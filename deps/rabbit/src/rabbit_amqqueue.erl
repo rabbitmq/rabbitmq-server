@@ -53,8 +53,9 @@
 -export([delete_crashed/1,
          delete_crashed/2,
          delete_crashed_internal/2]).
-
+-export([delete_with/4, delete_with/6]).
 -export([pid_of/1, pid_of/2]).
+-export([pid_or_crashed/2]).
 -export([mark_local_durable_queues_stopped/1]).
 
 -export([rebalance/3]).
@@ -70,6 +71,8 @@
 
 -export([prepend_extra_bcc/1]).
 -export([queue/1, queue_names/1]).
+
+-export([kill_queue/2, kill_queue/3, kill_queue_hard/2, kill_queue_hard/3]).
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
@@ -116,6 +119,7 @@
 -define(CONSUMER_INFO_KEYS,
         [queue_name, channel_pid, consumer_tag, ack_required, prefetch_count,
          active, activity_status, arguments]).
+-define(KILL_QUEUE_DELAY_INTERVAL, 100).
 
 warn_file_limit() ->
     DurableQueues = find_recoverable_queues(),
@@ -1601,6 +1605,51 @@ delete_immediately_by_resource(Resources) ->
 delete(Q, IfUnused, IfEmpty, ActingUser) ->
     rabbit_queue_type:delete(Q, IfUnused, IfEmpty, ActingUser).
 
+-spec delete_with(amqqueue:amqqueue() | name(), boolean(), boolean(), rabbit_types:username()) ->
+    rabbit_types:ok(integer()) | rabbit_misc:channel_or_connection_exit().
+delete_with(QueueName, IfUnused, IfEmpty, ActingUser) ->
+    delete_with(QueueName, undefined, IfUnused, IfEmpty, ActingUser, false).
+
+-spec delete_with(amqqueue:amqqueue() | name(), pid() | undefined, boolean(), boolean(), rabbit_types:username(), boolean()) ->
+    rabbit_types:ok(integer()) | rabbit_misc:channel_or_connection_exit().
+delete_with(AMQQueue, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive) when ?is_amqqueue(AMQQueue) ->
+    QueueName = amqqueue:get_name(AMQQueue),
+    delete_with(QueueName, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive);
+delete_with(QueueName, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive) when is_record(QueueName, resource) ->
+    case with(
+           QueueName,
+           fun (Q) ->
+                if CheckExclusive ->
+                    check_exclusive_access(Q, ConnPid);
+                true ->
+                    ok
+                end,
+                rabbit_queue_type:delete(Q, IfUnused, IfEmpty, Username)
+           end,
+           fun (not_found) ->
+                   {ok, 0};
+               ({absent, Q, crashed}) ->
+                   _ = delete_crashed(Q, Username),
+                   {ok, 0};
+               ({absent, Q, stopped}) ->
+                   _ = delete_crashed(Q, Username),
+                   {ok, 0};
+               ({absent, Q, Reason}) ->
+                   absent(Q, Reason)
+           end) of
+        {error, in_use} ->
+            rabbit_misc:precondition_failed("~ts in use", [rabbit_misc:rs(QueueName)]);
+        {error, not_empty} ->
+            rabbit_misc:precondition_failed("~ts not empty", [rabbit_misc:rs(QueueName)]);
+        {error, {exit, _, _}} ->
+            %% rabbit_amqqueue:delete()/delegate:invoke might return {error, {exit, _, _}}
+            {ok, 0};
+        {ok, Count} ->
+            {ok, Count};
+        {protocol_error, Type, Reason, ReasonArgs} ->
+            rabbit_misc:protocol_error(Type, Reason, ReasonArgs)
+    end.
+
 %% delete_crashed* INCLUDED FOR BACKWARDS COMPATBILITY REASONS
 delete_crashed(Q) when ?amqqueue_is_classic(Q) ->
     rabbit_classic_queue:delete_crashed(Q).
@@ -2060,4 +2109,62 @@ is_queue_args_combination_permitted(Durable, Exclusive) ->
             true;
         true ->
             rabbit_deprecated_features:is_permitted(transient_nonexcl_queues)
+    end.
+
+-spec kill_queue_hard(node(), name()) -> ok.
+kill_queue_hard(Node, QRes = #resource{kind = queue}) ->
+    kill_queue_hard(Node, QRes, boom).
+
+-spec kill_queue_hard(node(), name(), atom()) -> ok.
+kill_queue_hard(Node, QRes = #resource{kind = queue}, Reason) ->
+    case kill_queue(Node, QRes, Reason) of
+        crashed -> ok;
+        stopped -> ok;
+        NewPid when is_pid(NewPid) ->
+            timer:sleep(?KILL_QUEUE_DELAY_INTERVAL),
+            kill_queue_hard(Node, QRes, Reason);
+        Error -> Error
+    end.
+
+-spec kill_queue(node(), name()) -> pid() | crashed | stopped | rabbit_types:error(term()).
+kill_queue(Node, QRes = #resource{kind = queue}) ->
+    kill_queue(Node, QRes, boom).
+
+-spec kill_queue(node(), name(), atom()) -> pid() | crashed | stopped | rabbit_types:error(term()).
+kill_queue(Node, QRes = #resource{kind = queue}, Reason = shutdown) ->
+    Pid1 = pid_or_crashed(Node, QRes),
+    exit(Pid1, Reason),
+    rabbit_amqqueue_control:await_state(Node, QRes, stopped),
+    stopped;
+kill_queue(Node, QRes = #resource{kind = queue}, Reason) ->
+    case pid_or_crashed(Node, QRes) of
+        Pid1 when is_pid(Pid1) ->
+            exit(Pid1, Reason),
+            rabbit_amqqueue_control:await_new_pid(Node, QRes, Pid1);
+        crashed ->
+            crashed;
+        Error ->
+            Error
+    end.
+
+-spec pid_or_crashed(node(), name()) -> pid() | crashed | rabbit_types:error(term()).
+pid_or_crashed(Node, QRes = #resource{virtual_host = VHost, kind = queue}) ->
+    case rpc:call(Node, rabbit_amqqueue, lookup, [QRes]) of
+        {ok, Q} ->
+            QPid = amqqueue:get_pid(Q),
+            State = amqqueue:get_state(Q),
+            case State of
+                crashed ->
+                    case rabbit_amqqueue_sup_sup:find_for_vhost(VHost, Node) of
+                        {error, {queue_supervisor_not_found, _}} -> {error, no_sup};
+                        {ok, SPid} ->
+                            case rabbit_misc:remote_sup_child(Node, SPid) of
+                            {ok, _}           -> QPid;   %% restarting
+                            {error, no_child} -> crashed %% given up
+                            end
+                    end;
+                _       -> QPid
+            end;
+        Error = {error, _} -> Error;
+        Reason             -> {error, Reason}
     end.
