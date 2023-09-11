@@ -1273,15 +1273,15 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     check_user_id_header(Props, State),
     check_expiration_header(Props),
     DoConfirm = Tx =/= none orelse ConfirmEnabled,
-    {DeliveryOptions, SeqNum, State1} =
+    {DeliveryOptions, State1} =
         case DoConfirm of
             false ->
-                {maps_put_truthy(flow, Flow, #{}), undefined, State0};
+                {maps_put_truthy(flow, Flow, #{mandatory => Mandatory}), State0};
             true  ->
                 rabbit_global_counters:messages_received_confirm(amqp091, 1),
                 SeqNo = State0#ch.publish_seqno,
-                Opts = maps_put_truthy(flow, Flow, #{correlation => SeqNo}),
-                {Opts, SeqNo, State0#ch{publish_seqno = SeqNo + 1}}
+                Opts = maps_put_truthy(flow, Flow, #{correlation => SeqNo, mandatory => Mandatory}),
+                {Opts, State0#ch{publish_seqno = SeqNo + 1}}
         end,
     % rabbit_feature_flags:is_enabled(message_containers),
     case mc_amqpl:message(ExchangeName,
@@ -1295,7 +1295,6 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
             [rabbit_channel:deliver_reply(RK, Message) ||
              {virtual_reply_queue, RK} <- QNames],
             Queues = rabbit_amqqueue:lookup_many(QNames),
-            ok = process_routing_mandatory(Mandatory, Queues, SeqNum, Message, ExchangeName, State0),
             rabbit_trace:tap_in(Message, QNames, ConnName, ChannelNum,
                                 Username, TraceState),
             %% TODO: call delivery_to_queues with plain args
@@ -2150,7 +2149,7 @@ deliver_to_queues({Message, _Options, _RoutedToQueues} = Delivery,
     deliver_to_queues(XName, Delivery, State).
 
 deliver_to_queues(XName,
-                  {_Message, Options, _RoutedToQueues = []},
+                  {_Message, #{mandatory := false} = Options, _RoutedToQueues = []},
                   State)
   when not is_map_key(correlation, Options) -> %% optimisation when there are no queues
     ?INCR_STATS(exchange_stats, XName, 1, publish, State),
@@ -2168,6 +2167,8 @@ deliver_to_queues(XName,
             MsgSeqNo = maps:get(correlation, Options, undefined),
             %% NB: the order here is important since basic.returns must be
             %% sent before confirms.
+            Mandatory = maps:get(mandatory, Options, false),
+            ok = process_routing_mandatory(Mandatory, RoutedToQueues, MsgSeqNo, Message, XName, State0),
             State1 = process_routing_confirm(MsgSeqNo, QueueNames, XName, State0),
             %% Actions must be processed after registering confirms as actions may
             %% contain rejections of publishes
