@@ -2113,8 +2113,9 @@ kill_queue_hard(Node, QRes = #resource{kind = queue}, Reason) ->
     case kill_queue(Node, QRes, Reason) of
         crashed -> ok;
         stopped -> ok;
-        NewPid when is_pid(NewPid) -> timer:sleep(?KILL_QUEUE_DELAY_INTERVAL),
-                   kill_queue_hard(Node, QRes, Reason);
+        NewPid when is_pid(NewPid) ->
+            timer:sleep(?KILL_QUEUE_DELAY_INTERVAL),
+            kill_queue_hard(Node, QRes, Reason);
         Error -> Error
     end.
 
