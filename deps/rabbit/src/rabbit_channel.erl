@@ -2143,7 +2143,7 @@ notify_limiter(Limiter, Acked) ->
                  end
     end.
 
-deliver_to_queues({Message, _Options, _RoutedToQueues = []} = Delivery,
+deliver_to_queues({Message, _Options, _RoutedToQueues} = Delivery,
                   #ch{cfg = #conf{virtual_host = VHost}} = State) ->
     XNameBin = mc:get_annotation(exchange, Message),
     XName = rabbit_misc:r(VHost, exchange,  XNameBin),
