@@ -1111,7 +1111,7 @@ dead_letter_headers_should_be_appended_for_each_event(Config) ->
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag1,
                                         multiple     = false,
                                         requeue      = false}),
-    %% Message its being republished
+    %% Message is being republished
     wait_for_messages(Config, [[Dlx2Name, <<"1">>, <<"1">>, <<"0">>]]),
     {#'basic.get_ok'{}, #amqp_msg{payload = P,
                                   props = #'P_basic'{headers = Headers2}}} =
@@ -1121,6 +1121,15 @@ dead_letter_headers_should_be_appended_for_each_event(Config) ->
     ok = rabbit_ct_client_helpers:close_connection(Conn).
 
 dead_letter_headers_should_be_appended_for_republish(Config) ->
+    %% here we (re-)publish a message with the DL headers already set
+    %% TODO do we want to support this case after message containers?
+    %% when the "re-published" message arrives to the broker,
+    %% the DL headers are already present as 091 headers, not as MC "deaths" annotations.
+    %% The broker adds the death headers for a second time, as MC "deaths" annotations,
+    %% but those will erase the ones in the headers, as annotations and headers
+    %% are not merged (see mc_amqpl:deaths_to_headers/2).
+    %% so death headers are actually appended only if the message is dead lettered
+    %% several times, but *stays* on the broker.
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
     Durable = ?config(queue_durable, Config),
