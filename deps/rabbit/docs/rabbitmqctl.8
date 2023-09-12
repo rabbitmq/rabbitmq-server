@@ -25,7 +25,7 @@
 .\" ------------------------------------------------------------------------------------------------
 .Sh DESCRIPTION
 .\" ------------------------------------------------------------------------------------------------
-RabbitMQ is an open source multi-protocol messaging broker.
+RabbitMQ is an open-source multi-protocol messaging broker.
 .Pp
 .Nm
 is the main command line tool for managing a RabbitMQ server node,
@@ -39,7 +39,7 @@ It performs all actions by connecting to the target RabbitMQ node
 on a dedicated CLI tool communication port and authenticating
 using a shared secret (known as the cookie file).
 .Pp
-Diagnostic information is displayed if connection failed,
+Diagnostic information is displayed if the connection failed,
 the target node was not running, or
 .Nm
 could not authenticate to
@@ -52,7 +52,7 @@ To learn more, see the
 .\" ------------------------------------------------------------------------------------------------
 .Bl -tag -width Ds
 .It Fl n Ar node
-Default node is
+The default node is
 .Qq Ar rabbit@target-hostname ,
 where
 .Ar target-hostname
@@ -63,10 +63,12 @@ the node name will usually be
 .Qq rabbit@myserver
 (unless
 .Ev RABBITMQ_NODENAME
-has been overridden).
+has been overridden, in which case you'll need to use
+.It Fl -longnames
+).
 The output of
 .Qq hostname -s
-is usually the correct suffix to use after the
+is usually the correct hostname to use after the
 .Qq @
 sign.
 See
@@ -82,11 +84,11 @@ Informational messages are reduced and table headers are suppressed when silent 
 Do not output headers for tabular data.
 .It Fl -dry-run
 Do not run the command.
-Only print information message.
+Only print informational messages.
 .It Fl t Ar timeout , Fl -timeout Ar timeout
 Operation timeout in seconds.
 Not all commands support timeouts.
-Default is
+The default is
 .Cm infinity .
 .It Fl l , Fl -longnames
 Must be specified when the cluster is configured to use long (FQDN) node names.
@@ -156,7 +158,7 @@ For example, to reset the RabbitMQ node:
 Instructs the RabbitMQ node to perform internal log rotation.
 .Pp
 Log rotation is performed according to the logging settings specified in the configuration file.
-The rotation operation is asynchronous, there is no guarantee that it has completed when this command returns.
+The rotation operation is asynchronous, there is no guarantee that it will complete before this command returns.
 .Pp
 Note that there is no need to call this command in case of external log rotation (e.g. from logrotate(8)).
 .Pp
@@ -181,11 +183,11 @@ does not require a
 .Ar pid_file
 to wait for the runtime process to exit
 .It
-returns a non-zero exit code if RabbitMQ node is not running
+returns a non-zero exit code if the RabbitMQ node is not running
 .El
 .Pp
-For example, this will shut down a locally running RabbitMQ node
-with default node name:
+For example, this will shut down a local RabbitMQ node running with
+the default node name:
 .sp
 .Dl rabbitmqctl shutdown
 .\" ------------------------------------------------------------------
@@ -194,7 +196,7 @@ with default node name:
 Starts the RabbitMQ application.
 .Pp
 This command is typically run after performing other management actions
-that required the RabbitMQ application to be stopped, e.g.\&
+that require the RabbitMQ application to be stopped, e.g.\&
 .Cm reset .
 .Pp
 For example, to instruct the RabbitMQ node to start the RabbitMQ
@@ -225,7 +227,7 @@ For example, to instruct the RabbitMQ node to terminate:
 .Pp
 Stops the RabbitMQ application, leaving the runtime (Erlang VM) running.
 .Pp
-This command is typically run prior to performing other management
+This command is typically run before performing other management
 actions that require the RabbitMQ application to be stopped, e.g.\&
 .Cm reset .
 .Pp
@@ -249,15 +251,16 @@ argument, and then for the RabbitMQ application to start in that process.
 It will fail if the process terminates without starting the RabbitMQ
 application.
 .Pp
-If the specified pidfile is not created or erlang node is not started within
+If the specified pidfile is not created or the erlang node is not started
+within
 .Fl -timeout
 the command will fail.
-Default timeout is 10 seconds.
+The default timeout is 10 seconds.
 .Pp
 A suitable pid file is created by the
 .Xr rabbitmq-server 8
 script.
-By default this is located in the Mnesia directory.
+By default, this is located in the Mnesia directory.
 Modify the
 .Ev RABBITMQ_PID_FILE
 environment variable to change the location.
@@ -322,25 +325,24 @@ to shut down.
 Normally when you shut down a RabbitMQ cluster altogether, the first
 node you restart should be the last one to go down, since it may have
 seen things happen that other nodes did not.
-But sometimes that's not possible: for instance if the entire cluster
+But sometimes that's not possible: for instance, if the entire cluster
 loses power then all nodes may think they were not the last to shut
 down.
 .Pp
 In such a case you can invoke
 .Cm force_boot
 while the node is down.
-This will tell the node to unconditionally start next time you ask it
-to.
-If any changes happened to the cluster after this node shut down, they
-will be lost.
+This will tell the node to unconditionally start the next time you ask
+it.
+Any changes to the cluster after this node shut down will be lost.
 .Pp
 If the last node to go down is permanently lost then you should use
 .Cm forget_cluster_node Fl -offline
-in preference to this command, as it will ensure that mirrored queues
-which had their leader replica on the lost node get promoted.
+instead of this command, as it will ensure that mirrored queues
+whose leader replica was on the lost node get promoted.
 .Pp
-For example, this will force the node not to wait for other nodes next
-time it is started:
+For example, this will force the node not to wait for other nodes the
+next time it is started:
 .sp
 .Dl rabbitmqctl force_boot
 .\" ------------------------------------------------------------------
@@ -392,7 +394,7 @@ flag ,
 will not attempt to connect to a node as normal; instead it will
 temporarily become the node in order to make the change.
 This is useful if the node cannot be started normally.
-In this case the node will become the canonical source for cluster
+In this case, the node will become the canonical source for cluster
 metadata (e.g. which queues exist), even if it was not before.
 Therefore you should use this command on the latest node to shut down if
 at all possible.
@@ -423,15 +425,15 @@ stopped, e.g. with
 .Cm stop_app .
 .Pp
 Cluster nodes can be of two types: disc or RAM.
-Disc nodes replicate data in RAM and on disc, thus providing redundancy
+Disc nodes replicate data in RAM and on disk, thus providing redundancy
 in the event of node failure and recovery from global events such as
 power failure across all nodes.
-RAM nodes replicate data in RAM only (with the exception of queue
-contents, which can reside on disc if the queue is persistent or too big
-to fit in memory) and are mainly used for scalability.
+RAM nodes replicate data in RAM only (except for queue contents, which
+can reside on disk if the queue is persistent or too big to fit in
+memory) and are mainly used for scalability.
 RAM nodes are more performant only when managing resources (e.g.\&
 adding/removing queues, exchanges, or bindings).
-A cluster must always have at least one disc node, and usually should
+A cluster must always have at least one disc node and usually should
 have more than one.
 .Pp
 The node will be a disc node by default.
@@ -489,8 +491,8 @@ to the node
 .Dl rabbitmqctl rename_cluster_node rabbit@misshelpful rabbit@cordelia
 .Pp
 Note that this command only changes the local database.
-It may also be necessary to rename the local database directories,
-and to configure the new node name.
+It may also be necessary to rename the local database directories
+and configure the new node name.
 For example:
 .sp
 .Bl -enum -compact
@@ -523,7 +525,7 @@ mv \\
 .It
 If node name is configured e.g. using
 .Ar /etc/rabbitmq/rabbitmq-env.conf
-it has also be updated there.
+, it also needs to be updated there.
 .sp
 .It
 Start the node when ready
@@ -593,14 +595,14 @@ The name of the queue to synchronise.
 Instructs a mirrored queue with unsynchronised mirrors (follower replicas)
 to synchronise them.
 The queue will block while synchronisation takes place (all publishers
-to and consumers using the queue will block or temporarily see no activity).
+and consumers using the queue will block or temporarily see no activity).
 This command can only be used with mirrored queues.
 To learn more, see the
 .Lk https://www.rabbitmq.com/ha.html "RabbitMQ Mirroring guide"
 .Pp
 Note that queues with unsynchronised replicas and active consumers
 will become synchronised eventually (assuming that consumers make progress).
-This command is primarily useful for queues which do not have active consumers.
+This command is primarily useful for queues that do not have active consumers.
 .\" ------------------------------------------------------------------
 .It Cm cancel_sync_queue Oo Fl p Ar vhost Oc Ar queue
 .Bl -tag -width Ds
@@ -647,7 +649,7 @@ The password of the user.
 .Pp
 For example, this command instructs the RabbitMQ broker to authenticate the user named
 .Qq janeway
-with password
+with the password
 .Qq verifyit :
 .sp
 .Dl rabbitmqctl authenticate_user janeway verifyit
@@ -778,8 +780,8 @@ topic exchanges the given user has topic permissions for.
 .Pp
 Clear user topic permissions.
 .Pp
-For example, this command instructs the RabbitMQ broker to remove topic permissions for user
-named
+For example, this command instructs the RabbitMQ broker to remove topic permissions
+for the user named
 .Qq janeway
 for the topic exchange
 .Qq amq.topic
@@ -800,18 +802,18 @@ Defaults to
 Lists permissions in a virtual host.
 .Pp
 For example, this command instructs the RabbitMQ broker to list all the
-users which have been granted access to the virtual host called
+users who have been granted access to the virtual host called
 .Qq my-vhost ,
 and the permissions they have for operations on resources in that
 virtual host.
-Note that an empty string means no permissions granted:
+Note that an empty string means no permissions are granted:
 .sp
 .Dl rabbitmqctl list_permissions -p my-vhost
 .\" ------------------------------------------------------------------
 .It Cm list_topic_permissions Op Fl p Ar vhost
 .Bl -tag -width Ds
 .It Ar vhost
-The name of the virtual host for which to list the users topic permissions.
+The name of the virtual host for which to list the user's topic permissions.
 Defaults to
 .Qq / .
 .El
@@ -819,7 +821,7 @@ Defaults to
 Lists topic permissions in a virtual host.
 .Pp
 For example, this command instructs the RabbitMQ broker to list all the
-users which have been granted topic permissions in the virtual host called
+users who have been granted topic permissions in the virtual host called
 .Qq my-vhost:
 .sp
 .Dl rabbitmqctl list_topic_permissions -p my-vhost
@@ -882,7 +884,7 @@ Virtual host state: nodedown, running, stopped.
 .El
 .Pp
 If no
-.Ar vhostinfoitem
+.Ar vhostinfoitem s
 are specified then the vhost name is displayed.
 .Pp
 For example, this command instructs the RabbitMQ broker to list all
@@ -916,7 +918,7 @@ user named
 .Qq janeway
 access to the virtual host called
 .Qq my-vhost ,
-with configure permissions on all resources whose names starts with
+with configured permissions on all resources whose names start with
 .Qq janeway- ,
 and write and read permissions on all resources:
 .sp
@@ -957,7 +959,7 @@ defaulting to
 .It Ar user
 The name of the user the permissions apply to in the target virtual host.
 .It Ar exchange
-The name of the topic exchange the authorisation check will be applied to.
+The name of the topic exchange to which the authorisation check will be applied.
 .It Ar write
 A regular expression matching the routing key of the published message.
 .It Ar read
@@ -999,7 +1001,7 @@ environment for each running application.
 .It Cm list_bindings Oo Fl p Ar vhost Oc Op Ar bindinginfoitem ...
 .Pp
 Returns binding details.
-By default the bindings for the
+By default, the bindings for the
 .Qq /
 virtual host are returned.
 The
@@ -1026,18 +1028,17 @@ The name of the destination of messages to which the binding is
 attached.
 With non-ASCII characters escaped as in C.
 .It Cm destination_kind
-The kind of the destination of messages to which the binding is
-attached.
+The kind of destination of messages to which the binding is attached.
 With non-ASCII characters escaped as in C.
 .It Cm routing_key
-The binding's routing key, with non-ASCII characters escaped as in C.
+The binding's routing key with non-ASCII characters escaped as in C.
 .It Cm arguments
 The binding's arguments.
 .El
 .Pp
 If no
-.Ar bindinginfoitem
-are specified then all above items are displayed.
+.Ar bindinginfoitem s
+are specified then all the above items are displayed.
 .Pp
 For example, this command displays the exchange name and queue name of
 the bindings in the virtual host named
@@ -1049,7 +1050,7 @@ the bindings in the virtual host named
 .Pp
 Returns information on all current channels, the logical containers
 executing most AMQP commands.
-This includes channels that are part of ordinary AMQP connections, and
+This includes channels that are part of ordinary AMQP connections and
 channels created by various plug-ins and other extensions.
 .Pp
 The
@@ -1068,10 +1069,10 @@ channel belongs.
 .It Cm name
 Readable name for the channel.
 .It Cm number
-The number of the channel, which uniquely identifies it within a
+The number of the channel uniquely identifying it within a
 connection.
 .It Cm user
-Username associated with the channel.
+The username associated with the channel.
 .It Cm vhost
 Virtual host in which the channel operates.
 .It Cm transactional
@@ -1079,15 +1080,15 @@ True if the channel is in transactional mode, false otherwise.
 .It Cm confirm
 True if the channel is in confirm mode, false otherwise.
 .It Cm consumer_count
-Number of logical AMQP consumers retrieving messages via the channel.
+The number of logical AMQP consumers retrieving messages via the channel.
 .It Cm messages_unacknowledged
-Number of messages delivered via this channel but not yet acknowledged.
+The number of messages delivered via this channel but not yet acknowledged.
 .It Cm messages_uncommitted
-Number of messages received in an as yet uncommitted transaction.
+The number of messages received in an as-yet uncommitted transaction.
 .It Cm acks_uncommitted
-Number of acknowledgements received in an as yet uncommitted transaction.
+The number of acknowledgements received in an as-yet uncommitted transaction.
 .It Cm messages_unconfirmed
-Number of published messages not yet confirmed.
+The number of not yet confirmed published messages.
 On channels not in confirm mode, this remains 0.
 .It Cm prefetch_count
 QoS prefetch limit for new consumers, 0 if unlimited.
@@ -1096,7 +1097,7 @@ QoS prefetch limit for the entire channel, 0 if unlimited.
 .El
 .Pp
 If no
-.Ar channelinfoitem
+.Ar channelinfoitem s
 are specified then pid, user, consumer_count, and
 messages_unacknowledged are assumed.
 .Pp
@@ -1155,7 +1156,7 @@ SSL cipher algorithm (e.g.\&
 SSL hash function (e.g.\&
 .Qq sha ) .
 .It Cm peer_cert_subject
-The subject of the peer's SSL certificate, in RFC4514 form.
+The subject of the peer's SSL certificate in RFC4514 form.
 .It Cm peer_cert_issuer
 The issuer of the peer's SSL certificate, in RFC4514 form.
 .It Cm peer_cert_validity
@@ -1183,9 +1184,9 @@ closing
 closed
 .El
 .It Cm channels
-Number of channels using the connection.
+The number of channels using the connection.
 .It Cm protocol
-Version of the AMQP protocol in use; currently one of:
+The version of the AMQP protocol in use -- currently one of:
 .Bl -bullet -compact
 .It
 {0,9,1}
@@ -1199,9 +1200,9 @@ AMQP 0-9-1.
 SASL authentication mechanism used, such as
 .Qq PLAIN .
 .It Cm user
-Username associated with the connection.
+The username associated with the connection.
 .It Cm vhost
-Virtual host name with non-ASCII characters escaped as in C.
+Virtual hostname with non-ASCII characters escaped as in C.
 .It Cm timeout
 Connection timeout / negotiated heartbeat interval, in seconds.
 .It Cm frame_max
@@ -1222,13 +1223,13 @@ Packets sent.
 .It Cm send_pend
 Send queue size.
 .It Cm connected_at
-Date and time this connection was established, as timestamp.
+Date and time this connection was established, as a timestamp.
 .El
 .Pp
 If no
-.Ar connectioninfoitem
-are specified then user, peer host, peer port, time since flow control
-and memory block state are displayed.
+.Ar connectioninfoitem s
+are specified then user, peer host, peer port, time since flow
+control, and memory block state are displayed.
 .Pp
 For example, this command displays the send queue size and server port
 for each connection:
@@ -1286,8 +1287,8 @@ Whether or not the exchange survives server restarts.
 .It Cm auto_delete
 Whether the exchange will be deleted automatically when no longer used.
 .It Cm internal
-Whether the exchange is internal, i.e. cannot be directly published to
-by a client.
+Whether the exchange is internal, i.e. clients cannot publish to it
+directly.
 .It Cm arguments
 Exchange arguments.
 .It Cm policy
@@ -1295,7 +1296,7 @@ Policy name for applying to the exchange.
 .El
 .Pp
 If no
-.Ar exchangeinfoitem
+.Ar exchangeinfoitem s
 are specified then exchange name and type are displayed.
 .Pp
 For example, this command displays the name and type for each exchange
@@ -1367,24 +1368,24 @@ Id of the Erlang process of the connection which is the
 exclusive owner of the queue.
 Empty if the queue is non-exclusive.
 .It Cm exclusive
-True if queue is exclusive (i.e. has owner_pid), false otherwise.
+True if the queue is exclusive (i.e. has owner_pid), false otherwise.
 .It Cm exclusive_consumer_pid
 Id of the Erlang process representing the channel of the exclusive
 consumer subscribed to this queue.
 Empty if there is no exclusive consumer.
 .It Cm exclusive_consumer_tag
-Consumer tag of the exclusive consumer subscribed to this queue.
+The consumer tag of the exclusive consumer subscribed to this queue.
 Empty if there is no exclusive consumer.
 .It Cm messages_ready
-Number of messages ready to be delivered to clients.
+The number of messages ready to be delivered to clients.
 .It Cm messages_unacknowledged
-Number of messages delivered to clients but not yet acknowledged.
+The number of messages delivered to clients but not yet acknowledged.
 .It Cm messages
-Sum of ready and unacknowledged messages (queue depth).
+The sum of ready and unacknowledged messages (queue depth).
 .It Cm messages_ready_ram
-Number of messages from messages_ready which are resident in ram.
+The number of messages from messages_ready which are resident in ram.
 .It Cm messages_unacknowledged_ram
-Number of messages from messages_unacknowledged which are resident in
+The number of messages from messages_unacknowledged which are resident in
 ram.
 .It Cm messages_ram
 Total number of messages which are resident in ram.
@@ -1392,7 +1393,7 @@ Total number of messages which are resident in ram.
 Total number of persistent messages in the queue (will always be 0 for
 transient queues).
 .It Cm message_bytes
-Sum of the size of all message bodies in the queue.
+The sum of the size of all message bodies in the queue.
 This does not include the message properties (including headers) or any
 overhead.
 .It Cm message_bytes_ready
@@ -1407,7 +1408,7 @@ acknowledged.
 .It Cm message_bytes_ram
 Like
 .Cm message_bytes
-but counting only those messages which are currently held in RAM.
+but counting only those messages that are currently held in RAM.
 .It Cm message_bytes_persistent
 Like
 .Cm message_bytes
@@ -1422,7 +1423,7 @@ since it started.
 Total number of times messages have been written to disk by this queue
 since it started.
 .It Cm consumers
-Number of consumers.
+The number of consumers.
 .It Cm consumer_utilisation
 Fraction of the time (between 0.0 and 1.0) that the queue is able to
 immediately deliver messages to consumers.
@@ -1430,7 +1431,7 @@ This can be less than 1.0 if consumers are limited by network congestion
 or prefetch count.
 .It Cm memory
 Bytes of memory allocated by the runtime for the
-queue, including stack, heap and internal structures.
+queue, including stack, heap, and internal structures.
 .It Cm mirror_pids
 If the queue is mirrored, this lists the IDs of the mirrors (follower replicas).
 To learn more, see the
@@ -1447,7 +1448,7 @@ but may be
 .Qq Bro syncing, Ar message_count Brc
 if the queue is synchronising.
 .Pp
-Queues which are located on cluster nodes that are currently down will
+Queues that are located on cluster nodes that are currently down will
 be shown with a status of
 .Qq down
 (and most other
@@ -1458,7 +1459,7 @@ Queue type, one of: quorum, stream, classic.
 .El
 .Pp
 If no
-.Ar queueinfoitem
+.Ar queueinfoitem s
 are specified then queue name and depth are displayed.
 .Pp
 For example, this command displays the depth and number of consumers for
@@ -1469,7 +1470,7 @@ each queue of the virtual host named
 .\" ------------------------------------------------------------------
 .It Cm list_unresponsive_queues Oo Fl -local Oc Oo Fl -queue-timeout Ar milliseconds Oc Oo Ar queueinfoitem ... Oc Op Fl -no-table-headers
 .Pp
-Tests queue leader replicas to respond within the given timeout. Lists those which did not respond in time.
+Tests queue leader replicas to respond within the given timeout. Lists those that did not respond in time.
 .Pp
 Displayed queues can be filtered by their status or location using one
 of the following mutually exclusive options:
@@ -1514,7 +1515,7 @@ is hosted on the target node.
 .\" ------------------------------------------------------------------
 .It Cm ping
 .Pp
-Checks that the node OS process is up, registered with EPMD and CLI tools can authenticate with it
+Checks that the node OS process is up, registered with EPMD, and CLI tools can authenticate with it
 .Pp
 Example:
 .Dl rabbitmqctl ping -n rabbit@hostname
@@ -1542,8 +1543,8 @@ For example, this command lists the table names and their active replicas:
 .It Cm status
 .Pp
 Displays broker status information such as the running applications on
-the current Erlang node, RabbitMQ and Erlang versions, OS name, memory
-and file descriptor statistics.
+the current Erlang node, RabbitMQ and Erlang versions, OS name, and
+memory and file descriptor statistics.
 (See the
 .Cm cluster_status
 command to find out which nodes are clustered and running.)
@@ -1562,21 +1563,21 @@ controlled by dynamic, cluster-wide
 .Em parameters.
 There are 2 kinds of parameters: parameters scoped to a virtual host and
 global parameters.
-Each vhost-scoped parameter consists of a component name, a name and a
+Each vhost-scoped parameter consists of a component name, a name, and a
 value.
 The component name and name are strings, and the value is a valid JSON document.
 A global parameter consists of a name and value.
 The name is a string and the value is an arbitrary Erlang data structure.
-Parameters can be set, cleared and listed.
-In general you should refer to the documentation for the feature in
+Parameters can be set, cleared, and listed.
+In general, you should refer to the documentation for the feature in
 question to see how to set parameters.
 .Pp
 Policies is a feature built on top of runtime parameters.
 Policies are used to control and modify the behaviour of queues and
 exchanges on a cluster-wide basis.
-Policies apply within a given vhost, and consist of a name, pattern,
-definition and an optional priority.
-Policies can be set, cleared and listed.
+Policies apply within a given vhost and consist of a name, pattern,
+definition, and an optional priority.
+Policies can be set, cleared, and listed.
 .Bl -tag -width Ds
 .\" ------------------------------------------------------------------
 .It Cm clear_global_parameter Ar name
@@ -1710,8 +1711,7 @@ Sets a policy.
 .It Ar name
 The name of the policy.
 .It Ar pattern
-The regular expression, which when matches on a given resources causes
-the policy to apply.
+The regular expression allows the policy to apply if it matches a resource name.
 .It Ar definition
 The definition of the policy, as a JSON document.
 In most shells you are very likely to need to quote this.
@@ -1720,7 +1720,7 @@ The priority of the policy as an integer.
 Higher numbers indicate greater precedence.
 The default is 0.
 .It Ar apply-to
-Which types of object this policy should apply to.
+Which types of objects this policy should apply to.
 Possible values are:
 .Bl -bullet -compact
 .It
@@ -1737,7 +1737,7 @@ exchanges
 all
 .El
 The default is
-.Cm all ..
+.Cm all .
 .El
 .Pp
 For example, this command sets the policy
@@ -1789,9 +1789,10 @@ not be visible to
 .It Ar vhost
 The name of the virtual host entry to create.
 .It Ar desc
-Arbitrary virtual host description, e.g. its purpose, for operator's convenience.
+Arbitrary virtual host description, e.g. its purpose, for the operator's
+convenience.
 .It Ar tags
-A comma-separated list of virtual host tags for operator's convenient
+A comma-separated list of virtual host tags for the operator's convenience.
 .It Ar default-q-type
 If clients do not specify queue type explicitly, this type will be used. One of: quorum, stream.
 .El
@@ -1822,7 +1823,7 @@ The name of the virtual host entry to delete.
 Deletes a virtual host.
 .Pp
 Deleting a virtual host deletes all its exchanges, queues, bindings,
-user permissions, parameters and policies.
+user permissions, parameters, and policies.
 .Pp
 For example, this command instructs the RabbitMQ broker to delete the
 virtual host called
@@ -1874,20 +1875,20 @@ max-queues
 Use a negative value to specify "no limit".
 .El
 .Pp
-For example, this command limits the max number of concurrent
+For example, this command limits the maximum number of concurrent
 connections in vhost
 .Qq qa_env
 to 64:
 .sp
 .Dl rabbitmqctl set_vhost_limits -p qa_env '{"max-connections": 64}'
 .Pp
-This command limits the max number of queues in vhost
+This command limits the maximum number of queues in vhost
 .Qq qa_env
 to 256:
 .sp
 .Dl rabbitmqctl set_vhost_limits -p qa_env '{"max-queues": 256}'
 .Pp
-This command clears the max number of connections limit in vhost
+This command clears the maximum number of connections limit in vhost
 .Qq qa_env :
 .sp
 .Dl rabbitmqctl set_vhost_limits -p qa_env '{"max\-connections": \-1}'
@@ -1918,21 +1919,21 @@ max-channels
 Use a negative value to specify "no limit".
 .El
 .Pp
-For example, this command limits the max number of concurrent
+For example, this command limits the maximum number of concurrent
 connections a user is allowed to open
 .Qq limited_user
 to 64:
 .sp
 .Dl rabbitmqctl set_user_limits limited_user '{"max-connections": 64}'
 .Pp
-This command limits the max number of channels a user is allowed to open
+This command limits the maximum number of channels a user is allowed to open
 on a connection
 .Qq limited_user
 to 16:
 .sp
 .Dl rabbitmqctl set_user_limits limited_user '{"max-channels": 16}'
 .Pp
-This command clears the max number of connections limit for user
+This command clears the maximum number of connections limit for user
 .Qq limited_user :
 .sp
 .Dl rabbitmqctl clear_user_limits limited_user 'max-connections'
@@ -1947,7 +1948,7 @@ This command disables client connections for user
 Clears user limits.
 .Bl -tag -width Ds
 .It Ar username
-The name of the user to clear limits of
+The name of the user to clear the limits of
 .It Ar limit
 The name of the limit or "all" to clear all limits at once.
 .El
@@ -1960,7 +1961,7 @@ max-connections
 max-channels
 .El
 .Pp
-For example, this command clears max connection limits of user
+For example, this command clears the maximum connection limits of user
 .Qq limited_user :
 .sp
 .Dl rabbitmqctl clear_user_limits limited_user 'max-connections'
@@ -2035,7 +2036,7 @@ Sets the cluster name to
 The cluster name is announced to clients on connection, and used by the
 federation and shovel plugins to record where a message has been.
 The cluster name is by default derived from the hostname of the first
-node in the cluster, but can be changed.
+node in the cluster but can be changed.
 .Pp
 For example, this sets the cluster name to
 .Qq london :
@@ -2045,8 +2046,8 @@ For example, this sets the cluster name to
 .It Cm set_disk_free_limit Ar disk_limit
 .Bl -tag -width Ds
 .It Ar disk_limit
-Lower bound limit as an integer in bytes or a string with memory unit symbols
-(see vm_memory_high_watermark), e.g. 512M or 1G.
+Lower bound limit as an integer in bytes or a string with a memory unit
+symbol (see vm_memory_high_watermark), e.g. 512M or 1G.
 Once free disk space reaches the limit, a disk alarm will be set.
 .El
 .\" ------------------------------------------------------------------
@@ -2172,13 +2173,13 @@ Ignored when
 .Fl -global
 is specified.
 .It Fl -global
-If connections should be close for all vhosts.
+If connections should be closed for all vhosts.
 Overrides
 .Fl p
 .It Fl -per-connection-delay Ar delay
 Time in milliseconds to wait after each connection closing.
 .It Fl -limit Ar limit
-Number of connection to close.
+The number of connections to close.
 Only works per vhost.
 Ignored when
 .Fl -global
@@ -2265,12 +2266,13 @@ Purges a queue (removes all messages in it).
 .\" ------------------------------------------------------------------------------------------------
 .Sh PLUGIN COMMANDS
 .\" ------------------------------------------------------------------------------------------------
-RabbitMQ plugins can extend rabbitmqctl tool to add new commands when enabled.
-Currently available commands can be found in
+RabbitMQ plugins can extend the rabbitmqctl tool to add new commands
+when enabled.
+Currently available commands can be found in the
 .Cm rabbitmqctl help
 output.
-Following commands are added by RabbitMQ plugins, available in default
-distribution:
+The following commands are added by RabbitMQ plugins, available in
+the default distribution:
 .\" ------------------------------------------------------------------
 .\" ## Shovel
 .\" ------------------------------------------------------------------
@@ -2291,10 +2293,11 @@ Instructs the RabbitMQ node to delete the configured shovel by
 Prints a list of federation links.
 .Bl -tag -width Ds
 .It Fl -only-down
-Only list federation links which are not running.
+Only list federation links that are not running.
 .El
 .It Cm restart_federation_link Ar link_id
-Instructs the RabbitMQ node to restart the federation link with specified
+Instructs the RabbitMQ node to restart the federation link with the
+specified
 .Ar link_id .
 .El
 .\" ------------------------------------------------------------------
@@ -2305,7 +2308,7 @@ Instructs the RabbitMQ node to restart the federation link with specified
 .It Cm list_amqp10_connections Op Ar amqp10_connectioninfoitem ...
 Similar to the
 .Cm list_connections
-command, but returns fields which make sense for AMQP-1.0 connections.
+command, but returns fields that make sense for AMQP-1.0 connections.
 .Ar amqp10_connectioninfoitem
 parameter is used to indicate which connection information items to
 include in the results.
@@ -2376,7 +2379,8 @@ The issuer of the peer's SSL certificate, in RFC4514 form.
 .It Cm peer_cert_validity
 The period for which the peer's SSL certificate is valid.
 .It Cm node
-The node name of the RabbitMQ node to which connection is established.
+The node name of the RabbitMQ node to which the connection is
+established.
 .El
 .El
 .\" ------------------------------------------------------------------
@@ -2387,7 +2391,7 @@ The node name of the RabbitMQ node to which connection is established.
 .It Cm list_mqtt_connections Op Ar mqtt_connectioninfoitem
 Similar to the
 .Cm list_connections
-command, but returns fields which make sense for MQTT connections.
+command, but returns fields that make sense for MQTT connections.
 .Ar mqtt_connectioninfoitem
 parameter is used to indicate which connection information items to
 include in the results.
@@ -2406,7 +2410,7 @@ failed or was not enabled.
 .It Cm peer_port
 Peer port.
 .It Cm protocol
-MQTT protocol version, which can be on of the following:
+MQTT protocol version, which can be one of the following:
 .Bl -bullet -compact
 .It
 {'MQTT', N/A}
@@ -2416,7 +2420,7 @@ MQTT protocol version, which can be on of the following:
 {'MQTT', 3.1.1}
 .El
 .It Cm channels
-Number of channels using the connection.
+The number of channels using the connection.
 .It Cm channel_max
 Maximum number of channels on this connection.
 .It Cm frame_max
@@ -2489,7 +2493,7 @@ For example, this command will remove the node rabbit@stringer:
 .It Cm list_stomp_connections Op Ar stomp_connectioninfoitem
 Similar to the
 .Cm list_connections
-command, but returns fields which make sense for STOMP connections.
+command, but returns fields that make sense for STOMP connections.
 .Ar stomp_connectioninfoitem
 parameter is used to indicate which connection information items to
 include in the results.
@@ -2543,7 +2547,7 @@ Peer port.
 Peer hostname obtained via reverse DNS, or its IP address if reverse DNS
 failed or was not enabled.
 .It Cm protocol
-STOMP protocol version, which can be on of the following:
+STOMP protocol version, which can be one of the following:
 .Bl -bullet -compact
 .It
 {'STOMP', 0}
@@ -2553,7 +2557,7 @@ STOMP protocol version, which can be on of the following:
 {'STOMP', 2}
 .El
 .It Cm channels
-Number of channels using the connection.
+The number of channels using the connection.
 .It Cm channel_max
 Maximum number of channels on this connection.
 .It Cm frame_max
@@ -2582,10 +2586,10 @@ SSL hash function (e.g.\&
 .Ss Management agent plugin
 .Bl -tag -width Ds
 .It Cm reset_stats_db Op Fl -all
-Reset management stats database for the RabbitMQ node.
+Reset the management stats database for the RabbitMQ node.
 .Bl -tag -width Ds
 .It Fl -all
-Reset stats database for all nodes in the cluster.
+Reset the stats database for all nodes in the cluster.
 .El
 .El
 .\" ------------------------------------------------------------------------------------------------
