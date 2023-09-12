@@ -30,8 +30,6 @@
 %%       human-readable output, or compact ASCII serializations for floats.
 digits(N) when is_integer(N) ->
     integer_to_list(N);
-digits(0.0) ->
-    "0.0";
 digits(Float) ->
     {Frac1, Exp1} = frexp_int(Float),
     [Place0 | Digits0] = digits1(Float, Exp1, Frac1),
