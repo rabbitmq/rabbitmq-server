@@ -793,10 +793,12 @@ query_node(Config, NodeConfig) ->
       [rabbit, plugins_dir]),
     {ok, EnabledPluginsFile} = rpc(Config, Nodename, application, get_env,
       [rabbit, enabled_plugins_file]),
+    LogLocations = rpc(Config, Nodename, rabbit, log_locations, []),
     Vars0 = [{pid_file, PidFile},
              {data_dir, DataDir},
              {plugins_dir, PluginsDir},
-             {enabled_plugins_file, EnabledPluginsFile}],
+             {enabled_plugins_file, EnabledPluginsFile},
+             {log_locations, LogLocations}],
     Vars = try
                EnabledFeatureFlagsFile = rpc(Config, Nodename,
                                              rabbit_feature_flags,
@@ -1018,11 +1020,11 @@ stop_rabbitmq_nodes(Config) ->
                           false;
                       undefined ->
                           case os:getenv("FIND_CRASHES") of
-                              undefined -> true;
-                              "1"       -> true;
-                              "yes"     -> true;
-                              "true"    -> true;
-                              _         -> false
+                              false  -> true;
+                              "1"    -> true;
+                              "yes"  -> true;
+                              "true" -> true;
+                              _      -> false
                           end
                   end,
     case FindCrashes of
