@@ -1285,7 +1285,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                               State1#ch{tx = {Msgs1, Acks}}
                       end};
         {error, Reason} ->
-            precondition_failed("invalid message: ~tp", [Reason])
+            rabbit_misc:precondition_failed("invalid message: ~tp", [Reason])
     end;
 
 handle_method(#'basic.nack'{delivery_tag = DeliveryTag,

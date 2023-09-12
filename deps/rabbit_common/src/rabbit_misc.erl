@@ -83,17 +83,7 @@
 -export([maps_any/2]).
 -export([safe_ets_update_counter/3, safe_ets_update_counter/4, safe_ets_update_counter/5,
          safe_ets_update_element/3, safe_ets_update_element/4, safe_ets_update_element/5]).
-<<<<<<< HEAD
-=======
--export([is_even/1, is_odd/1]).
--export([is_valid_shortstr/1]).
-
--export([maps_any/2,
-         maps_put_truthy/3,
-         maps_put_falsy/3
-        ]).
 -export([remote_sup_child/2]).
->>>>>>> 5717bcd09d (refactor and move remote_sup_child/2 to rabbit_misc)
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -1637,60 +1627,12 @@ when is_function(Pred, 2) andalso is_map(Map) ->
 maps_any_1(_Pred, none) ->
   false;
 maps_any_1(Pred, {K, V, I}) ->
-<<<<<<< HEAD
   case Pred(K, V) of
       true ->
           true;
       false ->
           maps_any_1(Pred, maps:next(I))
   end.
-=======
-    case Pred(K, V) of
-        true ->
-            true;
-        false ->
-            maps_any_1(Pred, maps:next(I))
-    end.
-
--spec is_even(integer()) -> boolean().
-is_even(N) ->
-    (N band 1) =:= 0.
--spec is_odd(integer()) -> boolean().
-is_odd(N) ->
-    (N band 1) =:= 1.
-
--spec is_valid_shortstr(term()) -> boolean().
-is_valid_shortstr(Bin) when byte_size(Bin) < 256 ->
-    is_utf8_no_null(Bin);
-is_valid_shortstr(_) ->
-    false.
-
-is_utf8_no_null(<<>>) ->
-    true;
-is_utf8_no_null(<<0, _/binary>>) ->
-    false;
-is_utf8_no_null(<<_/utf8, Rem/binary>>) ->
-    is_utf8_no_null(Rem);
-is_utf8_no_null(_) ->
-    false.
-
--spec maps_put_truthy(Key, Value, Map) -> Map when
-      Map :: #{Key => Value}.
-maps_put_truthy(_K, undefined, M) ->
-    M;
-maps_put_truthy(_K, false, M) ->
-    M;
-maps_put_truthy(K, V, M) ->
-    maps:put(K, V, M).
-
--spec maps_put_falsy(Key, Value, Map) -> Map when
-      Map :: #{Key => Value}.
-maps_put_falsy(K, undefined, M) ->
-    maps:put(K, undefined, M);
-maps_put_falsy(K, false, M) ->
-    maps:put(K, false, M);
-maps_put_falsy(_K, _V, M) ->
-    M.
 
 -spec remote_sup_child(node(), rabbit_types:sup_ref()) -> rabbit_types:ok_or_error2(rabbit_types:child(), no_child | no_sup).
 remote_sup_child(Node, Sup) ->
@@ -1699,4 +1641,3 @@ remote_sup_child(Node, Sup) ->
         []                              -> {error, no_child};
         {badrpc, {'EXIT', {noproc, _}}} -> {error, no_sup}
     end.
->>>>>>> 5717bcd09d (refactor and move remote_sup_child/2 to rabbit_misc)

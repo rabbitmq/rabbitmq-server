@@ -2088,21 +2088,6 @@ get_bcc_queue(Q, BCCName) ->
     #resource{virtual_host = VHost} = amqqueue:get_name(Q),
     BCCQueueName = rabbit_misc:r(VHost, queue, BCCName),
     rabbit_amqqueue:lookup(BCCQueueName).
-<<<<<<< HEAD
-=======
-
-is_queue_args_combination_permitted(Q) ->
-    Durable = amqqueue:is_durable(Q),
-    Exclusive = is_exclusive(Q),
-    is_queue_args_combination_permitted(Durable, Exclusive).
-
-is_queue_args_combination_permitted(Durable, Exclusive) ->
-    case not Durable andalso not Exclusive of
-        false ->
-            true;
-        true ->
-            rabbit_deprecated_features:is_permitted(transient_nonexcl_queues)
-    end.
 
 -spec kill_queue_hard(node(), name()) -> ok.
 kill_queue_hard(Node, QRes = #resource{kind = queue}) ->
@@ -2161,14 +2146,3 @@ pid_or_crashed(Node, QRes = #resource{virtual_host = VHost, kind = queue}) ->
         Error = {error, _} -> Error;
         Reason             -> {error, Reason}
     end.
-<<<<<<< HEAD
-
-sup_child(Node, Sup) ->
-    case rpc:call(Node, supervisor, which_children, [Sup]) of
-        [{_, Child, _, _}]              -> {ok, Child};
-        []                              -> {error, no_child};
-        {badrpc, {'EXIT', {noproc, _}}} -> {error, no_sup}
-    end.
->>>>>>> f0a29c95a5 (make kill_queue/{2,3} and kill_queue_hard/{2,3} from crashing_queues_SUITE reusable)
-=======
->>>>>>> 5717bcd09d (refactor and move remote_sup_child/2 to rabbit_misc)
