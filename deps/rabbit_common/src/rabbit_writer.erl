@@ -62,7 +62,7 @@
     writer_gc_threshold
 }).
 
--define(HIBERNATE_AFTER, 5000).
+-define(HIBERNATE_AFTER, 6_000).
 %% 1GB
 -define(DEFAULT_GC_THRESHOLD, 1_000_000_000).
 
