@@ -238,10 +238,12 @@ update_last_blocked_by(Throttle) ->
 
 close_connection(State = #v1{connection = #v1_connection{
                                              timeout_sec = TimeoutSec}}) ->
+    Pid = self(),
     erlang:send_after((if TimeoutSec > 0 andalso
                           TimeoutSec < ?CLOSING_TIMEOUT -> TimeoutSec;
                           true                          -> ?CLOSING_TIMEOUT
-                       end) * 1000, self(), terminate_connection),
+                       end) * 1000, Pid, terminate_connection),
+    rabbit_amqp1_0:unregister_connection(Pid),
     State#v1{connection_state = closed}.
 
 handle_dependent_exit(ChPid, Reason, State) ->
@@ -434,6 +436,7 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                         container_id   = {utf8, rabbit_nodes:cluster_name()},
                         properties     = server_properties()}),
     Conserve = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+    rabbit_amqp1_0:register_connection(self()),
     control_throttle(
       State1#v1{throttle = Throttle#throttle{alarmed_by = Conserve}});
 
