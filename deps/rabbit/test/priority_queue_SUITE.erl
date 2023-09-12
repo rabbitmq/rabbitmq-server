@@ -27,6 +27,7 @@ groups() ->
                          {overflow_reject_publish_dlx, [], [reject]},
                          dropwhile_fetchwhile,
                          info_head_message_timestamp,
+                         info_backing_queue_version,
                          unknown_info_key,
                          matching,
                          purge,
@@ -397,6 +398,27 @@ info_head_message_timestamp1(_Config) ->
     '' = PQ:info(head_message_timestamp, BQS6),
     PQ:delete_and_terminate(a_whim, BQS6),
     passed.
+
+info_backing_queue_version(Config) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Q1 = <<"info-priority-queue-v1">>,
+    Q2 = <<"info-priority-queue-v2">>,
+    declare(Ch, Q1, [{<<"x-max-priority">>, byte, 3},
+                    {<<"x-queue-version">>, byte, 1}]),
+    declare(Ch, Q2, [{<<"x-max-priority">>, byte, 3},
+                    {<<"x-queue-version">>, byte, 2}]),
+    try
+        {ok, [{backing_queue_status, BQS1}]} = info(Config, Q1, [backing_queue_status]),
+        1 = proplists:get_value(version, BQS1),
+        {ok, [{backing_queue_status, BQS2}]} = info(Config, Q2, [backing_queue_status]),
+        2 = proplists:get_value(version, BQS2)
+    after
+        delete(Ch, Q1),
+        delete(Ch, Q2),
+        rabbit_ct_client_helpers:close_channel(Ch),
+        rabbit_ct_client_helpers:close_connection(Conn),
+        passed
+    end.
 
 unknown_info_key(Config) ->
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
