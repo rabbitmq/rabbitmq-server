@@ -6,10 +6,11 @@
 %%
 -module(rabbit_amqp1_0).
 
--export([connection_info_local/1,
-         emit_connection_info_local/3,
+-export([emit_connection_info_local/3,
          emit_connection_info_all/4,
-         list/0]).
+         list/0,
+         register_connection/1,
+         unregister_connection/1]).
 
 emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
     Pids = [spawn_link(Node, rabbit_amqp1_0, emit_connection_info_local,
@@ -26,17 +27,14 @@ emit_connection_info_local(Items, Ref, AggregatorPid) ->
       end,
       list()).
 
-connection_info_local(Items) ->
-    Connections = list(),
-    [rabbit_amqp1_0_reader:info(Pid, Items) || Pid <- Connections].
-
+-spec list() -> [pid()].
 list() ->
-    [ReaderPid
-     || {_, TcpPid, _, [tcp_listener_sup]} <- supervisor:which_children(rabbit_sup),
-        {_, RanchEPid, _, [ranch_embedded_sup]} <- supervisor:which_children(TcpPid),
-        {_, RanchLPid, _, [ranch_listener_sup]} <- supervisor:which_children(RanchEPid),
-        {_, RanchCSPid, _, [ranch_conns_sup_sup]} <- supervisor:which_children(RanchLPid),
-        {_, RanchCPid, _, [ranch_conns_sup]} <- supervisor:which_children(RanchCSPid),
-        {rabbit_connection_sup, ConnPid, _, _} <- supervisor:which_children(RanchCPid),
-        {reader, ReaderPid, _, _} <- supervisor:which_children(ConnPid)
-    ].
+    pg_local:get_members(rabbit_amqp10_connections).
+
+-spec register_connection(pid()) -> ok.
+register_connection(Pid) ->
+    pg_local:join(rabbit_amqp10_connections, Pid).
+
+-spec unregister_connection(pid()) -> ok.
+unregister_connection(Pid) ->
+    pg_local:leave(rabbit_amqp10_connections, Pid).
