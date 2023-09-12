@@ -105,7 +105,7 @@ jobs:
 
       - name: Login to DockerHub
         if: steps.authorized.outputs.PUSH == 'true'
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
@@ -239,7 +239,7 @@ jobs:
 
       - name: Login to DockerHub
         if: steps.authorized.outputs.PUSH == 'true'
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
