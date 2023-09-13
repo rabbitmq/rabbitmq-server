@@ -145,8 +145,8 @@ jobs:
           find . | sort > ${{ github.workspace }}/make.manifest
         popd
 
-        tree -L 2 bazel
-        tree -L 2 make
+        tree -L 3 bazel
+        tree -L 3 make
 
         sleep 1
 
