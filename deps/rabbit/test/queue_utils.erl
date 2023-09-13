@@ -1,4 +1,4 @@
--module(quorum_queue_utils).
+-module(queue_utils).
 
 -include_lib("eunit/include/eunit.hrl").
 

@@ -304,8 +304,8 @@ route_exchange_to_exchange(Config) ->
     bind_queue(Ch, Q2, FanoutX, <<"ignored">>),
 
     publish(Ch, DirectX, RKey),
-    quorum_queue_utils:wait_for_messages(Config, [[Q1, <<"1">>, <<"1">>, <<"0">>]]),
-    quorum_queue_utils:wait_for_messages(Config, [[Q2, <<"1">>, <<"1">>, <<"0">>]]),
+    queue_utils:wait_for_messages(Config, [[Q1, <<"1">>, <<"1">>, <<"0">>]]),
+    queue_utils:wait_for_messages(Config, [[Q2, <<"1">>, <<"1">>, <<"0">>]]),
     ?assertEqual(1, table_size(Config, ?INDEX_TABLE_NAME)),
 
     %% cleanup
