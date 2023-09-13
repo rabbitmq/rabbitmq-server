@@ -242,7 +242,7 @@ quorum_queue_leadership_transfer(Config) ->
         fun () -> rabbit_ct_broker_helpers:is_being_drained_local_read(Config, A) end, 10000),
 
     %% quorum queue leader election is asynchronous
-    AllTheSame = quorum_queue_utils:fifo_machines_use_same_version(
+    AllTheSame = queue_utils:fifo_machines_use_same_version(
                    Config, Nodenames),
     case AllTheSame of
         true ->
