@@ -10,7 +10,11 @@ bazel_dep(
 
 bazel_dep(
     name = "bazel_skylib",
+<<<<<<< HEAD
     version = "1.3.0",
+=======
+    version = "1.4.2",
+>>>>>>> e76ff2dc38 (Use the latest rules_erlang)
 )
 
 bazel_dep(
@@ -25,13 +29,17 @@ bazel_dep(
 
 bazel_dep(
     name = "gazelle",
-    version = "0.29.0",
+    version = "0.33.0",
     repo_name = "bazel_gazelle",
 )
 
 bazel_dep(
     name = "rules_erlang",
+<<<<<<< HEAD
     version = "3.11.3",
+=======
+    version = "3.12.0",
+>>>>>>> e76ff2dc38 (Use the latest rules_erlang)
 )
 
 bazel_dep(
