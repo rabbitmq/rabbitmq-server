@@ -16,7 +16,8 @@ define PROJECT_ENV
 	{frame_max, 1048576},
 	{heartbeat, 60},
 	{advertised_host, undefined},
-	{advertised_port, undefined}
+	{advertised_port, undefined},
+	{advertise_localhost_to_localhost_clients, true}
 ]
 endef
 

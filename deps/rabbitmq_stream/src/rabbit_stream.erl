@@ -23,6 +23,7 @@
          tls_host/0,
          port/0,
          tls_port/0,
+         advertise_localhost_to_localhost_clients/0,
          kill_connection/1]).
 -export([stop/1]).
 -export([emit_connection_info_local/3,
@@ -118,6 +119,9 @@ tls_port_from_listener() ->
                     end,
                     undefined, Listeners),
     Port.
+
+advertise_localhost_to_localhost_clients() ->
+    application:get_env(rabbitmq_stream, advertise_localhost_to_localhost_clients, true).
 
 stop(_State) ->
     ok.

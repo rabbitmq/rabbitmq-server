@@ -184,6 +184,10 @@ end}.
     {datatype, integer}
 ]}.
 
+{mapping, "stream.advertise_localhost_to_localhost_clients", "rabbitmq_stream.advertise_localhost_to_localhost_clients", [
+    {datatype, {enum, [true, false]}}
+]}.
+
 {mapping, "stream.advertised_host", "rabbitmq_stream.advertised_host", [
     {datatype, string}
 ]}.

@@ -1542,12 +1542,22 @@ handle_frame_pre_auth(Transport,
                                                      VirtualHost,
                                                      {socket, S},
                                                      #{}),
+            ClientUsesLoopback = rabbit_net:is_loopback(S),
+            ShouldAdvertiseLoopback = rabbit_stream:advertise_localhost_to_localhost_clients(),
             AdvertisedHost =
-                case TransportLayer of
-                    tcp ->
-                        rabbit_stream:host();
-                    ssl ->
-                        rabbit_stream:tls_host()
+                case {ClientUsesLoopback, ShouldAdvertiseLoopback} of
+                    %% if the user originally connects from localhost, advertise localhost as the connection
+                    %% hostname: connecting using a non-local hostname
+                    %% will fail the loopback check. See rabbitmq/rabbitmq-server#9424
+                    {true, true} ->
+                        <<"localhost">>;
+                    {_, _} ->
+                        case TransportLayer of
+                            tcp ->
+                                rabbit_stream:host();
+                            ssl ->
+                                rabbit_stream:tls_host()
+                        end
                 end,
             AdvertisedPort =
                 case TransportLayer of
