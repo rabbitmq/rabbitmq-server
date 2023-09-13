@@ -64,7 +64,7 @@ jobs:
     - name: UPLOAD package-generic-unix.tar.xz
       uses: actions/upload-artifact@v3.1.3
       with:
-        name: bazel-package-generic-unix.tar.xz
+        name: bazel-package-generic-unix-${{ env.VERSION }}.tar.xz
         path: ${{ env.archives_dir }}/package-generic-unix.tar.xz
         if-no-files-found: error
 
@@ -99,7 +99,7 @@ jobs:
     - name: UPLOAD package-generic-unix.tar.xz
       uses: actions/upload-artifact@v3.1.3
       with:
-        name: make-package-generic-unix.tar.xz
+        name: make-package-generic-unix-${{ env.VERSION }}.tar.xz
         path: PACKAGES/rabbitmq-server-generic-unix-*.tar.xz
         if-no-files-found: error
 
@@ -124,11 +124,11 @@ jobs:
     - name: DOWNLOAD bazel-package-generic-unix.tar.xz
       uses: actions/download-artifact@v3
       with:
-        name: bazel-package-generic-unix.tar.xz
+        name: bazel-package-generic-unix-${{ env.VERSION }}.tar.xz
     - name: DOWNLOAD make-package-generic-unix.tar.xz
       uses: actions/download-artifact@v3
       with:
-        name: make-package-generic-unix.tar.xz
+        name: make-package-generic-unix-${{ env.VERSION }}.tar.xz
     - name: EXPAND & COMPARE
       run: |
         mkdir bazel
@@ -145,8 +145,8 @@ jobs:
           find . | sort > ${{ github.workspace }}/make.manifest
         popd
 
-        tree -L 2 bazel
-        tree -L 2 make
+        tree -L 3 bazel
+        tree -L 3 make
 
         sleep 1
 
