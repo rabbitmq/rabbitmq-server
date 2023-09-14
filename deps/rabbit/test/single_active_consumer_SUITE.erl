@@ -189,7 +189,7 @@ fallback_to_another_consumer_when_first_one_is_cancelled_manual_acks(Config) ->
     {CTag, DTag1} = receive_deliver(),
     {_CTag, DTag2} = receive_deliver(),
 
-    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"0">>, <<"2">>]]),
+    queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"0">>, <<"2">>]]),
     #'basic.cancel_ok'{} = amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
 
     receive
@@ -201,14 +201,14 @@ fallback_to_another_consumer_when_first_one_is_cancelled_manual_acks(Config) ->
                                               Resource = proplists:get_value(queue_name, Props),
                                               Q == Resource#resource.name
                                       end, Consumers1)),
-    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"0">>, <<"2">>]]),
+    queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"0">>, <<"2">>]]),
 
     [amqp_channel:cast(Ch, Publish, #amqp_msg{payload = P}) || P <- [<<"msg3">>, <<"msg4">>]],
 
-    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"4">>, <<"0">>, <<"4">>]]),
+    queue_utils:wait_for_messages(Config, [[Q, <<"4">>, <<"0">>, <<"4">>]]),
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag1}),
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag2}),
-    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"0">>, <<"2">>]]),
+    queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"0">>, <<"2">>]]),
 
     amqp_connection:close(C),
     ok.

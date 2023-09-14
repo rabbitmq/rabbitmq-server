@@ -99,13 +99,13 @@
                                       {from_info, erlang:process_info(FROM)},
                                       {timestamp,
                                        os:system_time(
-                                         milliseconds)}])).
+                                         millisecond)}])).
 -define(TRACE_UNBLOCKED(SELF, FROM), rabbit_event:notify(credit_flow_unblocked,
                                        [{process, SELF},
                                         {from, FROM},
                                         {timestamp,
                                          os:system_time(
-                                           milliseconds)}])).
+                                           millisecond)}])).
 -else.
 -define(TRACE_BLOCKED(SELF, FROM), ok).
 -define(TRACE_UNBLOCKED(SELF, FROM), ok).

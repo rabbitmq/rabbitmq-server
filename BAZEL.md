@@ -75,14 +75,12 @@ Note: This takes quite some time on a single machine.
 
 ### from hex.pm
 
-1. `bazel run gazelle-update-repos -- -args hex.pm/accept@0.3.5` to generate/update `bazel/BUILD.accept`
-1. `git checkout WORKSPACE` to reset the workspace file
+1. `bazel run gazelle-update-repos -- hex.pm/accept@0.3.5` to generate/update `bazel/BUILD.accept`
 1. Add/update the entry in MODULE.bazel
 
 ### from github 
 
-1. `bazel run gazelle-update-repos -- -args --testonly github.com/extend/ct_helper@master`
-1. `git checkout WORKSPACE` to reset the workspace file
+1. `bazel run gazelle-update-repos -- --testonly github.com/extend/ct_helper@master`
 1. Add/update the entry in MODULE.bazel
 
 ## Update BUILD files
