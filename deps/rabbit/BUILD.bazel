@@ -213,6 +213,7 @@ rabbitmq_app(
         "//deps/rabbit/apps/rabbitmq_prelaunch:erlang_app",
         "//deps/rabbit_common:erlang_app",
         "@cuttlefish//:erlang_app",
+        "@gen_batch_server//:erlang_app",
         "@observer_cli//:erlang_app",
         "@osiris//:erlang_app",
         "@ra//:erlang_app",
