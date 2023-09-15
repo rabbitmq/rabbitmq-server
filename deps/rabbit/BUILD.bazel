@@ -1120,6 +1120,22 @@ rabbitmq_integration_suite(
     ],
 )
 
+<<<<<<< HEAD
+=======
+rabbitmq_integration_suite(
+    name = "routing_SUITE",
+    size = "large",
+)
+
+rabbitmq_integration_suite(
+    name = "cli_forget_cluster_node_SUITE",
+    size = "medium",
+    additional_beam = [
+        ":test_clustering_utils_beam",
+    ],
+)
+
+>>>>>>> 7540ccc628 (forget_cluster_node: handle errors while shrinking quorum queues)
 assert_suites()
 
 filegroup(
