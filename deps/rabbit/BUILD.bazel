@@ -1170,6 +1170,14 @@ rabbitmq_integration_suite(
     size = "large",
 )
 
+rabbitmq_integration_suite(
+    name = "cli_forget_cluster_node_SUITE",
+    size = "medium",
+    additional_beam = [
+        ":test_clustering_utils_beam",
+    ],
+)
+
 assert_suites()
 
 filegroup(
