@@ -221,9 +221,9 @@ consume(Q, #{limiter_active := true}, _State)
   when ?amqqueue_is_stream(Q) ->
     {error, global_qos_not_supported_for_queue_type};
 consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
-    %% Messages should include the offset as a custom header.
-    case check_queue_exists_in_local_node(Q) of
-        ok ->
+   %% Messages should include the offset as a custom header.
+    case get_local_pid(QState0) of
+        {LocalPid, QState} when is_pid(LocalPid) ->
             #{no_ack := NoAck,
               channel_pid := ChPid,
               prefetch_count := ConsumerPrefetchCount,
@@ -232,7 +232,8 @@ consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
               args := Args,
               ok_msg := OkMsg} = Spec,
             QName = amqqueue:get_name(Q),
-            case parse_offset_arg(rabbit_misc:table_lookup(Args, <<"x-stream-offset">>)) of
+            case parse_offset_arg(
+                   rabbit_misc:table_lookup(Args, <<"x-stream-offset">>)) of
                 {error, _} = Err ->
                     Err;
                 {ok, OffsetSpec} ->
@@ -245,10 +246,12 @@ consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
                     %% really it should be sent by the stream queue process like classic queues
                     %% do
                     maybe_send_reply(ChPid, OkMsg),
-                    begin_stream(QState0, ConsumerTag, OffsetSpec, ConsumerPrefetchCount)
-            end;
-        Err ->
-            Err
+                    begin_stream(QState, ConsumerTag, OffsetSpec, ConsumerPrefetchCount)
+           end;
+        {undefined, _} ->
+            {protocol_error, precondition_failed,
+             "queue '~ts' does not have a running replica on the local node",
+             [rabbit_misc:rs(amqqueue:get_name(Q))]}
     end.
 
 -spec parse_offset_arg(undefined |
@@ -285,8 +288,7 @@ get_local_pid(#stream_client{local_pid = Pid} = State)
 get_local_pid(#stream_client{leader = Pid} = State)
   when is_pid(Pid) andalso node(Pid) == node() ->
     {Pid, State#stream_client{local_pid = Pid}};
-get_local_pid(#stream_client{stream_id = StreamId,
-                             local_pid = undefined} = State) ->
+get_local_pid(#stream_client{stream_id = StreamId} = State) ->
     %% query local coordinator to get pid
     case rabbit_stream_coordinator:local_pid(StreamId) of
         {ok, Pid} ->
@@ -295,33 +297,29 @@ get_local_pid(#stream_client{stream_id = StreamId,
             {undefined, State}
     end.
 
-begin_stream(#stream_client{name = QName, readers = Readers0} = State0,
-             Tag, Offset, Max) ->
-    {LocalPid, State} = get_local_pid(State0),
-    case LocalPid of
-        undefined ->
-            {error, no_local_stream_replica_available};
-        _ ->
-            CounterSpec = {{?MODULE, QName, Tag, self()}, []},
-            {ok, Seg0} = osiris:init_reader(LocalPid, Offset, CounterSpec),
-            NextOffset = osiris_log:next_offset(Seg0) - 1,
-            osiris:register_offset_listener(LocalPid, NextOffset),
-            %% TODO: avoid double calls to the same process
-            StartOffset = case Offset of
-                              first -> NextOffset;
-                              last -> NextOffset;
-                              next -> NextOffset;
-                              {timestamp, _} -> NextOffset;
-                              _ -> Offset
-                          end,
-            Str0 = #stream{credit = Max,
-                           start_offset = StartOffset,
-                           listening_offset = NextOffset,
-                           log = Seg0,
-                           max = Max},
-            {ok, State#stream_client{local_pid = LocalPid,
-                                     readers = Readers0#{Tag => Str0}}}
-    end.
+begin_stream(#stream_client{name = QName,
+                            readers = Readers0,
+                            local_pid = LocalPid} = State,
+             Tag, Offset, Max)
+  when is_pid(LocalPid) ->
+    CounterSpec = {{?MODULE, QName, Tag, self()}, []},
+    {ok, Seg0} = osiris:init_reader(LocalPid, Offset, CounterSpec),
+    NextOffset = osiris_log:next_offset(Seg0) - 1,
+    osiris:register_offset_listener(LocalPid, NextOffset),
+    StartOffset = case Offset of
+                      first -> NextOffset;
+                      last -> NextOffset;
+                      next -> NextOffset;
+                      {timestamp, _} -> NextOffset;
+                      _ -> Offset
+                  end,
+    Str0 = #stream{credit = Max,
+                   start_offset = StartOffset,
+                   listening_offset = NextOffset,
+                   log = Seg0,
+                   max = Max},
+    {ok, State#stream_client{local_pid = LocalPid,
+                             readers = Readers0#{Tag => Str0}}}.
 
 cancel(_Q, ConsumerTag, OkMsg, ActingUser, #stream_client{readers = Readers0,
                                                           name = QName} = State) ->
@@ -341,8 +339,8 @@ cancel(_Q, ConsumerTag, OkMsg, ActingUser, #stream_client{readers = Readers0,
     end.
 
 credit(QName, CTag, Credit, Drain, #stream_client{readers = Readers0,
-                                           name = Name,
-                                           local_pid = LocalPid} = State) ->
+                                                  name = Name,
+                                                  local_pid = LocalPid} = State) ->
     {Readers1, Msgs} = case Readers0 of
                           #{CTag := #stream{credit = Credit0} = Str0} ->
                               Str1 = Str0#stream{credit = Credit0 + Credit},
@@ -356,7 +354,8 @@ credit(QName, CTag, Credit, Drain, #stream_client{readers = Readers0,
             true ->
                 case Readers1 of
                     #{CTag := #stream{credit = Credit1} = Str2} ->
-                        {Readers0#{CTag => Str2#stream{credit = 0}}, [{send_drained, {CTag, Credit1}}]};
+                        {Readers0#{CTag => Str2#stream{credit = 0}},
+                         [{send_drained, {CTag, Credit1}}]};
                     _ ->
                         {Readers1, []}
                 end;
@@ -386,7 +385,7 @@ deliver(_Confirm, #delivery{message = Msg, msg_seq_no = MsgId},
                        soft_limit = SftLmt,
                        slow = Slow0} = State) ->
     ok = osiris:write(LeaderPid, WriterId, Seq, msg_to_iodata(Msg)),
-    Correlation = case MsgId of
+   Correlation = case MsgId of
                       undefined ->
                           Correlation0;
                       _ when is_number(MsgId) ->
@@ -949,17 +948,6 @@ stream_name(#resource{virtual_host = VHost, name = Name}) ->
 
 recover(Q) ->
     {ok, Q}.
-
-check_queue_exists_in_local_node(Q) ->
-    #{name := StreamId} = amqqueue:get_type_state(Q),
-    case rabbit_stream_coordinator:local_pid(StreamId) of
-        {ok, Pid} when is_pid(Pid) ->
-            ok;
-        _ ->
-            {protocol_error, precondition_failed,
-             "queue '~ts' does not have a replica on the local node",
-             [rabbit_misc:rs(amqqueue:get_name(Q))]}
-    end.
 
 maybe_send_reply(_ChPid, undefined) -> ok;
 maybe_send_reply(ChPid, Msg) -> ok = rabbit_channel:send_command(ChPid, Msg).

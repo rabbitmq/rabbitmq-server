@@ -239,6 +239,8 @@ writer_pid(StreamId) when is_list(StreamId) ->
     MFA = {?MODULE, query_writer_pid, [StreamId]},
     query_pid(StreamId, MFA).
 
+-spec local_pid(string()) ->
+    {ok, pid()} | {error, not_found | term()}.
 local_pid(StreamId) when is_list(StreamId) ->
     MFA = {?MODULE, query_local_pid, [StreamId, node()]},
     query_pid(StreamId, MFA).
