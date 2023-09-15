@@ -1951,54 +1951,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
-<<<<<<< HEAD
-=======
-    erlang_bytecode(
-        name = "rabbitmq_4_0_deprecations_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/rabbitmq_4_0_deprecations_SUITE.erl"],
-        outs = ["test/rabbitmq_4_0_deprecations_SUITE.beam"],
-        app_name = "rabbit",
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app"],
-    )
-    erlang_bytecode(
-        name = "quorum_queue_member_reconciliation_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/quorum_queue_member_reconciliation_SUITE.erl"],
-        outs = ["test/quorum_queue_member_reconciliation_SUITE.beam"],
-        app_name = "rabbit",
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
-    )
-    erlang_bytecode(
-        name = "message_containers_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/message_containers_SUITE.erl"],
-        outs = ["test/message_containers_SUITE.beam"],
-        app_name = "rabbit",
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app"],
-    )
-    erlang_bytecode(
-        name = "mc_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/mc_SUITE.erl"],
-        outs = ["test/mc_SUITE.beam"],
-        hdrs = ["include/mc.hrl"],
-        app_name = "rabbit",
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp10_common:erlang_app", "//deps/rabbit_common:erlang_app"],
-    )
-    erlang_bytecode(
-        name = "routing_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/routing_SUITE.erl"],
-        outs = ["test/routing_SUITE.beam"],
-        app_name = "rabbit",
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app"],
-    )
+
     erlang_bytecode(
         name = "cli_forget_cluster_node_SUITE_beam_files",
         testonly = True,
@@ -2008,4 +1961,3 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )
->>>>>>> 7540ccc628 (forget_cluster_node: handle errors while shrinking quorum queues)
