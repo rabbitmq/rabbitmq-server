@@ -1229,6 +1229,7 @@ eunit(
         ":test_rabbit_ha_test_producer_beam",
         ":test_test_util_beam",
         ":test_test_rabbit_event_handler_beam",
+        ":test_clustering_utils_beam",
     ],
     target = ":test_erlang_app",
 )
