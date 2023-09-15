@@ -60,13 +60,27 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
         error
 
       :ok ->
-        case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :shrink_all, [atom_name]) do
-          {:error, _} ->
-            {:error,
-             "RabbitMQ failed to shrink some of the quorum queues on node #{node_to_remove}"}
+        qq_shrink_result =
+          :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :shrink_all, [atom_name])
 
-          _ ->
+        is_ok_fun = fn
+          {_, {:ok, _}} -> true
+          {_, {:error, _, _}} -> false
+        end
+
+        case Enum.empty?(qq_shrink_result) do
+          true ->
             :ok
+
+          false ->
+            case Enum.any?(qq_shrink_result, is_ok_fun) do
+              false ->
+                {:error,
+                 "RabbitMQ failed to shrink some of the quorum queues on node #{node_to_remove}"}
+
+              true ->
+                :ok
+            end
         end
 
       other ->
