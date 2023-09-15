@@ -219,14 +219,8 @@ consume(Q, #{no_ack := true}, _)
 consume(Q, #{limiter_active := true}, _State)
   when ?amqqueue_is_stream(Q) ->
     {error, global_qos_not_supported_for_queue_type};
-<<<<<<< HEAD
 consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
-=======
-consume(Q, Spec,
-        #stream_client{filtering_supported = FilteringSupported} = QState0)
-  when ?amqqueue_is_stream(Q) ->
->>>>>>> 19ab8824ce (Osiris 1.6.6)
-    %% Messages should include the offset as a custom header.
+   %% Messages should include the offset as a custom header.
     case get_local_pid(QState0) of
         {LocalPid, QState} when is_pid(LocalPid) ->
             #{no_ack := NoAck,
@@ -242,7 +236,6 @@ consume(Q, Spec,
                 {error, _} = Err ->
                     Err;
                 {ok, OffsetSpec} ->
-<<<<<<< HEAD
                     _ = rabbit_stream_coordinator:register_local_member_listener(Q),
                     rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                                          not NoAck, QName,
@@ -252,28 +245,8 @@ consume(Q, Spec,
                     %% really it should be sent by the stream queue process like classic queues
                     %% do
                     maybe_send_reply(ChPid, OkMsg),
-                    begin_stream(QState0, ConsumerTag, OffsetSpec, ConsumerPrefetchCount)
-=======
-                    FilterSpec = filter_spec(Args),
-                    case {FilterSpec, FilteringSupported} of
-                        {#{filter_spec := _}, false} ->
-                            {protocol_error, precondition_failed,
-                             "Filtering is not supported", []};
-                        _ ->
-                            rabbit_core_metrics:consumer_created(ChPid, ConsumerTag,
-                                                                 ExclusiveConsume,
-                                                                 not NoAck, QName,
-                                                                 ConsumerPrefetchCount,
-                                                                 false, up, Args),
-                            %% reply needs to be sent before the stream
-                            %% begins sending
-                            maybe_send_reply(ChPid, OkMsg),
-                            _ = rabbit_stream_coordinator:register_local_member_listener(Q),
-                            begin_stream(QState, ConsumerTag, OffsetSpec,
-                                         ConsumerPrefetchCount, FilterSpec)
-                    end
->>>>>>> 19ab8824ce (Osiris 1.6.6)
-            end;
+                    begin_stream(QState, ConsumerTag, OffsetSpec, ConsumerPrefetchCount)
+           end;
         {undefined, _} ->
             {protocol_error, precondition_failed,
              "queue '~ts' does not have a running replica on the local node",
@@ -323,42 +296,13 @@ get_local_pid(#stream_client{stream_id = StreamId} = State) ->
             {undefined, State}
     end.
 
-<<<<<<< HEAD
-begin_stream(#stream_client{name = QName, readers = Readers0} = State0,
-             Tag, Offset, Max) ->
-    {LocalPid, State} = get_local_pid(State0),
-    case LocalPid of
-        undefined ->
-            {error, no_local_stream_replica_available};
-        _ ->
-            CounterSpec = {{?MODULE, QName, Tag, self()}, []},
-            {ok, Seg0} = osiris:init_reader(LocalPid, Offset, CounterSpec),
-            NextOffset = osiris_log:next_offset(Seg0) - 1,
-            osiris:register_offset_listener(LocalPid, NextOffset),
-            %% TODO: avoid double calls to the same process
-            StartOffset = case Offset of
-                              first -> NextOffset;
-                              last -> NextOffset;
-                              next -> NextOffset;
-                              {timestamp, _} -> NextOffset;
-                              _ -> Offset
-                          end,
-            Str0 = #stream{credit = Max,
-                           start_offset = StartOffset,
-                           listening_offset = NextOffset,
-                           log = Seg0,
-                           max = Max},
-            {ok, State#stream_client{local_pid = LocalPid,
-                                     readers = Readers0#{Tag => Str0}}}
-    end.
-=======
 begin_stream(#stream_client{name = QName,
                             readers = Readers0,
                             local_pid = LocalPid} = State,
-             Tag, Offset, Max, Options)
+             Tag, Offset, Max)
   when is_pid(LocalPid) ->
     CounterSpec = {{?MODULE, QName, Tag, self()}, []},
-    {ok, Seg0} = osiris:init_reader(LocalPid, Offset, CounterSpec, Options),
+    {ok, Seg0} = osiris:init_reader(LocalPid, Offset, CounterSpec),
     NextOffset = osiris_log:next_offset(Seg0) - 1,
     osiris:register_offset_listener(LocalPid, NextOffset),
     StartOffset = case Offset of
@@ -372,11 +316,9 @@ begin_stream(#stream_client{name = QName,
                    start_offset = StartOffset,
                    listening_offset = NextOffset,
                    log = Seg0,
-                   max = Max,
-                   reader_options = Options},
+                   max = Max},
     {ok, State#stream_client{local_pid = LocalPid,
                              readers = Readers0#{Tag => Str0}}}.
->>>>>>> 19ab8824ce (Osiris 1.6.6)
 
 cancel(_Q, ConsumerTag, OkMsg, ActingUser, #stream_client{readers = Readers0,
                                                           name = QName} = State) ->
@@ -433,7 +375,6 @@ deliver(QSs, #delivery{message = Msg, confirm = Confirm} = Delivery) ->
               {[{Q, S} | Qs], As ++ Actions}
       end, {[], []}, QSs).
 
-<<<<<<< HEAD
 deliver(_Confirm, #delivery{message = Msg, msg_seq_no = MsgId},
         #stream_client{name = Name,
                        leader = LeaderPid,
@@ -443,21 +384,7 @@ deliver(_Confirm, #delivery{message = Msg, msg_seq_no = MsgId},
                        soft_limit = SftLmt,
                        slow = Slow0} = State) ->
     ok = osiris:write(LeaderPid, WriterId, Seq, msg_to_iodata(Msg)),
-=======
-deliver0(MsgId, Msg,
-         #stream_client{name = Name,
-                        leader = LeaderPid,
-                        writer_id = WriterId,
-                        next_seq = Seq,
-                        correlation = Correlation0,
-                        soft_limit = SftLmt,
-                        slow = Slow0,
-                        filtering_supported = FilteringSupported} = State,
-         Actions0) ->
-    ok = osiris:write(LeaderPid, WriterId, Seq,
-                      stream_message(Msg, FilteringSupported)),
->>>>>>> 19ab8824ce (Osiris 1.6.6)
-    Correlation = case MsgId of
+   Correlation = case MsgId of
                       undefined ->
                           Correlation0;
                       _ when is_number(MsgId) ->
