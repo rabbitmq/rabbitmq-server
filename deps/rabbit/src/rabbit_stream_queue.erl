@@ -42,7 +42,8 @@
 -export([set_retention_policy/3]).
 -export([restart_stream/3,
          add_replica/3,
-         delete_replica/3]).
+         delete_replica/3,
+         delete_all_replicas/1]).
 -export([format_osiris_event/2]).
 -export([update_stream_conf/2]).
 -export([readers/1]).
@@ -934,6 +935,32 @@ delete_replica(VHost, Name, Node) ->
             end;
         E ->
             E
+    end.
+
+delete_all_replicas(Node) ->
+    rabbit_log:info("Asked to remove all stream replicas from node ~ts", [Node]),
+    Streams = rabbit_amqqueue:list_by_type(stream),
+    Errors = 
+        lists:foldl(fun(Q, Acc) ->
+                            QName = amqqueue:get_name(Q),
+                            rabbit_log:info("~ts: removing replica on node ~w",
+                                            [rabbit_misc:rs(QName), Node]),
+                            #{name := StreamId} = amqqueue:get_type_state(Q),
+                            {ok, Reply, _} = rabbit_stream_coordinator:delete_replica(StreamId, Node),
+                            case Reply of
+                                ok ->
+                                    Acc;
+                                Err ->
+                                    rabbit_log:warning("~ts: failed to remove replica on node ~w, error: ~w",
+                                                       [rabbit_misc:rs(QName), Node, Err]),
+                                    [{QName, Err} | Acc]
+                            end
+                    end, [], Streams),
+    case Errors of
+        [] ->
+            ok;
+        _ ->
+            {error, Errors}
     end.
 
 make_stream_conf(Q) ->
