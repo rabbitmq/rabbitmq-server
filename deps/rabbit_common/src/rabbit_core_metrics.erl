@@ -120,8 +120,9 @@ terminate() ->
      || {Table, _Type} <- ?CORE_TABLES ++ ?CORE_EXTRA_TABLES],
     ok.
 
-connection_created(Pid, Infos) ->
-    ets:insert(connection_created, {Pid, Infos}),
+connection_created(Pid, Infos0) ->
+    Infos1 = maybe_cleanup_infos(Infos0),
+    ets:insert(connection_created, {Pid, Infos1}),
     ets:update_counter(connection_churn_metrics, node(), {2, 1},
                        ?CONNECTION_CHURN_METRICS),
     ok.
@@ -446,3 +447,14 @@ format_auth_attempt({{RemoteAddress, Username, Protocol}, Total, Succeeded, Fail
 format_auth_attempt({Protocol, Total, Succeeded, Failed}) ->
     [{protocol, atom_to_binary(Protocol, utf8)}, {auth_attempts, Total},
      {auth_attempts_failed, Failed}, {auth_attempts_succeeded, Succeeded}].
+
+maybe_cleanup_infos(Infos0) when is_list(Infos0) ->
+    %% Note: authz_backends is added in rabbit_amqp1_0_session_sup:adapter_info/3
+    %% We delete it here, if present, because it should not be stored in the
+    %% connection_created table.
+    %%
+    %% TODO @ansd this will no longer be necessary once this PR is merged:
+    %% https://github.com/rabbitmq/rabbitmq-server/pull/9022
+    proplists:delete(authz_backends, Infos0);
+maybe_cleanup_infos(Infos) ->
+    Infos.

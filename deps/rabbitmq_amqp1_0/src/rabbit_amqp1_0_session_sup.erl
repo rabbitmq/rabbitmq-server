@@ -62,7 +62,7 @@ start_link({amqp10_framing, Sock, Channel, FrameMax, ReaderPid,
                start =>
                    {rabbit_amqp1_0_session_process, start_link, [
                        {Channel, ReaderPid, WriterPid, User, VHost, FrameMax,
-                           adapter_info(User, SocketForAdapterInfo), Collector}
+                           adapter_info(User, SocketForAdapterInfo, Channel), Collector}
                    ]},
                restart => transient,
                significant => true,
@@ -98,7 +98,7 @@ init([]) ->
 %% See rabbit_direct.erl to see how `authz_bakends` is propagated from
 % amqp_adapter_info.additional_info to the rabbit_access_control module
 
-adapter_info(User, Sock) ->
-    AdapterInfo = amqp_connection:socket_adapter_info(Sock, {'AMQP', "1.0"}),
+adapter_info(User, Sock, UniqueId) ->
+    AdapterInfo = amqp_connection:socket_adapter_info(Sock, {'AMQP', "1.0"}, UniqueId),
     AdapterInfo#amqp_adapter_info{additional_info =
         AdapterInfo#amqp_adapter_info.additional_info ++ [{authz_backends, User#user.authz_backends}]}.

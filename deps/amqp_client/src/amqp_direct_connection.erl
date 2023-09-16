@@ -17,7 +17,8 @@
 -export([init/0, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
          info_keys/0, handle_message/2, closing/3, channels_terminated/1]).
 
--export([socket_adapter_info/2]).
+-export([socket_adapter_info/2,
+         socket_adapter_info/3]).
 
 -record(state, {node,
                 user,
@@ -176,17 +177,26 @@ ensure_adapter_info(A = #amqp_adapter_info{name = unknown}) ->
 ensure_adapter_info(Info) -> Info.
 
 socket_adapter_info(Sock, Protocol) ->
+    socket_adapter_info(Sock, Protocol, undefined).
+
+socket_adapter_info(Sock, Protocol, UniqueId) ->
     {PeerHost, PeerPort, Host, Port} =
-        case rabbit_net:socket_ends(Sock, inbound) of
-            {ok, Res} -> Res;
-            _          -> {unknown, unknown, unknown, unknown}
-        end,
-    Name = case rabbit_net:connection_string(Sock, inbound) of
-               {ok, Res1} -> Res1;
-               _Error     -> "(unknown)"
+    case rabbit_net:socket_ends(Sock, inbound) of
+        {ok, Res} -> Res;
+        _         -> {unknown, unknown, unknown, unknown}
+    end,
+    ConnectionString = case rabbit_net:connection_string(Sock, inbound) of
+                           {ok, Res1} -> Res1;
+                           _Error     -> "(unknown)"
+                       end,
+    Name = case UniqueId of
+               undefined ->
+                   rabbit_data_coercion:to_binary(ConnectionString);
+               _ ->
+                   rabbit_data_coercion:to_binary(rabbit_misc:format("~s (~tp)", [ConnectionString, UniqueId]))
            end,
     #amqp_adapter_info{protocol        = Protocol,
-                       name            = list_to_binary(Name),
+                       name            = Name,
                        host            = Host,
                        port            = Port,
                        peer_host       = PeerHost,
