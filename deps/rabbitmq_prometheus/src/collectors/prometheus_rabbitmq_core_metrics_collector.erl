@@ -16,6 +16,8 @@
                                    counter_metric/2,
                                    untyped_metric/2]).
 
+-import(prometheus_text_format, [escape_label_value/1]).
+
 -include_lib("prometheus/include/prometheus.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -408,22 +410,24 @@ label(L) when is_binary(L) ->
     L;
 label(M) when is_map(M) ->
     maps:fold(fun (K, V, Acc = <<>>) ->
-                      <<Acc/binary, K/binary, "=\"", V/binary, "\"">>;
+                      <<Acc/binary, K/binary, "=\"", (escape_label_value(V))/binary, "\"">>;
                   (K, V, Acc) ->
-                      <<Acc/binary, ",", K/binary, "=\"", V/binary, "\"">>
+                      <<Acc/binary, ",", K/binary, "=\"", (escape_label_value(V))/binary, "\"">>
               end, <<>>, M);
 label(#resource{virtual_host = VHost, kind = exchange, name = Name}) ->
-    <<"vhost=\"", VHost/binary, "\",exchange=\"", Name/binary, "\"">>;
+    <<"vhost=\"", (escape_label_value(VHost))/binary, "\",",
+      "exchange=\"", (escape_label_value(Name))/binary, "\"">>;
 label(#resource{virtual_host = VHost, kind = queue, name = Name}) ->
-    <<"vhost=\"", VHost/binary, "\",queue=\"", Name/binary, "\"">>;
+    <<"vhost=\"", (escape_label_value(VHost))/binary, "\",",
+      "queue=\"", (escape_label_value(Name))/binary, "\"">>;
 label({P, {#resource{virtual_host = QVHost, kind = queue, name = QName},
             #resource{virtual_host = EVHost, kind = exchange, name = EName}}}) when is_pid(P) ->
     %% channel_queue_exchange_metrics {channel_id, {queue_id, exchange_id}}
     <<"channel=\"", (iolist_to_binary(pid_to_list(P)))/binary, "\",",
-      "queue_vhost=\"", QVHost/binary, "\",",
-      "queue=\"", QName/binary, "\",",
-      "exchange_vhost=\"", EVHost/binary, "\",",
-      "exchange=\"", EName/binary, "\""
+      "queue_vhost=\"", (escape_label_value(QVHost))/binary, "\",",
+      "queue=\"", (escape_label_value(QName))/binary, "\",",
+      "exchange_vhost=\"", (escape_label_value(EVHost))/binary, "\",",
+      "exchange=\"", (escape_label_value(EName))/binary, "\""
     >>;
 label({RemoteAddress, Username, Protocol}) when is_binary(RemoteAddress), is_binary(Username),
                                                 is_atom(Protocol) ->
