@@ -44,6 +44,7 @@ bazel_dep(
 bazel_dep(
     name = "rabbitmq_osiris",
 <<<<<<< HEAD
+<<<<<<< HEAD
     version = "1.6.4",
 =======
 <<<<<<< HEAD
@@ -53,6 +54,10 @@ bazel_dep(
 >>>>>>> 1768694185 (Delete stream replica even if node is down.)
 >>>>>>> 8ace3d48aa (Delete stream replica even if node is down.)
     repo_name = "osiris",
+=======
+    version = "1.6.7",
+   repo_name = "osiris",
+>>>>>>> 9a537a011f (Resolve a conflict (#9453))
 )
 
 bazel_dep(

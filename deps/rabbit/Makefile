@@ -149,6 +149,7 @@ PLT_APPS += mnesia
 
 dep_syslog = git https://github.com/schlagert/syslog 4.0.0
 <<<<<<< HEAD
+<<<<<<< HEAD
 dep_osiris = git https://github.com/rabbitmq/osiris v1.6.4
 =======
 <<<<<<< HEAD
@@ -158,6 +159,10 @@ dep_osiris = git https://github.com/rabbitmq/osiris v1.6.5
 >>>>>>> 1768694185 (Delete stream replica even if node is down.)
 >>>>>>> 8ace3d48aa (Delete stream replica even if node is down.)
 dep_systemd = hex 0.6.1
+=======
+dep_osiris = git https://github.com/rabbitmq/osiris v1.6.7
+ep_systemd = hex 0.6.1
+>>>>>>> 9a537a011f (Resolve a conflict (#9453))
 dep_seshat = hex 0.4.0
 
 define usage_xml_to_erl
