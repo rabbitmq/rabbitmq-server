@@ -35,7 +35,7 @@ groups() ->
                        dead_letter_missing_exchange,
                        dead_letter_routing_key,
                        dead_letter_headers_should_be_appended_for_each_event,
-                       dead_letter_headers_should_be_appended_for_republish,
+                       dead_letter_headers_should_not_be_appended_for_republish,
                        dead_letter_routing_key_header_CC,
                        dead_letter_routing_key_header_BCC,
                        dead_letter_routing_key_cycle_max_length,
@@ -1120,16 +1120,8 @@ dead_letter_headers_should_be_appended_for_each_event(Config) ->
     ?assertEqual({longstr, Dlx1Name}, rabbit_misc:table_lookup(DeathDlx, <<"queue">>)),
     ok = rabbit_ct_client_helpers:close_connection(Conn).
 
-dead_letter_headers_should_be_appended_for_republish(Config) ->
+dead_letter_headers_should_not_be_appended_for_republish(Config) ->
     %% here we (re-)publish a message with the DL headers already set
-    %% TODO do we want to support this case after message containers?
-    %% when the "re-published" message arrives to the broker,
-    %% the DL headers are already present as 091 headers, not as MC "deaths" annotations.
-    %% The broker adds the death headers for a second time, as MC "deaths" annotations,
-    %% but those will erase the ones in the headers, as annotations and headers
-    %% are not merged (see mc_amqpl:deaths_to_headers/2).
-    %% so death headers are actually appended only if the message is dead lettered
-    %% several times, but *stays* on the broker.
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
     Durable = ?config(queue_durable, Config),
@@ -1163,10 +1155,9 @@ dead_letter_headers_should_be_appended_for_republish(Config) ->
     wait_for_messages(Config, [[DlxName, <<"0">>, <<"0">>, <<"0">>]]),
 
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
-    DeadLetterArgs1 = DeadLetterArgs ++ [{<<"x-max-length">>, long, 0}],
+    DeadLetterArgs1 = DeadLetterArgs ++ [{<<"x-message-ttl">>, long, 1}],
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs1 ++ Args, durable = Durable}),
 
-    %% publish, should go straight to the dlx
     publish(Ch, QName, [P], Headers1),
 
     wait_for_messages(Config, [[DlxName, <<"1">>, <<"1">>, <<"0">>]]),
@@ -1174,8 +1165,8 @@ dead_letter_headers_should_be_appended_for_republish(Config) ->
                                   props = #'P_basic'{headers = Headers2}}} =
         amqp_channel:call(Ch, #'basic.get'{queue = DlxName}),
 
-    {array, [{table, Death2}, {table, _Death1}]} = rabbit_misc:table_lookup(Headers2, <<"x-death">>),
-    ?assertEqual({longstr, <<"maxlen">>}, rabbit_misc:table_lookup(Death2, <<"reason">>)),
+    {array, [{table, Death2}]} = rabbit_misc:table_lookup(Headers2, <<"x-death">>),
+    ?assertEqual({longstr, <<"expired">>}, rabbit_misc:table_lookup(Death2, <<"reason">>)),
     ok = rabbit_ct_client_helpers:close_connection(Conn).
 
 %% Dead-lettering a message modifies its headers:
