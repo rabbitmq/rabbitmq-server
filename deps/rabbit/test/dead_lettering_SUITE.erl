@@ -176,21 +176,27 @@ end_per_group(Group, Config) ->
     end.
 
 init_per_testcase(Testcase, Config) ->
-    Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
-    Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~tp", [Group, Testcase])),
-    Q2 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_2", [Group, Testcase])),
-    Q3 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_3", [Group, Testcase])),
-    Policy = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_policy", [Group, Testcase])),
-    DLXExchange = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_dlx_exchange",
-                                                               [Group, Testcase])),
-    Counters = get_global_counters(Config),
-    Config1 = rabbit_ct_helpers:set_config(Config, [{dlx_exchange, DLXExchange},
-                                                    {queue_name, Q},
-                                                    {queue_name_dlx, Q2},
-                                                    {queue_name_dlx_2, Q3},
-                                                    {policy, Policy},
-                                                    {counters, Counters}]),
-    rabbit_ct_helpers:testcase_started(Config1, Testcase).
+    IsMixed = rabbit_ct_helpers:is_mixed_versions(),
+    case Testcase of
+        dead_letter_headers_should_not_be_appended_for_republish when IsMixed ->
+            {skip, "dead_letter_headers_should_not_be_appended_for_republish isn't mixed versions compatible"};
+        _ ->
+            Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
+            Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~tp", [Group, Testcase])),
+            Q2 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_2", [Group, Testcase])),
+            Q3 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_3", [Group, Testcase])),
+            Policy = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_policy", [Group, Testcase])),
+            DLXExchange = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_dlx_exchange",
+                                                                       [Group, Testcase])),
+            Counters = get_global_counters(Config),
+            Config1 = rabbit_ct_helpers:set_config(Config, [{dlx_exchange, DLXExchange},
+                                                            {queue_name, Q},
+                                                            {queue_name_dlx, Q2},
+                                                            {queue_name_dlx_2, Q3},
+                                                            {policy, Policy},
+                                                            {counters, Counters}]),
+            rabbit_ct_helpers:testcase_started(Config1, Testcase)
+    end.
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
