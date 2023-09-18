@@ -85,24 +85,52 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
         qq_shrink_result =
           :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :shrink_all, [atom_name])
 
-        is_ok_fun = fn
-          {_, {:ok, _}} -> true
-          {_, {:error, _, _}} -> false
+        stream_shrink_result =
+          case :rabbit_misc.rpc_call(node_name, :rabbit_stream_queue, :delete_all_replicas, [
+                 atom_name
+               ]) do
+            ## For backwards compatibility
+            {:badrpc, {:EXIT, {:undef, [{:rabbit_stream_queue, :delete_all_replicas, _, _}]}}} ->
+              []
+
+            any ->
+              any
+          end
+
+        is_error_fun = fn
+          {_, {:ok, _}} ->
+            false
+
+          {_, :ok} ->
+            false
+
+          {_, {:error, _, _}} ->
+            true
+
+          {_, {:error, _}} ->
+            true
         end
 
-        case Enum.empty?(qq_shrink_result) do
-          true ->
+        has_qq_error =
+          not Enum.empty?(qq_shrink_result) and Enum.any?(qq_shrink_result, is_error_fun)
+
+        has_stream_error =
+          not Enum.empty?(stream_shrink_result) and Enum.any?(stream_shrink_result, is_error_fun)
+
+        case {has_qq_error, has_stream_error} do
+          {false, false} ->
             :ok
 
-          false ->
-            case Enum.any?(qq_shrink_result, is_ok_fun) do
-              false ->
-                {:error,
-                 "RabbitMQ failed to shrink some of the quorum queues on node #{node_to_remove}"}
+          {true, false} ->
+            {:error,
+             "RabbitMQ failed to shrink some of the quorum queues on node #{node_to_remove}"}
 
-              true ->
-                :ok
-            end
+          {false, true} ->
+            {:error, "RabbitMQ failed to shrink some of the streams on node #{node_to_remove}"}
+
+          {true, true} ->
+            {:error,
+             "RabbitMQ failed to shrink some of the quorum queues and streams on node #{node_to_remove}"}
         end
 
       other ->
