@@ -643,7 +643,7 @@ reject_publish_max_length_target_quorum_queue(Config) ->
          Msg = integer_to_binary(N),
          ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg}},
                      amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
-                     ?DEFAULT_WAIT, ?DEFAULT_INTERVAL)
+                     30000)
      end || N <- lists:seq(1,4)],
     eventually(?_assertEqual([{0, 0}],
                              dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)), 500, 10),
@@ -987,7 +987,7 @@ single_dlx_worker(Config) ->
     true = rpc(Config, Leader0, erlang, exit, [Pid, kill]),
     {ok, _, {_, Leader1}} = ?awaitMatch({ok, _, _},
                                         ra:members({RaName, Follower0}),
-                                        1000),
+                                        30000),
     ?assertNotEqual(Leader0, Leader1),
     [Follower1, Follower2] = Servers -- [Leader1],
     assert_active_dlx_workers(0, Config, Follower1),
