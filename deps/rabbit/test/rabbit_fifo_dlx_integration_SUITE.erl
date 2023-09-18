@@ -640,13 +640,9 @@ reject_publish_max_length_target_quorum_queue(Config) ->
     [begin
          timer:sleep(2000),
          Msg = integer_to_binary(N),
-<<<<<<< HEAD
-         {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} = amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})
-=======
-         ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg}},
+        ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg}},
                      amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
                      30000)
->>>>>>> 40d055732a (Tests: increase await timeout)
      end || N <- lists:seq(1,4)],
     eventually(?_assertEqual([{0, 0}],
                              dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)), 500, 10),
