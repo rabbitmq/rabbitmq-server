@@ -1288,7 +1288,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                           RoutingKey,
                           DecodedContent) of
         {error, Reason}  ->
-            precondition_failed("invalid message: ~tp", [Reason]);
+            rabbit_misc:precondition_failed("invalid message: ~tp", [Reason]);
         {ok, Message0} ->
             Message = rabbit_message_interceptor:intercept(Message0),
             QNames = rabbit_exchange:route(Exchange, Message, #{return_binding_keys => true}),
