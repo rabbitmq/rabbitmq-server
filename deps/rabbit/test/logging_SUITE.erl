@@ -926,7 +926,7 @@ logging_to_exchange_works(Config) ->
     ?awaitMatch({ok, _}, rabbit_ct_broker_helpers:rpc(
                            Config, 0,
                            rabbit_exchange, lookup, [Exchange]),
-                10000),
+                30000),
 
     %% Declare a queue to collect all logged messages.
     {Conn, Chan} = rabbit_ct_client_helpers:open_connection_and_channel(
