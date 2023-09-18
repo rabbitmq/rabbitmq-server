@@ -926,14 +926,9 @@ delete_replica(VHost, Name, Node) ->
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
-            case lists:member(Node, rabbit_nodes:list_running()) of
-                false ->
-                    {error, node_not_running};
-                true ->
-                    #{name := StreamId} = amqqueue:get_type_state(Q),
-                    {ok, Reply, _} = rabbit_stream_coordinator:delete_replica(StreamId, Node),
-                    Reply
-            end;
+            #{name := StreamId} = amqqueue:get_type_state(Q),
+            {ok, Reply, _} = rabbit_stream_coordinator:delete_replica(StreamId, Node),
+            Reply;
         E ->
             E
     end.
