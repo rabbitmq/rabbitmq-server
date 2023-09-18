@@ -941,28 +941,21 @@ delete_replica(VHost, Name, Node) ->
 delete_all_replicas(Node) ->
     rabbit_log:info("Asked to remove all stream replicas from node ~ts", [Node]),
     Streams = rabbit_amqqueue:list_by_type(stream),
-    Errors = 
-        lists:foldl(fun(Q, Acc) ->
-                            QName = amqqueue:get_name(Q),
-                            rabbit_log:info("~ts: removing replica on node ~w",
-                                            [rabbit_misc:rs(QName), Node]),
-                            #{name := StreamId} = amqqueue:get_type_state(Q),
-                            {ok, Reply, _} = rabbit_stream_coordinator:delete_replica(StreamId, Node),
-                            case Reply of
-                                ok ->
-                                    Acc;
-                                Err ->
-                                    rabbit_log:warning("~ts: failed to remove replica on node ~w, error: ~w",
-                                                       [rabbit_misc:rs(QName), Node, Err]),
-                                    [{QName, Err} | Acc]
-                            end
-                    end, [], Streams),
-    case Errors of
-        [] ->
-            ok;
-        _ ->
-            {error, Errors}
-    end.
+    lists:map(fun(Q) ->
+                      QName = amqqueue:get_name(Q),
+                      rabbit_log:info("~ts: removing replica on node ~w",
+                                      [rabbit_misc:rs(QName), Node]),
+                      #{name := StreamId} = amqqueue:get_type_state(Q),
+                      {ok, Reply, _} = rabbit_stream_coordinator:delete_replica(StreamId, Node),
+                      case Reply of
+                          ok ->
+                              {QName, ok};
+                          Err ->
+                              rabbit_log:warning("~ts: failed to remove replica on node ~w, error: ~w",
+                                                 [rabbit_misc:rs(QName), Node, Err]),
+                              {QName, {error, Err}}
+                      end
+              end, Streams).
 
 make_stream_conf(Q) ->
     QName = amqqueue:get_name(Q),
