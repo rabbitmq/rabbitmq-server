@@ -22,7 +22,7 @@
 -record(wstate, {sock, channel, frame_max, protocol, reader,
                  stats_timer, pending}).
 
--define(HIBERNATE_AFTER, 5000).
+-define(HIBERNATE_AFTER, 6_000).
 -define(AMQP_SASL_FRAME_TYPE, 1).
 
 %%---------------------------------------------------------------------------

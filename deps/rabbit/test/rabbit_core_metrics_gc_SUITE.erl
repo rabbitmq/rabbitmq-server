@@ -127,10 +127,13 @@ connection_metrics(Config) ->
 
     DeadPid = rabbit_ct_broker_helpers:rpc(Config, A, ?MODULE, dead_pid, []),
 
+    Infos = [{info0, foo}, {info1, bar}, {info2, baz},
+             {authz_backends, [rabbit_auth_backend_oauth2,rabbit_auth_backend_http]}],
+
     rabbit_ct_broker_helpers:rpc(Config, A, rabbit_core_metrics,
-                                 connection_created, [DeadPid, infos]),
+                                 connection_created, [DeadPid, Infos]),
     rabbit_ct_broker_helpers:rpc(Config, A, rabbit_core_metrics,
-                                 connection_stats, [DeadPid, infos]),
+                                 connection_stats, [DeadPid, Infos]),
     rabbit_ct_broker_helpers:rpc(Config, A, rabbit_core_metrics,
                                  connection_stats, [DeadPid, 1, 1, 1]),
 

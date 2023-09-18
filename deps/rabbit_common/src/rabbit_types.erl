@@ -30,7 +30,8 @@
               node_type/0, topic_access_context/0,
               authz_data/0, authz_context/0,
               permission_atom/0, rabbit_amqqueue_name/0, binding_key/0, channel_number/0,
-              exchange_name/0, exchange_type/0, guid/0, routing_key/0]).
+              exchange_name/0, exchange_type/0, guid/0, routing_key/0,
+              sup_ref/0, child/0, child_id/0]).
 
 -type(option(T) :: T | 'none' | 'undefined').
 %% Deprecated, 'maybe' is a keyword in modern Erlang
@@ -216,3 +217,13 @@
 -type(authz_context() :: map()).
 
 -type(permission_atom() :: 'configure' | 'write' | 'read').
+
+%% not exported by OTP supervisor
+-type sup_ref()   :: (Name :: atom())
+                   | {Name :: atom(), Node :: node()}
+                   | {'global', Name :: term()}
+                   | {'via', Module :: module(), Name :: any()}
+                   | pid().
+
+-type child() :: 'undefined' | pid().
+-type child_id() :: term().

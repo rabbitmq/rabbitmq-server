@@ -399,6 +399,8 @@ session_expiry_disconnect_decrease(QueueType, Config) ->
 
     %% DISCONNECT decreases Session Expiry Interval from 100 seconds to 1 second.
     ok = emqtt:disconnect(C1, ?RC_NORMAL_DISCONNECTION, #{'Session-Expiry-Interval' => 1}),
+    %% Wait a bit since DISCONNECT is async.
+    timer:sleep(50),
     assert_queue_ttl(1, 1, Config),
 
     timer:sleep(1500),

@@ -652,7 +652,13 @@ priority_on_acktags(P, AckTags) ->
 combine_status(P, New, nothing) ->
     [{priority_lengths, [{P, proplists:get_value(len, New)}]} | New];
 combine_status(P, New, Old) ->
-    Combined = [{K, cse(V, proplists:get_value(K, Old))} || {K, V} <- New],
+    Combined = [case K of
+                    version ->
+                        {K, proplists:get_value(version, Old)};
+                    _ ->
+                        {K, cse(V, proplists:get_value(K, Old))}
+                end
+                || {K, V} <- New],
     Lens = [{P, proplists:get_value(len, New)} |
             proplists:get_value(priority_lengths, Old)],
     [{priority_lengths, Lens} | Combined].

@@ -13,6 +13,7 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/logging.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -export([suite/0,
          all/0,
@@ -922,18 +923,10 @@ logging_to_exchange_works(Config) ->
       #{exchange := #resource{name = XName} = Exchange}} = ExchangeHandler,
 
     %% Wait for the expected exchange to be automatically declared.
-    ?assert(
-       lists:any(
-         fun(_) ->
-                 Ret = rabbit_ct_broker_helpers:rpc(
-                         Config, 0,
-                         rabbit_exchange, lookup, [Exchange]),
-                 case Ret of
-                     {ok, _} -> true;
-                     _       -> timer:sleep(500),
-                                false
-                 end
-         end, lists:seq(1, 20))),
+    ?awaitMatch({ok, _}, rabbit_ct_broker_helpers:rpc(
+                           Config, 0,
+                           rabbit_exchange, lookup, [Exchange]),
+                30000),
 
     %% Declare a queue to collect all logged messages.
     {Conn, Chan} = rabbit_ct_client_helpers:open_connection_and_channel(

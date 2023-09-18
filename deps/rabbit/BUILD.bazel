@@ -216,6 +216,7 @@ rabbitmq_app(
         "//deps/rabbit/apps/rabbitmq_prelaunch:erlang_app",
         "//deps/rabbit_common:erlang_app",
         "@cuttlefish//:erlang_app",
+        "@gen_batch_server//:erlang_app",
         "@observer_cli//:erlang_app",
         "@osiris//:erlang_app",
         "@ra//:erlang_app",
@@ -335,7 +336,7 @@ rabbitmq_integration_suite(
     name = "quorum_queue_member_reconciliation_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
 )
 
@@ -374,7 +375,7 @@ rabbitmq_integration_suite(
     name = "consumer_timeout_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
 )
 
@@ -387,7 +388,7 @@ rabbitmq_integration_suite(
     name = "dead_lettering_SUITE",
     size = "large",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
     shard_count = 7,
 )
@@ -430,7 +431,7 @@ rabbitmq_integration_suite(
     name = "dynamic_qq_SUITE",
     size = "large",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
     flaky = True,
     deps = [
@@ -513,7 +514,7 @@ rabbitmq_integration_suite(
     name = "maintenance_mode_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
 )
 
@@ -650,7 +651,7 @@ rabbitmq_integration_suite(
     name = "publisher_confirms_parallel_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
 )
 
@@ -669,7 +670,7 @@ rabbitmq_integration_suite(
     name = "queue_parallel_SUITE",
     size = "large",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
     shard_count = 6,
 )
@@ -683,7 +684,7 @@ rabbitmq_integration_suite(
     name = "quorum_queue_SUITE",
     size = "large",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
     flaky = True,
     shard_count = 6,
@@ -744,7 +745,7 @@ rabbitmq_integration_suite(
     size = "medium",
     additional_beam = [
         ":test_test_util_beam",
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
         ":quorum_queue_SUITE_beam_files",
     ],
     deps = [
@@ -790,7 +791,7 @@ rabbitmq_suite(
 )
 
 rabbitmq_suite(
-    name = "mc_SUITE",
+    name = "mc_unit_SUITE",
     size = "small",
     deps = [
         "//deps/amqp10_common:erlang_app",
@@ -819,7 +820,7 @@ rabbitmq_integration_suite(
     name = "rabbit_stream_queue_SUITE",
     size = "large",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
     shard_count = 21,
     deps = [
@@ -867,7 +868,7 @@ rabbitmq_integration_suite(
     name = "single_active_consumer_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
 )
 
@@ -1091,7 +1092,7 @@ rabbitmq_integration_suite(
     name = "direct_exchange_routing_v2_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
 )
 
@@ -1112,7 +1113,7 @@ rabbitmq_integration_suite(
     name = "exchanges_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
 )
 
@@ -1167,6 +1168,14 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "routing_SUITE",
     size = "large",
+)
+
+rabbitmq_integration_suite(
+    name = "cli_forget_cluster_node_SUITE",
+    size = "medium",
+    additional_beam = [
+        ":test_clustering_utils_beam",
+    ],
 )
 
 assert_suites()
@@ -1256,7 +1265,7 @@ eunit(
         ":test_dummy_supervisor2_beam",
         ":test_failing_dummy_interceptor_beam",
         ":test_mirrored_supervisor_SUITE_gs_beam",
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
         ":test_rabbit_auth_backend_context_propagation_mock_beam",
         ":test_rabbit_dummy_protocol_connection_info_beam",
         ":test_rabbit_foo_protocol_connection_info_beam",

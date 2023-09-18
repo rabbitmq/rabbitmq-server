@@ -65,7 +65,8 @@
 -export([error_atom/1]).
 -export([info/2, info_keys/1, info_keys/0]).
 -export([connection_name/1, update_secret/3]).
--export([socket_adapter_info/2]).
+-export([socket_adapter_info/2,
+         socket_adapter_info/3]).
 
 -define(DEFAULT_CONSUMER, {amqp_selective_consumer, []}).
 
@@ -379,7 +380,12 @@ info_keys() ->
 %% @doc Takes a socket and a protocol, returns an #amqp_adapter_info{}
 %% based on the socket for the protocol given.
 socket_adapter_info(Sock, Protocol) ->
-    amqp_direct_connection:socket_adapter_info(Sock, Protocol).
+    socket_adapter_info(Sock, Protocol, undefined).
+
+%% @doc Takes a socket and a protocol, returns an #amqp_adapter_info{}
+%% based on the socket for the protocol given.
+socket_adapter_info(Sock, Protocol, UniqueId) ->
+    amqp_direct_connection:socket_adapter_info(Sock, Protocol, UniqueId).
 
 %% @spec (ConnectionPid) -> ConnectionName
 %% where

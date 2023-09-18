@@ -1,4 +1,4 @@
--module(mc_SUITE).
+-module(mc_unit_SUITE).
 
 -compile([export_all, nowarn_export_all]).
 

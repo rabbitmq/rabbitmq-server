@@ -149,9 +149,9 @@ TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck prop
 PLT_APPS += mnesia
 
 dep_syslog = git https://github.com/schlagert/syslog 4.0.0
-dep_osiris = git https://github.com/rabbitmq/osiris v1.6.5
+dep_osiris = git https://github.com/rabbitmq/osiris v1.6.7
 dep_systemd = hex 0.6.1
-dep_seshat = hex 0.4.0
+dep_seshat = git https://github.com/rabbitmq/seshat v0.6.1
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))

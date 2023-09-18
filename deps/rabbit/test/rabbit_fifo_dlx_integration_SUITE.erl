@@ -18,10 +18,11 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
--import(quorum_queue_utils, [wait_for_messages_ready/3,
-                             wait_for_min_messages/3,
-                             dirty_query/3,
-                             ra_name/1]).
+-import(queue_utils, [wait_for_messages_ready/3,
+                      wait_for_min_messages/3,
+                      wait_for_messages/2,
+                      dirty_query/3,
+                      ra_name/1]).
 -import(rabbit_ct_helpers, [eventually/1,
                             eventually/3,
                             consistently/1]).
@@ -639,9 +640,10 @@ reject_publish_max_length_target_quorum_queue(Config) ->
     %% Make space in target queue by consuming messages one by one
     %% allowing for more dead-lettered messages to reach the target queue.
     [begin
-         timer:sleep(2000),
          Msg = integer_to_binary(N),
-         {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} = amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})
+         ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg}},
+                     amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
+                     30000)
      end || N <- lists:seq(1,4)],
     eventually(?_assertEqual([{0, 0}],
                              dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)), 500, 10),
@@ -686,7 +688,7 @@ reject_publish_down_target_quorum_queue(Config) ->
      end || N <- lists:seq(21, 50)],
 
     %% The target queue should have all 50 messages.
-    timer:sleep(2000),
+    wait_for_messages(Config, [[TargetQ, <<"50">>, <<"50">>, <<"0">>]]),
     Received = lists:foldl(
                  fun(_N, S) ->
                          {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} =
@@ -985,7 +987,7 @@ single_dlx_worker(Config) ->
     true = rpc(Config, Leader0, erlang, exit, [Pid, kill]),
     {ok, _, {_, Leader1}} = ?awaitMatch({ok, _, _},
                                         ra:members({RaName, Follower0}),
-                                        1000),
+                                        30000),
     ?assertNotEqual(Leader0, Leader1),
     [Follower1, Follower2] = Servers -- [Leader1],
     assert_active_dlx_workers(0, Config, Follower1),
