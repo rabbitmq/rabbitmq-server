@@ -406,13 +406,8 @@ start_it(StartType) ->
                 ok = wait_for_ready_or_stopped(),
 
                 T1 = erlang:timestamp(),
-<<<<<<< HEAD
-                ?LOG_DEBUG(
-                  "Time to start RabbitMQ: ~p us",
-=======
                 ?LOG_INFO(
                   "Time to start RabbitMQ: ~tp us",
->>>>>>> 068d9f9b00 (Change log level for startup time to info)
                   [timer:now_diff(T1, T0)]),
                 stop_boot_marker(Marker),
                 ok
