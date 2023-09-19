@@ -178,12 +178,7 @@ rabbitmq_run_command(
     subcommand = "stop-node",
 )
 
-<<<<<<< HEAD
-# Allow us to `bazel run start-cluster`
-=======
-
 # Allows us to `bazel run start-cluster`
->>>>>>> 439bc35916 (BUILD.bazel: fix a few typos)
 # for the equivalent of `make start-cluster`
 rabbitmq_run_command(
     name = "start-cluster",
