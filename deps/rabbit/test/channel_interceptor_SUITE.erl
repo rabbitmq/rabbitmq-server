@@ -23,6 +23,7 @@ groups() ->
       {non_parallel_tests, [], [
           register_interceptor,
           register_interceptor_failing_with_amqp_error,
+          register_interceptor_crashing_with_amqp_error_exception,
           register_failing_interceptors
         ]}
     ].
@@ -120,13 +121,62 @@ register_interceptor_failing_with_amqp_error1(Config, Interceptor) ->
     #'queue.declare_ok'{} =
         amqp_channel:call(Ch1, #'queue.declare'{queue = Q1}),
 
-    Q2 = <<"failing-q">>,
+    Q2 = <<"failing-with-amqp-error-q">>,
     try
         amqp_channel:call(Ch1, #'queue.declare'{queue = Q2})
     catch
       _:Reason ->
           ?assertMatch(
               {{shutdown, {_, _, <<"PRECONDITION_FAILED - operation not allowed">>}}, _},
+              Reason)
+    end,
+
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, 0),
+    [ChannelProc1] = rabbit_channel:list() -- PredefinedChannels,
+
+    ok = rabbit_registry:unregister(channel_interceptor,
+                                  <<"dummy interceptor">>),
+    [{interceptors, []}] = rabbit_channel:info(ChannelProc1, [interceptors]),
+
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Ch2, #'queue.declare'{queue = Q2}),
+
+    #'queue.delete_ok'{} = amqp_channel:call(Ch2, #'queue.delete' {queue = Q1}),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch2, #'queue.delete' {queue = Q2}),
+
+    passed.
+
+register_interceptor_crashing_with_amqp_error_exception(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, register_interceptor_crashing_with_amqp_error_exception1,
+      [Config, dummy_interceptor]).
+
+register_interceptor_crashing_with_amqp_error_exception1(Config, Interceptor) ->
+    PredefinedChannels = rabbit_channel:list(),
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+    [ChannelProc] = rabbit_channel:list() -- PredefinedChannels,
+
+    [{interceptors, []}] = rabbit_channel:info(ChannelProc, [interceptors]),
+
+    ok = rabbit_registry:register(channel_interceptor,
+                                  <<"dummy interceptor">>,
+                                  Interceptor),
+    [{interceptors, [{Interceptor, undefined}]}] =
+      rabbit_channel:info(ChannelProc, [interceptors]),
+
+    Q1 = <<"succeeding-q">>,
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Ch1, #'queue.declare'{queue = Q1}),
+
+    Q2 = <<"crashing-with-amqp-exception-q">>,
+    try
+        amqp_channel:call(Ch1, #'queue.declare'{queue = Q2})
+    catch
+      _:Reason ->
+          ?assertMatch(
+              {{shutdown, {_, _, <<"PRECONDITION_FAILED - inequivalent arg 'durable' for queue 'crashing-with-amqp-exception-q' in vhost '/': received 'false' but current is 'true'">>}}, _},
               Reason)
     end,
 
