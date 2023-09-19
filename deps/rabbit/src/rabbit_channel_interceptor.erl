@@ -72,7 +72,9 @@ call_module(Mod, St, M, C) ->
     % this little dance is because Mod might be unloaded at any point
     case (catch {ok, Mod:intercept(M, C, St)}) of
         {ok, R} -> validate_response(Mod, M, C, R);
-        {'EXIT', {undef, [{Mod, intercept, _, _} | _]}} -> {M, C}
+        {'EXIT', {undef, [{Mod, intercept, _, _} | _]}} -> {M, C};
+        {'EXIT', {amqp_error, _Type, _ErrMsg, _} = AMQPError} ->
+            rabbit_misc:protocol_error(AMQPError)
     end.
 
 validate_response(Mod, M1, C1, R = {M2, C2}) ->
