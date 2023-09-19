@@ -158,7 +158,7 @@ trace(X, Msg0, RKPrefix, RKSuffix, Extra) ->
                                                   ++ Extra},
                                        properties_bin = none},
             TargetXName = SourceXName#resource{name = ?XNAME},
-            TraceMsg = mc_amqpl:message(TargetXName, Key, Content),
+            {ok, TraceMsg} = mc_amqpl:message(TargetXName, Key, Content),
             ok = rabbit_queue_type:publish_at_most_once(X, TraceMsg),
             ok
     end.

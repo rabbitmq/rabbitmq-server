@@ -2541,6 +2541,6 @@ compat(McMqtt, #state{cfg = #cfg{exchange = XName}}) ->
             [RoutingKey] = mc:get_annotation(routing_keys, McMqtt),
             McLegacy = mc:convert(mc_amqpl, McMqtt),
             Content = mc:protocol_state(McLegacy),
-            BasicMsg = mc_amqpl:message(XName, RoutingKey, Content, #{}, FFState),
+            {ok, BasicMsg} = mc_amqpl:message(XName, RoutingKey, Content, #{}, FFState),
             rabbit_basic:add_header(<<"x-mqtt-publish-qos">>, byte, Qos, BasicMsg)
     end.

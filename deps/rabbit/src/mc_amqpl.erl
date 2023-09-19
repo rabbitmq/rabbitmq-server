@@ -433,12 +433,13 @@ protocol_state(Content0, Anns) ->
     %% changed
     protocol_state(prepare(read, Content0), Anns).
 
--spec message(rabbit_types:exchange_name(), rabbit_types:routing_key(), #content{}) -> mc:state().
+-spec message(rabbit_types:exchange_name(), rabbit_types:routing_key(), #content{}) ->
+    {ok, mc:state()} | {error, Reason :: any()}.
 message(ExchangeName, RoutingKey, Content) ->
     message(ExchangeName, RoutingKey, Content, #{}).
 
 -spec message(rabbit_types:exchange_name(), rabbit_types:routing_key(), #content{}, map()) ->
-    mc:state().
+    {ok, mc:state()} | {error, Reason :: any()}.
 message(XName, RoutingKey, Content, Anns) ->
     message(XName, RoutingKey, Content, Anns,
             rabbit_feature_flags:is_enabled(message_containers)).
@@ -449,19 +450,27 @@ message(#resource{name = ExchangeNameBin}, RoutingKey,
         #content{properties = Props} = Content, Anns, true)
   when is_binary(RoutingKey) andalso
        is_map(Anns) ->
-    HeaderRoutes = rabbit_basic:header_routes(Props#'P_basic'.headers),
-    mc:init(?MODULE,
-            rabbit_basic:strip_bcc_header(Content),
-            Anns#{routing_keys => [RoutingKey | HeaderRoutes],
-                  exchange => ExchangeNameBin});
+    case rabbit_basic:header_routes(Props#'P_basic'.headers) of
+        {error, _} = Error ->
+            Error;
+        HeaderRoutes ->
+            {ok, mc:init(?MODULE,
+                         rabbit_basic:strip_bcc_header(Content),
+                         Anns#{routing_keys => [RoutingKey | HeaderRoutes],
+                               exchange => ExchangeNameBin})}
+    end;
 message(#resource{} = XName, RoutingKey,
         #content{} = Content, Anns, false) ->
-    {ok, Msg} = rabbit_basic:message(XName, RoutingKey, Content),
-    case Anns of
-        #{id := Id} ->
-            Msg#basic_message{id = Id};
-        _ ->
-            Msg
+    case rabbit_basic:message(XName, RoutingKey, Content) of
+        {ok, Msg} ->
+            case Anns of
+                #{id := Id} ->
+                    {ok, Msg#basic_message{id = Id}};
+                _ ->
+                    {ok, Msg}
+            end;
+        {error, _} = Error ->
+            Error
     end.
 
 from_basic_message(#basic_message{content = Content,
@@ -474,7 +483,8 @@ from_basic_message(#basic_message{content = Content,
                _ ->
                    #{id => Id}
            end,
-    message(Ex, RKey, prepare(read, Content), Anns, true).
+    {ok, Msg} = message(Ex, RKey, prepare(read, Content), Anns, true),
+    Msg.
 
 %% Internal
 
