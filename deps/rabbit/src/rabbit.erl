@@ -388,7 +388,7 @@ start_it(StartType) ->
                 ok = wait_for_ready_or_stopped(),
 
                 T1 = erlang:timestamp(),
-                ?LOG_DEBUG(
+                ?LOG_INFO(
                   "Time to start RabbitMQ: ~tp us",
                   [timer:now_diff(T1, T0)]),
                 stop_boot_marker(Marker),
