@@ -170,6 +170,14 @@ rabbitmq_run_command(
     subcommand = "start-background-broker",
 )
 
+# Allow us to `bazel run stop-broker`
+# Useful is broker started in the background
+rabbitmq_run_command(
+    name = "stop-broker",
+    rabbitmq_run = ":rabbitmq-run",
+    subcommand = "stop-node",
+)
+
 # Allow us to `bazel run start-cluster`
 # for the equivalent of `make start-cluster`
 rabbitmq_run_command(
