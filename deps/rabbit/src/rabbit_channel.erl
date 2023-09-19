@@ -2157,8 +2157,9 @@ deliver_to_queues(XName,
     ?INCR_STATS(exchange_stats, XName, 1, drop_unroutable, State),
     State;
 deliver_to_queues(XName,
-                  {Message, Options, RoutedToQueues},
+                  {Message, Options0, RoutedToQueues},
                   State0 = #ch{queue_states = QueueStates0}) ->
+    {Mandatory, Options} = maps:take(mandatory, Options0),
     Qs = rabbit_amqqueue:prepend_extra_bcc(RoutedToQueues),
     case rabbit_queue_type:deliver(Qs, Message, Options, QueueStates0) of
         {ok, QueueStates, Actions} ->
@@ -2167,7 +2168,6 @@ deliver_to_queues(XName,
             MsgSeqNo = maps:get(correlation, Options, undefined),
             %% NB: the order here is important since basic.returns must be
             %% sent before confirms.
-            Mandatory = maps:get(mandatory, Options, false),
             ok = process_routing_mandatory(Mandatory, RoutedToQueues, MsgSeqNo, Message, XName, State0),
             State1 = process_routing_confirm(MsgSeqNo, QueueNames, XName, State0),
             %% Actions must be processed after registering confirms as actions may
