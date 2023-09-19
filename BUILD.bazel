@@ -165,8 +165,6 @@ rabbitmq_run_command(
     subcommand = "run-broker",
 )
 
-<<<<<<< HEAD
-=======
 # Allow us to `bazel run background-broker`
 # to start a broker in the background
 rabbitmq_run_command(
@@ -183,8 +181,6 @@ rabbitmq_run_command(
     subcommand = "stop-node",
 )
 
-
->>>>>>> 588f932e33 (Expose the "stop-broker" CMD)
 # Allow us to `bazel run start-cluster`
 # for the equivalent of `make start-cluster`
 rabbitmq_run_command(
