@@ -17,6 +17,7 @@ build_dispatcher() ->
         prometheus_rabbitmq_core_metrics_collector,
         prometheus_rabbitmq_global_metrics_collector,
         prometheus_rabbitmq_alarm_metrics_collector,
+        prometheus_rabbitmq_dynamic_collector,
         prometheus_process_collector]),
     prometheus_registry:register_collectors('per-object', [
         prometheus_vm_system_info_collector,
