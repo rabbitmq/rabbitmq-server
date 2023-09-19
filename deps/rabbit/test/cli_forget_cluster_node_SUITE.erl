@@ -112,6 +112,7 @@ forget_cluster_node_with_quorum_queues(Config) ->
     %% as it takes some time to elect a new leader
     ?awaitMatch(Members when length(Members) == 2, get_online_members(Rabbit, QQ1), 30000),
     ?awaitMatch(Members when length(Members) == 2, get_online_members(Rabbit, QQ2), 30000),
+    ?awaitMatch(Member when Member =/= '', get_leader(Rabbit, QQ1), 30000),
     ?awaitMatch(Member when Member =/= '', get_leader(Rabbit, QQ2), 30000),
 
     ?assertEqual(ok, forget_cluster_node(Rabbit, Bunny)),
@@ -266,6 +267,7 @@ forget_cluster_node_with_quorum_queues_and_streams(Config) ->
     %% as it takes some time to elect a new leader
     ?awaitMatch(Members when length(Members) == 2, get_online_members(Rabbit, QQ1), 30000),
     ?awaitMatch(Members when length(Members) == 2, get_online_members(Rabbit, QQ2), 30000),
+    ?awaitMatch(Member when Member =/= '', get_leader(Rabbit, QQ1), 30000),
     ?awaitMatch(Member when Member =/= '', get_leader(Rabbit, QQ2), 30000),
 
     ?assertEqual(ok, forget_cluster_node(Rabbit, Bunny)),
@@ -340,6 +342,7 @@ forget_cluster_node_with_one_last_stream_and_quorum_queues(Config) ->
     %% as it takes some time to elect a new leader
     ?awaitMatch(Members when length(Members) == 2, get_online_members(Rabbit, QQ1), 30000),
     ?awaitMatch(Members when length(Members) == 2, get_online_members(Rabbit, QQ2), 30000),
+    ?awaitMatch(Member when Member =/= '', get_leader(Rabbit, QQ1), 30000),
     ?awaitMatch(Member when Member =/= '', get_leader(Rabbit, QQ2), 30000),
 
     ?assertMatch({error, 69, _}, forget_cluster_node(Rabbit, Bunny)),
