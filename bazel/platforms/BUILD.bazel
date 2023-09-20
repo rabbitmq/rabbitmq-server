@@ -57,9 +57,9 @@ platform(
 )
 
 platform(
-    name = "erlang_linux_26_platform",
+    name = "erlang_linux_26_1_platform",
     constraint_values = [
-        "@erlang_config//:erlang_26",
+        "@erlang_config//:erlang_26_1",
         "@elixir_config//:elixir_1_15",
     ],
     parents = ["@rbe//config:platform"],
