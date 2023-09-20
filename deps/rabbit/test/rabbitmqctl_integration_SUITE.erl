@@ -9,6 +9,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -export([all/0
         ,groups/0
@@ -97,8 +98,8 @@ init_per_testcase(list_queues_stopped, Config0) ->
     %% Start node 3 to crash it's queues
     rabbit_ct_broker_helpers:start_node(Config0, 2),
     %% Make vhost "down" on nodes 2 and 3
-    rabbit_ct_broker_helpers:force_vhost_failure(Config0, 1, <<"/">>),
-    rabbit_ct_broker_helpers:force_vhost_failure(Config0, 2, <<"/">>),
+    ok = rabbit_ct_broker_helpers:force_vhost_failure(Config0, 1, <<"/">>),
+    ok = rabbit_ct_broker_helpers:force_vhost_failure(Config0, 2, <<"/">>),
 
     rabbit_ct_broker_helpers:stop_node(Config0, 2),
     rabbit_ct_helpers:testcase_started(Config0, list_queues_stopped);
@@ -113,52 +114,58 @@ end_per_testcase(Testcase, Config0) ->
 %% Test cases
 %%----------------------------------------------------------------------------
 list_queues_local(Config) ->
-    Node1Queues = lists:sort(lists:nth(1, ?config(per_node_queues, Config))),
-    Node2Queues = lists:sort(lists:nth(2, ?config(per_node_queues, Config))),
+    Node1Queues = lists:nth(1, ?config(per_node_queues, Config)),
+    Node2Queues = lists:nth(2, ?config(per_node_queues, Config)),
     assert_ctl_queues(Config, 0, ["--local"], Node1Queues),
     assert_ctl_queues(Config, 1, ["--local"], Node2Queues),
     ok.
 
 list_queues_online(Config) ->
-    Node1Queues = lists:sort(lists:nth(1, ?config(per_node_queues, Config))),
-    Node2Queues = lists:sort(lists:nth(2, ?config(per_node_queues, Config))),
+    Node1Queues = lists:nth(1, ?config(per_node_queues, Config)),
+    Node2Queues = lists:nth(2, ?config(per_node_queues, Config)),
     OnlineQueues = Node1Queues ++ Node2Queues,
     assert_ctl_queues(Config, 0, ["--online"], OnlineQueues),
     assert_ctl_queues(Config, 1, ["--online"], OnlineQueues),
     ok.
 
 list_queues_offline(Config) ->
-    Node3Queues = lists:sort(lists:nth(3, ?config(per_node_queues, Config))),
+    Node3Queues = lists:nth(3, ?config(per_node_queues, Config)),
     OfflineQueues = Node3Queues,
     assert_ctl_queues(Config, 0, ["--offline"], OfflineQueues),
     assert_ctl_queues(Config, 1, ["--offline"], OfflineQueues),
     ok.
 
 list_queues_stopped(Config) ->
-    Node1Queues = lists:sort(lists:nth(1, ?config(per_node_queues, Config))),
-    Node2Queues = lists:sort(lists:nth(2, ?config(per_node_queues, Config))),
-    Node3Queues = lists:sort(lists:nth(3, ?config(per_node_queues, Config))),
+    Node1Queues = lists:nth(1, ?config(per_node_queues, Config)),
+    Node2Queues = lists:nth(2, ?config(per_node_queues, Config)),
+    Node3Queues = lists:nth(3, ?config(per_node_queues, Config)),
 
-    %% All queues are listed
-    ListedQueues =
-        [ {Name, State}
-          || [Name, State] <- rabbit_ct_broker_helpers:rabbitmqctl_list(
-                                Config, 0, ["list_queues", "name", "state", "--no-table-headers"]) ],
+    Expected =
+        lists:sort([ {Q, <<"running">>} || Q <- Node1Queues ] ++
+                       %% Node is running. Vhost is down
+                       [ {Q, <<"stopped">>} || Q <- Node2Queues ] ++
+                       %% Node is not running. Vhost is down
+                       [ {Q, <<"down">>} || Q <- Node3Queues ]),
 
-    [ <<"running">> = proplists:get_value(Q, ListedQueues) || Q <- Node1Queues ],
-    %% Node is running. Vhost is down
-    [ <<"stopped">> = proplists:get_value(Q, ListedQueues) || Q <- Node2Queues ],
-    %% Node is not running. Vhost is down
-    [ <<"down">> = proplists:get_value(Q, ListedQueues) || Q <- Node3Queues ].
+    ?awaitMatch(
+       Expected,
+       lists:sort(
+         [ {Name, State}
+           || [Name, State] <- rabbit_ct_broker_helpers:rabbitmqctl_list(Config, 0, ["list_queues", "name", "state", "--no-table-headers"]) ]),
+       30_000).
 
 %%----------------------------------------------------------------------------
 %% Helpers
 %%----------------------------------------------------------------------------
 assert_ctl_queues(Config, Node, Args, Expected0) ->
     Expected = lists:sort(Expected0),
-    Got0 = run_list_queues(Config, Node, Args),
-    Got = lists:sort(lists:map(fun hd/1, Got0)),
-    ?assertMatch(Expected, Got).
+    ?awaitMatch(
+       Expected,
+       begin
+           Got0 = run_list_queues(Config, Node, Args),
+           lists:sort(lists:map(fun hd/1, Got0))
+       end,
+       30_000).
 
 run_list_queues(Config, Node, Args) ->
     rabbit_ct_broker_helpers:rabbitmqctl_list(Config, Node, ["list_queues"] ++ Args ++ ["name", "--no-table-headers"]).
