@@ -1282,7 +1282,7 @@ prioritise_cast(Msg, _Len, State) ->
 
 consumer_bias(#q{backing_queue = BQ, backing_queue_state = BQS}, Low, High) ->
     case BQ:msg_rates(BQS) of
-        {0.0,          _} -> Low;
+        {Ingress,      _} when Ingress =:= +0.0 orelse Ingress =:= -0.0 -> Low;
         {Ingress, Egress} when Egress / Ingress < ?CONSUMER_BIAS_RATIO -> High;
         {_,            _} -> Low
     end.
