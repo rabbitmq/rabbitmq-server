@@ -95,9 +95,9 @@ erlang_config.internal_erlang_from_github_release(
 )
 
 erlang_config.internal_erlang_from_github_release(
-    name = "26",
-    sha256 = "47853ea9230643a0a31004433f07a71c1b92d6e0094534f629e3b75dbc62f193",
-    version = "26.0.2",
+    name = "26_1",
+    sha256 = "f914ddea79019ab2533911cdd4f91653726ac9b0561b3ec57aa6ecbcc3df3f55",
+    version = "26.1",
 )
 
 erlang_config.internal_erlang_from_http_archive(
@@ -151,8 +151,8 @@ register_toolchains(
     "@erlang_config//25_2:toolchain_major_minor",
     "@erlang_config//25_3:toolchain_major",
     "@erlang_config//25_3:toolchain_major_minor",
-    "@erlang_config//26:toolchain_major",
-    "@erlang_config//26:toolchain_major_minor",
+    "@erlang_config//26_1:toolchain_major",
+    "@erlang_config//26_1:toolchain_major_minor",
     "@erlang_config//git_master:toolchain_major",
     "@erlang_config//git_master:toolchain_major_minor",
     "@elixir_config//external:toolchain",

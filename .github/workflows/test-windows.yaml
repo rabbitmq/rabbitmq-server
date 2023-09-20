@@ -11,7 +11,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - erlang_version: "26.0"
+        - erlang_version: "26.1"
           elixir_version: "1.15.2"
     timeout-minutes: 120
     steps:
