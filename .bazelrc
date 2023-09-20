@@ -65,7 +65,10 @@ build:rbe-25_3 --config=rbe
 build:rbe-25_3 --platforms=//bazel/platforms:erlang_linux_25_3_platform
 
 build:rbe-26 --config=rbe
-build:rbe-26 --platforms=//bazel/platforms:erlang_linux_26_platform
+build:rbe-26 --platforms=//bazel/platforms:erlang_linux_26_1_platform
+
+build:rbe-26_1 --config=rbe
+build:rbe-26_1 --platforms=//bazel/platforms:erlang_linux_26_1_platform
 
 # no-op config so that --config=local does not error
 build:local --color=auto
