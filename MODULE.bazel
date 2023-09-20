@@ -53,6 +53,12 @@ bazel_dep(
     repo_name = "ra",
 )
 
+bazel_dep(
+    name = "rabbitmq_seshat",
+    version = "0.6.1",
+    repo_name = "seshat",
+)
+
 erlang_config = use_extension(
     "@rules_erlang//bzlmod:extensions.bzl",
     "erlang_config",
@@ -321,13 +327,6 @@ erlang_package.hex_package(
 )
 
 erlang_package.hex_package(
-    name = "seshat",
-    build_file = "@rabbitmq-server//bazel:BUILD.seshat",
-    sha256 = "2c3deec7ff86e0d0c05edebd3455c8363123c227be292ffffc1a05eec08bff63",
-    version = "0.4.0",
-)
-
-erlang_package.hex_package(
     name = "stdout_formatter",
     build_file = "@rabbitmq-server//bazel:BUILD.stdout_formatter",
     sha256 = "51f1df921b0477275ea712763042155dbc74acc75d9648dbd54985c45c913b29",
@@ -375,7 +374,6 @@ use_repo(
     "ranch",
     "recon",
     "redbug",
-    "seshat",
     "stdout_formatter",
     "syslog",
     "sysmon_handler",
