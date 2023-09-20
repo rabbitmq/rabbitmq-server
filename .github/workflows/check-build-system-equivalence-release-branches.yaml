@@ -6,38 +6,23 @@ jobs:
   check-main:
     uses: ./.github/workflows/check-build-system-equivalence.yaml
     with:
-<<<<<<< HEAD
-      ref: main
-      erlang_version: 26.0
-=======
-      ref: refs/heads/main
+     ref: refs/heads/main
       erlang_version: 26.1
->>>>>>> 75eb0621fc (Use OTP 26.1 as OTP 26 in CI)
       elixir_version: 1.15
       project_version: 3.13.0
 
   check-v3_12_x:
     uses: ./.github/workflows/check-build-system-equivalence.yaml
     with:
-<<<<<<< HEAD
-      ref: v3.12.x
-      erlang_version: 26.0
-=======
-      ref: refs/heads/v3.12.x
+     ref: refs/heads/v3.12.x
       erlang_version: 26.1
->>>>>>> 75eb0621fc (Use OTP 26.1 as OTP 26 in CI)
       elixir_version: 1.15
       project_version: 3.12.0
 
   check-v3_11_x:
     uses: ./.github/workflows/check-build-system-equivalence.yaml
     with:
-<<<<<<< HEAD
-      ref: v3.11.x
-      erlang_version: 26.0
-=======
-      ref: refs/heads/v3.11.x
+     ref: refs/heads/v3.11.x
       erlang_version: 26.1
->>>>>>> 75eb0621fc (Use OTP 26.1 as OTP 26 in CI)
       elixir_version: 1.15
       project_version: 3.11.0
