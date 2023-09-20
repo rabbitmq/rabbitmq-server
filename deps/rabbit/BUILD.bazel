@@ -687,7 +687,6 @@ rabbitmq_integration_suite(
         ":test_queue_utils_beam",
         ":test_clustering_utils_beam",
     ],
-    flaky = True,
     shard_count = 6,
 )
 
