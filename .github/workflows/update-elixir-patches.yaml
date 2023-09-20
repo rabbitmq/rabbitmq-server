@@ -16,6 +16,8 @@ jobs:
           name: '1_13'
         - elixir_version: "1.14"
           name: '1_14'
+        - elixir_version: "1.15"
+          name: '1_15'
     timeout-minutes: 10
     env:
       branch: bump-elixir-${{ matrix.elixir_version }}
