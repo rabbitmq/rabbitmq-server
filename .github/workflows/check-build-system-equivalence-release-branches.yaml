@@ -1,7 +1,8 @@
-name: Check Bazel/Erlang.mk Equivalence (Matrix)
+name: Check Bazel/Erlang.mk Equivalence on Release Branches
 on:
   schedule:
   - cron: '0 2 * * *'
+  workflow_dispatch:
 jobs:
   check-main:
     uses: ./.github/workflows/check-build-system-equivalence.yaml
