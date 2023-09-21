@@ -93,5 +93,6 @@ callgrand*
 /bazel-*
 /extra_deps/
 
+.tools-versions
 .vscode
 .idea
