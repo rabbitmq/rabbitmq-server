@@ -14,7 +14,7 @@ define PROJECT_ENV
 endef
 
 LOCAL_DEPS = ssl
-DEPS = rabbit_common rabbit cowboy rabbitmq_mqtt
+DEPS = amqp_client rabbit_common rabbit cowboy rabbitmq_mqtt
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
 # FIXME: Add Ranch as a BUILD_DEPS to be sure the correct version is picked.
