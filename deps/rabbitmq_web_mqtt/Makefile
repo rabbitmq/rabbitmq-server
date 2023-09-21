@@ -19,12 +19,8 @@ export BUILD_WITHOUT_QUIC
 
 LOCAL_DEPS = ssl
 <<<<<<< HEAD
-DEPS = rabbit_common rabbit cowboy rabbitmq_mqtt
-TEST_DEPS = emqtt rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management
-=======
 DEPS = amqp_client rabbit_common rabbit cowboy rabbitmq_mqtt
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
->>>>>>> 4cf012bf62 (Add amqp_client to the rabbitmq_web_mqtt deps in Make)
+TEST_DEPS = emqtt rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management
 
 # FIXME: Add Ranch as a BUILD_DEPS to be sure the correct version is picked.
 # See rabbitmq-components.mk.
