@@ -1165,7 +1165,11 @@ convert_from_v2_to_v1_loop(QueueName, V1Index0, V2Index0, V2Store0,
                     V1Index1b = rabbit_queue_index:publish(MsgId, SeqId, rabbit_msg_store, Props, IsPersistent, infinity, V1Index1a),
                     rabbit_queue_index:deliver([SeqId], V1Index1b)
             end,
-            {V1Index2, V2Store1}
+            {V1Index2, V2Store1};
+        %% Ignore messages that are in memory and had an entry written in the index.
+        %% @todo Remove this clause some time after CMQs get removed as this will become dead code.
+        ({undefined, _, memory, _, _}, {V1Index1, V2Store1}) ->
+            {V1Index1, V2Store1}
     end, {V1Index0, V2Store0}, Messages),
     %% Flush to disk to avoid keeping too much in memory between segments.
     V1Index = rabbit_queue_index:flush(V1Index3),
