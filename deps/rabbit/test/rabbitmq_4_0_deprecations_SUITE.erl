@@ -211,11 +211,12 @@ join_when_ram_node_type_is_permitted_by_default(Config) ->
     [NodeA, NodeB] = rabbit_ct_broker_helpers:get_node_configs(
                        Config, nodename),
 
-    ok = rabbit_control_helper:command(stop_app, NodeA),
-    ok = rabbit_control_helper:command_with_output(
-           join_cluster, NodeA,
-           [atom_to_list(NodeB)], [{"--ram", true}]),
-    ok = rabbit_control_helper:command(start_app, NodeA),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(
+                Config, NodeA, ["stop_app"]),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(
+                Config, NodeA, ["join_cluster", "--ram", atom_to_list(NodeB)]),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(
+                Config, NodeA, ["start_app"]),
 
     ?assertEqual([NodeA, NodeB], get_all_nodes(Config, NodeA)),
     ?assertEqual([NodeA, NodeB], get_all_nodes(Config, NodeB)),
@@ -242,31 +243,40 @@ join_when_ram_node_type_is_permitted_by_default(Config) ->
     ?assertEqual({ok, [ConfigContent1]}, file:consult(ConfigFilename)),
 
     %% Restart the node and see if it was correctly converted to a disc node.
-    ok = rabbit_control_helper:command(stop_app, NodeA),
-    Ret = rabbit_control_helper:command(start_app, NodeA),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(
+                Config, NodeA, ["stop_app"]),
+    Ret = rabbit_ct_broker_helpers:rabbitmqctl(Config, NodeA, ["start_app"]),
 
     case Ret of
-        ok ->
+        {ok, _} ->
             ?assertEqual([NodeA, NodeB], get_all_nodes(Config, NodeA)),
             ?assertEqual([NodeA, NodeB], get_all_nodes(Config, NodeB)),
             ?assertEqual([NodeA, NodeB], get_disc_nodes(Config, NodeA)),
             ?assertEqual([NodeA, NodeB], get_disc_nodes(Config, NodeB));
-        {error, 69,
-         <<"Error:\n{:rabbit, {:incompatible_feature_flags, ", _/binary>>} ->
-            {skip, "Incompatible feature flags between nodes A and B"}
+        {error, 69, Message} ->
+            Ret1 = re:run(
+                     Message, "incompatible_feature_flags",
+                     [{capture, none}]),
+            case Ret1 of
+                match ->
+                    {skip, "Incompatible feature flags between nodes A and B"};
+                _ ->
+                    throw(Ret)
+            end
     end.
 
 join_when_ram_node_type_is_not_permitted_from_conf(Config) ->
     [NodeA, NodeB] = rabbit_ct_broker_helpers:get_node_configs(
                        Config, nodename),
 
-    ok = rabbit_control_helper:command(stop_app, NodeA),
-    Ret = rabbit_control_helper:command_with_output(
-            join_cluster, NodeA,
-            [atom_to_list(NodeB)], [{"--ram", true}]),
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(
+                Config, NodeA, ["stop_app"]),
+    Ret = rabbit_ct_broker_helpers:rabbitmqctl(
+            Config, NodeA, ["join_cluster", "--ram", atom_to_list(NodeB)]),
     case Ret of
-        ok ->
-            ok = rabbit_control_helper:command(start_app, NodeA),
+        {ok, _} ->
+            {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(
+                        Config, NodeA, ["start_app"]),
 
             ?assertEqual([NodeA, NodeB], get_all_nodes(Config, NodeA)),
             ?assertEqual([NodeA, NodeB], get_all_nodes(Config, NodeB)),
@@ -278,8 +288,16 @@ join_when_ram_node_type_is_not_permitted_from_conf(Config) ->
                  Config, NodeA,
                  ["Deprecated features: `ram_node_type`: Feature `ram_node_type` is deprecated",
                   "Its use is not permitted per the configuration"]));
-        {error, 69, <<"Error:\nincompatible_feature_flags">>} ->
-            {skip, "Incompatible feature flags between nodes A and B"}
+        {error, 69, Message} ->
+            Ret1 = re:run(
+                     Message, "incompatible_feature_flags",
+                     [{capture, none}]),
+            case Ret1 of
+                match ->
+                    {skip, "Incompatible feature flags between nodes A and B"};
+                _ ->
+                    throw(Ret)
+            end
     end.
 
 get_all_nodes(Config, Node) ->
@@ -325,12 +343,16 @@ set_policy_when_cmq_is_permitted_by_default(Config) ->
     ?assertEqual({ok, [ConfigContent1]}, file:consult(ConfigFilename)),
 
     %% Restart the node and see if it was correctly converted to a disc node.
-    ok = rabbit_control_helper:command(stop_app, NodeA),
-    ?assertMatch(
-       {error, 69,
-        <<"Error:\n{:rabbit, {{:failed_to_deny_deprecated_features, "
-        "[:classic_queue_mirroring]}", _/binary>>},
-       rabbit_control_helper:command(start_app, NodeA)).
+    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(
+                Config, NodeA, ["stop_app"]),
+    {error, 69, Message} = rabbit_ct_broker_helpers:rabbitmqctl(
+                             Config, NodeA, ["start_app"]),
+    Ret = re:run(
+            Message,
+            ":failed_to_deny_deprecated_features, "
+            "\\[:classic_queue_mirroring\\]",
+            [{capture, none}]),
+    ?assertEqual(match, Ret).
 
 set_policy_when_cmq_is_not_permitted_from_conf(Config) ->
     ?assertError(
