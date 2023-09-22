@@ -1652,12 +1652,17 @@ process_routing_confirm(#{}, _, State) ->
 -spec send_puback(packet_id() | list(packet_id()), reason_code(), state()) -> ok.
 send_puback(PktIds0, ReasonCode, State)
   when is_list(PktIds0) ->
-    %% Classic queues confirm messages unordered.
-    %% Let's sort them here assuming most MQTT clients send with an increasing packet identifier.
-    PktIds = lists:usort(PktIds0),
-    lists:foreach(fun(Id) ->
-                          send_puback(Id, ReasonCode, State)
-                  end, PktIds);
+    case rabbit_node_monitor:pause_partition_guard() of
+        ok ->
+            %% Classic queues confirm messages unordered.
+            %% Let's sort them here assuming most MQTT clients send with an increasing packet identifier.
+            PktIds = lists:usort(PktIds0),
+            lists:foreach(fun(Id) ->
+                                  send_puback(Id, ReasonCode, State)
+                          end, PktIds);
+        pausing ->
+            ok
+    end;
 send_puback(PktId, ReasonCode, State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
     rabbit_global_counters:messages_confirmed(ProtoVer, 1),
     Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?PUBACK},
