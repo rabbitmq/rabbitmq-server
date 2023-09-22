@@ -125,13 +125,13 @@ end_per_testcase(Testcase, Config) ->
 
 start_with_invalid_schema_in_path(Config) ->
     [Rabbit, Hare] = cluster_members(Config),
-    stop_app(Rabbit),
-    stop_app(Hare),
+    stop_app(Config, Rabbit),
+    stop_app(Config, Hare),
 
     create_bad_schema(Rabbit, Hare, Config),
 
-    start_app(Hare),
-    case start_app(Rabbit) of
+    start_app(Config, Hare),
+    case start_app(Config, Rabbit) of
         ok  -> ok;
         ErrRabbit -> error({unable_to_start_with_bad_schema_in_work_dir, ErrRabbit})
     end.
@@ -182,26 +182,25 @@ join_and_part_cluster(Config) ->
     assert_not_clustered(Hare),
     assert_not_clustered(Bunny),
 
-    stop_join_start(Rabbit, Bunny),
+    stop_join_start(Config, Rabbit, Bunny),
     assert_clustered([Rabbit, Bunny]),
 
-    stop_join_start(Hare, Bunny, true),
+    stop_join_start(Config, Hare, Bunny, true),
     assert_cluster_status(
       {[Bunny, Hare, Rabbit], [Bunny, Rabbit], [Bunny, Hare, Rabbit]},
       [Rabbit, Hare, Bunny]),
 
     %% Allow clustering with already clustered node
-    ok = stop_app(Rabbit),
-    {ok, <<"The node is already a member of this cluster">>} =
-        join_cluster(Rabbit, Hare),
-    ok = start_app(Rabbit),
+    ok = stop_app(Config, Rabbit),
+    ok = join_cluster(Config, Rabbit, Hare),
+    ok = start_app(Config, Rabbit),
 
-    stop_reset_start(Rabbit),
+    stop_reset_start(Config, Rabbit),
     assert_not_clustered(Rabbit),
     assert_cluster_status({[Bunny, Hare], [Bunny], [Bunny, Hare]},
                           [Hare, Bunny]),
 
-    stop_reset_start(Hare),
+    stop_reset_start(Config, Hare),
     assert_not_clustered(Hare),
     assert_not_clustered(Bunny).
 
@@ -214,41 +213,41 @@ join_cluster_bad_operations(Config) ->
                      [rabbit_prelaunch, get_context, 0]),
 
     %% Nonexistent node
-    ok = stop_app(Rabbit),
-    assert_failure(fun () -> join_cluster(Rabbit, non@existent) end),
-    ok = start_app(Rabbit),
+    ok = stop_app(Config, Rabbit),
+    assert_failure(fun () -> join_cluster(Config, Rabbit, non@existent) end),
+    ok = start_app(Config, Rabbit),
     assert_not_clustered(Rabbit),
 
     %% Trying to cluster with mnesia running
-    assert_failure(fun () -> join_cluster(Rabbit, Bunny) end),
+    assert_failure(fun () -> join_cluster(Config, Rabbit, Bunny) end),
     assert_not_clustered(Rabbit),
 
     %% Trying to cluster the node with itself
-    ok = stop_app(Rabbit),
-    assert_failure(fun () -> join_cluster(Rabbit, Rabbit) end),
-    ok = start_app(Rabbit),
+    ok = stop_app(Config, Rabbit),
+    assert_failure(fun () -> join_cluster(Config, Rabbit, Rabbit) end),
+    ok = start_app(Config, Rabbit),
     assert_not_clustered(Rabbit),
 
     %% Do not let the node leave the cluster or reset if it's the only
     %% ram node
-    stop_join_start(Hare, Rabbit, true),
+    stop_join_start(Config, Hare, Rabbit, true),
     assert_cluster_status({[Rabbit, Hare], [Rabbit], [Rabbit, Hare]},
                           [Rabbit, Hare]),
-    ok = stop_app(Hare),
-    assert_failure(fun () -> join_cluster(Rabbit, Bunny) end),
-    assert_failure(fun () -> reset(Rabbit) end),
-    ok = start_app(Hare),
+    ok = stop_app(Config, Hare),
+    assert_failure(fun () -> join_cluster(Config, Rabbit, Bunny) end),
+    assert_failure(fun () -> reset(Config, Rabbit) end),
+    ok = start_app(Config, Hare),
     assert_cluster_status({[Rabbit, Hare], [Rabbit], [Rabbit, Hare]},
                           [Rabbit, Hare]),
 
     %% Cannot start RAM-only node first
-    ok = stop_app(Rabbit),
-    ok = stop_app(Hare),
-    assert_failure(fun () -> start_app(Hare) end),
-    ok = start_app(Rabbit),
+    ok = stop_app(Config, Rabbit),
+    ok = stop_app(Config, Hare),
+    assert_failure(fun () -> start_app(Config, Hare) end),
+    ok = start_app(Config, Rabbit),
     case UsePrelaunch of
         true ->
-            ok = start_app(Hare);
+            ok = start_app(Config, Hare);
         false ->
             %% The Erlang VM has stopped after previous rabbit app failure
             ok = rabbit_ct_broker_helpers:start_node(Config, Hare)
@@ -260,79 +259,78 @@ join_cluster_bad_operations(Config) ->
 join_to_start_interval(Config) ->
     [Rabbit, Hare, _Bunny] = cluster_members(Config),
 
-    ok = stop_app(Rabbit),
-    ok = join_cluster(Rabbit, Hare),
+    ok = stop_app(Config, Rabbit),
+    ok = join_cluster(Config, Rabbit, Hare),
     assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]},
                           [Rabbit, Hare]),
-    ok = start_app(Rabbit),
+    ok = start_app(Config, Rabbit),
     assert_clustered([Rabbit, Hare]).
 
 forget_cluster_node(Config) ->
     [Rabbit, Hare, Bunny] = cluster_members(Config),
 
     %% Trying to remove a node not in the cluster should fail
-    assert_failure(fun () -> forget_cluster_node(Hare, Rabbit) end),
+    assert_failure(fun () -> forget_cluster_node(Config, Hare, Rabbit) end),
 
-    stop_join_start(Rabbit, Hare),
+    stop_join_start(Config, Rabbit, Hare),
     assert_clustered([Rabbit, Hare]),
 
     %% Trying to remove an online node should fail
-    assert_failure(fun () -> forget_cluster_node(Hare, Rabbit) end),
+    assert_failure(fun () -> forget_cluster_node(Config, Hare, Rabbit) end),
 
-    ok = stop_app(Rabbit),
+    ok = stop_app(Config, Rabbit),
     %% We're passing the --offline flag, but Hare is online
-    assert_failure(fun () -> forget_cluster_node(Hare, Rabbit, true) end),
+    assert_failure(fun () -> forget_cluster_node(Config, Hare, Rabbit, true) end),
     %% Removing some nonexistent node will fail
-    assert_failure(fun () -> forget_cluster_node(Hare, non@existent) end),
-    ok = forget_cluster_node(Hare, Rabbit),
+    assert_failure(fun () -> forget_cluster_node(Config, Hare, non@existent) end),
+    ok = forget_cluster_node(Config, Hare, Rabbit),
     assert_not_clustered(Hare),
     assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]},
                           [Rabbit]),
 
     %% Now we can't start Rabbit since it thinks that it's still in the cluster
     %% with Hare, while Hare disagrees.
-    assert_failure(fun () -> start_app(Rabbit) end),
+    assert_failure(fun () -> start_app(Config, Rabbit) end),
 
-    ok = reset(Rabbit),
-    ok = start_app(Rabbit),
+    ok = reset(Config, Rabbit),
+    ok = start_app(Config, Rabbit),
     assert_not_clustered(Rabbit),
 
     %% Now we remove Rabbit from an offline node.
-    stop_join_start(Bunny, Hare),
-    stop_join_start(Rabbit, Hare),
+    stop_join_start(Config, Bunny, Hare),
+    stop_join_start(Config, Rabbit, Hare),
     assert_clustered([Rabbit, Hare, Bunny]),
-    ok = stop_app(Hare),
-    ok = stop_app(Rabbit),
-    ok = stop_app(Bunny),
+    ok = stop_app(Config, Hare),
+    ok = stop_app(Config, Rabbit),
+    ok = stop_app(Config, Bunny),
     %% This is fine but we need the flag
-    assert_failure(fun () -> forget_cluster_node(Hare, Bunny) end),
+    assert_failure(fun () -> forget_cluster_node(Config, Hare, Bunny) end),
     %% Also fails because hare node is still running
-    assert_failure(fun () -> forget_cluster_node(Hare, Bunny, true) end),
+    assert_failure(fun () -> forget_cluster_node(Config, Hare, Bunny, true) end),
     %% But this works
     ok = rabbit_ct_broker_helpers:stop_node(Config, Hare),
-    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Hare,
-      ["forget_cluster_node", "--offline", Bunny]),
+    ok = forget_cluster_node(Config, Hare, Bunny, true),
     ok = rabbit_ct_broker_helpers:start_node(Config, Hare),
-    ok = start_app(Rabbit),
+    ok = start_app(Config, Rabbit),
     %% Bunny still thinks its clustered with Rabbit and Hare
-    assert_failure(fun () -> start_app(Bunny) end),
-    ok = reset(Bunny),
-    ok = start_app(Bunny),
+    assert_failure(fun () -> start_app(Config, Bunny) end),
+    ok = reset(Config, Bunny),
+    ok = start_app(Config, Bunny),
     assert_not_clustered(Bunny),
     assert_clustered([Rabbit, Hare]).
 
 forget_removes_things(Config) ->
-    test_removes_things(Config, fun (R, H) -> ok = forget_cluster_node(H, R) end).
+    test_removes_things(Config, fun (R, H) -> ok = forget_cluster_node(Config, H, R) end).
 
 reset_removes_things(Config) ->
-    test_removes_things(Config, fun (R, _H) -> ok = reset(R) end).
+    test_removes_things(Config, fun (R, _H) -> ok = reset(Config, R) end).
 
 test_removes_things(Config, LoseRabbit) ->
     Unmirrored = <<"unmirrored-queue">>,
     [Rabbit, Hare] = cluster_members(Config),
     RCh = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
     declare(RCh, Unmirrored),
-    ok = stop_app(Rabbit),
+    ok = stop_app(Config, Rabbit),
 
     HCh = rabbit_ct_client_helpers:open_channel(Config, Hare),
     {'EXIT',{{shutdown,{server_initiated_close,404,_}}, _}} =
@@ -364,8 +362,7 @@ forget_offline_removes_things(Config) ->
 
     ok = rabbit_ct_broker_helpers:stop_node(Config, Hare),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Rabbit),
-    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Hare,
-      ["forget_cluster_node", "--offline", Rabbit]),
+    ok = forget_cluster_node(Config, Hare, Rabbit, true),
     ok = rabbit_ct_broker_helpers:start_node(Config, Hare),
 
     HCh2 = rabbit_ct_client_helpers:open_channel(Config, Hare),
@@ -437,46 +434,46 @@ change_cluster_node_type(Config) ->
     [Rabbit, Hare, _Bunny] = cluster_members(Config),
 
     %% Trying to change the node to the ram type when not clustered should always fail
-    ok = stop_app(Rabbit),
-    assert_failure(fun () -> change_cluster_node_type(Rabbit, ram) end),
-    ok = start_app(Rabbit),
+    ok = stop_app(Config, Rabbit),
+    assert_failure(fun () -> change_cluster_node_type(Config, Rabbit, ram) end),
+    ok = start_app(Config, Rabbit),
 
-    ok = stop_app(Rabbit),
-    join_cluster(Rabbit, Hare),
+    ok = stop_app(Config, Rabbit),
+    join_cluster(Config, Rabbit, Hare),
     assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]},
                           [Rabbit, Hare]),
-    change_cluster_node_type(Rabbit, ram),
+    change_cluster_node_type(Config, Rabbit, ram),
     assert_cluster_status({[Rabbit, Hare], [Hare], [Hare]},
                           [Rabbit, Hare]),
-    change_cluster_node_type(Rabbit, disc),
+    change_cluster_node_type(Config, Rabbit, disc),
 
     assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]},
                           [Rabbit, Hare]),
-    change_cluster_node_type(Rabbit, ram),
-    ok = start_app(Rabbit),
+    change_cluster_node_type(Config, Rabbit, ram),
+    ok = start_app(Config, Rabbit),
     assert_cluster_status({[Rabbit, Hare], [Hare], [Hare, Rabbit]},
                           [Rabbit, Hare]),
 
     %% Changing to ram when you're the only ram node should fail
-    ok = stop_app(Hare),
-    assert_failure(fun () -> change_cluster_node_type(Hare, ram) end),
-    ok = start_app(Hare).
+    ok = stop_app(Config, Hare),
+    assert_failure(fun () -> change_cluster_node_type(Config, Hare, ram) end),
+    ok = start_app(Config, Hare).
 
 change_cluster_when_node_offline(Config) ->
     [Rabbit, Hare, Bunny] = cluster_members(Config),
 
     %% Cluster the three notes
-    stop_join_start(Rabbit, Hare),
+    stop_join_start(Config, Rabbit, Hare),
     assert_clustered([Rabbit, Hare]),
 
-    stop_join_start(Bunny, Hare),
+    stop_join_start(Config, Bunny, Hare),
     assert_clustered([Rabbit, Hare, Bunny]),
 
     %% Bring down Rabbit, and remove Bunny from the cluster while
     %% Rabbit is offline
-    ok = stop_app(Rabbit),
-    ok = stop_app(Bunny),
-    ok = reset(Bunny),
+    ok = stop_app(Config, Rabbit),
+    ok = stop_app(Config, Bunny),
+    ok = reset(Config, Bunny),
     assert_cluster_status({[Bunny], [Bunny], []}, [Bunny]),
     assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]}, [Hare]),
     assert_cluster_status(
@@ -484,30 +481,30 @@ change_cluster_when_node_offline(Config) ->
        [Rabbit, Hare, Bunny], [Hare, Bunny]}, [Rabbit]),
 
     %% Bring Rabbit back up
-    ok = start_app(Rabbit),
+    ok = start_app(Config, Rabbit),
     assert_clustered([Rabbit, Hare]),
-    ok = start_app(Bunny),
+    ok = start_app(Config, Bunny),
     assert_not_clustered(Bunny),
 
     %% Now the same, but Rabbit is a RAM node, and we bring up Bunny
     %% before
-    ok = stop_app(Rabbit),
-    ok = change_cluster_node_type(Rabbit, ram),
-    ok = start_app(Rabbit),
-    stop_join_start(Bunny, Hare),
+    ok = stop_app(Config, Rabbit),
+    ok = change_cluster_node_type(Config, Rabbit, ram),
+    ok = start_app(Config, Rabbit),
+    stop_join_start(Config, Bunny, Hare),
     assert_cluster_status(
       {[Rabbit, Hare, Bunny], [Hare, Bunny], [Rabbit, Hare, Bunny]},
       [Rabbit, Hare, Bunny]),
-    ok = stop_app(Rabbit),
-    ok = stop_app(Bunny),
-    ok = reset(Bunny),
-    ok = start_app(Bunny),
+    ok = stop_app(Config, Rabbit),
+    ok = stop_app(Config, Bunny),
+    ok = reset(Config, Bunny),
+    ok = start_app(Config, Bunny),
     assert_not_clustered(Bunny),
     assert_cluster_status({[Rabbit, Hare], [Hare], [Hare]}, [Hare]),
     assert_cluster_status(
       {[Rabbit, Hare, Bunny], [Hare, Bunny], [Hare, Bunny]},
       [Rabbit]),
-    ok = start_app(Rabbit),
+    ok = start_app(Config, Rabbit),
     assert_cluster_status({[Rabbit, Hare], [Hare], [Rabbit, Hare]},
                           [Rabbit, Hare]),
     assert_not_clustered(Bunny).
@@ -516,72 +513,72 @@ update_cluster_nodes(Config) ->
     [Rabbit, Hare, Bunny] = cluster_members(Config),
 
     %% Mnesia is running...
-    assert_failure(fun () -> update_cluster_nodes(Rabbit, Hare) end),
+    assert_failure(fun () -> update_cluster_nodes(Config, Rabbit, Hare) end),
 
-    ok = stop_app(Rabbit),
-    ok = join_cluster(Rabbit, Hare),
-    ok = stop_app(Bunny),
-    ok = join_cluster(Bunny, Hare),
-    ok = start_app(Bunny),
-    stop_reset_start(Hare),
-    assert_failure(fun () -> start_app(Rabbit) end),
+    ok = stop_app(Config, Rabbit),
+    ok = join_cluster(Config, Rabbit, Hare),
+    ok = stop_app(Config, Bunny),
+    ok = join_cluster(Config, Bunny, Hare),
+    ok = start_app(Config, Bunny),
+    stop_reset_start(Config, Hare),
+    assert_failure(fun () -> start_app(Config, Rabbit) end),
     %% Bogus node
-    assert_failure(fun () -> update_cluster_nodes(Rabbit, non@existent) end),
+    assert_failure(fun () -> update_cluster_nodes(Config, Rabbit, non@existent) end),
     %% Inconsistent node
-    assert_failure(fun () -> update_cluster_nodes(Rabbit, Hare) end),
-    ok = update_cluster_nodes(Rabbit, Bunny),
-    ok = start_app(Rabbit),
+    assert_failure(fun () -> update_cluster_nodes(Config, Rabbit, Hare) end),
+    ok = update_cluster_nodes(Config, Rabbit, Bunny),
+    ok = start_app(Config, Rabbit),
     assert_not_clustered(Hare),
     assert_clustered([Rabbit, Bunny]).
 
 classic_config_discovery_node_list(Config) ->
     [Rabbit, Hare] = cluster_members(Config),
 
-    ok = stop_app(Hare),
-    ok = reset(Hare),
+    ok = stop_app(Config, Hare),
+    ok = reset(Config, Hare),
     ok = rpc:call(Hare, application, set_env,
                   [rabbit, cluster_nodes, {[Rabbit], disc}]),
-    ok = start_app(Hare),
+    ok = start_app(Config, Hare),
     assert_clustered([Rabbit, Hare]),
 
-    ok = stop_app(Hare),
-    ok = reset(Hare),
+    ok = stop_app(Config, Hare),
+    ok = reset(Config, Hare),
     ok = rpc:call(Hare, application, set_env,
                   [rabbit, cluster_nodes, {[Rabbit], ram}]),
-    ok = start_app(Hare),
+    ok = start_app(Config, Hare),
     assert_cluster_status({[Rabbit, Hare], [Rabbit], [Rabbit, Hare]},
                           [Rabbit, Hare]),
 
     %% List of nodes [node()] is equivalent to {[node()], disk}
-    ok = stop_app(Hare),
-    ok = reset(Hare),
+    ok = stop_app(Config, Hare),
+    ok = reset(Config, Hare),
     ok = rpc:call(Hare, application, set_env,
                   [rabbit, cluster_nodes, [Rabbit]]),
-    ok = start_app(Hare),
+    ok = start_app(Config, Hare),
     assert_clustered([Rabbit, Hare]),
 
-    ok = stop_app(Hare),
-    ok = reset(Hare),
+    ok = stop_app(Config, Hare),
+    ok = reset(Config, Hare),
     %% If we use an invalid cluster_nodes conf, the node fails to start.
     ok = rpc:call(Hare, application, set_env,
                   [rabbit, cluster_nodes, "Yes, please"]),
-    assert_failure(fun () -> start_app(Hare) end),
+    assert_failure(fun () -> start_app(Config, Hare) end),
     assert_not_clustered(Rabbit).
 
 force_reset_node(Config) ->
     [Rabbit, Hare, _Bunny] = cluster_members(Config),
 
-    stop_join_start(Rabbit, Hare),
-    stop_app(Rabbit),
-    force_reset(Rabbit),
+    stop_join_start(Config, Rabbit, Hare),
+    stop_app(Config, Rabbit),
+    force_reset(Config, Rabbit),
     %% Hare thinks that Rabbit is still clustered
     assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]},
                           [Hare]),
     %% %% ...but it isn't
     assert_cluster_status({[Rabbit], [Rabbit], []}, [Rabbit]),
     %% We can rejoin Rabbit and Hare
-    update_cluster_nodes(Rabbit, Hare),
-    start_app(Rabbit),
+    update_cluster_nodes(Config, Rabbit, Hare),
+    start_app(Config, Rabbit),
     assert_clustered([Rabbit, Hare]).
 
 status_with_alarm(Config) ->
@@ -723,49 +720,93 @@ assert_failure(Fun) ->
         Other                          -> error({expected_failure, Other})
     end.
 
-stop_app(Node) ->
-    rabbit_control_helper:command(stop_app, Node).
+stop_app(Config, Node) ->
+    case rabbit_ct_broker_helpers:rabbitmqctl(Config, Node, ["stop_app"]) of
+        {ok, _} -> ok;
+        Error   -> Error
+    end.
 
-start_app(Node) ->
-    rabbit_control_helper:command(start_app, Node).
+start_app(Config, Node) ->
+    case rabbit_ct_broker_helpers:rabbitmqctl(Config, Node, ["start_app"]) of
+        {ok, _} -> ok;
+        Error   -> Error
+    end.
 
-join_cluster(Node, To) ->
-    join_cluster(Node, To, false).
+join_cluster(Config, Node, To) ->
+    join_cluster(Config, Node, To, false).
 
-join_cluster(Node, To, Ram) ->
-    rabbit_control_helper:command_with_output(join_cluster, Node, [atom_to_list(To)], [{"--ram", Ram}]).
+join_cluster(Config, Node, To, Ram) ->
+    Cmd = case Ram of
+              true ->
+                  ["join_cluster", "--ram", atom_to_list(To)];
+              false ->
+                  ["join_cluster", atom_to_list(To)]
+          end,
+    case rabbit_ct_broker_helpers:rabbitmqctl(Config, Node, Cmd) of
+        {ok, _} -> ok;
+        Error   -> Error
+    end.
 
-reset(Node) ->
-    rabbit_control_helper:command(reset, Node).
+reset(Config, Node) ->
+    case rabbit_ct_broker_helpers:rabbitmqctl(Config, Node, ["reset"]) of
+        {ok, _} -> ok;
+        Error   -> Error
+    end.
 
-force_reset(Node) ->
-    rabbit_control_helper:command(force_reset, Node).
+force_reset(Config, Node) ->
+    Ret = rabbit_ct_broker_helpers:rabbitmqctl(
+            Config, Node, ["force_reset"]),
+    case Ret of
+        {ok, _} -> ok;
+        Error   -> Error
+    end.
 
-forget_cluster_node(Node, Removee, RemoveWhenOffline) ->
-    rabbit_control_helper:command(forget_cluster_node, Node, [atom_to_list(Removee)],
-                   [{"--offline", RemoveWhenOffline}]).
+forget_cluster_node(Config, Node, Removee, RemoveWhenOffline) ->
+    Cmd = case RemoveWhenOffline of
+              true ->
+                  ["forget_cluster_node", "--offline",
+                   atom_to_list(Removee)];
+              false ->
+                  ["forget_cluster_node",
+                   atom_to_list(Removee)]
+          end,
+    case rabbit_ct_broker_helpers:rabbitmqctl(Config, Node, Cmd) of
+        {ok, _} -> ok;
+        Error   -> Error
+    end.
 
-forget_cluster_node(Node, Removee) ->
-    forget_cluster_node(Node, Removee, false).
+forget_cluster_node(Config, Node, Removee) ->
+    forget_cluster_node(Config, Node, Removee, false).
 
-change_cluster_node_type(Node, Type) ->
-    rabbit_control_helper:command(change_cluster_node_type, Node, [atom_to_list(Type)]).
+change_cluster_node_type(Config, Node, Type) ->
+    Ret = rabbit_ct_broker_helpers:rabbitmqctl(
+            Config, Node, ["change_cluster_node_type", atom_to_list(Type)]),
+    case Ret of
+        {ok, _} -> ok;
+        Error   -> Error
+    end.
 
-update_cluster_nodes(Node, DiscoveryNode) ->
-    rabbit_control_helper:command(update_cluster_nodes, Node, [atom_to_list(DiscoveryNode)]).
+update_cluster_nodes(Config, Node, DiscoveryNode) ->
+    Ret = rabbit_ct_broker_helpers:rabbitmqctl(
+            Config, Node,
+            ["update_cluster_nodes", atom_to_list(DiscoveryNode)]),
+    case Ret of
+        {ok, _} -> ok;
+        Error   -> Error
+    end.
 
-stop_join_start(Node, ClusterTo, Ram) ->
-    ok = stop_app(Node),
-    ok = join_cluster(Node, ClusterTo, Ram),
-    ok = start_app(Node).
+stop_join_start(Config, Node, ClusterTo, Ram) ->
+    ok = stop_app(Config, Node),
+    ok = join_cluster(Config, Node, ClusterTo, Ram),
+    ok = start_app(Config, Node).
 
-stop_join_start(Node, ClusterTo) ->
-    stop_join_start(Node, ClusterTo, false).
+stop_join_start(Config, Node, ClusterTo) ->
+    stop_join_start(Config, Node, ClusterTo, false).
 
-stop_reset_start(Node) ->
-    ok = stop_app(Node),
-    ok = reset(Node),
-    ok = start_app(Node).
+stop_reset_start(Config, Node) ->
+    ok = stop_app(Config, Node),
+    ok = reset(Config, Node),
+    ok = start_app(Config, Node).
 
 declare(Ch, Name) ->
     Res = amqp_channel:call(Ch, #'queue.declare'{durable = true,
