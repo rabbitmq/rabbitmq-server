@@ -25,12 +25,12 @@ EOF
 
 def secondary_umbrella():
     http_archive(
-        name = "rabbitmq-server-generic-unix-3.11",
+        name = "rabbitmq-server-generic-unix-3.12",
         build_file = "@//:BUILD.package_generic_unix",
         patch_cmds = [ADD_PLUGINS_DIR_BUILD_FILE],
-        strip_prefix = "rabbitmq_server-3.11.18",
+        strip_prefix = "rabbitmq_server-3.12.6",
         # This file is produced just in time by the test-mixed-versions.yaml GitHub Actions workflow.
         urls = [
-            "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/rbe-25_3/package-generic-unix-for-mixed-version-testing-v3.11.18.tar.xz",
+            "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/rbe-25_3/package-generic-unix-for-mixed-version-testing-v3.12.6.tar.xz",
         ],
     )
