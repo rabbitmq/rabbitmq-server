@@ -104,18 +104,18 @@ route(#exchange{name = XName}, Msg, _Opts) ->
 validate(_X) -> ok.
 
 % After exchange declaration and recovery
-create(none, #exchange{name = XName}) ->
+create(_Tx, #exchange{name = XName}) ->
   add_initial_record(XName).
 
 % Delete an exchange
-delete(none, #exchange{name = XName}) ->
+delete(_Tx, #exchange{name = XName}) ->
     delete_state(XName).
 
 % Before add binding
 validate_binding(_X, _B) -> ok.
 
 % A new binding has ben added or recovered
-add_binding( none
+add_binding( _Tx
            , #exchange{name = XName}
            , #binding{key = BindingKey, destination = Dest, args = Args}
            ) ->
@@ -130,7 +130,7 @@ add_binding( none
   ok.
 
 % Binding removal
-remove_bindings( none
+remove_bindings( _Tx
                , #exchange{name = XName}
                , Bindings
                ) ->
