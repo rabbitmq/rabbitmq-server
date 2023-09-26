@@ -32,7 +32,7 @@ description() ->
 
 serialise_events(_X) -> false.
 
-create(none, X) ->
+create(_Tx, X) ->
     _ = maybe_start_sharding(X),
     ok.
 
@@ -48,7 +48,7 @@ active_for(X) ->
     end.
 
 %% we have to remove the policy from ?SHARDING_TABLE
-delete(none, X) ->
+delete(_Tx, X) ->
     _ = maybe_stop_sharding(X),
     ok.
 
