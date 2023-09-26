@@ -795,6 +795,8 @@ end}.
                               _ -> V
                           end,
                     {["default_policies","operator",ID|T], NewV};
+                   ({["default_policies","operator",ID, "queue_pattern"], V}) ->
+                    {["default_policies","operator",ID,"queue_pattern"], list_to_binary(V)};
                    (E) -> E
                 end),
     case Props of
