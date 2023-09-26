@@ -22,14 +22,15 @@
 
 all() ->
     [
-      {group, parallel_tests}
+      {group, all_tests}
     ].
 
 groups() ->
     [
-      {parallel_tests, [parallel], [
-                                    test_topic_selection
-                                   ]}
+     {all_tests, [], [
+                      test_topic_selection,
+                      restart_with_auto_delete_topic_exchange
+                     ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -70,7 +71,7 @@ test_topic_selection(Config) ->
     {Connection, Channel} = open_connection_and_channel(Config),
     #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
 
-    Exchange = declare_rjms_exchange(Channel, "rjms_test_topic_selector_exchange", []),
+    Exchange = declare_rjms_exchange(Channel, "rjms_test_topic_selector_exchange", false, false, []),
 
     %% Declare a queue and bind it
     Q = declare_queue(Channel),
@@ -81,8 +82,23 @@ test_topic_selection(Config) ->
 
     get_and_check(Channel, Q, 0, <<"true">>),
 
+    amqp_channel:call(Channel, #'exchange.delete'{exchange = Exchange}),
     close_connection_and_channel(Connection, Channel),
     ok.
+
+restart_with_auto_delete_topic_exchange(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    {Connection, Channel} = open_connection_and_channel(Config),
+    #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
+
+    Exchange = declare_rjms_exchange(Channel, "restart_with_auto_delete_topic_exchange", true, true, []),
+    %% Declare a queue and bind it
+    %% Q = declare_queue(Channel),
+    #'queue.declare_ok'{queue = Q} = amqp_channel:call(Channel, #'queue.declare'{durable = true}),
+    bind_queue(Channel, Q, Exchange, <<"select-key">>, [?BSELECTARG(<<"{ident, <<\"boolVal\">>}.">>)]),
+    ok = rabbit_control_helper:command(stop_app, Server),
+    ok = rabbit_control_helper:command(start_app, Server).
 
 
 %% -------------------------------------------------------------------
@@ -90,10 +106,12 @@ test_topic_selection(Config) ->
 %% -------------------------------------------------------------------
 
 %% Declare a rjms_topic_selector exchange, with args
-declare_rjms_exchange(Ch, XNameStr, XArgs) ->
+declare_rjms_exchange(Ch, XNameStr, Durable, AutoDelete, XArgs) ->
     Exchange = list_to_binary(XNameStr),
     Decl = #'exchange.declare'{ exchange = Exchange
                               , type = <<"x-jms-topic">>
+                              , durable = Durable
+                              , auto_delete = AutoDelete
                               , arguments = XArgs },
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, Decl),
     Exchange.
