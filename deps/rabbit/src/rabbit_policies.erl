@@ -54,13 +54,15 @@ register() ->
                           {operator_policy_validator, <<"max-in-memory-length">>},
                           {operator_policy_validator, <<"max-in-memory-bytes">>},
                           {operator_policy_validator, <<"delivery-limit">>},
+                          {operator_policy_validator, <<"queue-version">>},
                           {policy_merge_strategy, <<"expires">>},
                           {policy_merge_strategy, <<"message-ttl">>},
                           {policy_merge_strategy, <<"max-length">>},
                           {policy_merge_strategy, <<"max-length-bytes">>},
                           {policy_merge_strategy, <<"max-in-memory-length">>},
                           {policy_merge_strategy, <<"max-in-memory-bytes">>},
-                          {policy_merge_strategy, <<"delivery-limit">>}]],
+                          {policy_merge_strategy, <<"delivery-limit">>},
+                          {policy_merge_strategy, <<"queue-version">>}]],
     ok.
 
 -spec validate_policy([{binary(), term()}]) -> rabbit_policy_validator:validate_results().
@@ -211,5 +213,6 @@ merge_policy_value(<<"max-in-memory-length">>, Val, OpVal) -> min(Val, OpVal);
 merge_policy_value(<<"max-in-memory-bytes">>, Val, OpVal) -> min(Val, OpVal);
 merge_policy_value(<<"expires">>, Val, OpVal)          -> min(Val, OpVal);
 merge_policy_value(<<"delivery-limit">>, Val, OpVal)   -> min(Val, OpVal);
+merge_policy_value(<<"queue-version">>, _Val, OpVal)   -> OpVal;
 %% use operator policy value for booleans
 merge_policy_value(_Key, Val, OpVal) when is_boolean(Val) andalso is_boolean(OpVal) -> OpVal.

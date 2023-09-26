@@ -151,6 +151,7 @@ ssl_options.fail_if_no_peer_cert = true",
   default_policies.operator.a.classic_queues.ha_mode = exactly
   default_policies.operator.a.classic_queues.ha_params = 2
   default_policies.operator.a.classic_queues.ha_sync_mode = automatic
+  default_policies.operator.a.classic_queues.queue_version = 2
 
  ",
   [{rabbit, [{default_policies, [{operator, [
@@ -159,6 +160,7 @@ ssl_options.fail_if_no_peer_cert = true",
                  {<<"ha_params">>, 2},
                  {<<"ha_sync_mode">>, <<"automatic">>},
                  {<<"queue_pattern">>, "apple"},
+                 {<<"queue_version">>, 2},
                  {<<"vhost_pattern">>, "banana"}]}]}]}]}],
   []},
 
