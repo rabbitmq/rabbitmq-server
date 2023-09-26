@@ -657,12 +657,8 @@ rabbitmq_integration_suite(
     name = "quorum_queue_SUITE",
     size = "large",
     additional_beam = [
-<<<<<<< HEAD
         ":test_quorum_queue_utils_beam",
-=======
-        ":test_queue_utils_beam",
         ":test_clustering_utils_beam",
->>>>>>> 1e7c64c41c (quorum_queue_SUITE: wait for conditions or wait for longer to reduce flakiness)
     ],
     shard_count = 6,
 )
