@@ -71,10 +71,10 @@ validate_binding(_X, _B) -> ok.
 create(_Tx, _X) -> ok.
 policy_changed(_X1, _X2) -> ok.
 
-delete(none, #exchange{ name = XName }) ->
+delete(_Tx, #exchange{ name = XName }) ->
     rabbit_db_rh_exchange:delete(XName).
 
-add_binding(none, #exchange{ name = XName },
+add_binding(_Tx, #exchange{ name = XName },
             #binding{ destination = #resource{kind = queue} = QName }) ->
     _ = case rabbit_amqqueue:lookup(QName) of
         {error, not_found} ->
@@ -84,7 +84,7 @@ add_binding(none, #exchange{ name = XName },
             deliver_messages([Q], Msgs)
     end,
     ok;
-add_binding(none, #exchange{ name = XName },
+add_binding(_Tx, #exchange{ name = XName },
             #binding{ destination = #resource{kind = exchange} = DestName }) ->
     _ = case rabbit_exchange:lookup(DestName) of
         {error, not_found} ->
@@ -102,7 +102,7 @@ add_binding(none, #exchange{ name = XName },
              end || Msg <- Msgs]
     end,
     ok;
-add_binding(none, _Exchange, _Binding) ->
+add_binding(_Tx, _Exchange, _Binding) ->
     ok.
 
 remove_bindings(_Tx, _X, _Bs) -> ok.
