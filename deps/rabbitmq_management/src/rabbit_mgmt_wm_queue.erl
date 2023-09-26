@@ -71,18 +71,31 @@ accept_content(ReqData, Context) ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(io_lib:format(F ++ "~n", A)), ReqData, Context)
     end.
 
-delete_resource(ReqData, Context) ->
+delete_resource(ReqData, Context = #context{user = #user{username = ActingUser}}) ->
     %% We need to retrieve manually if-unused and if-empty, as the HTTP API uses '-'
     %% while the record uses '_'
     IfUnused = <<"true">> =:= rabbit_mgmt_util:qs_val(<<"if-unused">>, ReqData),
     IfEmpty = <<"true">> =:= rabbit_mgmt_util:qs_val(<<"if-empty">>, ReqData),
-    Name = rabbit_mgmt_util:id(queue, ReqData),
-    rabbit_mgmt_util:direct_request(
-      'queue.delete',
-      fun rabbit_mgmt_format:format_accept_content/1,
-      [{queue, Name},
-       {if_unused, IfUnused},
-       {if_empty, IfEmpty}], "Delete queue error: ~ts", ReqData, Context).
+    VHost = rabbit_mgmt_util:id(vhost, ReqData),
+    QName = rabbit_mgmt_util:id(queue, ReqData),
+    Name = rabbit_misc:r(VHost, queue, QName),
+    case rabbit_amqqueue:lookup(Name) of
+        {ok, Q} ->
+            case rabbit_amqqueue:delete(Q, IfUnused, IfEmpty, ActingUser) of
+                {ok, _} ->
+                    {true, ReqData, Context};
+                {error, not_empty} ->
+                    Explanation = io_lib:format("~ts not empty", [rabbit_misc:rs(Name)]),
+                    rabbit_log:warning("Delete queue error: ~ts", [Explanation]),
+                    rabbit_mgmt_util:bad_request(list_to_binary(Explanation), ReqData, Context);
+                {error, in_use} ->
+                    Explanation = io_lib:format("~ts in use", [rabbit_misc:rs(Name)]),
+                    rabbit_log:warning("Delete queue error: ~ts", [Explanation]),
+                    rabbit_mgmt_util:bad_request(list_to_binary(Explanation), ReqData, Context)
+            end;
+        {error, not_found} ->
+            {true, ReqData, Context}
+   end.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
