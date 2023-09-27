@@ -9,7 +9,8 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
-
+-include_lib("stdlib/include/assert.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -218,8 +219,6 @@ target_count_policy(Config) ->
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.
 
-<<<<<<< HEAD
-=======
 queue_type_specific_policies(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
@@ -381,14 +380,17 @@ effective_operator_policy_per_queue_type(Config, Name, Value, ClassicValue, Quor
     rabbit_ct_client_helpers:close_channel(Ch),
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.
->>>>>>> 24797c5a12 (Add Classic Queue version to operator policies)
 
 %%----------------------------------------------------------------------------
-
 
 declare(Ch, Q) ->
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
                                            durable   = true}).
+
+declare(Ch, Q, Args) ->
+    amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
+                                           durable   = true,
+                                           arguments = Args}).
 
 delete(Ch, Q) ->
     amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
