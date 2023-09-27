@@ -782,6 +782,12 @@ end}.
     {datatype, string}
 ]}.
 
+{mapping, "default_policies.operator.$id.classic_queues.queue_version", "rabbit.default_policies.operator",
+    [
+        {validators, ["non_zero_positive_integer"]},
+        {datatype, integer}
+    ]}.
+
 {translation, "rabbit.default_policies.operator", fun(Conf) ->
     Props = rabbit_cuttlefish:aggregate_props(
                 Conf,
