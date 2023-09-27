@@ -25,9 +25,6 @@ groups() ->
                            policy_ttl,
                            operator_policy_ttl,
                            operator_retroactive_policy_ttl,
-<<<<<<< HEAD
-                           operator_retroactive_policy_publish_ttl
-=======
                            operator_retroactive_policy_publish_ttl,
                            queue_type_specific_policies,
                            queue_version_specific_policies,
@@ -39,7 +36,6 @@ groups() ->
                            is_supported_operator_policy_max_in_memory_bytes,
                            is_supported_operator_policy_delivery_limit,
                            is_supported_operator_policy_ha
->>>>>>> 24797c5a12 (Add Classic Queue version to operator policies)
                           ]}
     ].
 
