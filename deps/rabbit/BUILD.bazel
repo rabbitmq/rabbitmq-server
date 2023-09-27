@@ -335,7 +335,6 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_clustering_utils_beam",
     ],
-    flaky = True,
     shard_count = 18,
     sharding_method = "case",
 )
@@ -414,7 +413,6 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_quorum_queue_utils_beam",
     ],
-    flaky = True,
     deps = [
         "@proper//:erlang_app",
     ],
@@ -549,8 +547,7 @@ rabbitmq_suite(
 
 rabbitmq_integration_suite(
     name = "peer_discovery_classic_config_SUITE",
-    size = "medium",
-    flaky = True,
+    size = "large",
 )
 
 rabbitmq_integration_suite(
@@ -661,6 +658,7 @@ rabbitmq_integration_suite(
     size = "large",
     additional_beam = [
         ":test_quorum_queue_utils_beam",
+        ":test_clustering_utils_beam",
     ],
     shard_count = 6,
 )
@@ -802,7 +800,6 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "rabbitmqctl_integration_SUITE",
     size = "medium",
-    flaky = True,
 )
 
 rabbitmq_integration_suite(
