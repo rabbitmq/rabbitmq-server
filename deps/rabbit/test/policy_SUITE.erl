@@ -28,6 +28,7 @@ groups() ->
                            operator_retroactive_policy_ttl,
                            operator_retroactive_policy_publish_ttl,
                            queue_type_specific_policies,
+                           queue_version_specific_policies,
                            is_supported_operator_policy_expires,
                            is_supported_operator_policy_message_ttl,
                            is_supported_operator_policy_max_length,
@@ -256,6 +257,29 @@ queue_type_specific_policies(Config) ->
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.
 
+queue_version_specific_policies(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = <<"policy_queue_version">>,
+    declare(Ch, QName),
+    QueueVersionOnePolicy = [{<<"queue-version">>, 1}],
+    QueueVersionTwoPolicy = [{<<"queue-version">>, 2}],
+
+    Opts = #{config => Config,
+             server => Server,
+             qname  => QName},
+
+    %% Queue version OperPolicy has precedence always
+    verify_policies(QueueVersionOnePolicy, QueueVersionTwoPolicy, QueueVersionTwoPolicy, Opts),
+    verify_policies(QueueVersionTwoPolicy, QueueVersionOnePolicy, QueueVersionOnePolicy, Opts),
+
+    delete(Ch, QName),
+    rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"policy">>),
+    rabbit_ct_broker_helpers:clear_operator_policy(Config, 0, <<"op_policy">>),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
+
 %% See supported policies in https://www.rabbitmq.com/parameters.html#operator-policies
 %% This test applies all supported operator policies to all queue types,
 %% and later verifies the effective policy definitions.
@@ -433,10 +457,10 @@ verify_policies(Policy, OperPolicy, VerifyFuns, #{config := Config,
                                                   server := Server,
                                                   qname := QName}) ->
     rabbit_ct_broker_helpers:set_policy(Config, 0, <<"policy">>,
-                                        <<"policy_ha">>, <<"queues">>,
+                                        QName, <<"queues">>,
                                         Policy),
     rabbit_ct_broker_helpers:set_operator_policy(Config, 0, <<"op_policy">>,
-                                                 <<"policy_ha">>, <<"queues">>,
+                                                 QName, <<"queues">>,
                                                  OperPolicy),
     verify_policy(VerifyFuns, Server, QName).
 
