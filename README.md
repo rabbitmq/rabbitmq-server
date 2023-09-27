@@ -51,10 +51,8 @@ RabbitMQ documentation is also [developed on GitHub](https://github.com/rabbitmq
 
 ## Getting Help from the Community
 
- * [Community Discord server](https://rabbitmq.com/discord/)
- * [Community Slack](https://rabbitmq.com/slack/)
  * [GitHub Discussions](https://github.com/rabbitmq/rabbitmq-server/discussions/)
- * [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users)
+ * [Community Discord server](https://rabbitmq.com/discord/)
  * `#rabbitmq` on [Libera Chat](https://libera.chat/)
 
 
