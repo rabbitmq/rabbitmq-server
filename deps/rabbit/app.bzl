@@ -1493,10 +1493,10 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
-        name = "test_quorum_queue_utils_beam",
+        name = "test_queue_utils_beam",
         testonly = True,
-        srcs = ["test/quorum_queue_utils.erl"],
-        outs = ["test/quorum_queue_utils.beam"],
+        srcs = ["test/queue_utils.erl"],
+        outs = ["test/queue_utils.beam"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
     )

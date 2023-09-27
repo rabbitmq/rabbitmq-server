@@ -15,7 +15,7 @@
 
 -compile([export_all, nowarn_export_all]).
 
--import(quorum_queue_utils, [wait_for_messages/2]).
+-import(queue_utils, [wait_for_messages/2]).
 
 all() ->
     [

@@ -363,7 +363,7 @@ rabbitmq_integration_suite(
     name = "consumer_timeout_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
 )
 
@@ -376,7 +376,7 @@ rabbitmq_integration_suite(
     name = "dead_lettering_SUITE",
     size = "large",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
     shard_count = 7,
 )
@@ -411,7 +411,7 @@ rabbitmq_integration_suite(
     name = "dynamic_qq_SUITE",
     size = "large",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
     deps = [
         "@proper//:erlang_app",
@@ -493,7 +493,7 @@ rabbitmq_integration_suite(
     name = "maintenance_mode_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
 )
 
@@ -624,7 +624,7 @@ rabbitmq_integration_suite(
     name = "publisher_confirms_parallel_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
 )
 
@@ -643,7 +643,7 @@ rabbitmq_integration_suite(
     name = "queue_parallel_SUITE",
     size = "large",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
     shard_count = 6,
 )
@@ -657,8 +657,8 @@ rabbitmq_integration_suite(
     name = "quorum_queue_SUITE",
     size = "large",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
         ":test_clustering_utils_beam",
+        ":test_queue_utils_beam",
     ],
     shard_count = 6,
 )
@@ -718,7 +718,7 @@ rabbitmq_integration_suite(
     size = "medium",
     additional_beam = [
         ":test_test_util_beam",
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
         ":quorum_queue_SUITE_beam_files",
     ],
     deps = [
@@ -784,7 +784,7 @@ rabbitmq_integration_suite(
     name = "rabbit_stream_queue_SUITE",
     size = "large",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
     shard_count = 12,
     deps = [
@@ -826,7 +826,7 @@ rabbitmq_integration_suite(
     name = "single_active_consumer_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
 )
 
@@ -1050,7 +1050,7 @@ rabbitmq_integration_suite(
     name = "direct_exchange_routing_v2_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
 )
 
@@ -1071,7 +1071,7 @@ rabbitmq_integration_suite(
     name = "exchanges_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
     ],
 )
 
@@ -1218,7 +1218,7 @@ eunit(
         ":test_dummy_supervisor2_beam",
         ":test_failing_dummy_interceptor_beam",
         ":test_mirrored_supervisor_SUITE_gs_beam",
-        ":test_quorum_queue_utils_beam",
+        ":test_queue_utils_beam",
         ":test_rabbit_auth_backend_context_propagation_mock_beam",
         ":test_rabbit_dummy_protocol_connection_info_beam",
         ":test_rabbit_foo_protocol_connection_info_beam",

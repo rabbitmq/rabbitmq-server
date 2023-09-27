@@ -15,7 +15,7 @@
 
 -define(TIMEOUT, 60000).
 
--import(quorum_queue_utils, [wait_for_messages/2]).
+-import(queue_utils, [wait_for_messages/2]).
 
 all() ->
     [

@@ -11,8 +11,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
--import(quorum_queue_utils, [wait_for_messages_ready/3,
-                             ra_name/1]).
+-import(queue_utils, [wait_for_messages_ready/3,
+                      ra_name/1]).
 
 -compile(nowarn_export_all).
 -compile(export_all).
