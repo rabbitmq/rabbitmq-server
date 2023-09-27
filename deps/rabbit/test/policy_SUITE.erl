@@ -38,7 +38,6 @@ groups() ->
                            is_supported_operator_policy_max_in_memory_length,
                            is_supported_operator_policy_max_in_memory_bytes,
                            is_supported_operator_policy_delivery_limit,
-                           is_supported_operator_policy_target_group_size,
                            is_supported_operator_policy_ha
 >>>>>>> 24797c5a12 (Add Classic Queue version to operator policies)
                           ]}
@@ -324,11 +323,6 @@ is_supported_operator_policy_delivery_limit(Config) ->
     Value = 3,
     effective_operator_policy_per_queue_type(
       Config, <<"delivery-limit">>, Value, undefined, Value, undefined).
-
-is_supported_operator_policy_target_group_size(Config) ->
-    Value = 5,
-    effective_operator_policy_per_queue_type(
-      Config, <<"target-group-size">>, Value, undefined, Value, undefined).
 
 is_supported_operator_policy_ha(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
