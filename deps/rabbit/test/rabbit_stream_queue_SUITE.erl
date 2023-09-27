@@ -1355,13 +1355,8 @@ consume_and_ack(Config) ->
             %% should still be open and declare is an idempotent operation
             %%
             ?assertMatch({'queue.declare_ok', Q, _MsgCount, 0},
-<<<<<<< HEAD
                          declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
-            quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]])
-=======
-                         declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
             queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]])
->>>>>>> 1ac9249512 (Rename quorum_queue_utils to queue_utils)
     after 5000 ->
             exit(timeout)
     end,
