@@ -736,7 +736,7 @@ publish(Config) ->
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     publish(Ch, Q),
-    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
+    queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 publish_confirm(Config) ->
@@ -751,7 +751,7 @@ publish_confirm(Config) ->
     amqp_channel:register_confirm_handler(Ch, self()),
     publish(Ch, Q),
     amqp_channel:wait_for_confirms(Ch, 5),
-    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
+    queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 restart_single_node(Config) ->
@@ -762,15 +762,15 @@ restart_single_node(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     publish(Ch, Q),
-    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
+    queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
 
     rabbit_control_helper:command(stop_app, Server),
     rabbit_control_helper:command(start_app, Server),
 
-    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
+    queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     publish(Ch1, Q),
-    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"2">>, <<"0">>]]),
+    queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"2">>, <<"0">>]]),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 %% the failing case for this test relies on a particular random condition
@@ -816,7 +816,7 @@ recover(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     publish(Ch, Q),
-    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
+    queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
 
     Perm0 = permute(Servers0),
     Servers = lists:nth(rand:uniform(length(Perm0)), Perm0),
@@ -828,7 +828,7 @@ recover(Config) ->
     [rabbit_ct_broker_helpers:start_node(Config, S) || S <- lists:reverse(Servers)],
     ct:pal("recover: running stop waiting for messages ~w", [Servers]),
     check_leader_and_replicas(Config, Servers0),
-    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]], 60),
+    queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]], 60),
 
     %% Another single random permutation
     Perm1 = permute(Servers0),
@@ -839,11 +839,11 @@ recover(Config) ->
     [rabbit_control_helper:command(start_app, S) || S <- lists:reverse(Servers1)],
     ct:pal("recover: running app stop waiting for messages ~w", [Servers1]),
     check_leader_and_replicas(Config, Servers0),
-    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]], 60),
+    queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]], 60),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     publish(Ch1, Q),
-    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"2">>, <<"0">>]]),
+    queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"2">>, <<"0">>]]),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 restart_coordinator_without_queues(Config) ->
@@ -1356,7 +1356,7 @@ consume_and_ack(Config) ->
             %%
             ?assertMatch({'queue.declare_ok', Q, _MsgCount, 0},
                          declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
-            quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]])
+            queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]])
     after 5000 ->
             exit(timeout)
     end,
@@ -1795,8 +1795,8 @@ max_age(Config) ->
     amqp_channel:wait_for_confirms(Ch, 5),
 
     %% Let's give it some margin if some messages fall between segments
-    quorum_queue_utils:wait_for_min_messages(Config, Q, 100),
-    quorum_queue_utils:wait_for_max_messages(Config, Q, 150),
+    queue_utils:wait_for_min_messages(Config, Q, 100),
+    queue_utils:wait_for_max_messages(Config, Q, 150),
 
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
@@ -2269,7 +2269,7 @@ update_retention_policy(Config) ->
 
     %% Retention policy should clear approximately 2/3 of the messages, but just to be safe
     %% let's simply check that it removed half of them
-    quorum_queue_utils:wait_for_max_messages(Config, Q, 5000),
+    queue_utils:wait_for_max_messages(Config, Q, 5000),
 
     {ok, Q1} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup,
                                             [rabbit_misc:r(<<"/">>, queue, Q)]),
@@ -2389,7 +2389,7 @@ dead_letter_target(Config) ->
             ok = amqp_channel:cast(Ch1, #'basic.nack'{delivery_tag = DeliveryTag,
                                                       requeue =false,
                                                       multiple     = false}),
-            quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]])
+            queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]])
     after 5000 ->
             exit(timeout)
     end,
