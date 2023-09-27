@@ -10,6 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("stdlib/include/assert.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -26,7 +27,16 @@ groups() ->
                            operator_policy_ttl,
                            operator_retroactive_policy_ttl,
                            operator_retroactive_policy_publish_ttl,
-                           queue_type_specific_policies
+                           queue_type_specific_policies,
+                           is_supported_operator_policy_expires,
+                           is_supported_operator_policy_message_ttl,
+                           is_supported_operator_policy_max_length,
+                           is_supported_operator_policy_max_length,
+                           is_supported_operator_policy_max_in_memory_length,
+                           is_supported_operator_policy_max_in_memory_bytes,
+                           is_supported_operator_policy_delivery_limit,
+                           is_supported_operator_policy_target_group_size,
+                           is_supported_operator_policy_ha
                           ]}
     ].
 
@@ -246,18 +256,124 @@ queue_type_specific_policies(Config) ->
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.
 
+%% See supported policies in https://www.rabbitmq.com/parameters.html#operator-policies
+%% This test applies all supported operator policies to all queue types,
+%% and later verifies the effective policy definitions.
+%% Just those supported by each queue type should be present.
+
+is_supported_operator_policy_expires(Config) ->
+    Value = 6000000,
+    effective_operator_policy_per_queue_type(
+      Config, <<"expires">>, Value, Value, Value, undefined).
+
+is_supported_operator_policy_message_ttl(Config) ->
+    Value = 1000,
+    effective_operator_policy_per_queue_type(
+      Config, <<"message-ttl">>, Value, Value, Value, undefined).
+
+is_supported_operator_policy_max_length(Config) ->
+    Value = 500,
+    effective_operator_policy_per_queue_type(
+      Config, <<"max-length">>, Value, Value, Value, undefined).
+
+is_supported_operator_policy_max_length_bytes(Config) ->
+    Value = 1500,
+    effective_operator_policy_per_queue_type(
+      Config, <<"max-length-bytes">>, Value, Value, Value, Value).
+
+is_supported_operator_policy_max_in_memory_length(Config) ->
+    Value = 30,
+    effective_operator_policy_per_queue_type(
+      Config, <<"max-in-memory-length">>, Value, undefined, Value, undefined).
+
+is_supported_operator_policy_max_in_memory_bytes(Config) ->
+    Value = 50000,
+    effective_operator_policy_per_queue_type(
+      Config, <<"max-in-memory-bytes">>, Value, undefined, Value, undefined).
+
+is_supported_operator_policy_delivery_limit(Config) ->
+    Value = 3,
+    effective_operator_policy_per_queue_type(
+      Config, <<"delivery-limit">>, Value, undefined, Value, undefined).
+
+is_supported_operator_policy_target_group_size(Config) ->
+    Value = 5,
+    effective_operator_policy_per_queue_type(
+      Config, <<"target-group-size">>, Value, undefined, Value, undefined).
+
+is_supported_operator_policy_ha(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    ClassicQ = <<"classic_queue">>,
+    QuorumQ = <<"quorum_queue">>,
+    StreamQ = <<"stream_queue">>,
+
+    declare(Ch, ClassicQ, [{<<"x-queue-type">>, longstr, <<"classic">>}]),
+    declare(Ch, QuorumQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+    declare(Ch, StreamQ, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
+
+    rabbit_ct_broker_helpers:set_operator_policy(
+      Config, 0, <<"operator-policy">>, <<".*">>, <<"all">>,
+      [{<<"ha-mode">>, <<"exactly">>},
+       {<<"ha-params">>, 2},
+       {<<"ha-sync-mode">>, <<"automatic">>}]),
+
+    ?awaitMatch(<<"exactly">>, check_policy_value(Server, ClassicQ, <<"ha-mode">>), 30_000),
+    ?awaitMatch(2, check_policy_value(Server, ClassicQ, <<"ha-params">>), 30_000),
+    ?awaitMatch(<<"automatic">>, check_policy_value(Server, ClassicQ, <<"ha-sync-mode">>), 30_000),
+    ?awaitMatch(undefined, check_policy_value(Server, QuorumQ, <<"ha-mode">>), 30_000),
+    ?awaitMatch(undefined, check_policy_value(Server, StreamQ, <<"ha-mode">>), 30_000),
+
+    rabbit_ct_broker_helpers:clear_operator_policy(Config, 0, <<"operator-policy">>),
+
+    delete(Ch, ClassicQ),
+    delete(Ch, QuorumQ),
+    delete(Ch, StreamQ),
+
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
+
+effective_operator_policy_per_queue_type(Config, Name, Value, ClassicValue, QuorumValue, StreamValue) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    ClassicQ = <<"classic_queue">>,
+    QuorumQ = <<"quorum_queue">>,
+    StreamQ = <<"stream_queue">>,
+
+    declare(Ch, ClassicQ, [{<<"x-queue-type">>, longstr, <<"classic">>}]),
+    declare(Ch, QuorumQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+    declare(Ch, StreamQ, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
+
+    rabbit_ct_broker_helpers:set_operator_policy(
+      Config, 0, <<"operator-policy">>, <<".*">>, <<"all">>,
+      [{Name, Value}]),
+
+    ?awaitMatch(ClassicValue, check_policy_value(Server, ClassicQ, Name), 30_000),
+    ?awaitMatch(QuorumValue, check_policy_value(Server, QuorumQ, Name), 30_000),
+    ?awaitMatch(StreamValue, check_policy_value(Server, StreamQ, Name), 30_000),
+
+    rabbit_ct_broker_helpers:clear_operator_policy(Config, 0, <<"operator-policy">>),
+
+    delete(Ch, ClassicQ),
+    delete(Ch, QuorumQ),
+    delete(Ch, StreamQ),
+
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
 
 %%----------------------------------------------------------------------------
 
 
 declare(Ch, Q) ->
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
-                                           durable   = true}).
+                                                                   durable   = true}).
 
 declare(Ch, Q, Args) ->
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
-                                           durable   = true,
-                                           arguments = Args}).
+                                                                   durable   = true,
+                                                                   arguments = Args}).
 
 delete(Ch, Q) ->
     amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
@@ -305,8 +421,13 @@ get_messages(Number, Ch, Q) ->
     end.
 
 check_policy_value(Server, QName, Value) ->
+    ct:pal("QUEUES ~p",
+           [rpc:call(Server, rabbit_amqqueue, list, [])]),
     {ok, Q} = rpc:call(Server, rabbit_amqqueue, lookup, [rabbit_misc:r(<<"/">>, queue, QName)]),
-    proplists:get_value(Value, rpc:call(Server, rabbit_policy, effective_definition, [Q])).
+    case rpc:call(Server, rabbit_policy, effective_definition, [Q]) of
+        List when is_list(List) -> proplists:get_value(Value, List);
+        Any -> Any
+    end.
 
 verify_policies(Policy, OperPolicy, VerifyFuns, #{config := Config,
                                                   server := Server,
