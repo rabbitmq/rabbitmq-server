@@ -28,7 +28,7 @@ groups() ->
                            operator_retroactive_policy_ttl,
                            operator_retroactive_policy_publish_ttl,
                            queue_type_specific_policies,
-                           queue_version_specific_policies,
+                           classic_queue_version_policies,
                            is_supported_operator_policy_expires,
                            is_supported_operator_policy_message_ttl,
                            is_supported_operator_policy_max_length,
@@ -256,7 +256,7 @@ queue_type_specific_policies(Config) ->
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.
 
-queue_version_specific_policies(Config) ->
+classic_queue_version_policies(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = <<"policy_queue_version">>,
