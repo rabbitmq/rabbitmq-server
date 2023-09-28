@@ -486,8 +486,10 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td class="path">/api/queues</td>
         <td>A list of all queues. Use <a href="#pagination">pagination parameters</a> to filter queues.
-          The parameter <code>enable_queue_totals</code> can be used in combination with the
-          <code>disable_stats</code> parameter to return a reduced set of fields.
+          The parameter <code>enable_queue_totals=true</code> can be used in combination with the
+          <code>disable_stats=true</code> parameter to return a reduced set of fields and significantly
+          reduce the amount of data returned by this endpoint. That in turn can significantly reduce
+          CPU and bandwidth footprint of such requests.
         </td>
       </tr>
       <tr>
