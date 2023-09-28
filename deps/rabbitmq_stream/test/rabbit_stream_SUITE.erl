@@ -111,7 +111,8 @@ init_per_group(cluster = Group, Config) ->
                          {rmq_nodes_count, 3},
                          {rmq_nodename_suffix, Group},
                          {tcp_ports_base},
-                         {rabbitmq_ct_tls_verify, verify_none}
+                         {rabbitmq_ct_tls_verify, verify_none},
+                         {find_crashes, false} %% we kill stream members in some tests
                         ]),
     rabbit_ct_helpers:run_setup_steps(
       Config1,
