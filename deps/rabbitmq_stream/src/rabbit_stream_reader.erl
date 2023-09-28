@@ -84,8 +84,13 @@
          heartbeat :: undefined | integer(),
          heartbeater :: any(),
          client_properties = #{} :: #{binary() => binary()},
+<<<<<<< HEAD
          monitors = #{} :: #{reference() => stream()},
          stats_timer :: undefined | reference(),
+=======
+         monitors = #{} :: #{reference() => {pid(), stream()}},
+         stats_timer :: undefined | rabbit_event:state(),
+>>>>>>> d1f597aae2 (Fix a couple for dialyzer warnings)
          resource_alarm :: boolean(),
          send_file_oct ::
              atomics:atomics_ref(), % number of bytes sent with send_file (for metrics)
@@ -3152,8 +3157,8 @@ clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
                                                 VirtualHost, Consumer,
                                                 single_active_consumer(Consumer),
                                                 Rqsts0);
-                                          {_, #consumer{configuration =
-                                                    #consumer_configuration{member_pid = MemberPid}}} ->
+                                          {MemberPid, #consumer{configuration =
+                                                                #consumer_configuration{member_pid = MemberPid}}} ->
                                               rabbit_stream_metrics:consumer_cancelled(self(),
                                                                                        stream_r(Stream,
                                                                                                 C0),
@@ -3182,17 +3187,17 @@ clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
             true ->
                 {PurgedPubs, PurgedPubToIds} =
                     maps:fold(fun(PubId,
-                                  #publisher{stream = S, reference = Ref, leader = MPid},
-                                  {Pubs, PubToIds}) when S =:= Stream andalso MPid =:= MemberPid ->
-                                         rabbit_stream_metrics:publisher_deleted(self(),
+                                  #publisher{stream = S, reference = Ref},
+                                  {Pubs, PubToIds}) when S =:= Stream andalso MemberPid =:= undefined ->
+                                      rabbit_stream_metrics:publisher_deleted(self(),
                                                                                  stream_r(Stream,
                                                                                           C1),
                                                                                  PubId),
                                          {maps:remove(PubId, Pubs),
                                           maps:remove({Stream, Ref}, PubToIds)};
                                  (PubId,
-                                  #publisher{stream = S, reference = Ref},
-                                  {Pubs, PubToIds}) when S =:= Stream andalso MemberPid =:= undefined ->
+                                  #publisher{stream = S, reference = Ref, leader = MPid},
+                                  {Pubs, PubToIds}) when S =:= Stream andalso MPid =:= MemberPid ->
                                          rabbit_stream_metrics:publisher_deleted(self(),
                                                                                  stream_r(Stream,
                                                                                           C1),
