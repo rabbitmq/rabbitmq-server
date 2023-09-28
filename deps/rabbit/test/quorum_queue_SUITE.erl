@@ -2738,8 +2738,6 @@ status(Config) ->
     publish(Ch, QQ, Msg2),
     wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
 
-    ct:pal("Server ~p", [Server]),
-
     [N1, N2, N3] = lists:sort(Nodes),
 
     %% check that nodes are returned and that at least the term isn't
