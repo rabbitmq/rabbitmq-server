@@ -101,6 +101,21 @@ public class Host {
     return System.getProperty("node2.name", "rabbit-2@" + hostname());
   }
 
+  public static Process killStreamLocalMemberProcess(String stream, String nodename) throws IOException {
+    return rabbitmqctl(
+        "eval 'case rabbit_stream_manager:lookup_local_member(<<\"/\">>, <<\""
+            + stream
+            + "\">>) of {ok, Pid} -> exit(Pid, kill); Pid -> exit(Pid, kill) end.'",
+        nodename);
+  }
+
+  public static Process killStreamLeaderProcess(String stream) throws IOException {
+    return rabbitmqctl(
+        "eval 'case rabbit_stream_manager:lookup_leader(<<\"/\">>, <<\""
+            + stream
+            + "\">>) of {ok, Pid} -> exit(Pid, kill); Pid -> exit(Pid, kill) end.'");
+  }
+
   public static String hostname() {
     try {
       return InetAddress.getLocalHost().getHostName();

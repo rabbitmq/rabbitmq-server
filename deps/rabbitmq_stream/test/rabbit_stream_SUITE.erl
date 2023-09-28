@@ -104,24 +104,23 @@ init_per_group(Group, Config)
                                       ++ ExtraSetupSteps
                                       ++ rabbit_ct_broker_helpers:setup_steps());
 init_per_group(cluster = Group, Config) ->
-    Config1 =
-        rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]),
-    Config2 =
-        rabbit_ct_helpers:set_config(Config1,
-                                     [{rmq_nodes_count, 3},
-                                      {rmq_nodename_suffix, Group},
-                                      {tcp_ports_base}]),
-    Config3 =
-        rabbit_ct_helpers:set_config(Config2,
-                                     {rabbitmq_ct_tls_verify, verify_none}),
-    rabbit_ct_helpers:run_setup_steps(Config3,
-                                      [fun(StepConfig) ->
-                                          rabbit_ct_helpers:merge_app_env(StepConfig,
-                                                                          {aten,
-                                                                           [{poll_interval,
-                                                                             1000}]})
-                                       end]
-                                      ++ rabbit_ct_broker_helpers:setup_steps());
+    Config1 = rabbit_ct_helpers:set_config(
+                Config, [{rmq_nodes_clustered, true},
+                         {rmq_nodes_count, 3},
+                         {rmq_nodename_suffix, Group},
+                         {tcp_ports_base},
+                         {rabbitmq_ct_tls_verify, verify_none},
+                         {find_crashes, false} %% we kill stream members in some tests
+                        ]),
+    rabbit_ct_helpers:run_setup_steps(
+      Config1,
+      [fun(StepConfig) ->
+               rabbit_ct_helpers:merge_app_env(StepConfig,
+                                               {aten,
+                                                [{poll_interval,
+                                                  1000}]})
+       end]
+      ++ rabbit_ct_broker_helpers:setup_steps());
 init_per_group(_, Config) ->
     rabbit_ct_helpers:run_setup_steps(Config).
 
