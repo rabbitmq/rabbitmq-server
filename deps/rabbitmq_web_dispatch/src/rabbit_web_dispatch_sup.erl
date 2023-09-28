@@ -30,15 +30,7 @@ ensure_listener(Listener) ->
             {Transport, TransportOpts, ProtoOpts} = preprocess_config(Listener),
             ProtoOptsMap = maps:from_list(ProtoOpts),
             StreamHandlers = stream_handlers_config(ProtoOpts),
-<<<<<<< HEAD
-<<<<<<< HEAD
-            rabbit_log:debug("Starting HTTP[S] listener with transport ~s, options ~p and protocol options ~p, stream handlers ~p",
-                             [Transport, TransportOpts, ProtoOptsMap, StreamHandlers]),
-=======
->>>>>>> 84cc3bd8d0 (Do not log HTTP-based plugin listener settings at debug level)
-=======
             rabbit_log:debug("Starting HTTP[S] listener with transport ~ts", [Transport]),
->>>>>>> 9ba3c3eb08 (Better yet, log HTTP-based listener startup but not the options)
             CowboyOptsMap =
                 maps:merge(#{env =>
                                 #{rabbit_listener => Listener},
