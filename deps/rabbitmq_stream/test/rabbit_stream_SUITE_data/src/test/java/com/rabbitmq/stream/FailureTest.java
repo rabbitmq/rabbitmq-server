@@ -30,8 +30,10 @@ import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -65,7 +67,7 @@ public class FailureTest {
   @Test
   void leaderFailureWhenPublisherConnectedToReplica() throws Exception {
     Set<String> messages = new HashSet<>();
-    Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
+    Client client = cf.get(new Client.ClientParameters().port(streamPortNode1()));
     Map<String, Client.StreamMetadata> metadata = client.metadata(stream);
     Client.StreamMetadata streamMetadata = metadata.get(stream);
     assertThat(streamMetadata).isNotNull();
@@ -73,11 +75,11 @@ public class FailureTest {
     waitUntil(() -> client.metadata(stream).get(stream).getReplicas().size() == 2);
 
     streamMetadata = client.metadata(stream).get(stream);
-    assertThat(streamMetadata.getLeader().getPort()).isEqualTo(TestUtils.streamPortNode1());
+    assertThat(streamMetadata.getLeader().getPort()).isEqualTo(streamPortNode1());
     assertThat(streamMetadata.getReplicas()).isNotEmpty();
 
     Client.Broker replica = streamMetadata.getReplicas().get(0);
-    assertThat(replica.getPort()).isNotEqualTo(TestUtils.streamPortNode1());
+    assertThat(replica.getPort()).isNotEqualTo(streamPortNode1());
 
     AtomicReference<CountDownLatch> confirmLatch = new AtomicReference<>(new CountDownLatch(1));
 
@@ -102,7 +104,7 @@ public class FailureTest {
     try {
       Host.rabbitmqctl("stop_app");
       try {
-        cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
+        cf.get(new Client.ClientParameters().port(streamPortNode1()));
         fail("Node app stopped, connecting should not be possible");
       } catch (Exception e) {
         // OK
@@ -115,7 +117,7 @@ public class FailureTest {
           Duration.ofSeconds(10),
           () -> {
             Client.StreamMetadata m = publisher.metadata(stream).get(stream);
-            return m.getLeader() != null && m.getLeader().getPort() != TestUtils.streamPortNode1();
+            return m.getLeader() != null && m.getLeader().getPort() != streamPortNode1();
           });
 
       confirmLatch.set(new CountDownLatch(1));
@@ -161,7 +163,7 @@ public class FailureTest {
     Client consumer =
         cf.get(
             new Client.ClientParameters()
-                .port(TestUtils.streamPortNode1())
+                .port(streamPortNode1())
                 .messageListener(
                     (subscriptionId, offset, chunkTimestamp, committedChunkId, context, msg) -> {
                       bodies.add(new String(msg.getBodyAsBinary(), StandardCharsets.UTF_8));
@@ -182,13 +184,13 @@ public class FailureTest {
   @Test
   void noLostConfirmedMessagesWhenLeaderGoesAway() throws Exception {
     executorService = Executors.newCachedThreadPool();
-    Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
+    Client client = cf.get(new Client.ClientParameters().port(streamPortNode1()));
     Map<String, Client.StreamMetadata> metadata = client.metadata(stream);
     Client.StreamMetadata streamMetadata = metadata.get(stream);
     assertThat(streamMetadata).isNotNull();
 
     assertThat(streamMetadata.getLeader()).isNotNull();
-    assertThat(streamMetadata.getLeader().getPort()).isEqualTo(TestUtils.streamPortNode1());
+    assertThat(streamMetadata.getLeader().getPort()).isEqualTo(streamPortNode1());
 
     Map<Long, Message> published = new ConcurrentHashMap<>();
     Set<Message> confirmed = ConcurrentHashMap.newKeySet();
@@ -220,7 +222,7 @@ public class FailureTest {
                   connected.set(false);
 
                   Client locator =
-                      cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode2()));
+                      cf.get(new Client.ClientParameters().port(streamPortNode2()));
                   // wait until there's a new leader
                   try {
                     waitAtMost(
@@ -228,7 +230,7 @@ public class FailureTest {
                         () -> {
                           Client.StreamMetadata m = locator.metadata(stream).get(stream);
                           return m.getLeader() != null
-                              && m.getLeader().getPort() != TestUtils.streamPortNode1();
+                              && m.getLeader().getPort() != streamPortNode1();
                         });
                   } catch (Throwable e) {
                     reconnectionLatch.countDown();
@@ -316,7 +318,7 @@ public class FailureTest {
     assertThat(confirmed).hasSizeGreaterThan(confirmedCount);
     confirmedCount = confirmed.size();
 
-    Client metadataClient = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode2()));
+    Client metadataClient = cf.get(new Client.ClientParameters().port(streamPortNode2()));
     // wait until all the replicas are there
     waitAtMost(
         Duration.ofSeconds(5),
@@ -374,7 +376,7 @@ public class FailureTest {
   @Test
   void consumerReattachesToOtherReplicaWhenReplicaGoesAway() throws Exception {
     executorService = Executors.newCachedThreadPool();
-    Client metadataClient = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
+    Client metadataClient = cf.get(new Client.ClientParameters().port(streamPortNode1()));
     Map<String, Client.StreamMetadata> metadata = metadataClient.metadata(stream);
     Client.StreamMetadata streamMetadata = metadata.get(stream);
     assertThat(streamMetadata).isNotNull();
@@ -384,7 +386,7 @@ public class FailureTest {
     metadata = metadataClient.metadata(stream);
     streamMetadata = metadata.get(stream);
     assertThat(streamMetadata.getLeader()).isNotNull();
-    assertThat(streamMetadata.getLeader().getPort()).isEqualTo(TestUtils.streamPortNode1());
+    assertThat(streamMetadata.getLeader().getPort()).isEqualTo(streamPortNode1());
 
     Map<Long, Message> published = new ConcurrentHashMap<>();
     Set<Message> confirmed = ConcurrentHashMap.newKeySet();
@@ -441,7 +443,7 @@ public class FailureTest {
 
     Client.Broker replica =
         streamMetadata.getReplicas().stream()
-            .filter(broker -> broker.getPort() == TestUtils.streamPortNode2())
+            .filter(broker -> broker.getPort() == streamPortNode2())
             .findFirst()
             .orElseThrow(() -> new NoSuchElementException());
 
@@ -565,7 +567,7 @@ public class FailureTest {
     waitUntil(
         () -> {
           try {
-            client.set(cf.get(new ClientParameters().port(TestUtils.streamPortNode1())));
+            client.set(cf.get(new ClientParameters().port(streamPortNode1())));
           } catch (Exception e) {
 
           }
@@ -581,5 +583,43 @@ public class FailureTest {
         });
 
     assertThat(responseCodes).doesNotContain(Constants.RESPONSE_CODE_STREAM_DOES_NOT_EXIST);
+  }
+
+  @Test
+  void shouldReceiveMetadataUpdateWhenReplicaIsKilledWithPublisherAndConsumerOnSameConnection() throws Exception {
+    Client metadataClient = cf.get(new Client.ClientParameters().port(streamPortNode1()));
+    Map<String, Client.StreamMetadata> metadata = metadataClient.metadata(stream);
+    Client.StreamMetadata streamMetadata = metadata.get(stream);
+    assertThat(streamMetadata).isNotNull();
+
+    waitUntil(() -> metadataClient.metadata(stream).get(stream).getReplicas().size() == 2);
+
+    metadata = metadataClient.metadata(stream);
+    streamMetadata = metadata.get(stream);
+    assertThat(streamMetadata.getLeader()).isNotNull();
+    assertThat(streamMetadata.getLeader().getPort()).isEqualTo(streamPortNode1());
+    Client.Broker broker =
+        streamMetadata.getReplicas().stream()
+            .filter(
+                r -> r.getPort() == streamPortNode1() || r.getPort() == streamPortNode2())
+            .findFirst()
+            .get();
+
+    AtomicInteger metadataNotifications = new AtomicInteger();
+    Client client =
+        cf.get(
+            new ClientParameters()
+                .port(broker.getPort())
+                .metadataListener(
+                    (stream, code) -> metadataNotifications.incrementAndGet()));
+    client.declarePublisher((byte) 42, null, stream);
+    client.subscribe((byte) 66, stream, OffsetSpecification.first(), 1);
+
+    String node = broker.getPort() == streamPortNode1() ? Host.node1name() : Host.node2name();
+    Host.killStreamLocalMemberProcess(stream, node);
+    waitUntil(() -> metadataNotifications.get() == 1);
+
+    Host.killStreamLeaderProcess(stream);
+    waitUntil(() -> metadataNotifications.get() == 2);
   }
 }

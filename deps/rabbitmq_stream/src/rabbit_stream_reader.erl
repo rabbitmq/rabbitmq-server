@@ -916,10 +916,10 @@ open(info, {'DOWN', MonitorRef, process, _OsirisPid, _Reason},
          StatemData) ->
     {Connection1, State1} =
         case Monitors of
-            #{MonitorRef := Stream} ->
+            #{MonitorRef := {MemberPid, Stream}} ->
                 Monitors1 = maps:remove(MonitorRef, Monitors),
                 C = Connection#stream_connection{monitors = Monitors1},
-                case clean_state_after_stream_deletion_or_failure(Stream, C,
+                case clean_state_after_stream_deletion_or_failure(MemberPid, Stream, C,
                                                                   State)
                 of
                     {cleaned, NewConnection, NewState} ->
@@ -1852,7 +1852,7 @@ handle_frame_post_auth(Transport,
                        {request, CorrelationId,
                         {delete_publisher, PublisherId}}) ->
     case Publishers of
-        #{PublisherId := #publisher{stream = Stream, reference = Ref}} ->
+        #{PublisherId := #publisher{stream = Stream, reference = Ref, leader = LeaderPid}} ->
             Connection1 =
                 Connection0#stream_connection{publishers =
                                                   maps:remove(PublisherId,
@@ -1861,7 +1861,7 @@ handle_frame_post_auth(Transport,
                                                   maps:remove({Stream, Ref},
                                                               PubToIds)},
             Connection2 =
-                maybe_clean_connection_from_stream(Stream, Connection1),
+                maybe_clean_connection_from_stream(LeaderPid, Stream, Connection1),
             response(Transport,
                      Connection1,
                      delete_publisher,
@@ -2350,7 +2350,7 @@ handle_frame_post_auth(Transport,
                                 CorrelationId),
                     {Connection1, State1} =
                         case
-                            clean_state_after_stream_deletion_or_failure(Stream,
+                            clean_state_after_stream_deletion_or_failure(undefined, Stream,
                                                                          Connection,
                                                                          State)
                         of
@@ -3088,7 +3088,7 @@ stream_r(Stream, #stream_connection{virtual_host = VHost}) ->
               kind = queue,
               virtual_host = VHost}.
 
-clean_state_after_stream_deletion_or_failure(Stream,
+clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
                                              #stream_connection{virtual_host =
                                                                     VirtualHost,
                                                                 stream_subscriptions
@@ -3113,16 +3113,30 @@ clean_state_after_stream_deletion_or_failure(Stream,
                 #{Stream := SubscriptionIds} = StreamSubscriptions,
                 Requests1 = lists:foldl(
                               fun(SubId, Rqsts0) ->
-                                      rabbit_stream_metrics:consumer_cancelled(self(),
-                                                                               stream_r(Stream,
-                                                                                        C0),
-                                                                               SubId),
                                       #{SubId := Consumer} = Consumers,
-                                      Rqsts1 = maybe_unregister_consumer(
-                                                 VirtualHost, Consumer,
-                                                 single_active_consumer(Consumer),
-                                                 Rqsts0),
-                                      Rqsts1
+                                      case {MemberPid, Consumer} of
+                                          {undefined, _C} ->
+                                              rabbit_stream_metrics:consumer_cancelled(self(),
+                                                                                       stream_r(Stream,
+                                                                                                C0),
+                                                                                       SubId),
+                                              maybe_unregister_consumer(
+                                                VirtualHost, Consumer,
+                                                single_active_consumer(Consumer),
+                                                Rqsts0);
+                                          {_, #consumer{configuration =
+                                                    #consumer_configuration{member_pid = MemberPid}}} ->
+                                              rabbit_stream_metrics:consumer_cancelled(self(),
+                                                                                       stream_r(Stream,
+                                                                                                C0),
+                                                                                       SubId),
+                                              maybe_unregister_consumer(
+                                                VirtualHost, Consumer,
+                                                single_active_consumer(Consumer),
+                                                Rqsts0);
+                                          _ ->
+                                              Rqsts0
+                                      end
                               end, Requests0, SubscriptionIds),
                 {true,
                  C0#stream_connection{stream_subscriptions =
@@ -3140,18 +3154,26 @@ clean_state_after_stream_deletion_or_failure(Stream,
             true ->
                 {PurgedPubs, PurgedPubToIds} =
                     maps:fold(fun(PubId,
-                                  #publisher{stream = S, reference = Ref},
-                                  {Pubs, PubToIds}) ->
-                                 case S of
-                                     Stream ->
+                                  #publisher{stream = S, reference = Ref, leader = MPid},
+                                  {Pubs, PubToIds}) when S =:= Stream andalso MPid =:= MemberPid ->
                                          rabbit_stream_metrics:publisher_deleted(self(),
-                                                                                 stream_r(S,
+                                                                                 stream_r(Stream,
                                                                                           C1),
                                                                                  PubId),
                                          {maps:remove(PubId, Pubs),
                                           maps:remove({Stream, Ref}, PubToIds)};
-                                     _ -> {Pubs, PubToIds}
-                                 end
+                                 (PubId,
+                                  #publisher{stream = S, reference = Ref},
+                                  {Pubs, PubToIds}) when S =:= Stream andalso MemberPid =:= undefined ->
+                                         rabbit_stream_metrics:publisher_deleted(self(),
+                                                                                 stream_r(Stream,
+                                                                                          C1),
+                                                                                 PubId),
+                                         {maps:remove(PubId, Pubs),
+                                          maps:remove({Stream, Ref}, PubToIds)};
+
+                                 (_PubId, _Publisher, {Pubs, PubToIds}) ->
+                                     {Pubs, PubToIds}
                               end,
                               {Publishers, PublisherToIds}, Publishers),
                 {true,
@@ -3173,7 +3195,7 @@ clean_state_after_stream_deletion_or_failure(Stream,
          orelse LeadersCleaned
     of
         true ->
-            C3 = demonitor_stream(Stream, C2),
+            C3 = demonitor_stream(MemberPid, Stream, C2),
             {cleaned, C3#stream_connection{stream_leaders = Leaders1}, S2};
         false ->
             {not_cleaned, C2#stream_connection{stream_leaders = Leaders1}, S2}
@@ -3212,7 +3234,7 @@ remove_subscription(SubscriptionId,
                     #stream_connection_state{consumers = Consumers} = State) ->
     #{SubscriptionId := Consumer} = Consumers,
     #consumer{log = Log,
-              configuration = #consumer_configuration{stream = Stream}} =
+              configuration = #consumer_configuration{stream = Stream, member_pid = MemberPid}} =
         Consumer,
     rabbit_log:debug("Deleting subscription ~tp (stream ~tp)",
                      [SubscriptionId, Stream]),
@@ -3232,7 +3254,7 @@ remove_subscription(SubscriptionId,
         Connection#stream_connection{stream_subscriptions =
                                          StreamSubscriptions1},
     Consumers1 = maps:remove(SubscriptionId, Consumers),
-    Connection2 = maybe_clean_connection_from_stream(Stream, Connection1),
+    Connection2 = maybe_clean_connection_from_stream(MemberPid, Stream, Connection1),
     rabbit_stream_metrics:consumer_cancelled(self(),
                                              stream_r(Stream, Connection2),
                                              SubscriptionId),
@@ -3245,7 +3267,7 @@ remove_subscription(SubscriptionId,
     {Connection2#stream_connection{outstanding_requests = Requests1},
      State#stream_connection_state{consumers = Consumers1}}.
 
-maybe_clean_connection_from_stream(Stream,
+maybe_clean_connection_from_stream(MemberPid, Stream,
                                    #stream_connection{stream_leaders =
                                                           Leaders} =
                                        Connection0) ->
@@ -3254,7 +3276,7 @@ maybe_clean_connection_from_stream(Stream,
               stream_has_subscriptions(Stream, Connection0)}
         of
             {false, false} ->
-                demonitor_stream(Stream, Connection0);
+                demonitor_stream(MemberPid, Stream, Connection0);
             _ ->
                 Connection0
         end,
@@ -3263,26 +3285,27 @@ maybe_clean_connection_from_stream(Stream,
 
 maybe_monitor_stream(Pid, Stream,
                      #stream_connection{monitors = Monitors} = Connection) ->
-    case lists:member(Stream, maps:values(Monitors)) of
+    case lists:member({Pid, Stream}, maps:values(Monitors)) of
         true ->
             Connection;
         false ->
             MonitorRef = monitor(process, Pid),
             Connection#stream_connection{monitors =
-                                             maps:put(MonitorRef, Stream,
+                                             maps:put(MonitorRef, {Pid, Stream},
                                                       Monitors)}
     end.
 
-demonitor_stream(Stream,
+demonitor_stream(MemberPid, Stream,
                  #stream_connection{monitors = Monitors0} = Connection) ->
     Monitors =
-        maps:fold(fun(MonitorRef, Strm, Acc) ->
-                     case Strm of
-                         Stream ->
-                             demonitor(MonitorRef, [flush]),
+        maps:fold(fun(MonitorRef, {MPid, Strm}, Acc) when MPid =:= MemberPid andalso Strm =:= Stream ->
+                        demonitor(MonitorRef, [flush]),
                              Acc;
-                         _ -> maps:put(MonitorRef, Strm, Acc)
-                     end
+                     (MonitorRef, {_MPid, Strm}, Acc) when MemberPid =:= undefined andalso Strm =:= Stream ->
+                        demonitor(MonitorRef, [flush]),
+                             Acc;
+                     (MonitorRef, {MPid, Strm}, Acc) ->
+                         maps:put(MonitorRef, {MPid, Strm}, Acc)
                   end,
                   #{}, Monitors0),
     Connection#stream_connection{monitors = Monitors}.
