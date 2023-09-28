@@ -84,7 +84,8 @@ groups() ->
                                             leader_locator_balanced,
                                             leader_locator_balanced_maintenance,
                                             leader_locator_balanced_random_maintenance,
-                                            leader_locator_policy
+                                            leader_locator_policy,
+                                            status
                                            ]
                        ++ all_tests()},
                       {cluster_size_5, [], [start_queue,
@@ -2705,6 +2706,50 @@ peek(Config) ->
                  rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
                                               peek, [3, QName])),
 
+    wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
+    ok.
+
+-define(STATUS_MATCH(N, T),
+        [{<<"Node Name">>, N},
+         {<<"Raft State">>, _},
+         {<<"Membership">>, _},
+         {<<"Last Log Index">>, _},
+         {<<"Last Written">>, _},
+         {<<"Last Applied">>, _},
+         {<<"Commit Index">>, _},
+         {<<"Snapshot Index">>, _},
+         {<<"Term">>, T},
+         {<<"Machine Version">>, _}
+        ]).
+
+status(Config) ->
+    [Server | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-max-in-memory-length">>, long, 2}])),
+
+    Msg1 = <<"msg1">>,
+    Msg2 = <<"msg11">>,
+
+    publish(Ch, QQ, Msg1),
+    publish(Ch, QQ, Msg2),
+    wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
+
+    [N1, N2, N3] = lists:sort(Nodes),
+
+    %% check that nodes are returned and that at least the term isn't
+    %% defaulted (i.e. there was an error)
+    ?assertMatch([?STATUS_MATCH(N1, T1),
+                  ?STATUS_MATCH(N2, T2),
+                  ?STATUS_MATCH(N3, T3)
+                 ] when T1 /= <<>> andalso
+                        T2 /= <<>> andalso
+                        T3 /= <<>>,
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                                              status, [<<"/">>, QQ])),
     wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
     ok.
 

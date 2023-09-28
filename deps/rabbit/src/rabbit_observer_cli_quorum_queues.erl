@@ -112,7 +112,7 @@ sheet_header() ->
     ].
  
 sheet_body(PrevState) ->
-    RaStates = ets:tab2list(ra_state),
+    {_, RaStates} = rabbit_quorum_queue:all_replica_states(),
     Body = [begin
                 #resource{name = Name, virtual_host = Vhost} = R = amqqueue:get_name(Q),
                 case rabbit_amqqueue:pid_of(Q) of
@@ -134,7 +134,7 @@ sheet_body(PrevState) ->
                                         [
                                          Pid,
                                          QName,
-                                         case proplists:get_value(InternalName, RaStates) of
+                                         case maps:get(InternalName, RaStates, undefined) of
                                              leader -> "L";
                                              follower -> "F";
                                              _ -> "?"
@@ -142,7 +142,7 @@ sheet_body(PrevState) ->
                                          format_int(proplists:get_value(memory, ProcInfo)),
                                          format_int(proplists:get_value(message_queue_len, ProcInfo)),
                                          format_int(maps:get(commands, QQCounters)),
-                                         case proplists:get_value(InternalName, RaStates) of
+                                         case maps:get(InternalName, RaStates, undefined) of
                                              leader -> format_int(maps:get(snapshots_written, QQCounters));
                                              follower -> format_int(maps:get(snapshot_installed, QQCounters));
                                              _ -> "?"
