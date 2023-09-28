@@ -1204,7 +1204,7 @@ emit_stats(State, Extra) ->
      {messages, M},
      {reductions, R},
      {name, Name} | Infos]
-    = [{K, V} || {K, V} <- infos(statistics_keys(), State),
+    = [{K, V} || {K, V} <- infos(statistics_keys() -- [backing_queue_status], State),
                  not lists:member(K, ExtraKs)],
     rabbit_core_metrics:queue_stats(Name, Extra ++ Infos),
     rabbit_core_metrics:queue_stats(Name, MR, MU, M, R).
