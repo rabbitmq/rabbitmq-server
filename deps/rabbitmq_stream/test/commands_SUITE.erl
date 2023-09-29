@@ -197,7 +197,7 @@ list_tls_connections_run(Config) ->
 list_consumers_merge_defaults(_Config) ->
     DefaultItems =
         [rabbit_data_coercion:to_binary(Item)
-         || Item <- ?CONSUMER_INFO_ITEMS],
+         || Item <- ?CONSUMER_INFO_ITEMS -- [connection_pid, node]],
     {DefaultItems, #{verbose := false}} =
         ?COMMAND_LIST_CONSUMERS:merge_defaults([], #{}),
 
@@ -266,7 +266,7 @@ list_consumers_run(Config) ->
 list_publishers_merge_defaults(_Config) ->
     DefaultItems =
         [rabbit_data_coercion:to_binary(Item)
-         || Item <- ?PUBLISHER_INFO_ITEMS],
+         || Item <- ?PUBLISHER_INFO_ITEMS -- [connection_pid, node]],
     {DefaultItems, #{verbose := false}} =
         ?COMMAND_LIST_PUBLISHERS:merge_defaults([], #{}),
 

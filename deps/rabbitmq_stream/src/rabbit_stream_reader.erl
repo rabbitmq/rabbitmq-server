@@ -3621,6 +3621,8 @@ consumer_i(offset_lag,
     stream_stored_offset(Log) - consumer_offset(Counters);
 consumer_i(connection_pid, _) ->
     self();
+consumer_i(node, _) ->
+    node();
 consumer_i(properties,
            #consumer{configuration =
                          #consumer_configuration{properties = Properties}}) ->
@@ -3653,6 +3655,8 @@ publisher_i(stream, #publisher{stream = S}) ->
     S;
 publisher_i(connection_pid, _) ->
     self();
+publisher_i(node, _) ->
+    node();
 publisher_i(publisher_id, #publisher{publisher_id = Id}) ->
     Id;
 publisher_i(reference, #publisher{reference = undefined}) ->

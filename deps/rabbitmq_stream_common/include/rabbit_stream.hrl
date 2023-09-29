@@ -95,6 +95,7 @@
 
 -define(CONSUMER_INFO_ITEMS, [
   connection_pid,
+  node,
   subscription_id,
   stream,
   messages_consumed,
@@ -108,6 +109,7 @@
 
 -define(PUBLISHER_INFO_ITEMS, [
   connection_pid,
+  node,
   publisher_id,
   stream,
   reference,
