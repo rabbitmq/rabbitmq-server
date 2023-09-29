@@ -96,7 +96,7 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 list_connections_merge_defaults(_Config) ->
-    {[<<"conn_name">>], #{verbose := false}} =
+    {[<<"node">>, <<"conn_name">>], #{verbose := false}} =
         ?COMMAND_LIST_CONNECTIONS:merge_defaults([], #{}),
 
     {[<<"other_key">>], #{verbose := true}} =

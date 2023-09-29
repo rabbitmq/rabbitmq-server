@@ -70,6 +70,8 @@
 
 -define(INFO_ITEMS,
   [conn_name,
+    pid,
+    node,
     port,
     peer_port,
     host,
