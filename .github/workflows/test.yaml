@@ -37,6 +37,9 @@ jobs:
         otp_version_id:
         - 25_3
         - 26
+        metadata_store:
+          - mnesia
+          - khepri
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
@@ -72,6 +75,7 @@ jobs:
         sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
         bazelisk test //... \
           --config=rbe-${{ matrix.otp_version_id }} \
+          --test_env RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }} \
           --test_tag_filters=-aws,-docker,-mixed-version-cluster \
           --build_tests_only \
           --verbose_failures

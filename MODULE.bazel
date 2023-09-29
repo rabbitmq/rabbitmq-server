@@ -264,6 +264,13 @@ erlang_package.hex_package(
 )
 
 erlang_package.git_package(
+    name = "horus",
+    build_file = "@rabbitmq-server//bazel:BUILD.horus",
+    commit = "253f9af23e539b7370a5105df19dcbb66762b247",
+    repository = "rabbitmq/horus",
+)
+
+erlang_package.git_package(
     name = "jose",
     build_file = "@rabbitmq-server//bazel:BUILD.jose",
     commit = "d63c1c5c8f9c1a4f1438e234b886de8607a0034e",
@@ -275,6 +282,20 @@ erlang_package.hex_package(
     build_file = "@rabbitmq-server//bazel:BUILD.json",
     sha256 = "9abf218dbe4ea4fcb875e087d5f904ef263d012ee5ed21d46e9dbca63f053d16",
     version = "1.4.1",
+)
+
+erlang_package.git_package(
+    name = "khepri",
+    build_file = "@rabbitmq-server//bazel:BUILD.khepri",
+    commit = "952a52969eaa97a4327806b4fc062238dc3e6214",
+    repository = "rabbitmq/khepri",
+)
+
+erlang_package.git_package(
+    name = "khepri_mnesia_migration",
+    build_file = "@rabbitmq-server//bazel:BUILD.khepri_mnesia_migration",
+    repository = "rabbitmq/khepri_mnesia_migration",
+    commit = "ec891800b449f6a8fc975f959447039b3df343ed",
 )
 
 erlang_package.hex_package(
@@ -303,6 +324,22 @@ erlang_package.hex_package(
     build_file = "@rabbitmq-server//bazel:BUILD.quantile_estimator",
     sha256 = "282a8a323ca2a845c9e6f787d166348f776c1d4a41ede63046d72d422e3da946",
     version = "0.2.1",
+)
+
+erlang_package.hex_package(
+    name = "ra_alt",
+    pkg = "ra",
+    build_file = "@rabbitmq-server//bazel:BUILD.ra",
+    sha256 = "f4dd317ab4030c0b14453bcf70179130f388dec35f7d59b6c7edcdfa25270397",
+    version = "2.7.0",
+)
+
+erlang_package.hex_package(
+    name = "seshat_alt",
+    pkg = "seshat",
+    build_file = "@rabbitmq-server//bazel:BUILD.seshat",
+    sha256 = "7cef700f92831dd7cae6a6dd223ccc55ac88ecce0631ee9ab0f2b5fb70e79b90",
+    version = "0.6.0",
 )
 
 erlang_package.hex_package(
@@ -370,13 +407,18 @@ use_repo(
     "gen_batch_server",
     "getopt",
     "gun",
+    "horus",
     "jose",
     "json",
+    "khepri",
+    "khepri_mnesia_migration",
     "observer_cli",
     "prometheus",
+    "ra_alt",
     "ranch",
     "recon",
     "redbug",
+    "seshat_alt",
     "stdout_formatter",
     "syslog",
     "sysmon_handler",

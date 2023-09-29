@@ -57,10 +57,10 @@ groups() ->
                                             delete_member_queue_not_found,
                                             delete_member,
                                             delete_member_not_a_member,
-                                            node_removal_is_quorum_critical,
-                                            cleanup_data_dir]
+                                            node_removal_is_quorum_critical]
                        ++ memory_tests()},
                       {cluster_size_3, [], [
+                                            cleanup_data_dir,
                                             channel_handles_ra_event,
                                             declare_during_node_down,
                                             simple_confirm_availability_on_leader_change,
@@ -955,8 +955,11 @@ consume_in_minority(Config) ->
     ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 541, _}}}, _},
                 amqp_channel:call(Ch, #'basic.get'{queue = QQ,
                                                    no_ack = false})),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
+
+    ok = rabbit_ct_broker_helpers:async_start_node(Config, Server1),
+    ok = rabbit_ct_broker_helpers:async_start_node(Config, Server2),
+    ok = rabbit_ct_broker_helpers:wait_for_async_start_node(Server1),
+    ok = rabbit_ct_broker_helpers:wait_for_async_start_node(Server2),
     ok.
 
 reject_after_leader_transfer(Config) ->
@@ -1169,12 +1172,12 @@ invalid_policy(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     ok = rabbit_ct_broker_helpers:set_policy(
-           Config, 0, <<"ha">>, <<"invalid_policy.*">>, <<"queues">>,
-           [{<<"ha-mode">>, <<"all">>}]),
+           Config, 0, <<"max-age">>, <<"invalid_policy.*">>, <<"queues">>,
+           [{<<"max-age">>, <<"5s">>}]),
     Info = rpc:call(Server, rabbit_quorum_queue, infos,
                     [rabbit_misc:r(<<"/">>, queue, QQ)]),
     ?assertEqual('', proplists:get_value(policy, Info)),
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"ha">>).
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"max-age">>).
 
 pre_existing_invalid_policy(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1182,14 +1185,14 @@ pre_existing_invalid_policy(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ok = rabbit_ct_broker_helpers:set_policy(
-           Config, 0, <<"ha">>, <<"invalid_policy.*">>, <<"queues">>,
-           [{<<"ha-mode">>, <<"all">>}]),
+           Config, 0, <<"max-age">>, <<"invalid_policy.*">>, <<"queues">>,
+           [{<<"max-age">>, <<"5s">>}]),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     Info = rpc:call(Server, rabbit_quorum_queue, infos,
                     [rabbit_misc:r(<<"/">>, queue, QQ)]),
     ?assertEqual('', proplists:get_value(policy, Info)),
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"ha">>),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"max-age">>),
     ok.
 
 dead_letter_to_quorum_queue(Config) ->
@@ -2018,16 +2021,19 @@ file_handle_reservations_above_limit(Config) ->
     ok = rpc:call(S3, file_handle_cache, set_limit, [Limit]).
 
 cleanup_data_dir(Config) ->
+    %% With Khepri this test needs to run in a 3-node cluster, otherwise the queue can't
+    %% be deleted in minority
+    %%
     %% This test is slow, but also checks that we handle properly errors when
     %% trying to delete a queue in minority. A case clause there had gone
     %% previously unnoticed.
 
-    [Server1, Server2] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server1, Server2, Server3] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    ?awaitMatch(2, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    ?awaitMatch(3, count_online_nodes(Server1, <<"/">>, QQ), ?DEFAULT_AWAIT),
 
     UId1 = proplists:get_value(ra_name(QQ), rpc:call(Server1, ra_directory, list_registered, [quorum_queues])),
     UId2 = proplists:get_value(ra_name(QQ), rpc:call(Server2, ra_directory, list_registered, [quorum_queues])),
@@ -2037,11 +2043,10 @@ cleanup_data_dir(Config) ->
     ?assert(filelib:is_dir(DataDir2)),
 
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
-    assert_cluster_status({Servers, Servers, [Server1]}, [Server1]),
+    assert_cluster_status({Servers, Servers, [Server1, Server3]}, [Server1]),
 
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
     %% data dir 1 should be force deleted at this point
     ?assert(not filelib:is_dir(DataDir1)),
     ?assert(filelib:is_dir(DataDir2)),

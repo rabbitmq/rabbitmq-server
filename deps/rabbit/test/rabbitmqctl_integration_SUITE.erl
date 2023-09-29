@@ -52,9 +52,14 @@ end_per_suite(Config) ->
 init_per_group(list_queues, Config0) ->
     NumNodes = 3,
     Config = create_n_node_cluster(Config0, NumNodes),
-    Config1 = declare_some_queues(Config),
-    rabbit_ct_broker_helpers:stop_node(Config1, NumNodes - 1),
-    Config1;
+    case Config of
+        {skip, _Reason} = Skip ->
+            Skip;
+        _ ->
+            Config1 = declare_some_queues(Config),
+            rabbit_ct_broker_helpers:stop_node(Config1, NumNodes - 1),
+            Config1
+    end;
 init_per_group(_, Config) ->
     Config.
 

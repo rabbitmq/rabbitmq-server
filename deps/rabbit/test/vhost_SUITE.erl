@@ -99,6 +99,17 @@ end_per_group(_Group, Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_testcase(node_starts_with_dead_vhosts_with_mirrors = Testcase, Config) ->
+    case lists:any(fun(B) -> B end,
+                   rabbit_ct_broker_helpers:rpc_all(
+                     Config, rabbit_feature_flags, is_enabled,
+                     [khepri_db])) of
+        true ->
+            {skip, "Classic queue mirroring not supported by Khepri"};
+        false ->
+            rabbit_ct_helpers:testcase_started(Config, Testcase),
+            Config
+    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config.

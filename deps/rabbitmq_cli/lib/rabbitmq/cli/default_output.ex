@@ -17,12 +17,17 @@ defmodule RabbitMQ.CLI.DefaultOutput do
   end
 
   def output(result, opts \\ %{}) do
-    format_output(normalize_output(result, opts))
+    format_output(format_khepri_output(normalize_output(result, opts), opts))
   end
 
   def mnesia_running_error(node_name) do
     "Mnesia is still running on node #{node_name}.\n" <>
       "Please stop RabbitMQ with 'rabbitmqctl stop_app' first."
+  end
+
+  def khepri_timeout_error(node_name) do
+    "Khepri has timed out on node #{node_name}.\n" <>
+      "Khepri cluster could be in minority."
   end
 
   defp normalize_output(:ok, %{node: node_name, formatter: "json"}) do
@@ -62,6 +67,18 @@ defmodule RabbitMQ.CLI.DefaultOutput do
   defp normalize_output(unknown, _opts) when is_atom(unknown), do: {:error, unknown}
   defp normalize_output({unknown, _} = input, _opts) when is_atom(unknown), do: {:error, input}
   defp normalize_output(result, _opts) when not is_atom(result), do: {:ok, result}
+
+  defp format_khepri_output({:error, {:timeout, {:rabbitmq_metadata, _}}}, %{node: node_name}) do
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_tempfail(), khepri_timeout_error(node_name)}
+  end
+
+  defp format_khepri_output({:error, :timeout_waiting_for_leader}, %{node: node_name}) do
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_tempfail(), khepri_timeout_error(node_name)}
+  end
+
+  defp format_khepri_output(result, _opts) do
+    result
+  end
 
   defp format_output({:error, _} = result) do
     result

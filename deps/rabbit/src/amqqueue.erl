@@ -78,6 +78,8 @@
          pattern_match_all/0,
          pattern_match_on_name/1,
          pattern_match_on_type/1,
+         pattern_match_on_durable/1,
+         pattern_match_on_type_and_durable/2,
          reset_mirroring_and_decorators/1,
          set_immutable/1,
          qnode/1,
@@ -589,6 +591,17 @@ pattern_match_on_name(Name) ->
 
 pattern_match_on_type(Type) ->
     #amqqueue{type = Type, _ = '_'}.
+
+-spec pattern_match_on_durable(boolean()) -> amqqueue_pattern().
+
+pattern_match_on_durable(IsDurable) ->
+    #amqqueue{durable = IsDurable, _ = '_'}.
+
+-spec pattern_match_on_type_and_durable(atom(), boolean()) ->
+    amqqueue_pattern().
+
+pattern_match_on_type_and_durable(Type, IsDurable) ->
+    #amqqueue{type = Type, durable = IsDurable, _ = '_'}.
 
 -spec reset_mirroring_and_decorators(amqqueue()) -> amqqueue().
 

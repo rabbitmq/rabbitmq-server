@@ -42,6 +42,8 @@
     rpc_all/4, rpc_all/5,
 
     start_node/2,
+    async_start_node/2,
+    wait_for_async_start_node/1,
     start_broker/2,
     restart_broker/2,
     stop_broker/2,
@@ -169,7 +171,9 @@
 
     test_channel/0,
     test_writer/1,
-    user/1
+    user/1,
+
+    configured_metadata_store/1
   ]).
 
 %% Internal functions exported to be used by rpc:call/4.
@@ -214,7 +218,8 @@ setup_steps() ->
                 fun rabbit_ct_helpers:ensure_rabbitmq_plugins_cmd/1,
                 fun set_lager_flood_limit/1,
                 fun start_rabbitmq_nodes/1,
-                fun share_dist_and_proxy_ports_map/1
+                fun share_dist_and_proxy_ports_map/1,
+                fun configure_metadata_store/1
             ];
         _ ->
             [
@@ -223,7 +228,8 @@ setup_steps() ->
                 fun rabbit_ct_helpers:ensure_rabbitmq_plugins_cmd/1,
                 fun set_lager_flood_limit/1,
                 fun start_rabbitmq_nodes/1,
-                fun share_dist_and_proxy_ports_map/1
+                fun share_dist_and_proxy_ports_map/1,
+                fun configure_metadata_store/1
             ]
     end.
 
@@ -929,6 +935,54 @@ share_dist_and_proxy_ports_map(Config) ->
     rpc_all(Config,
       application, set_env, [kernel, dist_and_proxy_ports_map, Map]),
     Config.
+
+configured_metadata_store(Config) ->
+    case rabbit_ct_helpers:get_config(Config, metadata_store) of
+        khepri ->
+            {khepri, []};
+        {khepri, _FFs0} = Khepri ->
+            Khepri;
+        mnesia ->
+            mnesia;
+        _ ->
+            case os:getenv("RABBITMQ_METADATA_STORE") of
+                "khepri" ->
+                    {khepri, []};
+                _ ->
+                    mnesia
+            end
+    end.
+
+configure_metadata_store(Config) ->
+    ct:pal("Configuring metadata store..."),
+    case configured_metadata_store(Config) of
+        {khepri, FFs0} ->
+            case enable_khepri_metadata_store(Config, FFs0) of
+                {skip, _} = Skip ->
+                    _ = stop_rabbitmq_nodes(Config),
+                    Skip;
+                Config1 ->
+                    Config1
+            end;
+        mnesia ->
+            ct:pal("Enabling Mnesia metadata store"),
+            Config
+    end.
+
+enable_khepri_metadata_store(Config, FFs0) ->
+    ct:pal("Enabling Khepri metadata store"),
+    FFs = [khepri_db | FFs0],
+    lists:foldl(fun(_FF, {skip, _Reason} = Skip) ->
+                        Skip;
+                   (FF, C) ->
+                        case enable_feature_flag(C, FF) of
+                            ok ->
+                                C;
+                            Skip ->
+                                ct:pal("Enabling metadata store failed: ~p", [Skip]),
+                                Skip
+                        end
+                end, Config, FFs).
 
 rewrite_node_config_file(Config, Node) ->
     NodeConfig = get_node_config(Config, Node),
@@ -1786,6 +1840,22 @@ start_node(Config, Node) ->
         _                 -> ok
     end.
 
+async_start_node(Config, Node) ->
+    Self = self(),
+    spawn(fun() ->
+                  Reply = (catch start_node(Config, Node)),
+                  Self ! {async_start_node, Node, Reply}
+          end),
+    ok.
+
+wait_for_async_start_node(Node) ->
+    receive
+        {async_start_node, N, Reply} when N == Node ->
+            Reply
+    after 600000 ->
+            timeout
+    end.
+
 start_broker(Config, Node) ->
     ok = rpc(Config, Node, rabbit, start, []).
 
@@ -1889,11 +1959,26 @@ enable_feature_flag(Config, FeatureName) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     enable_feature_flag(Config, Nodes, FeatureName).
 
-enable_feature_flag(Config, [Node1 | _] = Nodes, FeatureName) ->
+enable_feature_flag(Config, Nodes, FeatureName) ->
     case is_feature_flag_supported(Config, Nodes, FeatureName) of
         true ->
-            rabbit_ct_broker_helpers:rpc(
-              Config, Node1, rabbit_feature_flags, enable, [FeatureName]);
+            %% Nodes might not be clustered for some test suites, so enabling
+            %% feature flags on the first one of the list is not enough
+            lists:foldl(
+              fun(N, ok) ->
+                      case rabbit_ct_broker_helpers:rpc(
+                             Config, N, rabbit_feature_flags, enable, [FeatureName]) of
+                          {error, unsupported} ->
+                              {skip,
+                               lists:flatten(
+                                 io_lib:format("'~ts' feature flag is unsupported",
+                                               [FeatureName]))};
+                          Any ->
+                              Any
+                      end;
+                 (_, Other) ->
+                      Other
+              end, ok, Nodes);
         false ->
             {skip,
              lists:flatten(

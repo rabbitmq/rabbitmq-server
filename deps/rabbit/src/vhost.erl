@@ -20,6 +20,7 @@
   upgrade/1,
   upgrade_to/2,
   pattern_match_all/0,
+  pattern_match_names/0,
   get_name/1,
   get_limits/1,
   get_metadata/1,
@@ -53,7 +54,7 @@
 
 -record(vhost, {
     %% name as a binary
-    virtual_host :: name() | '_',
+    virtual_host :: name() | '_' | '$1',
     %% proplist of limits configured, if any
     limits :: limits() | '_',
     metadata :: metadata() | '_'
@@ -67,7 +68,7 @@
 
 -type vhost_pattern() :: vhost_v2_pattern().
 -type vhost_v2_pattern() :: #vhost{
-                                  virtual_host :: name() | '_',
+                                  virtual_host :: name() | '_' | '$1',
                                   limits :: '_',
                                   metadata :: '_'
                                  }.
@@ -127,6 +128,10 @@ info_keys() ->
 
 pattern_match_all() ->
     #vhost{_ = '_'}.
+
+-spec pattern_match_names() -> vhost_pattern().
+pattern_match_names() ->
+    #vhost{virtual_host = '$1', _ = '_'}.
 
 -spec get_name(vhost()) -> name().
 get_name(#vhost{virtual_host = Value}) -> Value.

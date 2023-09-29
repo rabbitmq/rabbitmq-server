@@ -8,6 +8,7 @@
 -module(rabbit_db_topic_exchange_SUITE).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -compile([nowarn_export_all, export_all]).
@@ -16,27 +17,33 @@
 
 all() ->
     [
-     {group, tests}
+     {group, mnesia_store}
     ].
 
 groups() ->
     [
-     {tests, [shuffle], all_tests()}
+     {mnesia_store, [], mnesia_tests()},
+     {benchmarks, [], benchmarks()}
     ].
 
-all_tests() ->
+mnesia_tests() ->
     [
      set,
      delete,
      delete_all_for_exchange,
      match,
      match_return_binding_keys_many_destinations,
-     match_return_binding_keys_single_destination
+     match_return_binding_keys_single_destination,
+     build_key_from_topic_trie_binding_record,
+     build_key_from_deletion_events,
+     build_key_from_binding_deletion_event,
+     build_multiple_key_from_deletion_events
     ].
 
-%% -------------------------------------------------------------------
-%% Test suite setup/teardown.
-%% -------------------------------------------------------------------
+benchmarks() ->
+    [
+     match_benchmark
+    ].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -45,7 +52,13 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+init_per_group(mnesia_store = Group, Config0) ->
+    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
+    init_per_group_common(Group, Config);
 init_per_group(Group, Config) ->
+    init_per_group_common(Group, Config).
+
+init_per_group_common(Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Group},
         {rmq_nodes_count, 1}
@@ -60,7 +73,11 @@ end_per_group(_Group, Config) ->
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config) ->
-    rabbit_ct_helpers:testcase_started(Config, Testcase).
+    XName = rabbit_misc:r(<<"/">>, exchange, <<"amq.topic">>),
+    {ok, X} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, lookup, [XName]),
+    Config1 = rabbit_ct_helpers:set_config(Config, [{exchange_name, XName},
+                                                    {exchange, X}]),
+    rabbit_ct_helpers:testcase_started(Config1, Testcase).
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_topic_exchange, clear, []),
@@ -247,3 +264,224 @@ set(Src, BindingKey, Dst, Args)
   when is_list(Args) ->
     Binding = #binding{source = Src, key = BindingKey, destination = Dst, args = Args},
     ok = rabbit_db_topic_exchange:set(Binding).
+
+%% ---------------------------------------------------------------------------
+%% Functional tests
+%% ---------------------------------------------------------------------------
+
+build_key_from_topic_trie_binding_record(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE, build_key_from_topic_trie_binding_record1, [Config]).
+
+build_key_from_topic_trie_binding_record1(Config) ->
+    XName = ?config(exchange_name, Config),
+    X = ?config(exchange, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, <<"q1">>),
+    RK = <<"a.b.c.d.e.f">>,
+    ok = rabbit_exchange_type_topic:add_binding(none, X, #binding{source = XName,
+                                                                  destination = QName,
+                                                                  key = RK,
+                                                                  args = []}),
+    SplitRK = rabbit_db_topic_exchange:split_topic_key(RK),
+    [TopicTrieBinding] = ets:tab2list(rabbit_topic_trie_binding),
+    ?assertEqual(SplitRK, rabbit_db_topic_exchange:trie_binding_to_key(TopicTrieBinding)),
+    passed.
+
+build_key_from_deletion_events(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE, build_key_from_deletion_events1, [Config]).
+
+build_key_from_deletion_events1(Config) ->
+    XName = ?config(exchange_name, Config),
+    X = ?config(exchange, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, <<"q1">>),
+    RK = <<"a.b.c.d.e.f">>,
+    Binding = #binding{source = XName,
+                       destination = QName,
+                       key = RK,
+                       args = []},
+    ok = rabbit_exchange_type_topic:add_binding(none, X, Binding),
+    SplitRK = rabbit_db_topic_exchange:split_topic_key(RK),
+    Tables = [rabbit_topic_trie_binding, rabbit_topic_trie_edge],
+    subscribe_to_mnesia_changes(Tables),
+    rabbit_exchange_type_topic:remove_bindings(none, X, [Binding]),
+    Records = receive_delete_events(7),
+    unsubscribe_to_mnesia_changes(Tables),
+    ?assertMatch([{_, SplitRK}],
+                 rabbit_db_topic_exchange:trie_records_to_key(Records)),
+    passed.
+
+build_key_from_binding_deletion_event(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE, build_key_from_binding_deletion_event1, [Config]).
+
+build_key_from_binding_deletion_event1(Config) ->
+    XName = ?config(exchange_name, Config),
+    X = ?config(exchange, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, <<"q1">>),
+    RK = <<"a.b.c.d.e.f">>,
+    Binding0 = #binding{source = XName,
+                        destination = QName,
+                        key = RK,
+                        args = [some_args]},
+    Binding = #binding{source = XName,
+                       destination = QName,
+                       key = RK,
+                       args = []},
+    ok = rabbit_exchange_type_topic:add_binding(none, X, Binding0),
+    ok = rabbit_exchange_type_topic:add_binding(none, X, Binding),
+    SplitRK = rabbit_db_topic_exchange:split_topic_key(RK),
+    Tables = [rabbit_topic_trie_binding, rabbit_topic_trie_edge],
+    subscribe_to_mnesia_changes(Tables),
+    rabbit_exchange_type_topic:remove_bindings(none, X, [Binding]),
+    Records = receive_delete_events(7),
+    unsubscribe_to_mnesia_changes(Tables),
+    ?assertMatch([{_, SplitRK}],
+                 rabbit_db_topic_exchange:trie_records_to_key(Records)),
+    passed.
+
+build_multiple_key_from_deletion_events(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE, build_multiple_key_from_deletion_events1, [Config]).
+
+build_multiple_key_from_deletion_events1(Config) ->
+    XName = ?config(exchange_name, Config),
+    X = ?config(exchange, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, <<"q1">>),
+    RK0 = <<"a.b.c.d.e.f">>,
+    RK1 = <<"a.b.c.d">>,
+    RK2 = <<"a.b.c.g.e.f">>,
+    RK3 = <<"hare.rabbit.ho">>,
+    Binding0 = #binding{source = XName, destination = QName, key = RK0, args = []},
+    Binding1 = #binding{source = XName, destination = QName, key = RK1, args = []},
+    Binding2 = #binding{source = XName, destination = QName, key = RK2, args = []},
+    Binding3 = #binding{source = XName, destination = QName, key = RK3, args = []},
+    ok = rabbit_exchange_type_topic:add_binding(none, X, Binding0),
+    ok = rabbit_exchange_type_topic:add_binding(none, X, Binding1),
+    ok = rabbit_exchange_type_topic:add_binding(none, X, Binding2),
+    ok = rabbit_exchange_type_topic:add_binding(none, X, Binding3),
+    SplitRK0 = rabbit_db_topic_exchange:split_topic_key(RK0),
+    SplitRK1 = rabbit_db_topic_exchange:split_topic_key(RK1),
+    SplitRK2 = rabbit_db_topic_exchange:split_topic_key(RK2),
+    SplitRK3 = rabbit_db_topic_exchange:split_topic_key(RK3),
+    Tables = [rabbit_topic_trie_binding, rabbit_topic_trie_edge],
+    subscribe_to_mnesia_changes(Tables),
+    rabbit_exchange_type_topic:delete(none, X),
+    Records = receive_delete_events(7),
+    unsubscribe_to_mnesia_changes(Tables),
+    RKs = lists:sort([SplitRK0, SplitRK1, SplitRK2, SplitRK3]),
+    ?assertMatch(
+       RKs,
+       lists:sort([RK || {_, RK} <- rabbit_db_topic_exchange:trie_records_to_key(Records)])),
+    passed.
+
+%% ---------------------------------------------------------------------------
+%% Benchmarks
+%% ---------------------------------------------------------------------------
+
+match_benchmark(Config) ->
+    %% run the benchmark with Mnesia first
+    MnesiaResults = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, match_benchmark1, [Config]),
+
+    %% migrate to Khepri
+    Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {T, ok} = timer:tc(fun() ->
+                               rabbit_ct_broker_helpers:enable_feature_flag(Config, Servers, khepri_db)
+                       end),
+    ct:pal("~p: time to migrate to Khepri: ~.2fs", [?FUNCTION_NAME, T/1000000]),
+
+    %% run the same same benchmark with Khepri enabled
+    KhepriResults = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, match_benchmark1, [Config]),
+
+    %% print all the results first
+    maps:foreach(fun(Test, KhepriResult) ->
+                      MnesiaResult = maps:get(Test, MnesiaResults),
+                      ct:pal("~p: Test: ~p, Mnesia: ~.2fus, Khepri: ~.2fus", [?FUNCTION_NAME, Test, MnesiaResult, KhepriResult])
+              end, KhepriResults),
+
+    %% fail the test if needed
+    maps:foreach(fun(Test, KhepriResult) ->
+                      MnesiaResult = maps:get(Test, MnesiaResults),
+                      ?assert(KhepriResult < MnesiaResult * 1.5, "Khepri can't be significantly slower than Mnesia")
+              end, KhepriResults).
+
+match_benchmark1(_Config) ->
+    Src = rabbit_misc:r(?VHOST, exchange, <<"test-exchange">>),
+    Dst1 = rabbit_misc:r(?VHOST, queue, <<"test-queue1">>),
+    Dst2 = rabbit_misc:r(?VHOST, queue, <<"test-queue2">>),
+    Dst3 = rabbit_misc:r(?VHOST, queue, <<"test-queue3">>),
+    Dst4 = rabbit_misc:r(?VHOST, queue, <<"test-queue4">>),
+    Dst5 = rabbit_misc:r(?VHOST, queue, <<"test-queue5">>),
+    Dst6 = rabbit_misc:r(?VHOST, queue, <<"test-queue6">>),
+
+    SimpleTopics = [list_to_binary("a.b." ++ integer_to_list(N)) || N <- lists:seq(1,1000)],
+    Bindings = [#binding{source = Src, key = RoutingKey, destination = Dst1, args = #{}} || RoutingKey <- SimpleTopics],
+    BindingRes = [rabbit_db_topic_exchange:set(Binding) || Binding <- Bindings],
+    ?assertMatch([ok], lists:uniq(BindingRes)),
+    ok = rabbit_db_topic_exchange:set(#binding{source = Src, key = <<"a.b.*">>, destination = Dst2, args = #{}}),
+    ok = rabbit_db_topic_exchange:set(#binding{source = Src, key = <<"a.b.*">>, destination = Dst3, args = #{}}),
+    ok = rabbit_db_topic_exchange:set(#binding{source = Src, key = <<"a.#">>, destination = Dst4, args = #{}}),
+    ok = rabbit_db_topic_exchange:set(#binding{source = Src, key = <<"*.b.42">>, destination = Dst5, args = #{}}),
+    ok = rabbit_db_topic_exchange:set(#binding{source = Src, key = <<"#">>, destination = Dst6, args = #{}}),
+
+    {Tany, _} = timer:tc(fun() ->
+                              [rabbit_db_topic_exchange:match(Src, <<"foo">>) || _ <- lists:seq(1, 100)]
+                      end),
+    ?assertMatch([Dst6], rabbit_db_topic_exchange:match(Src, <<"foo">>)),
+
+    {Tbar, _} = timer:tc(fun() ->
+                              [rabbit_db_topic_exchange:match(Src, <<"a.b.bar">>) || _ <- lists:seq(1, 100)]
+                      end),
+    ?assertEqual(lists:sort([Dst2,Dst3,Dst4,Dst6]), lists:sort(rabbit_db_topic_exchange:match(Src, <<"a.b.bar">>))),
+
+    {Tbaz, _} = timer:tc(fun() ->
+                              [rabbit_db_topic_exchange:match(Src, <<"baz.b.42">>) || _ <- lists:seq(1, 100)]
+                      end),
+    ?assertEqual(lists:sort([Dst5,Dst6]), lists:sort(rabbit_db_topic_exchange:match(Src, <<"baz.b.42">>))),
+
+    {Tsimple, Rsimple} = timer:tc(fun() ->
+                                          [rabbit_db_topic_exchange:match(Src, RoutingKey)
+                                           || RoutingKey <- SimpleTopics, RoutingKey =/= <<"a.b.123">>]
+                                  end),
+    ?assertEqual([Dst1,Dst2,Dst3,Dst4,Dst6], lists:sort(lists:uniq(hd(Rsimple)))),
+
+    #{
+      "average time to match `foo`" => Tany/100,
+      "average time to match `a.b.bar`" => Tbar/100,
+      "average time to match `baz.b.42`" => Tbaz/100,
+      "average time to match a simple topic" => Tsimple/length(SimpleTopics)
+     }.
+
+subscribe_to_mnesia_changes([Table | Rest]) ->
+    case mnesia:subscribe({table, Table, detailed}) of
+        {ok, _} -> subscribe_to_mnesia_changes(Rest);
+        Error -> Error
+    end;
+subscribe_to_mnesia_changes([]) ->
+    ok.
+
+unsubscribe_to_mnesia_changes([Table | Rest]) ->
+    case mnesia:unsubscribe({table, Table, detailed}) of
+        {ok, _} -> unsubscribe_to_mnesia_changes(Rest);
+        Error   -> Error
+    end;
+unsubscribe_to_mnesia_changes([]) ->
+    ok.
+
+receive_delete_events(Num) ->
+    receive_delete_events(Num, []).
+
+receive_delete_events(0, Evts) ->
+    receive
+        {mnesia_table_event, {delete, _, Record, _, _}} ->
+            receive_delete_events(0, [Record | Evts])
+    after 0 ->
+            Evts
+    end;
+receive_delete_events(N, Evts) ->
+    receive
+        {mnesia_table_event, {delete, _, Record, _, _}} ->
+            receive_delete_events(N - 1, [Record | Evts])
+    after 10000 ->
+            Evts
+    end.

@@ -1,0 +1,187 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+            "+warn_export_vars",
+            "+warnings_as_errors",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+            "+warn_export_vars",
+            "+warnings_as_errors",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "behaviours",
+    srcs = [
+        "src/khepri_import_export.erl",
+    ],
+    outs = [
+        "ebin/khepri_import_export.beam",
+    ],
+    hdrs = [
+        "src/khepri_cluster.hrl",
+        "src/khepri_machine.hrl",
+        "src/khepri_payload.hrl",
+        "src/khepri_tree.hrl",
+    ],
+    app_name = "khepri",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        ":behaviours",
+        ":other_beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/khepri.app.src",
+        "src/khepri.erl",
+        "src/khepri_adv.erl",
+        "src/khepri_app.erl",
+        "src/khepri_cluster.erl",
+        "src/khepri_condition.erl",
+        "src/khepri_event_handler.erl",
+        "src/khepri_evf.erl",
+        "src/khepri_export_erlang.erl",
+        "src/khepri_import_export.erl",
+        "src/khepri_machine.erl",
+        "src/khepri_path.erl",
+        "src/khepri_pattern_tree.erl",
+        "src/khepri_payload.erl",
+        "src/khepri_projection.erl",
+        "src/khepri_sproc.erl",
+        "src/khepri_sup.erl",
+        "src/khepri_tree.erl",
+        "src/khepri_tx.erl",
+        "src/khepri_tx_adv.erl",
+        "src/khepri_utils.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [
+        "src/khepri_bang.hrl",
+        "src/khepri_cluster.hrl",
+        "src/khepri_error.hrl",
+        "src/khepri_evf.hrl",
+        "src/khepri_machine.hrl",
+        "src/khepri_payload.hrl",
+        "src/khepri_projection.hrl",
+        "src/khepri_ret.hrl",
+        "src/khepri_tree.hrl",
+        "src/khepri_tx.hrl",
+    ],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = [
+        "include/khepri.hrl",
+    ],
+)
+
+filegroup(name = "priv")
+
+filegroup(
+    name = "licenses",
+    srcs = [
+        "LICENSE-Apache-2.0",
+        "LICENSE-MPL-2.0",
+    ],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
+    app_name = "khepri",
+    beam_files = [":beam_files"],
+    extra_apps = ["compiler"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "@horus//:erlang_app",
+        "@ra_alt//:erlang_app",
+        "@seshat_alt//:erlang_app",
+    ],
+)
+
+alias(
+    name = "khepri",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+erlang_bytecode(
+    name = "other_beam",
+    srcs = [
+        "src/khepri.erl",
+        "src/khepri_adv.erl",
+        "src/khepri_app.erl",
+        "src/khepri_cluster.erl",
+        "src/khepri_condition.erl",
+        "src/khepri_event_handler.erl",
+        "src/khepri_evf.erl",
+        "src/khepri_export_erlang.erl",
+        "src/khepri_machine.erl",
+        "src/khepri_path.erl",
+        "src/khepri_pattern_tree.erl",
+        "src/khepri_payload.erl",
+        "src/khepri_projection.erl",
+        "src/khepri_sproc.erl",
+        "src/khepri_sup.erl",
+        "src/khepri_tree.erl",
+        "src/khepri_tx.erl",
+        "src/khepri_tx_adv.erl",
+        "src/khepri_utils.erl",
+    ],
+    hdrs = [":public_and_private_hdrs"],
+    app_name = "khepri",
+    beam = [":behaviours"],
+    dest = "ebin",
+    erlc_opts = "//:erlc_opts",
+    deps = [
+        "@horus//:erlang_app",
+        "@ra_alt//:erlang_app",
+        "@seshat_alt//:erlang_app",
+    ],
+)
+
+filegroup(
+    name = "license_files",
+    srcs = [
+        "LICENSE-Apache-2.0",
+        "LICENSE-MPL-2.0",
+    ],
+)

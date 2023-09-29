@@ -188,7 +188,7 @@ erlang_app(
     deps = [
         "@aten//:erlang_app",
         "@gen_batch_server//:erlang_app",
-        "@seshat//:erlang_app",
+        "@seshat_alt//:erlang_app",
     ],
 )
 

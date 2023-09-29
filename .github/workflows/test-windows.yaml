@@ -13,6 +13,9 @@ jobs:
         include:
         - erlang_version: "26.1"
           elixir_version: "1.15.2"
+        metadata_store:
+          - mnesia
+          - khepri
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
@@ -57,6 +60,7 @@ jobs:
       run: |
         bazelisk test //... ^
           --config=buildbuddy ^
+          --test_env RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }} ^
           --test_tag_filters=-aws,-docker,-bats,-starts-background-broker,-dialyze ^
           --build_tests_only ^
           --verbose_failures

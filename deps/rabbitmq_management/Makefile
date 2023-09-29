@@ -22,7 +22,7 @@ endef
 
 DEPS = rabbit_common rabbit amqp_client cowboy cowlib rabbitmq_web_dispatch rabbitmq_management_agent
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers proper
-LOCAL_DEPS += mnesia ranch ssl crypto public_key
+LOCAL_DEPS += ranch ssl crypto public_key
 
 # FIXME: Add Ranch as a BUILD_DEPS to be sure the correct version is picked.
 # See rabbitmq-components.mk.

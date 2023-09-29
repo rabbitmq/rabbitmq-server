@@ -17,31 +17,50 @@
 
 all() ->
     [
-      publish_to_different_dirs,
-      storage_deleted_on_vhost_delete,
-      single_vhost_storage_delete_is_safe
+     {group, mnesia_store},
+     {group, khepri_store}
     ].
 
+groups() ->
+    [
+     {mnesia_store, [], all_tests()},
+     {khepri_store, [], all_tests()}
+    ].
 
+all_tests() ->
+    [publish_to_different_dirs,
+     storage_deleted_on_vhost_delete,
+     single_vhost_storage_delete_is_safe].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
+    rabbit_ct_helpers:run_setup_steps(Config, []).
+
+end_per_suite(Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config).
+
+init_per_group(mnesia_store, Config0) ->
+    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, khepri}]),
+    init_per_group_common(Config);
+init_per_group(khepri_store, Config0) ->
+    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, khepri}]),
+    init_per_group_common(Config).
+
+init_per_group_common(Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config,
                 [{rmq_nodename_suffix, ?MODULE}]),
     Config2 = rabbit_ct_helpers:merge_app_env(
                 Config1,
                 {rabbit, [{queue_index_embed_msgs_below, 100}]}),
-    rabbit_ct_helpers:run_setup_steps(
-        Config2,
-        rabbit_ct_broker_helpers:setup_steps() ++
-        rabbit_ct_client_helpers:setup_steps()).
+    rabbit_ct_helpers:run_steps(Config2,
+                                rabbit_ct_broker_helpers:setup_steps() ++
+                                    rabbit_ct_client_helpers:setup_steps()).
 
-end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(
-        Config,
-        rabbit_ct_client_helpers:teardown_steps() ++
-        rabbit_ct_broker_helpers:teardown_steps()).
+end_per_group(_, Config) ->
+    rabbit_ct_helpers:run_steps(Config,
+                                rabbit_ct_client_helpers:teardown_steps() ++
+                                    rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(_, Config) ->
     Vhost1 = <<"vhost1">>,

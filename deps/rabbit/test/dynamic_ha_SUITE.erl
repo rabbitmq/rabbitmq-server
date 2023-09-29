@@ -80,7 +80,12 @@ groups() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config).
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            rabbit_ct_helpers:run_setup_steps(Config);
+        {khepri, _} ->
+            {skip, "Classic queue mirroring not supported by Khepri"}
+    end.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
@@ -110,15 +115,21 @@ init_per_testcase(Testcase, Config) ->
     Config2 = rabbit_ct_helpers:run_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()),
-    case Testcase of
-        change_cluster ->
-            %% do not enable message_containers feature flag as it will stop
-            %% nodes in mixed versions joining later
-            ok;
+    case Config2 of
+        {skip, _} ->
+            Config2;
         _ ->
-            _ = rabbit_ct_broker_helpers:enable_feature_flag(Config2, message_containers)
-    end,
-    Config2.
+            case Testcase of
+                change_cluster ->
+                    %% do not enable message_containers feature flag as it will
+                    %% stop nodes in mixed versions joining later
+                    ok;
+                _ ->
+                    _ = rabbit_ct_broker_helpers:enable_feature_flag(
+                          Config2, message_containers)
+            end,
+            Config2
+    end.
 
 end_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:run_steps(Config,

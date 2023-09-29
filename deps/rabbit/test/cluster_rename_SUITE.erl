@@ -14,24 +14,29 @@
 
 all() ->
     [
-      {group, cluster_size_2},
-      {group, cluster_size_3}
+      {group, mnesia_store},
+      {group, khepri_store}
     ].
 
 groups() ->
     [
-      {cluster_size_2, [], [
-          % XXX post_change_nodename,
-          abortive_rename,
-          rename_fail,
-          rename_twice_fail
-        ]},
-      {cluster_size_3, [], [
-          rename_cluster_one_by_one,
-          rename_cluster_big_bang,
-          partial_one_by_one,
-          partial_big_bang
-        ]}
+     {mnesia_store, [], [
+                         {cluster_size_2, [], [
+                                                % XXX post_change_nodename,
+                                               abortive_rename,
+                                               rename_fail,
+                                               rename_twice_fail
+                                              ]},
+                         {cluster_size_3, [], [
+                                               rename_cluster_one_by_one,
+                                               rename_cluster_big_bang,
+                                               partial_one_by_one,
+                                               partial_big_bang
+                                              ]}
+                        ]},
+     {khepri_store, [], [
+                         {cluster_size_2, [], [unsupported_command]}
+                        ]}
     ].
 
 suite() ->
@@ -51,6 +56,10 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+init_per_group(mnesia_store, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{metadata_store, mnesia}]);
+init_per_group(khepri_store, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{metadata_store, khepri}]);
 init_per_group(cluster_size_2, Config) ->
     rabbit_ct_helpers:set_config(Config, [
         {rmq_nodes_count, 2} %% Replaced with a list of node names later.
@@ -228,6 +237,15 @@ rename_twice_fail(Config) ->
     Config1 = rename_node(Config, Node1, [Node1, indecisive]),
     ok = rename_node_fail(Config, Node1, [indecisive, jessica]),
     {save_config, Config1}.
+
+unsupported_command(Config) ->
+    [Node1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Node1),
+
+    Map = [Node1, jessica],
+    {error, _, Msg} = do_rename_node(Config, Node1, Map),
+    match = re:run(Msg, ".*not_supported.*", [{capture, none}]).
 
 %% ----------------------------------------------------------------------------
 

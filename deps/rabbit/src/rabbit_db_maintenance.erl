@@ -10,85 +10,32 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([
-         setup_schema/0,
+         table_definitions/0,
          set/1,
          get/1,
          get_consistent/1
         ]).
 
--type mnesia_table() :: atom().
+-export([
+         khepri_maintenance_path/1,
+         khepri_maintenance_path/0
+        ]).
 
 -define(TABLE, rabbit_node_maintenance_states).
 
 %% -------------------------------------------------------------------
-%% setup_schema().
+%% table_definitions().
 %% -------------------------------------------------------------------
 
--spec setup_schema() -> ok | {error, any()}.
-%% @doc Creates the internal schema used by the selected metadata store
-%%
-%% @private
+-spec table_definitions() -> [Def] when
+      Def :: {Name :: atom(), term()}.
 
-setup_schema() ->
-    setup_schema_in_mnesia().
-
-setup_schema_in_mnesia() ->
-    TableName = status_table_name(),
-    rabbit_log:info(
-      "Creating table ~ts for maintenance mode status",
-      [TableName]),
-    try
-        rabbit_table:create(
-          TableName,
-          status_table_definition()),
-        %% The `rabbit_node_maintenance_states' table used to be global but not
-        %% replicated. This leads to various errors during RabbitMQ boot or
-        %% operations on the Mnesia database. The reason is the table existed
-        %% on a single node and, if that node was stopped or MIA, other nodes
-        %% may wait forever on that node for the table to be available.
-        %%
-        %% The call below makes sure this node has a copy of the table.
-        case rabbit_table:ensure_table_copy(TableName, node(), ram_copies) of
-            ok ->
-                %% Next, we try to fix other nodes in the cluster if they are
-                %% running a version of RabbitMQ which does not replicate the
-                %% table. All nodes must have a replica for Mnesia operations
-                %% to work properly. Therefore the code below is to make older
-                %% compatible with newer nodes.
-                Replicas = mnesia:table_info(TableName, all_nodes),
-                Members = rabbit_nodes:list_running(),
-                MissingOn = Members -- Replicas,
-                lists:foreach(
-                  fun(Node) ->
-                          %% Errors from adding a replica on those older nodes
-                          %% are ignored however. They should not be fatal. The
-                          %% problem will solve by itself once all nodes are
-                          %% upgraded.
-                          _ = rpc:call(
-                                Node,
-                                rabbit_table, ensure_table_copy,
-                                [TableName, Node, ram_copies])
-                  end, MissingOn),
-                ok;
-            Error ->
-                Error
-        end
-    catch throw:Reason  ->
-            rabbit_log:error(
-              "Failed to create maintenance status table: ~tp",
-              [Reason])
-    end.
-
--spec status_table_name() -> mnesia_table().
-status_table_name() ->
-    ?TABLE.
-
--spec status_table_definition() -> list().
-status_table_definition() ->
-    maps:to_list(#{
-        record_name => node_maintenance_state,
-        attributes  => record_info(fields, node_maintenance_state)
-    }).
+table_definitions() ->
+    [{?TABLE, maps:to_list(#{
+                             record_name => node_maintenance_state,
+                             attributes  => record_info(fields, node_maintenance_state),
+                             match => #node_maintenance_state{_ = '_'}
+                            })}].
 
 %% -------------------------------------------------------------------
 %% set().
@@ -102,7 +49,10 @@ status_table_definition() ->
 %% @private
 
 set(Status) ->
-    set_in_mnesia(Status).
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun() -> set_in_mnesia(Status) end,
+        khepri => fun() -> set_in_khepri(Status) end
+       }).
 
 set_in_mnesia(Status) ->
     Res = mnesia:transaction(
@@ -127,6 +77,18 @@ set_in_mnesia(Status) ->
         _            -> false
     end.
 
+set_in_khepri(Status) ->
+    Node = node(),
+    Path = khepri_maintenance_path(Node),
+    Record = #node_maintenance_state{
+                node   = Node,
+                status = Status
+               },
+    case rabbit_khepri:put(Path, Record) of
+        ok -> true;
+        _ -> false
+    end.
+
 %% -------------------------------------------------------------------
 %% get().
 %% -------------------------------------------------------------------
@@ -141,7 +103,10 @@ set_in_mnesia(Status) ->
 %% @private
 
 get(Node) ->
-    get_in_mnesia(Node).
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun() -> get_in_mnesia(Node) end,
+        khepri => fun() -> get_in_khepri(Node) end
+       }).
 
 get_in_mnesia(Node) ->
     case catch mnesia:dirty_read(?TABLE, Node) of
@@ -149,6 +114,15 @@ get_in_mnesia(Node) ->
         [#node_maintenance_state{node = Node, status = Status}] ->
             Status;
         _   -> undefined
+    end.
+
+get_in_khepri(Node) ->
+    Path = khepri_maintenance_path(Node),
+    case rabbit_khepri:get(Path) of
+        {ok, #node_maintenance_state{status = Status}} ->
+            Status;
+        _ ->
+            undefined
     end.
 
 %% -------------------------------------------------------------------
@@ -165,7 +139,10 @@ get_in_mnesia(Node) ->
 %% @private
 
 get_consistent(Node) ->
-    get_consistent_in_mnesia(Node).
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun() -> get_consistent_in_mnesia(Node) end,
+        khepri => fun() -> get_consistent_in_khepri(Node) end
+       }).
 
 get_consistent_in_mnesia(Node) ->
     case mnesia:transaction(fun() -> mnesia:read(?TABLE, Node) end) of
@@ -175,3 +152,22 @@ get_consistent_in_mnesia(Node) ->
         {atomic, _}  -> undefined;
         {aborted, _Reason} -> undefined
     end.
+
+get_consistent_in_khepri(Node) ->
+    Path = khepri_maintenance_path(Node),
+    case rabbit_khepri:get(Path, #{favor => consistency}) of
+        {ok, #node_maintenance_state{status = Status}} ->
+            Status;
+        _ ->
+            undefined
+    end.
+
+%% -------------------------------------------------------------------
+%% Khepri paths
+%% -------------------------------------------------------------------
+
+khepri_maintenance_path() ->
+    [?MODULE, maintenance].
+
+khepri_maintenance_path(Node) ->
+    [?MODULE, maintenance, Node].

@@ -8,6 +8,7 @@
 -module(rabbit_control_helper).
 
 -export([command/2, command/3, command/4, command_with_output/4, format_command/4]).
+-export([async_command/4, wait_for_async_command/1]).
 
 command(Command, Node, Args) ->
     command(Command, Node, Args, []).
@@ -20,6 +21,21 @@ command(Command, Node, Args, Opts) ->
         {ok, _} -> ok;
         ok      -> ok;
         Error   -> Error
+    end.
+
+async_command(Command, Node, Args, Opts) ->
+    Self = self(),
+    spawn(fun() ->
+                  Reply = (catch command(Command, Node, Args, Opts)),
+                  Self ! {async_command, Node, Reply}
+          end).
+
+wait_for_async_command(Node) ->
+    receive
+        {async_command, N, Reply} when N == Node ->
+            Reply
+    after 600000 ->
+            timeout
     end.
 
 command_with_output(Command, Node, Args, Opts) ->

@@ -21,32 +21,44 @@
 
 all() ->
     [
-     {group, cluster_size_1}
-     , {group, cluster_size_2}
+     {group, mnesia_store},
+     {group, khepri_store}
     ].
 
 groups() ->
     [
-      {cluster_size_1, [], [
-          most_basic_single_node_queue_count,
-          single_node_single_vhost_queue_count,
-          single_node_multiple_vhosts_queue_count,
-          single_node_single_vhost_limit,
-          single_node_single_vhost_zero_limit,
-          single_node_single_vhost_limit_with_durable_named_queue,
-          single_node_single_vhost_zero_limit_with_durable_named_queue,
-          single_node_single_vhost_limit_with_queue_ttl,
-          single_node_single_vhost_limit_with_redeclaration
-        ]},
-      {cluster_size_2, [], [
-          most_basic_cluster_queue_count,
-          cluster_multiple_vhosts_queue_count,
-          cluster_multiple_vhosts_limit,
-          cluster_multiple_vhosts_zero_limit,
-          cluster_multiple_vhosts_limit_with_durable_named_queue,
-          cluster_multiple_vhosts_zero_limit_with_durable_named_queue,
-          cluster_node_restart_queue_count
-        ]}
+     {mnesia_store, [], [
+                         {cluster_size_1, [], cluster_size_1_tests()},
+                         {cluster_size_2, [], cluster_size_2_tests()}
+                         ]},
+     {khepri_store, [], [
+                         {cluster_size_1, [], cluster_size_1_tests()},
+                         {cluster_size_2, [], cluster_size_2_tests()}
+                        ]}
+    ].
+
+cluster_size_1_tests() ->
+    [
+     most_basic_single_node_queue_count,
+     single_node_single_vhost_queue_count,
+     single_node_multiple_vhosts_queue_count,
+     single_node_single_vhost_limit,
+     single_node_single_vhost_zero_limit,
+     single_node_single_vhost_limit_with_durable_named_queue,
+     single_node_single_vhost_zero_limit_with_durable_named_queue,
+     single_node_single_vhost_limit_with_queue_ttl,
+     single_node_single_vhost_limit_with_redeclaration
+    ].
+
+cluster_size_2_tests() ->
+    [
+     most_basic_cluster_queue_count,
+     cluster_multiple_vhosts_queue_count,
+     cluster_multiple_vhosts_limit,
+     cluster_multiple_vhosts_zero_limit,
+     cluster_multiple_vhosts_limit_with_durable_named_queue,
+     cluster_multiple_vhosts_zero_limit_with_durable_named_queue,
+     cluster_node_restart_queue_count
     ].
 
 suite() ->
@@ -66,31 +78,26 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(cluster_size_1, Config) ->
-    init_per_multinode_group(cluster_size_1, Config, 1);
-init_per_group(cluster_size_2, Config) ->
-    init_per_multinode_group(cluster_size_2, Config, 2);
-init_per_group(cluster_rename, Config) ->
-    init_per_multinode_group(cluster_rename, Config, 2).
+init_per_group(mnesia_store, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{metadata_store, mnesia}]);
+init_per_group(khepri_store, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{metadata_store, khepri}]);
+init_per_group(cluster_size_1 = Group, Config) ->
+    init_per_multinode_group(Group, Config, 1);
+init_per_group(cluster_size_2 = Group, Config) ->
+    init_per_multinode_group(Group, Config, 2).
 
-init_per_multinode_group(Group, Config, NodeCount) ->
+init_per_multinode_group(_Group, Config, NodeCount) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
                                                     {rmq_nodes_count, NodeCount},
                                                     {rmq_nodename_suffix, Suffix}
       ]),
-    case Group of
-        cluster_rename ->
-            % The broker is managed by {init,end}_per_testcase().
-            Config1;
-        _ ->
-            rabbit_ct_helpers:run_steps(Config1,
-              rabbit_ct_broker_helpers:setup_steps() ++
-              rabbit_ct_client_helpers:setup_steps())
-    end.
+    rabbit_ct_helpers:run_steps(Config1,
+                                rabbit_ct_broker_helpers:setup_steps() ++
+                                    rabbit_ct_client_helpers:setup_steps()).
 
-end_per_group(cluster_rename, Config) ->
-    % The broker is managed by {init,end}_per_testcase().
+end_per_group(Group, Config) when Group == mnesia_store; Group == khepri_store ->
     Config;
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_steps(Config,

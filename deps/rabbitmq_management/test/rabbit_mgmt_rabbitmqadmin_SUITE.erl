@@ -297,12 +297,12 @@ bindings(Config) ->
     {ok, _} = run(Config, ["delete", "queue", "name=foo"]).
 
 policies(Config) ->
-    {ok, _} = run(Config, ["declare", "policy", "name=ha",
-                           "pattern=.*", "definition={\"ha-mode\":\"all\"}"]),
-    {ok, [["ha", "/", ".*", "{\"ha-mode\": \"all\"}"]]} =
+    {ok, _} = run(Config, ["declare", "policy", "name=max-length-bytes",
+                           "pattern=.*", "definition={\"max-length-bytes\":10000}"]),
+    {ok, [["max-length-bytes", "/", ".*", "{\"max-length-bytes\": 10000}"]]} =
         run_table(Config, ["list", "policies", "name",
                                  "vhost", "pattern", "definition"]),
-    {ok, _} = run(Config, ["delete", "policy", "name=ha"]).
+    {ok, _} = run(Config, ["delete", "policy", "name=max-length-bytes"]).
 
 operator_policies(Config) ->
     {ok, _} = run(Config, ["declare", "operator_policy", "name=len",

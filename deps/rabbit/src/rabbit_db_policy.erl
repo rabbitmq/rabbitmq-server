@@ -27,7 +27,10 @@
       Ret :: {[{Exchange, Exchange}], [{Queue, Queue}]}.
 
 update(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun) ->
-    update_in_mnesia(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun).
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun() -> update_in_mnesia(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun) end,
+        khepri => fun() -> update_in_khepri(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun) end
+       }).
 
 %% [1] We need to prevent this from becoming O(n^2) in a similar
 %% manner to rabbit_binding:remove_for_{source,destination}. So see
@@ -47,6 +50,19 @@ update_in_mnesia(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun) ->
                [update_queue_policies(Map, fun rabbit_db_queue:update_in_mnesia_tx/2)
                 || Map <- Queues, is_map(Map)]}
       end).
+
+update_in_khepri(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun) ->
+    Exchanges0 = rabbit_db_exchange:get_all(VHost),
+    Queues0 = rabbit_db_queue:get_all(VHost),
+    Exchanges = [GetUpdatedExchangeFun(X) || X <- Exchanges0],
+    Queues = [GetUpdatedQueueFun(Q) || Q <- Queues0],
+    rabbit_khepri:transaction(
+      fun() ->
+              {[update_exchange_policies(Map, fun rabbit_db_exchange:update_in_khepri_tx/2)
+                || Map <- Exchanges, is_map(Map)],
+               [update_queue_policies(Map, fun rabbit_db_queue:update_in_khepri_tx/2)
+                || Map <- Queues, is_map(Map)]}
+      end, rw).
 
 update_exchange_policies(#{exchange := X = #exchange{name = XName},
                            update_function := UpdateFun}, StoreFun) ->

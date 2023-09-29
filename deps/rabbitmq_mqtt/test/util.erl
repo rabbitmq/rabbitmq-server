@@ -141,6 +141,10 @@ await_exit(Pid, Reason) ->
         20_000 -> ct:fail({missing_exit, Pid})
     end.
 
+maybe_skip_v5({skip, _Reason} = Skip) ->
+    %% Mixed-version can be skipped as `khepri_db`
+    %% is not supported
+    Skip;
 maybe_skip_v5(Config) ->
     case ?config(mqtt_version, Config) of
         v5 ->

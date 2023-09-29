@@ -1,0 +1,114 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+            "+warn_export_vars",
+            "+warnings_as_errors",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+            "+warn_export_vars",
+            "+warnings_as_errors",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "other_beam",
+    srcs = [
+        "src/horus.erl",
+        "src/horus_cover.erl",
+        "src/horus_utils.erl",
+    ],
+    hdrs = [":public_and_private_hdrs"],
+    app_name = "horus",
+    dest = "ebin",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [":other_beam"],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/horus.app.src",
+        "src/horus.erl",
+        "src/horus_cover.erl",
+        "src/horus_utils.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [
+        "src/horus_error.hrl",
+        "src/horus_fun.hrl",
+    ],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = [
+        "include/horus.hrl",
+    ],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [
+        "priv/horus_cover_helper.erl",
+    ],
+)
+
+filegroup(
+    name = "license_files",
+    srcs = [
+        "LICENSE-Apache-2.0",
+        "LICENSE-MPL-2.0",
+    ],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
+    app_name = "horus",
+    beam_files = [":beam_files"],
+    extra_apps = [
+        "compiler",
+        "tools",
+    ],
+    license_files = [":license_files"],
+    priv = [":priv"],
+)
+
+alias(
+    name = "horus",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)

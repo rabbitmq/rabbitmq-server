@@ -924,7 +924,9 @@ do_enable_feature_flag_when_ff_file_is_unwritable(Config) ->
     %% the `rabbit_ff_controller' process because it was pretty fragile.
     %% That's why the rest of the testcase is commentted out now. We should
     %% revisit this at some point.
-    [?assertEqual(ok, rabbit_ct_broker_helpers:start_node(Config, N))
+    [?assertEqual(ok, rabbit_ct_broker_helpers:async_start_node(Config, N))
+     || N <- lists:reverse(Nodes)],
+    [?assertEqual(ok, rabbit_ct_broker_helpers:wait_for_async_start_node(N))
      || N <- lists:reverse(Nodes)].
 
     % XXX ?assertEqual(
@@ -960,7 +962,7 @@ enable_feature_flag_with_a_network_partition(Config) ->
     block(NodePairs),
 
     %% Wait for the network partition to happen
-    clustering_utils:assert_cluster_status({All, All, [A, C, D]}, [A, C, D]),
+    clustering_utils:assert_cluster_status({All, [A, C, D]}, [A, C, D]),
 
     %% Enabling the feature flag should fail in the specific case of
     %% `ff_from_testsuite', if the network is broken.
@@ -977,7 +979,7 @@ enable_feature_flag_with_a_network_partition(Config) ->
      || N <- [A, C, D]],
     [?assertEqual(ok, rabbit_ct_broker_helpers:start_node(Config, N))
      || N <- [A, C, D]],
-    clustering_utils:assert_cluster_status({All, All, All}, All),
+    clustering_utils:assert_cluster_status({All, All}, All),
     declare_arbitrary_feature_flag(Config),
 
     %% Enabling the feature flag works.
@@ -1013,7 +1015,8 @@ mark_feature_flag_as_enabled_with_a_network_partition(Config) ->
                  {B, D},
                  {B, E}],
     block(NodePairs),
-    clustering_utils:assert_cluster_status({AllNodes, AllNodes, [A, C, D, E]}, [A, C, D, E]),
+    clustering_utils:assert_cluster_status(
+      {AllNodes, [A, C, D, E]}, [A, C, D, E]),
 
     %% Mark the feature flag as enabled on all nodes from node B. This
     %% is expected to timeout.
