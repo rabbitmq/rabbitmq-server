@@ -55,7 +55,6 @@ jobs:
           branch: main
           labels: |
             backport-v3.12.x
-            backport-v3.11.x
     timeout-minutes: 10
     env:
       branch: bump-otp-${{ matrix.erlang_version }}
