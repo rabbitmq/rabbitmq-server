@@ -64,7 +64,7 @@ validate(Args, _) ->
     end.
 
 merge_defaults([], Opts) ->
-    merge_defaults([<<"conn_name">>], Opts);
+    merge_defaults([<<"node">>, <<"conn_name">>], Opts);
 merge_defaults(Args, Opts) ->
     {Args, maps:merge(#{verbose => false}, Opts)}.
 
