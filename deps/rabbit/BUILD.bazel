@@ -188,6 +188,8 @@ test_suite_beam_files(name = "test_suite_beam_files")
 # gazelle:erlang_app_dep sysmon_handler
 # gazelle:erlang_app_dep systemd
 
+# gazelle:erlang_app_dep_exclude looking_glass
+
 rabbitmq_app(
     name = "erlang_app",
     srcs = [":all_srcs"],
@@ -219,7 +221,6 @@ rabbitmq_app(
         "@gen_batch_server//:erlang_app",
         "@khepri//:erlang_app",
         "@khepri_mnesia_migration//:erlang_app",
-        "@looking_glass//:erlang_app",
         "@observer_cli//:erlang_app",
         "@osiris//:erlang_app",
         "@ra//:erlang_app",
