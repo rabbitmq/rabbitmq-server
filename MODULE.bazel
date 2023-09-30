@@ -294,8 +294,8 @@ erlang_package.git_package(
 erlang_package.git_package(
     name = "khepri_mnesia_migration",
     build_file = "@rabbitmq-server//bazel:BUILD.khepri_mnesia_migration",
-    repository = "rabbitmq/khepri_mnesia_migration",
     commit = "ec891800b449f6a8fc975f959447039b3df343ed",
+    repository = "rabbitmq/khepri_mnesia_migration",
 )
 
 erlang_package.hex_package(
@@ -328,16 +328,16 @@ erlang_package.hex_package(
 
 erlang_package.hex_package(
     name = "ra_alt",
-    pkg = "ra",
     build_file = "@rabbitmq-server//bazel:BUILD.ra",
+    pkg = "ra",
     sha256 = "f4dd317ab4030c0b14453bcf70179130f388dec35f7d59b6c7edcdfa25270397",
     version = "2.7.0",
 )
 
 erlang_package.hex_package(
     name = "seshat_alt",
-    pkg = "seshat",
     build_file = "@rabbitmq-server//bazel:BUILD.seshat",
+    pkg = "seshat",
     sha256 = "7cef700f92831dd7cae6a6dd223ccc55ac88ecce0631ee9ab0f2b5fb70e79b90",
     version = "0.6.0",
 )
