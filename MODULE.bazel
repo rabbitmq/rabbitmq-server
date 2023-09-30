@@ -245,23 +245,6 @@ erlang_package.hex_package(
     version = "1.4.1",
 )
 
-<<<<<<< HEAD
-=======
-erlang_package.git_package(
-    name = "khepri",
-    build_file = "@rabbitmq-server//bazel:BUILD.khepri",
-    commit = "952a52969eaa97a4327806b4fc062238dc3e6214",
-    repository = "rabbitmq/khepri",
-)
-
-erlang_package.git_package(
-    name = "khepri_mnesia_migration",
-    build_file = "@rabbitmq-server//bazel:BUILD.khepri_mnesia_migration",
-    commit = "ec891800b449f6a8fc975f959447039b3df343ed",
-    repository = "rabbitmq/khepri_mnesia_migration",
-)
-
->>>>>>> d29a91496d (Adopt otp 25.3.2.6)
 erlang_package.hex_package(
     name = "jsx",
     build_file = "@//bazel:BUILD.jsx",
@@ -312,6 +295,7 @@ erlang_package.hex_package(
 
 erlang_package.hex_package(
 <<<<<<< HEAD
+<<<<<<< HEAD
     name = "ra",
     build_file = "@rabbitmq-server//bazel:BUILD.ra",
     sha256 = "7fae3112cea737bc64d5ff51c1b79a7f30f13ed3d11c565d2a6966ea5aa40473",
@@ -340,6 +324,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
 >>>>>>> d29a91496d (Adopt otp 25.3.2.6)
 >>>>>>> 0cf3bc4230 (Adopt otp 25.3.2.6)
+=======
+>>>>>>> 1396c13c8e (Resolve a conflict (#9598))
     name = "ranch",
     build_file = "@rabbitmq-server//bazel:BUILD.ranch",
     sha256 = "244ee3fa2a6175270d8e1fc59024fd9dbc76294a321057de8f803b1479e76916",
