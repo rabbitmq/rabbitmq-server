@@ -306,7 +306,7 @@ erlang_package.hex_package(
 )
 
 erlang_package.hex_package(
-    name = "ranch",
+   name = "ranch",
     build_file = "@rabbitmq-server//bazel:BUILD.ranch",
     patch_cmds = [
         "rm ebin/ranch.app",
