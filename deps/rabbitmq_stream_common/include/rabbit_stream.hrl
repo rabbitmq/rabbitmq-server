@@ -70,6 +70,8 @@
 
 -define(INFO_ITEMS,
   [conn_name,
+    pid,
+    node,
     port,
     peer_port,
     host,
@@ -95,6 +97,7 @@
 
 -define(CONSUMER_INFO_ITEMS, [
   connection_pid,
+  node,
   subscription_id,
   stream,
   messages_consumed,
@@ -108,6 +111,7 @@
 
 -define(PUBLISHER_INFO_ITEMS, [
   connection_pid,
+  node,
   publisher_id,
   stream,
   reference,
