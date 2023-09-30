@@ -277,6 +277,23 @@ erlang_package.hex_package(
     version = "1.4.1",
 )
 
+<<<<<<< HEAD
+=======
+erlang_package.git_package(
+    name = "khepri",
+    build_file = "@rabbitmq-server//bazel:BUILD.khepri",
+    commit = "952a52969eaa97a4327806b4fc062238dc3e6214",
+    repository = "rabbitmq/khepri",
+)
+
+erlang_package.git_package(
+    name = "khepri_mnesia_migration",
+    build_file = "@rabbitmq-server//bazel:BUILD.khepri_mnesia_migration",
+    commit = "ec891800b449f6a8fc975f959447039b3df343ed",
+    repository = "rabbitmq/khepri_mnesia_migration",
+)
+
+>>>>>>> 633eb85a13 (Adopt otp 25.0.4)
 erlang_package.hex_package(
     name = "thoas",
     build_file = "@rabbitmq-server//bazel:BUILD.thoas",
@@ -306,6 +323,25 @@ erlang_package.hex_package(
 )
 
 erlang_package.hex_package(
+<<<<<<< HEAD
+=======
+    name = "ra_alt",
+    build_file = "@rabbitmq-server//bazel:BUILD.ra",
+    pkg = "ra",
+    sha256 = "f4dd317ab4030c0b14453bcf70179130f388dec35f7d59b6c7edcdfa25270397",
+    version = "2.7.0",
+)
+
+erlang_package.hex_package(
+    name = "seshat_alt",
+    build_file = "@rabbitmq-server//bazel:BUILD.seshat",
+    pkg = "seshat",
+    sha256 = "7cef700f92831dd7cae6a6dd223ccc55ac88ecce0631ee9ab0f2b5fb70e79b90",
+    version = "0.6.0",
+)
+
+erlang_package.hex_package(
+>>>>>>> 633eb85a13 (Adopt otp 25.0.4)
     name = "ranch",
     build_file = "@rabbitmq-server//bazel:BUILD.ranch",
     patch_cmds = [
