@@ -327,15 +327,18 @@ batch_publish_delivered(Publishes, ChPid, Flow,
     State1 = State #state { backing_queue_state = BQS1 },
     {AckTags, ensure_monitoring(ChPid, State1)}.
 
-discard(MsgId, ChPid, Flow, State = #state { gm                  = GM,
-                                             backing_queue       = BQ,
-                                             backing_queue_state = BQS,
-                                             seen_status         = SS }) ->
-    false = maps:is_key(MsgId, SS), %% ASSERTION
-    ok = gm:broadcast(GM, {discard, ChPid, Flow, MsgId}),
+discard(Msg, ChPid, Flow, State = #state { backing_queue       = BQ,
+                                           backing_queue_state = BQS }) ->
+    MsgId = mc:get_annotation(id, Msg),
     ensure_monitoring(ChPid,
                       State #state { backing_queue_state =
-                                         BQ:discard(MsgId, ChPid, Flow, BQS) }).
+                                         BQ:discard(Msg, ChPid, Flow, BQS) }),
+    broadcast_discard(MsgId, ChPid, Flow, State).
+
+broadcast_discard(MsgId, ChPid, Flow, #state { gm          = GM,
+                                               seen_status = SS }) ->
+    false = maps:is_key(MsgId, SS), %% ASSERTION
+    ok = gm:broadcast(GM, {discard, ChPid, Flow, MsgId}).
 
 dropwhile(Pred, State = #state{backing_queue       = BQ,
                                backing_queue_state = BQS }) ->

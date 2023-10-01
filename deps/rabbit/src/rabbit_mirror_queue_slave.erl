@@ -1016,8 +1016,7 @@ process_instruction({discard, ChPid, Flow, MsgId}, State) ->
     maybe_flow_ack(ChPid, Flow),
     State1 = #state { backing_queue = BQ, backing_queue_state = BQS } =
         publish_or_discard(discarded, ChPid, MsgId, State),
-    BQS1 = BQ:discard(MsgId, ChPid, Flow, BQS),
-    {ok, State1 #state { backing_queue_state = BQS1 }};
+    {ok, State1 #state { backing_queue_state = BQS }};
 process_instruction({drop, Length, Dropped, AckRequired},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
