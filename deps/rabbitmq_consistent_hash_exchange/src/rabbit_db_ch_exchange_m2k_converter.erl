@@ -21,7 +21,7 @@
          delete_from_khepri/3,
          clear_data_in_khepri/1]).
 
--record(?MODULE, {store_id :: khepri:store_id()}).
+-record(?MODULE, {}).
 
 -define(HASH_RING_STATE_TABLE, rabbit_exchange_type_consistent_hash_ring_state).
 
@@ -33,64 +33,65 @@
       Priv :: #?MODULE{}.
 %% @private
 
-init_copy_to_khepri(StoreId, _MigrationId, _Tables) ->
-    State = #?MODULE{store_id = StoreId},
+init_copy_to_khepri(_StoreId, _MigrationId, _Tables) ->
+    State = #?MODULE{},
     {ok, State}.
 
--spec copy_to_khepri(Table, Record, Priv) -> Ret when
+-spec copy_to_khepri(Table, Record, State) -> Ret when
       Table :: mnesia_to_khepri:mnesia_table(),
       Record :: tuple(),
-      Priv :: #?MODULE{},
-      Ret :: {ok, NewPriv} | {error, Reason},
-      NewPriv :: #?MODULE{},
+      State :: rabbit_db_m2k_converter:state(),
+      Ret :: {ok, NewState} | {error, Reason},
+      NewState :: rabbit_db_m2k_converter:state(),
       Reason :: any().
 %% @private
 
 copy_to_khepri(?HASH_RING_STATE_TABLE = Table,
                #chx_hash_ring{exchange = XName} = Record,
-               #?MODULE{store_id = StoreId} = State) ->
+               State) ->
     ?LOG_DEBUG(
        "Mnesia->Khepri data copy: [~0p] key: ~0p",
        [Table, XName],
        #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
     Path = rabbit_db_ch_exchange:khepri_consistent_hash_path(XName),
-    ?LOG_DEBUG(
-       "Mnesia->Khepri data copy: [~0p] path: ~0p",
-       [Table, Path],
-       #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
-    case khepri:put(StoreId, Path, Record) of
-        ok    -> {ok, State};
-        Error -> Error
-    end;
+    rabbit_db_m2k_converter:with_correlation_id(
+      fun(CorrId) ->
+              Extra = #{async => CorrId},
+              ?LOG_DEBUG(
+                 "Mnesia->Khepri data copy: [~0p] path: ~0p corr: ~0p",
+                 [Table, Path, CorrId],
+                 #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
+              rabbit_khepri:put(Path, Record, Extra)
+      end, State);
 copy_to_khepri(Table, Record, State) ->
     ?LOG_DEBUG("Mnesia->Khepri unexpected record table ~0p record ~0p state ~0p",
                [Table, Record, State]),
     {error, unexpected_record}.
 
--spec delete_from_khepri(Table, Key, Priv) -> Ret when
+-spec delete_from_khepri(Table, Key, State) -> Ret when
       Table :: mnesia_to_khepri:mnesia_table(),
       Key :: any(),
-      Priv :: #?MODULE{},
-      Ret :: {ok, NewPriv} | {error, Reason},
-      NewPriv :: #?MODULE{},
+      State :: rabbit_db_m2k_converter:state(),
+      Ret :: {ok, NewState} | {error, Reason},
+      NewState :: rabbit_db_m2k_converter:state(),
       Reason :: any().
 %% @private
 
-delete_from_khepri(?HASH_RING_STATE_TABLE = Table, Key,
-                   #?MODULE{store_id = StoreId} = State) ->
+delete_from_khepri(?HASH_RING_STATE_TABLE = Table, Key, State) ->
     ?LOG_DEBUG(
        "Mnesia->Khepri data delete: [~0p] key: ~0p",
        [Table, Key],
        #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
     Path = rabbit_db_ch_exchange:khepri_consistent_hash_path(Key),
-    ?LOG_DEBUG(
-       "Mnesia->Khepri data delete: [~0p] path: ~0p",
-       [Table, Path],
-       #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
-    case khepri:delete(StoreId, Path) of
-        ok    -> {ok, State};
-        Error -> Error
-    end.
+    rabbit_db_m2k_converter:with_correlation_id(
+      fun(CorrId) ->
+              Extra = #{async => CorrId},
+              ?LOG_DEBUG(
+                 "Mnesia->Khepri data delete: [~0p] path: ~0p corr: ~0p",
+                 [Table, Path, CorrId],
+                 #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
+              rabbit_khepri:delete(Path, Extra)
+      end, State).
 
 clear_data_in_khepri(?HASH_RING_STATE_TABLE) ->
     Path = rabbit_db_ch_exchange:khepri_consistent_hash_path(),

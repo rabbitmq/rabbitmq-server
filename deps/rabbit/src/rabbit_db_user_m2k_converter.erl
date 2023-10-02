@@ -19,7 +19,7 @@
          copy_to_khepri/3,
          delete_from_khepri/3]).
 
--record(?MODULE, {store_id :: khepri:store_id()}).
+-record(?MODULE, {}).
 
 -spec init_copy_to_khepri(StoreId, MigrationId, Tables) -> Ret when
       StoreId :: khepri:store_id(),
@@ -29,42 +29,41 @@
       Priv :: #?MODULE{}.
 %% @private
 
-init_copy_to_khepri(StoreId, _MigrationId, Tables) ->
+init_copy_to_khepri(_StoreId, _MigrationId, Tables) ->
     %% Clean up any previous attempt to copy the Mnesia table to Khepri.
     lists:foreach(fun clear_data_in_khepri/1, Tables),
 
-    State = #?MODULE{store_id = StoreId},
-    {ok, State}.
+    SubState = #?MODULE{},
+    {ok, SubState}.
 
--spec copy_to_khepri(Table, Record, Priv) -> Ret when
+-spec copy_to_khepri(Table, Record, State) -> Ret when
       Table :: mnesia_to_khepri:mnesia_table(),
       Record :: tuple(),
-      Priv :: #?MODULE{},
-      Ret :: {ok, NewPriv} | {error, Reason},
-      NewPriv :: #?MODULE{},
+      State :: rabbit_db_m2k_converter:state(),
+      Ret :: {ok, NewState} | {error, Reason},
+      NewState :: rabbit_db_m2k_converter:state(),
       Reason :: any().
 %% @private
 
 copy_to_khepri(
-  rabbit_user = Table, Record,
-  #?MODULE{store_id = StoreId} = State) when ?is_internal_user(Record) ->
+  rabbit_user = Table, Record, State) when ?is_internal_user(Record) ->
     Username = internal_user:get_username(Record),
     ?LOG_DEBUG(
        "Mnesia->Khepri data copy: [~0p] key: ~0p",
        [Table, Username],
        #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
     Path = rabbit_db_user:khepri_user_path(Username),
-    ?LOG_DEBUG(
-       "Mnesia->Khepri data copy: [~0p] path: ~0p",
-       [Table, Path],
-       #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
-    case khepri:put(StoreId, Path, Record) of
-        ok    -> {ok, State};
-        Error -> Error
-    end;
+    rabbit_db_m2k_converter:with_correlation_id(
+      fun(CorrId) ->
+              Extra = #{async => CorrId},
+              ?LOG_DEBUG(
+                 "Mnesia->Khepri data copy: [~0p] path: ~0p corr: ~0p",
+                 [Table, Path, CorrId],
+                 #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
+              rabbit_khepri:put(Path, Record, Extra)
+      end, State);
 copy_to_khepri(
-  rabbit_user_permission = Table, #user_permission{} = Record,
-  #?MODULE{store_id = StoreId} = State) ->
+  rabbit_user_permission = Table, #user_permission{} = Record, State) ->
     #user_permission{
        user_vhost = #user_vhost{
                        username = Username,
@@ -78,20 +77,20 @@ copy_to_khepri(
                          [Username,
                           #if_node_exists{exists = true}]},
              VHost),
-    Extra = #{keep_while =>
-                  #{rabbit_db_vhost:khepri_vhost_path(VHost) =>
-                        #if_node_exists{exists = true}}},
-    ?LOG_DEBUG(
-       "Mnesia->Khepri data copy: [~0p] path: ~0p",
-       [Table, Path],
-       #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
-    case khepri:put(StoreId, Path, Record, Extra) of
-        ok    -> {ok, State};
-        Error -> Error
-    end;
+    rabbit_db_m2k_converter:with_correlation_id(
+      fun(CorrId) ->
+              Extra = #{keep_while =>
+                            #{rabbit_db_vhost:khepri_vhost_path(VHost) =>
+                                  #if_node_exists{exists = true}},
+                        async => CorrId},
+              ?LOG_DEBUG(
+                 "Mnesia->Khepri data copy: [~0p] path: ~0p corr: ~0p",
+                 [Table, Path, CorrId],
+                 #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
+              rabbit_khepri:put(Path, Record, Extra)
+      end, State);
 copy_to_khepri(
-  rabbit_topic_permission = Table, #topic_permission{} = Record,
-  #?MODULE{store_id = StoreId} = State) ->
+  rabbit_topic_permission = Table, #topic_permission{} = Record, State) ->
     #topic_permission{
        topic_permission_key =
            #topic_permission_key{
@@ -109,50 +108,48 @@ copy_to_khepri(
                           #if_node_exists{exists = true}]},
              VHost,
              Exchange),
-    Extra = #{keep_while =>
-                  #{rabbit_db_vhost:khepri_vhost_path(VHost) =>
-                        #if_node_exists{exists = true}}},
-    ?LOG_DEBUG(
-       "Mnesia->Khepri data copy: [~0p] path: ~0p",
-       [Table, Path],
-       #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
-    case khepri:put(StoreId, Path, Record, Extra) of
-        ok    -> {ok, State};
-        Error -> Error
-    end;
+    rabbit_db_m2k_converter:with_correlation_id(
+      fun(CorrId) ->
+              Extra = #{keep_while =>
+                            #{rabbit_db_vhost:khepri_vhost_path(VHost) =>
+                                  #if_node_exists{exists = true}},
+                        async => CorrId},
+              ?LOG_DEBUG(
+                 "Mnesia->Khepri data copy: [~0p] path: ~0p corr: ~0p",
+                 [Table, Path, CorrId],
+                 #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
+              rabbit_khepri:put(Path, Record, Extra)
+      end, State);
 copy_to_khepri(Table, Record, State) ->
     ?LOG_DEBUG("Mnesia->Khepri unexpected record table ~0p record ~0p state ~0p",
                [Table, Record, State]),
     {error, unexpected_record}.
 
--spec delete_from_khepri(Table, Key, Priv) -> Ret when
+-spec delete_from_khepri(Table, Key, State) -> Ret when
       Table :: mnesia_to_khepri:mnesia_table(),
       Key :: any(),
-      Priv :: #?MODULE{},
-      Ret :: {ok, NewPriv} | {error, Reason},
-      NewPriv :: #?MODULE{},
+      State :: rabbit_db_m2k_converter:state(),
+      Ret :: {ok, NewState} | {error, Reason},
+      NewState :: rabbit_db_m2k_converter:state(),
       Reason :: any().
 %% @private
 
-delete_from_khepri(
-  rabbit_user = Table, Key,
-  #?MODULE{store_id = StoreId} = State) ->
+delete_from_khepri(rabbit_user = Table, Key, State) ->
     ?LOG_DEBUG(
        "Mnesia->Khepri data delete: [~0p] key: ~0p",
        [Table, Key],
        #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
     Path = rabbit_db_user:khepri_user_path(Key),
-    ?LOG_DEBUG(
-       "Mnesia->Khepri data delete: [~0p] path: ~0p",
-       [Table, Path],
-       #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
-    case khepri:delete(StoreId, Path) of
-        ok    -> {ok, State};
-        Error -> Error
-    end;
-delete_from_khepri(
-  rabbit_user_permission = Table, Key,
-  #?MODULE{store_id = StoreId} = State) ->
+    rabbit_db_m2k_converter:with_correlation_id(
+      fun(CorrId) ->
+              Extra = #{async => CorrId},
+              ?LOG_DEBUG(
+                 "Mnesia->Khepri data delete: [~0p] path: ~0p corr: ~0p",
+                 [Table, Path, CorrId],
+                 #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
+              rabbit_khepri:delete(Path, Extra)
+      end, State);
+delete_from_khepri(rabbit_user_permission = Table, Key, State) ->
     #user_vhost{
        username = Username,
        virtual_host = VHost} = Key,
@@ -161,17 +158,16 @@ delete_from_khepri(
        [Table, Key],
        #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
     Path = rabbit_db_user:khepri_user_permission_path(Username, VHost),
-    ?LOG_DEBUG(
-       "Mnesia->Khepri data delete: [~0p] path: ~0p",
-       [Table, Path],
-       #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
-    case khepri:delete(StoreId, Path) of
-        ok    -> {ok, State};
-        Error -> Error
-    end;
-delete_from_khepri(
-  rabbit_topic_permission = Table, Key,
-  #?MODULE{store_id = StoreId} = State) ->
+    rabbit_db_m2k_converter:with_correlation_id(
+      fun(CorrId) ->
+              Extra = #{async => CorrId},
+              ?LOG_DEBUG(
+                 "Mnesia->Khepri data delete: [~0p] path: ~0p corr: ~0p",
+                 [Table, Path, CorrId],
+                 #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
+              rabbit_khepri:delete(Path, Extra)
+      end, State);
+delete_from_khepri(rabbit_topic_permission = Table, Key, State) ->
     #topic_permission_key{
        user_vhost = #user_vhost{
                        username = Username,
@@ -182,14 +178,15 @@ delete_from_khepri(
        [Table, Key],
        #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
     Path = rabbit_db_user:khepri_topic_permission_path(Username, VHost, Exchange),
-    ?LOG_DEBUG(
-       "Mnesia->Khepri data delete: [~0p] path: ~0p",
-       [Table, Path],
-       #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
-    case khepri:delete(StoreId, Path) of
-        ok    -> {ok, State};
-        Error -> Error
-    end.
+    rabbit_db_m2k_converter:with_correlation_id(
+      fun(CorrId) ->
+              Extra = #{async => CorrId},
+              ?LOG_DEBUG(
+                 "Mnesia->Khepri data delete: [~0p] path: ~0p corr: ~0p",
+                 [Table, Path, CorrId],
+                 #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
+              rabbit_khepri:delete(Path, Extra)
+      end, State).
 
 -spec clear_data_in_khepri(Table) -> ok when
       Table :: atom().
