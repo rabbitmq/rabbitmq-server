@@ -35,6 +35,7 @@
                  {exchange_stats_publish_in, set},
                  {consumer_stats, set},
                  {queue_stats, set},
+                 {queue_basic_stats, set},
                  {queue_msg_stats, set},
                  {vhost_msg_stats, set},
                  {queue_process_stats, set},

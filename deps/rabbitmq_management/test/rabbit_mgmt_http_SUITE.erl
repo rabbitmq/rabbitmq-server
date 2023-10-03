@@ -114,6 +114,7 @@ all_tests() -> [
     connections_channels_pagination_test,
     exchanges_pagination_test,
     exchanges_pagination_permissions_test,
+    queues_detailed_test,
     queue_pagination_test,
     queue_pagination_columns_test,
     queues_pagination_permissions_test,
@@ -224,6 +225,13 @@ init_per_testcase(Testcase = disabled_qq_replica_opers_test, Config) ->
     rabbit_ct_broker_helpers:rpc_all(Config,
       application, set_env, [rabbitmq_management, restrictions, Restrictions]),
     rabbit_ct_helpers:testcase_started(Config, Testcase);
+init_per_testcase(queues_detailed_test, Config) ->
+    IsEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                  Config, detailed_queues_endpoint),
+    case IsEnabled of
+        true  -> Config;
+        false -> {skip, "The detailed queues endpoint is not available."}
+    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"rabbit_mgmt_SUITE:init_per_testcase">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -2238,8 +2246,18 @@ queue_pagination_test(Config) ->
                  #{name => <<"test2_reg">>, vhost => <<"/">>},
                  #{name => <<"reg_test3">>, vhost =><<"vh1">>}
                 ], maps:get(items, FirstPage)),
-
-
+    %% The reduced API version just has the most useful fields.
+    %% garbage_collection is not one of them
+    IsEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                  Config, detailed_queues_endpoint),
+    case IsEnabled of
+        true  ->
+            [?assertNot(maps:is_key(garbage_collection, Item)) ||
+                Item <- maps:get(items, FirstPage)];
+        false ->
+            [?assert(maps:is_key(garbage_collection, Item)) ||
+                Item <- maps:get(items, FirstPage)]
+    end,
     ReverseSortedByName = http_get(Config,
                                    "/queues?page=2&page_size=2&sort=name&sort_reverse=true",
                                    ?OK),
@@ -2338,12 +2356,61 @@ queue_pagination_columns_test(Config) ->
           vhost => <<"vh1">>}
     ], maps:get(items, ColumnsNameVhost)),
 
+    ?awaitMatch(
+       true,
+       begin
+           ColumnsGarbageCollection = http_get(Config, "/queues?columns=name,garbage_collection&page=2&page_size=2", ?OK),
+           %% The reduced API version just has the most useful fields,
+           %% but we can still query any info item using `columns`
+           lists:all(fun(Item) ->
+                             maps:is_key(garbage_collection, Item)
+                     end,
+                     maps:get(items, ColumnsGarbageCollection))
+       end, 30000),
 
     http_delete(Config, "/queues/%2F/queue_a", {group, '2xx'}),
     http_delete(Config, "/queues/vh1/queue_b", {group, '2xx'}),
     http_delete(Config, "/queues/%2F/queue_c", {group, '2xx'}),
     http_delete(Config, "/queues/vh1/queue_d", {group, '2xx'}),
     http_delete(Config, "/vhosts/vh1", {group, '2xx'}),
+    passed.
+
+queues_detailed_test(Config) ->
+    QArgs = #{},
+    http_put(Config, "/queues/%2F/queue_a", QArgs, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/queue_c", QArgs, {group, '2xx'}),
+
+    ?awaitMatch(
+       true,
+       begin
+           Detailed = http_get(Config, "/queues/detailed", ?OK),
+           lists:all(fun(Item) ->
+                             maps:is_key(garbage_collection, Item)
+                     end, Detailed)
+       end, 30000),
+
+    Detailed = http_get(Config, "/queues/detailed", ?OK),
+    ?assertNot(lists:any(fun(Item) ->
+                                 maps:is_key(backing_queue_status, Item)
+                         end, Detailed)),
+    %% It's null
+    ?assert(lists:any(fun(Item) ->
+                              maps:is_key(single_active_consumer_tag, Item)
+                      end, Detailed)),
+
+    Reduced = http_get(Config, "/queues", ?OK),
+    ?assertNot(lists:any(fun(Item) ->
+                                 maps:is_key(garbage_collection, Item)
+                         end, Reduced)),
+    ?assertNot(lists:any(fun(Item) ->
+                                 maps:is_key(backing_queue_status, Item)
+                         end, Reduced)),
+    ?assertNot(lists:any(fun(Item) ->
+                                 maps:is_key(single_active_consumer_tag, Item)
+                         end, Reduced)),
+
+    http_delete(Config, "/queues/%2F/queue_a", {group, '2xx'}),
+    http_delete(Config, "/queues/%2F/queue_c", {group, '2xx'}),
     passed.
 
 queues_pagination_permissions_test(Config) ->

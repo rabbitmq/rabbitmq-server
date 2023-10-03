@@ -145,13 +145,20 @@ augment_exchanges(Xs, Ranges, _)    ->
 
 %% we can only cache if no ranges are requested.
 %% The mgmt ui doesn't use ranges for queue listings
--spec augment_queues([proplists:proplist()], ranges(), basic | full) -> any().
-augment_queues(Qs, ?NO_RANGES = Ranges, basic)    ->
+-spec augment_queues([proplists:proplist()], ranges(), basic | detailed | full) -> any().
+augment_queues(Qs, ?NO_RANGES = Ranges, basic) ->
+   submit_cached(queues,
+                 fun(Interval, Queues) ->
+                         list_basic_queue_stats(Ranges, Queues, Interval)
+                 end, Qs, max(60000, length(Qs) * 2));
+augment_queues(Qs, ?NO_RANGES = Ranges, detailed) ->
    submit_cached(queues,
                  fun(Interval, Queues) ->
                          list_queue_stats(Ranges, Queues, Interval)
                  end, Qs, max(60000, length(Qs) * 2));
-augment_queues(Qs, Ranges, basic)    ->
+augment_queues(Qs, Ranges, basic) ->
+   submit(fun(Interval) -> list_basic_queue_stats(Ranges, Qs, Interval) end);
+augment_queues(Qs, Ranges, detailed) ->
    submit(fun(Interval) -> list_queue_stats(Ranges, Qs, Interval) end);
 augment_queues(Qs, Ranges, _)    ->
    submit(fun(Interval) -> detail_queue_stats(Ranges, Qs, Interval) end).
@@ -349,8 +356,16 @@ consumers_stats(VHost) ->
 -spec list_queue_stats(ranges(), [proplists:proplist()], integer()) ->
     [proplists:proplist()].
 list_queue_stats(Ranges, Objs, Interval) ->
+    list_queue_stats(Ranges, Objs, Interval, all_list_queue_data).
+
+-spec list_basic_queue_stats(ranges(), [proplists:proplist()], integer()) ->
+    [proplists:proplist()].
+list_basic_queue_stats(Ranges, Objs, Interval) ->
+    list_queue_stats(Ranges, Objs, Interval, all_list_basic_queue_data).
+
+list_queue_stats(Ranges, Objs, Interval, Fun) ->
     Ids = [id_lookup(queue_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_list_queue_data, [Ids, Ranges]}),
+    DataLookup = get_data_from_nodes({rabbit_mgmt_data, Fun, [Ids, Ranges]}),
     adjust_hibernated_memory_use(
       [begin
        Id = id_lookup(queue_stats, Obj),

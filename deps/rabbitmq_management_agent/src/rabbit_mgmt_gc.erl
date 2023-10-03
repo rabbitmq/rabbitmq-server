@@ -80,6 +80,7 @@ gc_queues() ->
     LocalGbSet = gb_sets:from_list(LocalQueues),
     gc_entity(queue_stats_publish, GbSet),
     gc_entity(queue_stats, LocalGbSet),
+    gc_entity(queue_basic_stats, LocalGbSet),
     gc_entity(queue_msg_stats, LocalGbSet),
     gc_entity(queue_process_stats, LocalGbSet),
     gc_entity(queue_msg_rates, LocalGbSet),
