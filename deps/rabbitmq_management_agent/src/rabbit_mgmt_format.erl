@@ -53,18 +53,10 @@ format_queue_stats({exclusive_consumer_pid, _}) ->
     [];
 format_queue_stats({single_active_consumer_pid, _}) ->
     [];
-format_queue_stats({slave_pids, ''}) ->
-    [];
-format_queue_stats({slave_pids, Pids}) ->
-    [{slave_nodes, [node(Pid) || Pid <- Pids]}];
 format_queue_stats({leader, Leader}) ->
     [{node, Leader}];
-format_queue_stats({synchronised_slave_pids, ''}) ->
-    [];
 format_queue_stats({effective_policy_definition, []}) ->
     [{effective_policy_definition, #{}}];
-format_queue_stats({synchronised_slave_pids, Pids}) ->
-    [{synchronised_slave_nodes, [node(Pid) || Pid <- Pids]}];
 format_queue_stats({backing_queue_status, Value}) ->
     case proplists:get_value(version, Value, undefined) of
         undefined -> [];
@@ -513,14 +505,6 @@ strip_pids([{channel_pid, _} | T], Acc) ->
     strip_pids(T, Acc);
 strip_pids([{exclusive_consumer_pid, _} | T], Acc) ->
     strip_pids(T, Acc);
-strip_pids([{slave_pids, ''} | T], Acc) ->
-    strip_pids(T, Acc);
-strip_pids([{slave_pids, Pids} | T], Acc) ->
-    strip_pids(T, [{slave_nodes, [node(Pid) || Pid <- Pids]} | Acc]);
-strip_pids([{synchronised_slave_pids, ''} | T], Acc) ->
-    strip_pids(T, Acc);
-strip_pids([{synchronised_slave_pids, Pids} | T], Acc) ->
-    strip_pids(T, [{synchronised_slave_nodes, [node(Pid) || Pid <- Pids]} | Acc]);
 strip_pids([{K, [P|_] = Nested} | T], Acc) when is_tuple(P) -> % recurse
     strip_pids(T, [{K, strip_pids(Nested)} | Acc]);
 strip_pids([{K, [L|_] = Nested} | T], Acc) when is_list(L) -> % recurse

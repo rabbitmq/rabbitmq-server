@@ -363,7 +363,7 @@ memory_test(Config) ->
     Result = http_get(Config, Path, ?OK),
     assert_keys([memory], Result),
     Keys = [total, connection_readers, connection_writers, connection_channels,
-            connection_other, queue_procs, queue_slave_procs, plugins,
+            connection_other, queue_procs, plugins,
             other_proc, mnesia, mgmt_db, msg_index, other_ets, binary, code,
             atom, other_system, allocated_unused, reserved_unallocated],
     assert_keys(Keys, maps:get(memory, Result)),
@@ -2139,8 +2139,6 @@ queue_purge_test(Config) ->
 
 queue_actions_test(Config) ->
     http_put(Config, "/queues/%2F/q", #{}, {group, '2xx'}),
-    http_post(Config, "/queues/%2F/q/actions", [{action, sync}], {group, '2xx'}),
-    http_post(Config, "/queues/%2F/q/actions", [{action, cancel_sync}], {group, '2xx'}),
     http_post(Config, "/queues/%2F/q/actions", [{action, change_colour}], ?BAD_REQUEST),
     http_delete(Config, "/queues/%2F/q", {group, '2xx'}),
     passed.
@@ -2703,8 +2701,7 @@ format_output_test(Config) ->
     assert_list([#{name => <<"test0">>,
                    consumer_capacity => 0,
                    consumer_utilisation => 0,
-                   exclusive_consumer_tag => null,
-                   recoverable_slaves => null}], http_get(Config, "/queues", ?OK)),
+                   exclusive_consumer_tag => null}], http_get(Config, "/queues", ?OK)),
     http_delete(Config, "/queues/%2F/test0", {group, '2xx'}),
     http_delete(Config, "/vhosts/vh129", {group, '2xx'}),
     passed.

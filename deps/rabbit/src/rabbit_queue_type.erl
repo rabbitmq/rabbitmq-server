@@ -77,9 +77,7 @@
 
 -define(STATE, ?MODULE).
 
-%% Recoverable mirrors shouldn't really be a generic one, but let's keep it here until
-%% mirrored queues are deprecated.
--define(DOWN_KEYS, [name, durable, auto_delete, arguments, pid, recoverable_slaves, type, state]).
+-define(DOWN_KEYS, [name, durable, auto_delete, arguments, pid, type, state]).
 
 %% TODO resolve all registered queue types from registry
 -define(QUEUE_MODULES, [rabbit_classic_queue, rabbit_quorum_queue, rabbit_stream_queue]).
@@ -395,7 +393,6 @@ i_down(durable,            Q, _) -> amqqueue:is_durable(Q);
 i_down(auto_delete,        Q, _) -> amqqueue:is_auto_delete(Q);
 i_down(arguments,          Q, _) -> amqqueue:get_arguments(Q);
 i_down(pid,                Q, _) -> amqqueue:get_pid(Q);
-i_down(recoverable_slaves, Q, _) -> amqqueue:get_recoverable_slaves(Q);
 i_down(type,               Q, _) -> amqqueue:get_type(Q);
 i_down(state, _Q, DownReason)    -> DownReason;
 i_down(_K, _Q, _DownReason) -> ''.

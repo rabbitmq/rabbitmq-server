@@ -159,8 +159,7 @@
              rejected,
              %% used by "one shot RPC" (amq.
              reply_consumer,
-             %% flow | noflow, see rabbitmq-server#114
-             delivery_flow,
+             delivery_flow, %% Deprecated since removal of CMQ in 4.0
              interceptor_state,
              queue_states,
              tick_timer,
@@ -489,10 +488,6 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
     ?LG_PROCESS_TYPE(channel),
     ?store_proc_name({ConnName, Channel}),
     ok = pg_local:join(rabbit_channels, self()),
-    Flow = case rabbit_misc:get_env(rabbit, mirroring_flow_control, true) of
-             true   -> flow;
-             false  -> noflow
-           end,
     {ok, {Global0, Prefetch}} = application:get_env(rabbit, default_consumer_prefetch),
     Limiter0 = rabbit_limiter:new(LimiterPid),
     Global = Global0 andalso is_global_qos_permitted(),
@@ -541,7 +536,6 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 rejected                = [],
                 confirmed               = [],
                 reply_consumer          = none,
-                delivery_flow           = Flow,
                 interceptor_state       = undefined,
                 queue_states            = rabbit_queue_type:init()
                },
@@ -699,16 +693,6 @@ handle_cast({force_event_refresh, Ref}, State) ->
     rabbit_event:notify(channel_created, infos(?CREATION_EVENT_KEYS, State),
                         Ref),
     noreply(rabbit_event:init_stats_timer(State, #ch.stats_timer));
-
-handle_cast({mandatory_received, _MsgSeqNo}, State) ->
-    %% This feature was used by `rabbit_amqqueue_process` and
-    %% `rabbit_mirror_queue_slave` up-to and including RabbitMQ 3.7.x.
-    %% It is unused in 3.8.x and thus deprecated. We keep it to support
-    %% in-place upgrades to 3.8.x (i.e. mixed-version clusters), but it
-    %% is a no-op starting with that version.
-    %%
-    %% NB: don't call noreply/1 since we don't want to send confirms.
-    noreply_coalesce(State);
 
 handle_cast({queue_event, QRef, Evt},
             #ch{queue_states = QueueStates0} = State0) ->

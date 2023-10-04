@@ -129,11 +129,6 @@
      <% } %>
      <% if (queue.hasOwnProperty('members')) { %>
       <%= fmt_members(queue) %>
-     <% } else { %>
-      <%= fmt_mirrors(queue) %>
-      <% if (queue.state == 'syncing') { %>
-        <%= fmt_sync_state(queue) %>
-      <% } %>
      <% } %>
    </td>
 <% } %>

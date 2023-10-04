@@ -26,8 +26,7 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2, delete_crashed/1,
          purge/1, purge_acks/1,
-         publish/6, publish_delivered/5, discard/4, drain_confirmed/1,
-         batch_publish/4, batch_publish_delivered/4,
+         publish/5, publish_delivered/4, discard/3, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
          ackfold/4, fold/3, len/1, is_empty/1, depth/1,
          set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
@@ -199,54 +198,23 @@ purge_acks(State = #state{bq = BQ}) ->
 purge_acks(State = #passthrough{bq = BQ, bqs = BQS}) ->
     ?passthrough1(purge_acks(BQS)).
 
-publish(Msg, MsgProps, IsDelivered, ChPid, Flow, State = #state{bq = BQ}) ->
+publish(Msg, MsgProps, IsDelivered, ChPid, State = #state{bq = BQ}) ->
     pick1(fun (_P, BQSN) ->
-                  BQ:publish(Msg, MsgProps, IsDelivered, ChPid, Flow, BQSN)
+                  BQ:publish(Msg, MsgProps, IsDelivered, ChPid, BQSN)
           end, Msg, State);
-publish(Msg, MsgProps, IsDelivered, ChPid, Flow,
+publish(Msg, MsgProps, IsDelivered, ChPid,
         State = #passthrough{bq = BQ, bqs = BQS}) ->
-    ?passthrough1(publish(Msg, MsgProps, IsDelivered, ChPid, Flow, BQS)).
+    ?passthrough1(publish(Msg, MsgProps, IsDelivered, ChPid, BQS)).
 
-batch_publish(Publishes, ChPid, Flow, State = #state{bq = BQ, bqss = [{MaxP, _} |_]}) ->
-    PubMap = partition_publish_batch(Publishes, MaxP),
-    lists:foldl(
-      fun ({Priority, Pubs}, St) ->
-              pick1(fun (_P, BQSN) ->
-                            BQ:batch_publish(Pubs, ChPid, Flow, BQSN)
-                    end, Priority, St)
-      end, State, maps:to_list(PubMap));
-batch_publish(Publishes, ChPid, Flow,
-              State = #passthrough{bq = BQ, bqs = BQS}) ->
-    ?passthrough1(batch_publish(Publishes, ChPid, Flow, BQS)).
-
-publish_delivered(Msg, MsgProps, ChPid, Flow, State = #state{bq = BQ}) ->
+publish_delivered(Msg, MsgProps, ChPid, State = #state{bq = BQ}) ->
     pick2(fun (P, BQSN) ->
                   {AckTag, BQSN1} = BQ:publish_delivered(
-                                      Msg, MsgProps, ChPid, Flow, BQSN),
+                                      Msg, MsgProps, ChPid, BQSN),
                   {{P, AckTag}, BQSN1}
           end, Msg, State);
-publish_delivered(Msg, MsgProps, ChPid, Flow,
+publish_delivered(Msg, MsgProps, ChPid,
                   State = #passthrough{bq = BQ, bqs = BQS}) ->
-    ?passthrough2(publish_delivered(Msg, MsgProps, ChPid, Flow, BQS)).
-
-batch_publish_delivered(Publishes, ChPid, Flow, State = #state{bq = BQ, bqss = [{MaxP, _} |_]}) ->
-    PubMap = partition_publish_delivered_batch(Publishes, MaxP),
-    {PrioritiesAndAcks, State1} =
-        lists:foldl(
-          fun ({Priority, Pubs}, {PriosAndAcks, St}) ->
-                  {PriosAndAcks1, St1} =
-                      pick2(fun (P, BQSN) ->
-                                    {AckTags, BQSN1} =
-                                        BQ:batch_publish_delivered(
-                                          Pubs, ChPid, Flow, BQSN),
-                                    {priority_on_acktags(P, AckTags), BQSN1}
-                            end, Priority, St),
-                  {[PriosAndAcks1 | PriosAndAcks], St1}
-          end, {[], State}, maps:to_list(PubMap)),
-    {lists:reverse(PrioritiesAndAcks), State1};
-batch_publish_delivered(Publishes, ChPid, Flow,
-                        State = #passthrough{bq = BQ, bqs = BQS}) ->
-    ?passthrough2(batch_publish_delivered(Publishes, ChPid, Flow, BQS)).
+    ?passthrough2(publish_delivered(Msg, MsgProps, ChPid, BQS)).
 
 %% TODO this is a hack. The BQ api does not give us enough information
 %% here - if we had the Msg we could look at its priority and forward
@@ -256,14 +224,14 @@ batch_publish_delivered(Publishes, ChPid, Flow,
 %% are talking to VQ*. discard/4 is used by HA, but that's "above" us
 %% (if in use) so we don't break that either, just some hypothetical
 %% alternate BQ implementation.
-discard(_MsgId, _ChPid, _Flow, State = #state{}) ->
+discard(_MsgId, _ChPid, State = #state{}) ->
     State;
     %% We should have something a bit like this here:
     %% pick1(fun (_P, BQSN) ->
-    %%               BQ:discard(MsgId, ChPid, Flow, BQSN)
+    %%               BQ:discard(MsgId, ChPid, BQSN)
     %%       end, Msg, State);
-discard(MsgId, ChPid, Flow, State = #passthrough{bq = BQ, bqs = BQS}) ->
-    ?passthrough1(discard(MsgId, ChPid, Flow, BQS)).
+discard(MsgId, ChPid, State = #passthrough{bq = BQ, bqs = BQS}) ->
+    ?passthrough1(discard(MsgId, ChPid, BQS)).
 
 drain_confirmed(State = #state{bq = BQ}) ->
     fold_append2(fun (_P, BQSN) -> BQ:drain_confirmed(BQSN) end, State);
@@ -599,10 +567,6 @@ a(State = #state{bqss = BQSs}) ->
     end.
 
 %%----------------------------------------------------------------------------
-partition_publish_batch(Publishes, MaxP) ->
-    partition_publishes(
-      Publishes, fun ({Msg, _, _}) -> Msg end, MaxP).
-
 partition_publish_delivered_batch(Publishes, MaxP) ->
     partition_publishes(
       Publishes, fun ({Msg, _}) -> Msg end, MaxP).

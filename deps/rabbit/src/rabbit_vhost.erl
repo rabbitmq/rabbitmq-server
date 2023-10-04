@@ -68,8 +68,6 @@ recover(VHost) ->
     rabbit_log:debug("rabbit_binding:recover/2 for vhost ~ts completed in ~fs", [VHost, Time/1000000]),
 
     ok = rabbit_amqqueue:start(Recovered),
-    %% Start queue mirrors.
-    ok = rabbit_mirror_queue_misc:on_vhost_up(VHost),
     ok.
 
 ensure_config_file(VHost) ->

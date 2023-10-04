@@ -44,24 +44,7 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config),
     ok.
 
-init_per_group(classic = Group, Config0) ->
-    ct:pal("init per group ~p", [Group]),
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config0) of
-        mnesia ->
-            Config = init_per_group0(classic, Config0),
-            rabbit_ct_broker_helpers:set_policy(
-              Config, 0,
-              <<"ha-policy">>, <<".*">>, <<"queues">>,
-              [{<<"ha-mode">>, <<"all">>}]),
-            Config;
-        {khepri, _} ->
-            {skip, "Classic queue mirroring not supported by Khepri"}
-    end;
 init_per_group(Group, Config) ->
-    ct:pal("init per group ~p", [Group]),
-    init_per_group0(Group, Config).
-
-init_per_group0(Group, Config) ->
     ClusterSize = 3,
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [{rmq_nodes_count, ClusterSize},

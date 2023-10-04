@@ -25,7 +25,7 @@
 
 register() ->
     %% Note: there are more validators registered from other modules,
-    %% such as rabbit_mirror_queue_misc
+    %% such as rabbit_quorum_queue
     [rabbit_registry:register(Class, Name, ?MODULE) ||
         {Class, Name} <- [{policy_validator, <<"alternate-exchange">>},
                           {policy_validator, <<"consumer-timeout">>},

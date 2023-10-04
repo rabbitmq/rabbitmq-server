@@ -67,15 +67,5 @@ raise_not_found(ReqData, Context) ->
         Context).
 %%--------------------------------------------------------------------
 
-action(<<"sync">>, Q, ReqData, Context) when ?is_amqqueue(Q) ->
-    QPid = amqqueue:get_pid(Q),
-    spawn(fun() -> rabbit_amqqueue:sync_mirrors(QPid) end),
-    {true, ReqData, Context};
-
-action(<<"cancel_sync">>, Q, ReqData, Context) when ?is_amqqueue(Q) ->
-    QPid = amqqueue:get_pid(Q),
-    _ = rabbit_amqqueue:cancel_sync_mirrors(QPid),
-    {true, ReqData, Context};
-
 action(Else, _Q, ReqData, Context) ->
     rabbit_mgmt_util:bad_request({unknown, Else}, ReqData, Context).

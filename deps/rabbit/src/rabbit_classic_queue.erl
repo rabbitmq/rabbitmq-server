@@ -84,41 +84,42 @@ declare(Q, Node) when ?amqqueue_is_classic(Q) ->
                         _   -> Node
                     end
             end,
-    Node2 = rabbit_mirror_queue_misc:initial_queue_node(Q, Node1),
-    case rabbit_vhost_sup_sup:get_vhost_sup(VHost, Node2) of
+    case rabbit_vhost_sup_sup:get_vhost_sup(VHost, Node1) of
         {ok, _} ->
             gen_server2:call(
-              rabbit_amqqueue_sup_sup:start_queue_process(Node2, Q, declare),
+              rabbit_amqqueue_sup_sup:start_queue_process(Node1, Q),
               {init, new}, infinity);
         {error, Error} ->
             {protocol_error, internal_error, "Cannot declare a queue '~ts' on node '~ts': ~255p",
-             [rabbit_misc:rs(QName), Node2, Error]}
+             [rabbit_misc:rs(QName), Node1, Error]}
     end.
 
-delete(Q, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_classic(Q) ->
-    case wait_for_promoted_or_stopped(Q) of
-        {promoted, Q1} ->
-            QPid = amqqueue:get_pid(Q1),
-            delegate:invoke(QPid, {gen_server2, call,
-                                   [{delete, IfUnused, IfEmpty, ActingUser},
-                                    infinity]});
-        {stopped, Q1} ->
-            #resource{name = Name, virtual_host = Vhost} = amqqueue:get_name(Q1),
-            case IfEmpty of
+delete(Q0, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_classic(Q0) ->
+    QName = amqqueue:get_name(Q0),
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} ->
+            QPid = amqqueue:get_pid(Q),
+            case rabbit_process:is_process_alive(QPid) of
                 true ->
-                    rabbit_log:error("Queue ~ts in vhost ~ts has its master node down and "
-                                     "no mirrors available or eligible for promotion. "
-                                     "The queue may be non-empty. "
-                                     "Refusing to force-delete.",
-                                     [Name, Vhost]),
-                    {error, not_empty};
+                    delegate:invoke(QPid, {gen_server2, call,
+                                           [{delete, IfUnused, IfEmpty, ActingUser},
+                                            infinity]});
                 false ->
-                    rabbit_log:warning("Queue ~ts in vhost ~ts has its master node is down and "
-                                       "no mirrors available or eligible for promotion. "
-                                       "Forcing queue deletion.",
-                                       [Name, Vhost]),
-                    delete_crashed_internal(Q1, ActingUser),
-                    {ok, 0}
+                    #resource{name = Name, virtual_host = Vhost} = QName,
+                    case IfEmpty of
+                        true ->
+                            rabbit_log:error("Queue ~ts in vhost ~ts is down. "
+                                             "The queue may be non-empty. "
+                                             "Refusing to force-delete.",
+                                             [Name, Vhost]),
+                            {error, not_empty};
+                        false ->
+                            rabbit_log:warning("Queue ~ts in vhost ~ts is down. "
+                                               "Forcing queue deletion.",
+                                               [Name, Vhost]),
+                            delete_crashed_internal(Q, ActingUser),
+                            {ok, 0}
+                    end
             end;
         {error, not_found} ->
             %% Assume the queue was deleted
@@ -128,10 +129,6 @@ delete(Q, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_classic(Q) ->
 is_recoverable(Q) when ?is_amqqueue(Q) and ?amqqueue_is_classic(Q) ->
     Node = node(),
     Node =:= amqqueue:qnode(Q) andalso
-    %% Terminations on node down will not remove the rabbit_queue
-    %% record if it is a mirrored queue (such info is now obtained from
-    %% the policy). Thus, we must check if the local pid is alive
-    %% - if the record is present - in order to restart.
     (not rabbit_db_queue:consistent_exists(amqqueue:get_name(Q))
      orelse not rabbit_process:is_process_alive(amqqueue:get_pid(Q))).
 
@@ -199,20 +196,9 @@ format(Q, _Ctx) when ?is_amqqueue(Q) ->
                 S ->
                     S
             end,
-    case rabbit_mirror_queue_misc:is_mirrored(Q) of
-        false ->
-            [{type, classic},
-             {state, State},
-             {node, node(amqqueue:get_pid(Q))}];
-        true ->
-            Slaves = amqqueue:get_slave_pids(Q),
-            SSlaves = amqqueue:get_sync_slave_pids(Q),
-            [{type, classic},
-             {state, State},
-             {slave_nodes, [node(S) || S <- Slaves]},
-             {synchronised_slave_nodes, [node(S) || S <- SSlaves]},
-             {node, node(amqqueue:get_pid(Q))}]
-    end.
+    [{type, classic},
+     {state, State},
+     {node, node(amqqueue:get_pid(Q))}].
 
 -spec init(amqqueue:amqqueue()) -> {ok, state()}.
 init(Q) when ?amqqueue_is_classic(Q) ->
@@ -332,21 +318,14 @@ handle_event(QName, {reject_publish, SeqNo, _QPid},
     Actions = [{rejected, QName, Rejected}],
     {ok, State#?STATE{unconfirmed = U}, Actions};
 handle_event(QName, {down, Pid, Info}, #?STATE{monitored = Monitored,
-                                               pid = MasterPid,
                                                unconfirmed = U0} = State0) ->
     State = State0#?STATE{monitored = maps:remove(Pid, Monitored)},
-    Actions0 = case Pid =:= MasterPid of
-                   true ->
-                       [{queue_down, QName}];
-                   false ->
-                       []
-              end,
+    Actions0 = [{queue_down, QName}],
     case rabbit_misc:is_abnormal_exit(Info) of
-        false when Info =:= normal andalso Pid == MasterPid ->
-            %% queue was deleted and masterpid is down
+        false when Info =:= normal ->
+            %% queue was deleted
             {eol, []};
         false ->
-            %% this assumes the mirror isn't part of the active set
             MsgSeqNos = maps:keys(
                           maps:filter(fun (_, #msg_status{pending = Pids}) ->
                                               lists:member(Pid, Pids)
@@ -359,8 +338,7 @@ handle_event(QName, {down, Pid, Info}, #?STATE{monitored = Monitored,
             {ok, State#?STATE{unconfirmed = Unconfirmed}, Actions};
         true ->
             %% any abnormal exit should be considered a full reject of the
-            %% oustanding message ids - If the message didn't get to all
-            %% mirrors we have to assume it will never get there
+            %% oustanding message ids
             MsgIds = maps:fold(
                           fun (SeqNo, Status, Acc) ->
                                   case lists:member(Pid, Status#msg_status.pending) of
@@ -401,8 +379,8 @@ deliver(Qs0, Msg0, Options) ->
     Flow = maps:get(flow, Options, noflow),
     Confirm = MsgSeqNo /= undefined,
 
-    {MPids, SPids, Qs} = qpids(Qs0, Confirm, MsgSeqNo),
-    Delivery = rabbit_basic:delivery(Mandatory, Confirm, Msg, MsgSeqNo, Flow),
+    {MPids, Qs} = qpids(Qs0, Confirm, MsgSeqNo),
+    Delivery = rabbit_basic:delivery(Mandatory, Confirm, Msg, MsgSeqNo),
 
     case Flow of
         %% Here we are tracking messages sent by the rabbit_channel
@@ -410,14 +388,11 @@ deliver(Qs0, Msg0, Options) ->
         %% dictionary.
         flow ->
             _ = [credit_flow:send(QPid) || QPid <- MPids],
-            _ = [credit_flow:send(QPid) || QPid <- SPids],
             ok;
         noflow -> ok
     end,
     MMsg = {deliver, Delivery, false},
-    SMsg = {deliver, Delivery, true},
     delegate:invoke_no_result(MPids, {gen_server2, cast, [MMsg]}),
-    delegate:invoke_no_result(SPids, {gen_server2, cast, [SMsg]}),
     {Qs, []}.
 
 -spec dequeue(rabbit_amqqueue:name(), NoAck :: boolean(),
@@ -466,62 +441,27 @@ purge(Q) when ?is_amqqueue(Q) ->
 
 qpids(Qs, Confirm, MsgNo) ->
     lists:foldl(
-      fun ({Q, S0}, {MPidAcc, SPidAcc, Qs0}) ->
+      fun ({Q, S0}, {MPidAcc, Qs0}) ->
               QPid = amqqueue:get_pid(Q),
-              SPids = amqqueue:get_slave_pids(Q),
               QRef = amqqueue:get_name(Q),
               S1 = ensure_monitor(QPid, QRef, S0),
-              S2 = lists:foldl(fun(SPid, Acc) ->
-                                       ensure_monitor(SPid, QRef, Acc)
-                               end, S1, SPids),
               %% confirm record only if necessary
-              S = case S2 of
+              S = case S1 of
                       #?STATE{unconfirmed = U0} ->
-                          Rec = [QPid | SPids],
+                          Rec = [QPid],
                           U = case Confirm of
                                   false ->
                                       U0;
                                   true ->
                                       U0#{MsgNo => #msg_status{pending = Rec}}
                               end,
-                          S2#?STATE{pid = QPid,
+                          S1#?STATE{pid = QPid,
                                     unconfirmed = U};
                       stateless ->
-                          S2
+                          S1
                   end,
-              {[QPid | MPidAcc], SPidAcc ++ SPids,
-               [{Q, S} | Qs0]}
-      end, {[], [], []}, Qs).
-
-%% internal-ish
--spec wait_for_promoted_or_stopped(amqqueue:amqqueue()) ->
-    {promoted, amqqueue:amqqueue()} |
-    {stopped, amqqueue:amqqueue()} |
-    {error, not_found}.
-wait_for_promoted_or_stopped(Q0) ->
-    QName = amqqueue:get_name(Q0),
-    case rabbit_amqqueue:lookup(QName) of
-        {ok, Q} ->
-            QPid = amqqueue:get_pid(Q),
-            SPids = amqqueue:get_slave_pids(Q),
-            case rabbit_process:is_process_alive(QPid) of
-                true  -> {promoted, Q};
-                false ->
-                    case lists:any(fun(Pid) ->
-                                       rabbit_process:is_process_alive(Pid)
-                                   end, SPids) of
-                        %% There is a live slave. May be promoted
-                        true ->
-                            timer:sleep(100),
-                            wait_for_promoted_or_stopped(Q);
-                        %% All slave pids are stopped.
-                        %% No process left for the queue
-                        false -> {stopped, Q}
-                    end
-            end;
-        {error, not_found} ->
-            {error, not_found}
-    end.
+              {[QPid | MPidAcc], [{Q, S} | Qs0]}
+      end, {[], []}, Qs).
 
 -spec delete_crashed(amqqueue:amqqueue()) -> ok.
 delete_crashed(Q) ->
@@ -555,7 +495,7 @@ delete_crashed_in_backing_queue(Q) ->
 recover_durable_queues(QueuesAndRecoveryTerms) ->
     {Results, Failures} =
         gen_server2:mcall(
-          [{rabbit_amqqueue_sup_sup:start_queue_process(node(), Q, recovery),
+          [{rabbit_amqqueue_sup_sup:start_queue_process(node(), Q),
             {init, {self(), Terms}}} || {Q, Terms} <- QueuesAndRecoveryTerms]),
     [rabbit_log:error("Queue ~tp failed to initialise: ~tp",
                       [Pid, Error]) || {Pid, Error} <- Failures],

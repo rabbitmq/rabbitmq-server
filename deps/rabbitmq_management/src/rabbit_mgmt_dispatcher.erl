@@ -197,7 +197,6 @@ dispatcher() ->
      {"/health/checks/port-listener/:port",                    rabbit_mgmt_wm_health_check_port_listener, []},
      {"/health/checks/protocol-listener/:protocol",            rabbit_mgmt_wm_health_check_protocol_listener, []},
      {"/health/checks/virtual-hosts",                          rabbit_mgmt_wm_health_check_virtual_hosts, []},
-     {"/health/checks/node-is-mirror-sync-critical",           rabbit_mgmt_wm_health_check_node_is_mirror_sync_critical, []},
      {"/health/checks/node-is-quorum-critical",                rabbit_mgmt_wm_health_check_node_is_quorum_critical, []},
      {"/reset",                                                rabbit_mgmt_wm_reset, []},
      {"/reset/:node",                                          rabbit_mgmt_wm_reset, []},

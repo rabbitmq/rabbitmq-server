@@ -153,8 +153,6 @@ cluster_size_3_tests() ->
 
 mnesia_store_tests() ->
     [
-     consuming_classic_mirrored_queue_down,
-     flow_classic_mirrored_queue,
      publish_to_all_queue_types_qos0,
      publish_to_all_queue_types_qos1
     ].
@@ -399,17 +397,12 @@ publish_to_all_queue_types(Config, QoS) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config),
 
     CQ = <<"classic-queue">>,
-    CMQ = <<"classic-mirrored-queue">>,
     QQ = <<"quorum-queue">>,
     SQ = <<"stream-queue">>,
     Topic = <<"mytopic">>,
 
     declare_queue(Ch, CQ, []),
     bind(Ch, CQ, Topic),
-
-    ok = rabbit_ct_broker_helpers:set_ha_policy(Config, 0, CMQ, <<"all">>),
-    declare_queue(Ch, CMQ, []),
-    bind(Ch, CMQ, Topic),
 
     declare_queue(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
     bind(Ch, QQ, Topic),
@@ -433,7 +426,7 @@ publish_to_all_queue_types(Config, QoS) ->
     eventually(?_assert(
                   begin
                       L = rabbitmqctl_list(Config, 0, ["list_queues", "messages", "--no-table-headers"]),
-                      length(L) =:= 4 andalso
+                      length(L) =:= 3 andalso
                       lists:all(fun([Bin]) ->
                                         N = binary_to_integer(Bin),
                                         case QoS of
@@ -448,8 +441,7 @@ publish_to_all_queue_types(Config, QoS) ->
                                 end, L)
                   end), 2000, 10),
 
-    delete_queue(Ch, [CQ, CMQ, QQ, SQ]),
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, CMQ),
+    delete_queue(Ch, [CQ, QQ, SQ]),
     ok = emqtt:disconnect(C),
     ?awaitMatch([],
                 all_connection_pids(Config), 10_000, 1000).
@@ -512,23 +504,6 @@ publish_to_all_non_deprecated_queue_types(Config, QoS) ->
     ok = emqtt:disconnect(C),
     ?awaitMatch([],
                 all_connection_pids(Config), 10_000, 1000).
-
-flow_classic_mirrored_queue(Config) ->
-    QueueName = <<"flow">>,
-    ok = rabbit_ct_broker_helpers:set_ha_policy(Config, 0, QueueName, <<"all">>),
-    %% New nodes lookup via persistent_term:get/1.
-    %% Old nodes lookup via application:get_env/2.
-    %% Therefore, we set both persistent_term and application.
-    Key = credit_flow_default_credit,
-    Val = {2, 1},
-    DefaultVal = rabbit_ct_broker_helpers:rpc(Config, persistent_term, get, [Key]),
-    Result = rpc_all(Config, persistent_term, put, [Key, Val]),
-    ?assert(lists:all(fun(R) -> R =:= ok end, Result)),
-
-    flow(Config, {rabbit, Key, Val}, <<"classic">>),
-
-    ?assertEqual(Result, rpc_all(Config, persistent_term, put, [Key, DefaultVal])),
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, QueueName).
 
 flow_quorum_queue(Config) ->
     flow(Config, {rabbit, quorum_commands_soft_limit, 1}, <<"quorum">>).
@@ -828,48 +803,6 @@ queue_down_qos1(Config) ->
     delete_queue(Ch0, CQ),
     ok = emqtt:disconnect(C).
 
-%% Even though classic mirrored queues are deprecated, we know that some users have set up
-%% a policy to mirror MQTT queues. So, we need to support that use case in RabbitMQ 3.x
-%% and failover consumption when the classic mirrored queue leader fails.
-consuming_classic_mirrored_queue_down(Config) ->
-    [Server1, Server2, _Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    ClientId = Topic = PolicyName = atom_to_binary(?FUNCTION_NAME),
-
-    ok = rabbit_ct_broker_helpers:set_policy(
-           Config, Server1, PolicyName, <<".*">>, <<"queues">>,
-           [{<<"ha-mode">>, <<"all">>},
-            {<<"queue-master-locator">>, <<"client-local">>}]),
-
-    %% Declare queue leader on Server1.
-    C1 = connect(ClientId, Config, Server1, non_clean_sess_opts()),
-    {ok, _, _} = emqtt:subscribe(C1, Topic, qos1),
-    ok = emqtt:disconnect(C1),
-
-    %% Consume from Server2.
-    C2 = connect(ClientId, Config, Server2, non_clean_sess_opts()),
-
-    %% Sanity check that consumption works.
-    {ok, _} = emqtt:publish(C2, Topic, <<"m1">>, qos1),
-    ok = expect_publishes(C2, Topic, [<<"m1">>]),
-
-    %% Let's stop the queue leader node.
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
-
-    %% Consumption should continue to work.
-    {ok, _} = emqtt:publish(C2, Topic, <<"m2">>, qos1),
-    ok = expect_publishes(C2, Topic, [<<"m2">>]),
-
-    %% Cleanup
-    ok = emqtt:disconnect(C2),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
-    ?assertMatch([_Q],
-                 rpc(Config, Server1, rabbit_amqqueue, list, [])),
-    C3 = connect(ClientId, Config, Server2, [{clean_start, true}]),
-    ok = emqtt:disconnect(C3),
-    ?assertEqual([],
-                 rpc(Config, Server1, rabbit_amqqueue, list, [])),
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, Server1, PolicyName).
-
 %% Consuming classic queue on a different node goes down.
 consuming_classic_queue_down(Config) ->
     [Server1, _Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -891,7 +824,7 @@ consuming_classic_queue_down(Config) ->
     process_flag(trap_exit, true),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
 
-    %% When the dedicated MQTT connection (non-mirrored classic) queue goes down, it is reasonable
+    %% When the dedicated MQTT connection queue goes down, it is reasonable
     %% that the server closes the MQTT connection because the MQTT client cannot consume anymore.
     eventually(?_assertMatch(#{consumers := 0},
                              get_global_counters(Config, ProtoVer, Server3)),

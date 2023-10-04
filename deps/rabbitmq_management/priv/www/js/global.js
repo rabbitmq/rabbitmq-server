@@ -471,18 +471,6 @@ var HELP = {
 
     'binary-use' : '<p>Binary accounting is not exact; binaries are shared between processes (and thus the same binary might be counted in more than one section), and the VM does not allow us to track binaries that are not associated with processes (so some binary use might not appear at all).</p>',
 
-    'policy-ha-mode' : 'One of <code>all</code> (mirror to all nodes in the cluster), <code>exactly</code> (mirror to a set number of nodes) or <code>nodes</code> (mirror to an explicit list of nodes). If you choose one of the latter two, you must also set <code>ha-params</code>.',
-
-    'policy-ha-params' : 'Absent if <code>ha-mode</code> is <code>all</code>, a number\
-    if <code>ha-mode</code> is <code>exactly</code>, or a list\
-    of strings if <code>ha-mode</code> is <code>nodes</code>.',
-
-    'policy-ha-sync-mode' : 'One of <code>manual</code> or <code>automatic</code>. <a target="_blank" href="https://www.rabbitmq.com/ha.html#unsynchronised-mirrors">Learn more</a>',
-
-    'policy-ha-promote-on-shutdown' : 'One of <code>when-synced</code> or <code>always</code>. <a target="_blank" href="https://www.rabbitmq.com/ha.html#unsynchronised-mirrors">Learn more</a>',
-
-    'policy-ha-promote-on-failure' : 'One of <code>when-synced</code> or <code>always</code>. <a target="_blank" href="https://www.rabbitmq.com/ha.html#unsynchronised-mirrors">Learn more</a>',
-
     'policy-federation-upstream-set' :
     'A string; only if the federation plugin is enabled. Chooses the name of a set of upstreams to use with federation, or "all" to use all upstreams. Incompatible with <code>federation-upstream</code>.',
 

@@ -367,15 +367,13 @@ info_head_message_timestamp1(_Config) ->
                                                 timestamp = 1000},
                         payload_fragments_rev = []},
     {ok, Msg1} = mc_amqpl:message(ExName, <<>>, Content1, #{id => <<"msg1">>}),
-    BQS2 = PQ:publish(Msg1, #message_properties{size = 0}, false, self(),
-      noflow, BQS1),
+    BQS2 = PQ:publish(Msg1, #message_properties{size = 0}, false, self(), BQS1),
     1000 = PQ:info(head_message_timestamp, BQS2),
     %% Publish a higher priority message with no timestamp.
     Content2 = #content{properties = #'P_basic'{priority = 2},
                         payload_fragments_rev = []},
     {ok, Msg2} = mc_amqpl:message(ExName, <<>>, Content2, #{id => <<"msg2">>}),
-    BQS3 = PQ:publish(Msg2, #message_properties{size = 0}, false, self(),
-      noflow, BQS2),
+    BQS3 = PQ:publish(Msg2, #message_properties{size = 0}, false, self(), BQS2),
     '' = PQ:info(head_message_timestamp, BQS3),
     %% Consume message with no timestamp.
     {{Msg2, _, _}, BQS4} = PQ:fetch(false, BQS3),
@@ -435,7 +433,7 @@ info_oldest_message_received_timestamp1(_Config) ->
                         payload_fragments_rev = []},
     {ok, Msg1} = mc_amqpl:message(ExName, <<>>, Content1, #{id => <<"msg1">>}),
     BQS2 = PQ:publish(Msg1, #message_properties{size = 0}, false, self(),
-                      noflow, BQS1),
+                      BQS1),
     Ts1 = PQ:info(oldest_message_received_timestamp, BQS2),
     ?assert(is_integer(Ts1)),
     %% Publish a higher priority message.
@@ -443,7 +441,7 @@ info_oldest_message_received_timestamp1(_Config) ->
                         payload_fragments_rev = []},
     {ok, Msg2} = mc_amqpl:message(ExName, <<>>, Content2, #{id => <<"msg2">>}),
     BQS3 = PQ:publish(Msg2, #message_properties{size = 0}, false, self(),
-                      noflow, BQS2),
+                      BQS2),
     %% Even though is highest priority, the lower priority message is older.
     %% Timestamp hasn't changed.
     ?assertEqual(Ts1, PQ:info(oldest_message_received_timestamp, BQS3)),

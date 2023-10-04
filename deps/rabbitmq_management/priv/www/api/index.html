@@ -559,9 +559,7 @@ vary: accept, accept-encoding, origin</pre>
         <td>X</td>
         <td class="path">/api/queues/<i>vhost</i>/<i>name</i>/actions</td>
         <td>
-          Actions that can be taken on a queue. POST a body like:
-          <pre>{"action":"sync"}</pre> Currently the actions which are
-          supported are <code>sync</code> and <code>cancel_sync</code>.
+          Actions that can be taken on a queue. Currently no actions are supported.
         </td>
       </tr>
 
@@ -1068,19 +1066,6 @@ or:
         <td class="path">/api/health/checks/virtual-hosts</td>
         <td>
           Responds a 200 OK if all virtual hosts and running on the target node,
-          otherwise responds with a 503 Service Unavailable.
-        </td>
-      </tr>
-      <tr>
-        <td>X</td>
-        <td></td>
-        <td></td>
-        <td></td>
-        <td class="path">/api/health/checks/node-is-mirror-sync-critical</td>
-        <td>
-          Checks if there are classic mirrored queues without synchronised mirrors online
-          (queues that would potentially lose data if the target node is shut down).
-          Responds a 200 OK if there are no such classic mirrored queues,
           otherwise responds with a 503 Service Unavailable.
         </td>
       </tr>

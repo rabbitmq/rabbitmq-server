@@ -36,7 +36,6 @@ groups() ->
      {mnesia_store, [],
       [
        {classic_queue, [parallel], PublisherConfirmTests ++ [confirm_nack]},
-       {mirrored_queue, [parallel], PublisherConfirmTests ++ [confirm_nack]},
        {quorum_queue, [parallel], PublisherConfirmTests},
        {quorum_queue, [], [confirm_minority]}
       ]},
@@ -73,14 +72,6 @@ init_per_group(quorum_queue, Config) ->
       Config,
       [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
        {queue_durable, true}]);
-init_per_group(mirrored_queue, Config) ->
-    rabbit_ct_broker_helpers:set_ha_policy(Config, 0, <<"^max_length.*queue">>,
-        <<"all">>, [{<<"ha-sync-mode">>, <<"automatic">>}]),
-    Config1 = rabbit_ct_helpers:set_config(
-                Config, [{is_mirrored, true},
-                         {queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
-                         {queue_durable, true}]),
-    rabbit_ct_helpers:run_steps(Config1, []);
 init_per_group(mnesia_store = Group, Config0) ->
     Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
     init_per_group0(Group, Config);
@@ -379,13 +370,6 @@ consume(Ch, QName, Payloads) ->
 
 consume_empty(Ch, QName) ->
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}).
-
-sync_mirrors(QName, Config) ->
-    case ?config(is_mirrored, Config) of
-        true ->
-            rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, [<<"sync_queue">>, QName]);
-        _ -> ok
-    end.
 
 receive_many([]) ->
     ok;

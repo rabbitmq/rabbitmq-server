@@ -9,7 +9,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/2]).
+-export([start_link/1]).
 
 -export([init/1]).
 
@@ -17,19 +17,19 @@
 
 %%----------------------------------------------------------------------------
 
--spec start_link(amqqueue:amqqueue(), rabbit_prequeue:start_mode()) ->
+-spec start_link(amqqueue:amqqueue()) ->
           {'ok', pid(), pid()}.
 
-start_link(Q, StartMode) ->
+start_link(Q) ->
     Marker = spawn_link(fun() -> receive stop -> ok end end),
-    StartMFA = {rabbit_prequeue, start_link, [Q, StartMode, Marker]},
+    StartMFA = {rabbit_amqqueue_process, start_link, [Q, Marker]},
     ChildSpec = #{id => rabbit_amqqueue,
                   start => StartMFA,
                   restart => transient,
                   significant => true,
                   shutdown => ?CLASSIC_QUEUE_WORKER_WAIT,
                   type => worker,
-                  modules => [rabbit_amqqueue_process, rabbit_mirror_queue_slave]},
+                  modules => [rabbit_amqqueue_process]},
     {ok, SupPid} = supervisor:start_link(?MODULE, []),
     {ok, QPid} = supervisor:start_child(SupPid, ChildSpec),
     unlink(Marker),
