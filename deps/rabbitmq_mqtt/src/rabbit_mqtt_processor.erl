@@ -39,6 +39,13 @@
 -define(CONSUMER_TAG, <<"mqtt">>).
 
 -type send_fun() :: fun((iodata()) -> ok).
+<<<<<<< HEAD
+=======
+-type session_expiry_interval() :: non_neg_integer() | infinity.
+-type subscriptions() :: #{topic_filter() => #mqtt_subscription_opts{}}.
+-type topic_aliases() :: {Inbound :: #{pos_integer() => topic()},
+                          Outbound :: #{topic() => pos_integer()}}.
+>>>>>>> d56ff59e61 (Fix MQTT Topic Alias type spec)
 
 -record(auth_state,
         {user :: #user{},
