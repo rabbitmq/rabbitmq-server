@@ -44,7 +44,7 @@
 -type send_fun() :: fun((iodata()) -> ok).
 -type session_expiry_interval() :: non_neg_integer() | infinity.
 -type subscriptions() :: #{topic_filter() => #mqtt_subscription_opts{}}.
--type topic_aliases() :: {Inbound :: #{topic() => pos_integer()},
+-type topic_aliases() :: {Inbound :: #{pos_integer() => topic()},
                           Outbound :: #{topic() => pos_integer()}}.
 
 -record(auth_state,
