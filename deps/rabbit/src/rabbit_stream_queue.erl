@@ -487,9 +487,16 @@ recover(_VHost, Queues) ->
               {[Q | R0], F0}
       end, {[], []}, Queues).
 
+<<<<<<< HEAD
 settle(QName, complete, CTag, MsgIds, #stream_client{readers = Readers0,
                                               local_pid = LocalPid,
                                               name = Name} = State) ->
+=======
+settle(QName, _, CTag, MsgIds, #stream_client{readers = Readers0,
+                                                     local_pid = LocalPid,
+                                                     name = Name} = State) ->
+    %% all settle reasons will "give credit" to the stream queue
+>>>>>>> 8db5316b87 (Stream queue: treat discard and return like settle)
     Credit = length(MsgIds),
     {Readers, Msgs} = case Readers0 of
                           #{CTag := #stream{credit = Credit0} = Str0} ->
@@ -499,11 +506,7 @@ settle(QName, complete, CTag, MsgIds, #stream_client{readers = Readers0,
                           _ ->
                               {Readers0, []}
                       end,
-    {State#stream_client{readers = Readers}, [{deliver, CTag, true, Msgs}]};
-settle(_, _, _, _, #stream_client{name = Name}) ->
-    {protocol_error, not_implemented,
-     "basic.nack and basic.reject not supported by stream queues ~ts",
-     [rabbit_misc:rs(Name)]}.
+    {State#stream_client{readers = Readers}, [{deliver, CTag, true, Msgs}]}.
 
 info(Q, all_keys) ->
     info(Q, ?INFO_KEYS);

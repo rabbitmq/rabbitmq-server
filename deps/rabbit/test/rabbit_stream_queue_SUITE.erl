@@ -1066,6 +1066,7 @@ consume_with_autoack(Config) ->
        subscribe(Ch1, Q, true, 0)),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
+<<<<<<< HEAD
 consume_and_nack(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -1094,6 +1095,8 @@ consume_and_nack(Config) ->
     end,
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
+=======
+>>>>>>> 8db5316b87 (Stream queue: treat discard and return like settle)
 basic_cancel(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -1298,6 +1301,7 @@ filter_consumers(Config, Server, CTag) ->
                 end, [], CInfo).
 
 consume_and_reject(Config) ->
+<<<<<<< HEAD
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -1333,7 +1337,15 @@ consume_and_reject(Config) ->
     end,
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
+=======
+    consume_and_(Config, fun (DT) -> #'basic.reject'{delivery_tag = DT} end).
+consume_and_nack(Config) ->
+    consume_and_(Config, fun (DT) -> #'basic.nack'{delivery_tag = DT} end).
+>>>>>>> 8db5316b87 (Stream queue: treat discard and return like settle)
 consume_and_ack(Config) ->
+    consume_and_(Config, fun (DT) -> #'basic.ack'{delivery_tag = DT} end).
+
+consume_and_(Config, AckFun) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -1348,8 +1360,7 @@ consume_and_ack(Config) ->
     subscribe(Ch1, Q, false, 0),
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
-            ok = amqp_channel:cast(Ch1, #'basic.ack'{delivery_tag = DeliveryTag,
-                                                     multiple     = false}),
+            ok = amqp_channel:cast(Ch1, AckFun(DeliveryTag)),
             %% It will succeed as ack is now a credit operation. We should be
             %% able to redeclare a queue (gen_server call op) as the channel
             %% should still be open and declare is an idempotent operation
