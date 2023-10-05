@@ -21,6 +21,7 @@ all() ->
 
 groups() ->
     [
+<<<<<<< HEAD
      {cluster_size_2, [], [
                            target_count_policy,
                            policy_ttl,
@@ -38,6 +39,34 @@ groups() ->
                            is_supported_operator_policy_delivery_limit,
                            is_supported_operator_policy_ha
                           ]}
+=======
+     {mnesia_store, [], [target_count_policy] ++ all_tests()},
+     {khepri_store, [], all_tests()},
+     {khepri_migration, [], [
+                             from_mnesia_to_khepri
+                            ]}
+    ].
+
+all_tests() ->
+    [
+     policy_ttl,
+     operator_policy_ttl,
+     operator_retroactive_policy_ttl,
+     operator_retroactive_policy_publish_ttl,
+     queue_type_specific_policies,
+     classic_queue_version_policies,
+     overflow_policies,
+     is_supported_operator_policy_expires,
+     is_supported_operator_policy_message_ttl,
+     is_supported_operator_policy_max_length,
+     is_supported_operator_policy_max_length,
+     is_supported_operator_policy_max_in_memory_length,
+     is_supported_operator_policy_max_in_memory_bytes,
+     is_supported_operator_policy_delivery_limit,
+     is_supported_operator_policy_target_group_size,
+     is_supported_operator_policy_overflow,
+     is_supported_operator_policy_ha
+>>>>>>> cffc77d396 (Add overflow as operpolicy)
     ].
 
 %% -------------------------------------------------------------------
@@ -279,6 +308,29 @@ classic_queue_version_policies(Config) ->
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.
 
+overflow_policies(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = <<"policy_overflow">>,
+    declare(Ch, QName),
+    DropHead = [{<<"overflow">>, <<"drop-head">>}],
+    RejectPub = [{<<"overflow">>, <<"reject-publish">>}],
+
+    Opts = #{config => Config,
+             server => Server,
+             qname  => QName},
+
+    %% OperPolicy has precedence always
+    verify_policies(DropHead, RejectPub, RejectPub, Opts),
+
+    delete(Ch, QName),
+    rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"policy">>),
+    rabbit_ct_broker_helpers:clear_operator_policy(Config, 0, <<"op_policy">>),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
+
+
 %% See supported policies in https://www.rabbitmq.com/parameters.html#operator-policies
 %% This test applies all supported operator policies to all queue types,
 %% and later verifies the effective policy definitions.
@@ -319,6 +371,20 @@ is_supported_operator_policy_delivery_limit(Config) ->
     effective_operator_policy_per_queue_type(
       Config, <<"delivery-limit">>, Value, undefined, Value, undefined).
 
+<<<<<<< HEAD
+=======
+is_supported_operator_policy_target_group_size(Config) ->
+    Value = 5,
+    effective_operator_policy_per_queue_type(
+      Config, <<"target-group-size">>, Value, undefined, Value, undefined).
+
+is_supported_operator_policy_overflow(Config) ->
+    Value = <<"drop-head">>,
+    effective_operator_policy_per_queue_type(
+      Config, <<"overflow">>, Value, Value, Value, undefined).
+
+
+>>>>>>> cffc77d396 (Add overflow as operpolicy)
 is_supported_operator_policy_ha(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
