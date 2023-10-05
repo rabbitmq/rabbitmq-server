@@ -1792,7 +1792,7 @@ add_member_not_running(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     ?assertEqual({error, node_not_running},
                  rpc:call(Server, rabbit_quorum_queue, add_member,
-                          [<<"/">>, QQ, 'rabbit@burrow', 5000])).
+                          [<<"/">>, QQ, 'rabbit@burrow', voter, 5000])).
 
 add_member_classic(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1801,7 +1801,7 @@ add_member_classic(Config) ->
     ?assertEqual({'queue.declare_ok', CQ, 0, 0}, declare(Ch, CQ, [])),
     ?assertEqual({error, classic_queue_not_supported},
                  rpc:call(Server, rabbit_quorum_queue, add_member,
-                          [<<"/">>, CQ, Server, 5000])).
+                          [<<"/">>, CQ, Server, voter, 5000])).
 
 add_member_wrong_type(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1811,7 +1811,7 @@ add_member_wrong_type(Config) ->
                  declare(Ch, SQ, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     ?assertEqual({error, not_quorum_queue},
                  rpc:call(Server, rabbit_quorum_queue, add_member,
-                          [<<"/">>, SQ, Server, 5000])).
+                          [<<"/">>, SQ, Server, voter, 5000])).
 
 add_member_already_a_member(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1822,14 +1822,14 @@ add_member_already_a_member(Config) ->
     %% idempotent by design
     ?assertEqual(ok,
                  rpc:call(Server, rabbit_quorum_queue, add_member,
-                          [<<"/">>, QQ, Server, 5000])).
+                          [<<"/">>, QQ, Server, voter, 5000])).
 
 add_member_not_found(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     QQ = ?config(queue_name, Config),
     ?assertEqual({error, not_found},
                  rpc:call(Server, rabbit_quorum_queue, add_member,
-                          [<<"/">>, QQ, Server, 5000])).
+                          [<<"/">>, QQ, Server, voter, 5000])).
 
 add_member(Config) ->
     [Server0, Server1] = Servers0 =
@@ -1840,12 +1840,12 @@ add_member(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     ?assertEqual({error, node_not_running},
                  rpc:call(Server0, rabbit_quorum_queue, add_member,
-                          [<<"/">>, QQ, Server1, 5000])),
+                          [<<"/">>, QQ, Server1, voter, 5000])),
     ok = rabbit_control_helper:command(stop_app, Server1),
     ok = rabbit_control_helper:command(join_cluster, Server1, [atom_to_list(Server0)], []),
     rabbit_control_helper:command(start_app, Server1),
     ?assertEqual(ok, rpc:call(Server1, rabbit_quorum_queue, add_member,
-                              [<<"/">>, QQ, Server1, 5000])),
+                              [<<"/">>, QQ, Server1, voter, 5000])),
     Info = rpc:call(Server0, rabbit_quorum_queue, infos,
                     [rabbit_misc:r(<<"/">>, queue, QQ)]),
     Servers = lists:sort(Servers0),

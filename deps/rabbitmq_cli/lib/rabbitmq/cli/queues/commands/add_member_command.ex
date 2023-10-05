@@ -10,21 +10,51 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  @default_timeout 5_000
+  defp default_opts, do: %{vhost: "/", membership: "promotable", timeout: 5_000}
 
   def merge_defaults(args, opts) do
-    timeout =
-      case opts[:timeout] do
-        nil -> @default_timeout
-        :infinity -> @default_timeout
-        other -> other
-      end
+    default = default_opts()
 
-    {args, Map.merge(%{vhost: "/", timeout: timeout}, opts)}
+    opts =
+      Map.update(
+        opts,
+        :timeout,
+        :infinity,
+        &case &1 do
+          :infinity -> default.timeout
+          other -> other
+        end
+      )
+
+    {args, Map.merge(default, opts)}
   end
 
-  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
-  use RabbitMQ.CLI.Core.AcceptsTwoPositionalArguments
+  def switches(),
+    do: [
+      timeout: :integer,
+      membership: :string
+    ]
+
+  def aliases(), do: [t: :timeout]
+
+  def validate(args, _) when length(args) < 2 do
+    {:validation_failure, :not_enough_args}
+  end
+
+  def validate(args, _) when length(args) > 2 do
+    {:validation_failure, :too_many_args}
+  end
+
+  def validate(_, %{membership: m})
+      when not (m == "promotable" or
+                  m == "non_voter" or
+                  m == "voter") do
+    {:validation_failure, "voter status '#{m}' is not recognised."}
+  end
+
+  def validate(_, _) do
+    :ok
+  end
 
   def validate_execution_environment(args, opts) do
     Validators.chain(
@@ -39,13 +69,19 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
     )
   end
 
-  def run([name, node] = _args, %{vhost: vhost, node: node_name, timeout: timeout}) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :add_member, [
-           vhost,
-           name,
-           to_atom(node),
-           timeout
-         ]) do
+  def run(
+        [name, node] = _args,
+        %{vhost: vhost, node: node_name, timeout: timeout, membership: membership}
+      ) do
+    args = [vhost, name, to_atom(node)]
+
+    args =
+      case to_atom(membership) do
+        :promotable -> args ++ [timeout]
+        other -> args ++ [other, timeout]
+      end
+
+    case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :add_member, args) do
       {:error, :classic_queue_not_supported} ->
         {:error, "Cannot add members to a classic queue"}
 
@@ -59,12 +95,13 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "add_member [--vhost <vhost>] <queue> <node>"
+  def usage, do: "add_member [--vhost <vhost>] <queue> <node> [--membership <promotable|voter>]"
 
   def usage_additional do
     [
       ["<queue>", "quorum queue name"],
-      ["<node>", "node to add a new replica on"]
+      ["<node>", "node to add a new replica on"],
+      ["--membership <promotable|voter>", "add a promotable non-voter (default) or full voter"]
     ]
   end
 

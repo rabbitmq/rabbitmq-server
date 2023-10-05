@@ -23,13 +23,20 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommandTest do
        timeout: context[:test_timeout] || 30000,
        vhost_pattern: ".*",
        queue_pattern: ".*",
+       membership: "promotable",
        errors_only: false
      }}
   end
 
   test "merge_defaults: defaults to reporting complete results" do
     assert @command.merge_defaults([], %{}) ==
-             {[], %{vhost_pattern: ".*", queue_pattern: ".*", errors_only: false}}
+             {[],
+              %{
+                vhost_pattern: ".*",
+                queue_pattern: ".*",
+                errors_only: false,
+                membership: "promotable"
+              }}
   end
 
   test "validate: when no arguments are provided, returns a failure" do
@@ -58,13 +65,30 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommandTest do
              {:validation_failure, :too_many_args}
   end
 
+  test "validate: when membership promotable is provided, returns a success" do
+    assert @command.validate(["quorum-queue-a", "all"], %{membership: "promotable"}) == :ok
+  end
+
+  test "validate: when membership voter is provided, returns a success" do
+    assert @command.validate(["quorum-queue-a", "all"], %{membership: "voter"}) == :ok
+  end
+
+  test "validate: when membership non_voter is provided, returns a success" do
+    assert @command.validate(["quorum-queue-a", "all"], %{membership: "non_voter"}) == :ok
+  end
+
+  test "validate: when wrong membership is provided, returns failure" do
+    assert @command.validate(["quorum-queue-a", "all"], %{membership: "banana"}) ==
+             {:validation_failure, "voter status 'banana' is not recognised."}
+  end
+
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
     assert match?(
              {:badrpc, _},
              @command.run(
                ["quorum-queue-a", "all"],
-               Map.merge(context[:opts], %{node: :jake@thedog, timeout: 200})
+               Map.merge(context[:opts], %{node: :jake@thedog})
              )
            )
   end
