@@ -36,7 +36,8 @@ groups() ->
                            is_supported_operator_policy_max_in_memory_length,
                            is_supported_operator_policy_max_in_memory_bytes,
                            is_supported_operator_policy_delivery_limit,
-                           is_supported_operator_policy_ha
+                           is_supported_operator_policy_ha,
+                           is_supported_operator_policy_overflow
                           ]}
     ].
 
@@ -279,6 +280,29 @@ classic_queue_version_policies(Config) ->
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.
 
+overflow_policies(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = <<"policy_overflow">>,
+    declare(Ch, QName),
+    DropHead = [{<<"overflow">>, <<"drop-head">>}],
+    RejectPub = [{<<"overflow">>, <<"reject-publish">>}],
+
+    Opts = #{config => Config,
+             server => Server,
+             qname  => QName},
+
+    %% OperPolicy has precedence always
+    verify_policies(DropHead, RejectPub, RejectPub, Opts),
+
+    delete(Ch, QName),
+    rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"policy">>),
+    rabbit_ct_broker_helpers:clear_operator_policy(Config, 0, <<"op_policy">>),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
+
+
 %% See supported policies in https://www.rabbitmq.com/parameters.html#operator-policies
 %% This test applies all supported operator policies to all queue types,
 %% and later verifies the effective policy definitions.
@@ -351,6 +375,11 @@ is_supported_operator_policy_ha(Config) ->
     rabbit_ct_client_helpers:close_channel(Ch),
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.
+
+is_supported_operator_policy_overflow(Config) ->
+    Value = <<"drop-head">>,
+    effective_operator_policy_per_queue_type(
+        Config, <<"overflow">>, Value, Value, Value, undefined).
 
 effective_operator_policy_per_queue_type(Config, Name, Value, ClassicValue, QuorumValue, StreamValue) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
