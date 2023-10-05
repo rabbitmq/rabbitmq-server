@@ -276,15 +276,24 @@ parse_offset_arg({_, V}) ->
 parse_offset_arg(V) ->
     {error, {invalid_offset_arg, V}}.
 
+
 get_local_pid(#stream_client{local_pid = Pid} = State)
-  when is_pid(Pid) ->
-    {Pid, State};
+    when is_pid(Pid) ->
+    case erlang:is_process_alive(Pid) of
+        true ->
+            {Pid, State};
+        false ->
+            query_local_pid(State)
+    end;
 get_local_pid(#stream_client{leader = Pid} = State)
-  when is_pid(Pid) andalso node(Pid) == node() ->
-    {Pid, State#stream_client{local_pid = Pid}};
-get_local_pid(#stream_client{stream_id = StreamId,
-                             local_pid = undefined} = State) ->
+    when is_pid(Pid) andalso node(Pid) == node() ->
+    get_local_pid(State#stream_client{local_pid = Pid});
+get_local_pid(#stream_client{} = State) ->
     %% query local coordinator to get pid
+    query_local_pid(State).
+
+
+query_local_pid(#stream_client{stream_id = StreamId} = State) ->
     case rabbit_stream_coordinator:local_pid(StreamId) of
         {ok, Pid} ->
             {Pid, State#stream_client{local_pid = Pid}};
