@@ -584,14 +584,14 @@ list_stream_tracking_run(Config) ->
 
     store_offset(S, Stream, ConsumerReference, 42, C),
 
-    ?assertMatch([[{type,offset}, {name, ConsumerReference}, {'offset (sequence)', 42}]],
+    ?assertMatch([[{type,offset}, {name, ConsumerReference}, {tracking_value, 42}]],
                 ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{all => true})),
 
-    ?assertMatch([[{type,offset}, {name, ConsumerReference}, {'offset', 42}]],
+    ?assertMatch([[{type,offset}, {name, ConsumerReference}, {tracking_value, 42}]],
                 ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{offset => true})),
 
     ok = store_offset(S, Stream, ConsumerReference, 55, C),
-    ?assertMatch([[{type,offset}, {name, ConsumerReference}, {'offset', 55}]],
+    ?assertMatch([[{type,offset}, {name, ConsumerReference}, {tracking_value, 55}]],
                 ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{offset => true})),
 
 
@@ -603,13 +603,13 @@ list_stream_tracking_run(Config) ->
     ok = check_publisher_sequence(S, Stream, PublisherReference, 42, C),
 
     ?assertMatch([
-                  [{type,writer},{name,<<"bar">>},{'offset (sequence)',"2 (42)"}],
-                  [{type,offset},{name,<<"foo">>},{'offset (sequence)',55}]
+                  [{type,writer},{name,<<"bar">>},{tracking_value, 42}],
+                  [{type,offset},{name,<<"foo">>},{tracking_value, 55}]
                  ],
                  ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{all => true})),
 
     ?assertMatch([
-                  [{type,writer},{name,<<"bar">>},{'offset (sequence)',"2 (42)"}]
+                  [{type,writer},{name,<<"bar">>},{tracking_value, 42}]
                  ],
                  ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{writer => true})),
 
@@ -618,7 +618,7 @@ list_stream_tracking_run(Config) ->
     ok = check_publisher_sequence(S, Stream, PublisherReference, 66, C),
 
     ?assertMatch([
-                  [{type,writer},{name,<<"bar">>},{'offset (sequence)',"3 (66)"}]
+                  [{type,writer},{name,<<"bar">>},{tracking_value, 66}]
                  ],
                  ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{writer => true})),
 

@@ -133,23 +133,23 @@ tracking_info(VHost, Stream, TrackingType) ->
             TrackingInfo = osiris:read_tracking(Leader),
             FieldsLabels = case TrackingType of
                                all ->
-                                   [{offsets, offset, 'offset (sequence)'}, {sequences, writer, 'offset (sequence)'}];
+                                   [{offsets, offset}, {sequences, writer}];
                                offset ->
-                                   [{offsets, offset, offset}];
+                                   [{offsets, offset}];
                                writer ->
-                                   [{sequences, writer, 'offset (sequence)'}]
+                                   [{sequences, writer}]
                            end,
-            lists:foldl(fun({F, L, C}, Acc) ->
+            lists:foldl(fun({F, L}, Acc) ->
                                 Tracking = maps:get(F, TrackingInfo, #{}),
-                                maps:fold(fun(Reference, {Offset, Sequence}, AccType) ->
+                                maps:fold(fun(Reference, {_, Sequence}, AccType) ->
                                                   [[{type, L},
                                                     {name, Reference},
-                                                    {C, lists:flatten(io_lib:format("~p (~p)", [Offset, Sequence]))}
+                                                    {tracking_value, Sequence}
                                                    ] | AccType];
                                              (Reference, Offset, AccType) ->
                                                   [[{type, L},
                                                     {name, Reference},
-                                                    {C, Offset}
+                                                    {tracking_value, Offset}
                                                    ] | AccType]
                                           end, Acc, Tracking)
                         end, [], FieldsLabels);
