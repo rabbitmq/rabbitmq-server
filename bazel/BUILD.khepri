@@ -24,16 +24,9 @@ erlang_bytecode(
     srcs = [
         "src/khepri_import_export.erl",
     ],
-    outs = [
-        "ebin/khepri_import_export.beam",
-    ],
-    hdrs = [
-        "src/khepri_cluster.hrl",
-        "src/khepri_machine.hrl",
-        "src/khepri_payload.hrl",
-        "src/khepri_tree.hrl",
-    ],
+    hdrs = [":public_and_private_hdrs"],
     app_name = "khepri",
+    dest = "ebin",
     erlc_opts = "//:erlc_opts",
 )
 
