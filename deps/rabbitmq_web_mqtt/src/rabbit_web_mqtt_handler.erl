@@ -58,6 +58,7 @@ takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, HandlerState}) 
 
 %% cowboy_websocket
 init(Req, Opts) ->
+<<<<<<< HEAD
     {PeerAddr, _PeerPort} = maps:get(peer, Req),
     {_, KeepaliveSup} = lists:keyfind(keepalive_sup, 1, Opts),
     SockInfo = maps:get(proxy_header, Req, undefined),
@@ -77,6 +78,23 @@ init(Req, Opts) ->
                        socket             = SockInfo,
                        peername           = PeerAddr
                       }, WsOpts}.
+=======
+    case cowboy_req:parse_header(<<"sec-websocket-protocol">>, Req) of
+        undefined ->
+            no_supported_sub_protocol(undefined, Req);
+        Protocol ->
+            case lists:member(<<"mqtt">>, Protocol) of
+                false ->
+                    no_supported_sub_protocol(Protocol, Req);
+                true ->
+                    WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
+                    WsOpts  = maps:merge(#{compress => true}, WsOpts0),
+                    ShouldUseFHC = application:get_env(?APP, use_file_handle_cache, true),
+                    case ShouldUseFHC of
+                      true  -> ?LOG_INFO("Web MQTT: file handle cache use is enabled");
+                      false -> ?LOG_INFO("Web MQTT: file handle cache use is disabled")
+                    end,
+>>>>>>> 14ced5eb28 (Web-MQTT: don't call FHC when connection terminates early)
 
 websocket_init(State0 = #state{socket = Sock, peername = PeerAddr}) ->
     ok = file_handle_cache:obtain(),
@@ -193,7 +211,21 @@ terminate(_, _, State) ->
 
 %% Internal.
 
+<<<<<<< HEAD
 handle_data(Data, State0 = #state{conn_name = ConnStr}) ->
+=======
+no_supported_sub_protocol(Protocol, Req) ->
+    %% The client MUST include “mqtt” in the list of WebSocket Sub Protocols it offers [MQTT-6.0.0-3].
+    ?LOG_ERROR("Web MQTT: 'mqtt' not included in client offered subprotocols: ~tp", [Protocol]),
+    %% Set should_use_fhc to false, because at this early stage of init no fhc
+    %% obtain was called, so terminate/3 should not call fhc release
+    %% (even if use_file_handle_cache is true)
+    {ok,
+     cowboy_req:reply(400, #{<<"connection">> => <<"close">>}, Req),
+     #state{should_use_fhc = false}}.
+
+handle_data(Data, State0 = #state{}) ->
+>>>>>>> 14ced5eb28 (Web-MQTT: don't call FHC when connection terminates early)
     case handle_data1(Data, State0) of
         {ok, State1 = #state{state = blocked}, hibernate} ->
             {[{active, false}], State1, hibernate};
