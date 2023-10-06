@@ -75,12 +75,12 @@ init(Req, Opts) ->
         undefined ->
             no_supported_sub_protocol(undefined, Req);
         Protocol ->
-            WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
-            WsOpts  = maps:merge(#{compress => true}, WsOpts0),
             case lists:member(<<"mqtt">>, Protocol) of
                 false ->
                     no_supported_sub_protocol(Protocol, Req);
                 true ->
+                    WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
+                    WsOpts  = maps:merge(#{compress => true}, WsOpts0),
                     ShouldUseFHC = application:get_env(?APP, use_file_handle_cache, true),
                     case ShouldUseFHC of
                       true  -> ?LOG_INFO("Web MQTT: file handle cache use is enabled");
@@ -278,7 +278,12 @@ terminate(_Reason, _Request,
 no_supported_sub_protocol(Protocol, Req) ->
     %% The client MUST include “mqtt” in the list of WebSocket Sub Protocols it offers [MQTT-6.0.0-3].
     ?LOG_ERROR("Web MQTT: 'mqtt' not included in client offered subprotocols: ~tp", [Protocol]),
-    {ok, cowboy_req:reply(400, #{<<"connection">> => <<"close">>}, Req), #state{}}.
+    %% Set should_use_fhc to false, because at this early stage of init no fhc
+    %% obtain was called, so terminate/3 should not call fhc release
+    %% (even if use_file_handle_cache is true)
+    {ok,
+     cowboy_req:reply(400, #{<<"connection">> => <<"close">>}, Req),
+     #state{should_use_fhc = false}}.
 
 handle_data(Data, State0 = #state{}) ->
     case handle_data1(Data, State0) of
