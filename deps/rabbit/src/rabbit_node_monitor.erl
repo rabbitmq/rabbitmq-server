@@ -980,8 +980,12 @@ ping_all() ->
 possibly_partitioned_nodes() ->
     alive_rabbit_nodes() -- rabbit_mnesia:cluster_nodes(running).
 
-startup_log([]) ->
-    rabbit_log:info("Starting rabbit_node_monitor", []);
 startup_log(Nodes) ->
-    rabbit_log:info("Starting rabbit_node_monitor, might be partitioned from ~tp",
-                    [Nodes]).
+    {ok, M} = application:get_env(rabbit, cluster_partition_handling),
+    startup_log(Nodes, M).
+
+startup_log([], PartitionHandling) ->
+    rabbit_log:info("Starting rabbit_node_monitor (in ~tp mode)", [PartitionHandling]);
+startup_log(Nodes, PartitionHandling) ->
+    rabbit_log:info("Starting rabbit_node_monitor (in ~tp mode), might be partitioned from ~tp",
+                    [Nodes, PartitionHandling]).
