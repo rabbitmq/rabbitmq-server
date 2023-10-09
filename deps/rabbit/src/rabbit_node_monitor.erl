@@ -34,6 +34,7 @@
 -define(NODE_REPLY_TIMEOUT, 5000).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
 -define(RABBIT_DOWN_PING_INTERVAL, 1000).
+-define(NODE_DISCONNECTION_TIMEOUT, 1000).
 
 -record(state, {monitors, partitions, subscribers, down_ping_timer,
                 keepalive_timer, autoheal, guid, node_guids}).
@@ -892,13 +893,23 @@ upgrade_to_full_partition(Proxy) ->
 %% detect a very short partition. So we want to force a slightly
 %% longer disconnect. Unfortunately we don't have a way to blacklist
 %% individual nodes; the best we can do is turn off auto-connect
-%% altogether.
+%% altogether. If Node is not already part of the connected nodes, then
+%% there's no need to repeat disabling dist_auto_connect and executing
+%% disconnect_node/1, which can result in application_controller
+%% timeouts and crash node monitor process. This also implies that
+%% the already disconnected node was already processed. In an
+%% unstable network, if we get consecutive 'up' and 'down' messages,
+%% then we expect disconnect_node/1 to be executed.
 disconnect(Node) ->
-    application:set_env(kernel, dist_auto_connect, never),
-    erlang:disconnect_node(Node),
-    timer:sleep(1000),
-    application:unset_env(kernel, dist_auto_connect),
-    ok.
+    case lists:member(Node, nodes()) of
+        true ->
+            application:set_env(kernel, dist_auto_connect, never),
+            erlang:disconnect_node(Node),
+            timer:sleep(?NODE_DISCONNECTION_TIMEOUT),
+            application:unset_env(kernel, dist_auto_connect);
+        false ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 
@@ -969,8 +980,12 @@ ping_all() ->
 possibly_partitioned_nodes() ->
     alive_rabbit_nodes() -- rabbit_mnesia:cluster_nodes(running).
 
-startup_log([]) ->
-    rabbit_log:info("Starting rabbit_node_monitor", []);
 startup_log(Nodes) ->
-    rabbit_log:info("Starting rabbit_node_monitor, might be partitioned from ~tp",
-                    [Nodes]).
+    {ok, M} = application:get_env(rabbit, cluster_partition_handling),
+    startup_log(Nodes, M).
+
+startup_log([], PartitionHandling) ->
+    rabbit_log:info("Starting rabbit_node_monitor (in ~tp mode)", [PartitionHandling]);
+startup_log(Nodes, PartitionHandling) ->
+    rabbit_log:info("Starting rabbit_node_monitor (in ~tp mode), might be partitioned from ~tp",
+                    [PartitionHandling, Nodes]).
