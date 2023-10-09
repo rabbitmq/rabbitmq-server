@@ -983,10 +983,6 @@ possibly_partitioned_nodes() ->
     alive_rabbit_nodes() -- rabbit_nodes:all_running().
 
 startup_log(Nodes) ->
-<<<<<<< HEAD
-    rabbit_log:info("Starting rabbit_node_monitor, might be partitioned from ~p",
-                    [Nodes]).
-=======
     {ok, M} = application:get_env(rabbit, cluster_partition_handling),
     startup_log(Nodes, M).
 
@@ -994,9 +990,5 @@ startup_log([], PartitionHandling) ->
     rabbit_log:info("Starting rabbit_node_monitor (in ~tp mode)", [PartitionHandling]);
 startup_log(Nodes, PartitionHandling) ->
     rabbit_log:info("Starting rabbit_node_monitor (in ~tp mode), might be partitioned from ~tp",
-<<<<<<< HEAD
-                    [Nodes, PartitionHandling]).
->>>>>>> 864ec125a3 (announce partition handling mechanism in node monitor start-up log)
-=======
                     [PartitionHandling, Nodes]).
->>>>>>> c55b431345 (oops, fix parameter ordering)
+
