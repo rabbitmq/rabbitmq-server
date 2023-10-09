@@ -18,6 +18,7 @@ def all_beam_files(name = "all_beam_files"):
             "src/rabbit_stream_management_utils.erl",
             "src/rabbit_stream_mgmt_db.erl",
             "src/rabbit_stream_publishers_mgmt.erl",
+            "src/rabbit_stream_tracking_mgmt.erl",
         ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_stream_management",
@@ -51,6 +52,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/rabbit_stream_management_utils.erl",
             "src/rabbit_stream_mgmt_db.erl",
             "src/rabbit_stream_publishers_mgmt.erl",
+            "src/rabbit_stream_tracking_mgmt.erl",
         ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_stream_management",
@@ -101,6 +103,7 @@ def all_srcs(name = "all_srcs"):
             "src/rabbit_stream_management_utils.erl",
             "src/rabbit_stream_mgmt_db.erl",
             "src/rabbit_stream_publishers_mgmt.erl",
+            "src/rabbit_stream_tracking_mgmt.erl",
         ],
     )
     filegroup(
