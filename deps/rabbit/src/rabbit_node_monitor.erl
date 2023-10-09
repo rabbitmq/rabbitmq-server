@@ -1017,4 +1017,4 @@ startup_log([], PartitionHandling) ->
     rabbit_log:info("Starting rabbit_node_monitor (in ~tp mode)", [PartitionHandling]);
 startup_log(Nodes, PartitionHandling) ->
     rabbit_log:info("Starting rabbit_node_monitor (in ~tp mode), might be partitioned from ~tp",
-                    [Nodes, PartitionHandling]).
+                    [PartitionHandling, Nodes]).
