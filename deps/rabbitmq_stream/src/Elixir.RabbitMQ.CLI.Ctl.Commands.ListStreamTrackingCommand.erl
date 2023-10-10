@@ -58,9 +58,9 @@ validate([], _Opts) ->
 validate([_Stream], Opts) ->
     case maps:with([all, writer, offset], Opts) of
         M when map_size(M) > 1 ->
-               {validation_failure,
-                "Specify only one of --all, --offset, --writer."};
-               _ ->
+            {validation_failure,
+             "Specify only one of --all, --offset, --writer."};
+        _ ->
             ok
     end;
 validate(_, _Opts) ->
@@ -75,7 +75,7 @@ merge_defaults(Args, Opts) ->
     end.
 
 usage() ->
-    <<"list_tracking <stream> [--all | --offset | --writer] "
+    <<"list_stream_tracking <stream> [--all | --offset | --writer] "
       "[--vhost <vhost>]">>.
 
 usage_additional() ->
@@ -124,6 +124,10 @@ run([Stream],
 banner([Stream], _) ->
     <<"Listing tracking information for stream ", Stream/binary, <<" ...">>/binary>>.
 
+output({ok, []}, _Opts) ->
+    ok;
+output([], _Opts) ->
+    ok;
 output(Result, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(Result).
 
