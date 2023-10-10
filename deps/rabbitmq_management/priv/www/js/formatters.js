@@ -194,8 +194,8 @@ function args_to_features(obj) {
     if (obj.messages_delayed != undefined){
         res['messages delayed'] = obj.messages_delayed;
     }
-    if (obj.backing_queue_status && obj.backing_queue_status.version){
-	res['queue storage version'] = obj.backing_queue_status.version
+    if (obj.storage_version){
+	res['queue storage version'] = obj.storage_version
     }
     return res;
 }

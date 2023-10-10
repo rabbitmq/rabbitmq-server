@@ -65,7 +65,10 @@ format_queue_stats({effective_policy_definition, []}) ->
 format_queue_stats({synchronised_slave_pids, Pids}) ->
     [{synchronised_slave_nodes, [node(Pid) || Pid <- Pids]}];
 format_queue_stats({backing_queue_status, Value}) ->
-    [{backing_queue_status, properties(Value)}];
+    case proplists:get_value(version, Value, undefined) of
+        undefined -> [];
+        Version   -> [{storage_version, Version}]
+    end;
 format_queue_stats({idle_since, Value}) ->
     [{idle_since, now_to_str(Value)}];
 format_queue_stats({state, Value}) ->

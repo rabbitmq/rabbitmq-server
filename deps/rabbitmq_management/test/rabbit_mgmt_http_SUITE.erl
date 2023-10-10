@@ -11,6 +11,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -import(rabbit_ct_client_helpers, [close_connection/1, close_channel/1,
                                    open_unmanaged_connection/1]).
@@ -1031,6 +1032,10 @@ queues_test(Config) ->
              ?BAD_REQUEST),
 
     http_put(Config, "/queues/%2F/baz", Good, {group, '2xx'}),
+    %% Wait until metrics are emitted and stats collected
+    ?awaitMatch(true, maps:is_key(storage_version,
+                                  http_get(Config, "/queues/%2F/baz")),
+                30000),
     Queues = http_get(Config, "/queues/%2F"),
     Queue = http_get(Config, "/queues/%2F/foo"),
     assert_list([#{name        => <<"baz">>,
@@ -1038,19 +1043,22 @@ queues_test(Config) ->
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
-                   arguments   => #{}},
+                   arguments   => #{},
+                   storage_version => 2},
                  #{name        => <<"foo">>,
                    vhost       => <<"/">>,
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
-                   arguments   => #{}}], Queues),
+                   arguments   => #{},
+                   storage_version => 2}], Queues),
     assert_item(#{name        => <<"foo">>,
                   vhost       => <<"/">>,
                   durable     => true,
                   auto_delete => false,
                   exclusive   => false,
-                  arguments   => #{}}, Queue),
+                  arguments   => #{},
+                  storage_version => 2}, Queue),
 
     http_delete(Config, "/queues/%2F/foo", {group, '2xx'}),
     http_delete(Config, "/queues/%2F/baz", {group, '2xx'}),
@@ -2201,8 +2209,8 @@ queue_pagination_test(Config) ->
     ?assertEqual(1, maps:get(page, PageOfTwo)),
     ?assertEqual(2, maps:get(page_size, PageOfTwo)),
     ?assertEqual(2, maps:get(page_count, PageOfTwo)),
-    assert_list([#{name => <<"test0">>, vhost => <<"/">>},
-                 #{name => <<"test2_reg">>, vhost => <<"/">>}
+    assert_list([#{name => <<"test0">>, vhost => <<"/">>, storage_version => 2},
+                 #{name => <<"test2_reg">>, vhost => <<"/">>, storage_version => 2}
                 ], maps:get(items, PageOfTwo)),
 
     SortedByName = http_get(Config, "/queues?sort=name&page=1&page_size=2", ?OK),
