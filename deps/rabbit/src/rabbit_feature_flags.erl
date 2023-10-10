@@ -227,7 +227,7 @@
 %% It is called when a feature flag is being enabled. The function is
 %% responsible for this feature-flag-specific verification and data
 %% conversion. It returns `ok' if RabbitMQ can mark the feature flag as
-%% enabled an continue with the next one, if any. `{error, Reason}' and
+%% enabled and continue with the next one, if any. `{error, Reason}' and
 %% exceptions are an error and the feature flag will remain disabled.
 %%
 %% The migration function is called on all nodes which fulfill the following
