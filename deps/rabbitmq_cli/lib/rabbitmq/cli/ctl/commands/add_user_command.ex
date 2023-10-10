@@ -29,8 +29,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
     case Base.decode64(base64_encoded_password_hash) do
       {:ok, _password_hash} ->
         :ok
+
       _ ->
-        {:validation_failure, {:bad_argument, "Could not Base64 decode provided password hash value"}}
+        {:validation_failure,
+         {:bad_argument, "Could not Base64 decode provided password hash value"}}
     end
   end
 
@@ -71,13 +73,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
               :add_user_with_pre_hashed_password_sans_validation,
               [username, password_hash, Helpers.cli_acting_user()]
             )
+
           _ ->
-            {:error, ExitCodes.exit_dataerr(), "Could not Base64 decode provided password hash value"}
+            {:error, ExitCodes.exit_dataerr(),
+             "Could not Base64 decode provided password hash value"}
         end
     end
   end
 
-  def run([username, base64_encoded_password_hash], %{node: node_name, pre_hashed_password: true} = opts) do
+  def run(
+        [username, base64_encoded_password_hash],
+        %{node: node_name, pre_hashed_password: true} = opts
+      ) do
     case Base.decode64(base64_encoded_password_hash) do
       {:ok, password_hash} ->
         :rabbit_misc.rpc_call(
@@ -86,6 +93,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
           :add_user_with_pre_hashed_password_sans_validation,
           [username, password_hash, Helpers.cli_acting_user()]
         )
+
       _ ->
         {:error, ExitCodes.exit_dataerr(), "Could not Base64 decode provided password hash value"}
     end

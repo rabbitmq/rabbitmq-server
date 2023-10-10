@@ -63,9 +63,9 @@ defmodule AddUserCommandTest do
     opts = Map.merge(context[:opts], %{pre_hashed_password: true})
 
     assert match?(
-         {:validation_failure, {:bad_argument, _}},
-         @command.validate([context[:user], hashed], opts)
-       )
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate([context[:user], hashed], opts)
+           )
   end
 
   @tag user: "someone", password: "password"
