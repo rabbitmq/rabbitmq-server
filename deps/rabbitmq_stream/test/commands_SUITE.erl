@@ -52,7 +52,8 @@ groups() ->
      {list_publishers, [],
       [list_publishers_merge_defaults, list_publishers_run]},
      {list_consumer_groups, [],
-      [list_consumer_groups_merge_defaults, list_consumer_groups_run]},
+      [list_consumer_groups_validate, list_consumer_groups_merge_defaults,
+       list_consumer_groups_run]},
      {list_group_consumers, [],
       [list_group_consumers_validate, list_group_consumers_merge_defaults,
        list_group_consumers_run]},
@@ -337,6 +338,18 @@ list_publishers_run(Config) ->
     close(S2, C2_2),
     ?awaitMatch(0, publisher_count(Config), ?WAIT),
     ok.
+
+list_consumer_groups_validate(_) ->
+    ValidOpts = #{vhost => <<"/">>},
+    ?assertMatch({validation_failure, {bad_info_key, [foo]}},
+                 ?COMMAND_LIST_CONSUMER_GROUPS:validate([<<"foo">>],
+                                                        ValidOpts)),
+    ?assertMatch(ok,
+                 ?COMMAND_LIST_CONSUMER_GROUPS:validate([<<"reference">>],
+                                                        ValidOpts)),
+    ?assertMatch(ok,
+                 ?COMMAND_LIST_CONSUMER_GROUPS:validate([], ValidOpts)).
+
 
 list_consumer_groups_merge_defaults(_Config) ->
     DefaultItems =
