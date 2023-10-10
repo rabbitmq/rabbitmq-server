@@ -39,21 +39,24 @@
 -export([open_files/1]).
 -export([peek/2, peek/3]).
 -export([add_member/2,
-         add_member/4]).
+         add_member/3,
+         add_member/4,
+         add_member/5]).
 -export([delete_member/3, delete_member/2]).
 -export([requeue/3]).
 -export([policy_changed/1]).
 -export([format_ra_event/3]).
 -export([cleanup_data_dir/0]).
 -export([shrink_all/1,
-         grow/4]).
+         grow/4,
+         grow/5]).
 -export([transfer_leadership/2, get_replicas/1, queue_length/1]).
 -export([file_handle_leader_reservation/1,
          file_handle_other_reservation/0]).
 -export([file_handle_release_reservation/0]).
 -export([list_with_minimum_quorum/0,
          filter_quorum_critical/1,
-         filter_quorum_critical/2,
+         filter_quorum_critical/3,
          all_replica_states/0]).
 -export([capabilities/0]).
 -export([repair_amqqueue_nodes/1,
@@ -84,6 +87,7 @@
 -type msg_id() :: non_neg_integer().
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(),
                  mc:state()}.
+-type membership() :: voter | non_voter | promotable.  %% see ra_membership() in Ra.
 
 -define(RA_SYSTEM, quorum_queues).
 -define(RA_WAL_NAME, ra_log_wal).
@@ -384,13 +388,15 @@ become_leader(QName, Name) ->
 all_replica_states() ->
     Rows0 = ets:tab2list(ra_state),
     Rows = lists:map(fun
-                         %% TODO: support other membership types
+                         ({K, follower, promotable}) ->
+                             {K, promotable};
+                         ({K, follower, non_voter}) ->
+                             {K, non_voter};
                          ({K, S, voter}) ->
                              {K, S};
                          (T) ->
                              T
                      end, Rows0),
-
     {node(), maps:from_list(Rows)}.
 
 -spec list_with_minimum_quorum() -> [amqqueue:amqqueue()].
@@ -419,20 +425,22 @@ filter_quorum_critical(Queues) ->
     ReplicaStates = maps:from_list(
                         rabbit_misc:append_rpc_all_nodes(rabbit_nodes:list_running(),
                             ?MODULE, all_replica_states, [])),
-    filter_quorum_critical(Queues, ReplicaStates).
+    filter_quorum_critical(Queues, ReplicaStates, node()).
 
--spec filter_quorum_critical([amqqueue:amqqueue()], #{node() => #{atom() => atom()}}) -> [amqqueue:amqqueue()].
+-spec filter_quorum_critical([amqqueue:amqqueue()], #{node() => #{atom() => atom()}}, node()) ->
+    [amqqueue:amqqueue()].
 
-filter_quorum_critical(Queues, ReplicaStates) ->
+filter_quorum_critical(Queues, ReplicaStates, Self) ->
     lists:filter(fun (Q) ->
                     MemberNodes = rabbit_amqqueue:get_quorum_nodes(Q),
                     {Name, _Node} = amqqueue:get_pid(Q),
                     AllUp = lists:filter(fun (N) ->
-                                            {Name, _} = amqqueue:get_pid(Q),
                                             case maps:get(N, ReplicaStates, undefined) of
                                                 #{Name := State}
                                                   when State =:= follower orelse
-                                                       State =:= leader ->
+                                                       State =:= leader orelse
+                                                       (State =:= promotable andalso N =:= Self) orelse
+                                                       (State =:= non_voter andalso N =:= Self) ->
                                                     true;
                                                 _ -> false
                                             end
@@ -1143,7 +1151,7 @@ get_sys_status(Proc) ->
 
     end.
 
-add_member(VHost, Name, Node, Timeout) ->
+add_member(VHost, Name, Node, Membership, Timeout) when is_binary(VHost) ->
     QName = #resource{virtual_host = VHost, name = Name, kind = queue},
     rabbit_log:debug("Asked to add a replica for queue ~ts on node ~ts", [rabbit_misc:rs(QName), Node]),
     case rabbit_amqqueue:lookup(QName) of
@@ -1161,7 +1169,7 @@ add_member(VHost, Name, Node, Timeout) ->
                           rabbit_log:debug("Quorum ~ts already has a replica on node ~ts", [rabbit_misc:rs(QName), Node]),
                           ok;
                         false ->
-                            add_member(Q, Node, Timeout)
+                            add_member(Q, Node, Membership, Timeout)
                     end
             end;
         {ok, _Q} ->
@@ -1171,9 +1179,15 @@ add_member(VHost, Name, Node, Timeout) ->
     end.
 
 add_member(Q, Node) ->
-    add_member(Q, Node, ?ADD_MEMBER_TIMEOUT).
+    add_member(Q, Node, promotable).
 
-add_member(Q, Node, Timeout) when ?amqqueue_is_quorum(Q) ->
+add_member(Q, Node, Membership) ->
+    add_member(Q, Node, Membership, ?ADD_MEMBER_TIMEOUT).
+
+add_member(VHost, Name, Node, Timeout) when is_binary(VHost) ->
+    %% NOTE needed to pass mixed cluster tests.
+    add_member(VHost, Name, Node, promotable, Timeout);
+add_member(Q, Node, Membership, Timeout) when ?amqqueue_is_quorum(Q) ->
     {RaName, _} = amqqueue:get_pid(Q),
     QName = amqqueue:get_name(Q),
     %% TODO parallel calls might crash this, or add a duplicate in quorum_nodes
@@ -1183,7 +1197,7 @@ add_member(Q, Node, Timeout) when ?amqqueue_is_quorum(Q) ->
                                       ?TICK_TIMEOUT),
     SnapshotInterval = application:get_env(rabbit, quorum_snapshot_interval,
                                            ?SNAPSHOT_INTERVAL),
-    Conf = make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, voter),
+    Conf = make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership),
     case ra:start_server(?RA_SYSTEM, Conf) of
         ok ->
             ServerIdSpec = maps:with([id, uid, membership], Conf),
@@ -1295,17 +1309,21 @@ shrink_all(Node) ->
             amqqueue:get_type(Q) == ?MODULE,
             lists:member(Node, get_nodes(Q))].
 
--spec grow(node(), binary(), binary(), all | even) ->
+
+ grow(Node, VhostSpec, QueueSpec, Strategy) ->
+    grow(Node, VhostSpec, QueueSpec, Strategy, promotable).
+
+-spec grow(node(), binary(), binary(), all | even, membership()) ->
     [{rabbit_amqqueue:name(),
       {ok, pos_integer()} | {error, pos_integer(), term()}}].
- grow(Node, VhostSpec, QueueSpec, Strategy) ->
+ grow(Node, VhostSpec, QueueSpec, Strategy, Membership) ->
     Running = rabbit_nodes:list_running(),
     [begin
          Size = length(get_nodes(Q)),
          QName = amqqueue:get_name(Q),
          rabbit_log:info("~ts: adding a new member (replica) on node ~w",
                          [rabbit_misc:rs(QName), Node]),
-         case add_member(Q, Node, ?ADD_MEMBER_TIMEOUT) of
+         case add_member(Q, Node, Membership) of
              ok ->
                  {QName, {ok, Size + 1}};
              {error, Err} ->

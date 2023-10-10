@@ -9,6 +9,8 @@ defmodule AddUserCommandTest do
   import TestHelper
 
   @command RabbitMQ.CLI.Ctl.Commands.AddUserCommand
+  @hash_password_command RabbitMQ.CLI.Ctl.Commands.HashPasswordCommand
+  @authenticate_user_command RabbitMQ.CLI.Ctl.Commands.AuthenticateUserCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -18,7 +20,7 @@ defmodule AddUserCommandTest do
 
   setup context do
     on_exit(context, fn -> delete_user(context[:user]) end)
-    {:ok, opts: %{node: get_rabbit_hostname()}}
+    {:ok, opts: %{node: get_rabbit_hostname(), pre_hashed_password: false}}
   end
 
   test "validate: no positional arguments fails" do
@@ -55,6 +57,17 @@ defmodule AddUserCommandTest do
     assert @command.validate([context[:user], context[:password]], context[:opts]) == :ok
   end
 
+  @tag user: "someone"
+  test "validate: pre-hashed with a non-Base64-encoded value returns an error", context do
+    hashed = "this is not a Base64-encoded value"
+    opts = Map.merge(context[:opts], %{pre_hashed_password: true})
+
+    assert match?(
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate([context[:user], hashed], opts)
+           )
+  end
+
   @tag user: "someone", password: "password"
   test "run: request to a non-existent node returns a badrpc", context do
     opts = %{node: :jake@thedog, timeout: 200}
@@ -62,9 +75,30 @@ defmodule AddUserCommandTest do
   end
 
   @tag user: "someone", password: "password"
-  test "run: default case completes successfully", context do
+  test "run: happy path completes successfully", context do
     assert @command.run([context[:user], context[:password]], context[:opts]) == :ok
     assert list_users() |> Enum.count(fn record -> record[:user] == context[:user] end) == 1
+
+    assert @authenticate_user_command.run([context[:user], context[:password]], context[:opts])
+  end
+
+  @tag user: "someone"
+  test "run: a pre-hashed request to a non-existent node returns a badrpc", context do
+    opts = %{node: :jake@thedog, timeout: 200}
+    hashed = "BMT6cj/MsI+4UOBtsPPQWpQfk7ViRLj4VqpMTxu54FU3qa1G"
+    assert match?({:badrpc, _}, @command.run([context[:user], hashed], opts))
+  end
+
+  @tag user: "someone"
+  test "run: pre-hashed happy path completes successfully", context do
+    pwd = "guest10"
+    hashed = @hash_password_command.hash_password(pwd)
+    opts = Map.merge(%{pre_hashed_password: true}, context[:opts])
+
+    assert @command.run([context[:user], hashed], opts) == :ok
+    assert list_users() |> Enum.count(fn record -> record[:user] == context[:user] end) == 1
+
+    assert @authenticate_user_command.run([context[:user], pwd], opts)
   end
 
   @tag user: "someone", password: "password"

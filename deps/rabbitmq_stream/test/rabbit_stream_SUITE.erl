@@ -724,11 +724,14 @@ test_metadata_update_stream_deleted(Transport, S, Stream, C0) ->
     C1.
 
 test_declare_publisher(Transport, S, PublisherId, Stream, C0) ->
+    test_declare_publisher(Transport, S, PublisherId, <<>>, Stream, C0).
+
+test_declare_publisher(Transport, S, PublisherId, Reference, Stream, C0) ->
     DeclarePublisherFrame =
         rabbit_stream_core:frame({request, 1,
                                   {declare_publisher,
                                    PublisherId,
-                                   <<>>,
+                                   Reference,
                                    Stream}}),
     ok = Transport:send(S, DeclarePublisherFrame),
     {Cmd, C} = receive_commands(Transport, S, C0),
@@ -737,25 +740,35 @@ test_declare_publisher(Transport, S, PublisherId, Stream, C0) ->
     C.
 
 test_publish_confirm(Transport, S, PublisherId, Body, C0) ->
-    test_publish_confirm(Transport, S, publish, PublisherId, Body,
+    test_publish_confirm(Transport, S, PublisherId, 1, Body, C0).
+
+test_publish_confirm(Transport, S, PublisherId, Sequence, Body, C0) ->
+    test_publish_confirm(Transport, S, publish, PublisherId, Sequence, Body,
                          publish_confirm, C0).
 
-test_publish_confirm(Transport, S, publish = PublishCmd, PublisherId, Body,
-                     ExpectedConfirmCommand,C0) ->
+test_publish_confirm(Transport, S, PublishCmd, PublisherId, Body,
+                     ExpectedConfirmCommand, C0) ->
+    test_publish_confirm(Transport, S, PublishCmd, PublisherId, 1, Body,
+                         ExpectedConfirmCommand, C0).
+
+test_publish_confirm(Transport, S, publish = PublishCmd, PublisherId,
+                     Sequence, Body,
+                     ExpectedConfirmCommand, C0) ->
     BodySize = byte_size(Body),
-    Messages = [<<1:64, 0:1, BodySize:31, Body:BodySize/binary>>],
+    Messages = [<<Sequence:64, 0:1, BodySize:31, Body:BodySize/binary>>],
     PublishFrame =
         rabbit_stream_core:frame({PublishCmd, PublisherId, 1, Messages}),
     ok = Transport:send(S, PublishFrame),
     {Cmd, C} = receive_commands(Transport, S, C0),
-    ?assertMatch({ExpectedConfirmCommand, PublisherId, [1]}, Cmd),
+    ?assertMatch({ExpectedConfirmCommand, PublisherId, [Sequence]}, Cmd),
     C;
-test_publish_confirm(Transport, S, publish_v2 = PublishCmd, PublisherId, Body,
+test_publish_confirm(Transport, S, publish_v2 = PublishCmd, PublisherId,
+                     Sequence, Body,
                      ExpectedConfirmCommand, C0) ->
     BodySize = byte_size(Body),
     FilterValue = <<"foo">>,
     FilterValueSize = byte_size(FilterValue),
-    Messages = [<<1:64, FilterValueSize:16, FilterValue:FilterValueSize/binary,
+    Messages = [<<Sequence:64, FilterValueSize:16, FilterValue:FilterValueSize/binary,
                   0:1, BodySize:31, Body:BodySize/binary>>],
     PublishFrame =
         rabbit_stream_core:frame({PublishCmd, PublisherId, 1, Messages}),
@@ -763,9 +776,9 @@ test_publish_confirm(Transport, S, publish_v2 = PublishCmd, PublisherId, Body,
     {Cmd, C} = receive_commands(Transport, S, C0),
     case ExpectedConfirmCommand of
         publish_confirm ->
-            ?assertMatch({ExpectedConfirmCommand, PublisherId, [1]}, Cmd);
+            ?assertMatch({ExpectedConfirmCommand, PublisherId, [Sequence]}, Cmd);
         publish_error ->
-            ?assertMatch({ExpectedConfirmCommand, PublisherId, _, [1]}, Cmd)
+            ?assertMatch({ExpectedConfirmCommand, PublisherId, _, [Sequence]}, Cmd)
     end,
     C.
 

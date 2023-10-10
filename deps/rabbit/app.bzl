@@ -1693,6 +1693,14 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         deps = ["//deps/amqp_client:erlang_app"],
     )
     erlang_bytecode(
+        name = "unit_quorum_queue_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/unit_quorum_queue_SUITE.erl"],
+        outs = ["test/unit_quorum_queue_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+    )
+    erlang_bytecode(
         name = "unit_app_management_SUITE_beam_files",
         testonly = True,
         srcs = ["test/unit_app_management_SUITE.erl"],

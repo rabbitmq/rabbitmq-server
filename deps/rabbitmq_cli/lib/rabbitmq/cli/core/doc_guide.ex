@@ -54,6 +54,7 @@ defmodule RabbitMQ.CLI.Core.DocGuide do
   Macros.defguide("monitoring")
   Macros.defguide("networking")
   Macros.defguide("parameters")
+  Macros.defguide("passwords")
   Macros.defguide("plugins")
   Macros.defguide("prometheus")
   Macros.defguide("publishers")

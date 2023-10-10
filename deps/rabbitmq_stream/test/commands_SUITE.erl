@@ -31,6 +31,8 @@
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumerGroupsCommand').
 -define(COMMAND_LIST_GROUP_CONSUMERS,
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamGroupConsumersCommand').
+-define(COMMAND_LIST_STREAM_TRACKING,
+        'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamTrackingCommand').
 
 all() ->
     [{group, list_connections},
@@ -38,6 +40,7 @@ all() ->
      {group, list_publishers},
      {group, list_consumer_groups},
      {group, list_group_consumers},
+     {group, list_stream_tracking},
      {group, super_streams}].
 
 groups() ->
@@ -49,10 +52,14 @@ groups() ->
      {list_publishers, [],
       [list_publishers_merge_defaults, list_publishers_run]},
      {list_consumer_groups, [],
-      [list_consumer_groups_merge_defaults, list_consumer_groups_run]},
+      [list_consumer_groups_validate, list_consumer_groups_merge_defaults,
+       list_consumer_groups_run]},
      {list_group_consumers, [],
       [list_group_consumers_validate, list_group_consumers_merge_defaults,
        list_group_consumers_run]},
+     {list_stream_tracking, [],
+      [list_stream_tracking_validate, list_stream_tracking_merge_defaults,
+       list_stream_tracking_run]},
      {super_streams, [],
       [add_super_stream_merge_defaults,
        add_super_stream_validate,
@@ -332,6 +339,18 @@ list_publishers_run(Config) ->
     ?awaitMatch(0, publisher_count(Config), ?WAIT),
     ok.
 
+list_consumer_groups_validate(_) ->
+    ValidOpts = #{vhost => <<"/">>},
+    ?assertMatch({validation_failure, {bad_info_key, [foo]}},
+                 ?COMMAND_LIST_CONSUMER_GROUPS:validate([<<"foo">>],
+                                                        ValidOpts)),
+    ?assertMatch(ok,
+                 ?COMMAND_LIST_CONSUMER_GROUPS:validate([<<"reference">>],
+                                                        ValidOpts)),
+    ?assertMatch(ok,
+                 ?COMMAND_LIST_CONSUMER_GROUPS:validate([], ValidOpts)).
+
+
 list_consumer_groups_merge_defaults(_Config) ->
     DefaultItems =
         [rabbit_data_coercion:to_binary(Item)
@@ -519,6 +538,106 @@ assertConsumerGroup(S, R, PI, Cs, Record) ->
     ?assertEqual(R, proplists:get_value(reference, Record)),
     ?assertEqual(PI, proplists:get_value(partition_index, Record)),
     ?assertEqual(Cs, proplists:get_value(consumers, Record)),
+    ok.
+
+list_stream_tracking_validate(_) ->
+    ValidOpts = #{vhost => <<"/">>, <<"writer">> => true},
+    ?assertMatch({validation_failure, not_enough_args},
+                 ?COMMAND_LIST_STREAM_TRACKING:validate([], #{})),
+    ?assertMatch({validation_failure, not_enough_args},
+                 ?COMMAND_LIST_STREAM_TRACKING:validate([],
+                                                        #{vhost =>
+                                                              <<"test">>})),
+    ?assertMatch({validation_failure, "Specify only one of --all, --offset, --writer."},
+                 ?COMMAND_LIST_STREAM_TRACKING:validate([<<"stream">>],
+                                                        #{all => true, writer => true})),
+    ?assertMatch({validation_failure, too_many_args},
+                 ?COMMAND_LIST_STREAM_TRACKING:validate([<<"stream">>, <<"bad">>],
+                                                        ValidOpts)),
+
+    ?assertMatch(ok,
+                 ?COMMAND_LIST_STREAM_TRACKING:validate([<<"stream">>],
+                                                        ValidOpts)).
+list_stream_tracking_merge_defaults(_Config) ->
+    ?assertMatch({[<<"s">>], #{all := true, vhost := <<"/">>}},
+      ?COMMAND_LIST_STREAM_TRACKING:merge_defaults([<<"s">>], #{})),
+
+    ?assertMatch({[<<"s">>], #{writer := true, vhost := <<"/">>}},
+      ?COMMAND_LIST_STREAM_TRACKING:merge_defaults([<<"s">>], #{writer => true})),
+
+    ?assertMatch({[<<"s">>], #{all := true, vhost := <<"dev">>}},
+      ?COMMAND_LIST_STREAM_TRACKING:merge_defaults([<<"s">>], #{vhost => <<"dev">>})),
+
+    ?assertMatch({[<<"s">>], #{writer := true, vhost := <<"dev">>}},
+      ?COMMAND_LIST_STREAM_TRACKING:merge_defaults([<<"s">>], #{writer => true, vhost => <<"dev">>})).
+
+list_stream_tracking_run(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Stream = <<"list_stream_tracking_run">>,
+    ConsumerReference = <<"foo">>,
+    PublisherReference = <<"bar">>,
+    Opts =
+        #{node => Node,
+          timeout => 10000,
+          vhost => <<"/">>},
+    Args = [Stream],
+
+    %% the stream does not exist yet
+    ?assertMatch({error, "The stream does not exist."},
+                 ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{all => true})),
+
+    StreamPort = rabbit_stream_SUITE:get_stream_port(Config),
+    {S, C} = start_stream_connection(StreamPort),
+    ?awaitMatch(1, connection_count(Config), ?WAIT),
+
+    create_stream(S, Stream, C),
+
+    ?assertMatch([],
+                 ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{all => true})),
+
+    store_offset(S, Stream, ConsumerReference, 42, C),
+
+    ?assertMatch([[{type,offset}, {name, ConsumerReference}, {tracking_value, 42}]],
+                ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{all => true})),
+
+    ?assertMatch([[{type,offset}, {name, ConsumerReference}, {tracking_value, 42}]],
+                ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{offset => true})),
+
+    ok = store_offset(S, Stream, ConsumerReference, 55, C),
+    ?assertMatch([[{type,offset}, {name, ConsumerReference}, {tracking_value, 55}]],
+                ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{offset => true})),
+
+
+    PublisherId = 1,
+    rabbit_stream_SUITE:test_declare_publisher(gen_tcp, S, PublisherId,
+                                               PublisherReference, Stream, C),
+    rabbit_stream_SUITE:test_publish_confirm(gen_tcp, S, PublisherId, 42, <<"">>, C),
+
+    ok = check_publisher_sequence(S, Stream, PublisherReference, 42, C),
+
+    ?assertMatch([
+                  [{type,writer},{name,<<"bar">>},{tracking_value, 42}],
+                  [{type,offset},{name,<<"foo">>},{tracking_value, 55}]
+                 ],
+                 ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{all => true})),
+
+    ?assertMatch([
+                  [{type,writer},{name,<<"bar">>},{tracking_value, 42}]
+                 ],
+                 ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{writer => true})),
+
+    rabbit_stream_SUITE:test_publish_confirm(gen_tcp, S, PublisherId, 66, <<"">>, C),
+
+    ok = check_publisher_sequence(S, Stream, PublisherReference, 66, C),
+
+    ?assertMatch([
+                  [{type,writer},{name,<<"bar">>},{tracking_value, 66}]
+                 ],
+                 ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{writer => true})),
+
+    delete_stream(S, Stream, C),
+
+    close(S, C),
     ok.
 
 add_super_stream_merge_defaults(_Config) ->
@@ -714,6 +833,9 @@ declare_publisher(S, PubId, Stream, C) ->
 delete_stream(S, Stream, C) ->
     rabbit_stream_SUITE:test_delete_stream(gen_tcp, S, Stream, C).
 
+delete_stream_no_metadata_update(S, Stream, C) ->
+    rabbit_stream_SUITE:test_delete_stream(gen_tcp, S, Stream, C, false).
+
 metadata_update_stream_deleted(S, Stream, C) ->
     rabbit_stream_SUITE:test_metadata_update_stream_deleted(gen_tcp,
                                                             S,
@@ -798,3 +920,52 @@ queue_lookup(Config, Q) ->
                                  rabbit_amqqueue,
                                  lookup,
                                  [QueueName]).
+
+store_offset(S, Stream, Reference, Value, C) ->
+    StoreOffsetFrame =
+        rabbit_stream_core:frame({store_offset, Reference, Stream, Value}),
+    ok = gen_tcp:send(S, StoreOffsetFrame),
+    case check_stored_offset(S, Stream, Reference, Value, C, 20) of
+        ok ->
+            ok;
+        _ ->
+            {error, offset_not_stored}
+    end.
+
+check_stored_offset(_, _, _, _, _, 0) ->
+    error;
+check_stored_offset(S, Stream, Reference, Expected, C, Attempt) ->
+    QueryOffsetFrame =
+        rabbit_stream_core:frame({request, 1, {query_offset, Reference, Stream}}),
+    ok = gen_tcp:send(S, QueryOffsetFrame),
+    {Cmd, _} = rabbit_stream_SUITE:receive_commands(gen_tcp, S, C),
+    ?assertMatch({response, 1, {query_offset, ?RESPONSE_CODE_OK, _}}, Cmd),
+    {response, 1, {query_offset, ?RESPONSE_CODE_OK, StoredValue}} = Cmd,
+    case StoredValue of
+        Expected ->
+            ok;
+        _ ->
+            timer:sleep(50),
+            check_stored_offset(S, Stream, Reference, Expected, C, Attempt - 1)
+    end.
+
+check_publisher_sequence(S, Stream, Reference, Expected, C) ->
+    check_publisher_sequence(S, Stream, Reference, Expected, C, 20).
+
+check_publisher_sequence(_, _, _, _, _, 0) ->
+    error;
+check_publisher_sequence(S, Stream, Reference, Expected, C, Attempt) ->
+    QueryFrame =
+        rabbit_stream_core:frame({request, 1, {query_publisher_sequence, Reference, Stream}}),
+    ok = gen_tcp:send(S, QueryFrame),
+    {Cmd, _} = rabbit_stream_SUITE:receive_commands(gen_tcp, S, C),
+    ?assertMatch({response, 1, {query_publisher_sequence, _, _}}, Cmd),
+    {response, 1, {query_publisher_sequence, _, StoredValue}} = Cmd,
+    case StoredValue of
+        Expected ->
+            ok;
+        _ ->
+            timer:sleep(50),
+            check_publisher_sequence(S, Stream, Reference, Expected, C, Attempt - 1)
+    end.
+
