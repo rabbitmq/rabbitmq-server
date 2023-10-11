@@ -232,6 +232,8 @@ consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
               args := Args,
               ok_msg := OkMsg} = Spec,
             QName = amqqueue:get_name(Q),
+            rabbit_log:debug("~s:~s Local pid resolved ~0p",
+                             [?MODULE, ?FUNCTION_NAME, LocalPid]),
             case parse_offset_arg(
                    rabbit_misc:table_lookup(Args, <<"x-stream-offset">>)) of
                 {error, _} = Err ->
