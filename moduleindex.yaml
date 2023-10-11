@@ -1274,6 +1274,7 @@ rabbitmq_stream:
 - Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumersCommand
 - Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamGroupConsumersCommand
 - Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamPublishersCommand
+- Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamTrackingCommand
 - rabbit_stream
 - rabbit_stream_connection_sup
 - rabbit_stream_manager
@@ -1294,6 +1295,7 @@ rabbitmq_stream_management:
 - rabbit_stream_management_utils
 - rabbit_stream_mgmt_db
 - rabbit_stream_publishers_mgmt
+- rabbit_stream_tracking_mgmt
 rabbitmq_top:
 - rabbit_top_app
 - rabbit_top_extension

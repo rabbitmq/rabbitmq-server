@@ -51,6 +51,7 @@ rabbitmq_app(
         "//deps/rabbit:erlang_app",
         "//deps/rabbitmq_management:erlang_app",
         "//deps/rabbitmq_stream:erlang_app",
+        "@osiris//:erlang_app",
     ],
 )
 
