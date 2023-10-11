@@ -1144,6 +1144,18 @@ do_write_enabled_feature_flags_list(EnabledFeatureNames) ->
             Error
     end.
 
+-spec delete_enabled_feature_flags_list_file() -> Ret when
+      Ret :: ok | {error, file:posix() | badarg}.
+%% @private
+
+delete_enabled_feature_flags_list_file() ->
+    File = enabled_feature_flags_list_file(),
+    case file:delete(File) of
+        ok              -> ok;
+        {error, enoent} -> ok;
+        Error           -> Error
+    end.
+
 -spec enabled_feature_flags_list_file() -> file:filename().
 %% @doc
 %% Returns the path to the file where the state of feature flags is stored.
@@ -1329,4 +1341,6 @@ refresh_feature_flags_after_app_load() ->
 %% reading the recorded state from disc.
 
 reset_registry() ->
-    rabbit_ff_registry_factory:reset_registry().
+    ok = rabbit_ff_registry_factory:reset_registry(),
+    ok = delete_enabled_feature_flags_list_file(),
+    ok.
