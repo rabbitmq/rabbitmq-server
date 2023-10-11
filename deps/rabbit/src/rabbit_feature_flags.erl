@@ -1193,7 +1193,7 @@ try_to_write_enabled_feature_flags_list(FeatureNames) ->
     FeatureNames2 = lists:sort(FeatureNames1),
 
     File = enabled_feature_flags_list_file(),
-    Content = io_lib:format("~p.~n", [FeatureNames2]),
+    Content = io_lib:format("~1tp.~n", [FeatureNames2]),
     %% TODO: If we fail to write the the file, we should spawn a process
     %% to retry the operation.
     case file:write_file(File, Content) of
