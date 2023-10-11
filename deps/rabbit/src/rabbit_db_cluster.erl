@@ -97,6 +97,7 @@ join(RemoteNode, NodeType)
     case can_join(RemoteNode) of
         {ok, ClusterNodes} when is_list(ClusterNodes) ->
             ok = rabbit_db:reset(),
+            rabbit_feature_flags:copy_feature_states_after_reset(RemoteNode),
 
             ?LOG_INFO(
                "DB: joining cluster using remote nodes:~n~tp", [ClusterNodes],
@@ -107,11 +108,13 @@ join(RemoteNode, NodeType)
                   end,
             case Ret of
                 ok ->
-                    rabbit_feature_flags:copy_feature_states_after_reset(
-                      RemoteNode),
                     rabbit_node_monitor:notify_joined_cluster(),
                     ok;
                 {error, _} = Error ->
+                    %% We reset feature flags states again and make sure the
+                    %% recorded states on disk are deleted.
+                    rabbit_feature_flags:reset(),
+
                     Error
             end;
         {ok, already_member} ->
