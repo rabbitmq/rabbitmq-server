@@ -871,10 +871,7 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
                     Error
             end;
         {_OTP, _Rabbit, {ok, Status}} ->
-            case rabbit_db_cluster:check_compatibility(Node) of
-                ok    -> {ok, Status};
-                Error -> Error
-            end
+            {ok, Status}
     end.
 
 remote_node_info(Node) ->
