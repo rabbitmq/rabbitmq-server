@@ -561,13 +561,18 @@ handle_cast({partial_partition_disconnect, Other}, State) ->
 handle_cast({node_up, Node, NodeType},
             State = #state{monitors = Monitors}) ->
     rabbit_log:info("rabbit on node ~tp up", [Node]),
-    {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    write_cluster_status({add_node(Node, AllNodes),
-                          case NodeType of
-                              disc -> add_node(Node, DiscNodes);
-                              ram  -> DiscNodes
-                          end,
-                          add_node(Node, RunningNodes)}),
+    case rabbit_khepri:is_enabled() of
+        true ->
+            ok;
+        false ->
+            {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
+            write_cluster_status({add_node(Node, AllNodes),
+                                  case NodeType of
+                                      disc -> add_node(Node, DiscNodes);
+                                      ram  -> DiscNodes
+                                  end,
+                                  add_node(Node, RunningNodes)})
+    end,
     ok = handle_live_rabbit(Node),
     Monitors1 = case pmon:is_monitored({rabbit, Node}, Monitors) of
                     true ->
@@ -578,21 +583,32 @@ handle_cast({node_up, Node, NodeType},
     {noreply, maybe_autoheal(State#state{monitors = Monitors1})};
 
 handle_cast({joined_cluster, Node, NodeType}, State) ->
-    {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    write_cluster_status({add_node(Node, AllNodes),
-                          case NodeType of
-                              disc -> add_node(Node, DiscNodes);
-                              ram  -> DiscNodes
-                          end,
-                          RunningNodes}),
+    case rabbit_khepri:is_enabled() of
+        true ->
+            ok;
+        false ->
+            {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
+            write_cluster_status({add_node(Node, AllNodes),
+                                  case NodeType of
+                                      disc -> add_node(Node, DiscNodes);
+                                      ram  -> DiscNodes
+                                  end,
+                                  RunningNodes})
+    end,
     rabbit_log:debug("Node '~tp' has joined the cluster", [Node]),
     rabbit_event:notify(node_added, [{node, Node}]),
     {noreply, State};
 
 handle_cast({left_cluster, Node}, State) ->
-    {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    write_cluster_status({del_node(Node, AllNodes), del_node(Node, DiscNodes),
-                          del_node(Node, RunningNodes)}),
+    case rabbit_khepri:is_enabled() of
+        true ->
+            ok;
+        false ->
+            {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
+            write_cluster_status(
+              {del_node(Node, AllNodes), del_node(Node, DiscNodes),
+               del_node(Node, RunningNodes)})
+    end,
     {noreply, State};
 
 handle_cast({subscribe, Pid}, State = #state{subscribers = Subscribers}) ->
@@ -607,8 +623,14 @@ handle_cast(_Msg, State) ->
 handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason},
             State = #state{monitors = Monitors, subscribers = Subscribers}) ->
     rabbit_log:info("rabbit on node ~tp down", [Node]),
-    {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    write_cluster_status({AllNodes, DiscNodes, del_node(Node, RunningNodes)}),
+    case rabbit_khepri:is_enabled() of
+        true ->
+            ok;
+        false ->
+            {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
+            write_cluster_status(
+              {AllNodes, DiscNodes, del_node(Node, RunningNodes)})
+    end,
     _ = [P ! {node_down, Node} || P <- pmon:monitored(Subscribers)],
     {noreply, handle_dead_rabbit(
                 Node,
