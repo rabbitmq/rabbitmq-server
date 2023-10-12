@@ -1347,7 +1347,7 @@ khepri_db_migration_enable(#{feature_name := FeatureName}) ->
 
 khepri_db_migration_post_enable(
   #{feature_name := FeatureName, enabled := true}) ->
-    ?LOG_ERROR(
+    ?LOG_DEBUG(
        "Feature flag `~s`: cleaning up after finished migration",
        [FeatureName],
        #{domain => ?RMQLOG_DOMAIN_DB}),
@@ -1355,8 +1355,8 @@ khepri_db_migration_post_enable(
     ok;
 khepri_db_migration_post_enable(
   #{feature_name := FeatureName, enabled := false}) ->
-    ?LOG_ERROR(
-       "Feature flag `~s`: cleaning up after finished migration",
+    ?LOG_DEBUG(
+       "Feature flag `~s`: cleaning up after aborted migration",
        [FeatureName],
        #{domain => ?RMQLOG_DOMAIN_DB}),
     _ = mnesia_to_khepri:rollback_table_copy(?STORE_ID, ?MIGRATION_ID),
