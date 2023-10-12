@@ -371,6 +371,7 @@ begin_stream(#stream_client{name = QName,
     CounterSpec = {{?MODULE, QName, Tag, self()}, []},
     {ok, Seg0} = osiris:init_reader(LocalPid, Offset, CounterSpec, Options),
     NextOffset = osiris_log:next_offset(Seg0) - 1,
+    rabbit_log:debug("next offset ~b", [NextOffset]),
     osiris:register_offset_listener(LocalPid, NextOffset),
     StartOffset = case Offset of
                       first -> NextOffset;
