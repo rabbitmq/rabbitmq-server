@@ -69,7 +69,13 @@ emit_connection_info(Items, Ref, AggregatorPid, Pids) ->
     rabbit_control_misc:emitting_map_with_exit_handler(
       AggregatorPid, Ref,
       fun(Pid) ->
-              rabbit_mqtt_reader:info(Pid, Items)
+              case rabbit_mqtt_reader:info(Pid, Items) of
+                  {error, not_found} ->
+                      %% a Web-MQTT connection
+                      rabbit_web_mqtt_handler:info(Pid, Items);
+                  Result ->
+                      Result
+              end
       end, Pids).
 
 -spec close_local_client_connections(atom()) -> {'ok', non_neg_integer()}.
