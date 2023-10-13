@@ -385,20 +385,27 @@ init([]) ->
     %% happen.
     process_flag(trap_exit, true),
     _ = net_kernel:monitor_nodes(true, [nodedown_reason]),
-    _ = case rabbit_khepri:is_enabled() of
-            true  -> ok;
-            false -> {ok, _} = mnesia:subscribe(system)
-        end,
-    %% If the node has been restarted, Mnesia can trigger a system notification
-    %% before the monitor subscribes to receive them. To avoid autoheal blocking due to
-    %% the inconsistent database event never arriving, we being monitoring all running
-    %% nodes as early as possible. The rest of the monitoring ops will only be triggered
-    %% when notifications arrive.
-    Nodes = possibly_partitioned_nodes(),
-    startup_log(Nodes),
-    Monitors = lists:foldl(fun(Node, Monitors0) ->
-                                   pmon:monitor({rabbit, Node}, Monitors0)
-                           end, pmon:new(), Nodes),
+    Monitors = case rabbit_khepri:is_enabled() of
+                   true ->
+                       startup_log(),
+                       pmon:new();
+                   false ->
+                       {ok, _} = mnesia:subscribe(system),
+
+                       %% If the node has been restarted, Mnesia can trigger a
+                       %% system notification before the monitor subscribes to
+                       %% receive them. To avoid autoheal blocking due to the
+                       %% inconsistent database event never arriving, we being
+                       %% monitoring all running nodes as early as possible.
+                       %% The rest of the monitoring ops will only be
+                       %% triggered when notifications arrive.
+                       Nodes = possibly_partitioned_nodes(),
+                       startup_log(Nodes),
+                       lists:foldl(
+                         fun(Node, Monitors0) ->
+                                 pmon:monitor({rabbit, Node}, Monitors0)
+                         end, pmon:new(), Nodes)
+               end,
     {ok, ensure_keepalive_timer(#state{monitors    = Monitors,
                                        subscribers = pmon:new(),
                                        partitions  = [],
@@ -1030,6 +1037,9 @@ ping_all() ->
 
 possibly_partitioned_nodes() ->
     alive_rabbit_nodes() -- rabbit_mnesia:cluster_nodes(running).
+
+startup_log() ->
+    rabbit_log:info("Starting rabbit_node_monitor (partition handling strategy unapplicable with Khepri)", []).
 
 startup_log(Nodes) ->
     {ok, M} = application:get_env(rabbit, cluster_partition_handling),
