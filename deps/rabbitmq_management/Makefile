@@ -12,7 +12,8 @@ define PROJECT_ENV
 
 	    {cors_allow_origins, []},
 	    {cors_max_age, 1800},
-	    {content_security_policy, "script-src 'self' 'unsafe-eval' 'unsafe-inline'; object-src 'self'"}
+	    {content_security_policy, "script-src 'self' 'unsafe-eval' 'unsafe-inline'; object-src 'self'"},
+	    {max_http_body_size, 20000000}
 	  ]
 endef
 
