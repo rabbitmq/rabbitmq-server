@@ -31,7 +31,11 @@ bazel_dep(
 
 bazel_dep(
     name = "rules_erlang",
+<<<<<<< HEAD
     version = "3.11.3",
+=======
+    version = "3.13.1",
+>>>>>>> d3117d121a (Use rules_erlang 3.13.1)
 )
 
 bazel_dep(
