@@ -138,9 +138,10 @@ roundtrip(Config) ->
 
 streams(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
-    amqp_channel:call(Ch, #'queue.declare'{queue = <<"stream_q">>,
-                                           durable = true,
-                                           arguments = [{<<"x-queue-type">>, longstr, "stream"}]}),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Ch, #'queue.declare'{queue = <<"stream_q2">>,
+                                               durable = true,
+                                               arguments = [{<<"x-queue-type">>, longstr, "stream"}]}),
     run(Config, [
         {dotnet, "streams"}
       ]).
@@ -208,9 +209,6 @@ routing(Config) ->
                                            durable = true,
                                            arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]}),
     amqp_channel:call(Ch, #'queue.declare'{queue = <<"stream_q">>,
-                                           durable = true,
-                                           arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}),
-    amqp_channel:call(Ch, #'queue.declare'{queue = <<"stream_q2">>,
                                            durable = true,
                                            arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}),
     amqp_channel:call(Ch, #'queue.declare'{queue = <<"autodel_q">>,
