@@ -1065,3 +1065,37 @@ rm -dr web-manpages-tmp
 """,
     visibility = ["//visibility:public"],
 )
+<<<<<<< HEAD
+=======
+
+alias(
+    name = "rabbit",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+eunit(
+    name = "eunit",
+    compiled_suites = [
+        ":test_channel_operation_timeout_test_queue_beam",
+        ":test_dummy_event_receiver_beam",
+        ":test_dummy_interceptor_beam",
+        ":test_dummy_runtime_parameters_beam",
+        ":test_dummy_supervisor2_beam",
+        ":test_failing_dummy_interceptor_beam",
+        ":test_mirrored_supervisor_SUITE_gs_beam",
+        ":test_quorum_queue_utils_beam",
+        ":test_rabbit_auth_backend_context_propagation_mock_beam",
+        ":test_rabbit_dummy_protocol_connection_info_beam",
+        ":test_rabbit_foo_protocol_connection_info_beam",
+        ":test_rabbit_ha_test_consumer_beam",
+        ":test_rabbit_ha_test_producer_beam",
+        ":test_test_util_beam",
+        ":test_test_rabbit_event_handler_beam",
+    ],
+    target = ":test_erlang_app",
+    test_env = {
+        "COVERDATA_TO_LCOV_APPS_DIRS": "deps:deps/rabbit/apps",
+    },
+)
+>>>>>>> 27f4e0dab5 (Use rules_erlang 3.13.1)

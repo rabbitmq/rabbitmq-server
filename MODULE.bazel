@@ -25,7 +25,22 @@ bazel_dep(
 
 bazel_dep(
     name = "rules_erlang",
+<<<<<<< HEAD
     version = "3.9.0",
+=======
+<<<<<<< HEAD
+    version = "3.11.3",
+=======
+    version = "3.13.1",
+>>>>>>> d3117d121a (Use rules_erlang 3.13.1)
+)
+
+bazel_dep(
+    name = "com_github_rabbitmq_looking_glass",
+    version = "0.2.1",
+    dev_dependency = True,
+    repo_name = "looking_glass",
+>>>>>>> 27f4e0dab5 (Use rules_erlang 3.13.1)
 )
 
 erlang_config = use_extension(

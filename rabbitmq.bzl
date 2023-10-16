@@ -165,9 +165,31 @@ def rabbitmq_app(
         runtime_deps = with_test_versions(runtime_deps),
     )
 
+<<<<<<< HEAD
 def rabbitmq_suite(erlc_opts = [], test_env = {}, **kwargs):
     ct_suite(
         erlc_opts = RABBITMQ_TEST_ERLC_OPTS + erlc_opts,
+=======
+def rabbitmq_suite(
+        name = None,
+        suite_name = None,
+        data = [],
+        additional_beam = [],
+        test_env = {},
+        deps = [],
+        runtime_deps = [],
+        **kwargs):
+    app_name = native.package_name().rpartition("/")[-1]
+    # suite_name exists in the underying ct_test macro, but we don't
+    # want to use the arg in rabbitmq-server, for the sake of clarity
+    if suite_name != None:
+        fail("rabbitmq_suite cannot be called with a suite_name attr")
+    ct_test(
+        name = name,
+        app_name = app_name,
+        compiled_suites = [":{}_beam_files".format(name)] + additional_beam,
+        data = native.glob(["test/{}_data/**/*".format(name)]) + data,
+>>>>>>> 27f4e0dab5 (Use rules_erlang 3.13.1)
         test_env = dict({
             "RABBITMQ_CT_SKIP_AS_ERROR": "true",
             "LANG": "C.UTF-8",
@@ -214,9 +236,19 @@ def rabbitmq_integration_suite(
         deps = [],
         runtime_deps = [],
         **kwargs):
+<<<<<<< HEAD
     package = native.package_name()
 
     extra_deps = [
+=======
+    app_name = native.package_name().rpartition("/")[-1]
+    # suite_name exists in the underying ct_test macro, but we don't
+    # want to use the arg in rabbitmq-server, for the sake of clarity
+    if suite_name != None:
+        fail("rabbitmq_integration_suite cannot be called with a suite_name attr")
+    assumed_deps = [
+        ":test_erlang_app",
+>>>>>>> 27f4e0dab5 (Use rules_erlang 3.13.1)
         "//deps/rabbit_common:erlang_app",
         "//deps/rabbitmq_ct_helpers:erlang_app",
     ]
@@ -225,6 +257,7 @@ def rabbitmq_integration_suite(
 
     ct_suite(
         name = name,
+        app_name = app_name,
         suite_name = name,
         tags = tags + [STARTS_BACKGROUND_BROKER_TAG],
         erlc_opts = select({
