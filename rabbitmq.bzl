@@ -175,12 +175,14 @@ def rabbitmq_suite(
         deps = [],
         runtime_deps = [],
         **kwargs):
+    app_name = native.package_name().rpartition("/")[-1]
     # suite_name exists in the underying ct_test macro, but we don't
     # want to use the arg in rabbitmq-server, for the sake of clarity
     if suite_name != None:
         fail("rabbitmq_suite cannot be called with a suite_name attr")
     ct_test(
         name = name,
+        app_name = app_name,
         compiled_suites = [":{}_beam_files".format(name)] + additional_beam,
         ct_run_extra_args = [ENABLE_FEATURE_MAYBE_EXPR],
         data = native.glob(["test/{}_data/**/*".format(name)]) + data,
@@ -221,6 +223,7 @@ def rabbitmq_integration_suite(
         deps = [],
         runtime_deps = [],
         **kwargs):
+    app_name = native.package_name().rpartition("/")[-1]
     # suite_name exists in the underying ct_test macro, but we don't
     # want to use the arg in rabbitmq-server, for the sake of clarity
     if suite_name != None:
@@ -239,6 +242,7 @@ def rabbitmq_integration_suite(
 
     ct_test(
         name = name,
+        app_name = app_name,
         suite_name = name,
         compiled_suites = [":{}_beam_files".format(name)] + additional_beam,
         tags = tags + [STARTS_BACKGROUND_BROKER_TAG],
