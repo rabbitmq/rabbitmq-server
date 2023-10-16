@@ -1437,6 +1437,8 @@ handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser}, _From,
             notify_decorators(State1),
             case should_auto_delete(State1) of
                 false -> reply(ok, ensure_expiry_timer(State1));
+                % false -> State2 = run_message_queue(true, State1),
+                %          reply(ok, ensure_expiry_timer(State2));
                 true  ->
                     log_auto_delete(
                         io_lib:format(
