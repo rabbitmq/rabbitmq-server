@@ -152,8 +152,6 @@ dep_osiris = git https://github.com/rabbitmq/osiris v1.6.9
 dep_systemd = hex 0.6.1
 
 dep_seshat = git https://github.com/rabbitmq/seshat v0.6.1
-dep_khepri = hex 0.8.0
-dep_khepri_mnesia_migration = hex 0.1.1
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))
