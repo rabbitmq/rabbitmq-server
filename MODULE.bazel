@@ -334,12 +334,11 @@ erlang_package.hex_package(
     version = "2.7.0",
 )
 
-erlang_package.hex_package(
+erlang_package.git_package(
     name = "seshat_alt",
     build_file = "@rabbitmq-server//bazel:BUILD.seshat",
-    pkg = "seshat",
-    sha256 = "7cef700f92831dd7cae6a6dd223ccc55ac88ecce0631ee9ab0f2b5fb70e79b90",
-    version = "0.6.0",
+    repository = "rabbitmq/seshat",
+    tag = "v0.6.1",
 )
 
 erlang_package.hex_package(
