@@ -43,7 +43,6 @@ all_srcs(name = "all_srcs")
 test_suite_beam_files(name = "test_suite_beam_files")
 
 # gazelle:erlang_app_extra_app xmerl
-# gazelle:erlang_app_extra_app mnesia
 # gazelle:erlang_app_extra_app ssl
 # gazelle:erlang_app_extra_app crypto
 # gazelle:erlang_app_extra_app public_key
@@ -62,7 +61,6 @@ rabbitmq_app(
     beam_files = [":beam_files"],
     extra_apps = [
         "crypto",
-        "mnesia",
         "public_key",
         "ssl",
         "xmerl",
