@@ -67,14 +67,6 @@ defmodule JoinClusterCommandTest do
     start_rabbitmq_app()
   end
 
-  # TODO
-  test "run: request to an active node fails", context do
-    assert match?(
-             {:error, :mnesia_unexpectedly_running},
-             @command.run([context[:opts][:node]], context[:opts])
-           )
-  end
-
   test "run: request to a non-existent node returns a badrpc", context do
     opts = %{
       node: :jake@thedog,

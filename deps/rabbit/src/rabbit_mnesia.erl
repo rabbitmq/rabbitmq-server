@@ -77,6 +77,9 @@
 %% Used internally in `rabbit_db_cluster'.
 -export([members/0]).
 
+%% Used internally in `rabbit_khepri'.
+-export([mnesia_and_msg_store_files/0]).
+
 -export([check_reset_gracefully/0]).
 
 -deprecated({on_running_node, 1,
@@ -1062,11 +1065,14 @@ with_running_or_clean_mnesia(Fun) ->
 %% exception of certain files and directories, which can be there very early
 %% on node boot.
 is_virgin_node() ->
+    mnesia_and_msg_store_files() =:= [].
+
+mnesia_and_msg_store_files() ->
     case rabbit_file:list_dir(dir()) of
         {error, enoent} ->
-            true;
+            [];
         {ok, []} ->
-            true;
+            [];
         {ok, List0} ->
             IgnoredFiles0 =
             [rabbit_node_monitor:cluster_status_filename(),
@@ -1082,7 +1088,7 @@ is_virgin_node() ->
                             [string:join(lists:usort(List0), ", "), string:join(lists:usort(IgnoredFiles), ", ")]),
             List = List0 -- IgnoredFiles,
             rabbit_log:debug("Files and directories found in node's data directory sans ignored ones: ~ts", [string:join(lists:usort(List), ", ")]),
-            List =:= []
+            List
     end.
 
 is_only_clustered_disc_node() ->

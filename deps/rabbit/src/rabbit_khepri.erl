@@ -1347,16 +1347,32 @@ khepri_db_migration_enable(#{feature_name := FeatureName}) ->
 
 khepri_db_migration_post_enable(
   #{feature_name := FeatureName, enabled := true}) ->
-    ?LOG_ERROR(
+    ?LOG_DEBUG(
        "Feature flag `~s`: cleaning up after finished migration",
        [FeatureName],
        #{domain => ?RMQLOG_DOMAIN_DB}),
     _ = mnesia_to_khepri:cleanup_after_table_copy(?STORE_ID, ?MIGRATION_ID),
+
+    rabbit_mnesia:stop_mnesia(),
+
+    %% We delete all Mnesia-related files in the data directory. This is in
+    %% case this node joins a Mnesia-based cluster: it will be reset and switch
+    %% back from Khepri to Mnesia. If there were Mnesia files left, Mnesia
+    %% would restart with stale/incorrect data.
+    MsgStoreDir = filename:dirname(rabbit_vhost:msg_store_dir_base()),
+    DataDir = rabbit:data_dir(),
+    MnesiaAndMsgStoreFiles = rabbit_mnesia:mnesia_and_msg_store_files(),
+    MnesiaFiles0 = MnesiaAndMsgStoreFiles -- [filename:basename(MsgStoreDir)],
+    MnesiaFiles = [filename:join(DataDir, File) || File <- MnesiaFiles0],
+    NodeMonitorFiles = [rabbit_node_monitor:cluster_status_filename(),
+                        rabbit_node_monitor:running_nodes_filename()],
+    _ = rabbit_file:recursive_delete(MnesiaFiles ++ NodeMonitorFiles),
+
     ok;
 khepri_db_migration_post_enable(
   #{feature_name := FeatureName, enabled := false}) ->
-    ?LOG_ERROR(
-       "Feature flag `~s`: cleaning up after finished migration",
+    ?LOG_DEBUG(
+       "Feature flag `~s`: cleaning up after aborted migration",
        [FeatureName],
        #{domain => ?RMQLOG_DOMAIN_DB}),
     _ = mnesia_to_khepri:rollback_table_copy(?STORE_ID, ?MIGRATION_ID),

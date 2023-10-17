@@ -358,14 +358,26 @@ join_when_ram_node_type_is_not_permitted_from_conf_khepri(Config) ->
     ?assertEqual([NodeB], get_disc_nodes(Config, NodeB)).
 
 get_all_nodes(Config, Node) ->
-    lists:sort(
-      rabbit_ct_broker_helpers:rpc(
-        Config, Node, rabbit_mnesia, cluster_nodes, [all])).
+    Nodes = case rabbit_khepri:is_enabled(Node) of
+                true ->
+                    rabbit_ct_broker_helpers:rpc(
+                      Config, Node, rabbit_khepri, locally_known_nodes, []);
+                false ->
+                    rabbit_ct_broker_helpers:rpc(
+                      Config, Node, rabbit_mnesia, cluster_nodes, [all])
+            end,
+    lists:sort(Nodes).
 
 get_disc_nodes(Config, Node) ->
-    lists:sort(
-      rabbit_ct_broker_helpers:rpc(
-        Config, Node, rabbit_mnesia, cluster_nodes, [disc])).
+    Nodes = case rabbit_khepri:is_enabled(Node) of
+                true ->
+                    rabbit_ct_broker_helpers:rpc(
+                      Config, Node, rabbit_khepri, locally_known_nodes, []);
+                false ->
+                    rabbit_ct_broker_helpers:rpc(
+                      Config, Node, rabbit_mnesia, cluster_nodes, [disc])
+            end,
+    lists:sort(Nodes).
 
 %% -------------------------------------------------------------------
 %% Classic queue mirroring.

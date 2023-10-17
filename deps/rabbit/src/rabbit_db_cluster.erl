@@ -73,6 +73,10 @@ can_join(RemoteNode) ->
     end.
 
 can_join_using_mnesia(RemoteNode) ->
+    case rabbit_khepri:is_enabled() of
+        true  -> rabbit_node_monitor:prepare_cluster_status_files();
+        false -> ok
+    end,
     rabbit_mnesia:can_join_cluster(RemoteNode).
 
 can_join_using_khepri(RemoteNode) ->
@@ -86,11 +90,14 @@ can_join_using_khepri(RemoteNode) ->
       Error :: {error, {inconsistent_cluster, string()}}.
 %% @doc Adds this node to a cluster using `RemoteNode' to reach it.
 
+join(ThisNode, _NodeType) when ThisNode =:= node() ->
+    {error, cannot_cluster_node_with_itself};
 join(RemoteNode, NodeType)
   when is_atom(RemoteNode) andalso ?IS_NODE_TYPE(NodeType) ->
     case can_join(RemoteNode) of
         {ok, ClusterNodes} when is_list(ClusterNodes) ->
             ok = rabbit_db:reset(),
+            rabbit_feature_flags:copy_feature_states_after_reset(RemoteNode),
 
             ?LOG_INFO(
                "DB: joining cluster using remote nodes:~n~tp", [ClusterNodes],
@@ -101,11 +108,13 @@ join(RemoteNode, NodeType)
                   end,
             case Ret of
                 ok ->
-                    rabbit_feature_flags:copy_feature_states_after_reset(
-                      RemoteNode),
                     rabbit_node_monitor:notify_joined_cluster(),
                     ok;
                 {error, _} = Error ->
+                    %% We reset feature flags states again and make sure the
+                    %% recorded states on disk are deleted.
+                    rabbit_feature_flags:reset(),
+
                     Error
             end;
         {ok, already_member} ->

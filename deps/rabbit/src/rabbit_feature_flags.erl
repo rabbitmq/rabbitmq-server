@@ -122,6 +122,7 @@
          read_enabled_feature_flags_list/0,
          copy_feature_states_after_reset/1,
          uses_callbacks/1,
+         reset/0,
          reset_registry/0]).
 
 -ifdef(TEST).
@@ -1144,6 +1145,18 @@ do_write_enabled_feature_flags_list(EnabledFeatureNames) ->
             Error
     end.
 
+-spec delete_enabled_feature_flags_list_file() -> Ret when
+      Ret :: ok | {error, file:posix() | badarg}.
+%% @private
+
+delete_enabled_feature_flags_list_file() ->
+    File = enabled_feature_flags_list_file(),
+    case file:delete(File) of
+        ok              -> ok;
+        {error, enoent} -> ok;
+        Error           -> Error
+    end.
+
 -spec enabled_feature_flags_list_file() -> file:filename().
 %% @doc
 %% Returns the path to the file where the state of feature flags is stored.
@@ -1321,6 +1334,14 @@ sync_feature_flags_with_cluster(Nodes, _NodeIsVirgin) ->
 
 refresh_feature_flags_after_app_load() ->
     rabbit_ff_controller:refresh_after_app_load().
+
+-spec reset() -> ok.
+%% @doc Resets the feature flags registry and recorded states on disk.
+
+reset() ->
+    ok = reset_registry(),
+    ok = delete_enabled_feature_flags_list_file(),
+    ok.
 
 -spec reset_registry() -> ok.
 %% @doc Resets the feature flags registry.

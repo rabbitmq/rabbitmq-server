@@ -19,7 +19,7 @@
 -export([update_metadata/3]).
 -export([lookup/1, default_name/0]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
--export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, config_file_path/1, ensure_config_file/1]).
+-export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, msg_store_dir_base/0, config_file_path/1, ensure_config_file/1]).
 -export([delete_storage/1]).
 -export([vhost_down/1]).
 -export([put_vhost/5,

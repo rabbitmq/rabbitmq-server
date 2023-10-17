@@ -606,12 +606,6 @@ forget_unavailable_node_in_minority(Config) ->
     %% Stop other two nodes
     ok = rabbit_ct_broker_helpers:stop_node(Config, Rabbit),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Bunny),
-    %% Wait until Mnesia has detected both nodes down
-    ?awaitMatch(
-       [Hare],
-       rabbit_ct_broker_helpers:rpc(Config, Hare,
-                                    rabbit_mnesia, cluster_nodes, [running]),
-       30000),
 
     %% If Hare was the leader, it is able to forget one of the nodes. Change takes place as soon as it is written on the log. The other membership change will be rejected until the last change has consensus.
     ct:pal("Initial Raft status: ~p", [RaftStatus]),

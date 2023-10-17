@@ -172,7 +172,18 @@ force_load_on_next_boot_using_mnesia() ->
     rabbit_mnesia:force_load_next_boot().
 
 post_reset() ->
-    rabbit_feature_flags:reset_registry(),
+    rabbit_feature_flags:reset(),
+
+    %% The cluster status files that RabbitMQ uses when Mnesia is the database
+    %% are initially created from rabbit_prelaunch_cluster. However, it will
+    %% only be done once the `rabbit` app is restarted. Meanwhile, they are
+    %% missing and the CLI or the testsuite may rely on them. Indeed, after
+    %% the reset, Mnesia is assumed to be the database and the cluster status
+    %% files should have been created the first time the application was
+    %% started already.
+    ThisNode = node(),
+    rabbit_node_monitor:write_cluster_status({[ThisNode], [ThisNode], []}),
+
     ok.
 
 %% -------------------------------------------------------------------
