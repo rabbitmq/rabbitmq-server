@@ -186,6 +186,7 @@ def rabbitmq_suite(
         test_env = dict({
             "RABBITMQ_CT_SKIP_AS_ERROR": "true",
             "LANG": "C.UTF-8",
+            "COVERDATA_TO_LCOV_APPS_DIRS": "deps:deps/rabbit/apps",
         }.items() + test_env.items()),
         deps = [":test_erlang_app"] + deps + runtime_deps,
         **kwargs
@@ -252,6 +253,7 @@ def rabbitmq_integration_suite(
             "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-plugins".format(package),
             "RABBITMQ_QUEUES": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-queues".format(package),
             "LANG": "C.UTF-8",
+            "COVERDATA_TO_LCOV_APPS_DIRS": "deps:deps/rabbit/apps",
         }.items() + test_env.items()),
         tools = [
             ":rabbitmq-for-tests-run",
