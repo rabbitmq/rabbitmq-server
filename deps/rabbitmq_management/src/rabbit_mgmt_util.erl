@@ -686,15 +686,27 @@ id(Key, ReqData) ->
 
 read_complete_body(Req) ->
     read_complete_body(Req, <<"">>).
-read_complete_body(Req0, Acc) ->
-    case cowboy_req:read_body(Req0) of
-        {ok, Data, Req}   -> {ok, <<Acc/binary, Data/binary>>, Req};
-        {more, Data, Req} -> read_complete_body(Req, <<Acc/binary, Data/binary>>)
+read_complete_body(Req, Acc) ->
+    BodySizeLimit = application:get_env(rabbitmq_management, max_http_body_size, ?MANAGEMENT_DEFAULT_HTTP_MAX_BODY_SIZE),
+    read_complete_body(Req, Acc, BodySizeLimit).
+read_complete_body(Req0, Acc, BodySizeLimit) ->
+    case bit_size(Acc) > BodySizeLimit of
+        true ->
+            {error, "Exceeded HTTP request body size limit"};
+        false ->
+            case cowboy_req:read_body(Req0) of
+                {ok, Data, Req}   -> {ok, <<Acc/binary, Data/binary>>, Req};
+                {more, Data, Req} -> read_complete_body(Req, <<Acc/binary, Data/binary>>)
+            end
     end.
 
 with_decode(Keys, ReqData, Context, Fun) ->
-    {ok, Body, ReqData1} = read_complete_body(ReqData),
-    with_decode(Keys, Body, ReqData1, Context, Fun).
+    case read_complete_body(ReqData) of
+        {error, Reason} ->
+            bad_request(Reason, ReqData, Context);
+        {ok, Body, ReqData1} ->
+            with_decode(Keys, Body, ReqData1, Context, Fun)
+    end.
 
 with_decode(Keys, Body, ReqData, Context, Fun) ->
     case decode(Keys, Body) of
