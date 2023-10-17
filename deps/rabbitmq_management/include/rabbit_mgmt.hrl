@@ -11,3 +11,5 @@
 
 -define(MANAGEMENT_PG_SCOPE, rabbitmq_management).
 -define(MANAGEMENT_PG_GROUP, management_db).
+
+-define(MANAGEMENT_DEFAULT_HTTP_MAX_BODY_SIZE, 20000000).

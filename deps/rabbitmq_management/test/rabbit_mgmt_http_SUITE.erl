@@ -125,6 +125,7 @@ all_tests() -> [
     get_fail_test,
     publish_test,
     publish_large_message_test,
+    publish_large_message_exceeding_http_request_body_size_test,
     publish_accept_json_test,
     publish_fail_test,
     publish_base64_test,
@@ -2636,7 +2637,7 @@ get_fail_test(Config) ->
     passed.
 
 
--define(LARGE_BODY_BYTES, 25000000).
+-define(LARGE_BODY_BYTES, 5000000).
 
 publish_test(Config) ->
     Headers = #{'x-forwarding' => [#{uri => <<"amqp://localhost/%2F/upstream">>}]},
@@ -2677,6 +2678,19 @@ publish_large_message_test(Config) ->
                                   {encoding, auto}], ?OK),
   assert_item(Msg, Msg3),
   http_delete(Config, "/queues/%2F/publish_accept_json_test", {group, '2xx'}),
+  passed.
+
+-define(EXCESSIVELY_LARGE_BODY_BYTES, 35000000).
+
+publish_large_message_exceeding_http_request_body_size_test(Config) ->
+  Headers = #{'x-forwarding' => [#{uri => <<"amqp://localhost/%2F/upstream">>}]},
+  Body = binary:copy(<<"a">>, ?EXCESSIVELY_LARGE_BODY_BYTES),
+  Msg = msg(<<"large_message_exceeding_http_request_body_size_test">>, Headers, Body),
+  http_put(Config, "/queues/%2F/large_message_exceeding_http_request_body_size_test", #{}, {group, '2xx'}),
+  %% exceeds the default HTTP API request body size limit
+  http_post_accept_json(Config, "/exchanges/%2F/amq.default/publish",
+                                     Msg, ?BAD_REQUEST),
+  http_delete(Config, "/queues/%2F/large_message_exceeding_http_request_body_size_test", {group, '2xx'}),
   passed.
 
 publish_accept_json_test(Config) ->

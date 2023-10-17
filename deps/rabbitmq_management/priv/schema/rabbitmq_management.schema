@@ -20,6 +20,23 @@
 {mapping, "management.http_log_dir", "rabbitmq_management.http_log_dir",
     [{datatype, string}]}.
 
+%% Max HTTP body limit
+
+{mapping, "management.http.max_body_size", "rabbitmq_management.max_http_body_size",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
+{translation, "rabbitmq_management.max_http_body_size",
+fun(Conf) ->
+    case cuttlefish:conf_get("management.http.max_body_size", Conf, undefined) of
+        %% 10 MiB allows for about 100K queues with short names across a small (single digit) number of virtual hosts with
+        %% an equally small number of users. MK.
+        undefined                -> 10000000;
+        Val when is_integer(Val) -> Val;
+        Other                    -> cuttlefish:invalid("management.http.max_body_size must be set to a positive integer")
+    end
+end}.
+
+
 %% HTTP (TCP) listener options ========================================================
 
 %% HTTP listener consistent with Web STOMP and Web MQTT.
