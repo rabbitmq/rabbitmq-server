@@ -93,6 +93,7 @@ jobs:
 
         sed -i"_orig" -E "/APP_VERSION/ s/3\.[0-9]+\.[0-9]+/${{ steps.check.outputs.version }}/" rabbitmq.bzl
         bazelisk build :package-generic-unix \
+          --allow_yanked_versions rules_go@0.37.0,gazelle@0.28.0 \
           --config=rbe-${{ env.otp_version_id }} \
           --test_build \
           --verbose_failures
