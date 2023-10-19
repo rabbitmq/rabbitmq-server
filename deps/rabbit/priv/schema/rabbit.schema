@@ -2365,7 +2365,7 @@ end}.
 
 {mapping, "raft.segment_max_entries", "ra.segment_max_entries", [
   {datatype, integer},
-  {validators, ["non_zero_positive_integer"]}
+  {validators, ["non_zero_positive_integer", "non_zero_positive_16_bit_integer"]}
 ]}.
 
 {translation, "ra.segment_max_entries",
@@ -2627,6 +2627,11 @@ end}.
 {validator, "non_zero_positive_integer", "number should be greater or equal to one",
 fun(Int) when is_integer(Int) ->
     Int >= 1
+end}.
+
+{validator, "non_zero_positive_16_bit_integer", "number should be between 1 and 65535",
+fun(Int) when is_integer(Int) ->
+    (Int >= 1) and (Int =< 65535)
 end}.
 
 {validator, "valid_regex", "string must be a valid regular expression",
