@@ -8,13 +8,8 @@ build --flag_alias=erlang_version=@rules_erlang//:erlang_version
 build --flag_alias=elixir_home=//:elixir_home
 build --flag_alias=test_build=//:enable_test_build
 
-<<<<<<< HEAD
-=======
-build --test_timeout=7200
-
 build --combined_report=lcov
 
->>>>>>> 231465f35e (Use rules_erlang 3.13.1)
 build:buildbuddy --bes_results_url=https://app.buildbuddy.io/invocation/
 build:buildbuddy --bes_backend=grpcs://remote.buildbuddy.io
 build:buildbuddy --remote_cache=grpcs://remote.buildbuddy.io
