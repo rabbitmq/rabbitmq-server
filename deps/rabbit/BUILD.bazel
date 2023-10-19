@@ -1324,4 +1324,7 @@ eunit(
     ],
     erl_extra_args = [ENABLE_FEATURE_MAYBE_EXPR],
     target = ":test_erlang_app",
+    test_env = {
+        "COVERDATA_TO_LCOV_APPS_DIRS": "deps:deps/rabbit/apps",
+    },
 )
