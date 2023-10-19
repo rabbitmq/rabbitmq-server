@@ -26,13 +26,15 @@ bazel_dep(
 bazel_dep(
     name = "rules_erlang",
 <<<<<<< HEAD
+<<<<<<< HEAD
     version = "3.9.0",
 =======
 <<<<<<< HEAD
     version = "3.11.3",
 =======
+=======
+>>>>>>> 7ed5f99eb5 (Resolve a conflict (#9732))
     version = "3.13.1",
->>>>>>> d3117d121a (Use rules_erlang 3.13.1)
 )
 
 bazel_dep(
