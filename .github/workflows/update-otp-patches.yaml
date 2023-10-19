@@ -124,6 +124,12 @@ jobs:
 
         echo "WORKSPACE updated"
 
+        echo "$(cat WORKSPACE.bzlmod | buildozer 'set downloaded_file_path "OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"' -:otp_src_${{ matrix.name }})" > WORKSPACE.bzlmod
+        echo "$(cat WORKSPACE.bzlmod | buildozer 'set urls ["https://github.com/erlang/otp/archive/OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"]' -:otp_src_${{ matrix.name }})" > WORKSPACE.bzlmod
+        echo "$(cat WORKSPACE.bzlmod | buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA2 }}"' -:otp_src_${{ matrix.name }})" > WORKSPACE.bzlmod
+
+        echo "WORKSPACE.bzlmod updated"
+
         set -x
         git diff
     - name: CREATE PULL REQUEST
