@@ -69,6 +69,7 @@ rebar3.crashdump
 *.lock
 
 /logs/
+/genhtml/
 
 /topic-branch-scratch/
 
