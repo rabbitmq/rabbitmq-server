@@ -1229,4 +1229,7 @@ eunit(
         ":test_clustering_utils_beam",
     ],
     target = ":test_erlang_app",
+    test_env = {
+        "COVERDATA_TO_LCOV_APPS_DIRS": "deps:deps/rabbit/apps",
+    },
 )
