@@ -112,7 +112,7 @@ git_repository(
 git_repository(
     name = "rules_erlang",
     remote = "https://github.com/rabbitmq/rules_erlang.git",
-    tag = "3.9.0",
+    tag = "3.13.1",
 )
 
 load(
