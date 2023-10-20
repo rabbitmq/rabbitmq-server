@@ -951,7 +951,7 @@ are_cmqs_permitted() ->
 are_cmqs_used(_) ->
     case rabbit_khepri:get_feature_state() of
         enabled ->
-            are_cmqs_used1();
+            false;
         _ ->
             %% If we are using Mnesia, we want to check manually if the table
             %% exists first. Otherwise it can conflict with the way
