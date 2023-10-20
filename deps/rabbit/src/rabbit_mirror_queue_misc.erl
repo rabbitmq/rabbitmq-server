@@ -962,8 +962,16 @@ are_cmqs_used(_) ->
             RuntimeParamsReady = lists:member(
                                    rabbit_runtime_parameters, AllTables),
             case RuntimeParamsReady of
-                true  -> are_cmqs_used1();
-                false -> false
+                true ->
+                    %% We also wait for the table because it could exist but
+                    %% may be unavailable. For instance, Mnesia needs another
+                    %% replica on another node before it considers it to be
+                    %% available.
+                    rabbit_table:wait(
+                      [rabbit_runtime_parameters], _Retry = true),
+                    are_cmqs_used1();
+                false ->
+                    false
             end
     end.
 
