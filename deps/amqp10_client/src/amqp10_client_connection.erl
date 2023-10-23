@@ -48,7 +48,7 @@
          opened/3,
          close_sent/3]).
 
--export([format_status/1, obfuscate_state_config_sasl/1, obfuscate_state_config_tls_opts/1, obfuscate_state/1]).
+-export([format_status/1]).
 
 -type amqp10_socket() :: {tcp, gen_tcp:socket()} | {ssl, ssl:sslsocket()}.
 
