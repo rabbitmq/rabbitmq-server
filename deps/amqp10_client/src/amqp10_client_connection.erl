@@ -48,6 +48,8 @@
          opened/3,
          close_sent/3]).
 
+-export([format_status/1, obfuscate_state_config_sasl/1, obfuscate_state_config_tls_opts/1, obfuscate_state/1]).
+
 -type amqp10_socket() :: {tcp, gen_tcp:socket()} | {ssl, ssl:sslsocket()}.
 
 -type milliseconds() :: non_neg_integer().
@@ -328,9 +330,44 @@ terminate(Reason, _StateName, #state{connection_sup = Sup,
 code_change(_OldVsn, StateName, State, _Extra) ->
     {ok, StateName, State}.
 
+format_status(Context = #{data := ProcState}) ->
+    %% Note: Context.state here refers to the gen_statem state name,
+    %%       so we need to use Context.data to get #state{}
+    Obfuscated = obfuscate_state(ProcState),
+    Context#{data => Obfuscated}.
+
+
 %% -------------------------------------------------------------------
 %% Internal functions.
 %% -------------------------------------------------------------------
+
+obfuscate_state(State = #state{config = Cfg0}) ->
+    Cfg1 = obfuscate_state_config_sasl(Cfg0),
+    Cfg2 = obfuscate_state_config_tls_opts(Cfg1),
+    State#state{config = Cfg2}.
+
+-spec obfuscate_state_config_sasl(connection_config()) -> connection_config().
+obfuscate_state_config_sasl(Cfg) ->
+    Sasl0 = maps:get(sasl, Cfg, none),
+    Sasl = case Sasl0 of
+               {plain, Username, _Password} ->
+                   {plain, Username, <<"[redacted]">>};
+               Other ->
+                   Other
+           end,
+    Cfg#{sasl => Sasl}.
+
+-spec obfuscate_state_config_tls_opts(connection_config()) -> connection_config().
+obfuscate_state_config_tls_opts(Cfg) ->
+    TlsOpts0 = maps:get(tls_opts, Cfg, undefined),
+    TlsOpts = case TlsOpts0 of
+        {secure_port, PropL0} ->
+            Obfuscated = proplists:delete(password, PropL0),
+            {secure_port, Obfuscated};
+        _ ->
+            TlsOpts0
+    end,
+    Cfg#{tls_opts => TlsOpts}.
 
 handle_begin_session({FromPid, _Ref},
                      #state{sessions_sup = Sup, reader = Reader,
