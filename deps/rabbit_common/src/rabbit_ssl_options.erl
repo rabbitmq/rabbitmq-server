@@ -18,7 +18,9 @@
 -spec fix(rabbit_types:infos()) -> rabbit_types:infos().
 
 fix(Config) ->
-    fix_verify_fun(fix_ssl_protocol_versions(Config)).
+    fix_verify_fun(
+      fix_ssl_protocol_versions(
+        hibernate_after(Config))).
 
 fix_verify_fun(SslOptsConfig) ->
     %% Starting with ssl 4.0.1 in Erlang R14B, the verify_fun function
@@ -83,4 +85,13 @@ fix_ssl_protocol_versions(Config) ->
                              Vs        -> Vs
                          end,
             rabbit_misc:pset(versions, Configured -- ?BAD_SSL_PROTOCOL_VERSIONS, Config)
+    end.
+
+hibernate_after(Config) ->
+    Key = hibernate_after,
+    case proplists:is_defined(Key, Config) of
+        true ->
+            Config;
+        false ->
+            [{Key, 6_000} | Config]
     end.
