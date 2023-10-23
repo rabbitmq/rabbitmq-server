@@ -58,7 +58,9 @@
     ?RESPONSE_CODE_ACCESS_REFUSED |
     ?RESPONSE_CODE_PRECONDITION_FAILED |
     ?RESPONSE_CODE_PUBLISHER_DOES_NOT_EXIST |
-    ?RESPONSE_CODE_NO_OFFSET.
+    ?RESPONSE_CODE_NO_OFFSET |
+    ?RESPONSE_SASL_CANNOT_CHANGE_MECHANISM |
+    ?RESPONSE_SASL_CANNOT_CHANGE_USERNAME .
 -type error_code() :: response_code().
 -type sequence() :: non_neg_integer().
 -type credit() :: non_neg_integer().
