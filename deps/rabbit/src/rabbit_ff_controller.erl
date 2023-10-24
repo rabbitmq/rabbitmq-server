@@ -1273,20 +1273,29 @@ list_feature_flags_enabled_somewhere(
       FeatureName :: rabbit_feature_flags:feature_name().
 
 list_deprecated_features_that_cant_be_denied(
-  #{states_per_node := StatesPerNode}) ->
+  #{feature_flags := FeatureFlags,
+    states_per_node := StatesPerNode}) ->
     ThisNode = node(),
     States = maps:get(ThisNode, StatesPerNode),
 
     maps:fold(
       fun
           (FeatureName, true, Acc) ->
-              #{ThisNode := IsUsed} = run_callback(
-                                        [ThisNode], FeatureName,
-                                        is_feature_used, #{}, infinity),
-              case IsUsed of
-                  true   -> [FeatureName | Acc];
-                  false  -> Acc;
-                  _Error -> Acc
+              FeatureProps = maps:get(FeatureName, FeatureFlags),
+              Stability = rabbit_feature_flags:get_stability(FeatureProps),
+              case Stability of
+                  required ->
+                      Acc;
+                  _ ->
+                      #{ThisNode := IsUsed} = run_callback(
+                                                [ThisNode], FeatureName,
+                                                is_feature_used, #{},
+                                                infinity),
+                      case IsUsed of
+                          true   -> [FeatureName | Acc];
+                          false  -> Acc;
+                          _Error -> [FeatureName | Acc]
+                      end
               end;
           (_FeatureName, false, Acc) ->
               Acc
