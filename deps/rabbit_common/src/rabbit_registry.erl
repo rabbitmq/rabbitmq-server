@@ -46,9 +46,11 @@ unregister(Class, TypeName) ->
 %% can throw a badarg, indicating that the type cannot have been
 %% registered.
 binary_to_type(TypeBin) when is_binary(TypeBin) ->
-    case catch list_to_existing_atom(binary_to_list(TypeBin)) of
-        {'EXIT', {badarg, _}} -> {error, not_found};
-        TypeAtom              -> TypeAtom
+    case catch binary_to_existing_atom(TypeBin) of
+        {'EXIT', {badarg, _}} ->
+            {error, not_found};
+        TypeAtom ->
+            TypeAtom
     end.
 
 lookup_module(Class, T) when is_atom(T) ->
@@ -65,7 +67,7 @@ lookup_all(Class) ->
 %%---------------------------------------------------------------------------
 
 internal_binary_to_type(TypeBin) when is_binary(TypeBin) ->
-    list_to_atom(binary_to_list(TypeBin)).
+    binary_to_atom(TypeBin).
 
 internal_register(Class, TypeName, ModuleName)
   when is_atom(Class), is_binary(TypeName), is_atom(ModuleName) ->
