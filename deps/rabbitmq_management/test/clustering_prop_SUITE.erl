@@ -170,7 +170,7 @@ force_all() ->
 
 clear_all_table_data() ->
     [ets:delete_all_objects(T) || {T, _} <- ?CORE_TABLES],
-    [ets:delete_all_objects(T) || {T, _} <- ?TABLES],
+    rabbit_mgmt_storage:reset(),
     [gen_server:call(P, purge_cache)
      || {_, P, _, _} <- supervisor:which_children(rabbit_mgmt_db_cache_sup)].
 

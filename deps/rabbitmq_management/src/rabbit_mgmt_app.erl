@@ -26,6 +26,13 @@
                    [{description, "Imports definition file at management.load_definitions"},
                     {mfa,         {rabbit_mgmt_load_definitions, boot, []}}]}).
 
+-rabbit_feature_flag(
+   {detailed_queues_endpoint,
+    #{desc          => "Add a detailed queues HTTP API endpoint. Reduce number of metrics in the default endpoint.",
+      stability     => stable,
+      depends_on    => [feature_flags_v2]
+     }}).
+
 start(_Type, _StartArgs) ->
     case rabbit_mgmt_agent_config:is_metrics_collector_enabled() of
         true ->

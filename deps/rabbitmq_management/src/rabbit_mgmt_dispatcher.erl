@@ -134,6 +134,7 @@ dispatcher() ->
      {"/exchanges/:vhost/:exchange/bindings/source",           rabbit_mgmt_wm_bindings, [exchange_source]},
      {"/exchanges/:vhost/:exchange/bindings/destination",      rabbit_mgmt_wm_bindings, [exchange_destination]},
      {"/queues",                                               rabbit_mgmt_wm_queues, []},
+     {"/queues/detailed",                                      rabbit_mgmt_wm_queues, [detailed]},
      {"/queues/:vhost",                                        rabbit_mgmt_wm_queues, []},
      {"/queues/:vhost/:queue",                                 rabbit_mgmt_wm_queue, []},
      {"/queues/:vhost/:destination/bindings",                  rabbit_mgmt_wm_bindings, [queue]},

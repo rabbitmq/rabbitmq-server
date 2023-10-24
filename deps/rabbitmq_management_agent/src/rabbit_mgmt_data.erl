@@ -18,6 +18,7 @@
 -export([overview_data/4,
          consumer_data/2,
          all_list_queue_data/3,
+         all_list_basic_queue_data/3,
          all_detail_queue_data/3,
          all_exchange_data/3,
          all_connection_data/3,
@@ -63,6 +64,12 @@ all_detail_queue_data(_Pid, Ids, Ranges) ->
 all_list_queue_data(_Pid, Ids, Ranges) ->
     lists:foldl(fun (Id, Acc) ->
                         Data = list_queue_data(Ranges, Id),
+                        maps:put(Id, Data, Acc)
+                end, #{}, Ids).
+
+all_list_basic_queue_data(_Pid, Ids, Ranges) ->
+    lists:foldl(fun (Id, Acc) ->
+                        Data = list_basic_queue_data(Ranges, Id),
                         maps:put(Id, Data, Acc)
                 end, #{}, Ids).
 
@@ -203,6 +210,11 @@ list_queue_data(Ranges, Id) ->
     maps:from_list(queue_raw_message_data(Ranges, Id) ++
                    queue_raw_deliver_stats_data(Ranges, Id) ++
                    [{queue_stats, lookup_element(queue_stats, Id)}]).
+
+list_basic_queue_data(Ranges, Id) ->
+    maps:from_list(queue_raw_message_data(Ranges, Id) ++
+                   queue_raw_deliver_stats_data(Ranges, Id) ++
+                   [{queue_stats, lookup_element(queue_basic_stats, Id)}]).
 
 detail_channel_data(Ranges, Id) ->
     maps:from_list(channel_raw_message_data(Ranges, Id) ++

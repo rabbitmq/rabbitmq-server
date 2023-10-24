@@ -150,6 +150,7 @@ handle_deleted_queues(queue_coarse_metrics, Remainders,
                                           QNegStats, Size, Interval, false)
                              || {Size, Interval} <- BPolicies],
                             ets:delete(queue_stats, Queue),
+                            ets:delete(queue_basic_stats, Queue),
                             ets:delete(queue_process_stats, Queue)
                   end, maps:to_list(Remainders));
 handle_deleted_queues(_T, _R, _P) -> ok.
@@ -441,12 +442,16 @@ aggregate_entry({Id, Metrics, 0}, NextStats, Ops0,
                             GPolicies),
     Ops2 = case QueueFun(Id) of
                true ->
-                   O = insert_entry_ops(queue_msg_rates, Id, false, Stats, Ops1,
-                                        BPolicies),
+                   O_1 = insert_entry_ops(queue_msg_rates, Id, false, Stats, Ops1,
+                                          BPolicies),
                    Fmt = rabbit_mgmt_format:format(
                            Metrics,
                            {fun rabbit_mgmt_format:format_queue_stats/1, false}),
-                   insert_op(queue_stats, Id, ?queue_stats(Id, Fmt), O);
+                   FmtBasic = rabbit_mgmt_format:format(
+                                Metrics,
+                                {fun rabbit_mgmt_format:format_queue_basic_stats/1, false}),
+                   O_2 = insert_op(queue_basic_stats, Id, ?queue_stats(Id, FmtBasic), O_1),
+                   insert_op(queue_stats, Id, ?queue_stats(Id, Fmt), O_2);
                _ ->
                    Ops1
            end,
@@ -648,6 +653,8 @@ difference({A0, A1, A2, A3, A4, A5, A6, A7}, {B0, B1, B2, B3, B4, B5, B6, B7}) -
 vhost(#resource{virtual_host = VHost}) ->
     VHost;
 vhost({queue_stats, #resource{virtual_host = VHost}}) ->
+    VHost;
+vhost({queue_basic_stats, #resource{virtual_host = VHost}}) ->
     VHost;
 vhost({TName, Pid}) ->
     pget(vhost, lookup_element(TName, Pid, 2)).

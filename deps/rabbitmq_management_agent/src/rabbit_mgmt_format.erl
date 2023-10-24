@@ -18,7 +18,8 @@
 -export([format_nulls/1, escape_html_tags/1]).
 -export([print/2, print/1]).
 
--export([format_queue_stats/1, format_channel_stats/1,
+-export([format_queue_stats/1, format_queue_basic_stats/1,
+         format_channel_stats/1,
          format_consumer_arguments/1,
          format_connection_created/1,
          format_accept_content/1, format_args/1]).
@@ -78,6 +79,40 @@ format_queue_stats({disk_reads, _}) ->
 format_queue_stats({disk_writes, _}) ->
     [];
 format_queue_stats(Stat) ->
+    [Stat].
+
+format_queue_basic_stats({_, ''}) ->
+    [];
+format_queue_basic_stats({reductions, _}) ->
+    [];
+format_queue_basic_stats({exclusive_consumer_pid, _}) ->
+    [];
+format_queue_basic_stats({single_active_consumer_pid, _}) ->
+    [];
+format_queue_basic_stats({slave_pids, Pids}) ->
+    [{slave_nodes, [node(Pid) || Pid <- Pids]}];
+format_queue_basic_stats({leader, Leader}) ->
+    [{node, Leader}];
+format_queue_basic_stats({effective_policy_definition, []}) ->
+    [{effective_policy_definition, #{}}];
+format_queue_basic_stats({synchronised_slave_pids, Pids}) ->
+    [{synchronised_slave_nodes, [node(Pid) || Pid <- Pids]}];
+format_queue_basic_stats({backing_queue_status, Value}) ->
+    case proplists:get_value(version, Value, undefined) of
+        undefined -> [];
+        Version   -> [{storage_version, Version}]
+    end;
+format_queue_basic_stats({garbage_collection, _}) ->
+    [];
+format_queue_basic_stats({idle_since, _Value}) ->
+    [];
+format_queue_basic_stats({state, Value}) ->
+    queue_state(Value);
+format_queue_basic_stats({disk_reads, _}) ->
+    [];
+format_queue_basic_stats({disk_writes, _}) ->
+    [];
+format_queue_basic_stats(Stat) ->
     [Stat].
 
 format_channel_stats([{idle_since, Value} | Rest]) ->

@@ -108,6 +108,7 @@ remove_exchange(Name, BIntervals) ->
 
 remove_queue(Name, BIntervals) ->
     ets:delete(queue_stats, Name),
+    ets:delete(queue_basic_stats, Name),
     delete_samples(queue_stats_publish, Name, BIntervals),
     delete_samples(queue_stats_deliver_stats, Name, BIntervals),
     delete_samples(queue_process_stats, Name, BIntervals),

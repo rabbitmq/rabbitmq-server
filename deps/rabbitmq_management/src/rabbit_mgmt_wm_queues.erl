@@ -23,8 +23,12 @@
 
 %%--------------------------------------------------------------------
 
-init(Req, _State) ->
-    {cowboy_rest, rabbit_mgmt_headers:set_common_permission_headers(Req, ?MODULE), #context{}}.
+init(Req, State) ->
+    Mode = case State of
+               [] -> basic;
+               [detailed] -> detailed
+           end,
+    {cowboy_rest, rabbit_mgmt_headers:set_common_permission_headers(Req, ?MODULE), {Mode, #context{}}}.
 
 variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
@@ -32,27 +36,28 @@ variances(Req, Context) ->
 content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
-resource_exists(ReqData, Context) ->
+resource_exists(ReqData, {Mode, Context}) ->
     {case queues0(ReqData) of
          vhost_not_found -> false;
          _               -> true
-     end, ReqData, Context}.
+     end, ReqData, {Mode, Context}}.
 
-to_json(ReqData, Context) ->
+to_json(ReqData, {Mode, Context}) ->
     try
         Basic = basic_vhost_filtered(ReqData, Context),
         Data = rabbit_mgmt_util:augment_resources(Basic, ?DEFAULT_SORT,
                                                   ?BASIC_COLUMNS, ReqData,
-                                                  Context, fun augment/2),
-        rabbit_mgmt_util:reply(Data, ReqData, Context)
+                                                  Context, augment(Mode)),
+        rabbit_mgmt_util:reply(Data, ReqData, {Mode, Context})
     catch
         {error, invalid_range_parameters, Reason} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData,
-                                         Context)
+                                         {Mode, Context})
     end.
 
-is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
+is_authorized(ReqData, {Mode, Context}) ->
+    {Res, RD2, C2} = rabbit_mgmt_util:is_authorized_vhost(ReqData, Context),
+    {Res, RD2, {Mode, C2}}.
 
 %%--------------------------------------------------------------------
 %% Exported functions
@@ -77,18 +82,31 @@ basic(ReqData) ->
     end.
 
 augmented(ReqData, Context) ->
-    augment(rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context), ReqData).
+    Fun = augment(basic),
+    Fun(rabbit_mgmt_util:filter_vhost(basic(ReqData), ReqData, Context), ReqData).
 
 %%--------------------------------------------------------------------
 %% Private helpers
 
-augment(Basic, ReqData) ->
-    case rabbit_mgmt_util:disable_stats(ReqData) of
-        false ->
-            rabbit_mgmt_db:augment_queues(Basic, rabbit_mgmt_util:range_ceil(ReqData),
-                                          basic);
-        true ->
-            Basic
+augment(Mode) ->
+    fun(Basic, ReqData) ->
+            case rabbit_mgmt_util:disable_stats(ReqData) of
+                false ->
+                    %% The reduced endpoint needs to sit behind a feature flag, as it calls a different data aggregation function that is used against all cluster nodes.
+                    %% Data can be collected locally even if other nodes in the cluster do not, it's just a local ETS table. But it can't be queried until all nodes enable the FF.
+                    IsEnabled = rabbit_feature_flags:is_enabled(detailed_queues_endpoint),
+                    Stats = case {IsEnabled, Mode, rabbit_mgmt_util:columns(ReqData)} of
+                                {false, _, _} -> detailed;
+                                {_, detailed, _} -> detailed;
+                                {_, _, all} -> basic;
+                                _ -> detailed
+                            end,
+                    rabbit_log:warning("AUGMENT QUEUES is_enabled ~p stats ~p", [IsEnabled, Stats]),
+                    rabbit_mgmt_db:augment_queues(Basic, rabbit_mgmt_util:range_ceil(ReqData),
+                                                  Stats);
+                true ->
+                    Basic
+            end
     end.
 
 basic_vhost_filtered(ReqData, Context) ->
