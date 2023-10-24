@@ -30,7 +30,9 @@
          socket_ready/2,
          protocol_header_received/5,
          begin_session/1,
-         heartbeat/1]).
+         heartbeat/1,
+         encrypt_sasl/1,
+         decrypt_sasl/1]).
 
 %% gen_fsm callbacks.
 -export([init/1,
@@ -56,6 +58,9 @@
 
 -type address() :: inet:socket_address() | inet:hostname().
 
+-type encrypted_sasl() :: {plaintext, binary()} | {encrypted, binary()}.
+-type decrypted_sasl() :: none | anon | {plain, User :: binary(), Pwd :: binary()}.
+
 -type connection_config() ::
     #{container_id => binary(), % AMQP container id
       hostname => binary(), % the dns name of the target host
@@ -72,7 +77,9 @@
       % set to a negative value to allow a sender to "overshoot" the flow
       % control by this margin
       transfer_limit_margin => 0 | neg_integer(),
-      sasl => none | anon | {plain, User :: binary(), Pwd :: binary()},
+      %% These credentials_obfuscation-wrapped values have the type of
+      %% decrypted_sasl/0
+      sasl => encrypted_sasl() | decrypted_sasl(),
       notify => pid(),
       notify_when_opened => pid() | none,
       notify_when_closed => pid() | none
@@ -92,7 +99,9 @@
         }).
 
 -export_type([connection_config/0,
-              amqp10_socket/0]).
+              amqp10_socket/0,
+              encrypted_sasl/0,
+              decrypted_sasl/0]).
 
 %% -------------------------------------------------------------------
 %% Public API.
@@ -124,6 +133,18 @@ open(Config) ->
                    | amqp10_client_types:connection_error(), binary()} | none) -> ok.
 close(Pid, Reason) ->
     gen_statem:cast(Pid, {close, Reason}).
+
+-spec encrypt_sasl(decrypted_sasl()) -> encrypted_sasl().
+encrypt_sasl(none) ->
+    credentials_obfuscation:encrypt(none);
+encrypt_sasl(DecryptedSasl) ->
+    credentials_obfuscation:encrypt(term_to_binary(DecryptedSasl)).
+
+-spec decrypt_sasl(encrypted_sasl()) -> decrypted_sasl().
+decrypt_sasl(none) ->
+    credentials_obfuscation:decrypt(none);
+decrypt_sasl(EncryptedSasl) ->
+    binary_to_term(credentials_obfuscation:decrypt(EncryptedSasl)).
 
 %% -------------------------------------------------------------------
 %% Private API.
@@ -166,8 +187,9 @@ init([Sup, Config0]) ->
 expecting_socket(_EvtType, {socket_ready, Socket},
                  State = #state{config = Cfg}) ->
     State1 = State#state{socket = Socket},
-    case Cfg of
-        #{sasl := none} ->
+    Sasl = credentials_obfuscation:decrypt(maps:get(sasl, Cfg)),
+    case Sasl of
+        none ->
             ok = socket_send(Socket, ?AMQP_PROTOCOL_HEADER),
             {next_state, hdr_sent, State1};
         _ ->
@@ -193,16 +215,17 @@ sasl_hdr_sent({call, From}, begin_session,
 
 sasl_hdr_rcvds(_EvtType, #'v1_0.sasl_mechanisms'{
                   sasl_server_mechanisms = {array, symbol, Mechs}},
-               State = #state{config = #{sasl := Sasl}}) ->
-    SaslBin = {symbol, sasl_to_bin(Sasl)},
+               State = #state{config = #{sasl := EncryptedSasl}}) ->
+    DecryptedSasl = decrypt_sasl(EncryptedSasl),
+    SaslBin = {symbol, decrypted_sasl_to_bin(DecryptedSasl)},
     case lists:any(fun(S) when S =:= SaslBin -> true;
                       (_) -> false
                    end, Mechs) of
         true ->
-            ok = send_sasl_init(State, Sasl),
+            ok = send_sasl_init(State, DecryptedSasl),
             {next_state, sasl_init_sent, State};
         false ->
-            {stop, {sasl_not_supported, Sasl}, State}
+            {stop, {sasl_not_supported, DecryptedSasl}, State}
     end;
 sasl_hdr_rcvds({call, From}, begin_session,
                #state{pending_session_reqs = PendingSessionReqs} = State) ->
@@ -522,8 +545,9 @@ translate_err(#'v1_0.error'{condition = Cond, description = Desc}) ->
 amqp10_event(Evt) ->
     {amqp10_event, {connection, self(), Evt}}.
 
-sasl_to_bin({plain, _, _}) -> <<"PLAIN">>;
-sasl_to_bin(anon) -> <<"ANONYMOUS">>.
+decrypted_sasl_to_bin({plain, _, _}) -> <<"PLAIN">>;
+decrypted_sasl_to_bin(anon) -> <<"ANONYMOUS">>;
+decrypted_sasl_to_bin(none) -> <<"ANONYMOUS">>.
 
 config_defaults() ->
     #{sasl => none,
