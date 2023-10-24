@@ -100,13 +100,21 @@ recover(XNames, QNames) ->
 
 recover_semi_durable_route(Gatherer, Binding, Src, Dst, ToRecover, Fun) ->
     case sets:is_element(Dst, ToRecover) of
-        true  -> {ok, X} = rabbit_exchange:lookup(Src),
-                 ok = gatherer:fork(Gatherer),
-                 ok = worker_pool:submit_async(
-                        fun () ->
-                                Fun(Binding, X),
-                                gatherer:finish(Gatherer)
-                        end);
+        true  ->
+            case rabbit_exchange:lookup(Src) of
+                {ok, X} ->
+                    ok = gatherer:fork(Gatherer),
+                    ok = worker_pool:submit_async(
+                           fun () ->
+                                   Fun(Binding, X),
+                                   gatherer:finish(Gatherer)
+                           end);
+                {error, not_found}=Error ->
+                    rabbit_log:warning(
+                      "expected exchange ~tp to exist during recovery, "
+                      "error: ~tp", [Src, Error]),
+                    ok
+            end;
         false -> ok
     end.
 
