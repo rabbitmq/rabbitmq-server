@@ -109,7 +109,11 @@ recover_semi_durable_route(Gatherer, Binding, Src, Dst, ToRecover, Fun) ->
                                    Fun(Binding, X),
                                    gatherer:finish(Gatherer)
                            end);
-                {error, not_found} -> ok
+                {error, not_found}=Error ->
+                    rabbit_log:warning(
+                      "expected exchange ~tp to exist during recovery, "
+                      "error: ~tp", [Src, Error]),
+                    ok
             end;
         false -> ok
     end.
