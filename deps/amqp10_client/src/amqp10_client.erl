@@ -504,7 +504,7 @@ try_to_existing_atom(L) when is_list(L) ->
     end.
 
 ensure_started() ->
-    _ = application:ensure_all_started([credentials_obfuscation]).
+    _ = application:ensure_all_started(credentials_obfuscation).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
