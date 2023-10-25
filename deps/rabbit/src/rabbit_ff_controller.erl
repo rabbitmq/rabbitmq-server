@@ -49,7 +49,8 @@
          running_nodes/0,
          collect_inventory_on_nodes/1, collect_inventory_on_nodes/2,
          mark_as_enabled_on_nodes/4,
-         wait_for_task_and_stop/0]).
+         wait_for_task_and_stop/0,
+         is_running/0]).
 
 %% gen_statem callbacks.
 -export([callback_mode/0,
@@ -83,6 +84,9 @@ wait_for_task_and_stop() ->
         undefined -> gen_statem:stop(?LOCAL_NAME);
         _         -> rabbit_sup:stop_child(?LOCAL_NAME)
     end.
+
+is_running() ->
+    is_pid(erlang:whereis(?LOCAL_NAME)).
 
 is_supported(FeatureNames) ->
     is_supported(FeatureNames, ?TIMEOUT).
