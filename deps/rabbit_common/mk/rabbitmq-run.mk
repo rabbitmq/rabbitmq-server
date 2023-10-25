@@ -393,11 +393,7 @@ start-brokers start-cluster: $(DIST_TARGET)
 		nodename="rabbit-$$n@$(HOSTNAME)"; \
 		if test '$@' = 'start-cluster' && test "$$nodename1"; then \
 			ERL_LIBS="$(DIST_ERL_LIBS)" \
-			  $(RABBITMQCTL) -n "$$nodename" stop_app; \
-			ERL_LIBS="$(DIST_ERL_LIBS)" \
 			  $(RABBITMQCTL) -n "$$nodename" join_cluster "$$nodename1"; \
-			ERL_LIBS="$(DIST_ERL_LIBS)" \
-			  $(RABBITMQCTL) -n "$$nodename" start_app; \
 		else \
 			nodename1=$$nodename; \
 		fi; \
