@@ -87,6 +87,7 @@
 -spec open_connection(inet:socket_address() | inet:hostname(),
                       inet:port_number()) -> supervisor:startchild_ret().
 open_connection(Addr, Port) ->
+    _ = ensure_started(),
     open_connection(#{address => Addr, port => Port, notify => self(),
                       sasl => anon}).
 
@@ -97,14 +98,19 @@ open_connection(Addr, Port) ->
 -spec open_connection(connection_config()) ->
     supervisor:startchild_ret().
 open_connection(ConnectionConfig0) ->
+    _ = ensure_started(),
+
     Notify = maps:get(notify, ConnectionConfig0, self()),
     NotifyWhenOpened = maps:get(notify_when_opened, ConnectionConfig0, self()),
     NotifyWhenClosed = maps:get(notify_when_closed, ConnectionConfig0, self()),
-    amqp10_client_connection:open(ConnectionConfig0#{
+    ConnectionConfig1 = ConnectionConfig0#{
         notify => Notify,
         notify_when_opened => NotifyWhenOpened,
         notify_when_closed => NotifyWhenClosed
-    }).
+    },
+    Sasl = maps:get(sasl, ConnectionConfig1),
+    ConnectionConfig2 = ConnectionConfig1#{sasl => amqp10_client_connection:encrypt_sasl(Sasl)},
+    amqp10_client_connection:open(ConnectionConfig2).
 
 %% @doc Opens a connection using a connection_config map
 %% This is asynchronous and will notify completion to the caller using
@@ -497,6 +503,8 @@ try_to_existing_atom(L) when is_list(L) ->
             throw({non_existent_atom, L})
     end.
 
+ensure_started() ->
+    _ = application:ensure_all_started(credentials_obfuscation).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
