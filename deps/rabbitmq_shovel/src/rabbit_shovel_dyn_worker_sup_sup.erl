@@ -84,7 +84,8 @@ stop_child({VHost, ShovelName} = Name) ->
 
 cleanup_specs() ->
     SpecsSet = sets:from_list([element(2, element(1, S)) || S <- mirrored_supervisor:which_children(?SUPERVISOR)]),
-    ParamsSet = sets:from_list(rabbit_runtime_parameters:list_component(<<"shovel">>)),
+    ParamsSet = sets:from_list([ {proplists:get_value(vhost, S), proplists:get_value(name, S)}
+                                 || S <- rabbit_runtime_parameters:list_component(<<"shovel">>) ]),
     F = fun(Name, ok) ->
             _ = mirrored_supervisor:delete_child(?SUPERVISOR, id(Name)),
             ok
