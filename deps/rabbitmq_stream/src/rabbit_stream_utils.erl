@@ -60,42 +60,6 @@ check_name(_Name) ->
 write_messages(_Version, _ClusterLeader, _PublisherRef, _PublisherId, <<>>) ->
     ok;
 write_messages(?VERSION_1 = V, ClusterLeader,
-               undefined,
-               PublisherId,
-               <<PublishingId:64,
-                 0:1,
-                 MessageSize:31,
-                 Message:MessageSize/binary,
-                 Rest/binary>>) ->
-    ok =
-        osiris:write(ClusterLeader,
-                     undefined,
-                     {PublisherId, PublishingId},
-                     Message),
-    write_messages(V, ClusterLeader, undefined, PublisherId, Rest);
-write_messages(?VERSION_1 = V, ClusterLeader,
-               undefined,
-               PublisherId,
-               <<PublishingId:64,
-                 1:1,
-                 CompressionType:3,
-                 _Unused:4,
-                 MessageCount:16,
-                 UncompressedSize:32,
-                 BatchSize:32,
-                 Batch:BatchSize/binary,
-                 Rest/binary>>) ->
-    ok =
-        osiris:write(ClusterLeader,
-                     undefined,
-                     {PublisherId, PublishingId},
-                     {batch,
-                      MessageCount,
-                      CompressionType,
-                      UncompressedSize,
-                      Batch}),
-    write_messages(V, ClusterLeader, undefined, PublisherId, Rest);
-write_messages(?VERSION_1 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
                <<PublishingId:64,
@@ -103,8 +67,8 @@ write_messages(?VERSION_1 = V, ClusterLeader,
                  MessageSize:31,
                  Message:MessageSize/binary,
                  Rest/binary>>) ->
-    ok = osiris:write(ClusterLeader, PublisherRef, PublishingId, Message),
-    write_messages(V, ClusterLeader, PublisherRef, PublisherId, Rest);
+    write_messages0(V, ClusterLeader, PublisherRef, PublisherId,
+                    PublishingId, Message, Rest);
 write_messages(?VERSION_1 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
@@ -117,46 +81,9 @@ write_messages(?VERSION_1 = V, ClusterLeader,
                  BatchSize:32,
                  Batch:BatchSize/binary,
                  Rest/binary>>) ->
-    ok =
-        osiris:write(ClusterLeader,
-                     PublisherRef,
-                     PublishingId,
-                     {batch,
-                      MessageCount,
-                      CompressionType,
-                      UncompressedSize,
-                      Batch}),
-    write_messages(V, ClusterLeader, PublisherRef, PublisherId, Rest);
-write_messages(?VERSION_2 = V, ClusterLeader,
-               undefined,
-               PublisherId,
-               <<PublishingId:64,
-                 -1:16/signed,
-                 0:1,
-                 MessageSize:31,
-                 Message:MessageSize/binary,
-                 Rest/binary>>) ->
-    ok =
-        osiris:write(ClusterLeader,
-                     undefined,
-                     {PublisherId, PublishingId},
-                     Message),
-    write_messages(V, ClusterLeader, undefined, PublisherId, Rest);
-write_messages(?VERSION_2 = V, ClusterLeader,
-               undefined,
-               PublisherId,
-               <<PublishingId:64,
-                 FilterValueLength:16, FilterValue:FilterValueLength/binary,
-                 0:1,
-                 MessageSize:31,
-                 Message:MessageSize/binary,
-                 Rest/binary>>) ->
-    ok =
-        osiris:write(ClusterLeader,
-                     undefined,
-                     {PublisherId, PublishingId},
-                     {FilterValue, Message}),
-    write_messages(V, ClusterLeader, undefined, PublisherId, Rest);
+    Data = {batch, MessageCount, CompressionType, UncompressedSize, Batch},
+    write_messages0(V, ClusterLeader, PublisherRef, PublisherId,
+                    PublishingId, Data, Rest);
 write_messages(?VERSION_2 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
@@ -166,8 +93,8 @@ write_messages(?VERSION_2 = V, ClusterLeader,
                  MessageSize:31,
                  Message:MessageSize/binary,
                  Rest/binary>>) ->
-    ok = osiris:write(ClusterLeader, PublisherRef, PublishingId, Message),
-    write_messages(V, ClusterLeader, PublisherRef, PublisherId, Rest);
+    write_messages0(V, ClusterLeader, PublisherRef, PublisherId,
+                    PublishingId, Message, Rest);
 write_messages(?VERSION_2 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
@@ -177,8 +104,16 @@ write_messages(?VERSION_2 = V, ClusterLeader,
                  MessageSize:31,
                  Message:MessageSize/binary,
                  Rest/binary>>) ->
-    ok = osiris:write(ClusterLeader, PublisherRef, PublishingId, {FilterValue, Message}),
-    write_messages(V, ClusterLeader, PublisherRef, PublisherId, Rest).
+    write_messages0(V, ClusterLeader, PublisherRef, PublisherId,
+                    PublishingId, {FilterValue, Message}, Rest).
+
+write_messages0(Vsn, ClusterLeader, PublisherRef, PublisherId, PublishingId, Data, Rest) ->
+    Corr = case PublisherRef of
+               undefined -> {PublisherId, PublishingId};
+               _ -> PublishingId
+           end,
+    ok = osiris:write(ClusterLeader, PublisherRef, Corr, Data),
+    write_messages(Vsn, ClusterLeader, PublisherRef, PublisherId, Rest).
 
 parse_map(<<>>, _Count) ->
     {#{}, <<>>};
