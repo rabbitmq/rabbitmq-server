@@ -79,7 +79,10 @@ start_link() ->
     gen_statem:start_link({local, ?LOCAL_NAME}, ?MODULE, none, []).
 
 wait_for_task_and_stop() ->
-    gen_statem:stop(?LOCAL_NAME).
+    case erlang:whereis(rabbit_sup) of
+        undefined -> gen_statem:stop(?LOCAL_NAME);
+        _         -> rabbit_sup:stop_child(?LOCAL_NAME)
+    end.
 
 is_supported(FeatureNames) ->
     is_supported(FeatureNames, ?TIMEOUT).
