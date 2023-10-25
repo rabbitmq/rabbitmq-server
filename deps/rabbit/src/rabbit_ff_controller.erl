@@ -183,6 +183,9 @@ callback_mode() ->
     state_functions.
 
 init(_Args) ->
+    ?LOG_DEBUG(
+       "Feature flags: controller standing by",
+       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     {ok, standing_by, none}.
 
 standing_by(
