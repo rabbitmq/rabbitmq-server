@@ -96,6 +96,28 @@ join(RemoteNode, NodeType)
   when is_atom(RemoteNode) andalso ?IS_NODE_TYPE(NodeType) ->
     case can_join(RemoteNode) of
         {ok, ClusterNodes} when is_list(ClusterNodes) ->
+            %% RabbitMQ and Mnesia must be stopped to modify the cluster. In
+            %% particular, we stop Mnesia regardless of the remotely selected
+            %% database because we might change it during the join.
+            RestartMnesia = rabbit_mnesia:is_running(),
+            RestartFFCtl = rabbit_ff_controller:is_running(),
+            RestartRabbit = rabbit:is_running(),
+            case RestartRabbit of
+                true ->
+                    rabbit:stop();
+                false ->
+                    case RestartFFCtl of
+                        true ->
+                            ok = rabbit_ff_controller:wait_for_task_and_stop();
+                        false ->
+                            ok
+                    end,
+                    case RestartMnesia of
+                        true  -> rabbit_mnesia:stop_mnesia();
+                        false -> ok
+                    end
+            end,
+
             ok = rabbit_db:reset(),
             rabbit_feature_flags:copy_feature_states_after_reset(RemoteNode),
 
@@ -106,6 +128,27 @@ join(RemoteNode, NodeType)
                       true  -> join_using_khepri(ClusterNodes, NodeType);
                       false -> join_using_mnesia(ClusterNodes, NodeType)
                   end,
+
+            %% Restart RabbitMQ afterwards, if it was running before the join.
+            %% Likewise for the Feature flags controller and Mnesia (if we
+            %% still need it).
+            case RestartRabbit of
+                true ->
+                    rabbit:start();
+                false ->
+                    case RestartFFCtl of
+                        true ->
+                            ok = rabbit_sup:start_child(rabbit_ff_controller);
+                        false ->
+                            ok
+                    end,
+                    NeedMnesia = not rabbit_khepri:is_enabled(),
+                    case RestartMnesia andalso NeedMnesia of
+                        true  -> rabbit_mnesia:start_mnesia(false);
+                        false -> ok
+                    end
+            end,
+
             case Ret of
                 ok ->
                     rabbit_node_monitor:notify_joined_cluster(),

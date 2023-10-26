@@ -269,7 +269,30 @@ join_and_part_cluster(Config) ->
 
     stop_reset_start(Config, Hare),
     assert_not_clustered(Hare),
-    assert_not_clustered(Bunny).
+    assert_not_clustered(Bunny),
+
+    %% Using `join_cluster` is allowed without stopping `rabbit` first since
+    %% 3.13.0. It will only work if all nodes support it: check if they all
+    %% expose `rabbit_ff_controller:is_running/0`.
+    Supported = lists:all(
+                  fun(R) -> R end,
+                  rabbit_ct_broker_helpers:rpc_all(
+                    Config, erlang, function_exported,
+                    [rabbit_ff_controller, is_running, 0])),
+    ct:pal(
+      "Do all nodes support `join_cluster` without stopping `rabbit` "
+      "first? ~p",
+      [Supported]),
+    case Supported of
+        true ->
+            ?assertEqual(ok, join_cluster(Config, Rabbit, Bunny)),
+            assert_clustered([Rabbit, Bunny]),
+
+            ?assertEqual(ok, join_cluster(Config, Hare, Bunny)),
+            assert_clustered([Rabbit, Bunny, Hare]);
+        false ->
+            ok
+    end.
 
 stop_start_cluster_node(Config) ->
     [Rabbit, Hare] = cluster_members(Config),
@@ -326,7 +349,15 @@ join_and_part_cluster_in_khepri(Config) ->
 
     stop_reset_start(Config, Rabbit),
     assert_not_clustered(Rabbit),
-    assert_not_clustered(Hare).
+    assert_not_clustered(Hare),
+
+    %% Using `join_cluster` is allowed without stopping `rabbit` first since
+    %% 3.13.0.
+    ?assertEqual(ok, join_cluster(Config, Rabbit, Bunny)),
+    assert_clustered([Rabbit, Bunny]),
+
+    ?assertEqual(ok, join_cluster(Config, Hare, Bunny)),
+    assert_clustered([Rabbit, Bunny, Hare]).
 
 join_cluster_bad_operations(Config) ->
     [Rabbit, Hare, Bunny] = cluster_members(Config),
@@ -340,10 +371,6 @@ join_cluster_bad_operations(Config) ->
     ok = stop_app(Config, Rabbit),
     assert_failure(fun () -> join_cluster(Config, Rabbit, non@existent) end),
     ok = start_app(Config, Rabbit),
-    assert_not_clustered(Rabbit),
-
-    %% Trying to cluster with mnesia running
-    assert_failure(fun () -> join_cluster(Config, Rabbit, Bunny) end),
     assert_not_clustered(Rabbit),
 
     %% Trying to cluster the node with itself
@@ -379,16 +406,12 @@ join_cluster_bad_operations(Config) ->
     ok.
 
 join_cluster_bad_operations_in_khepri(Config) ->
-    [Rabbit, _Hare, Bunny] = cluster_members(Config),
+    [Rabbit, _Hare, _Bunny] = cluster_members(Config),
 
     %% Nonexistent node
     ok = stop_app(Config, Rabbit),
     assert_failure(fun () -> join_cluster(Config, Rabbit, non@existent) end),
     ok = start_app(Config, Rabbit),
-    assert_not_clustered(Rabbit),
-
-    %% Trying to cluster with mnesia running
-    assert_failure(fun () -> join_cluster(Config, Rabbit, Bunny) end),
     assert_not_clustered(Rabbit),
 
     %% Trying to cluster the node with itself

@@ -177,7 +177,6 @@ create_cluster_callback(RemoteNode, NodeType) ->
                         -> {ok, [node()]} | {ok, already_member} | {error, {inconsistent_cluster, string()}}.
 
 can_join_cluster(DiscoveryNode) ->
-    ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
     case is_only_clustered_disc_node() of
         true  -> e(clustering_only_disc_node);
@@ -225,6 +224,7 @@ join_cluster(ClusterNodes, NodeType) when is_list(ClusterNodes) ->
 join_cluster(DiscoveryNode, NodeType) when is_atom(DiscoveryNode) ->
     %% Code to remain compatible with `change_cluster_node_type/1' and older
     %% CLI.
+    ensure_mnesia_not_running(),
     case can_join_cluster(DiscoveryNode) of
         {ok, ClusterNodes} when is_list(ClusterNodes) ->
             ok = reset_gracefully(),
