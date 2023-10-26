@@ -34,7 +34,7 @@ jobs:
       matrix:
         include:
           - image_tag_suffix: otp-min-bazel
-            otp_version_id: 25_3
+            otp_version_id: 26_1
           - image_tag_suffix: otp-max-bazel
             otp_version_id: 26_1
     steps:

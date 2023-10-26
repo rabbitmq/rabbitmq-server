@@ -130,7 +130,7 @@ jobs:
       fail-fast: false
       matrix:
         otp_version_id:
-        - "25_3"
+        - "26_1"
         metadata_store:
           - mnesia
           - khepri
