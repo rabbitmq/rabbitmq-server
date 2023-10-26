@@ -6,8 +6,10 @@
 
 -export([check/1]).
 
--define(OTP_MINIMUM, "25.0").
--define(ERTS_MINIMUM, "13.0").
+%% minimum Erlang/OTP version supported
+-define(OTP_MINIMUM, "26.0").
+%% the ERTS version provided by the minimum Erlang/OTP version supported
+-define(ERTS_MINIMUM, "14.0").
 
 check(_Context) ->
     ?LOG_DEBUG(
