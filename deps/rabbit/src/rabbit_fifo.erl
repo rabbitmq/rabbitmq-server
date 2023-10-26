@@ -1103,18 +1103,19 @@ handle_aux(_RaState, cast, eol, #?AUX{name = Name} = Aux, Log, _) ->
     ets:delete(rabbit_fifo_usage, Name),
     {no_reply, Aux, Log};
 handle_aux(_RaState, {call, _From}, oldest_entry_timestamp, Aux,
-           Log, #?MODULE{} = State) ->
-    Ts = case smallest_raft_index(State) of
-             %% if there are no entries, we return current timestamp
-             %% so that any previously obtained entries are considered older than this
-             undefined ->
-                 erlang:system_time(millisecond);
-             Idx when is_integer(Idx) ->
-                 %% TODO: make more defensive to avoid potential crash
-                 {{_, _, {_, Meta, _, _}}, _Log1} = ra_log:fetch(Idx, Log),
-                 #{ts := Timestamp} = Meta,
-                 Timestamp
-         end,
+           Log0, #?MODULE{} = State) ->
+    {Ts, Log} = case smallest_raft_index(State) of
+                    %% if there are no entries, we return current timestamp
+                    %% so that any previously obtained entries are considered
+                    %% older than this
+                    undefined ->
+                        {erlang:system_time(millisecond), Log0};
+                    Idx when is_integer(Idx) ->
+                        %% TODO: make more defensive to avoid potential crash
+                        {{_, _, {_, Meta, _, _}}, Log1} = ra_log:fetch(Idx, Log0),
+                        #{ts := Timestamp} = Meta,
+                        {Timestamp, Log1}
+                end,
     {reply, {ok, Ts}, Aux, Log};
 handle_aux(_RaState, {call, _From}, {peek, Pos}, Aux0,
            Log0, MacState) ->
