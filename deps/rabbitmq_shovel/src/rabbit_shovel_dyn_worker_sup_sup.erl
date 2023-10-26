@@ -96,3 +96,6 @@ cleanup_specs() ->
 
 init([]) ->
     {ok, {{one_for_one, 3, 10}, []}}.
+
+id({V, S} = Name) ->
+    {[V, S], Name}.
