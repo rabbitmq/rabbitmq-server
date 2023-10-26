@@ -6,8 +6,6 @@ on:
       - v3.12.x
       - v3.11.x
       - v3.10.x
-      - v3.9.x
-      - v3.8.x
       - bump-otp-for-oci
       - bump-rbe-*
       - bump-rules_erlang
@@ -35,7 +33,6 @@ jobs:
       fail-fast: false
       matrix:
         otp_version_id:
-        - 25_3
         - 26
         metadata_store:
           - mnesia
