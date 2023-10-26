@@ -2081,9 +2081,8 @@ leader_locator_client_local(Config) ->
                  declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                               {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
 
-    Info = find_queue_info(Config, [leader]),
-
-    ?assertEqual(Server1, proplists:get_value(leader, Info)),
+    ?assertMatch(Server1, proplists:get_value(leader,
+                                              find_queue_info(Config, [leader]))),
 
     ?assertMatch(#'queue.delete_ok'{},
                  delete(Config, Server1, Q)),
@@ -2093,8 +2092,8 @@ leader_locator_client_local(Config) ->
                  declare(Config, Server2, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                               {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
 
-    Info2 = find_queue_info(Config, [leader]),
-    ?assertEqual(Server2, proplists:get_value(leader, Info2)),
+    ?assertMatch(Server2, proplists:get_value(leader,
+                                              find_queue_info(Config, [leader]))),
 
     ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server2, Q)),
 
@@ -2104,8 +2103,8 @@ leader_locator_client_local(Config) ->
                                               {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
 
 
-    Info3 = find_queue_info(Config, [leader]),
-    ?assertEqual(Server3, proplists:get_value(leader, Info3)),
+    ?assertEqual(Server3, proplists:get_value(leader,
+                                              find_queue_info(Config, [leader]))),
 
     ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server3, Q)),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).

@@ -430,7 +430,7 @@ stream(Config) ->
                    content_type => ContentType,
                    %% We expect that reply_to contains a valid address,
                    %% and that the topic format got translated from MQTT to AMQP 0.9.1.
-                   reply_to => <<"/topic/response.topic">>},
+                   reply_to => <<"/exchange/amq.topic/response.topic">>},
                  amqp10_msg:properties(Msg)),
     ?assertEqual(#{<<"rabbit🐇"/utf8>> => <<"carrot🥕"/utf8>>,
                    <<"key">> => <<"val">>},

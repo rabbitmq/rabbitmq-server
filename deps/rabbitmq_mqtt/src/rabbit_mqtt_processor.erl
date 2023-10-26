@@ -1550,9 +1550,16 @@ publish_to_queues(
                     trace_state = TraceState},
          auth_state = #auth_state{user = #user{username = Username}}} = State) ->
 
+    Env = case persistent_term:get(?PERSISTENT_TERM_EXCHANGE) of
+              ?DEFAULT_MQTT_EXCHANGE ->
+                  #{};
+              MqttX ->
+                  #{mqtt_exchange => MqttX}
+          end,
+
     Anns = #{exchange => ExchangeNameBin,
              routing_keys => [mqtt_to_amqp(Topic)]},
-    Msg0 = mc:init(mc_mqtt, MqttMsg, Anns),
+    Msg0 = mc:init(mc_mqtt, MqttMsg, Anns, Env),
     Msg = rabbit_message_interceptor:intercept(Msg0),
     case rabbit_exchange:lookup(ExchangeName) of
         {ok, Exchange} ->

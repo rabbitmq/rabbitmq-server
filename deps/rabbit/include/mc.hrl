@@ -21,3 +21,4 @@
 %% underlines, to a maximum length of 128 characters." [AMQP 0.9.1 4.2.5.5 Field Tables]
 %% Given that the valid chars are ASCII chars, 1 char is encoded as 1 byte.
 -define(AMQP_LEGACY_FIELD_NAME_MAX_LEN, 128).
+-define(IS_SHORTSTR_LEN(B), byte_size(B) < 256).

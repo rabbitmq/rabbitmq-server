@@ -11,8 +11,8 @@
          property/2,
          routing_headers/2,
          get_property/2,
-         convert_to/2,
-         convert_from/2,
+         convert_to/3,
+         convert_from/3,
          protocol_state/2,
          serialize/1,
          prepare/2
@@ -70,9 +70,9 @@ init(#msg{} = Msg) ->
     Anns = essential_properties(Msg),
     {Msg, Anns}.
 
-convert_from(?MODULE, Sections) ->
+convert_from(?MODULE, Sections, _Env) ->
     element(1, init(Sections));
-convert_from(_SourceProto, _) ->
+convert_from(_SourceProto, _, _Env) ->
     not_implemented.
 
 size(#msg{data = Body}) ->
@@ -177,10 +177,12 @@ get_property(priority, Msg) ->
 get_property(_P, _Msg) ->
     undefined.
 
-convert_to(?MODULE, Msg) ->
+convert_to(?MODULE, Msg, _Env) ->
     Msg;
-convert_to(TargetProto, Msg) ->
-    TargetProto:convert_from(?MODULE, msg_to_sections(Msg, fun (X) -> X end)).
+convert_to(TargetProto, Msg, Env) ->
+    TargetProto:convert_from(?MODULE,
+                             msg_to_sections(Msg, fun (X) -> X end),
+                             Env).
 
 serialize(Sections) ->
     encode_bin(Sections).

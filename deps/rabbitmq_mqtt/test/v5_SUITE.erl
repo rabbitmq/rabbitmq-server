@@ -251,7 +251,9 @@ client_set_max_packet_size_publish(Config) ->
     assert_nothing_received(),
     NumRejected = dead_letter_metric(messages_dead_lettered_rejected_total, Config) - NumRejectedBefore,
     ?assertEqual(1, NumRejected),
-    ok = emqtt:disconnect(C).
+    ok = emqtt:disconnect(C),
+    ok.
+
 
 client_set_max_packet_size_connack(Config) ->
     {C, Connect} = start_client(?FUNCTION_NAME, Config, 0,
