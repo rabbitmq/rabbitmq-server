@@ -1615,8 +1615,13 @@ open_files(Name) ->
     case whereis(Name) of
         undefined ->
             {node(), 0};
-        Pid ->
-            {node(), ets_lookup_element(ra_open_file_metrics, Pid, 2, 0)}
+        _ ->
+            case ra_counters:counters({Name, node()}, [open_segments]) of
+                #{open_segments := Num} ->
+                    {node(), Num};
+                _ ->
+                    {node(), 0}
+            end
     end.
 
 leader(Q) when ?is_amqqueue(Q) ->
