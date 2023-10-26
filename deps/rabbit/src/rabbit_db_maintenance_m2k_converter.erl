@@ -45,7 +45,7 @@ init_copy_to_khepri(StoreId, _MigrationId, Tables) ->
 %% @private
 
 copy_to_khepri(
-  rabbit_node_maintenance_states = Table, Record,
+  rabbit_node_maintenance_states = Table, #node_maintenance_state{} = Record,
   #?MODULE{store_id = StoreId} = State) ->
     Name = Record#node_maintenance_state.node,
     ?LOG_DEBUG(

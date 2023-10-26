@@ -45,7 +45,7 @@ init_copy_to_khepri(StoreId, _MigrationId, Tables) ->
 %% @private
 
 copy_to_khepri(
-  rabbit_exchange = Table, Record,
+  rabbit_exchange = Table, #exchange{} = Record,
   #?MODULE{store_id = StoreId} = State) ->
     Name = Record#exchange.name,
     ?LOG_DEBUG(

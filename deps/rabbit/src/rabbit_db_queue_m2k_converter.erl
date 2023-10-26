@@ -13,6 +13,7 @@
 -include_lib("khepri/include/khepri.hrl").
 -include_lib("khepri_mnesia_migration/src/kmm_logging.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include("amqqueue.hrl").
 
 -export([init_copy_to_khepri/3,
          copy_to_khepri/3,
@@ -45,7 +46,7 @@ init_copy_to_khepri(StoreId, _MigrationId, Tables) ->
 %% @private
 
 copy_to_khepri(rabbit_queue = Table, Record,
-               #?MODULE{store_id = StoreId} = State) ->
+               #?MODULE{store_id = StoreId} = State) when ?is_amqqueue(Record) ->
     Name = amqqueue:get_name(Record),
     ?LOG_DEBUG(
        "Mnesia->Khepri data copy: [~0p] key: ~0p",
