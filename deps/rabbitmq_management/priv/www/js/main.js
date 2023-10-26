@@ -7,6 +7,8 @@ $(document).ready(function() {
      renderWarningMessageInLoginStatus(fmt_escape_html(error));
    } else {
       if (oauth.enabled) {
+        store_pref("oauth-return-to", url.hash);
+
         startWithOAuthLogin();
       } else {
         startWithLoginPage();
