@@ -146,7 +146,8 @@ cluster_size_3_tests() ->
      maintenance,
      delete_create_queue,
      session_reconnect,
-     session_takeover
+     session_takeover,
+     duplicate_client_id
     ].
 
 mnesia_store_tests() ->
@@ -154,8 +155,7 @@ mnesia_store_tests() ->
      consuming_classic_mirrored_queue_down,
      flow_classic_mirrored_queue,
      publish_to_all_queue_types_qos0,
-     publish_to_all_queue_types_qos1,
-     duplicate_client_id
+     publish_to_all_queue_types_qos1
     ].
 
 suite() ->
@@ -183,28 +183,28 @@ init_per_group(Group, Config)
        Group =:= v5 ->
     rabbit_ct_helpers:set_config(Config, {mqtt_version, Group});
 
-init_per_group(Group, Config00) ->
+init_per_group(Group, Config0) ->
     Nodes = case Group of
                 cluster_size_1 -> 1;
                 cluster_size_3 -> 3;
                 mnesia_store -> 3
             end,
-    Suffix = rabbit_ct_helpers:testcase_absname(Config00, "", "-"),
-    Config0 = case Group of
+    Suffix = rabbit_ct_helpers:testcase_absname(Config0, "", "-"),
+    Config1 = case Group of
                   mnesia_store ->
-                      rabbit_ct_helpers:set_config(Config00, [{metadata_store, mnesia}]);
+                      rabbit_ct_helpers:set_config(Config0, {metadata_store, mnesia});
                   _ ->
-                      Config00
+                      Config0
               end,
-    Config1 = rabbit_ct_helpers:set_config(
-                Config0,
+    Config2 = rabbit_ct_helpers:set_config(
+                Config1,
                 [{rmq_nodes_count, Nodes},
                  {rmq_nodename_suffix, Suffix}]),
-    Config2 = rabbit_ct_helpers:merge_app_env(
-                Config1,
+    Config3 = rabbit_ct_helpers:merge_app_env(
+                Config2,
                 {rabbit, [{classic_queue_default_version, 2}]}),
     Config = rabbit_ct_helpers:run_steps(
-               Config2,
+               Config3,
                rabbit_ct_broker_helpers:setup_steps() ++
                rabbit_ct_client_helpers:setup_steps()),
     util:maybe_skip_v5(Config).
