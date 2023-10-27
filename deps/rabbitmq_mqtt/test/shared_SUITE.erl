@@ -143,11 +143,11 @@ cluster_size_3_tests() ->
      flow_stream,
      rabbit_mqtt_qos0_queue,
      cli_list_queues,
-     maintenance,
      delete_create_queue,
      session_reconnect,
      session_takeover,
-     duplicate_client_id
+     duplicate_client_id,
+     maintenance
     ].
 
 mnesia_store_tests() ->
@@ -1276,38 +1276,34 @@ cli_list_queues(Config) ->
     ok = emqtt:disconnect(C).
 
 maintenance(Config) ->
-    case is_feature_flag_enabled(Config, delete_ra_cluster_mqtt_node) of
-        false ->
-            %% When either file rabbit_mqtt_collector changes or different OTP versions
-            %% are used for compilation, the rabbit_mqtt_collector module version will
-            %% change and cause a bad fun error when executing ra:leader_query/2 remotely.
-            {skip, "Anonymous fun as used in ra:leader_query/2 errors when executing "
-             "remotely with a different module version"};
-        true ->
-            C0 = connect(<<"client-0">>, Config, 0, []),
-            C1a = connect(<<"client-1a">>, Config, 1, []),
-            C1b = connect(<<"client-1b">>, Config, 1, []),
-            ClientsNode1 = [C1a, C1b],
+    %% When either file rabbit_mqtt_collector changes or different OTP versions
+    %% are used for compilation, the rabbit_mqtt_collector module version will
+    %% change and cause a bad fun error when executing ra:leader_query/2 remotely.
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, delete_ra_cluster_mqtt_node),
 
-            timer:sleep(500),
+    C0 = connect(<<"client-0">>, Config, 0, []),
+    C1a = connect(<<"client-1a">>, Config, 1, []),
+    C1b = connect(<<"client-1b">>, Config, 1, []),
+    ClientsNode1 = [C1a, C1b],
 
-            ok = drain_node(Config, 2),
-            ok = revive_node(Config, 2),
-            timer:sleep(500),
-            [?assert(erlang:is_process_alive(C)) || C <- [C0, C1a, C1b]],
+    timer:sleep(500),
 
-            process_flag(trap_exit, true),
-            ok = drain_node(Config, 1),
-            [await_exit(Pid) || Pid <- ClientsNode1],
-            [assert_v5_disconnect_reason_code(Config, ?RC_SERVER_SHUTTING_DOWN) || _ <- ClientsNode1],
-            ok = revive_node(Config, 1),
-            ?assert(erlang:is_process_alive(C0)),
+    ok = drain_node(Config, 2),
+    ok = revive_node(Config, 2),
+    timer:sleep(500),
+    [?assert(erlang:is_process_alive(C)) || C <- [C0, C1a, C1b]],
 
-            ok = drain_node(Config, 0),
-            await_exit(C0),
-            assert_v5_disconnect_reason_code(Config, ?RC_SERVER_SHUTTING_DOWN),
-            ok = revive_node(Config, 0)
-    end.
+    process_flag(trap_exit, true),
+    ok = drain_node(Config, 1),
+    [await_exit(Pid) || Pid <- ClientsNode1],
+    [assert_v5_disconnect_reason_code(Config, ?RC_SERVER_SHUTTING_DOWN) || _ <- ClientsNode1],
+    ok = revive_node(Config, 1),
+    ?assert(erlang:is_process_alive(C0)),
+
+    ok = drain_node(Config, 0),
+    await_exit(C0),
+    assert_v5_disconnect_reason_code(Config, ?RC_SERVER_SHUTTING_DOWN),
+    ok = revive_node(Config, 0).
 
 keepalive(Config) ->
     KeepaliveSecs = 1,
@@ -1374,21 +1370,18 @@ keepalive_turned_off(Config) ->
     ok = emqtt:disconnect(C).
 
 duplicate_client_id(Config) ->
+    %% When either file rabbit_mqtt_collector changes or different OTP versions
+    %% are used for compilation, the rabbit_mqtt_collector module version will
+    %% change and cause a bad fun error when executing ra:leader_query/2 remotely.
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, delete_ra_cluster_mqtt_node),
+
     [Server1, Server2, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     %% Test session takeover by both new and old node in mixed version clusters.
     ClientId1 = <<"c1">>,
     ClientId2 = <<"c2">>,
     C1a = connect(ClientId1, Config, Server2, []),
     C2a = connect(ClientId2, Config, Server1, []),
-    case is_feature_flag_enabled(Config, delete_ra_cluster_mqtt_node) of
-        true ->
-            eventually(?_assertEqual(2, length(all_connection_pids(Config))));
-        false ->
-            %% When different OTP versions are used for compilation, the
-            %% rabbit_mqtt_collector module version will change and cause
-            %% a bad fun error when executing ra:leader_query/2 remotely.
-            timer:sleep(200)
-    end,
+    eventually(?_assertEqual(2, length(all_connection_pids(Config)))),
     process_flag(trap_exit, true),
     C1b = connect(ClientId1, Config, Server1, []),
     C2b = connect(ClientId2, Config, Server2, []),
@@ -1397,12 +1390,7 @@ duplicate_client_id(Config) ->
     await_exit(C1a),
     await_exit(C2a),
     timer:sleep(200),
-    case is_feature_flag_enabled(Config, delete_ra_cluster_mqtt_node) of
-        true ->
-            ?assertEqual(2, length(all_connection_pids(Config)));
-        false ->
-            ok
-    end,
+    ?assertEqual(2, length(all_connection_pids(Config))),
     ok = emqtt:disconnect(C1b),
     ok = emqtt:disconnect(C2b),
     eventually(?_assertEqual(0, length(all_connection_pids(Config)))).
