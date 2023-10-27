@@ -230,6 +230,16 @@ used to make the difference between a request (0) and a response (1). Example fo
 |0x001c
 |Yes
 
+|<<createsuperstream>>
+|Client
+|0x001d
+|Yes
+
+|<<deletesuperstream>>
+|Client
+|0x001e
+|Yes
+
 |===
 
 === DeclarePublisher
@@ -754,6 +764,31 @@ StreamStatsResponse => Key Version CorrelationId ResponseCode Stats
   Value => int64
 ```
 
+=== CreateSuperStream
+
+```
+CreateSuperStream => Key Version CorrelationId Name [Partition] [RoutingKey] Arguments
+  Key => uint16 // 0x001d
+  Version => uint16
+  CorrelationId => uint32
+  Name => string
+  Partition => string
+  RoutingKey => string
+  Arguments => [Argument]
+  Argument => Key Value
+  Key => string
+  Value => string
+```
+
+=== DeleteSuperStream
+
+```
+Delete => Key Version CorrelationId Name
+  Key => uint16 // 0x001e
+  Version => uint16
+  CorrelationId => uint32
+  Name => string
+```
 
 == Authentication
 
