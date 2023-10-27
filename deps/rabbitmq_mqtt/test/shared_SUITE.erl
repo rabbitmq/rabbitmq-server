@@ -1404,14 +1404,14 @@ session_takeover(Config) ->
 session_switch(Config, Disconnect) ->
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
     %% Connect to old node in mixed version cluster.
-    C1 = connect(ClientId, Config, 1, [non_clean_sess_opts()]),
+    C1 = connect(ClientId, Config, 1, non_clean_sess_opts()),
     {ok, _, [1]} = emqtt:subscribe(C1, Topic, qos1),
     case Disconnect of
         true -> ok = emqtt:disconnect(C1);
         false -> unlink(C1)
     end,
     %% Connect to new node in mixed version cluster.
-    C2 = connect(ClientId, Config, 0, [non_clean_sess_opts()]),
+    C2 = connect(ClientId, Config, 0, non_clean_sess_opts()),
     case Disconnect of
         true -> ok;
         false -> assert_v5_disconnect_reason_code(Config, ?RC_SESSION_TAKEN_OVER)
