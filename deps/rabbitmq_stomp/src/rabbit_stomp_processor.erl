@@ -85,7 +85,7 @@ adapter_name(State) ->
 -spec cancel_consumer(binary(), #proc_state{}) -> process_frame_result().
 
 -spec send_delivery(#'basic.deliver'{}, term(), term(), term(),
-                    #proc_state{}) -> #proc_state{}.
+                    #proc_state{}) -> process_frame_result().
 
 %%----------------------------------------------------------------------------
 
@@ -176,12 +176,15 @@ command(Request, State = #proc_state{channel = none,
         _    -> command(Request, State1)
     end;
 
-command(_Request, State = #proc_state{channel = none,
-                              config = #stomp_configuration{
-                              implicit_connect = false}}) ->
-    {ok, send_error("Illegal command",
-                    "You must log in using CONNECT first",
-                    State), none};
+command({Command, _Frame}, State = #proc_state{channel = none,
+                                       config = #stomp_configuration{
+                                       implicit_connect = false}}) ->
+
+    log_error(rabbit_misc:format("Illegal command ~tp", [Command]),
+              "You must log in using CONNECT first", none),
+    {stop, normal, send_error(rabbit_misc:format("Illegal command ~tp", [Command]),
+                              "You must log in using CONNECT first",
+                              State)};
 
 command({Command, Frame}, State = #proc_state{frame_transformer = FT}) ->
     Frame1 = FT(Frame),
@@ -208,16 +211,18 @@ handle_exit(Conn, {shutdown, {connection_closing,
             State = #proc_state{connection = Conn}) ->
     amqp_death(Code, Explanation, State);
 handle_exit(Conn, Reason, State = #proc_state{connection = Conn}) ->
-    _ = send_error("AMQP connection died", "Reason: ~tp", [Reason], State),
-    {stop, {conn_died, Reason}, State};
+    State1 = send_error("AMQP connection died", [], "Reason: ~tp", [Reason], State),
+    log_error("AMQP connection died", rabbit_misc:format("Reason: ~tp", [Reason]), none),
+    {stop, {conn_died, Reason}, State1};
 
 handle_exit(Ch, {shutdown, {server_initiated_close, Code, Explanation}},
             State = #proc_state{channel = Ch}) ->
     amqp_death(Code, Explanation, State);
 
 handle_exit(Ch, Reason, State = #proc_state{channel = Ch}) ->
-    _ = send_error("AMQP channel died", "Reason: ~tp", [Reason], State),
-    {stop, {channel_died, Reason}, State};
+    State1 = send_error("AMQP channel died", [], "Reason: ~tp", [Reason], State),
+    log_error("AMQP channel died", rabbit_misc:format("Reason: ~tp", [Reason]), none),
+    {stop, {channel_died, Reason}, State1};
 handle_exit(Ch, {shutdown, {server_initiated_close, Code, Explanation}},
             State = #proc_state{channel = Ch}) ->
     amqp_death(Code, Explanation, State);
@@ -249,8 +254,8 @@ process_request(ProcessFun, SuccessFun, State) ->
                     _    -> send_frame(Frame, NewState)
                 end,
             {ok, SuccessFun(NewState), Conn};
-        {error, Message, Detail, NewState = #proc_state{connection = Conn}} ->
-            {ok, send_error(Message, Detail, NewState), Conn};
+        {error, Message, Detail, NewState} ->
+            {stop, normal, send_error(Message, Detail, NewState)};
         {stop, normal, NewState} ->
             {stop, normal, SuccessFun(NewState)};
         {stop, R, NewState} ->
@@ -351,7 +356,7 @@ validate_frame(_Command, _Frame, State) ->
 %%----------------------------------------------------------------------------
 
 handle_frame("DISCONNECT", _Frame, State) ->
-    {stop, normal, close_connection(State)};
+    {stop, normal, State};
 
 handle_frame("SUBSCRIBE", Frame, State) ->
     with_destination("SUBSCRIBE", Frame, State, fun do_subscribe/4);
@@ -448,14 +453,15 @@ server_cancel_consumer(ConsumerTag, State = #proc_state{subscriptions = Subs}) -
                      {ok,    {_, Id1}} -> Id1;
                      {error, {_, Id1}} -> "Unknown[" ++ Id1 ++ "]"
                  end,
-            _ = send_error_frame("Server cancelled subscription",
-                                 [{?HEADER_SUBSCRIPTION, Id}],
-                                 "The server has canceled a subscription.~n"
-                                 "No more messages will be delivered for ~tp.~n",
-                                 [Description],
-                                 State),
-            tidy_canceled_subscription(ConsumerTag, Subscription,
-                                       undefined, State)
+            NewState = send_error("Server cancelled subscription",
+                                  [{?HEADER_SUBSCRIPTION, Id}],
+                                  "The server has canceled a subscription.~n"
+                                  "No more messages will be delivered for ~tp.~n",
+                                  [Description],
+                                  State),
+            _ = tidy_canceled_subscription(ConsumerTag, Subscription,
+                                           undefined, State),
+            {stop, normal, NewState}
     end.
 
 cancel_subscription({error, invalid_prefix}, _Frame, State) ->
@@ -672,8 +678,7 @@ do_subscribe(Destination, DestHdr, Frame,
                     Message = "Duplicated subscription identifier",
                     Detail = "A subscription identified by '~ts' already exists.",
                     _ = error(Message, Detail, [ConsumerTag], State),
-                    _ = send_error(Message, Detail, [ConsumerTag], State),
-                    {stop, normal, close_connection(State)};
+                    {stop, normal, send_error(Message, [], Detail, [ConsumerTag], State)};
                 error ->
                     ExchangeAndKey = parse_routing(Destination, DfltTopicEx),
                     StreamOffset = rabbit_stomp_frame:stream_offset_header(Frame, undefined),
@@ -806,25 +811,32 @@ negotiate_version(Frame) ->
 send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
               Properties, Body, DeliveryCtx,
               State = #proc_state{
-                          session_id  = SessionId,
-                          subscriptions = Subs,
-                          version       = Version}) ->
-    NewState = case maps:find(ConsumerTag, Subs) of
-        {ok, #subscription{ack_mode = AckMode}} ->
-            send_frame(
-              "MESSAGE",
-              rabbit_stomp_util:headers(SessionId, Delivery, Properties,
-                                        AckMode, Version),
-              Body,
-              State);
-        error ->
-            send_error("Subscription not found",
-                       "There is no current subscription with tag '~ts'.",
-                       [ConsumerTag],
-                       State)
-    end,
-    notify_received(DeliveryCtx),
-    NewState.
+                         session_id  = SessionId,
+                         subscriptions = Subs,
+                         version       = Version}) ->
+    process_request(
+      fun(StateN) ->
+              Ret = case maps:find(ConsumerTag, Subs) of
+                        {ok, #subscription{ack_mode = AckMode}} ->
+                            {ok, #stomp_frame{command = "MESSAGE",
+                                              headers = rabbit_stomp_util:headers(SessionId,
+                                                                                Delivery,
+                                                                                  Properties,
+                                                                                  AckMode,
+                                                                                  Version),
+                                              body_iolist = Body},
+                             StateN};
+                        error ->
+                            log_error("Subscription not found",
+                                      rabbit_misc:format("There is no current subscription with tag '~ts'.", [ConsumerTag]), none),
+                            {error, "Subscription not found",
+                             rabbit_misc:format("There is no current subscription with tag '~ts'.", [ConsumerTag]),
+                             StateN}
+                    end,
+              notify_received(DeliveryCtx),
+              Ret
+      end,
+    State).
 
 notify_received(undefined) ->
   %% no notification for quorum queues and streams
@@ -1134,12 +1146,12 @@ ok(Command, Headers, BodyFragments, State) ->
 amqp_death(access_refused = ErrorName, Explanation, State) ->
     ErrorDesc = rabbit_misc:format("~ts", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
-    {stop, normal, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))};
+    {stop, normal, send_error(atom_to_list(ErrorName), ErrorDesc, State)};
 amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = amqp_connection:error_atom(ReplyCode),
     ErrorDesc = rabbit_misc:format("~ts", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
-    {stop, normal, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))}.
+    {stop, normal, send_error(atom_to_list(ErrorName), ErrorDesc, State)}.
 
 error(Message, Detail, State) ->
     priv_error(Message, Detail, none, State).
@@ -1173,26 +1185,23 @@ send_frame(Command, Headers, BodyFragments, State) ->
                State).
 
 send_frame(Frame, State = #proc_state{send_fun = SendFun,
-                                 trailing_lf = TrailingLF}) ->
+                                      trailing_lf = TrailingLF}) ->
     SendFun(async, rabbit_stomp_frame:serialize(Frame, TrailingLF)),
     State.
 
-send_error_frame(Message, ExtraHeaders, Format, Args, State) ->
-    send_error_frame(Message, ExtraHeaders, rabbit_misc:format(Format, Args),
+send_error(Message, Detail, State) ->
+    send_error(Message, [], Detail, State).
+
+send_error(Message, ExtraHeaders, Format, Args, State) ->
+    send_error(Message, ExtraHeaders, rabbit_misc:format(Format, Args),
                      State).
 
-send_error_frame(Message, ExtraHeaders, Detail, State) ->
+send_error(Message, ExtraHeaders, Detail, State) ->
     send_frame("ERROR", [{"message", Message},
                          {"content-type", "text/plain"},
                          {"version", string:join(?SUPPORTED_VERSIONS, ",")}] ++
-                        ExtraHeaders,
-                        Detail, State).
-
-send_error(Message, Detail, State) ->
-    send_error_frame(Message, [], Detail, State).
-
-send_error(Message, Format, Args, State) ->
-    send_error(Message, rabbit_misc:format(Format, Args), State).
+                   ExtraHeaders,
+               Detail, State).
 
 additional_info(Key,
                 #proc_state{adapter_info =
