@@ -58,6 +58,10 @@ module.exports = {
     return driver.get(baseUrl + '/#/login?access_token=' + token)
   },
 
+  goToExchanges: (driver) => {
+    return driver.get(baseUrl + '/#/exchanges')
+  },
+
   goTo: (driver, address) => {
     return driver.get(address)
   },
