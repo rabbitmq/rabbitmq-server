@@ -263,6 +263,12 @@ handle_msg({winner_is, Winner}, State = {leader_waiting, Winner, _},
     %% This node is the leader and a loser at the same time.
     Pid = restart_loser(State, Winner),
     {restarting, Pid};
+handle_msg({winner_is, Winner}, State = {winner_waiting, _OutstandingStops, _Notify},
+           _Partitions) ->
+    %% This node is still in winner_waiting with a winner reported, restart loser
+    %% and update state
+    Pid = restart_loser(State, Winner),
+    {restarting, Pid};
 
 handle_msg(Request, {restarting, Pid} = St, _Partitions) ->
     %% ignore, we can contribute no further
