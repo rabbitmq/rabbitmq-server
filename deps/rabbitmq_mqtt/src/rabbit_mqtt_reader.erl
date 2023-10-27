@@ -193,12 +193,6 @@ handle_info({Tag, Sock, Reason}, State = #state{socket = Sock})
             when Tag =:= tcp_error; Tag =:= ssl_error ->
     network_error(Reason, State);
 
-handle_info({inet_reply, Sock, ok}, State = #state{socket = Sock}) ->
-    {noreply, State, ?HIBERNATE_AFTER};
-
-handle_info({inet_reply, Sock, {error, Reason}}, State = #state{socket = Sock}) ->
-    network_error(Reason, State);
-
 handle_info({conserve_resources, Conserve}, State) ->
     maybe_process_deferred_recv(
         control_throttle(State #state{ conserve = Conserve }));
@@ -335,13 +329,14 @@ process_received_bytes(Bytes, State = #state{socket = Socket,
             case ProcState of
                 connect_packet_unprocessed ->
                     Send = fun(Data) ->
-                                   try rabbit_net:port_command(Socket, Data)
-                                   catch error:Reason ->
-                                             ?LOG_ERROR("writing to MQTT socket ~p failed: ~p",
-                                                        [Socket, Reason]),
-                                             exit({send_failed, Reason})
-                                   end,
-                                   ok
+                                   case rabbit_net:send(Socket, Data) of
+                                       ok ->
+                                           ok;
+                                       {error, Reason} ->
+                                           ?LOG_ERROR("writing to MQTT socket ~p failed: ~p",
+                                                      [Socket, Reason]),
+                                           exit({send_failed, Reason})
+                                   end
                            end,
                     try rabbit_mqtt_processor:init(Packet, Socket, ConnName, Send) of
                         {ok, ProcState1} ->

@@ -11,7 +11,7 @@
 -include_lib("kernel/include/net_address.hrl").
 
 -export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
-    recv/1, sync_recv/2, async_recv/3, port_command/2, getopts/2,
+    recv/1, sync_recv/2, async_recv/3, getopts/2,
     setopts/2, send/2, close/1, fast_close/1, sockname/1, peername/1,
     peercert/1, connection_string/2, socket_ends/2, is_loopback/1,
     tcp_host/1, unwrap_socket/1, maybe_get_proxy_socket/1,
@@ -50,7 +50,6 @@
           rabbit_types:error(any()).
 -spec async_recv(socket(), integer(), timeout()) ->
           rabbit_types:ok(any()).
--spec port_command(socket(), iolist()) -> 'true'.
 -spec getopts
         (socket(),
          [atom() |
@@ -58,7 +57,7 @@
            non_neg_integer() | binary()}]) ->
             ok_val_or_error(opts()).
 -spec setopts(socket(), opts()) -> ok_or_any_error().
--spec send(socket(), binary() | iolist()) -> ok_or_any_error().
+-spec send(socket(), iodata()) -> ok_or_any_error().
 -spec close(socket()) -> ok_or_any_error().
 -spec fast_close(socket()) -> ok_or_any_error().
 -spec sockname(socket()) ->
@@ -160,40 +159,6 @@ async_recv(Sock, Length, infinity) when is_port(Sock) ->
     prim_inet:async_recv(Sock, Length, -1);
 async_recv(Sock, Length, Timeout) when is_port(Sock) ->
     prim_inet:async_recv(Sock, Length, Timeout).
-
-port_command(Sock, Data) when ?IS_SSL(Sock) ->
-    case ssl:send(Sock, Data) of
-        ok              -> self() ! {inet_reply, Sock, ok},
-                           true;
-        {error, Reason} -> erlang:error(Reason)
-    end;
-port_command(Sock, Data) when is_port(Sock) ->
-    Fun = case persistent_term:get(rabbit_net_tcp_send, undefined) of
-              undefined ->
-                  Rel = list_to_integer(erlang:system_info(otp_release)),
-                  %% gen_tcp:send/2 does a selective receive of
-                  %% {inet_reply, Sock, Status[, CallerTag]}
-                  F = if Rel >= 26 ->
-                             %% Selective receive is optimised:
-                             %% https://github.com/erlang/otp/issues/6455
-                             fun gen_tcp_send/2;
-                         Rel < 26 ->
-                             %% Avoid costly selective receive.
-                             fun erlang:port_command/2
-                      end,
-                  ok = persistent_term:put(rabbit_net_tcp_send, F),
-                  F;
-              F ->
-                  F
-          end,
-    Fun(Sock, Data).
-
-gen_tcp_send(Sock, Data) ->
-    case gen_tcp:send(Sock, Data) of
-        ok -> self() ! {inet_reply, Sock, ok},
-              true;
-        {error, Reason} -> erlang:error(Reason)
-    end.
 
 getopts(Sock, Options) when ?IS_SSL(Sock) ->
     ssl:getopts(Sock, Options);
