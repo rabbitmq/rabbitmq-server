@@ -1049,7 +1049,7 @@ cluster_state(Name) ->
     case whereis(Name) of
         undefined -> down;
         _ ->
-            case ets_lookup_element(ra_state, Name, 2, undefined) of
+            case ets:lookup_element(ra_state, Name, 2, undefined) of
                 recover ->
                     recovering;
                 _ ->
@@ -1496,10 +1496,10 @@ i(messages, Q) when ?is_amqqueue(Q) ->
     quorum_messages(QName);
 i(messages_ready, Q) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
-    ets_lookup_element(queue_coarse_metrics, QName, 2, 0);
+    ets:lookup_element(queue_coarse_metrics, QName, 2, 0);
 i(messages_unacknowledged, Q) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
-    ets_lookup_element(queue_coarse_metrics, QName, 3, 0);
+    ets:lookup_element(queue_coarse_metrics, QName, 3, 0);
 i(policy, Q) ->
     case rabbit_policy:name(Q) of
         none   -> '';
@@ -1517,7 +1517,7 @@ i(effective_policy_definition, Q) ->
     end;
 i(consumers, Q) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
-    Consumers = ets_lookup_element(queue_metrics, QName, 2, []),
+    Consumers = ets:lookup_element(queue_metrics, QName, 2, []),
     proplists:get_value(consumers, Consumers, 0);
 i(memory, Q) when ?is_amqqueue(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
@@ -1539,7 +1539,7 @@ i(state, Q) when ?is_amqqueue(Q) ->
     end;
 i(local_state, Q) when ?is_amqqueue(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
-    ets_lookup_element(ra_state, Name, 2, not_member);
+    ets:lookup_element(ra_state, Name, 2, not_member);
 i(garbage_collection, Q) when ?is_amqqueue(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
     try
@@ -1683,7 +1683,7 @@ is_process_alive(Name, Node) ->
 -spec quorum_messages(rabbit_amqqueue:name()) -> non_neg_integer().
 
 quorum_messages(QName) ->
-    ets_lookup_element(queue_coarse_metrics, QName, 4, 0).
+    ets:lookup_element(queue_coarse_metrics, QName, 4, 0).
 
 quorum_ctag(Int) when is_integer(Int) ->
     integer_to_binary(Int);
@@ -1794,14 +1794,6 @@ notify_decorators(QName, F, A) ->
             ok;
         {error, not_found} ->
             ok
-    end.
-
-ets_lookup_element(Tbl, Key, Pos, Default) ->
-    try ets:lookup_element(Tbl, Key, Pos) of
-        V -> V
-    catch
-        _:badarg ->
-            Default
     end.
 
 erpc_call(Node, M, F, A, _Timeout)

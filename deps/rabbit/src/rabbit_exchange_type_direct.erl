@@ -36,12 +36,7 @@ route(#exchange{name = Name, type = Type}, Msg) ->
 
 route(#exchange{name = Name, type = Type}, Msg, _Opts) ->
     Routes = mc:get_annotation(routing_keys, Msg),
-    case Type of
-        direct ->
-            rabbit_db_binding:match_routing_key(Name, Routes, true);
-        _ ->
-            rabbit_db_binding:match_routing_key(Name, Routes, false)
-        end.
+    rabbit_db_binding:match_routing_key(Name, Routes, Type =:= direct).
 
 validate(_X) -> ok.
 validate_binding(_X, _B) -> ok.
