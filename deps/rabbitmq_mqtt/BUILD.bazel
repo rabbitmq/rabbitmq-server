@@ -154,7 +154,7 @@ rabbitmq_integration_suite(
         ":test_util_beam",
     ],
     flaky = True,
-    shard_count = 6,
+    shard_count = 4,
     sharding_method = "case",
     runtime_deps = [
         "@emqtt//:erlang_app",
