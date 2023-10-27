@@ -195,6 +195,9 @@ The intent is that the source and destination address formats should be
 mostly the same as those supported by the STOMP plugin, to the extent
 permitted by AMQP 1.0 semantics.
 
+Address format `"/amq/queue/" Q` refers to existing queues, i.e. queues created outside the RabbitMQ AMQP 1.0 plugin.
+Other address formats, e.g. `"/queue/" Q` refer to queues managed by the RabbitMQ AMQP 1.0 plugin, i.e. the plugin will declare such queues.
+
 ## Virtual Hosts
 
 AMQP 1.0 has no equivalent of AMQP 0-9-1 virtual hosts. A virtual host
