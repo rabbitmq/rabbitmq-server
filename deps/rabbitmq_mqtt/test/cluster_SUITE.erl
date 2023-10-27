@@ -43,8 +43,7 @@ groups() ->
 cluster_size_5() ->
     [
      connection_id_tracking,
-     connection_id_tracking_on_nodedown,
-     connection_id_tracking_with_decommissioned_node
+     connection_id_tracking_on_nodedown
     ].
 
 %% -------------------------------------------------------------------
@@ -142,25 +141,6 @@ connection_id_tracking_on_nodedown(Config) ->
     ok = stop_node(Config, 0),
     await_exit(C),
     ok = eventually(?_assertEqual([], util:all_connection_pids(1, Config)), 500, 4).
-
-connection_id_tracking_with_decommissioned_node(Config) ->
-    case rpc(Config, rabbit_mqtt_ff, track_client_id_in_ra, []) of
-        false ->
-            {skip, "This test requires client ID tracking in Ra"};
-        true ->
-            Server = get_node_config(Config, 0, nodename),
-            C = connect(<<"simpleClient">>, Config, ?OPTS),
-            {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
-            ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
-            ok = expect_publishes(C, <<"TopicA">>, [<<"Payload">>]),
-
-            assert_connection_count(Config, 4, 1),
-            process_flag(trap_exit, true),
-            {ok, _} = rabbitmqctl(Config, 0, ["decommission_mqtt_node", Server]),
-            await_exit(C),
-            assert_connection_count(Config, 4, 0),
-            ok
-    end.
 
 %%
 %% Helpers

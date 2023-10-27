@@ -1380,7 +1380,15 @@ duplicate_client_id(Config) ->
     ClientId2 = <<"c2">>,
     C1a = connect(ClientId1, Config, Server2, []),
     C2a = connect(ClientId2, Config, Server1, []),
-    eventually(?_assertEqual(2, length(all_connection_pids(Config)))),
+    case is_feature_flag_enabled(Config, delete_ra_cluster_mqtt_node) of
+        true ->
+            eventually(?_assertEqual(2, length(all_connection_pids(Config))));
+        false ->
+            %% When different OTP versions are used for compilation, the
+            %% rabbit_mqtt_collector module version will change and cause
+            %% a bad fun error when executing ra:leader_query/2 remotely.
+            timer:sleep(200)
+    end,
     process_flag(trap_exit, true),
     C1b = connect(ClientId1, Config, Server1, []),
     C2b = connect(ClientId2, Config, Server2, []),
@@ -1389,7 +1397,12 @@ duplicate_client_id(Config) ->
     await_exit(C1a),
     await_exit(C2a),
     timer:sleep(200),
-    ?assertEqual(2, length(all_connection_pids(Config))),
+    case is_feature_flag_enabled(Config, delete_ra_cluster_mqtt_node) of
+        true ->
+            ?assertEqual(2, length(all_connection_pids(Config)));
+        false ->
+            ok
+    end,
     ok = emqtt:disconnect(C1b),
     ok = emqtt:disconnect(C2b),
     eventually(?_assertEqual(0, length(all_connection_pids(Config)))).
