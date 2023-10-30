@@ -6,13 +6,11 @@ const { buildDriver, goToExchanges, captureScreensFor, teardown, goToHome } = re
 const SSOHomePage = require('../../pageobjects/SSOHomePage')
 const UAALoginPage = require('../../pageobjects/UAALoginPage')
 const ExchangesPage = require('../../pageobjects/ExchangesPage')
-const OverviewPage = require('../../pageobjects/OverviewPage')
 
 describe('A user which accesses a protected URL without a session', function () {
   let homePage
   let uaaLogin
   let exchanges
-  let overview
   let captureScreen
 
   before(async function () {
@@ -20,7 +18,6 @@ describe('A user which accesses a protected URL without a session', function () 
     homePage = new SSOHomePage(driver)
     uaaLogin = new UAALoginPage(driver)
     exchanges = new ExchangesPage(driver)
-    overview = new OverviewPage(driver)
 
     await goToExchanges(driver)
 
