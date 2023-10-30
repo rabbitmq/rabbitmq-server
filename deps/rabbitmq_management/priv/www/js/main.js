@@ -7,8 +7,6 @@ $(document).ready(function() {
      renderWarningMessageInLoginStatus(fmt_escape_html(error));
    } else {
       if (oauth.enabled) {
-        store_pref("oauth-return-to", url.hash);
-
         startWithOAuthLogin();
       } else {
         startWithLoginPage();
@@ -21,6 +19,8 @@ function startWithLoginPage() {
   start_app_login();
 }
 function startWithOAuthLogin () {
+  store_pref("oauth-return-to", window.location.hash);
+
   if (!oauth.logged_in) {
     if (oauth.sp_initiated) {
       get(oauth.readiness_url, 'application/json', function (req) {
