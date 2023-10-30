@@ -1581,7 +1581,8 @@ drop_local(QNames, #state{subscriptions = Subs,
                               "qos", _:1/binary >>},
            #{binding_keys := BindingKeys}})
             when Vhost0 =:= Vhost andalso
-                 ClientId0 =:= ClientId ->
+                 ClientId0 =:= ClientId andalso
+                 map_size(BindingKeys) > 0 ->
               rabbit_misc:maps_any(
                 fun(BKey, true) ->
                         TopicFilter = amqp_to_mqtt(BKey),

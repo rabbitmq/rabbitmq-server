@@ -13,6 +13,7 @@
 -include_lib("khepri/include/khepri.hrl").
 -include_lib("khepri_mnesia_migration/src/kmm_logging.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include("vhost.hrl").
 
 -export([init_copy_to_khepri/3,
          copy_to_khepri/3,
@@ -46,7 +47,7 @@ init_copy_to_khepri(StoreId, _MigrationId, Tables) ->
 
 copy_to_khepri(
   rabbit_vhost = Table, Record,
-  #?MODULE{store_id = StoreId} = State) ->
+  #?MODULE{store_id = StoreId} = State) when ?is_vhost(Record) ->
     Name = vhost:get_name(Record),
     ?LOG_DEBUG(
        "Mnesia->Khepri data copy: [~0p] key: ~0p",
