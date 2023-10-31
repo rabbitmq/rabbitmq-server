@@ -1,7 +1,7 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown } = require('../../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, log } = require('../../utils')
 
 const SSOHomePage = require('../../pageobjects/SSOHomePage')
 const UAALoginPage = require('../../pageobjects/UAALoginPage')
@@ -27,6 +27,7 @@ describe('When a logged in user', function () {
     await overview.isLoaded()
     await overview.logout()
     await homePage.isLoaded()
+    
   })
 
   after(async function () {
