@@ -12,7 +12,7 @@ module.exports = class SSOHomePage extends BasePage {
 
   async clickToLogin () {
     await this.isLoaded()
-    if (!await this.isWarningVisible()) {
+    if (await this.waitForDisplayed(LOGIN_BUTTON)) {
       return this.click(LOGIN_BUTTON)
     } else {
       this.capture()
@@ -27,7 +27,7 @@ module.exports = class SSOHomePage extends BasePage {
 
   async isWarningVisible () {
     try {
-      await this.getText(WARNING)
+      await this.waitForDisplayed(WARNING)
       return Promise.resolve(true)
     } catch (e) {
       return Promise.resolve(false)
