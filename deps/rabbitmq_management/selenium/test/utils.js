@@ -32,6 +32,10 @@ class CaptureScreenshot {
 }
 
 module.exports = {
+  log: (message) => {
+    console.log(new Date() + " " + message)
+  },
+
   buildDriver: (caps) => {
     builder = new Builder()
     if (!runLocal) {
