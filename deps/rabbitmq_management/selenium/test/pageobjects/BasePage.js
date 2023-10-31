@@ -22,7 +22,7 @@ module.exports = class BasePage {
     this.driver = webdriver
     // this is another timeout (--timeout 10000) which is the maximum test execution time
     this.timeout = parseInt(process.env.TIMEOUT) || 5000 // max time waiting to locate an element. Should be less that test timeout
-    this.polling = parseInt(process.env.POLLING) || 1000 // how frequent selenium searches for an element
+    this.polling = parseInt(process.env.POLLING) || 500 // how frequent selenium searches for an element
   }
 
   async isLoaded () {
@@ -180,6 +180,9 @@ module.exports = class BasePage {
     let alert = await this.driver.switchTo().alert();
     await this.driver.sleep(250)
     return alert.accept();
+  }
+  log(message) {
+    console.log(new Date() + " " + message)
   }
 
   capture () {
