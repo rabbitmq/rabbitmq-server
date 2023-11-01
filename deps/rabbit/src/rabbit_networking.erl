@@ -134,7 +134,7 @@ boot_tls(NumAcceptors, ConcurrentConnsSupsCount) ->
             ok;
         {ok, SslListeners} ->
             SslOpts = ensure_ssl(),
-            [start_ssl_listener(L, SslOpts, NumAcceptors, ConcurrentConnsSupsCount) || L <- SslListeners],
+            _ = [start_ssl_listener(L, SslOpts, NumAcceptors, ConcurrentConnsSupsCount) || L <- SslListeners],
             ok
     end.
 
