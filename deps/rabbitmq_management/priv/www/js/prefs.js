@@ -185,6 +185,7 @@ function default_pref(k) {
     if (k.substring(0, 11) == 'chart-line-')  return 'true';
     if (k == 'truncate')                      return '100';
     if (k == 'chart-range')                   return '60|5';
+    if (k == 'oauth-return-to')               return '';
     if (k.substring(0,  7) == 'column-')
         return default_column_pref(k.substring(7));
     return null;

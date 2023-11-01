@@ -148,10 +148,13 @@ function oauth_initiateLogin() {
 function oauth_redirectToHome(oauth) {
   console.log("oauth_redirectToHome set_token_auth")
   set_token_auth(oauth.access_token)
-  go_to_home()
+
+  path = get_pref("oauth-return-to");
+  clear_pref("oauth-return-to")
+  go_to(path)
 }
-function go_to_home() {
-  location.href = rabbit_path_prefix() + "/"
+function go_to(path) {
+  location.href = rabbit_path_prefix() + "/" + path
 }
 function go_to_authority() {
   location.href = oauth.authority
