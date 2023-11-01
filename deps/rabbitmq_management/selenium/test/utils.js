@@ -6,7 +6,7 @@ const { By, Key, until, Builder, logging } = require('selenium-webdriver')
 require('chromedriver')
 
 const uaaUrl = process.env.UAA_URL || 'http://localhost:8080'
-const baseUrl = process.env.RABBITMQ_URL || 'http://localhost:15672'
+const baseUrl = process.env.RABBITMQ_URL || 'http://localhost:15672/'
 const hostname = process.env.RABBITMQ_HOSTNAME || 'localhost'
 const runLocal = String(process.env.RUN_LOCAL).toLowerCase() != 'false'
 const seleniumUrl = process.env.SELENIUM_URL || 'http://selenium:4444'
@@ -59,11 +59,11 @@ module.exports = {
   },
 
   goToLogin: (driver, token) => {
-    return driver.get(baseUrl + '/#/login?access_token=' + token)
+    return driver.get(baseUrl + '#/login?access_token=' + token)
   },
 
   goToExchanges: (driver) => {
-    return driver.get(baseUrl + '/#/exchanges')
+    return driver.get(baseUrl + '#/exchanges')
   },
 
   goTo: (driver, address) => {
