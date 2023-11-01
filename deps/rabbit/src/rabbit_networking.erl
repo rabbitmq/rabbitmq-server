@@ -38,8 +38,13 @@
 
 %% Used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1,
+<<<<<<< HEAD
          tcp_listener_spec/9, tcp_listener_spec/10,
          ensure_ssl/0, fix_ssl_options/1, poodle_check/1]).
+=======
+         tcp_listener_spec/9, tcp_listener_spec/10, tcp_listener_spec/11,
+         ensure_ssl/0, fix_ssl_options/1]).
+>>>>>>> a73551387a (Remove POODLE check, we are in the future)
 
 -export([tcp_listener_started/4, tcp_listener_stopped/4]).
 
@@ -129,12 +134,7 @@ boot_tls(NumAcceptors, ConcurrentConnsSupsCount) ->
             ok;
         {ok, SslListeners} ->
             SslOpts = ensure_ssl(),
-            case poodle_check('AMQP') of
-                ok     -> _ = [start_ssl_listener(L, SslOpts, NumAcceptors, ConcurrentConnsSupsCount)
-                           || L <- SslListeners],
-                          ok;
-                danger -> ok
-            end,
+            [start_ssl_listener(L, SslOpts, NumAcceptors, ConcurrentConnsSupsCount) || L <- SslListeners],
             ok
     end.
 
@@ -146,6 +146,7 @@ ensure_ssl() ->
     {ok, SslOptsConfig0} = application:get_env(rabbit, ssl_options),
     rabbit_ssl_options:fix(SslOptsConfig0).
 
+<<<<<<< HEAD
 -spec poodle_check(atom()) -> 'ok' | 'danger'.
 
 poodle_check(Context) ->
@@ -173,6 +174,8 @@ log_poodle_fail(Context) ->
       "'rabbit' section of your configuration file.",
       [rabbit_misc:otp_release(), Context]).
 
+=======
+>>>>>>> a73551387a (Remove POODLE check, we are in the future)
 fix_ssl_options(Config) ->
     rabbit_ssl_options:fix(Config).
 

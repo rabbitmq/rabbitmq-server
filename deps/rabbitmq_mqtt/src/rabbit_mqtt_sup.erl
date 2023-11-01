@@ -26,11 +26,16 @@ init([{Listeners, SslListeners0}]) ->
         = case SslListeners0 of
               [] -> {none, 0, []};
               _  -> {rabbit_networking:ensure_ssl(),
+<<<<<<< HEAD
                      application:get_env(rabbitmq_mqtt, num_ssl_acceptors, 10),
                      case rabbit_networking:poodle_check('MQTT') of
                          ok     -> SslListeners0;
                          danger -> []
                      end}
+=======
+                     application:get_env(?APP_NAME, num_ssl_acceptors, 10),
+                     SslListeners0}
+>>>>>>> a73551387a (Remove POODLE check, we are in the future)
           end,
     {ok, {{one_for_all, 10, 10},
           [{rabbit_mqtt_retainer_sup,
