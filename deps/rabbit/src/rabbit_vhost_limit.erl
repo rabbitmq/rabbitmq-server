@@ -83,6 +83,8 @@ list(VHost) ->
 
 -spec is_over_connection_limit(vhost:name()) -> {true, non_neg_integer()} | false.
 
+%% @doc returns false if new connection is allowed and {true, Limit} otherwise
+%% should be same return format as rabbit_networking:is_over_node_connection_limit
 is_over_connection_limit(VirtualHost) ->
     case rabbit_vhost_limit:connection_limit(VirtualHost) of
         %% no limit configured

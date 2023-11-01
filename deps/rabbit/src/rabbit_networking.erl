@@ -461,13 +461,18 @@ count_all_local_connections() ->
     pg_local:count_unique_members(rabbit_non_amqp_connections) +
         pg_local:count_unique_members(rabbit_connections).
 
+%% @doc returns false if new connection is allowed and {true, Limit} otherwise
+%% should be same return format as rabbit_vhost_limit:is_over_connection_limit
 is_over_node_connection_limit() ->
     Limit = rabbit_misc:get_env(rabbit, connection_max, infinity),
     case Limit of
-        infinity -> {false, Limit};
+        infinity -> false;
         N when is_integer(N) ->
             ActiveConns = count_all_local_connections(),
-            {ActiveConns > Limit, Limit}
+            case ActiveConns >= Limit of
+                false -> false;
+                true  -> {true, Limit}
+            end
     end.
 
 -spec local_connections() -> [rabbit_types:connection()].
