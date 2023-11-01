@@ -26,10 +26,7 @@ init([{Listeners, SslListeners0}, Configuration]) ->
               [] -> {none, 0, []};
               _  -> {rabbit_networking:ensure_ssl(),
                      application:get_env(rabbitmq_stomp, num_ssl_acceptors, 10),
-                     case rabbit_networking:poodle_check('STOMP') of
-                         ok     -> SslListeners0;
-                         danger -> []
-                     end}
+                     SslListeners0}
           end,
     Flags = #{
         strategy => one_for_all,

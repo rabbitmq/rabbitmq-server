@@ -71,12 +71,9 @@ init([]) ->
 preprocess_config(Options) ->
     case proplists:get_value(ssl, Options) of
         true -> _ = rabbit_networking:ensure_ssl(),
-                case rabbit_networking:poodle_check('HTTP') of
-                    ok     -> case proplists:get_value(ssl_opts, Options) of
-                                  undefined -> auto_ssl(Options);
-                                  _         -> fix_ssl(Options)
-                              end;
-                    danger -> {ranch_tcp, transport_config(Options), protocol_config(Options)}
+                case proplists:get_value(ssl_opts, Options) of
+                    undefined -> auto_ssl(Options);
+                    _         -> fix_ssl(Options)
                 end;
         _    -> {ranch_tcp, transport_config(Options), protocol_config(Options)}
     end.
