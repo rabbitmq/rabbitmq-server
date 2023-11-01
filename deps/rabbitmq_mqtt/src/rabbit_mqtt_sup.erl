@@ -28,10 +28,7 @@ init([{Listeners, SslListeners0}]) ->
               [] -> {none, 0, []};
               _  -> {rabbit_networking:ensure_ssl(),
                      application:get_env(?APP_NAME, num_ssl_acceptors, 10),
-                     case rabbit_networking:poodle_check('MQTT') of
-                         ok     -> SslListeners0;
-                         danger -> []
-                     end}
+                     SslListeners0}
           end,
     %% Use separate process group scope per RabbitMQ node. This achieves a local-only
     %% process group which requires less memory with millions of connections.

@@ -1180,12 +1180,9 @@ get_proc_name() ->
             {ok, Name}
     end.
 
-%% application:get_env/3 is only available in R16B01 or later.
+%% application:get_env/3 is available in R16B01 or later.
 get_env(Application, Key, Def) ->
-    case application:get_env(Application, Key) of
-        {ok, Val} -> Val;
-        undefined -> Def
-    end.
+    application:get_env(Application, Key, Def).
 
 get_channel_operation_timeout() ->
     %% Default channel_operation_timeout set to net_ticktime + 10s to
