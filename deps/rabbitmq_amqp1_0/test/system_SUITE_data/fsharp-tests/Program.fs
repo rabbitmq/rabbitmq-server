@@ -478,6 +478,28 @@ module Test =
             printfn "Exception %A" ex
             ()
 
+    let nodeConnectionsLimit uri =
+        try
+            use c = connect uri
+            let sender, receiver = senderReceiver c "test" "roundtrip-q"
+            for body in sampleTypes do
+                let corr = "correlation"
+                new Message(body,
+                            Header = Header(Ttl = 500u),
+                            Properties = new Properties(CorrelationId = corr))
+                |> sender.Send
+                let rtd = receive receiver
+                assertEqual body rtd.Body
+                assertTrue (rtd.Header.Ttl <= 500u)
+                assertEqual rtd.Properties.CorrelationId  corr
+
+            failwith "expected exception not received"
+        with
+        | :? Amqp.AmqpException as ex ->
+            assertEqual (ex.Error.Condition.ToString()) ErrorCode.ConnectionForced
+            printfn "Exception %A" ex
+            ()
+
     let accessFailureNotAllowed uri =
         try
             let u = Uri uri
@@ -541,6 +563,9 @@ let main argv =
         0
     | [AsLower "redelivery"; uri] ->
         redelivery uri
+        0
+    | [AsLower "node_connections_limit"; uri] ->
+        nodeConnectionsLimit uri
         0
     | [AsLower "routing"; uri] ->
         routing uri

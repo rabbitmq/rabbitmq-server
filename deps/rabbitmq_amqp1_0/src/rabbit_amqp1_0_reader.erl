@@ -437,6 +437,13 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                         properties     = server_properties()}),
     Conserve = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
     rabbit_amqp1_0:register_connection(self()),
+    case rabbit_networking:is_over_node_connection_limit() of
+        false -> ok;
+        {true, Limit} ->
+            protocol_error(?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
+                           "node connection limit (~tp) is reached",
+                           [Limit])
+    end,
     control_throttle(
       State1#v1{throttle = Throttle#throttle{alarmed_by = Conserve}});
 

@@ -101,7 +101,8 @@ sub_groups() ->
       ]
      },
      {limit, [shuffle],
-      [vhost_connection_limit,
+      [node_connection_limit,
+       vhost_connection_limit,
        vhost_queue_limit,
        user_connection_limit
       ]}
@@ -1081,6 +1082,20 @@ expect_authentication_failure(ConnectFun, Config) ->
     ?assertEqual(proplists:get_value(auth_attempts_succeeded, Attempt), 0),
     ok.
 
+node_connection_limit(Config) ->
+    ok = set_node_limit(Config, 2),
+    {ok, C1} = connect_anonymous(Config, <<"client1">>),
+    {ok, _} = emqtt:connect(C1),
+    {ok, C2} = connect_anonymous(Config, <<"client2">>),
+    {ok, _} = emqtt:connect(C2),
+    {ok, C3} = connect_anonymous(Config, <<"client3">>),
+    ExpectedError = expected_connection_limit_error(Config),
+    unlink(C3),
+    ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C3)),
+    ok = emqtt:disconnect(C1),
+    ok = emqtt:disconnect(C2),
+    ok = set_node_limit(Config, infinity).
+
 vhost_connection_limit(Config) ->
     ok = rabbit_ct_broker_helpers:set_vhost_limit(Config, 0, <<"/">>, max_connections, 2),
     {ok, C1} = connect_anonymous(Config, <<"client1">>),
@@ -1183,3 +1198,8 @@ assert_connection_closed(ClientPid) ->
         2000 ->
             ct:fail("timed out waiting for exit message")
     end.
+
+set_node_limit(Config, Limit) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 application,
+                                 set_env, [rabbit, connection_max, Limit]).

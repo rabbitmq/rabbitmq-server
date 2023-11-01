@@ -24,6 +24,7 @@
          stop_tcp_listener/1, active_listeners/0,
          node_listeners/1, node_client_listeners/1,
          register_connection/1, unregister_connection/1,
+         register_amqp10_connection/1, unregister_amqp10_connection/1,
          register_non_amqp_connection/1, unregister_non_amqp_connection/1,
          connections/0, non_amqp_connections/0, connection_info_keys/0,
          connection_info/1, connection_info/2,
@@ -51,6 +52,7 @@
     count_all_local_connections/0,
     is_over_node_connection_limit/0,
     local_connections/0,
+    local_amqp10_connections/0,
     local_non_amqp_connections/0,
     %% prefer local_connections/0
     connections_local/0
@@ -447,6 +449,14 @@ register_connection(Pid) -> pg_local:join(rabbit_connections, Pid).
 
 unregister_connection(Pid) -> pg_local:leave(rabbit_connections, Pid).
 
+-spec register_amqp10_connection(pid()) -> ok.
+
+register_amqp10_connection(Pid) -> pg_local:join(rabbit_amqp10_connections, Pid).
+
+-spec unregister_amqp10_connection(pid()) -> ok.
+
+unregister_amqp10_connection(Pid) -> pg_local:leave(rabbit_amqp10_connections, Pid).
+
 -spec connections() -> [rabbit_types:connection()].
 
 connections() ->
@@ -469,7 +479,7 @@ is_over_node_connection_limit() ->
         infinity -> false;
         N when is_integer(N) ->
             ActiveConns = count_all_local_connections(),
-            case ActiveConns >= Limit of
+            case ActiveConns > Limit of
                 false -> false;
                 true  -> {true, Limit}
             end
@@ -479,6 +489,10 @@ is_over_node_connection_limit() ->
 %% @doc Returns pids of AMQP 0-9-1 and AMQP 1.0 connections local to this node.
 local_connections() ->
     connections_local().
+
+-spec local_amqp10_connections() -> [rabbit_types:connection()].
+local_amqp10_connections() ->
+    pg_local:get_members(rabbit_amqp10_connections).
 
 -spec connections_local() -> [rabbit_types:connection()].
 %% @deprecated Prefer {@link local_connections}

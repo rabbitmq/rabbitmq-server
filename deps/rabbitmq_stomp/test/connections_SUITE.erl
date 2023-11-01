@@ -24,7 +24,8 @@ all() ->
         heartbeat,
         login_timeout,
         frame_size,
-        frame_size_huge
+        frame_size_huge,
+        node_connection_limit
     ].
 
 merge_app_env(Config) ->
@@ -209,3 +210,41 @@ frame_size_huge(Config) ->
     {S, _} = Client,
     {error, closed} = gen_tcp:recv(S, 0, 500),
     ok.
+
+node_connection_limit(Config) ->
+    StompPort = get_stomp_port(Config),
+    %% Set limit to 0, don't accept any connections
+    set_node_limit(Config, 0),
+    {'EXIT',
+     {{badmatch,
+       {{stomp_frame, "ERROR",
+         _,
+         [<<"STOMP connection failed: node connections limit 0 reached">>]},
+        Client0}}, _}} = catch rabbit_stomp_client:connect(StompPort),
+
+    rabbit_stomp_client:disconnect(Client0),
+
+    %% Set limit to 2, accept connections
+    set_node_limit(Config, 2),
+    {ok, Client1} = rabbit_stomp_client:connect(StompPort),
+    {ok, Client2} = rabbit_stomp_client:connect(StompPort),
+    %% But no more than 2
+    {'EXIT',
+     {{badmatch,
+       {{stomp_frame, "ERROR",
+         _,
+         [<<"STOMP connection failed: node connections limit 2 reached">>]},
+        Client3}}, _}} = catch rabbit_stomp_client:connect(StompPort),
+
+    set_node_limit(Config, infinity),
+    {ok, ClientI} = rabbit_stomp_client:connect(StompPort),
+    rabbit_stomp_client:disconnect(Client1),
+    rabbit_stomp_client:disconnect(Client2),
+    rabbit_stomp_client:disconnect(Client3),
+    rabbit_stomp_client:disconnect(ClientI),
+    ok.
+
+set_node_limit(Config, Limit) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 application,
+                                 set_env, [rabbit, connection_max, Limit]).

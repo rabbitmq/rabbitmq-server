@@ -537,11 +537,18 @@ transition_to_opened(Transport,
     rabbit_core_metrics:connection_created(self(), Infos),
     rabbit_event:notify(connection_created, Infos),
     rabbit_networking:register_non_amqp_connection(self()),
-    {next_state, open,
-     #statem_data{transport = Transport,
+    case rabbit_networking:is_over_node_connection_limit() of
+        false -> {next_state, open,
+                  #statem_data{transport = Transport,
                   connection = Connection2,
                   connection_state = NewConnectionState,
-                  config = Configuration}}.
+                               config = Configuration}};
+        {true, Limit} ->
+            rabbit_log_connection:warning("Closing socket ~w. Node connections limit (~tp) reached",
+                                          [Limit]),
+            close_immediately(Transport, Connection2#stream_connection.socket),
+            stop
+    end.
 
 invalid_transition(Transport, Socket, From, To) ->
     rabbit_log_connection:warning("Closing socket ~w. Invalid transition from ~ts "
