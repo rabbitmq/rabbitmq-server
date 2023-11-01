@@ -1323,20 +1323,13 @@ is_vhost_alive(VHostPath, User) ->
     end.
 
 is_over_node_connection_limit(RanchRef) ->
-    Limit = rabbit_misc:get_env(rabbit, connection_max, infinity),
-    case Limit of
-        infinity -> ok;
-        N when is_integer(N) ->
-            #{active_connections := ActiveConns} = ranch:info(RanchRef),
-
-            case ActiveConns > Limit of
-                false -> ok;
-                true ->
-                    rabbit_misc:protocol_error(not_allowed,
-                                            "connection refused: "
-                                            "node connection limit (~tp) is reached",
-                                            [Limit])
-            end
+    case rabbit_networking:is_over_node_connection_limit() of
+        {false, _} -> ok;
+        {true, Limit} ->
+            rabbit_misc:protocol_error(not_allowed,
+                                       "connection refused: "
+                                       "node connection limit (~tp) is reached",
+                                       [Limit])
     end.
 
 is_over_vhost_connection_limit(VHostPath, User) ->

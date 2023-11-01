@@ -48,6 +48,8 @@
 -deprecated([{force_connection_event_refresh, 1, eventually}]).
 
 -export([
+    count_all_local_connections/0,
+    is_over_node_connection_limit/0,
     local_connections/0,
     local_non_amqp_connections/0,
     %% prefer local_connections/0
@@ -63,7 +65,7 @@
 -define(ETS_TABLE, rabbit_listener_ets).
 %% Number of re-try in case of no_epmd_port
 %% it can happen when the DNS is not ready
-%% for example, in Kubernetes during the start-up phase  
+%% for example, in Kubernetes during the start-up phase
 -define(PORT_PLEASE_ATTEMPTS, 10).
 
 %% Wait for retry when erl_epmd:port_please fails
@@ -450,6 +452,23 @@ unregister_connection(Pid) -> pg_local:leave(rabbit_connections, Pid).
 connections() ->
     Nodes = rabbit_nodes:list_running(),
     rabbit_misc:append_rpc_all_nodes(Nodes, rabbit_networking, connections_local, [], ?RPC_TIMEOUT).
+
+-spec count_all_local_connections() -> non_neg_integer().
+%% @doc Returns the number of AMQP/non-AMQP connections registered
+%% we are using pg variant that allows registering same pid many times
+%% however here we count each pid only once.
+count_all_local_connections() ->
+    pg_local:count_unique_members(rabbit_non_amqp_connections) +
+        pg_local:count_unique_members(rabbit_connections).
+
+is_over_node_connection_limit() ->
+    Limit = rabbit_misc:get_env(rabbit, connection_max, infinity),
+    case Limit of
+        infinity -> {false, Limit};
+        N when is_integer(N) ->
+            ActiveConns = count_all_local_connections(),
+            {ActiveConns > Limit, Limit}
+    end.
 
 -spec local_connections() -> [rabbit_types:connection()].
 %% @doc Returns pids of AMQP 0-9-1 and AMQP 1.0 connections local to this node.

@@ -35,6 +35,8 @@
 -module(pg_local).
 
 -export([join/2, leave/2, get_members/1, in_group/2]).
+%% extension
+-export([count_unique_members/1]).
 %% intended for testing only; not part of official API
 -export([sync/0, clear/0]).
 -export([start/0, start_link/0, init/1, handle_call/3, handle_cast/2,
@@ -73,6 +75,12 @@ join(Name, Pid) when is_pid(Pid) ->
 leave(Name, Pid) when is_pid(Pid) ->
     _ = ensure_started(),
     gen_server:cast(?MODULE, {leave, Name, Pid}).
+
+-spec count_unique_members(name()) -> non_neg_integer().
+
+count_unique_members(Name) ->
+    _ = ensure_started(),
+    ets:select_count(?TABLE, [{{{member, Name, '_'}, '_'}, [], [true]}]).
 
 -spec get_members(name()) -> [pid()].
 
