@@ -44,12 +44,7 @@ init([]) ->
             _ ->
                 {rabbit_networking:ensure_ssl(),
                  application:get_env(rabbitmq_stream, num_ssl_acceptors, 10),
-                 case rabbit_networking:poodle_check('STREAM') of
-                     ok ->
-                         SslListeners0;
-                     danger ->
-                         []
-                 end}
+                 SslListeners0}
         end,
 
     Nodes = rabbit_nodes:list_members(),
