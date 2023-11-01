@@ -39,7 +39,7 @@
 %% Used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1,
          tcp_listener_spec/9, tcp_listener_spec/10, tcp_listener_spec/11,
-         ensure_ssl/0, fix_ssl_options/1, poodle_check/1]).
+         ensure_ssl/0, fix_ssl_options/1]).
 
 -export([tcp_listener_started/4, tcp_listener_stopped/4]).
 
@@ -127,12 +127,7 @@ boot_tls(NumAcceptors, ConcurrentConnsSupsCount) ->
             ok;
         {ok, SslListeners} ->
             SslOpts = ensure_ssl(),
-            case poodle_check('AMQP') of
-                ok     -> _ = [start_ssl_listener(L, SslOpts, NumAcceptors, ConcurrentConnsSupsCount)
-                           || L <- SslListeners],
-                          ok;
-                danger -> ok
-            end,
+            _ = [start_ssl_listener(L, SslOpts, NumAcceptors, ConcurrentConnsSupsCount) || L <- SslListeners],
             ok
     end.
 
@@ -143,33 +138,6 @@ ensure_ssl() ->
     ok = app_utils:start_applications(SslAppsConfig),
     {ok, SslOptsConfig0} = application:get_env(rabbit, ssl_options),
     rabbit_ssl_options:fix(SslOptsConfig0).
-
--spec poodle_check(atom()) -> 'ok' | 'danger'.
-
-poodle_check(Context) ->
-    {ok, Vsn} = application:get_key(ssl, vsn),
-    case rabbit_misc:version_compare(Vsn, "5.3", gte) of %% R16B01
-        true  -> ok;
-        false -> case application:get_env(rabbit, ssl_allow_poodle_attack) of
-                     {ok, true}  -> ok;
-                     _           -> log_poodle_fail(Context),
-                                    danger
-                 end
-    end.
-
-log_poodle_fail(Context) ->
-    rabbit_log:error(
-      "The installed version of Erlang (~ts) contains the bug OTP-10905,~n"
-      "which makes it impossible to disable SSLv3. This makes the system~n"
-      "vulnerable to the POODLE attack. SSL listeners for ~ts have therefore~n"
-      "been disabled.~n~n"
-      "You are advised to upgrade to a recent Erlang version; R16B01 is the~n"
-      "first version in which this bug is fixed, but later is usually~n"
-      "better.~n~n"
-      "If you cannot upgrade now and want to re-enable SSL listeners, you can~n"
-      "set the config item 'ssl_allow_poodle_attack' to 'true' in the~n"
-      "'rabbit' section of your configuration file.",
-      [rabbit_misc:otp_release(), Context]).
 
 fix_ssl_options(Config) ->
     rabbit_ssl_options:fix(Config).
