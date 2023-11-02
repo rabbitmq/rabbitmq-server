@@ -1332,22 +1332,21 @@ will_qos2(Config) ->
     ?assertEqual({error, {qos_not_supported, #{}}}, Connect(C)).
 
 will_delay_less_than_session_expiry(Config) ->
-    will_delay(1, 5, Config).
+    will_delay(1, 5, ?FUNCTION_NAME, Config).
 
 will_delay_equals_session_expiry(Config) ->
-    will_delay(1, 1, Config).
+    will_delay(1, 1, ?FUNCTION_NAME, Config).
 
 will_delay_greater_than_session_expiry(Config) ->
-    will_delay(5, 1, Config).
+    will_delay(5, 1, ?FUNCTION_NAME, Config).
 
 %% "The Server delays publishing the Client’s Will Message until the Will Delay
 %% Interval has passed or the Session ends, whichever happens first." [v5 3.1.3.2.2]
-will_delay(WillDelay, SessionExpiry, Config)
+will_delay(WillDelay, SessionExpiry, ClientId, Config)
   when WillDelay =:= 1 orelse
        SessionExpiry =:= 1->
     Topic = <<"a/b">>,
     Msg = <<"msg">>,
-    ClientId = ?FUNCTION_NAME,
     Opts = [{properties, #{'Session-Expiry-Interval' => SessionExpiry}},
             {will_props, #{'Will-Delay-Interval' => WillDelay}},
             {will_topic, Topic},
@@ -1360,8 +1359,9 @@ will_delay(WillDelay, SessionExpiry, Config)
     receive TooEarly -> ct:fail(TooEarly)
     after 800 -> ok
     end,
-    receive {publish, #{payload := Msg}} -> ok
-    after 2000 -> ct:fail(will_message_timeout)
+    receive {publish, #{payload := Msg}} -> ok;
+            Unexpected -> ct:fail({unexpected_message, Unexpected})
+    after 3000 -> ct:fail(will_message_timeout)
     end,
     %% Cleanup
     C2 = connect(ClientId, Config),
