@@ -32,6 +32,9 @@
 -export([are_cmqs_permitted/0,
          are_cmqs_used/1]).
 
+-export([list_policies_with_classic_queue_mirroring_for_cli/0,
+         list_operator_policies_with_classic_queue_mirroring_for_cli/0]).
+
 %% for testing only
 -export([module/1]).
 
@@ -997,6 +1000,22 @@ has_ha_policies(Policies) ->
 
 does_policy_configure_cmq(KeyList) ->
     lists:keymember(<<"ha-mode">>, 1, KeyList).
+
+list_policies_with_classic_queue_mirroring_for_cli() ->
+    Policies = rabbit_policy:list(),
+    lists:filter(
+      fun(Policy) ->
+              KeyList = proplists:get_value(definition, Policy),
+              does_policy_configure_cmq(KeyList)
+      end, Policies).
+
+list_operator_policies_with_classic_queue_mirroring_for_cli() ->
+    Policies = rabbit_policy:list_op(),
+    lists:filter(
+      fun(Policy) ->
+              KeyList = proplists:get_value(definition, Policy),
+              does_policy_configure_cmq(KeyList)
+      end, Policies).
 
 validate_policy(KeyList) ->
     Mode = proplists:get_value(<<"ha-mode">>, KeyList, none),
