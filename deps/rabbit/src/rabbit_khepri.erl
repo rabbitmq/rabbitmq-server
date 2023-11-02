@@ -174,11 +174,6 @@
 
 -compile({no_auto_import, [get/1, get/2, nodes/0]}).
 
-%% `sys:get_status/1''s spec only allows `sys:name()' but can work on any
-%% `erlang:send_destination()' including a `ra:server_id()'.
--dialyzer({nowarn_function, get_sys_status/1}).
--dialyzer({no_match, [status/0, cluster_status_from_khepri/0]}).
-
 -define(RA_SYSTEM, coordination).
 -define(RA_CLUSTER_NAME, rabbitmq_metadata).
 -define(RA_FRIENDLY_NAME, "RabbitMQ metadata store").
@@ -639,47 +634,56 @@ transfer_leadership0([Destination | TransferCandidates]) ->
 
 status() ->
     Nodes = rabbit_nodes:all_running(),
-    [begin
-         case get_sys_status({?RA_CLUSTER_NAME, N}) of
-             {ok, Sys} ->
-                 {_, M} = lists:keyfind(ra_server_state, 1, Sys),
-                 {_, RaftState} = lists:keyfind(raft_state, 1, Sys),
-                 #{commit_index := Commit,
-                   machine_version := MacVer,
-                   current_term := Term,
-                   log := #{last_index := Last,
-                            snapshot_index := SnapIdx}} = M,
-                 [{<<"Node Name">>, N},
-                  {<<"Raft State">>, RaftState},
-                  {<<"Log Index">>, Last},
-                  {<<"Commit Index">>, Commit},
-                  {<<"Snapshot Index">>, SnapIdx},
-                  {<<"Term">>, Term},
-                  {<<"Machine Version">>, MacVer}
-                 ];
-             {error, Err} ->
-                 [{<<"Node Name">>, N},
-                  {<<"Raft State">>, Err},
-                  {<<"Log Index">>, <<>>},
-                  {<<"Commit Index">>, <<>>},
-                  {<<"Snapshot Index">>, <<>>},
-                  {<<"Term">>, <<>>},
-                  {<<"Machine Version">>, <<>>}
-                 ]
-         end
+    [try
+         Metrics = get_ra_key_metrics(N),
+         #{state := RaftState,
+           membership := Membership,
+           commit_index := Commit,
+           term := Term,
+           last_index := Last,
+           last_applied := LastApplied,
+           last_written_index := LastWritten,
+           snapshot_index := SnapIdx,
+           machine_version := MacVer} = Metrics,
+         [{<<"Node Name">>, N},
+          {<<"Raft State">>, RaftState},
+          {<<"Membership">>, Membership},
+          {<<"Last Log Index">>, Last},
+          {<<"Last Written">>, LastWritten},
+          {<<"Last Applied">>, LastApplied},
+          {<<"Commit Index">>, Commit},
+          {<<"Snapshot Index">>, SnapIdx},
+          {<<"Term">>, Term},
+          {<<"Machine Version">>, MacVer}
+         ]
+     catch
+         _:Error ->
+             [{<<"Node Name">>, N},
+              {<<"Raft State">>, Error},
+              {<<"Membership">>, <<>>},
+              {<<"Last Log Index">>, <<>>},
+              {<<"Last Written">>, <<>>},
+              {<<"Last Applied">>, <<>>},
+              {<<"Commit Index">>, <<>>},
+              {<<"Snapshot Index">>, <<>>},
+              {<<"Term">>, <<>>},
+              {<<"Machine Version">>, <<>>}
+             ]
      end || N <- Nodes].
 
 %% @private
 
-get_sys_status(Proc) ->
-    try lists:nth(5, element(4, sys:get_status(Proc))) of
-        Sys -> {ok, Sys}
-    catch
-        _:Err when is_tuple(Err) ->
-            {error, element(1, Err)};
-        _:_ ->
-            {error, other}
-    end.
+get_ra_key_metrics(Node) ->
+    ServerId = {?RA_CLUSTER_NAME, Node},
+    Metrics0 = ra:key_metrics(ServerId),
+    MacVer = try
+                 erpc:call(Node, khepri_machine, version, [])
+             catch
+                 _:{exception, undef, [{khepri_machine, version, _, _} | _]} ->
+                     0
+             end,
+    Metrics1 = Metrics0#{machine_version => MacVer},
+    Metrics1.
 
 %% @private
 
@@ -788,15 +792,16 @@ node_info() ->
 %% @private
 
 cluster_status_from_khepri() ->
-    case get_sys_status({?RA_CLUSTER_NAME, node()}) of
-        {ok, _} ->
-            All = locally_known_nodes(),
-            Running = lists:filter(
-                        fun(N) ->
-                                rabbit_nodes:is_running(N)
-                        end, All),
-            {ok, {All, Running}};
-        _ ->
+    try
+        _ = get_ra_key_metrics(node()),
+        All = locally_known_nodes(),
+        Running = lists:filter(
+                    fun(N) ->
+                            rabbit_nodes:is_running(N)
+                    end, All),
+        {ok, {All, Running}}
+    catch
+        _:_ ->
             {error, khepri_not_running}
     end.
 
