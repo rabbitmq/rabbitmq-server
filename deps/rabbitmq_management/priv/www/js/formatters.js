@@ -621,6 +621,11 @@ function fmt_object_state(obj) {
         colour = 'red';
         explanation = 'The queue process was stopped by the vhost supervisor.';
     }
+    else if (obj.state == 'minority') {
+        colour = 'yellow';
+        explanation = 'The queue does not have sufficient online members to ' +
+            'make progress'
+    }
 
     return fmt_state(colour, text, explanation);
 }

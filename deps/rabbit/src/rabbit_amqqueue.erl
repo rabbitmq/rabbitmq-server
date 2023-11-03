@@ -25,7 +25,8 @@
          emit_info_all/5, list_local/1, info_local/1,
          emit_info_local/4, emit_info_down/4]).
 -export([count/0]).
--export([list_down/1, count/1, list_names/0, list_names/1, list_local_names/0,
+-export([list_down/1, list_down/2, list_all/1,
+         count/1, list_names/0, list_names/1, list_local_names/0,
          list_local_names_down/0]).
 -export([list_by_type/1, sample_local_queues/0, sample_n_by_name/2, sample_n/2]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
@@ -1313,22 +1314,35 @@ is_in_virtual_host(Q, VHostName) ->
 
 -spec list(vhost:name()) -> [amqqueue:amqqueue()].
 list(VHostPath) ->
+    list(VHostPath, rabbit_nodes:list_running()).
+
+list(VHostPath, NodesRunning) ->
     All = rabbit_db_queue:get_all(VHostPath),
-    NodesRunning = rabbit_nodes:list_running(),
     lists:filter(fun (Q) ->
                          Pid = amqqueue:get_pid(Q),
                          St = amqqueue:get_state(Q),
-                         St =/= stopped orelse is_local_to_node_set(Pid, NodesRunning)
+                         St =/= stopped orelse
+                             is_local_to_node_set(Pid, NodesRunning)
                  end, All).
 
--spec list_down(rabbit_types:vhost()) -> [amqqueue:amqqueue()].
+-spec list_all(vhost:name()) -> [amqqueue:amqqueue()].
+list_all(VHostPath) ->
+    rabbit_db_queue:get_all(VHostPath).
 
+-spec list_down(rabbit_types:vhost()) ->
+    [amqqueue:amqqueue()].
 list_down(VHostPath) ->
+    list_down(VHostPath, rabbit_nodes:list_running()).
+
+-spec list_down(rabbit_types:vhost(), NodesRunning :: [node()]) ->
+    [amqqueue:amqqueue()].
+list_down(VHostPath, NodesRunning) ->
     case rabbit_vhost:exists(VHostPath) of
         false -> [];
         true  ->
-            Alive = sets:from_list([amqqueue:get_name(Q) || Q <- list(VHostPath)]),
-            NodesRunning = rabbit_nodes:list_running(),
+            Alive = sets:from_list([amqqueue:get_name(Q) ||
+                                    Q <- list(VHostPath, NodesRunning)],
+                                   [{version, 2}]),
             rabbit_db_queue:filter_all_durable(
               fun (Q) ->
                       N = amqqueue:get_name(Q),
@@ -1336,7 +1350,8 @@ list_down(VHostPath) ->
                       St = amqqueue:get_state(Q),
                       amqqueue:get_vhost(Q) =:= VHostPath
                           andalso
-                            ((St =:= stopped andalso not is_local_to_node_set(Pid, NodesRunning))
+                            ((St =:= stopped andalso
+                              not is_local_to_node_set(Pid, NodesRunning))
                              orelse
                                (not sets:is_element(N, Alive)))
               end)
@@ -1390,8 +1405,8 @@ is_unresponsive(Q, Timeout) when ?amqqueue_is_stream(Q) ->
             true
     end.
 
-format(Q) when ?amqqueue_is_quorum(Q) -> rabbit_quorum_queue:format(Q);
-format(Q) -> rabbit_amqqueue_process:format(Q).
+format(Q) ->
+    rabbit_queue_type:format(Q, #{}).
 
 -spec info(amqqueue:amqqueue()) -> rabbit_types:infos().
 
@@ -1428,13 +1443,15 @@ emit_info_local(VHostPath, Items, Ref, AggregatorPid) ->
       AggregatorPid, Ref, fun(Q) -> info(Q, Items) end, list_local(VHostPath)).
 
 emit_info_all(Nodes, VHostPath, Items, Ref, AggregatorPid) ->
-    Pids = [ spawn_link(Node, rabbit_amqqueue, emit_info_local, [VHostPath, Items, Ref, AggregatorPid]) || Node <- Nodes ],
+    Pids = [spawn_link(Node, rabbit_amqqueue, emit_info_local,
+                       [VHostPath, Items, Ref, AggregatorPid]) || Node <- Nodes],
     rabbit_control_misc:await_emitters_termination(Pids).
 
 collect_info_all(VHostPath, Items) ->
     Nodes = rabbit_nodes:list_running(),
     Ref = make_ref(),
-    Pids = [ spawn_link(Node, rabbit_amqqueue, emit_info_local, [VHostPath, Items, Ref, self()]) || Node <- Nodes ],
+    Pids = [spawn_link(Node, rabbit_amqqueue, emit_info_local,
+                       [VHostPath, Items, Ref, self()]) || Node <- Nodes],
     rabbit_control_misc:await_emitters_termination(Pids),
     wait_for_queues(Ref, length(Pids), []).
 
@@ -1475,7 +1492,8 @@ info_local(VHostPath) ->
 
 list_local(VHostPath) ->
     [Q || Q <- list(VHostPath),
-          amqqueue:get_state(Q) =/= crashed, is_local_to_node(amqqueue:get_pid(Q), node())].
+          amqqueue:get_state(Q) =/= crashed,
+          is_local_to_node(amqqueue:get_pid(Q), node())].
 
 -spec force_event_refresh(reference()) -> 'ok'.
 

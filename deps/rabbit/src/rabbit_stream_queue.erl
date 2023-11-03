@@ -33,6 +33,7 @@
          update/2,
          state_info/1,
          stat/1,
+         format/2,
          capabilities/0,
          notify_decorators/1,
          is_stateful/0]).
@@ -223,6 +224,43 @@ stat(Q) ->
             end;
         _ ->
             {ok, i(messages, Q), 0}
+    end.
+
+format(Q, Ctx) ->
+    case amqqueue:get_pid(Q) of
+        Pid when is_pid(Pid) ->
+            LeaderNode = node(Pid),
+            Nodes = get_nodes(Q),
+            Running = case Ctx of
+                          #{running_nodes := Running0} ->
+                              Running0;
+                          _ ->
+                              %% WARN: slow
+                              rabbit_nodes:list_running()
+                      end,
+            Online = [N || N <- Nodes, lists:member(N, Running)],
+            State = case is_minority(Nodes, Online) of
+                        true when length(Online) == 0 ->
+                            down;
+                        true ->
+                            minority;
+                        false ->
+                            case lists:member(LeaderNode, Online) of
+                                true ->
+                                    running;
+                                false ->
+                                    down
+                            end
+                    end,
+            [{type, stream},
+             {state, State},
+             {leader, LeaderNode},
+             {online, Online},
+             {members, Nodes},
+             {node, node(Pid)}];
+        _ ->
+            [{type, stream},
+             {state, down}]
     end.
 
 consume(Q, #{prefetch_count := 0}, _)
@@ -1158,3 +1196,11 @@ is_stateful() -> true.
 
 filtering_supported() ->
     rabbit_feature_flags:is_enabled(stream_filtering).
+
+get_nodes(Q) when ?is_amqqueue(Q) ->
+    #{nodes := Nodes} = amqqueue:get_type_state(Q),
+    Nodes.
+
+is_minority(All, Up) ->
+    MinQuorum = length(All) div 2 + 1,
+    length(Up) =< MinQuorum.
