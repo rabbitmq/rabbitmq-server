@@ -14,7 +14,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RemoveClassicQueueMirroringFromPoliciesComma
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name, timeout: timeout}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_mirror_queue_misc, :remove_classic_queue_mirroring_from_policies_for_cli, [], timeout)
+    :rabbit_misc.rpc_call(
+      node_name,
+      :rabbit_mirror_queue_misc,
+      :remove_classic_queue_mirroring_from_policies_for_cli,
+      [],
+      timeout
+    )
   end
 
   use RabbitMQ.CLI.DefaultOutput
@@ -30,8 +36,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RemoveClassicQueueMirroringFromPoliciesComma
   def help_section(), do: :operations
 
   def description,
-    do:
-      "Removes all classic queue mirroring policies and operator policies"
+    do: "Removes all classic queue mirroring policies and operator policies"
 
   def banner([], %{}),
     do: "Will remove all classic queue mirroring policies and operator policies"
