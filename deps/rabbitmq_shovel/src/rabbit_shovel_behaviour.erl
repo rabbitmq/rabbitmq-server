@@ -80,7 +80,8 @@
 -callback ack(Tag :: tag(), Multi :: boolean(), state()) -> state().
 -callback nack(Tag :: tag(), Multi :: boolean(), state()) -> state().
 -callback forward(Tag :: tag(), Props :: #{atom() => any()},
-                  Payload :: binary(), state()) -> state().
+                  Payload :: binary(), state()) ->
+    state() | {stop, any()}.
 -callback status(state()) -> rabbit_shovel_status:blocked_status() | ignore.
 
 -spec parse(atom(), binary(), {source | destination, proplists:proplist()}) ->
