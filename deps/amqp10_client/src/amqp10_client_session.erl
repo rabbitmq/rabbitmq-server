@@ -955,7 +955,7 @@ update_link(Link = #link{output_handle = OutHandle},
             State#state{links = Links#{OutHandle => Link}}.
 
 incr_link_counters(#link{link_credit = LC, delivery_count = DC} = Link) ->
-    Link#link{delivery_count = DC+1, link_credit = LC+1}.
+    Link#link{delivery_count = DC+1, link_credit = LC-1}.
 
 append_partial_transfer(Transfer, Payload,
                         #link{partial_transfers = undefined} = Link) ->
