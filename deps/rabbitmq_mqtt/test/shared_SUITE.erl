@@ -754,10 +754,10 @@ global_counters(Config) ->
 pubsub(Config) ->
     Topic0 = <<"t/0">>,
     Topic1 = <<"t/1">>,
-    C0 = connect(<<"c0">>, Config, 0, []),
     C1 = connect(<<"c1">>, Config, 1, []),
-    {ok, _, [1]} = emqtt:subscribe(C0, Topic0, qos1),
     {ok, _, [1]} = emqtt:subscribe(C1, Topic1, qos1),
+    C0 = connect(<<"c0">>, Config, 0, []),
+    {ok, _, [1]} = emqtt:subscribe(C0, Topic0, qos1),
 
     {ok, _} = emqtt:publish(C0, Topic1, <<"m1">>, qos1),
     receive {publish, #{client_pid := C1,
