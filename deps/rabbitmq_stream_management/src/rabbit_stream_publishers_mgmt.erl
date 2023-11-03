@@ -86,8 +86,9 @@ to_json(ReqData, Context = #context{user = User}) ->
                                         ReqData,
                                         Context);
         true ->
-            rabbit_mgmt_util:bad_request(<<"Stats in management UI are disabled on this node">>,
-                                         ReqData, Context)
+            %% if we don't return a 200 it is not possible to view the queue page
+            %% for a queue if the stream mgmt is enabled
+            rabbit_mgmt_util:reply_list([], [], ReqData, Context)
     end.
 
 is_authorized(ReqData, Context) ->
