@@ -14,13 +14,17 @@
 
 -include_lib("rabbit_common/include/logging.hrl").
 
+-define(PT_KEY_INIT_FINISHED, {?MODULE, node(), initialisation_finished}).
+
 -export([init/0,
          reset/0,
          force_reset/0,
          force_load_on_next_boot/0,
          is_virgin_node/0, is_virgin_node/1,
          dir/0,
-         ensure_dir_exists/0]).
+         ensure_dir_exists/0,
+         is_init_finished/0,
+         clear_init_finished/0]).
 
 %% Exported to be used by various rabbit_db_* modules
 -export([
@@ -62,6 +66,7 @@ init() ->
                "DB: initialization successeful",
                #{domain => ?RMQLOG_DOMAIN_DB}),
 
+            init_finished(),
             post_init(IsVirgin),
 
             ok;
@@ -101,6 +106,24 @@ init_using_khepri() ->
                "Found the following metadata store members: ~p", [Members],
                #{domain => ?RMQLOG_DOMAIN_DB})
     end.
+
+init_finished() ->
+    %% Used during initialisation by rabbit_logger_exchange_h.erl
+    %% If an exchange logger is configured, it needs to declare the
+    %% exchange. For this, it requires the metadata store to be
+    %% initialised. The initialisation happens on a rabbit boot step,
+    %% after the second phase of the prelaunch where the logger is
+    %% configured.
+    %% Using this persistent term the logger exchange can delay
+    %% declaring the exchange until the metadata store is ready.
+    persistent_term:put(?PT_KEY_INIT_FINISHED, true).
+
+is_init_finished() ->
+    persistent_term:get(?PT_KEY_INIT_FINISHED, false).
+
+clear_init_finished() ->
+    _ = persistent_term:erase(?PT_KEY_INIT_FINISHED),
+    ok.
 
 -spec reset() -> Ret when
       Ret :: ok.
