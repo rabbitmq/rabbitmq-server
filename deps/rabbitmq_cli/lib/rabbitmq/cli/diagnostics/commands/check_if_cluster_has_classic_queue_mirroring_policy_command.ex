@@ -4,13 +4,12 @@
 ##
 ## Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Queues.Commands.CheckIfClusterHasClassicQueueMirroringPolicyCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckIfClusterHasClassicQueueMirroringPolicyCommand do
   @moduledoc """
-  Exits with a non-zero code if there are classic mirrored queues that don't
-  have any in sync mirrors online and would potentially lose data
-  if the target node is shut down.
+  Exits with a non-zero code if there are policies enabling classic queue mirroring.
 
-  This command is meant to be used as a pre-upgrade (pre-shutdown) check.
+  This command is meant to be used as a pre-upgrade (pre-shutdown) check before classic queue
+  mirroring is removed.
   """
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
