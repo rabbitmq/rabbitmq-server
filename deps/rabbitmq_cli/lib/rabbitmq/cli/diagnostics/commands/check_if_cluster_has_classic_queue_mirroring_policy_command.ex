@@ -44,29 +44,35 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckIfClusterHasClassicQueueMirrori
 
     case {policies, op_policies} do
       {[], []} ->
-        :ok
+        true
 
       {_, _} when is_list(policies) and is_list(op_policies) ->
-        {:ok, policies, op_policies}
+        {false, policies, op_policies}
+
+      {{:badrpc, _} = left, _} ->
+        left
+
+      {_, {:badrpc, _} = right} ->
+        right
 
       other ->
         other
     end
   end
 
-  def output(:ok, %{formatter: "json"}) do
+  def output(true, %{formatter: "json"}) do
     {:ok, %{"result" => "ok"}}
   end
 
-  def output(:ok, %{silent: true}) do
+  def output(true, %{silent: true}) do
     {:ok, :check_passed}
   end
 
-  def output(:ok, %{}) do
-    {:ok, "Cluster reported no policies enabling classic queue mirroring"}
+  def output(true, %{}) do
+    {:ok, "Cluster reported no policies that enable classic queue mirroring"}
   end
 
-  def output({:ok, ps, op_ps}, %{formatter: "json"})
+  def output({false, ps, op_ps}, %{formatter: "json"})
       when is_list(ps) and is_list(op_ps) do
     {:error, :check_failed,
      %{
@@ -77,17 +83,16 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckIfClusterHasClassicQueueMirrori
      }}
   end
 
-  def output({:ok, ps, op_ps}, %{silent: true}) when is_list(ps) and is_list(op_ps) do
+  def output({false, ps, op_ps}, %{silent: true}) when is_list(ps) and is_list(op_ps) do
     {:error, :check_failed}
   end
 
-  def output({:ok, ps, op_ps}, _) when is_list(ps) and is_list(op_ps) do
+  def output({false, ps, op_ps}, _) when is_list(ps) and is_list(op_ps) do
     lines = policy_lines(ps)
     op_lines = op_policy_lines(op_ps)
 
     {:error, :check_failed, Enum.join(Enum.concat(lines, op_lines), line_separator())}
   end
-
   use RabbitMQ.CLI.DefaultOutput
 
   def help_section(), do: :observability_and_health_checks
