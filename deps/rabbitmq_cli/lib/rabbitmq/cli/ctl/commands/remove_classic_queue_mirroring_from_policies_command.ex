@@ -36,8 +36,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RemoveClassicQueueMirroringFromPoliciesComma
   def help_section(), do: :operations
 
   def description,
-    do: "Removes all classic queue mirroring policies and operator policies"
+    do: "Removes keys that enable classic queue mirroring from all regular and operator policies"
 
   def banner([], %{}),
-    do: "Will remove all regular policies and operator policies that enable classic queue mirroring"
+    do: "Will remove keys that enable classic queue mirroring from all regular and operator policies"
 end
