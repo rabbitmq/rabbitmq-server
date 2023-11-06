@@ -38,8 +38,7 @@ build:rbe --config=buildbuddy
 
 build:rbe --remote_executor=grpcs://remote.buildbuddy.io
 
-build:rbe --spawn_strategy=remote,local
-build:rbe --test_strategy=""
+build:rbe --strategy=TestRunner=remote,worker,sandboxed,local
 build:rbe --jobs=50
 
 build:rbe --crosstool_top=@rbe//cc:toolchain

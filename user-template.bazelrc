@@ -1,7 +1,7 @@
 # rabbitmqctl wait shells out to 'ps', which is broken in the bazel macOS
 # sandbox (https://github.com/bazelbuild/bazel/issues/7448)
-# adding "--spawn_strategy=local" to the invocation is a workaround
-build --spawn_strategy=local
+# adding "--strategy=TestRunner=local" to the invocation is a workaround
+build --strategy=TestRunner=local
 
 # --experimental_strict_action_env breaks memory size detection on macOS,
 # so turn it off for local runs
