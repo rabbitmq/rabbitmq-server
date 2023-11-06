@@ -15,39 +15,72 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckIfAnyDeprecatedFeaturesAreUsedC
 
   def scopes(), do: [:ctl, :diagnostics]
 
+  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
   use RabbitMQ.CLI.Core.MergesNoDefaults
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
+  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def validate([_ | _] = args, _) when length(args) != 0,
-    do: {:validation_failure, :too_many_args}
+  def run([], opts) do
+    are_deprecated_features_used = %{
+      :classic_queue_mirroring => is_used_classic_queue_mirroring(opts)
+    }
 
-  def validate([], %{formatter: formatter}) do
-    case formatter do
-      "report" -> :ok
-      _other -> {:validation_failure, "Only report formatter is supported"}
+    deprecated_features_list =
+      Map.keys(Map.filter(are_deprecated_features_used, fn {_key, val} -> val != false end))
+
+    case deprecated_features_list do
+      [] -> false
+      _ -> {true, deprecated_features_list}
     end
   end
 
-  def validate([], _), do: :ok
+  def is_used_classic_queue_mirroring(%{node: node_name, timeout: timeout}) do
+    :rabbit_misc.rpc_call(
+      node_name,
+      :rabbit_mirror_queue_misc,
+      :are_cmqs_used,
+      [:none],
+      timeout
+    )
+  end
 
-  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+  def output(false, %{formatter: "json"}) do
+    {:ok, %{"result" => "ok"}}
+  end
 
-  def run([], %{node: node_name} = opts) do
-        [
-          run_command(CheckIfClusterHasClassicQueueMirroringPolicyCommand, [], opts)
-        ]
+  def output(false, %{silent: true}) do
+    {:ok, :check_passed}
+  end
+
+  def output(false, %{}) do
+    {:ok, "Cluster reported no deprecated features in use"}
+  end
+
+  def output({true, deprecated_features_list}, %{formatter: "json"}) do
+    {:error, :check_failed,
+     %{
+       "result" => "error",
+       "deprecated_features" => deprecated_features_list,
+       "message" => "Cluster reported deprecated features in use"
+     }}
+  end
+
+  def output({true, _deprecated_features_list}, %{silent: true}) do
+    {:error, :check_failed}
+  end
+
+  def output({true, deprecated_features_list}, _) do
+    {:error, :check_failed, deprecated_features_list}
   end
 
   use RabbitMQ.CLI.DefaultOutput
-
-  def formatter(), do: RabbitMQ.CLI.Formatters.Report
 
   def usage, do: "check_if_any_deprecated_features_are_used"
 
   def help_section(), do: :observability_and_health_checks
 
   def description(),
-    do:
-      "Generate a report listing all deprecated features in use"
+    do: "Generate a report listing all deprecated features in use"
 
   def banner(_, %{node: node_name}), do: "Checking if any deprecated features are used ..."
 
@@ -61,5 +94,4 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckIfAnyDeprecatedFeaturesAreUsedC
     command_result = command.run(args, opts) |> command.output(opts)
     {command, banner, command_result}
   end
-
 end
