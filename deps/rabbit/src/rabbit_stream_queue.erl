@@ -1146,11 +1146,6 @@ list_with_minimum_quorum() ->
                  end, rabbit_amqqueue:list_local_stream_queues()).
 
 is_stateful() -> true.
-<<<<<<< HEAD
-=======
-
-filtering_supported() ->
-    rabbit_feature_flags:is_enabled(stream_filtering).
 
 get_nodes(Q) when ?is_amqqueue(Q) ->
     #{nodes := Nodes} = amqqueue:get_type_state(Q),
@@ -1159,4 +1154,3 @@ get_nodes(Q) when ?is_amqqueue(Q) ->
 is_minority(All, Up) ->
     MinQuorum = length(All) div 2 + 1,
     length(Up) =< MinQuorum.
->>>>>>> c2cd60b18d (Optimise mgmt HTTP API /queues endpoint)

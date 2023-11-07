@@ -40,18 +40,9 @@ variances(Req, Context) ->
 content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
-<<<<<<< HEAD
 resource_exists(ReqData, Context) ->
-    {case queues0(ReqData) of
-=======
-resource_exists(ReqData, {Mode, Context}) ->
     %% just checking that the vhost requested exists
-<<<<<<< HEAD
-    {case rabbit_mgmt_util:all_or_one_vhost(ReqData, fun (_) -> ok end) of
->>>>>>> ff12d3b6b4 (HTTP API /queues optimise resource_exists)
-=======
     {case rabbit_mgmt_util:all_or_one_vhost(ReqData, fun (_) -> [] end) of
->>>>>>> baff660ab4 (use right dummy type)
          vhost_not_found -> false;
          _               -> true
      end, ReqData, Context}.
@@ -129,7 +120,6 @@ augmented(ReqData, Context) ->
 %%--------------------------------------------------------------------
 %% Private helpers
 
-<<<<<<< HEAD
 augment(Basic, ReqData) ->
     case rabbit_mgmt_util:disable_stats(ReqData) of
         false ->
@@ -137,31 +127,6 @@ augment(Basic, ReqData) ->
                                           basic);
         true ->
             Basic
-=======
-augment(Mode) ->
-    fun(Basic, ReqData) ->
-            case rabbit_mgmt_util:disable_stats(ReqData) of
-                false ->
-                    %% The reduced endpoint needs to sit behind a feature flag,
-                    %% as it calls a different data aggregation function
-                    %% that is used against all cluster nodes.
-                    %% Data can be collected locally even if other nodes in the
-                    %% cluster do not, it's just a local ETS table.
-                    %% But it can't be queried until all nodes enable the FF.
-                    IsEnabled = rabbit_feature_flags:is_enabled(detailed_queues_endpoint),
-                    Stats = case {IsEnabled, Mode, rabbit_mgmt_util:columns(ReqData)} of
-                                {false, _, _} -> detailed;
-                                {_, detailed, _} -> detailed;
-                                {_, _, all} -> basic;
-                                _ -> detailed
-                            end,
-                    rabbit_mgmt_db:augment_queues(Basic,
-                                                  rabbit_mgmt_util:range_ceil(ReqData),
-                                                  Stats);
-                true ->
-                    Basic
-            end
->>>>>>> c2cd60b18d (Optimise mgmt HTTP API /queues endpoint)
     end.
 
 basic_vhost_filtered(ReqData, Context) ->
