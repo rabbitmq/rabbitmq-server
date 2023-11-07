@@ -3368,7 +3368,7 @@ get_queue_type(Server, VHost, Q0) ->
 
 count_online_nodes(Server, VHost, Q0) ->
     QNameRes = rabbit_misc:r(VHost, queue, Q0),
-    Info = rpc:call(Server, rabbit_quorum_queue, infos, [QNameRes]),
+    Info = rpc:call(Server, rabbit_quorum_queue, infos, [QNameRes, [online]]),
     length(proplists:get_value(online, Info, [])).
 
 publish_many(Ch, Queue, Count) ->
