@@ -23,7 +23,7 @@
          stop_server/1,
          delete/4,
          delete_immediately/1]).
--export([state_info/1, info/2, stat/1, infos/1]).
+-export([state_info/1, info/2, stat/1, infos/1, infos/2]).
 -export([settle/5, dequeue/5, consume/3, cancel/5]).
 -export([credit/5]).
 -export([purge/1]).
