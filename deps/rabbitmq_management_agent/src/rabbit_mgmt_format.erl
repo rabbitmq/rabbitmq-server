@@ -9,7 +9,7 @@
 
 -export([format/2, ip/1, ipb/1, amqp_table/1, tuple/1]).
 -export([parameter/1, now_to_str/0, now_to_str/1, strip_pids/1]).
--export([protocol/1, resource/1, queue/1, queue_state/1, queue_info/1]).
+-export([protocol/1, resource/1, queue/1, queue/2, queue_state/1, queue_info/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, tokenise/1]).
 -export([to_amqp_table/1, listener/1, web_context/1, properties/1, basic_properties/1]).
@@ -367,34 +367,26 @@ exchange(X) ->
 %% We get queues using rabbit_amqqueue:list/1 rather than :info_all/1 since
 %% the latter wakes up each queue. Therefore we have a record rather than a
 %% proplist to deal with.
-queue(Q) when ?is_amqqueue(Q) ->
-    Name = amqqueue:get_name(Q),
+queue(Q) ->
+    queue(Q, #{}).
+
+queue(Q, Ctx) when ?is_amqqueue(Q) ->
+    #resource{name = Name, virtual_host = VHost} = amqqueue:get_name(Q),
     Durable = amqqueue:is_durable(Q),
     AutoDelete = amqqueue:is_auto_delete(Q),
     ExclusiveOwner = amqqueue:get_exclusive_owner(Q),
     Arguments = amqqueue:get_arguments(Q),
     Pid = amqqueue:get_pid(Q),
-    State = amqqueue:get_state(Q),
-    %% TODO: in the future queue types should be registered with their
-    %% full and short names and this hard-coded translation should not be
-    %% necessary
-    Type = case amqqueue:get_type(Q) of
-               rabbit_classic_queue -> classic;
-               rabbit_quorum_queue -> quorum;
-               rabbit_stream_queue -> stream;
-               T -> T
-           end,
-    format(
-      [{name,        Name},
-       {durable,     Durable},
-       {auto_delete, AutoDelete},
-       {exclusive,   is_pid(ExclusiveOwner)},
-       {owner_pid,   ExclusiveOwner},
-       {arguments,   Arguments},
-       {pid,         Pid},
-       {type,        Type},
-       {state,       State}] ++ rabbit_amqqueue:format(Q),
-      {fun format_exchange_and_queue/1, false}).
+    [{name, Name},
+     {vhost, VHost},
+     {durable, Durable},
+     {auto_delete, AutoDelete},
+     {exclusive, is_pid(ExclusiveOwner)},
+     {owner_pid, ExclusiveOwner},
+     {arguments, amqp_table(Arguments)},
+     {pid, Pid}
+     %% type specific stuff like, state, type, members etc is returned here
+     | rabbit_queue_type:format(Q, Ctx)].
 
 queue_info(List) ->
     format(List, {fun format_exchange_and_queue/1, false}).

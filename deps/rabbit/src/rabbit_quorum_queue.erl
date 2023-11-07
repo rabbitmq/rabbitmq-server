@@ -23,7 +23,7 @@
          stop_server/1,
          delete/4,
          delete_immediately/1]).
--export([state_info/1, info/2, stat/1, infos/1]).
+-export([state_info/1, info/2, stat/1, infos/1, infos/2]).
 -export([settle/5, dequeue/5, consume/3, cancel/5]).
 -export([credit/5]).
 -export([purge/1]).
@@ -35,7 +35,7 @@
 -export([become_leader/2, handle_tick/3, spawn_deleter/1]).
 -export([rpc_delete_metrics/1,
          key_metrics_rpc/1]).
--export([format/1]).
+-export([format/2]).
 -export([open_files/1]).
 -export([peek/2, peek/3]).
 -export([add_member/2,
@@ -432,7 +432,7 @@ filter_quorum_critical(Queues) ->
 
 filter_quorum_critical(Queues, ReplicaStates, Self) ->
     lists:filter(fun (Q) ->
-                    MemberNodes = rabbit_amqqueue:get_quorum_nodes(Q),
+                    MemberNodes = get_nodes(Q),
                     {Name, _Node} = amqqueue:get_pid(Q),
                     AllUp = lists:filter(fun (N) ->
                                             case maps:get(N, ReplicaStates, undefined) of
@@ -510,7 +510,8 @@ handle_tick(QName,
                              0 -> 0;
                              _ -> rabbit_fifo:usage(Name)
                          end,
-                  Keys = ?STATISTICS_KEYS -- [consumers,
+                  Keys = ?STATISTICS_KEYS -- [leader,
+                                              consumers,
                                               messages_dlx,
                                               message_bytes_dlx,
                                               single_active_consumer_pid,
@@ -531,7 +532,8 @@ handle_tick(QName,
                            {messages_dlx, NumDiscarded + NumDiscardedCheckedOut},
                            {message_bytes_dlx, MsgBytesDiscarded},
                            {single_active_consumer_tag, SacTag},
-                           {single_active_consumer_pid, SacPid}
+                           {single_active_consumer_pid, SacPid},
+                           {leader, node()}
                            | infos(QName, Keys)],
                   rabbit_core_metrics:queue_stats(QName, Infos),
                   ok = repair_leader_record(QName, Self),
@@ -971,7 +973,7 @@ info(Q, Items) ->
     lists:foldr(fun(totals, Acc) ->
                         i_totals(Q) ++ Acc;
                    (type_specific, Acc) ->
-                        format(Q) ++ Acc;
+                        format(Q, #{}) ++ Acc;
                    (Item, Acc) ->
                         [{Item, i(Item, Q)} | Acc]
                 end, [], Items).
@@ -1668,11 +1670,41 @@ peek(_Pos, Q) when ?is_amqqueue(Q) ->
 online(Q) when ?is_amqqueue(Q) ->
     Nodes = get_connected_nodes(Q),
     {Name, _} = amqqueue:get_pid(Q),
-    [Node || Node <- Nodes, is_process_alive(Name, Node)].
+    [node(Pid) || {ok, Pid} <-
+                  erpc:multicall(Nodes, erlang, whereis, [Name]),
+                  is_pid(Pid)].
 
-format(Q) when ?is_amqqueue(Q) ->
+format(Q, Ctx) when ?is_amqqueue(Q) ->
+    %% TODO: this should really just be voters
     Nodes = get_nodes(Q),
-    [{members, Nodes}, {online, online(Q)}, {leader, leader(Q)}].
+    Running = case Ctx of
+                  #{running_nodes := Running0} ->
+                      Running0;
+                  _ ->
+                      %% WARN: slow
+                      rabbit_nodes:list_running()
+              end,
+    Online = [N || N <- Nodes, lists:member(N, Running)],
+    {_, LeaderNode} = amqqueue:get_pid(Q),
+    State = case is_minority(Nodes, Online) of
+                true when length(Online) == 0 ->
+                    down;
+                true ->
+                    minority;
+                false ->
+                    case lists:member(LeaderNode, Online) of
+                        true ->
+                            running;
+                        false ->
+                            down
+                    end
+            end,
+    [{type, quorum},
+     {state, State},
+     {node, LeaderNode},
+     {members, Nodes},
+     {leader, LeaderNode},
+     {online, Online}].
 
 is_process_alive(Name, Node) ->
     %% don't attempt rpc if node is not already connected
@@ -1860,3 +1892,7 @@ force_all_queues_shrink_member_to_current_member() ->
          end || Q <- rabbit_amqqueue:list(), amqqueue:get_type(Q) == ?MODULE],
     rabbit_log:warning("Disaster recovery procedure: shrinking finished"),
     ok.
+
+is_minority(All, Up) ->
+    MinQuorum = length(All) div 2 + 1,
+    length(Up) < MinQuorum.

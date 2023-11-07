@@ -1812,6 +1812,7 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
+%% TODO: this can be removed after 3.13
 format(Q) when ?is_amqqueue(Q) ->
     case rabbit_mirror_queue_misc:is_mirrored(Q) of
         false ->

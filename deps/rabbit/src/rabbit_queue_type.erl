@@ -27,6 +27,7 @@
          purge/1,
          policy_changed/1,
          stat/1,
+         format/2,
          remove/2,
          info/2,
          state_info/1,
@@ -228,6 +229,9 @@
 -callback stat(amqqueue:amqqueue()) ->
     {'ok', non_neg_integer(), non_neg_integer()}.
 
+-callback format(amqqueue:amqqueue(), Context :: map()) ->
+    [{atom(), term()}].
+
 -callback capabilities() ->
     #{atom() := term()}.
 
@@ -303,6 +307,12 @@ policy_changed(Q) ->
 stat(Q) ->
     Mod = amqqueue:get_type(Q),
     Mod:stat(Q).
+
+-spec format(amqqueue:amqqueue(), map()) ->
+    [{atom(), term()}].
+format(Q, Context) ->
+    Mod = amqqueue:get_type(Q),
+    Mod:format(Q, Context).
 
 -spec remove(queue_name(), state()) -> state().
 remove(QRef, #?STATE{ctxs = Ctxs0} = State) ->

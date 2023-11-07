@@ -272,13 +272,21 @@ get_value_param(Name, ReqData) ->
         Bin       -> binary_to_list(Bin)
     end.
 
+get_sorts_param(ReqData, Def) ->
+    case get_value_param(<<"sort">>, ReqData) of
+        undefined ->
+            Def;
+        S ->
+            [S]
+    end.
+
 reply_list(Facts, DefaultSorts, ReqData, Context, Pagination) ->
     SortList =
-    sort_list_and_paginate(
-          extract_columns_list(Facts, ReqData),
-          DefaultSorts,
-          get_value_param(<<"sort">>, ReqData),
-          get_sort_reverse(ReqData), Pagination),
+        sort_list_and_paginate(
+              extract_columns_list(Facts, ReqData),
+              DefaultSorts,
+              get_sorts_param(ReqData, undefined),
+              get_sort_reverse(ReqData), Pagination),
 
     reply(SortList, ReqData, Context).
 
@@ -320,7 +328,9 @@ reply_list_or_paginate(Facts, ReqData, Context) ->
 merge_sorts(DefaultSorts, Extra) ->
     case Extra of
         undefined -> DefaultSorts;
-        Extra     -> [Extra | DefaultSorts]
+        Extra ->
+            %% it is possible that the extra sorts have an overlap with default
+            lists:uniq(Extra ++ DefaultSorts)
     end.
 
 %% Resource augmentation. Works out the most optimal configuration of the operations:
@@ -352,9 +362,9 @@ augment_resources0(Resources, DefaultSort, BasicColumns, Pagination, ReqData,
     SortFun = fun (AugCtx) -> sort(DefaultSort, AugCtx) end,
     AugFun = fun (AugCtx) -> augment(AugmentFun, AugCtx) end,
     PageFun = fun page/1,
-    Pagination = pagination_params(ReqData),
-    Sort = def(get_value_param(<<"sort">>, ReqData), DefaultSort),
-    Columns = def(columns(ReqData), all),
+    %% Sort needs to be a list of, erm, strings which are lists
+    Sort = get_sorts_param(ReqData, DefaultSort),
+    Columns = columns(ReqData),
     ColumnsAsStrings = columns_as_strings(Columns),
     Pipeline =
         case {Pagination =/= undefined,
@@ -368,7 +378,10 @@ augment_resources0(Resources, DefaultSort, BasicColumns, Pagination, ReqData,
             {true, basic, basic} ->
                 [SortFun, PageFun];
             {true, extended, _} ->
-                % pagination with extended sort columns - SLOW
+                Path = cowboy_req:path(ReqData),
+                rabbit_log:debug("HTTP API: ~s slow query mode requested - extended sort on ~0p",
+                                 [Path, Sort]),
+                % pagination with extended sort columns - SLOW!
                 [AugFun, SortFun, PageFun];
             {true, basic, extended} ->
                 % pagination with extended columns and sorting on basic
@@ -1107,9 +1120,6 @@ int(Name, ReqData) ->
                          Integer     -> Integer
                      end
     end.
-
-def(undefined, Def) -> Def;
-def(V, _) -> V.
 
 -spec qs_val(binary(), cowboy_req:req()) -> any() | undefined.
 qs_val(Name, ReqData) ->

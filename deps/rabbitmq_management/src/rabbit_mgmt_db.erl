@@ -667,9 +667,12 @@ node_stats(Ranges, Objs, Interval) ->
 combine(New, Old) ->
     case pget(state, Old) of
         unknown -> New ++ Old;
-        live    -> New ++ lists:keydelete(state, 1, Old);
+        live    -> New ++ delete_keys([state, online], Old);
         _       -> lists:keydelete(state, 1, New) ++ Old
     end.
+
+delete_keys(Keys, List) ->
+    [I || I <- List, not lists:member(element(1, I), Keys)].
 
 revert({'_', _}, {Id, _}) ->
     Id;

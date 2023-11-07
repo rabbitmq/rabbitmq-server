@@ -32,6 +32,7 @@
          purge/1,
          policy_changed/1,
          stat/1,
+         format/2,
          init/1,
          close/1,
          update/2,
@@ -187,6 +188,29 @@ policy_changed(Q) ->
 stat(Q) ->
     delegate:invoke(amqqueue:get_pid(Q),
                     {gen_server2, call, [stat, infinity]}).
+
+
+format(Q, _Ctx) when ?is_amqqueue(Q) ->
+    State = case amqqueue:get_state(Q) of
+                live ->
+                    running;
+                S ->
+                    S
+            end,
+    case rabbit_mirror_queue_misc:is_mirrored(Q) of
+        false ->
+            [{type, classic},
+             {state, State},
+             {node, node(amqqueue:get_pid(Q))}];
+        true ->
+            Slaves = amqqueue:get_slave_pids(Q),
+            SSlaves = amqqueue:get_sync_slave_pids(Q),
+            [{type, classic},
+             {state, State},
+             {slave_nodes, [node(S) || S <- Slaves]},
+             {synchronised_slave_nodes, [node(S) || S <- SSlaves]},
+             {node, node(amqqueue:get_pid(Q))}]
+    end.
 
 -spec init(amqqueue:amqqueue()) -> {ok, state()}.
 init(Q) when ?amqqueue_is_classic(Q) ->

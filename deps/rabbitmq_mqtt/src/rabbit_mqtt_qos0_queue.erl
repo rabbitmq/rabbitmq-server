@@ -36,6 +36,7 @@
          policy_changed/1,
          info/2,
          stat/1,
+         format/2,
          capabilities/0,
          notify_decorators/1
         ]).
@@ -201,6 +202,12 @@ notify_decorators(_) ->
     {'ok', non_neg_integer(), non_neg_integer()}.
 stat(_Q) ->
     {ok, 0, 0}.
+
+-spec format(amqqueue:amqqueue(), map()) ->
+    [{atom(), term()}].
+format(Q, _Ctx) ->
+    [{type, ?MODULE},
+     {state, amqqueue:get_state(Q)}].
 
 -spec capabilities() ->
     #{atom() := term()}.
