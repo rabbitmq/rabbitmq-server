@@ -9,7 +9,7 @@
 
 -behaviour(gen_event).
 
--export([init/1, handle_event/2, handle_call/2]).
+-export([init/1, handle_event/2, handle_call/2, handle_info/2]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -35,3 +35,6 @@ handle_event(_Event, ?STATE) ->
 
 handle_call(_Request, ?STATE) ->
     {ok, ok, ?STATE}.
+
+handle_info(_Info, State) ->
+    {ok, State}.
