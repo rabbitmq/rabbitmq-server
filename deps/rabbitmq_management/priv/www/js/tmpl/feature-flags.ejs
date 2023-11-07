@@ -1,4 +1,17 @@
 <h1>Feature Flags</h1>
+  <%
+       var needs_enable = false;
+       for (var i = 0; i < feature_flags.length; i++) {
+         var feature_flag = feature_flags[i];
+         if (feature_flag.state == "disabled" && feature_flag.state != "experimental") {
+           needs_enable = true;
+         }
+       }
+  if (needs_enable) { %>
+     <p class="warning">
+        All stable feature flags must be enabled after completing an upgrade. Without enabling all flags, upgrading to future minor or major versions of RabbitMQ may not be possible. <a href="https://www.rabbitmq.com/feature-flags.html">[Learn more]</a>
+     </p>
+  <% } %>
 <div class="section">
   <h2>All Feature Flags</h2>
   <div class="hider">
@@ -43,7 +56,15 @@
            <% } %>
          </td>
          <td>
-         <p><%= fmt_string(feature_flag.desc) %></p>
+         <p>
+         <% if (feature_flag.stability == "experimental") { %>
+              <abbr class="status-grey"
+                    style="text-transform: capitalize"
+                    title="Feature flag stability: <%= fmt_string(feature_flag.stability) %>">
+                    <%= fmt_string(feature_flag.stability) %>
+             </abbr>
+         <% } %>
+         <%= fmt_string(feature_flag.desc) %></p>
          <% if (feature_flag.doc_url) { %>
          <p><a href="<%= fmt_string(feature_flag.doc_url) %>">[Learn more]</a></p>
          <% } %>
