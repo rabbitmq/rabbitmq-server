@@ -25,7 +25,7 @@
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamPublishersCommand').
 -define(COMMAND_ADD_SUPER_STREAM,
         'Elixir.RabbitMQ.CLI.Ctl.Commands.AddSuperStreamCommand').
--define(COMMAND_DELETE_SUPER_STREAM,
+-define(COMMAND_DELETE_SUPER_STREAM_CLI,
         'Elixir.RabbitMQ.CLI.Ctl.Commands.DeleteSuperStreamCommand').
 -define(COMMAND_LIST_CONSUMER_GROUPS,
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumerGroupsCommand').
@@ -719,15 +719,15 @@ add_super_stream_validate(_Config) ->
 
 delete_super_stream_merge_defaults(_Config) ->
     ?assertMatch({[<<"super-stream">>], #{vhost := <<"/">>}},
-                 ?COMMAND_DELETE_SUPER_STREAM:merge_defaults([<<"super-stream">>],
+                 ?COMMAND_DELETE_SUPER_STREAM_CLI:merge_defaults([<<"super-stream">>],
                                                              #{})),
     ok.
 
 delete_super_stream_validate(_Config) ->
     ?assertMatch({validation_failure, not_enough_args},
-                 ?COMMAND_DELETE_SUPER_STREAM:validate([], #{})),
+                 ?COMMAND_DELETE_SUPER_STREAM_CLI:validate([], #{})),
     ?assertMatch({validation_failure, too_many_args},
-                 ?COMMAND_DELETE_SUPER_STREAM:validate([<<"a">>, <<"b">>],
+                 ?COMMAND_DELETE_SUPER_STREAM_CLI:validate([<<"a">>, <<"b">>],
                                                        #{})),
     ?assertEqual(ok, ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>], #{})),
     ok.
@@ -748,7 +748,7 @@ add_delete_super_stream_run(Config) ->
                   [<<"invoices-0">>, <<"invoices-1">>, <<"invoices-2">>]},
                  partitions(Config, <<"invoices">>)),
     ?assertMatch({ok, _},
-                 ?COMMAND_DELETE_SUPER_STREAM:run([<<"invoices">>], Opts)),
+                 ?COMMAND_DELETE_SUPER_STREAM_CLI:run([<<"invoices">>], Opts)),
     ?assertEqual({error, stream_not_found},
                  partitions(Config, <<"invoices">>)),
 
@@ -763,7 +763,7 @@ add_delete_super_stream_run(Config) ->
                    <<"invoices-apac">>]},
                  partitions(Config, <<"invoices">>)),
     ?assertMatch({ok, _},
-                 ?COMMAND_DELETE_SUPER_STREAM:run([<<"invoices">>], Opts)),
+                 ?COMMAND_DELETE_SUPER_STREAM_CLI:run([<<"invoices">>], Opts)),
     ?assertEqual({error, stream_not_found},
                  partitions(Config, <<"invoices">>)),
 
@@ -797,7 +797,7 @@ add_delete_super_stream_run(Config) ->
                  rabbit_misc:table_lookup(Args, <<"x-queue-type">>)),
 
     ?assertMatch({ok, _},
-                 ?COMMAND_DELETE_SUPER_STREAM:run([<<"invoices">>], Opts)),
+                 ?COMMAND_DELETE_SUPER_STREAM_CLI:run([<<"invoices">>], Opts)),
 
     ok.
 

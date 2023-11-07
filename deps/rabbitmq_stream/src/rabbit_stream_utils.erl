@@ -22,8 +22,8 @@
          parse_map/2,
          auth_mechanisms/1,
          auth_mechanism_to_module/2,
-         check_configure_permitted/3,
-         check_write_permitted/3,
+         check_configure_permitted/2,
+         check_write_permitted/2,
          check_read_permitted/3,
          extract_stream_list/2,
          sort_partitions/1,
@@ -32,7 +32,8 @@
          filter_defined/1,
          filter_spec/1,
          command_versions/0,
-         filtering_supported/0]).
+         filtering_supported/0,
+         check_super_stream_management_permitted/4]).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -190,14 +191,61 @@ check_resource_access(User, Resource, Perm, Context) ->
             end
     end.
 
-check_configure_permitted(Resource, User, Context) ->
-    check_resource_access(User, Resource, configure, Context).
+check_configure_permitted(Resource, User) ->
+    check_resource_access(User, Resource, configure, #{}).
 
-check_write_permitted(Resource, User, Context) ->
-    check_resource_access(User, Resource, write, Context).
+check_write_permitted(Resource, User) ->
+    check_resource_access(User, Resource, write, #{}).
 
 check_read_permitted(Resource, User, Context) ->
     check_resource_access(User, Resource, read, Context).
+
+check_super_stream_management_permitted(VirtualHost, SuperStream, Partitions, User) ->
+    Exchange = e(VirtualHost, SuperStream),
+    %% exchange creation
+    case check_configure_permitted(Exchange, User) of
+        ok ->
+            %% stream creations
+            case check_streams_permissions(fun check_configure_permitted/2,
+                                           VirtualHost, Partitions,
+                                           User) of
+                ok ->
+                    %% binding from exchange
+                    case check_read_permitted(Exchange, User, #{}) of
+                        ok ->
+                            %% binding to streams
+                            case check_streams_permissions(fun check_write_permitted/2,
+                                                           VirtualHost, Partitions,
+                                                           User) of
+                                ok ->
+                                    ok;
+                                _ ->
+                                    error
+                            end;
+                        _ ->
+                            error
+                    end;
+                _ ->
+                    error
+            end;
+        _ ->
+            error
+    end.
+
+check_streams_permissions(Fun, VirtualHost, List, User) ->
+    case lists:all(fun(S) ->
+                      case Fun(q(VirtualHost, S), User) of
+                          ok ->
+                              true;
+                          _ ->
+                              false
+                      end
+              end, List) of
+        true ->
+            ok;
+        _ ->
+            error
+    end.
 
 extract_stream_list(<<>>, Streams) ->
     Streams;
@@ -295,3 +343,12 @@ command_versions() ->
 
 filtering_supported() ->
     rabbit_feature_flags:is_enabled(stream_filtering).
+
+q(VirtualHost, Name) ->
+    r(VirtualHost, Name, queue).
+
+e(VirtualHost, Name) ->
+    r(VirtualHost, Name, exchange).
+
+r(VirtualHost, Name, Kind) when Kind =:= exchange orelse Kind =:= queue ->
+    #resource{virtual_host = VirtualHost, name = Name, kind = Kind}.
