@@ -25,12 +25,25 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckIfAnyDeprecatedFeaturesAreUsedC
       :classic_queue_mirroring => is_used_classic_queue_mirroring(opts)
     }
 
-    deprecated_features_list =
-      Map.keys(Map.filter(are_deprecated_features_used, fn {_key, val} -> val != false end))
+    deprecated_features_list = Enum.reduce(are_deprecated_features_used,
+      [],
+      fn({_feat, _result}, {:badrpc, _} = acc) ->
+          acc
+        ({feat, result}, acc) ->
+          case result do
+            {:badrpc, _} = err -> err
+            {:error, _} = err -> err
+            true  -> [feat | acc]
+            false -> acc
+          end
+      end)
 
+    # health checks return true if they pass
     case deprecated_features_list do
-      [] -> false
-      _ -> {true, deprecated_features_list}
+      {:badrpc, _} = err  -> err
+      {:error, _}  = err  -> err
+      []                  -> true
+      xs when is_list(xs) -> {false, deprecated_features_list}
     end
   end
 
@@ -44,19 +57,19 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckIfAnyDeprecatedFeaturesAreUsedC
     )
   end
 
-  def output(false, %{formatter: "json"}) do
+  def output(true, %{formatter: "json"}) do
     {:ok, %{"result" => "ok"}}
   end
 
-  def output(false, %{silent: true}) do
+  def output(true, %{silent: true}) do
     {:ok, :check_passed}
   end
 
-  def output(false, %{}) do
+  def output(true, %{}) do
     {:ok, "Cluster reported no deprecated features in use"}
   end
 
-  def output({true, deprecated_features_list}, %{formatter: "json"}) do
+  def output({false, deprecated_features_list}, %{formatter: "json"}) do
     {:error, :check_failed,
      %{
        "result" => "error",
@@ -65,11 +78,11 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckIfAnyDeprecatedFeaturesAreUsedC
      }}
   end
 
-  def output({true, _deprecated_features_list}, %{silent: true}) do
+  def output({false, _deprecated_features_list}, %{silent: true}) do
     {:error, :check_failed}
   end
 
-  def output({true, deprecated_features_list}, _) do
+  def output({false, deprecated_features_list}, _) do
     {:error, :check_failed, deprecated_features_list}
   end
 
