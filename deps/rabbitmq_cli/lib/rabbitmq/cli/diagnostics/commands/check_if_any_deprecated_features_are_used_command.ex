@@ -25,24 +25,29 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckIfAnyDeprecatedFeaturesAreUsedC
       :classic_queue_mirroring => is_used_classic_queue_mirroring(opts)
     }
 
-    deprecated_features_list = Enum.reduce(are_deprecated_features_used,
-      [],
-      fn({_feat, _result}, {:badrpc, _} = acc) ->
-          acc
-        ({feat, result}, acc) ->
-          case result do
-            {:badrpc, _} = err -> err
-            {:error, _} = err -> err
-            true  -> [feat | acc]
-            false -> acc
-          end
-      end)
+    deprecated_features_list =
+      Enum.reduce(
+        are_deprecated_features_used,
+        [],
+        fn
+          {_feat, _result}, {:badrpc, _} = acc ->
+            acc
+
+          {feat, result}, acc ->
+            case result do
+              {:badrpc, _} = err -> err
+              {:error, _} = err -> err
+              true -> [feat | acc]
+              false -> acc
+            end
+        end
+      )
 
     # health checks return true if they pass
     case deprecated_features_list do
-      {:badrpc, _} = err  -> err
-      {:error, _}  = err  -> err
-      []                  -> true
+      {:badrpc, _} = err -> err
+      {:error, _} = err -> err
+      [] -> true
       xs when is_list(xs) -> {false, deprecated_features_list}
     end
   end

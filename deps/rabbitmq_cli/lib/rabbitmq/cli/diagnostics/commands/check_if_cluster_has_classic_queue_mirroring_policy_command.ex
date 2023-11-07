@@ -93,6 +93,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckIfClusterHasClassicQueueMirrori
 
     {:error, :check_failed, Enum.join(Enum.concat(lines, op_lines), line_separator())}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def help_section(), do: :observability_and_health_checks
