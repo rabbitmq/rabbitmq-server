@@ -46,8 +46,12 @@ resource_exists(ReqData, Context) ->
 =======
 resource_exists(ReqData, {Mode, Context}) ->
     %% just checking that the vhost requested exists
+<<<<<<< HEAD
     {case rabbit_mgmt_util:all_or_one_vhost(ReqData, fun (_) -> ok end) of
 >>>>>>> ff12d3b6b4 (HTTP API /queues optimise resource_exists)
+=======
+    {case rabbit_mgmt_util:all_or_one_vhost(ReqData, fun (_) -> [] end) of
+>>>>>>> baff660ab4 (use right dummy type)
          vhost_not_found -> false;
          _               -> true
      end, ReqData, Context}.
