@@ -1670,8 +1670,8 @@ peek(_Pos, Q) when ?is_amqqueue(Q) ->
 online(Q) when ?is_amqqueue(Q) ->
     Nodes = get_connected_nodes(Q),
     {Name, _} = amqqueue:get_pid(Q),
-    [node(Pid) || {ok, Pid} <- 
-                  erpc:multicall(Nodes, fun () -> whereis(Name) end),
+    [node(Pid) || {ok, Pid} <-
+                  erpc:multicall(Nodes, erlang, whereis, [Name]),
                   is_pid(Pid)].
 
 format(Q, Ctx) when ?is_amqqueue(Q) ->
