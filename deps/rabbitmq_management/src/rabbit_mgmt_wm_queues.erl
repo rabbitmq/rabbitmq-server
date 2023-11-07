@@ -40,8 +40,14 @@ variances(Req, Context) ->
 content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
+<<<<<<< HEAD
 resource_exists(ReqData, Context) ->
     {case queues0(ReqData) of
+=======
+resource_exists(ReqData, {Mode, Context}) ->
+    %% just checking that the vhost requested exists
+    {case rabbit_mgmt_util:all_or_one_vhost(ReqData, fun (_) -> ok end) of
+>>>>>>> ff12d3b6b4 (HTTP API /queues optimise resource_exists)
          vhost_not_found -> false;
          _               -> true
      end, ReqData, Context}.
@@ -159,9 +165,6 @@ basic_vhost_filtered(ReqData, Context) ->
 
 all_queues(ReqData) ->
     rabbit_mgmt_util:all_or_one_vhost(ReqData, fun rabbit_amqqueue:list_all/1).
-
-queues0(ReqData) ->
-    rabbit_mgmt_util:all_or_one_vhost(ReqData, fun rabbit_amqqueue:list/1).
 
 queues_with_totals(ReqData) ->
     rabbit_mgmt_util:all_or_one_vhost(ReqData, fun collect_info_all/1).
