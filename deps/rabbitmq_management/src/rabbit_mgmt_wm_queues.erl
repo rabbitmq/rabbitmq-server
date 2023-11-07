@@ -46,7 +46,7 @@ content_types_provided(ReqData, Context) ->
 
 resource_exists(ReqData, {Mode, Context}) ->
     %% just checking that the vhost requested exists
-    {case rabbit_mgmt_util:all_or_one_vhost(ReqData, fun (_) -> ok end) of
+    {case rabbit_mgmt_util:all_or_one_vhost(ReqData, fun (_) -> [] end) of
          vhost_not_found -> false;
          _               -> true
      end, ReqData, {Mode, Context}}.
