@@ -115,7 +115,7 @@
      {exchange_command_versions,
       [{Command :: atom(), MinVersion :: command_version(),
         MaxVersion :: command_version()}]} |
-     {stream_stats, Stream :: binary()},
+     {stream_stats, Stream :: binary()} |
      {create_super_stream, stream_name(), Partitions :: [binary()], RoutingKeys :: [binary()], Args :: #{binary() => binary()}} |
      {delete_super_stream, stream_name()}} |
     {response, correlation_id(),
@@ -127,7 +127,7 @@
       delete_stream |
       close |
       sasl_authenticate |
-      create_super_stream,
+      create_super_stream |
       delete_super_stream,
       response_code()} |
      {query_publisher_sequence, response_code(), sequence()} |
