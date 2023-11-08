@@ -12,11 +12,11 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -import(queue_utils, [wait_for_messages_ready/3,
-                             wait_for_messages_pending_ack/3,
-                             wait_for_messages_total/3,
-                             wait_for_messages/2,
-                             dirty_query/3,
-                             ra_name/1]).
+                      wait_for_messages_pending_ack/3,
+                      wait_for_messages_total/3,
+                      wait_for_messages/2,
+                      dirty_query/3,
+                      ra_name/1]).
 
 -import(clustering_utils, [
                            assert_cluster_status/2,
@@ -39,9 +39,10 @@ all() ->
 
 groups() ->
     [
-     {single_node, [], all_tests()
-                       ++ memory_tests()
-                       ++ [node_removal_is_quorum_critical]},
+     {single_node, [], all_tests() ++
+                       memory_tests() ++
+                       [node_removal_is_quorum_critical,
+                        format]},
      {unclustered, [], [
                         {uncluster_size_2, [], [add_member]}
                        ]},
@@ -85,7 +86,8 @@ groups() ->
                                             leader_locator_balanced_maintenance,
                                             leader_locator_balanced_random_maintenance,
                                             leader_locator_policy,
-                                            status
+                                            status,
+                                            format
                                            ]
                        ++ all_tests()},
                       {cluster_size_5, [], [start_queue,
@@ -2756,6 +2758,60 @@ status(Config) ->
                  rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
                                               status, [<<"/">>, QQ])),
     wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
+    ok.
+
+format(Config) ->
+    %% tests rabbit_quorum_queue:format/2
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Server = hd(Nodes),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    Vhost = ?config(rmq_vhost, Config),
+    QName = #resource{virtual_host = Vhost,
+                      kind = queue,
+                      name = Q},
+    {ok, QRecord}  = rabbit_ct_broker_helpers:rpc(Config, Server,
+                                                  rabbit_amqqueue,
+                                                  lookup, [QName]),
+    %% restart the quorum
+    Fmt = rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_quorum_queue,
+                                       ?FUNCTION_NAME, [QRecord, #{}]),
+
+    %% test all up case
+    ?assertEqual(quorum, proplists:get_value(type, Fmt)),
+    ?assertEqual(running, proplists:get_value(state, Fmt)),
+    ?assertEqual(Server, proplists:get_value(leader, Fmt)),
+    ?assertEqual(Server, proplists:get_value(node, Fmt)),
+    ?assertEqual(Nodes, proplists:get_value(online, Fmt)),
+    ?assertEqual(Nodes, proplists:get_value(members, Fmt)),
+
+    case length(Nodes) of
+        3 ->
+            [_, Server2, Server3] = Nodes,
+            ok = rabbit_control_helper:command(stop_app, Server2),
+            ok = rabbit_control_helper:command(stop_app, Server3),
+
+            Fmt2 = rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_quorum_queue,
+                                               ?FUNCTION_NAME, [QRecord, #{}]),
+            ok = rabbit_control_helper:command(start_app, Server2),
+            ok = rabbit_control_helper:command(start_app, Server3),
+            ?assertEqual(quorum, proplists:get_value(type, Fmt2)),
+            ?assertEqual(minority, proplists:get_value(state, Fmt2)),
+            ?assertEqual(Server, proplists:get_value(leader, Fmt2)),
+            ?assertEqual(Server, proplists:get_value(node, Fmt2)),
+            ?assertEqual([Server], proplists:get_value(online, Fmt2)),
+            ?assertEqual(Nodes, proplists:get_value(members, Fmt2)),
+            ok;
+        1 ->
+            ok
+    end,
+    ?assertMatch(#'queue.delete_ok'{},
+                  amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
     ok.
 
 peek_with_wrong_queue_type(Config) ->

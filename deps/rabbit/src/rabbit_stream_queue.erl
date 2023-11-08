@@ -230,7 +230,7 @@ format(Q, Ctx) ->
     case amqqueue:get_pid(Q) of
         Pid when is_pid(Pid) ->
             LeaderNode = node(Pid),
-            Nodes = get_nodes(Q),
+            Nodes = lists:sort(get_nodes(Q)),
             Running = case Ctx of
                           #{running_nodes := Running0} ->
                               Running0;
@@ -1203,4 +1203,4 @@ get_nodes(Q) when ?is_amqqueue(Q) ->
 
 is_minority(All, Up) ->
     MinQuorum = length(All) div 2 + 1,
-    length(Up) =< MinQuorum.
+    length(Up) < MinQuorum.
