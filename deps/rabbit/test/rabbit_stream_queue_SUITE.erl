@@ -48,7 +48,10 @@ all() ->
 
 groups() ->
     [
-     {single_node, [], [restart_single_node, recover]},
+     {single_node, [],
+      [restart_single_node,
+       recover,
+       format]},
      {single_node_parallel_1, [parallel], all_tests_1()},
      {single_node_parallel_2, [parallel], all_tests_2()},
      {single_node_parallel_3, [parallel], all_tests_3()},
@@ -74,6 +77,7 @@ groups() ->
            select_nodes_with_least_replicas,
            recover_after_leader_and_coordinator_kill,
            restart_stream,
+           format,
            rebalance
           ]},
      {cluster_size_3_1, [], [shrink_coordinator_cluster]},
@@ -1423,6 +1427,60 @@ restart_stream(Config) ->
             ok
     end.
 
+format(Config) ->
+    %% tests rabbit_stream_queue:format/2
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Server = hd(Nodes),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    publish_confirm(Ch, Q, [<<"msg">>]),
+    Vhost = ?config(rmq_vhost, Config),
+    QName = #resource{virtual_host = Vhost,
+                      kind = queue,
+                      name = Q},
+    {ok, QRecord}  = rabbit_ct_broker_helpers:rpc(Config, Server,
+                                                  rabbit_amqqueue,
+                                                  lookup, [QName]),
+    %% restart the stream
+    Fmt = rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_stream_queue,
+                                       ?FUNCTION_NAME, [QRecord, #{}]),
+
+    %% test all up case
+    ?assertEqual(stream, proplists:get_value(type, Fmt)),
+    ?assertEqual(running, proplists:get_value(state, Fmt)),
+    ?assertEqual(Server, proplists:get_value(leader, Fmt)),
+    ?assertEqual(Server, proplists:get_value(node, Fmt)),
+    ?assertEqual(Nodes, proplists:get_value(online, Fmt)),
+    ?assertEqual(Nodes, proplists:get_value(members, Fmt)),
+
+    case length(Nodes) of
+        3 ->
+            [_, Server2, Server3] = Nodes,
+            ok = rabbit_control_helper:command(stop_app, Server2),
+            ok = rabbit_control_helper:command(stop_app, Server3),
+
+            Fmt2 = rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_stream_queue,
+                                               ?FUNCTION_NAME, [QRecord, #{}]),
+            ok = rabbit_control_helper:command(start_app, Server2),
+            ok = rabbit_control_helper:command(start_app, Server3),
+            ?assertEqual(stream, proplists:get_value(type, Fmt2)),
+            ?assertEqual(minority, proplists:get_value(state, Fmt2)),
+            ?assertEqual(Server, proplists:get_value(leader, Fmt2)),
+            ?assertEqual(Server, proplists:get_value(node, Fmt2)),
+            ?assertEqual([Server], proplists:get_value(online, Fmt2)),
+            ?assertEqual(Nodes, proplists:get_value(members, Fmt2)),
+            ok;
+        1 ->
+            ok
+    end,
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]),
+    ok.
+
 
 consume_from_last(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1924,11 +1982,9 @@ leader_failover_dedupe(Config) ->
     ok = rabbit_ct_broker_helpers:stop_node(Config, DownNode),
     %% this should cause a new leader to be elected and the channel on node 2
     %% to have to resend any pending messages to ensure none is lost
-    ct:pal("preinfo", []),
     rabbit_ct_helpers:await_condition(
       fun() ->
               Info = find_queue_info(Config, PubNode, [leader, members]),
-              ct:pal("info ~tp", [Info]),
               NewLeader = proplists:get_value(leader, Info),
               NewLeader =/= DownNode
       end),

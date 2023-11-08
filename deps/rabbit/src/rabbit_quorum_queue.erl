@@ -1676,7 +1676,7 @@ online(Q) when ?is_amqqueue(Q) ->
 
 format(Q, Ctx) when ?is_amqqueue(Q) ->
     %% TODO: this should really just be voters
-    Nodes = get_nodes(Q),
+    Nodes = lists:sort(get_nodes(Q)),
     Running = case Ctx of
                   #{running_nodes := Running0} ->
                       Running0;
