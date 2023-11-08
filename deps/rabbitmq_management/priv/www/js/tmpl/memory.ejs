@@ -6,8 +6,7 @@
 </p>
 <% } else { %>
 <%
-  var sections = {'queue_procs'         : ['classic',  'Classic queues (masters)'],
-                  'queue_slave_procs'   : ['classic',  'Classic queues (mirrors)'],
+  var sections = {'queue_procs'         : ['classic',  'Classic queues'],
                   'quorum_queue_procs'  : ['quorum', 'Quorum queues'],
                   'quorum_queue_dlx_procs'      : ['quorum', 'Dead letter workers'],
                   'stream_queue_procs'          : ['stream',  'Stream queues'],
@@ -36,8 +35,7 @@
 <div class="box">
 <%
 var key = [[{name: 'Classic Queues', colour: 'classic',
-             keys: [['queue_procs',       'queues'],
-                    ['queue_slave_procs', 'mirrors']]},
+             keys: [['queue_procs',       'queues']]},
             {name: 'Quorum Queues', colour: 'quorum',
              keys: [['quorum_queue_procs','quorum'],
                     ['quorum_queue_dlx_procs', 'dead letter workers']]},

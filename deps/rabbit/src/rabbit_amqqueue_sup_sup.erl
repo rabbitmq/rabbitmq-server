@@ -9,7 +9,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/0, start_queue_process/3]).
+-export([start_link/0, start_queue_process/2]).
 -export([start_for_vhost/1, stop_for_vhost/1,
          find_for_vhost/2, find_for_vhost/1]).
 
@@ -27,13 +27,12 @@ start_link() ->
     supervisor:start_link(?MODULE, []).
 
 -spec start_queue_process
-        (node(), amqqueue:amqqueue(), 'declare' | 'recovery' | 'slave') ->
-            pid().
+        (node(), amqqueue:amqqueue()) -> pid().
 
-start_queue_process(Node, Q, StartMode) ->
+start_queue_process(Node, Q) ->
     #resource{virtual_host = VHost} = amqqueue:get_name(Q),
     {ok, Sup} = find_for_vhost(VHost, Node),
-    {ok, _SupPid, QPid} = supervisor:start_child(Sup, [Q, StartMode]),
+    {ok, _SupPid, QPid} = supervisor:start_child(Sup, [Q]),
     QPid.
 
 init([]) ->

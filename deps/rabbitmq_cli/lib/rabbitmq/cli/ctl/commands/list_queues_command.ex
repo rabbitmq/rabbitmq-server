@@ -23,13 +23,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
             message_bytes_unacknowledged message_bytes_ram message_bytes_persistent
             head_message_timestamp disk_reads disk_writes consumers
             consumer_utilisation consumer_capacity
-            memory slave_pids synchronised_slave_pids state type
-            leader members online
-            mirror_pids synchronised_mirror_pids)a
-  @info_key_aliases [
-    {:mirror_pids, :slave_pids},
-    {:synchronised_mirror_pids, :synchronised_slave_pids}
-  ]
+            memory state type
+            leader members online)a
 
   def description(), do: "Lists queues and their properties"
 
@@ -67,7 +62,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
   end
 
   def validate(args, _opts) do
-    case InfoKeys.validate_info_keys(args, @info_keys, @info_key_aliases) do
+    case InfoKeys.validate_info_keys(args, @info_keys) do
       {:ok, _} -> :ok
       err -> err
     end
@@ -91,7 +86,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
         other -> other
       end
 
-    info_keys = InfoKeys.prepare_info_keys(args, @info_key_aliases)
+    info_keys = InfoKeys.prepare_info_keys(args)
     broker_keys = InfoKeys.broker_keys(info_keys)
 
     Helpers.with_nodes_in_cluster(node_name, fn nodes ->

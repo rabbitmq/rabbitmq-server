@@ -21,10 +21,7 @@
 -type ack()   :: any().
 -type state() :: any().
 
--type flow() :: 'flow' | 'noflow'.
 -type msg_ids() :: [rabbit_types:msg_id()].
--type publish() :: {mc:state(),
-                    rabbit_types:message_properties(), boolean()}.
 -type delivered_publish() :: {mc:state(),
                               rabbit_types:message_properties()}.
 -type fetch_result(Ack) ::
@@ -96,28 +93,20 @@
 
 %% Publish a message.
 -callback publish(mc:state(),
-                  rabbit_types:message_properties(), boolean(), pid(), flow(),
+                  rabbit_types:message_properties(), boolean(), pid(),
                   state()) -> state().
-
-%% Like publish/6 but for batches of publishes.
--callback batch_publish([publish()], pid(), flow(), state()) -> state().
 
 %% Called for messages which have already been passed straight
 %% out to a client. The queue will be empty for these calls
 %% (i.e. saves the round trip through the backing queue).
 -callback publish_delivered(mc:state(),
-                            rabbit_types:message_properties(), pid(), flow(),
+                            rabbit_types:message_properties(), pid(),
                             state())
                            -> {ack(), state()}.
 
-%% Like publish_delivered/5 but for batches of publishes.
--callback batch_publish_delivered([delivered_publish()], pid(), flow(),
-                                  state())
-                                 -> {[ack()], state()}.
-
 %% Called to inform the BQ about messages which have reached the
 %% queue, but are not going to be further passed to BQ.
--callback discard(rabbit_types:msg_id(), pid(), flow(), state()) -> state().
+-callback discard(rabbit_types:msg_id(), pid(), state()) -> state().
 
 %% Return ids of messages which have been confirmed since the last
 %% invocation of this function (or initialisation).

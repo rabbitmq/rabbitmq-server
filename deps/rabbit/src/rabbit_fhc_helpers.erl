@@ -30,9 +30,8 @@ clear_queue_read_cache([]) ->
     ok;
 clear_queue_read_cache([Q | Rest]) when ?is_amqqueue(Q) ->
     MPid = amqqueue:get_pid(Q),
-    SPids = amqqueue:get_slave_pids(Q),
     %% Limit the action to the current node.
-    Pids = [P || P <- [MPid | SPids], node(P) =:= node()],
+    Pids = [P || P <- [MPid], node(P) =:= node()],
     %% This function is executed in the context of the backing queue
     %% process because the read buffer is stored in the process
     %% dictionary.

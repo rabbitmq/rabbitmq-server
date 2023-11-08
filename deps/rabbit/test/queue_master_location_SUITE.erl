@@ -41,19 +41,15 @@ all() ->
 
 groups() ->
     [
-      {cluster_size_3, [], [{non_mirrored, [], [
-                                            declare_args,
-                                            declare_policy,
-                                            declare_config,
-                                            calculate_min_master,
-                                            calculate_min_master_with_bindings,
-                                            calculate_random,
-                                            calculate_client_local
-                                           ]},
-                            {mirrored, [], [declare_invalid_policy,
-                                            declare_policy_nodes,
-                                            declare_policy_all,
-                                            declare_policy_exactly]}]
+      {cluster_size_3, [], [
+                            declare_args,
+                            declare_policy,
+                            declare_config,
+                            calculate_min_master,
+                            calculate_min_master_with_bindings,
+                            calculate_random,
+                            calculate_client_local
+                           ]
       },
 
       {maintenance_mode, [], [
@@ -84,15 +80,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(mirrored, Config) ->
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        mnesia ->
-            Config;
-        {khepri, _} ->
-            {skip, "Classic queue mirroring not supported by Khepri"}
-    end;
-init_per_group(non_mirrored, Config) ->
-    Config;
 init_per_group(cluster_size_3, Config) ->
     rabbit_ct_helpers:set_config(Config, [
         %% Replaced with a list of node names later
@@ -154,80 +141,6 @@ declare_policy(Config) ->
     QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
     declare(Config, QueueName, false, false, _Args=[], none),
     verify_min_master(Config, Q).
-
-declare_invalid_policy(Config) ->
-    %% Tests that queue masters location returns 'ok', otherwise the validation of
-    %% any other parameter might be skipped and invalid policy accepted.
-    setup_test_environment(Config),
-    unset_location_config(Config),
-    Policy = [{<<"queue-master-locator">>, <<"min-masters">>},
-              {<<"ha-mode">>, <<"exactly">>},
-              %% this field is expected to be an integer
-              {<<"ha-params">>, <<"2">>}],
-    {error_string, _} = rabbit_ct_broker_helpers:rpc(
-                          Config, 0, rabbit_policy, set,
-                          [<<"/">>, ?POLICY, <<".*">>, Policy, 0, <<"queues">>, <<"acting-user">>]).
-
-declare_policy_nodes(Config) ->
-    setup_test_environment(Config),
-    unset_location_config(Config),
-    % Note:
-    % Node0 has 15 queues, Node1 has 8 and Node2 has 1
-    Node0Name = rabbit_data_coercion:to_binary(
-                  rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename)),
-    Node1 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
-    Node1Name =  rabbit_data_coercion:to_binary(Node1),
-    Nodes = [Node1Name, Node0Name],
-    Policy = [{<<"queue-master-locator">>, <<"min-masters">>},
-              {<<"ha-mode">>, <<"nodes">>},
-              {<<"ha-params">>, Nodes}],
-    ok = rabbit_ct_broker_helpers:set_policy(Config, 0, ?POLICY,
-                                             <<".*">>, <<"queues">>, Policy),
-    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
-    declare(Config, QueueName, false, false, _Args=[], none),
-    verify_min_master(Config, Q, Node1).
-
-declare_policy_all(Config) ->
-    setup_test_environment(Config),
-    unset_location_config(Config),
-    % Note:
-    % Node0 has 15 queues, Node1 has 8 and Node2 has 1
-    Policy = [{<<"queue-master-locator">>, <<"min-masters">>},
-              {<<"ha-mode">>, <<"all">>}],
-    ok = rabbit_ct_broker_helpers:set_policy(Config, 0, ?POLICY,
-                                             <<".*">>, <<"queues">>, Policy),
-    QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
-    declare(Config, QueueName, false, false, _Args=[], none),
-    verify_min_master(Config, Q).
-
-declare_policy_exactly(Config) ->
-    setup_test_environment(Config),
-    unset_location_config(Config),
-    Policy = [{<<"queue-master-locator">>, <<"min-masters">>},
-              {<<"ha-mode">>, <<"exactly">>},
-              {<<"ha-params">>, 2}],
-    ok = rabbit_ct_broker_helpers:set_policy(Config, 0, ?POLICY,
-                                             <<".*">>, <<"queues">>, Policy),
-    QueueRes = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
-    declare(Config, QueueRes, false, false, _Args=[], none),
-
-    Node0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    rabbit_ct_broker_helpers:control_action(sync_queue, Node0,
-                                            [binary_to_list(Q)], [{"-p", "/"}]),
-    ?awaitMatch(true, synced(Config, Node0, QueueRes, 1), 60000),
-
-    {ok, Queue} = rabbit_ct_broker_helpers:rpc(Config, Node0,
-                                               rabbit_amqqueue, lookup, [QueueRes]),
-    {MNode0, [SNode], [SSNode]} = rabbit_ct_broker_helpers:rpc(Config, Node0,
-                                                               rabbit_mirror_queue_misc,
-                                                               actual_queue_nodes, [Queue]),
-    ?assertEqual(SNode, SSNode),
-    {ok, MNode1} = rabbit_ct_broker_helpers:rpc(Config, 0,
-                                                rabbit_queue_master_location_misc,
-                                                lookup_master, [Q, ?DEFAULT_VHOST_PATH]),
-    ?assertEqual(MNode0, MNode1),
-    Node2 = rabbit_ct_broker_helpers:get_node_config(Config, 2, nodename),
-    ?assertEqual(MNode1, Node2).
 
 declare_config(Config) ->
     setup_test_environment(Config),
@@ -469,10 +382,3 @@ verify_client_local(Config, Q) ->
 set_location_policy(Config, Name, Strategy) ->
     ok = rabbit_ct_broker_helpers:set_policy(Config, 0,
       Name, <<".*">>, <<"queues">>, [{<<"queue-master-locator">>, Strategy}]).
-
-synced(Config, Nodename, Q, ExpectedSSPidLen) ->
-    Args = [<<"/">>, [name, synchronised_slave_pids]],
-    Info = rabbit_ct_broker_helpers:rpc(Config, Nodename,
-                                        rabbit_amqqueue, info_all, Args),
-    [SSPids] = [Pids || [{name, Q1}, {synchronised_slave_pids, Pids}] <- Info, Q =:= Q1],
-    length(SSPids) =:= ExpectedSSPidLen.

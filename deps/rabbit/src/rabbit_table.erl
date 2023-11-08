@@ -359,7 +359,6 @@ definitions() ->
 
 mandatory_definitions() ->
     pre_khepri_definitions()
-        ++ gm:table_definitions()
         ++ mirrored_supervisor:table_definitions()
         ++ rabbit_maintenance:table_definitions().
 

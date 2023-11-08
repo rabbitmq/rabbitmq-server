@@ -47,7 +47,6 @@ defmodule RabbitMQ.CLI.Core.DocGuide do
   Macros.defguide("erlang_versions", path_segment: "which-erlang")
   Macros.defguide("feature_flags")
   Macros.defguide("firehose")
-  Macros.defguide("mirroring", path_segment: "ha")
   Macros.defguide("logging")
   Macros.defguide("management")
   Macros.defguide("memory_use")

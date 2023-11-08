@@ -479,12 +479,6 @@
 # cluster_partition_handling.pause_if_all_down.nodes.1 = rabbit@localhost
 # cluster_partition_handling.pause_if_all_down.nodes.2 = hare@localhost
 
-## Mirror sync batch size, in messages. Increasing this will speed
-## up syncing but total batch size in bytes must not exceed 2 GiB.
-## Available in RabbitMQ 3.6.0 or later.
-##
-# mirroring_sync_batch_size = 4096
-
 ## Make clustering happen *automatically* at startup. Only applied
 ## to nodes that have just been reset or started for the first time.
 ##

@@ -69,24 +69,7 @@ init_per_group(Group, Config) ->
             AllFFs = rabbit_ct_broker_helpers:rpc(Config2, rabbit_feature_flags, list, [all, stable]),
             FFs = maps:keys(maps:remove(?FEATURE_FLAG, AllFFs)),
             ct:pal("FFs ~p", [FFs]),
-            case Group of
-                classic ->
-                    try
-                        rabbit_ct_broker_helpers:set_policy(
-                          Config2, 0,
-                          <<"ha-policy">>, <<".*">>, <<"queues">>,
-                          [{<<"ha-mode">>, <<"all">>}]),
-                        Config2
-                    catch
-                        _:{badmatch, {error_string, Reason}} ->
-                            rabbit_ct_helpers:run_steps(
-                              Config2,
-                              rabbit_ct_broker_helpers:teardown_steps()),
-                            {skip, Reason}
-                    end;
-                _ ->
-                    Config2
-            end
+            Config2
     end.
 
 merge_app_env(Config) ->
