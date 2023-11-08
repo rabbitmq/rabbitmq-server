@@ -3018,7 +3018,7 @@ handle_frame_post_auth(Transport,
         error ->
             response(Transport,
                      Connection,
-                     delete_stream,
+                     delete_super_stream,
                      CorrelationId,
                      ?RESPONSE_CODE_ACCESS_REFUSED),
             rabbit_global_counters:increase_protocol_counter(stream,

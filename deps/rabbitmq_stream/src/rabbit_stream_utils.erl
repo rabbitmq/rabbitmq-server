@@ -339,7 +339,9 @@ command_versions() ->
      {heartbeat, ?VERSION_1, ?VERSION_1},
      {route, ?VERSION_1, ?VERSION_1},
      {partitions, ?VERSION_1, ?VERSION_1},
-     {stream_stats, ?VERSION_1, ?VERSION_1}].
+     {stream_stats, ?VERSION_1, ?VERSION_1},
+     {create_super_stream, ?VERSION_1, ?VERSION_1},
+     {delete_super_stream, ?VERSION_1, ?VERSION_1}].
 
 filtering_supported() ->
     rabbit_feature_flags:is_enabled(stream_filtering).
