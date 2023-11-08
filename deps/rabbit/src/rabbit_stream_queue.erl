@@ -1203,4 +1203,4 @@ get_nodes(Q) when ?is_amqqueue(Q) ->
 
 is_minority(All, Up) ->
     MinQuorum = length(All) div 2 + 1,
-    length(Up) =< MinQuorum.
+    length(Up) < MinQuorum.
