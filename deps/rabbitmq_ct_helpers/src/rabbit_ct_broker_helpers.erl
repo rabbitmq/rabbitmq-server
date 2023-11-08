@@ -2208,6 +2208,11 @@ cover_add_node(Node)
   when is_atom(Node) andalso Node =/= undefined ->
     if_cover(
       fun() ->
+              %% Dependency horus starts registered process cover_server on the RabbitMQ
+              %% node. If we weren't to stop that process first, ct_cover:add_nodes/1 would
+              %% print `{error, {already_started, _CoverServerPid}}` and return
+              %% `{ok, []}` resulting in no test coverage.
+              ok = erpc:call(Node, cover, stop, []),
               {ok, [Node]} = ct_cover:add_nodes([Node])
       end).
 
@@ -2224,11 +2229,14 @@ cover_remove_node(Config, Node) ->
     cover_remove_node(Nodename).
 
 if_cover(F) ->
-    case os:getenv("COVER") of
-        false ->
-            ok;
-        _ ->
-            F()
+    case {
+      %% make ct COVER=1
+      os:getenv("COVER"),
+      %% bazel coverage
+      os:getenv("COVERAGE")
+     } of
+        {false, false} -> ok;
+        _ -> F()
     end.
 
 setup_meck(Config) ->
