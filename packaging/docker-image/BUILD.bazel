@@ -95,14 +95,14 @@ container_layer(
     name = "openssl_source_layer",
     directory = "/usr/local/src",
     env = {
-        "OPENSSL_VERSION": "3.1.1",
+        "OPENSSL_VERSION": "3.1.4",
     },
     files = [
         "build_install_openssl.sh",
     ],
     tags = ["manual"],
     tars = [
-        "@openssl-3.1.1//file",
+        "@openssl-3.1.4//file",
     ],
 )
 
