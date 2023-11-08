@@ -32,6 +32,10 @@
 -export([are_cmqs_permitted/0,
          are_cmqs_used/1]).
 
+-export([list_policies_with_classic_queue_mirroring_for_cli/0,
+         list_operator_policies_with_classic_queue_mirroring_for_cli/0]).
+-export([remove_classic_queue_mirroring_from_policies_for_cli/0]).
+
 %% for testing only
 -export([module/1]).
 
@@ -997,6 +1001,63 @@ has_ha_policies(Policies) ->
 
 does_policy_configure_cmq(KeyList) ->
     lists:keymember(<<"ha-mode">>, 1, KeyList).
+
+list_policies_with_classic_queue_mirroring_for_cli() ->
+    Policies = rabbit_policy:list(),
+    lists:filter(
+      fun(Policy) ->
+              KeyList = proplists:get_value(definition, Policy),
+              does_policy_configure_cmq(KeyList)
+      end, Policies).
+
+list_operator_policies_with_classic_queue_mirroring_for_cli() ->
+    Policies = rabbit_policy:list_op(),
+    lists:filter(
+      fun(Policy) ->
+              KeyList = proplists:get_value(definition, Policy),
+              does_policy_configure_cmq(KeyList)
+      end, Policies).
+
+remove_classic_queue_mirroring_from_policies_for_cli() ->
+    rabbit_log_mirroring:warning("Removing all classic queue mirroring policies"),
+    Policies = rabbit_policy:list(),
+    remove_classic_queue_mirroring_policies(Policies, set, delete, "policy"),
+    OpPolicies = rabbit_policy:list_op(),
+    remove_classic_queue_mirroring_policies(OpPolicies, set_op, delete_op, "operator policy").
+
+remove_classic_queue_mirroring_policies(Policies, SetFun, DeleteFun, LogMsg) ->
+    lists:foreach(
+      fun(Policy) ->
+              KeyList = proplists:get_value(definition, Policy),
+              case does_policy_configure_cmq(KeyList) of
+                  true ->
+                      remove_classic_queue_mirroring_policy(Policy, SetFun, DeleteFun, LogMsg);
+                  false ->
+                      ok
+              end
+      end, Policies).
+
+remove_classic_queue_mirroring_policy(Policy, SetFun, DeleteFun, LogMsg) ->
+    Definition0 = proplists:get_value(definition, Policy),
+    HaPolicies = [<<"ha-mode">>, <<"ha-params">>, <<"ha-sync-mode">>,
+                  <<"ha-sync-batch-size">>, <<"ha-promote-on-shutdown">>,
+                  <<"ha-promote-on-failure">>],
+    Definition = lists:filter(fun({Key, _}) ->
+                                      not lists:member(Key, HaPolicies)
+                              end, Definition0),
+    VHost = proplists:get_value(vhost, Policy),
+    Name = proplists:get_value(name, Policy),
+    case Definition of
+        [] ->
+            ok = rabbit_policy:DeleteFun(VHost, Name, ?INTERNAL_USER),
+            rabbit_log_mirroring:warning("Removed classic queue mirroring ~ts: ~ts", [LogMsg, Name]);
+        _ ->
+            Pattern = proplists:get_value(pattern, Policy),
+            Priority = proplists:get_value(priority, Policy),
+            ApplyTo = proplists:get_value('apply-to', Policy),
+            ok = rabbit_policy:SetFun(VHost, Name, Pattern, Definition, Priority, ApplyTo, ?INTERNAL_USER),
+            rabbit_log_mirroring:warning("Updated ~ts \"~ts\" to remove classic queue mirroring", [LogMsg, Name])
+    end.
 
 validate_policy(KeyList) ->
     Mode = proplists:get_value(<<"ha-mode">>, KeyList, none),
