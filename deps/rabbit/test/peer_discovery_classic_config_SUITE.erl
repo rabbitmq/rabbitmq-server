@@ -109,8 +109,10 @@ init_per_testcase(successful_discovery_with_a_subset_of_nodes_coming_online = Te
     ],
     Config2 = rabbit_ct_helpers:set_config(Config1, [
         {rmq_nodename_suffix, Testcase},
+        %% We remove the first node in the list: it will be considered by peer
+        %% discovery (see `cluster_nodes' below), but it won't be started.
         %% note: this must not include the host part
-        {rmq_nodes_count, NodeNames},
+        {rmq_nodes_count, tl(NodeNames)},
         {rmq_nodes_clustered, false}
       ]),
     NodeNamesWithHostname = [rabbit_nodes:make({Name, "localhost"}) || Name <- NodeNames],
