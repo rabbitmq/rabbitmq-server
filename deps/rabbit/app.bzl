@@ -1736,6 +1736,14 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
+        name = "unit_cluster_formation_sort_nodes_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/unit_cluster_formation_sort_nodes_SUITE.erl"],
+        outs = ["test/unit_cluster_formation_sort_nodes_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+    )
+    erlang_bytecode(
         name = "unit_collections_SUITE_beam_files",
         testonly = True,
         srcs = ["test/unit_collections_SUITE.erl"],

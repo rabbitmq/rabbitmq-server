@@ -22,8 +22,17 @@
 
 list_nodes() ->
     case application:get_env(rabbit, cluster_nodes, {[], disc}) of
-        {_Nodes, _NodeType} = Pair -> {ok, Pair};
-        Nodes when is_list(Nodes)  -> {ok, {Nodes, disc}}
+        {Nodes, NodeType} ->
+            {ok, {add_this_node(Nodes), NodeType}};
+        Nodes when is_list(Nodes) ->
+            {ok, {add_this_node(Nodes), disc}}
+    end.
+
+add_this_node(Nodes) ->
+    ThisNode = node(),
+    case lists:member(ThisNode, Nodes) of
+        true  -> Nodes;
+        false -> [ThisNode | Nodes]
     end.
 
 -spec lock(Node :: node()) -> {ok, {{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}} |
