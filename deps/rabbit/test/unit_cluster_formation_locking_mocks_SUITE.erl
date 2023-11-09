@@ -47,25 +47,37 @@ end_per_testcase(_, _) ->
 
 init_with_lock_exits_after_errors(_Config) ->
     meck:expect(rabbit_peer_discovery_classic_config, lock, fun(_) -> {error, "test error"} end),
-    ?assertExit(cannot_acquire_startup_lock, rabbit_peer_discovery:maybe_create_cluster(2, 10, fun(_, _) -> ok end)),
+    ?assertEqual(
+       {error, "test error"},
+       rabbit_peer_discovery:join_selected_node(rabbit_peer_discovery_classic_config, missing@localhost, disc)),
     ?assert(meck:validate(rabbit_peer_discovery_classic_config)),
     passed.
 
+%% The `aborted_feature_flags_compat_check' error means the function called
+%% `rabbit_db_cluster:join/2', so it passed the locking step. The error is
+%% expected because the test runs outside of a working RabbitMQ.
+
 init_with_lock_ignore_after_errors(_Config) ->
     meck:expect(rabbit_peer_discovery_classic_config, lock, fun(_) -> {error, "test error"} end),
-    ?assertEqual(ok, rabbit_peer_discovery:maybe_create_cluster(2, 10, fun(_, _) -> ok end)),
+    ?assertEqual(
+       {error, {aborted_feature_flags_compat_check, {error, feature_flags_file_not_set}}},
+       rabbit_peer_discovery:join_selected_node(rabbit_peer_discovery_classic_config, missing@localhost, disc)),
     ?assert(meck:validate(rabbit_peer_discovery_classic_config)),
     passed.
 
 init_with_lock_not_supported(_Config) ->
     meck:expect(rabbit_peer_discovery_classic_config, lock, fun(_) -> not_supported end),
-    ?assertEqual(ok, rabbit_peer_discovery:maybe_create_cluster(2, 10, fun(_, _) -> ok end)),
+    ?assertEqual(
+       {error, {aborted_feature_flags_compat_check, {error, feature_flags_file_not_set}}},
+       rabbit_peer_discovery:join_selected_node(rabbit_peer_discovery_classic_config, missing@localhost, disc)),
     ?assert(meck:validate(rabbit_peer_discovery_classic_config)),
     passed.
 
 init_with_lock_supported(_Config) ->
     meck:expect(rabbit_peer_discovery_classic_config, lock, fun(_) -> {ok, data} end),
     meck:expect(rabbit_peer_discovery_classic_config, unlock, fun(data) -> ok end),
-    ?assertEqual(ok, rabbit_peer_discovery:maybe_create_cluster(2, 10, fun(_, _) -> ok end)),
+    ?assertEqual(
+       {error, {aborted_feature_flags_compat_check, {error, feature_flags_file_not_set}}},
+       rabbit_peer_discovery:join_selected_node(rabbit_peer_discovery_classic_config, missing@localhost, disc)),
     ?assert(meck:validate(rabbit_peer_discovery_classic_config)),
     passed.

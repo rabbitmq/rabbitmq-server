@@ -114,13 +114,24 @@
 init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
+    %% If this node is virgin, we call peer discovery to see if this node
+    %% should start as a standalone node or if it should join a cluster.
     case is_virgin_node() of
         true  ->
             rabbit_log:info("Node database directory at ~ts is empty. "
                             "Assuming we need to join an existing cluster or initialise from scratch...",
                             [dir()]),
-            rabbit_peer_discovery:maybe_create_cluster(
-              fun create_cluster_callback/2);
+            rabbit_peer_discovery:sync_desired_cluster();
+        false ->
+            ok
+    end,
+    %% Peer discovery may have been a no-op if it decided that all other nodes
+    %% should join this one. Therefore, we need to look at if this node is
+    %% still virgin and finish our use of Mnesia accordingly. In particular,
+    %% this second part crates all our Mnesia tables.
+    case is_virgin_node() of
+        true ->
+            init_db_and_upgrade([node()], disc, true, _Retry = true);
         false ->
             NodeType = node_type(),
             case is_node_type_permitted(NodeType) of
@@ -139,23 +150,6 @@ init() ->
     %% Mnesia is up. In fact that's not guaranteed to be the case -
     %% let's make it so.
     ok = rabbit_node_monitor:global_sync(),
-    ok.
-
-create_cluster_callback(none, NodeType) ->
-    DiscNodes = [node()],
-    NodeType1 = case is_node_type_permitted(NodeType) of
-                    false -> disc;
-                    true  -> NodeType
-                end,
-    init_db_and_upgrade(DiscNodes, NodeType1, true, _Retry = true),
-    ok;
-create_cluster_callback(RemoteNode, NodeType) ->
-    {ok, {_, DiscNodes, _}} = discover_cluster0(RemoteNode),
-    NodeType1 = case is_node_type_permitted(NodeType) of
-                    false -> disc;
-                    true  -> NodeType
-                end,
-    init_db_and_upgrade(DiscNodes, NodeType1, true, _Retry = true),
     ok.
 
 %% Make the node join a cluster. The node will be reset automatically

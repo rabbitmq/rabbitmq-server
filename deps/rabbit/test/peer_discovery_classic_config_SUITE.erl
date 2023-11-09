@@ -126,8 +126,6 @@ init_per_testcase(successful_discovery_with_a_subset_of_nodes_coming_online = Te
       {rabbit, [
           {cluster_nodes, {NodeNamesWithHostname, disc}},
           {cluster_formation, [
-              {discovery_retry_limit, 2},
-              {discovery_retry_interval, 100},
               {internal_lock_retries, 10}
           ]}
       ]}),
