@@ -1079,6 +1079,7 @@ stop(State) ->
         [] -> rabbit_prelaunch:set_stop_reason(normal);
         _  -> rabbit_prelaunch:set_stop_reason(State)
     end,
+    rabbit_db:clear_init_finished(),
     rabbit_boot_state:set(stopped),
     ok.
 

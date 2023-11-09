@@ -124,10 +124,26 @@ start_setup_proc(#{config := InternalConfig} = Config) ->
     {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
     Exchange = rabbit_misc:r(DefaultVHost, exchange, ?LOG_EXCH_NAME),
     InternalConfig1 = InternalConfig#{exchange => Exchange},
-
-    Pid = spawn(fun() -> setup_proc(Config#{config => InternalConfig1}) end),
+    Pid = spawn(fun() ->
+                        wait_for_initial_pass(60),
+                        setup_proc(Config#{config => InternalConfig1})
+                end),
     InternalConfig2 = InternalConfig1#{setup_proc => Pid},
     Config#{config => InternalConfig2}.
+
+%% Declaring an exchange requires the metadata store to be ready
+%% which happens on a boot step after the second phase of the prelaunch.
+%% This function waits for the store initialisation.
+wait_for_initial_pass(0) ->
+    ok;
+wait_for_initial_pass(N) ->
+    case rabbit_db:is_init_finished() of
+        false ->
+            timer:sleep(1000),
+            wait_for_initial_pass(N - 1);
+        true ->
+            ok
+    end.
 
 setup_proc(
   #{config := #{exchange := #resource{name = Name,
