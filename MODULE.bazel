@@ -445,13 +445,6 @@ erlang_dev_package.git_package(
     repository = "ninenines/ct_helper",
 )
 
-erlang_dev_package.hex_package(
-    name = "dialyxir",
-    build_file = "@rabbitmq-server//bazel:BUILD.dialyxir",
-    sha256 = "6c32a70ed5d452c6650916555b1f96c79af5fc4bf286997f8b15f213de786f73",
-    version = "0.5.1",
-)
-
 erlang_dev_package.git_package(
     name = "emqtt",
     branch = "master",
@@ -496,7 +489,6 @@ use_repo(
     erlang_dev_package,
     "amqp",
     "ct_helper",
-    "dialyxir",
     "emqtt",
     "inet_tcp_proxy_dist",
     "meck",
