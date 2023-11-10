@@ -28,6 +28,8 @@ a:hover { color: #F60; }
 #topnav input[type=submit] { padding: 3px 7px; display: inline; }
 #topnav li { text-align: right; padding: 2px 0; }
 
+#warnings p { text-align: center; padding: 1; margin: 1;}
+
 #menu ul { padding: 0; margin: 0; overflow: auto; }
 #menu li { float: left; list-style-type: none; padding: 0 0.1em 0 0; }
 #menu li a { display: block; padding: 0.7em 1.3em; margin-right: 5px; }
@@ -37,7 +39,9 @@ a:hover { color: #F60; }
 
 #main { padding-top: 10em; }
 #main.with-rhs { margin-right: 210px; }
+#main.with-warnings { padding-top: 18em; }
 #rhs { float: right; width: 200px; background-color: white; position: relative; padding-top: 10em; }
+#rhs.with-warnings { padding-top: 18em; }
 #rhs ul { padding: 0; margin: 10px 0 0 0; }
 #rhs li { list-style-type: none; padding: 0; margin-bottom: 5px; }
 #rhs a { display: block; padding: 0.7em; font-weight: bold; text-decoration: none; }

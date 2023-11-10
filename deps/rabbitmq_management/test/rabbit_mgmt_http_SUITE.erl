@@ -156,7 +156,9 @@ all_tests() -> [
     user_limits_list_test,
     user_limit_set_test,
     config_environment_test,
-    disabled_qq_replica_opers_test
+    disabled_qq_replica_opers_test,
+    list_deprecated_features_test,
+    list_used_deprecated_features_test
 ].
 
 %% -------------------------------------------------------------------
@@ -297,6 +299,13 @@ end_per_testcase0(disabled_operator_policy_test, Config) ->
 end_per_testcase0(disabled_qq_replica_opers_test, Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
                                  [rabbitmq_management, restrictions]),
+    Config;
+end_per_testcase0(Testcase, Config)
+  when Testcase == list_deprecated_features_test;
+       Testcase == list_used_deprecated_features_test ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_feature_flags,
+                                      clear_injected_test_feature_flags,
+                                      []),
     Config;
 end_per_testcase0(_, Config) -> Config.
 
@@ -3689,6 +3698,51 @@ disabled_qq_replica_opers_test(Config) ->
     http_post(Config, "/queues/quorum/replicas/on/" ++ Nodename ++ "/grow", Body, ?METHOD_NOT_ALLOWED),
     http_delete(Config, "/queues/quorum/replicas/on/" ++ Nodename ++ "/shrink", ?METHOD_NOT_ALLOWED),
     passed.
+
+list_deprecated_features_test(Config) ->
+    Desc = "This is a deprecated feature",
+    DocUrl = "https://rabbitmq.com/",
+    FeatureFlags = #{?FUNCTION_NAME =>
+                         #{provided_by => ?MODULE,
+                           deprecation_phase => permitted_by_default,
+                           desc => Desc,
+                           doc_url => DocUrl}},
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_feature_flags,
+                                      inject_test_feature_flags,
+                                      [FeatureFlags]),
+    Result = http_get(Config, "/deprecated-features", ?OK),
+    Features = lists:filter(fun(Map) ->
+                                    maps:get(name, Map) == atom_to_binary(?FUNCTION_NAME)
+                            end, Result),
+    ?assertMatch([_], Features),
+    [Feature] = Features,
+    ?assertEqual(<<"permitted_by_default">>, maps:get(deprecation_phase, Feature)),
+    ?assertEqual(atom_to_binary(?MODULE), maps:get(provided_by, Feature)),
+    ?assertEqual(list_to_binary(Desc), maps:get(desc, Feature)),
+    ?assertEqual(list_to_binary(DocUrl), maps:get(doc_url, Feature)).
+
+list_used_deprecated_features_test(Config) ->
+    Desc = "This is a deprecated feature in use",
+    DocUrl = "https://rabbitmq.com/",
+    FeatureFlags = #{?FUNCTION_NAME =>
+                         #{provided_by => ?MODULE,
+                           deprecation_phase => removed,
+                           desc => Desc,
+                           doc_url => DocUrl,
+                           callbacks => #{is_feature_used => {rabbit_mgmt_wm_deprecated_features, feature_is_used}}}},
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_feature_flags,
+                                      inject_test_feature_flags,
+                                      [FeatureFlags]),
+    Result = http_get(Config, "/deprecated-features/used", ?OK),
+    Features = lists:filter(fun(Map) ->
+                                    maps:get(name, Map) == atom_to_binary(?FUNCTION_NAME)
+                            end, Result),
+    ?assertMatch([_], Features),
+    [Feature] = Features,
+    ?assertEqual(<<"removed">>, maps:get(deprecation_phase, Feature)),
+    ?assertEqual(atom_to_binary(?MODULE), maps:get(provided_by, Feature)),
+    ?assertEqual(list_to_binary(Desc), maps:get(desc, Feature)),
+    ?assertEqual(list_to_binary(DocUrl), maps:get(doc_url, Feature)).
 
 %% -------------------------------------------------------------------
 %% Helpers.
