@@ -151,7 +151,6 @@ rabbitmqctl_test(
     source_deps = {
         "@amqp//:sources": "amqp",
         "@csv//:sources": "csv",
-        "@dialyxir//:sources": "dialyxir",
         "@json//:sources": "json",
         "@temp//:sources": "temp",
         "@x509//:sources": "x509",
