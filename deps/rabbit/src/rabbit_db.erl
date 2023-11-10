@@ -55,6 +55,18 @@ init() ->
 
     pre_init(IsVirgin),
 
+    case IsVirgin of
+        true ->
+            %% At this point, the database backend could change if the node
+            %% joins a cluster and that cluster uses a different database.
+            ?LOG_INFO(
+               "DB: virgin node -> run peer discovery",
+               #{domain => ?RMQLOG_DOMAIN_DB}),
+            rabbit_peer_discovery:sync_desired_cluster();
+        false ->
+            ok
+    end,
+
     Ret = case rabbit_khepri:is_enabled() of
               true  -> init_using_khepri();
               false -> init_using_mnesia()
