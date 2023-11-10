@@ -26,6 +26,11 @@ const CONSUMER_OWNER_FORMATTERS_COMPARATOR = function(formatter1, formatter2) {
     return formatter1.order - formatter2.order;
 }
 
+const DEPRECATION_PHASES = [['permitted_by_default', 'Permitted by default'],
+                            ['denied_by_default', 'Denied by default'],
+                            ['disconnect', 'Disconnect'],
+                            ['removed', 'Removed']];
+
 function fmt_string(str, unknown) {
     if (unknown == undefined) {
         unknown = UNKNOWN_REPR;
@@ -1108,4 +1113,14 @@ function isNumberKey(evt){
     if (charCode > 31 && (charCode < 48 || charCode > 57))
         return false;
     return true;
+}
+
+function fmt_deprecation_phase(phase, deprecation_phases){
+    for (var i in deprecation_phases) {
+        var deprecation_phase = deprecation_phases[i][0];
+
+        if (phase == deprecation_phase) {
+            return deprecation_phases[i][1];
+        }
+    }
 }

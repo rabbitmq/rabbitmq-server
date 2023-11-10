@@ -3,7 +3,7 @@
        var needs_enable = false;
        for (var i = 0; i < feature_flags.length; i++) {
          var feature_flag = feature_flags[i];
-         if (feature_flag.state == "disabled" && feature_flag.state != "experimental") {
+         if (feature_flag.state == "disabled" && feature_flag.stability != "experimental") {
            needs_enable = true;
          }
        }
