@@ -36,6 +36,8 @@
          get_appropriate_warning_when_disconnected/1,
          get_appropriate_warning_when_removed/1,
          deprecated_feature_enabled_if_feature_flag_depends_on_it/1,
+         list_all_deprecated_features/1,
+         list_used_deprecated_features/1,
 
          feature_is_unused/1,
          feature_is_used/1
@@ -67,7 +69,9 @@ groups() ->
              get_appropriate_warning_when_denied,
              get_appropriate_warning_when_disconnected,
              get_appropriate_warning_when_removed,
-             deprecated_feature_enabled_if_feature_flag_depends_on_it
+             deprecated_feature_enabled_if_feature_flag_depends_on_it,
+             list_all_deprecated_features,
+             list_used_deprecated_features
             ],
     [
      {cluster_size_1, [], Tests},
@@ -726,3 +730,50 @@ deprecated_feature_enabled_if_feature_flag_depends_on_it(Config) ->
                    ok
            end )
          || Node <- AllNodes].
+
+list_all_deprecated_features(Config) ->
+    [FirstNode | _] = AllNodes = ?config(nodes, Config),
+    feature_flags_v2_SUITE:connect_nodes(AllNodes),
+    feature_flags_v2_SUITE:override_running_nodes(AllNodes),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureFlags = #{FeatureName =>
+                     #{provided_by => rabbit,
+                       deprecation_phase => permitted_by_default}},
+    ?assertEqual(
+       ok,
+       feature_flags_v2_SUITE:inject_on_nodes(AllNodes, FeatureFlags)),
+
+    feature_flags_v2_SUITE:run_on_node(
+      FirstNode,
+      fun() ->
+              Map = rabbit_deprecated_features:list(all),
+              ?assert(maps:is_key(FeatureName, Map))
+      end).
+
+list_used_deprecated_features(Config) ->
+    [FirstNode | _] = AllNodes = ?config(nodes, Config),
+    feature_flags_v2_SUITE:connect_nodes(AllNodes),
+    feature_flags_v2_SUITE:override_running_nodes(AllNodes),
+
+    UsedFeatureName = used_deprecated_feature,
+    UnusedFeatureName = unused_deprecated_feature,
+    FeatureFlags = #{UsedFeatureName =>
+                         #{provided_by => rabbit,
+                           deprecation_phase => permitted_by_default,
+                           callbacks => #{is_feature_used => {?MODULE, feature_is_used}}},
+                     UnusedFeatureName =>
+                         #{provided_by => rabbit,
+                           deprecation_phase => permitted_by_default,
+                           callbacks => #{is_feature_used => {?MODULE, feature_is_unused}}}},
+    ?assertEqual(
+       ok,
+       feature_flags_v2_SUITE:inject_on_nodes(AllNodes, FeatureFlags)),
+
+    feature_flags_v2_SUITE:run_on_node(
+      FirstNode,
+      fun() ->
+              Map = rabbit_deprecated_features:list(used),
+              ?assertNot(maps:is_key(UnusedFeatureName, Map)),
+              ?assert(maps:is_key(UsedFeatureName, Map))
+      end).
