@@ -114,17 +114,6 @@
 init() ->
     ensure_mnesia_running(),
     ensure_mnesia_dir(),
-    %% If this node is virgin, we call peer discovery to see if this node
-    %% should start as a standalone node or if it should join a cluster.
-    case is_virgin_node() of
-        true  ->
-            rabbit_log:info("Node database directory at ~ts is empty. "
-                            "Assuming we need to join an existing cluster or initialise from scratch...",
-                            [dir()]),
-            rabbit_peer_discovery:sync_desired_cluster();
-        false ->
-            ok
-    end,
     %% Peer discovery may have been a no-op if it decided that all other nodes
     %% should join this one. Therefore, we need to look at if this node is
     %% still virgin and finish our use of Mnesia accordingly. In particular,
