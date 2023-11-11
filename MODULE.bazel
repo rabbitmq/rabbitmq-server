@@ -214,8 +214,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "csv",
     build_file = "@rabbitmq-server//bazel:BUILD.csv",
-    sha256 = "cbbe5455c93df5f3f2943e995e28b7a8808361ba34cf3e44267d77a01eaf1609",
-    version = "3.0.5",
+    sha256 = "f5ee7299a55ff84fbe623d9aea7218b800d19ecccb2b3eac2bcb327d644365ea",
+    version = "3.2.0",
 )
 
 erlang_package.hex_package(
@@ -389,23 +389,16 @@ erlang_dev_package = use_extension(
 erlang_dev_package.hex_package(
     name = "amqp",
     build_file = "@rabbitmq-server//bazel:BUILD.amqp",
-    sha256 = "b6d926770e4508e30e3e9e476c57b6c8aeda44f7715663bdc38935620ce5be6f",
-    version = "2.1.1",
-    patch_args = ["-p1"],
+   patch_args = ["-p1"],
     patches = ["@rabbitmq-server//bazel:amqp.patch"],
+    sha256 = "8d3ae139d2646c630d674a1b8d68c7f85134f9e8b2a1c3dd5621616994b10a8b",
+    version = "3.3.0",
 )
 
 erlang_dev_package.git_package(
     branch = "master",
     build_file = "@//:bazel/BUILD.ct_helper",
     repository = "ninenines/ct_helper",
-)
-
-erlang_dev_package.hex_package(
-    name = "dialyxir",
-    build_file = "@rabbitmq-server//bazel:BUILD.dialyxir",
-    sha256 = "6c32a70ed5d452c6650916555b1f96c79af5fc4bf286997f8b15f213de786f73",
-    version = "0.5.1",
 )
 
 erlang_dev_package.git_package(
@@ -444,15 +437,14 @@ erlang_dev_package.hex_package(
 erlang_dev_package.hex_package(
     name = "x509",
     build_file = "@rabbitmq-server//bazel:BUILD.x509",
-    sha256 = "3604125d6a0171da6e8a935810b58c999fccab0e3d20b2ed28d97fa2d9e2f6b4",
-    version = "0.8.7",
+    sha256 = "ccc3bff61406e5bb6a63f06d549f3dba3a1bbb456d84517efaaa210d8a33750f",
+    version = "0.8.8",
 )
 
 use_repo(
     erlang_dev_package,
     "amqp",
     "ct_helper",
-    "dialyxir",
     "emqtt",
     "inet_tcp_proxy_dist",
     "meck",
