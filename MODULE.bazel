@@ -389,17 +389,10 @@ erlang_dev_package = use_extension(
 erlang_dev_package.hex_package(
     name = "amqp",
     build_file = "@rabbitmq-server//bazel:BUILD.amqp",
-<<<<<<< HEAD
-    sha256 = "b6d926770e4508e30e3e9e476c57b6c8aeda44f7715663bdc38935620ce5be6f",
-    version = "2.1.1",
-    patch_args = ["-p1"],
-    patches = ["@rabbitmq-server//bazel:amqp.patch"],
-=======
-    patch_args = ["-p1"],
+   patch_args = ["-p1"],
     patches = ["@rabbitmq-server//bazel:amqp.patch"],
     sha256 = "8d3ae139d2646c630d674a1b8d68c7f85134f9e8b2a1c3dd5621616994b10a8b",
     version = "3.3.0",
->>>>>>> 0fa5e9b180 (Run gazelle for updated deps)
 )
 
 erlang_dev_package.git_package(
