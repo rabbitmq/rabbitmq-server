@@ -202,7 +202,7 @@ check_write_permitted(Resource, User) ->
 check_read_permitted(Resource, User, Context) ->
     check_resource_access(User, Resource, read, Context).
 
--spec check_super_stream_management_permitted(binary(), binary(), [binary()], binary()) ->
+-spec check_super_stream_management_permitted(rabbit_types:vhost(), binary(), [binary()], rabbit_types:user()) ->
     ok | error.
 check_super_stream_management_permitted(VirtualHost, SuperStream, Partitions, User) ->
     Exchange = e(VirtualHost, SuperStream),
