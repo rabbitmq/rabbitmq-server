@@ -94,10 +94,24 @@ cleanup_specs() ->
     ParamsSet = sets:from_list([ {proplists:get_value(vhost, S), proplists:get_value(name, S)}
                                  || S <- rabbit_runtime_parameters:list_component(<<"shovel">>) ]),
     F = fun(Name, ok) ->
-            _ = mirrored_supervisor:delete_child(?SUPERVISOR, id(Name)),
+            try
+                %% The supervisor operation is very unlikely to fail, it's the schema
+                %% data stores that can make a fuss about a non-existent or non-standard value passed in.
+                %% For example, an old style Shovel name is an invalid Khepri query path element. MK.
+                _ = mirrored_supervisor:delete_child(?SUPERVISOR, id(Name))
+            catch _:_:_Stacktrace ->
+                ok
+            end,
             ok
         end,
-    AllSpecs = sets:union(NewStyleSpecsSet, OldStyleSpecsSet),
+    %% Khepri won't handle values in OldStyleSpecsSet in its path well. At the same time,
+    %% those older elements simply cannot exist in Khepri because having Khepri enabled
+    %% means a cluster-wide move to 3.13+, so we can conditionally compute what specs we care about. MK.
+    AllSpecs =
+        case rabbit_khepri:is_enabled() of
+            true  -> NewStyleSpecsSet;
+            false -> sets:union(NewStyleSpecsSet, OldStyleSpecsSet)
+        end,
     %% Delete any supervisor children that do not have their respective runtime parameters in the database.
     SetToCleanUp = sets:subtract(AllSpecs, ParamsSet),
     ok = sets:fold(F, ok, SetToCleanUp).
