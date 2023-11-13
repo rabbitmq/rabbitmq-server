@@ -332,7 +332,7 @@ test_super_stream_creation_deletion(Config) ->
     ok = T:send(S, PartitionsFrame),
     {Cmd2, _} = receive_commands(T, S, C),
     ?assertMatch({response, 1, {partitions, ?RESPONSE_CODE_OK, Partitions}},
-                  Cmd2),
+                 Cmd2),
     [begin
          RouteFrame = frame({request, 1, {route, Rk, Ss}}),
          ok = T:send(S, RouteFrame),
@@ -351,7 +351,15 @@ test_super_stream_creation_deletion(Config) ->
     ok = T:send(S, PartitionsFrame),
     {Cmd4, _} = receive_commands(T, S, C),
     ?assertMatch({response, 1, {partitions, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, []}},
-                  Cmd4),
+                 Cmd4),
+
+    %% not the same number of partitions and binding keys
+    SsCreationBadFrame = frame({request, 1, {create_super_stream, Ss,
+                                             [<<"s1">>, <<"s2">>], [<<"bk1">>], #{}}}),
+    ok = T:send(S, SsCreationBadFrame),
+    {Cmd5, _} = receive_commands(T, S, C),
+    ?assertMatch({response, 1, {create_super_stream, ?RESPONSE_CODE_PRECONDITION_FAILED}},
+                 Cmd5),
 
     test_close(T, S, C),
     closed = wait_for_socket_close(T, S, 10),

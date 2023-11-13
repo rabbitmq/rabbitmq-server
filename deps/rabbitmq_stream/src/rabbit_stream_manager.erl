@@ -229,7 +229,7 @@ handle_call({create_super_stream,
              BindingKeys,
              Username},
             _From, State) ->
-    case validate_super_stream_creation(VirtualHost, Name, Partitions) of
+    case validate_super_stream_creation(VirtualHost, Name, Partitions, BindingKeys) of
         {error, Reason} ->
             {reply, {error, Reason}, State};
         ok ->
@@ -655,7 +655,10 @@ super_stream_partitions(VirtualHost, SuperStream) ->
             {error, stream_not_found}
     end.
 
-validate_super_stream_creation(VirtualHost, Name, Partitions) ->
+validate_super_stream_creation(_VirtualHost, _Name, Partitions, BindingKeys)
+  when length(Partitions) =/= length(BindingKeys) ->
+   {error, {validation_failed, "There must be the same number of partitions and binding keys"}};
+validate_super_stream_creation(VirtualHost, Name, Partitions, _BindingKeys) ->
     case exchange_exists(VirtualHost, Name) of
         {error, validation_failed} ->
             {error,
