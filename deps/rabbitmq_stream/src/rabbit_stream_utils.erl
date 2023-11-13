@@ -202,6 +202,8 @@ check_write_permitted(Resource, User) ->
 check_read_permitted(Resource, User, Context) ->
     check_resource_access(User, Resource, read, Context).
 
+-spec check_super_stream_management_permitted(binary(), binary(), [binary()], binary()) ->
+    ok | error.
 check_super_stream_management_permitted(VirtualHost, SuperStream, Partitions, User) ->
     Exchange = e(VirtualHost, SuperStream),
     maybe
@@ -214,12 +216,9 @@ check_super_stream_management_permitted(VirtualHost, SuperStream, Partitions, Us
         %% binding from exchange
         ok ?= check_read_permitted(Exchange, User, #{}),
         %% binding to streams
-        ok ?= check_streams_permissions(fun check_write_permitted/2,
-                                        VirtualHost, Partitions,
-                                        User)
-    else
-        _ ->
-            error
+        check_streams_permissions(fun check_write_permitted/2,
+                                  VirtualHost, Partitions,
+                                  User)
     end.
 
 check_streams_permissions(Fun, VirtualHost, List, User) ->
