@@ -16,6 +16,8 @@
 
 -module(rabbit_stream_utils).
 
+-feature(maybe_expr, enable).
+
 %% API
 -export([enforce_correct_name/1,
          write_messages/5,
@@ -202,32 +204,20 @@ check_read_permitted(Resource, User, Context) ->
 
 check_super_stream_management_permitted(VirtualHost, SuperStream, Partitions, User) ->
     Exchange = e(VirtualHost, SuperStream),
-    %% exchange creation
-    case check_configure_permitted(Exchange, User) of
-        ok ->
-            %% stream creations
-            case check_streams_permissions(fun check_configure_permitted/2,
-                                           VirtualHost, Partitions,
-                                           User) of
-                ok ->
-                    %% binding from exchange
-                    case check_read_permitted(Exchange, User, #{}) of
-                        ok ->
-                            %% binding to streams
-                            case check_streams_permissions(fun check_write_permitted/2,
-                                                           VirtualHost, Partitions,
-                                                           User) of
-                                ok ->
-                                    ok;
-                                _ ->
-                                    error
-                            end;
-                        _ ->
-                            error
-                    end;
-                _ ->
-                    error
-            end;
+    maybe
+        %% exchange creation
+        ok ?= check_configure_permitted(Exchange, User),
+        %% stream creations
+        ok ?= check_streams_permissions(fun check_configure_permitted/2,
+                                        VirtualHost, Partitions,
+                                        User),
+        %% binding from exchange
+        ok ?= check_read_permitted(Exchange, User, #{}),
+        %% binding to streams
+        ok ?= check_streams_permissions(fun check_write_permitted/2,
+                                        VirtualHost, Partitions,
+                                        User)
+    else
         _ ->
             error
     end.
@@ -347,10 +337,7 @@ filtering_supported() ->
     rabbit_feature_flags:is_enabled(stream_filtering).
 
 q(VirtualHost, Name) ->
-    r(VirtualHost, Name, queue).
+    rabbit_misc:r(VirtualHost, queue, Name).
 
 e(VirtualHost, Name) ->
-    r(VirtualHost, Name, exchange).
-
-r(VirtualHost, Name, Kind) when Kind =:= exchange orelse Kind =:= queue ->
-    #resource{virtual_host = VirtualHost, name = Name, kind = Kind}.
+    rabbit_misc:r(VirtualHost, exchange, Name).
