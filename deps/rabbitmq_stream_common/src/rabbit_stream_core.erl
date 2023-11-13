@@ -116,7 +116,7 @@
       [{Command :: atom(), MinVersion :: command_version(),
         MaxVersion :: command_version()}]} |
      {stream_stats, Stream :: binary()} |
-     {create_super_stream, stream_name(), Partitions :: [binary()], RoutingKeys :: [binary()], Args :: #{binary() => binary()}} |
+     {create_super_stream, stream_name(), Partitions :: [binary()], BindingKeys :: [binary()], Args :: #{binary() => binary()}} |
      {delete_super_stream, stream_name()}} |
     {response, correlation_id(),
      {declare_publisher |
@@ -608,12 +608,12 @@ request_body({exchange_command_versions = Tag, CommandVersions}) ->
     {Tag, [<<CommandVersionsLength:32>>, CommandVersionsBin]};
 request_body({stream_stats = Tag, Stream}) ->
     {Tag, <<?STRING(Stream)>>};
-request_body({create_super_stream = Tag, SuperStream, Partitions, RoutingKeys, Args}) ->
+request_body({create_super_stream = Tag, SuperStream, Partitions, BindingKeys, Args}) ->
     PartitionsBin = generate_list(Partitions),
-    RoutingKeysBin = generate_list(RoutingKeys),
+    BindingKeysBin = generate_list(BindingKeys),
     ArgsBin = generate_map(Args),
     {Tag, [<<?STRING(SuperStream), (length(Partitions)):32>>, PartitionsBin,
-           <<(length(RoutingKeys)):32>>, RoutingKeysBin,
+           <<(length(BindingKeys)):32>>, BindingKeysBin,
            <<(map_size(Args)):32>>, ArgsBin]};
 request_body({delete_super_stream = Tag, SuperStream}) ->
     {Tag, <<?STRING(SuperStream)>>}.
@@ -903,10 +903,10 @@ parse_request(<<?REQUEST:1,
                 ?STRING(StreamSize, Stream),
                 PartitionsCount:32,
                 Rest0/binary>>) ->
-    {Partitions, <<RoutingKeysCount:32, Rest1/binary>>} = list_of_strings(PartitionsCount, Rest0),
-    {RoutingKeys, <<_ArgumentsCount:32, Rest2/binary>>} = list_of_strings(RoutingKeysCount, Rest1),
+    {Partitions, <<BindingKeysCount:32, Rest1/binary>>} = list_of_strings(PartitionsCount, Rest0),
+    {BindingKeys, <<_ArgumentsCount:32, Rest2/binary>>} = list_of_strings(BindingKeysCount, Rest1),
     Args = parse_map(Rest2, #{}),
-    request(CorrelationId, {create_super_stream, Stream, Partitions, RoutingKeys, Args});
+    request(CorrelationId, {create_super_stream, Stream, Partitions, BindingKeys, Args});
 parse_request(<<?REQUEST:1,
                 ?COMMAND_DELETE_SUPER_STREAM:15,
                 ?VERSION_1:16,

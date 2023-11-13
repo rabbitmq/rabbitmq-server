@@ -321,8 +321,8 @@ test_super_stream_creation_deletion(Config) ->
 
     Ss = atom_to_binary(?FUNCTION_NAME, utf8),
     Partitions = [unicode:characters_to_binary([Ss, <<"-">>, integer_to_binary(N)]) || N <- lists:seq(0, 2)],
-    Rks = [integer_to_binary(N) || N <- lists:seq(0, 2)],
-    SsCreationFrame = frame({request, 1, {create_super_stream, Ss, Partitions, Rks, #{}}}),
+    Bks = [integer_to_binary(N) || N <- lists:seq(0, 2)],
+    SsCreationFrame = frame({request, 1, {create_super_stream, Ss, Partitions, Bks, #{}}}),
     ok = T:send(S, SsCreationFrame),
     {Cmd1, _} = receive_commands(T, S, C),
     ?assertMatch({response, 1, {create_super_stream, ?RESPONSE_CODE_OK}},
@@ -340,7 +340,7 @@ test_super_stream_creation_deletion(Config) ->
          ?assertMatch({response, 1, {route, ?RESPONSE_CODE_OK, _}}, Command),
          {response, 1, {route, ?RESPONSE_CODE_OK, [P]}} = Command,
          ?assertEqual(unicode:characters_to_binary([Ss, <<"-">>, Rk]), P)
-     end || Rk <- Rks],
+     end || Rk <- Bks],
 
     SsDeletionFrame = frame({request, 1, {delete_super_stream, Ss}}),
     ok = T:send(S, SsDeletionFrame),

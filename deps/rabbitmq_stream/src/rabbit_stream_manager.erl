@@ -73,7 +73,7 @@ create_super_stream(VirtualHost,
                     Name,
                     Partitions,
                     Arguments,
-                    RoutingKeys,
+                    BindingKeys,
                     Username) ->
     gen_server:call(?MODULE,
                     {create_super_stream,
@@ -81,7 +81,7 @@ create_super_stream(VirtualHost,
                      Name,
                      Partitions,
                      Arguments,
-                     RoutingKeys,
+                     BindingKeys,
                      Username}).
 
 -spec delete_super_stream(binary(), binary(), binary()) ->
@@ -226,7 +226,7 @@ handle_call({create_super_stream,
              Name,
              Partitions,
              Arguments,
-             RoutingKeys,
+             BindingKeys,
              Username},
             _From, State) ->
     case validate_super_stream_creation(VirtualHost, Name, Partitions) of
@@ -273,7 +273,7 @@ handle_call({create_super_stream,
                                 add_super_stream_bindings(VirtualHost,
                                                           Name,
                                                           Partitions,
-                                                          RoutingKeys,
+                                                          BindingKeys,
                                                           Username),
                             case BindingsResult of
                                 ok ->
@@ -758,15 +758,15 @@ declare_super_stream_exchange(VirtualHost, Name, Username) ->
 add_super_stream_bindings(VirtualHost,
                           Name,
                           Partitions,
-                          RoutingKeys,
+                          BindingKeys,
                           Username) ->
-    PartitionsRoutingKeys = lists:zip(Partitions, RoutingKeys),
+    PartitionsBindingKeys = lists:zip(Partitions, BindingKeys),
     BindingsResult =
-        lists:foldl(fun ({Partition, RoutingKey}, {ok, Order}) ->
+        lists:foldl(fun ({Partition, BindingKey}, {ok, Order}) ->
                             case add_super_stream_binding(VirtualHost,
                                                           Name,
                                                           Partition,
-                                                          RoutingKey,
+                                                          BindingKey,
                                                           Order,
                                                           Username)
                             of
@@ -778,7 +778,7 @@ add_super_stream_bindings(VirtualHost,
                         (_, {{error, _Reason}, _Order} = Acc) ->
                             Acc
                     end,
-                    {ok, 0}, PartitionsRoutingKeys),
+                    {ok, 0}, PartitionsBindingKeys),
     case BindingsResult of
         {ok, _} ->
             ok;
@@ -789,7 +789,7 @@ add_super_stream_bindings(VirtualHost,
 add_super_stream_binding(VirtualHost,
                          SuperStream,
                          Partition,
-                         RoutingKey,
+                         BindingKey,
                          Order,
                          Username) ->
     {ok, ExchangeNameBin} =
@@ -806,7 +806,7 @@ add_super_stream_binding(VirtualHost,
                                     Order),
     case rabbit_binding:add(#binding{source = ExchangeName,
                                      destination = QueueName,
-                                     key = RoutingKey,
+                                     key = BindingKey,
                                      args = Arguments},
                             fun (_X, Q) when ?is_amqqueue(Q) ->
                                     try

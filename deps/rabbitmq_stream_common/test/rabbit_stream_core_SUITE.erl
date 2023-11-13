@@ -112,11 +112,11 @@ roundtrip(_Config) ->
     test_roundtrip({request, 99, {stream_stats, <<"stream_name">>}}),
     test_roundtrip({request, 99,
                     {create_super_stream, <<"hello">>,
-                     [<<"stream1">>, <<"stream2">>, <<"stream3">>], [<<"rk1">>, <<"rk2">>, <<"rk3">>],
+                     [<<"stream1">>, <<"stream2">>, <<"stream3">>], [<<"bk1">>, <<"bk2">>, <<"bk3">>],
                      Args}}),
     test_roundtrip({request, 99,
                     {create_super_stream, <<"super_stream_name">>,
-                     [<<"stream1">>, <<"stream2">>, <<"stream3">>], [<<"rk1">>, <<"rk2">>, <<"rk3">>],
+                     [<<"stream1">>, <<"stream2">>, <<"stream3">>], [<<"bk1">>, <<"bk2">>, <<"bk3">>],
                      #{}}}),
     test_roundtrip({request, 99, {delete_super_stream, <<"super_stream_name">>}}),
 

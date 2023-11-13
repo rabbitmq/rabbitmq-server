@@ -2883,7 +2883,7 @@ handle_frame_post_auth(Transport,
                                           user = #user{username = Username} = User} = Connection,
                        State,
                        {request, CorrelationId,
-                        {create_super_stream, SuperStream, Partitions, RoutingKeys, Arguments}}) ->
+                        {create_super_stream, SuperStream, Partitions, BindingKeys, Arguments}}) ->
     case rabbit_stream_utils:enforce_correct_name(SuperStream) of
         {ok, SuperStreamName} ->
             case rabbit_stream_utils:check_super_stream_management_permitted(VirtualHost,
@@ -2895,7 +2895,7 @@ handle_frame_post_auth(Transport,
                                                                    SuperStreamName,
                                                                    Partitions,
                                                                    Arguments,
-                                                                   RoutingKeys,
+                                                                   BindingKeys,
                                                                    Username) of
                         ok ->
                             rabbit_log:debug("Created super stream ~tp", [SuperStreamName]),

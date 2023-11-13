@@ -767,13 +767,13 @@ StreamStatsResponse => Key Version CorrelationId ResponseCode Stats
 === CreateSuperStream
 
 ```
-CreateSuperStream => Key Version CorrelationId Name [Partition] [RoutingKey] Arguments
+CreateSuperStream => Key Version CorrelationId Name [Partition] [BindingKey] Arguments
   Key => uint16 // 0x001d
   Version => uint16
   CorrelationId => uint32
   Name => string
   Partition => string
-  RoutingKey => string
+  BindingKey => string
   Arguments => [Argument]
   Argument => Key Value
   Key => string
