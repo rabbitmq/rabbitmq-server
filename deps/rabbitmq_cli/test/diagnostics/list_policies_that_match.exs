@@ -37,7 +37,7 @@ defmodule ListPoliciesThatMatchCommandTest do
         node: get_rabbit_hostname(),
         vhost: context[:vhost],
         object_type: context[:object_type],
-        timeout: context[:timeout] || :infinity,
+        timeout: context[:timeout] || :infinity
       }
     }
   end
@@ -58,7 +58,11 @@ defmodule ListPoliciesThatMatchCommandTest do
   @tag vhost: @vhost
   test "merge_defaults: default object_type is \"queue\"" do
     assert match?({_, %{object_type: "queue"}}, @command.merge_defaults([], %{}))
-    assert match?({_, %{object_type: "exchange"}}, @command.merge_defaults([], %{object_type: "exchange"}))
+
+    assert match?(
+             {_, %{object_type: "exchange"}},
+             @command.merge_defaults([], %{object_type: "exchange"})
+           )
   end
 
   @tag vhost: @vhost
@@ -119,7 +123,14 @@ defmodule ListPoliciesThatMatchCommandTest do
 
     policies
     |> Enum.map(fn p ->
-      set_policy(context[:vhost], p[:name], p[:pattern], p[:definition], p[:priority], p[:apply_to])
+      set_policy(
+        context[:vhost],
+        p[:name],
+        p[:pattern],
+        p[:definition],
+        p[:priority],
+        p[:apply_to]
+      )
 
       on_exit(fn ->
         clear_policy(context[:vhost], p[:name])
@@ -136,6 +147,7 @@ defmodule ListPoliciesThatMatchCommandTest do
   @tag vhost: @vhost, object_type: "queue", vhost: @vhost
   test "banner_queue", context do
     opts = Map.merge(context[:opts], %{vhost: context[:vhost], object_type: "queue"})
+
     assert @command.banner(["my_queue"], opts) ==
              "Listing policies that match #{context[:object_type]} 'my_queue' in vhost '#{context[:vhost]}' ..."
   end

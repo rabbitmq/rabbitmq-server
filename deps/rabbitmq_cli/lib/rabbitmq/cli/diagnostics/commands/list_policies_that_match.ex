@@ -29,16 +29,20 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListPoliciesThatMatchCommand do
         timeout
       )
 
-    res = case object_type do
-      "exchange" -> res
-      "queue" -> :rabbit_misc.rpc_call(
-        node_name,
-        :rabbit_amqqueue,
-        :lookup,
-        [res],
-        timeout
-      )
-    end
+    res =
+      case object_type do
+        "exchange" ->
+          res
+
+        "queue" ->
+          :rabbit_misc.rpc_call(
+            node_name,
+            :rabbit_amqqueue,
+            :lookup,
+            [res],
+            timeout
+          )
+      end
 
     case res do
       {:ok, q} -> list_policies_that_match(node_name, q, timeout)
@@ -55,8 +59,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListPoliciesThatMatchCommand do
   def usage_additional() do
     [
       ["<name>", "The name of the queue/exchange"],
-      ["--object-type <queue | exchange>",
-        "the type of object to match (default: queue)"]
+      ["--object-type <queue | exchange>", "the type of object to match (default: queue)"]
     ]
   end
 
@@ -68,7 +71,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListPoliciesThatMatchCommand do
 
   def help_section(), do: :policies
 
-  def description(), do: "Lists all policies matching a queue/exchange (only the highest priority policy is active)"
+  def description(),
+    do:
+      "Lists all policies matching a queue/exchange (only the highest priority policy is active)"
 
   def banner([name], %{vhost: vhost, object_type: object_type}) do
     "Listing policies that match #{object_type} '#{name}' in vhost '#{vhost}' ..."
