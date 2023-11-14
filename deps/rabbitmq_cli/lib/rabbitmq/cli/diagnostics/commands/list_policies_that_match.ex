@@ -45,14 +45,24 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListPoliciesThatMatchCommand do
       end
 
     case res do
-      {:ok, q} -> list_policies_that_match(node_name, q, timeout)
-      {:resource, _, :exchange, _} = ex -> list_policies_that_match(node_name, ex, timeout)
-      _ -> res
+      {:ok, q} ->
+        list_policies_that_match(node_name, q, timeout)
+
+      {:resource, _, :exchange, _} = ex ->
+        list_policies_that_match(node_name, ex, timeout)
+
+      _ ->
+        res
     end
   end
 
   def output([], %{node: node_name, formatter: "json"}) do
     {:ok, %{"result" => "ok", "policies" => []}}
+  end
+
+  def output({:error, :not_found}, %{node: node_name, formatter: "json"}) do
+    {:ok,
+     %{"result" => "error", "message" => "object (queue, exchange) not found", "policies" => []}}
   end
 
   def output(value, %{node: node_name, formatter: "json"}) when is_list(value) do
