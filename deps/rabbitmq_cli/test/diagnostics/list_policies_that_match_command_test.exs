@@ -116,7 +116,7 @@ defmodule ListPoliciesThatMatchCommandTest do
         name: "non-matching-p20",
         pattern: "^foo.*",
         definition: "{\"max-length\":20}",
-        apply_to: "quorum_queues",
+        apply_to: "queues",
         priority: 20
       }
     ]
