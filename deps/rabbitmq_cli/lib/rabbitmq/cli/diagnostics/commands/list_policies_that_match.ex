@@ -54,6 +54,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListPoliciesThatMatchCommand do
   def output([], %{node: node_name, formatter: "json"}) do
     {:ok, %{"result" => "ok", "policies" => []}}
   end
+
   def output(value, %{node: node_name, formatter: "json"}) when is_list(value) do
     {:ok, %{"result" => "ok", "policies" => value}}
   end
