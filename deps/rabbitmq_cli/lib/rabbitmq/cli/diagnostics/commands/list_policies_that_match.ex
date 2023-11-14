@@ -20,7 +20,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListPoliciesThatMatchCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([queue], %{node: node_name, vhost: vhost, object_type: object_type, timeout: timeout}) do
-    res =
+    resource =
       :rabbit_misc.rpc_call(
         node_name,
         :rabbit_misc,
@@ -32,26 +32,34 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListPoliciesThatMatchCommand do
     res =
       case object_type do
         "exchange" ->
-          res
+          resource
 
         "queue" ->
           :rabbit_misc.rpc_call(
             node_name,
             :rabbit_amqqueue,
             :lookup,
-            [res],
+            [resource],
             timeout
           )
       end
 
     case res do
       {:ok, q} -> list_policies_that_match(node_name, q, timeout)
-      {:resource, _, :exchange, _} = e -> list_policies_that_match(node_name, e, timeout)
+      {:resource, _, :exchange, _} = ex -> list_policies_that_match(node_name, ex, timeout)
       _ -> res
     end
   end
 
+  def output([], %{node: node_name, formatter: "json"}) do
+    {:ok, %{"result" => "ok", "policies" => []}}
+  end
+  def output(value, %{node: node_name, formatter: "json"}) when is_list(value) do
+    {:ok, %{"result" => "ok", "policies" => value}}
+  end
+
   use RabbitMQ.CLI.DefaultOutput
+
   def formatter(), do: RabbitMQ.CLI.Formatters.PrettyTable
 
   def usage, do: "list_policies_that_match [--object-type <type>] <name>"
