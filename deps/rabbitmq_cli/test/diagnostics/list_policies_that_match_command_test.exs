@@ -114,7 +114,7 @@ defmodule ListPoliciesThatMatchCommandTest do
       %{
         vhost: @vhost,
         name: "non-matching-p20",
-        pattern: "^foo.*",
+        pattern: "^other.*",
         definition: "{\"max-length\":20}",
         apply_to: "queues",
         priority: 20
