@@ -215,8 +215,8 @@ defmodule TestHelper do
     :rpc.call(get_rabbit_hostname(), :rabbit_policy, :list_formatted, [vhost])
   end
 
-  def set_policy(vhost, name, pattern, value) do
-    {:ok, decoded} = :rabbit_json.try_decode(value)
+  def set_policy(vhost, name, pattern, definition) do
+    {:ok, decoded} = :rabbit_json.try_decode(definition)
     parsed = :maps.to_list(decoded)
 
     :ok =
@@ -227,6 +227,22 @@ defmodule TestHelper do
         parsed,
         0,
         "all",
+        "acting-user"
+      ])
+  end
+
+  def set_policy(vhost, name, pattern, definition, priority, apply_to) do
+    {:ok, decoded} = :rabbit_json.try_decode(definition)
+    parsed = :maps.to_list(decoded)
+
+    :ok =
+      :rpc.call(get_rabbit_hostname(), :rabbit_policy, :set, [
+        vhost,
+        name,
+        pattern,
+        parsed,
+        priority,
+        apply_to,
         "acting-user"
       ])
   end
