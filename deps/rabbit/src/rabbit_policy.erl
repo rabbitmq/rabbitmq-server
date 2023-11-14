@@ -39,7 +39,7 @@
          list_formatted/1, list_formatted/3, info_keys/0]).
 -export([parse_set_op/7, set_op/7, delete_op/3, lookup_op/2, list_op/0, list_op/1, list_op/2,
          list_formatted_op/1, list_formatted_op/3,
-         match_all/2, match_as_map/1, match_op_as_map/1, definition_keys/1,
+         match_all/1, match_all/2, match_as_map/1, match_op_as_map/1, definition_keys/1,
          list_in/1, list_in/2, list_as_maps/0, list_as_maps/1, list_op_as_maps/0, list_op_as_maps/1
         ]).
 -export([sort_by_priority/1]).
@@ -196,6 +196,9 @@ match(NameOrQueue, Policies, Function) ->
     end.
 
 %% It's exported, so give it a default until all khepri transformation is sorted
+match_all(NameOrQueue) ->
+    match_all(NameOrQueue, list()).
+
 match_all(NameOrQueue, Policies) ->
     match_all(NameOrQueue, Policies, is_policy_applicable).
 
