@@ -73,7 +73,7 @@ create_super_stream(VirtualHost,
                     Name,
                     Partitions,
                     Arguments,
-                    RoutingKeys,
+                    BindingKeys,
                     Username) ->
     gen_server:call(?MODULE,
                     {create_super_stream,
@@ -81,7 +81,7 @@ create_super_stream(VirtualHost,
                      Name,
                      Partitions,
                      Arguments,
-                     RoutingKeys,
+                     BindingKeys,
                      Username}).
 
 -spec delete_super_stream(binary(), binary(), binary()) ->
@@ -226,10 +226,10 @@ handle_call({create_super_stream,
              Name,
              Partitions,
              Arguments,
-             RoutingKeys,
+             BindingKeys,
              Username},
             _From, State) ->
-    case validate_super_stream_creation(VirtualHost, Name, Partitions) of
+    case validate_super_stream_creation(VirtualHost, Name, Partitions, BindingKeys) of
         {error, Reason} ->
             {reply, {error, Reason}, State};
         ok ->
@@ -273,7 +273,7 @@ handle_call({create_super_stream,
                                 add_super_stream_bindings(VirtualHost,
                                                           Name,
                                                           Partitions,
-                                                          RoutingKeys,
+                                                          BindingKeys,
                                                           Username),
                             case BindingsResult of
                                 ok ->
@@ -445,8 +445,8 @@ handle_call({route, RoutingKey, VirtualHost, SuperStream}, _From,
               end
           catch
               exit:Error ->
-                  rabbit_log:error("Error while looking up exchange ~tp, ~tp",
-                                   [rabbit_misc:rs(ExchangeName), Error]),
+                  rabbit_log:warning("Error while looking up exchange ~tp, ~tp",
+                                     [rabbit_misc:rs(ExchangeName), Error]),
                   {error, stream_not_found}
           end,
     {reply, Res, State};
@@ -655,7 +655,10 @@ super_stream_partitions(VirtualHost, SuperStream) ->
             {error, stream_not_found}
     end.
 
-validate_super_stream_creation(VirtualHost, Name, Partitions) ->
+validate_super_stream_creation(_VirtualHost, _Name, Partitions, BindingKeys)
+  when length(Partitions) =/= length(BindingKeys) ->
+   {error, {validation_failed, "There must be the same number of partitions and binding keys"}};
+validate_super_stream_creation(VirtualHost, Name, Partitions, _BindingKeys) ->
     case exchange_exists(VirtualHost, Name) of
         {error, validation_failed} ->
             {error,
@@ -758,15 +761,15 @@ declare_super_stream_exchange(VirtualHost, Name, Username) ->
 add_super_stream_bindings(VirtualHost,
                           Name,
                           Partitions,
-                          RoutingKeys,
+                          BindingKeys,
                           Username) ->
-    PartitionsRoutingKeys = lists:zip(Partitions, RoutingKeys),
+    PartitionsBindingKeys = lists:zip(Partitions, BindingKeys),
     BindingsResult =
-        lists:foldl(fun ({Partition, RoutingKey}, {ok, Order}) ->
+        lists:foldl(fun ({Partition, BindingKey}, {ok, Order}) ->
                             case add_super_stream_binding(VirtualHost,
                                                           Name,
                                                           Partition,
-                                                          RoutingKey,
+                                                          BindingKey,
                                                           Order,
                                                           Username)
                             of
@@ -778,7 +781,7 @@ add_super_stream_bindings(VirtualHost,
                         (_, {{error, _Reason}, _Order} = Acc) ->
                             Acc
                     end,
-                    {ok, 0}, PartitionsRoutingKeys),
+                    {ok, 0}, PartitionsBindingKeys),
     case BindingsResult of
         {ok, _} ->
             ok;
@@ -789,7 +792,7 @@ add_super_stream_bindings(VirtualHost,
 add_super_stream_binding(VirtualHost,
                          SuperStream,
                          Partition,
-                         RoutingKey,
+                         BindingKey,
                          Order,
                          Username) ->
     {ok, ExchangeNameBin} =
@@ -806,7 +809,7 @@ add_super_stream_binding(VirtualHost,
                                     Order),
     case rabbit_binding:add(#binding{source = ExchangeName,
                                      destination = QueueName,
-                                     key = RoutingKey,
+                                     key = BindingKey,
                                      args = Arguments},
                             fun (_X, Q) when ?is_amqqueue(Q) ->
                                     try

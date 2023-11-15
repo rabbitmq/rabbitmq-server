@@ -179,10 +179,6 @@
          open/3,
          close_sent/3]).
 
-         %% not called by gen_statem since gen_statem:enter_loop/4 is used
-
-         %% states
-
 callback_mode() ->
     [state_functions, state_enter].
 
@@ -1747,7 +1743,7 @@ handle_frame_post_auth(Transport,
                         {declare_publisher, PublisherId, WriterRef, Stream}}) ->
     case rabbit_stream_utils:check_write_permitted(stream_r(Stream,
                                                             Connection0),
-                                                   User, #{})
+                                                   User)
     of
         ok ->
             case {maps:is_key(PublisherId, Publishers0),
@@ -1876,7 +1872,6 @@ handle_frame_post_auth(Transport,
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
                                           credits = Credits,
-                                          virtual_host = VirtualHost,
                                           user = User,
                                           publishers = Publishers} =
                            Connection,
@@ -1890,15 +1885,8 @@ handle_frame_post_auth(Transport,
                        message_counters = Counters} =
                 Publisher,
             increase_messages_received(Counters, MessageCount),
-            case rabbit_stream_utils:check_write_permitted(#resource{name =
-                                                                         Stream,
-                                                                     kind =
-                                                                         queue,
-                                                                     virtual_host
-                                                                         =
-                                                                         VirtualHost},
-                                                           User, #{})
-            of
+            case rabbit_stream_utils:check_write_permitted(stream_r(Stream, Connection),
+                                                           User) of
                 ok ->
                     rabbit_stream_utils:write_messages(Version, Leader,
                                                        Reference,
@@ -2294,18 +2282,11 @@ handle_frame_post_auth(Transport,
             {Connection, State}
     end;
 handle_frame_post_auth(_Transport,
-                       #stream_connection{virtual_host = VirtualHost,
-                                          user = User} =
-                           Connection,
+                       #stream_connection{user = User} = Connection,
                        State,
                        {store_offset, Reference, Stream, Offset}) ->
-    case rabbit_stream_utils:check_write_permitted(#resource{name =
-                                                                 Stream,
-                                                             kind = queue,
-                                                             virtual_host =
-                                                                 VirtualHost},
-                                                   User, #{})
-    of
+    case rabbit_stream_utils:check_write_permitted(stream_r(Stream, Connection),
+                                                   User) of
         ok ->
             case lookup_leader(Stream, Connection) of
                 {error, Error} ->
@@ -2398,24 +2379,13 @@ handle_frame_post_auth(Transport,
     end;
 handle_frame_post_auth(Transport,
                        #stream_connection{virtual_host = VirtualHost,
-                                          user =
-                                              #user{username = Username} =
-                                                  User} =
-                           Connection,
+                                          user = #user{username = Username} = User} = Connection,
                        State,
                        {request, CorrelationId,
                         {create_stream, Stream, Arguments}}) ->
     case rabbit_stream_utils:enforce_correct_name(Stream) of
         {ok, StreamName} ->
-            case rabbit_stream_utils:check_configure_permitted(#resource{name =
-                                                                             StreamName,
-                                                                         kind =
-                                                                             queue,
-                                                                         virtual_host
-                                                                             =
-                                                                             VirtualHost},
-                                                               User, #{})
-            of
+            case rabbit_stream_utils:check_configure_permitted(stream_r(StreamName, Connection), User) of
                 ok ->
                     case rabbit_stream_manager:create(VirtualHost,
                                                       StreamName,
@@ -2489,19 +2459,10 @@ handle_frame_post_auth(Transport,
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
                                           virtual_host = VirtualHost,
-                                          user =
-                                              #user{username = Username} =
-                                                  User} =
-                           Connection,
+                                          user = #user{username = Username} = User} = Connection,
                        State,
                        {request, CorrelationId, {delete_stream, Stream}}) ->
-    case rabbit_stream_utils:check_configure_permitted(#resource{name =
-                                                                     Stream,
-                                                                 kind = queue,
-                                                                 virtual_host =
-                                                                     VirtualHost},
-                                                       User, #{})
-    of
+    case rabbit_stream_utils:check_configure_permitted(stream_r(Stream, Connection), User) of
         ok ->
             case rabbit_stream_manager:delete(VirtualHost, Stream, Username) of
                 {ok, deleted} ->
@@ -2918,6 +2879,154 @@ handle_frame_post_auth(Transport,
     send(Transport, S, Frame),
     {Connection, State};
 handle_frame_post_auth(Transport,
+                       #stream_connection{virtual_host = VirtualHost,
+                                          user = #user{username = Username} = User} = Connection,
+                       State,
+                       {request, CorrelationId,
+                        {create_super_stream, SuperStream, Partitions, BindingKeys, Arguments}}) ->
+    case rabbit_stream_utils:enforce_correct_name(SuperStream) of
+        {ok, SuperStreamName} ->
+            case rabbit_stream_utils:check_super_stream_management_permitted(VirtualHost,
+                                                                             SuperStreamName,
+                                                                             Partitions,
+                                                                             User) of
+                ok ->
+                    case rabbit_stream_manager:create_super_stream(VirtualHost,
+                                                                   SuperStreamName,
+                                                                   Partitions,
+                                                                   Arguments,
+                                                                   BindingKeys,
+                                                                   Username) of
+                        ok ->
+                            rabbit_log:debug("Created super stream ~tp", [SuperStreamName]),
+                            response_ok(Transport,
+                                        Connection,
+                                        create_super_stream,
+                                        CorrelationId),
+                            {Connection, State};
+                        {error, {validation_failed, Msg}} ->
+                            rabbit_log:warning("Error while trying to create super stream ~tp: ~tp",
+                                               [SuperStreamName, Msg]),
+                            response(Transport,
+                                     Connection,
+                                     create_super_stream,
+                                     CorrelationId,
+                                     ?RESPONSE_CODE_PRECONDITION_FAILED),
+                            rabbit_global_counters:increase_protocol_counter(stream,
+                                                                             ?PRECONDITION_FAILED,
+                                                                             1),
+                            {Connection, State};
+                        {error, {reference_already_exists, Msg}} ->
+                            rabbit_log:warning("Error while trying to create super stream ~tp: ~tp",
+                                               [SuperStreamName, Msg]),
+                            response(Transport,
+                                     Connection,
+                                     create_super_stream,
+                                     CorrelationId,
+                                     ?RESPONSE_CODE_STREAM_ALREADY_EXISTS),
+                            rabbit_global_counters:increase_protocol_counter(stream,
+                                                                             ?STREAM_ALREADY_EXISTS,
+                                                                             1),
+                            {Connection, State};
+                        {error, Error} ->
+                            rabbit_log:warning("Error while trying to create super stream ~tp: ~tp",
+                                               [SuperStreamName, Error]),
+                            response(Transport,
+                                     Connection,
+                                     create_super_stream,
+                                     CorrelationId,
+                                     ?RESPONSE_CODE_INTERNAL_ERROR),
+                            rabbit_global_counters:increase_protocol_counter(stream,
+                                                                             ?INTERNAL_ERROR,
+                                                                             1),
+                            {Connection, State}
+                    end;
+                error ->
+                    response(Transport,
+                             Connection,
+                             create_super_stream,
+                             CorrelationId,
+                             ?RESPONSE_CODE_ACCESS_REFUSED),
+                    rabbit_global_counters:increase_protocol_counter(stream,
+                                                                     ?ACCESS_REFUSED,
+                                                                     1),
+                    {Connection, State}
+            end;
+        _ ->
+            response(Transport,
+                     Connection,
+                     create_super_stream,
+                     CorrelationId,
+                     ?RESPONSE_CODE_PRECONDITION_FAILED),
+            rabbit_global_counters:increase_protocol_counter(stream,
+                                                             ?PRECONDITION_FAILED,
+                                                             1),
+            {Connection, State}
+    end;
+handle_frame_post_auth(Transport,
+                       #stream_connection{socket = S,
+                                          virtual_host = VirtualHost,
+                                          user = #user{username = Username} = User} = Connection,
+                       State,
+                       {request, CorrelationId, {delete_super_stream, SuperStream}}) ->
+    Partitions = case rabbit_stream_manager:partitions(VirtualHost, SuperStream) of
+                     {ok, Ps} ->
+                         Ps;
+                     _ ->
+                         []
+                 end,
+    case rabbit_stream_utils:check_super_stream_management_permitted(VirtualHost,
+                                                                     SuperStream,
+                                                                     Partitions,
+                                                                     User) of
+        ok ->
+            case rabbit_stream_manager:delete_super_stream(VirtualHost, SuperStream, Username) of
+                ok ->
+                    response_ok(Transport,
+                                Connection,
+                                delete_super_stream,
+                                CorrelationId),
+                    {Connection1, State1} = clean_state_after_super_stream_deletion(Partitions,
+                                                                                    Connection,
+                                                                                    State,
+                                                                                    Transport, S),
+                    {Connection1, State1};
+                {error, stream_not_found} ->
+                    response(Transport,
+                             Connection,
+                             delete_super_stream,
+                             CorrelationId,
+                             ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
+                    rabbit_global_counters:increase_protocol_counter(stream,
+                                                                     ?STREAM_DOES_NOT_EXIST,
+                                                                     1),
+                    {Connection, State};
+                {error, Error} ->
+                    rabbit_log:warning("Error while trying to delete super stream ~tp: ~tp",
+                                               [SuperStream, Error]),
+                    response(Transport,
+                             Connection,
+                             delete_super_stream,
+                             CorrelationId,
+                             ?RESPONSE_CODE_PRECONDITION_FAILED),
+                    rabbit_global_counters:increase_protocol_counter(stream,
+                                                                     ?PRECONDITION_FAILED,
+                                                                     1),
+                    {Connection, State}
+
+            end;
+        error ->
+            response(Transport,
+                     Connection,
+                     delete_super_stream,
+                     CorrelationId,
+                     ?RESPONSE_CODE_ACCESS_REFUSED),
+            rabbit_global_counters:increase_protocol_counter(stream,
+                                                             ?ACCESS_REFUSED,
+                                                             1),
+            {Connection, State}
+    end;
+handle_frame_post_auth(Transport,
                        #stream_connection{socket = S} = Connection,
                        State,
                        {request, CorrelationId,
@@ -3247,6 +3356,27 @@ stream_r(Stream, #stream_connection{virtual_host = VHost}) ->
     #resource{name = Stream,
               kind = queue,
               virtual_host = VHost}.
+
+clean_state_after_super_stream_deletion(Partitions, Connection, State, Transport, S) ->
+    lists:foldl(fun(Partition, {Conn, St}) ->
+                        case
+                            clean_state_after_stream_deletion_or_failure(undefined, Partition,
+                                                                         Conn,
+                                                                         St)
+                        of
+                            {cleaned, NewConnection, NewState} ->
+                                Command = {metadata_update, Partition,
+                                           ?RESPONSE_CODE_STREAM_NOT_AVAILABLE},
+                                Frame = rabbit_stream_core:frame(Command),
+                                send(Transport, S, Frame),
+                                rabbit_global_counters:increase_protocol_counter(stream,
+                                                                                 ?STREAM_NOT_AVAILABLE,
+                                                                                 1),
+                                {NewConnection, NewState};
+                            {not_cleaned, SameConnection, SameState} ->
+                                {SameConnection, SameState}
+                        end
+                end, {Connection, State}, Partitions).
 
 clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
                                              #stream_connection{virtual_host =

@@ -110,6 +110,15 @@ roundtrip(_Config) ->
                     {exchange_command_versions,
                      [{deliver, ?VERSION_1, ?VERSION_1}]}}),
     test_roundtrip({request, 99, {stream_stats, <<"stream_name">>}}),
+    test_roundtrip({request, 99,
+                    {create_super_stream, <<"hello">>,
+                     [<<"stream1">>, <<"stream2">>, <<"stream3">>], [<<"bk1">>, <<"bk2">>, <<"bk3">>],
+                     Args}}),
+    test_roundtrip({request, 99,
+                    {create_super_stream, <<"super_stream_name">>,
+                     [<<"stream1">>, <<"stream2">>, <<"stream3">>], [<<"bk1">>, <<"bk2">>, <<"bk3">>],
+                     #{}}}),
+    test_roundtrip({request, 99, {delete_super_stream, <<"super_stream_name">>}}),
 
     %% RESPONSES
     [test_roundtrip({response, 99, {Tag, 53}})
@@ -120,6 +129,8 @@ roundtrip(_Config) ->
                 unsubscribe,
                 create_stream,
                 delete_stream,
+                create_super_stream,
+                delete_super_stream,
                 open,
                 close]],
 

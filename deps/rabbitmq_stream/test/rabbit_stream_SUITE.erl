@@ -26,6 +26,8 @@
 -compile(nowarn_export_all).
 -compile(export_all).
 
+-import(rabbit_stream_core, [frame/1]).
+
 -define(WAIT, 5000).
 
 all() ->
@@ -37,6 +39,7 @@ groups() ->
        test_stream,
        test_stream_tls,
        test_publish_v2,
+       test_super_stream_creation_deletion,
        test_gc_consumers,
        test_gc_publishers,
        test_update_secret,
@@ -304,6 +307,62 @@ test_publish_v2(Config) ->
     C10 = test_delete_stream(Transport, S, Stream, C9),
     _C11 = test_close(Transport, S, C10),
     closed = wait_for_socket_close(Transport, S, 10),
+    ok.
+
+
+test_super_stream_creation_deletion(Config) ->
+    T = gen_tcp,
+    Port = get_port(T, Config),
+    Opts = get_opts(T),
+    {ok, S} = T:connect("localhost", Port, Opts),
+    C = rabbit_stream_core:init(0),
+    test_peer_properties(T, S, C),
+    test_authenticate(T, S, C),
+
+    Ss = atom_to_binary(?FUNCTION_NAME, utf8),
+    Partitions = [unicode:characters_to_binary([Ss, <<"-">>, integer_to_binary(N)]) || N <- lists:seq(0, 2)],
+    Bks = [integer_to_binary(N) || N <- lists:seq(0, 2)],
+    SsCreationFrame = frame({request, 1, {create_super_stream, Ss, Partitions, Bks, #{}}}),
+    ok = T:send(S, SsCreationFrame),
+    {Cmd1, _} = receive_commands(T, S, C),
+    ?assertMatch({response, 1, {create_super_stream, ?RESPONSE_CODE_OK}},
+                 Cmd1),
+
+    PartitionsFrame = frame({request, 1, {partitions, Ss}}),
+    ok = T:send(S, PartitionsFrame),
+    {Cmd2, _} = receive_commands(T, S, C),
+    ?assertMatch({response, 1, {partitions, ?RESPONSE_CODE_OK, Partitions}},
+                 Cmd2),
+    [begin
+         RouteFrame = frame({request, 1, {route, Rk, Ss}}),
+         ok = T:send(S, RouteFrame),
+         {Command, _} = receive_commands(T, S, C),
+         ?assertMatch({response, 1, {route, ?RESPONSE_CODE_OK, _}}, Command),
+         {response, 1, {route, ?RESPONSE_CODE_OK, [P]}} = Command,
+         ?assertEqual(unicode:characters_to_binary([Ss, <<"-">>, Rk]), P)
+     end || Rk <- Bks],
+
+    SsDeletionFrame = frame({request, 1, {delete_super_stream, Ss}}),
+    ok = T:send(S, SsDeletionFrame),
+    {Cmd3, _} = receive_commands(T, S, C),
+    ?assertMatch({response, 1, {delete_super_stream, ?RESPONSE_CODE_OK}},
+                 Cmd3),
+
+    ok = T:send(S, PartitionsFrame),
+    {Cmd4, _} = receive_commands(T, S, C),
+    ?assertMatch({response, 1, {partitions, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, []}},
+                 Cmd4),
+
+    %% not the same number of partitions and binding keys
+    SsCreationBadFrame = frame({request, 1, {create_super_stream, Ss,
+                                             [<<"s1">>, <<"s2">>], [<<"bk1">>], #{}}}),
+    ok = T:send(S, SsCreationBadFrame),
+    {Cmd5, _} = receive_commands(T, S, C),
+    ?assertMatch({response, 1, {create_super_stream, ?RESPONSE_CODE_PRECONDITION_FAILED}},
+                 Cmd5),
+
+    test_close(T, S, C),
+    closed = wait_for_socket_close(T, S, 10),
     ok.
 
 test_metadata(Config) ->
