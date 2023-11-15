@@ -31,7 +31,7 @@ defmodule RabbitMQ.CLI.Formatters.JsonStream do
   end
 
   def format_output(output, _opts) do
-    {:ok, json} = JSON.encode(keys_to_atoms(output))
+    {:ok, json} = :rabbit_json.try_encode(output)
     json
   end
 
