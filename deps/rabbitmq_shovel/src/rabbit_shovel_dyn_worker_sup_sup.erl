@@ -58,7 +58,10 @@ obfuscated_uris_parameters(Def) when is_list(Def) ->
     rabbit_shovel_parameters:obfuscate_uris_in_definition(Def).
 
 child_exists(Name) ->
-    lists:any(fun ({{_, N}, _, _, _}) -> N =:= Name end,
+    lists:any(fun ({{_, N}, _, _, _}) -> N =:= Name;
+                  %% older format, pre 3.13.0 and 3.12.8. See rabbitmq/rabbitmq-server#9894.
+                  ({N, _, _, _})      -> N =:= Name
+              end,
               mirrored_supervisor:which_children(?SUPERVISOR)).
 
 stop_child({VHost, ShovelName} = Name) ->
@@ -83,14 +86,26 @@ stop_child({VHost, ShovelName} = Name) ->
 %% See rabbit_shovel_worker:terminate/2
 
 cleanup_specs() ->
-    SpecsSet = sets:from_list([element(2, element(1, S)) || S <- mirrored_supervisor:which_children(?SUPERVISOR)]),
+    Children = mirrored_supervisor:which_children(?SUPERVISOR),
+
+    %% older format, pre 3.13.0 and 3.12.8. See rabbitmq/rabbitmq-server#9894
+    OldStyleSpecsSet = sets:from_list([element(1, S) || S <- Children]),
+    NewStyleSpecsSet = sets:from_list([element(2, element(1, S)) || S <- Children]),
     ParamsSet = sets:from_list([ {proplists:get_value(vhost, S), proplists:get_value(name, S)}
                                  || S <- rabbit_runtime_parameters:list_component(<<"shovel">>) ]),
     F = fun(Name, ok) ->
-            _ = mirrored_supervisor:delete_child(?SUPERVISOR, id(Name)),
+            try
+                _ = mirrored_supervisor:delete_child(?SUPERVISOR, id(Name))
+            catch _:_:_Stacktrace ->
+                ok
+            end,
             ok
         end,
-    ok = sets:fold(F, ok, sets:subtract(SpecsSet, ParamsSet)).
+    %% Try both formats to cover the transitionary mixed version cluster period.
+    AllSpecs = sets:union(NewStyleSpecsSet, OldStyleSpecsSet),
+    %% Delete any supervisor children that do not have their respective runtime parameters in the database.
+    SetToCleanUp = sets:subtract(AllSpecs, ParamsSet),
+    ok = sets:fold(F, ok, SetToCleanUp).
 
 %%----------------------------------------------------------------------------
 
@@ -98,4 +113,7 @@ init([]) ->
     {ok, {{one_for_one, 3, 10}, []}}.
 
 id({V, S} = Name) ->
-    {[V, S], Name}.
+    {[V, S], Name};
+%% older format, pre 3.13.0 and 3.12.8. See rabbitmq/rabbitmq-server#9894
+id(Other) ->
+    Other.
