@@ -307,7 +307,7 @@ for each producer:
 .sp
 .Dl rabbitmq-streams list_stream_publishers connection_pid publisher_id stream
 .\" ------------------------------------------------------------------
-.It Cm add_super_stream Ar super-stream Oo Fl -vhost Ar vhost Oc Oo Fl -partitions Ar partitions Oc Oo Fl -routing-keys Ar routing-keys Oc Oo Fl -max-length-bytes Ar max-length-bytes Oc Oo Fl -max-age Ar max-age Oc Oo Fl -stream-max-segment-size-bytes Ar stream-max-segment-size-bytes Oc Oo Fl -leader-locator Ar leader-locator Oc Oo Fl -initial-cluster-size Ar initial-cluster-size Oc
+.It Cm add_super_stream Ar super-stream Oo Fl -vhost Ar vhost Oc Oo Fl -partitions Ar partitions Oc Oo Fl -binding-keys Ar binding-keys Oc Oo Fl -max-length-bytes Ar max-length-bytes Oc Oo Fl -max-age Ar max-age Oc Oo Fl -stream-max-segment-size-bytes Ar stream-max-segment-size-bytes Oc Oo Fl -leader-locator Ar leader-locator Oc Oo Fl -initial-cluster-size Ar initial-cluster-size Oc
 .Bl -tag -width Ds
 .It Ar super-stream
 The name of the super stream to create.
@@ -315,8 +315,8 @@ The name of the super stream to create.
 The name of the virtual host to create the super stream into.
 .It Ar partitions
 The number of partitions the super stream will have.
-.It Ar routing-keys
-Comma-separated list of routing keys.
+.It Ar binding-keys
+Comma-separated list of binding keys.
 .It Ar max-length-bytes
 The maximum size of partition streams, example values: 20gb, 500mb.
 .It Ar max-age
