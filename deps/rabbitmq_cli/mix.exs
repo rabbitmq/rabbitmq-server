@@ -15,6 +15,7 @@ defmodule RabbitMQCtl.MixfileBase do
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
       escript: [main_module: RabbitMQCtl, emu_args: "-hidden", path: "escript/rabbitmqctl"],
+      prune_code_paths: false,
       deps: deps(Mix.env()),
       aliases: aliases(),
       xref: [
@@ -139,10 +140,6 @@ defmodule RabbitMQCtl.MixfileBase do
     is_bazel = System.get_env("IS_BAZEL") != nil
 
     [
-      {
-        :json,
-        path: Path.join(deps_dir, "json")
-      },
       {
         :csv,
         path: Path.join(deps_dir, "csv")

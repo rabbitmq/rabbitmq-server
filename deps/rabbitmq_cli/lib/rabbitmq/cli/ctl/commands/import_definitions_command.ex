@@ -166,7 +166,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
   #
 
   defp deserialise(bin, "json") do
-    JSON.decode(bin)
+    :rabbit_json.try_decode(bin)
   end
 
   defp deserialise(bin, "erlang") do
