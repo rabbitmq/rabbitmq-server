@@ -81,15 +81,13 @@ delete_resource(ReqData, Context = #context{user = #user{username = ActingUser}}
     Name = rabbit_misc:r(VHost, queue, QName),
     case rabbit_amqqueue:lookup(Name) of
         {ok, Q} ->
-            case rabbit_amqqueue:delete(Q, IfUnused, IfEmpty, ActingUser) of
+            IsExclusive = amqqueue:is_exclusive(Q),
+            ExclusiveOwnerPid = amqqueue:get_exclusive_owner(Q),
+            try rabbit_amqqueue:delete_with(Q, ExclusiveOwnerPid, IfUnused, IfEmpty, ActingUser, IsExclusive) of
                 {ok, _} ->
-                    {true, ReqData, Context};
-                {error, not_empty} ->
-                    Explanation = io_lib:format("~ts not empty", [rabbit_misc:rs(Name)]),
-                    rabbit_log:warning("Delete queue error: ~ts", [Explanation]),
-                    rabbit_mgmt_util:bad_request(list_to_binary(Explanation), ReqData, Context);
-                {error, in_use} ->
-                    Explanation = io_lib:format("~ts in use", [rabbit_misc:rs(Name)]),
+                    {true, ReqData, Context}
+            catch
+                _:#amqp_error{explanation = Explanation} ->
                     rabbit_log:warning("Delete queue error: ~ts", [Explanation]),
                     rabbit_mgmt_util:bad_request(list_to_binary(Explanation), ReqData, Context)
             end;

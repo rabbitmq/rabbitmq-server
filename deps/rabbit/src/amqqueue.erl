@@ -73,6 +73,7 @@
          is_amqqueue/1,
          is_auto_delete/1,
          is_durable/1,
+         is_exclusive/1,
          is_classic/1,
          is_quorum/1,
          pattern_match_all/0,
@@ -556,6 +557,11 @@ is_auto_delete(#amqqueue{auto_delete = AutoDelete}) ->
 -spec is_durable(amqqueue()) -> boolean().
 
 is_durable(#amqqueue{durable = Durable}) -> Durable.
+
+-spec is_exclusive(amqqueue()) -> boolean().
+
+is_exclusive(Queue) ->
+    is_pid(get_exclusive_owner(Queue)).
 
 -spec is_classic(amqqueue()) -> boolean().
 
