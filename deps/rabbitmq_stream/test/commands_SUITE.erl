@@ -650,17 +650,27 @@ add_super_stream_merge_defaults(_Config) ->
                   #{partitions := 5, vhost := <<"/">>}},
                  ?COMMAND_ADD_SUPER_STREAM:merge_defaults([<<"super-stream">>],
                                                           #{partitions => 5})),
+    DefaultWithBindingKeys =
+        ?COMMAND_ADD_SUPER_STREAM:merge_defaults([<<"super-stream">>],
+                                                 #{binding_keys =>
+                                                       <<"amer,emea,apac">>}),
+    ?assertMatch({[<<"super-stream">>],
+                  #{binding_keys := <<"amer,emea,apac">>, vhost := <<"/">>}},
+                 DefaultWithBindingKeys),
+
+    {_, OptsBks} = DefaultWithBindingKeys,
+    ?assertEqual(false, maps:is_key(partitions, OptsBks)),
 
     DefaultWithRoutingKeys =
         ?COMMAND_ADD_SUPER_STREAM:merge_defaults([<<"super-stream">>],
                                                  #{routing_keys =>
                                                        <<"amer,emea,apac">>}),
     ?assertMatch({[<<"super-stream">>],
-                  #{routing_keys := <<"amer,emea,apac">>, vhost := <<"/">>}},
+                  #{binding_keys := <<"amer,emea,apac">>, vhost := <<"/">>}},
                  DefaultWithRoutingKeys),
 
-    {_, Opts} = DefaultWithRoutingKeys,
-    ?assertEqual(false, maps:is_key(partitions, Opts)).
+    {_, OptsRks} = DefaultWithRoutingKeys,
+    ?assertEqual(false, maps:is_key(partitions, OptsRks)).
 
 add_super_stream_validate(_Config) ->
     ?assertMatch({validation_failure, not_enough_args},
@@ -674,6 +684,17 @@ add_super_stream_validate(_Config) ->
                                                           <<"a,b,c">>})),
     ?assertMatch({validation_failure, _},
                  ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
+                                                    #{partitions => 1,
+                                                      binding_keys => <<"a,b,c">>})),
+
+    ?assertMatch({validation_failure, _},
+                 ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
+                                                    #{routing_keys => 1,
+                                                      binding_keys => <<"a,b,c">>}
+                                                    )),
+
+    ?assertMatch({validation_failure, _},
+                 ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
                                                     #{partitions => 0})),
     ?assertEqual(ok,
                  ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
@@ -681,6 +702,10 @@ add_super_stream_validate(_Config) ->
     ?assertEqual(ok,
                  ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
                                                     #{routing_keys =>
+                                                          <<"a,b,c">>})),
+    ?assertEqual(ok,
+                 ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
+                                                    #{binding_keys =>
                                                           <<"a,b,c">>})),
 
     [case Expected of
@@ -752,11 +777,10 @@ add_delete_super_stream_run(Config) ->
     ?assertEqual({error, stream_not_found},
                  partitions(Config, <<"invoices">>)),
 
-    % with routing keys
+    % with binding keys
     ?assertMatch({ok, _},
                  ?COMMAND_ADD_SUPER_STREAM:run([<<"invoices">>],
-                                               maps:merge(#{routing_keys =>
-                                                                <<" amer,emea , apac">>},
+                                               maps:merge(#{binding_keys => <<" amer,emea , apac">>},
                                                           Opts))),
     ?assertEqual({ok,
                   [<<"invoices-amer">>, <<"invoices-emea">>,
