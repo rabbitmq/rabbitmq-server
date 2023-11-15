@@ -83,6 +83,7 @@ all_tests() -> [
     multiple_invalid_connections_test,
     exchanges_test,
     queues_test,
+    crashed_queues_test,
     quorum_queues_test,
     stream_queues_have_consumers_field,
     bindings_test,
@@ -1076,6 +1077,36 @@ queues_test(Config) ->
 
     http_delete(Config, "/queues/downvhost/foo", {group, '2xx'}),
     http_delete(Config, "/queues/downvhost/bar", {group, '2xx'}),
+    passed.
+
+crashed_queues_test(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Q = #resource{virtual_host = <<"/">>, kind = queue, name = <<"crashingqueue">>},
+
+    QArgs = #{},
+    http_put(Config, "/queues/%2F/crashingqueue", QArgs, {group, '2xx'}),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+            rabbit_amqqueue_control, await_state, [Node, Q, running]),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+        rabbit_amqqueue, kill_queue_hard, [Node, Q]),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+            rabbit_amqqueue_control, await_state, [Node, Q, crashed]),
+
+    CrashedQueue  = http_get(Config, "/queues/%2F/crashingqueue"),
+
+    assert_item(#{name        => <<"crashingqueue">>,
+                  vhost       => <<"/">>,
+                  state       => <<"crashed">>,
+                  durable     => false,
+                  auto_delete => false,
+                  exclusive   => false,
+                  arguments   => #{}}, CrashedQueue),
+
+    http_delete(Config, "/queues/%2F/crashingqueue", {group, '2xx'}),
+    http_delete(Config, "/queues/%2F/crashingqueue", ?NOT_FOUND),
     passed.
 
 quorum_queues_test(Config) ->
