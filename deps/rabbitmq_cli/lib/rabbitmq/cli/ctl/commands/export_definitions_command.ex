@@ -159,7 +159,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand do
         end)
       end)
 
-    {:ok, json} = JSON.encode(map)
+    {:ok, json} = :rabbit_json.try_encode(map)
     json
   end
 
