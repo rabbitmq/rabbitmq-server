@@ -1164,9 +1164,14 @@ delete_enabled_feature_flags_list_file() ->
 %% @returns the path to the file.
 
 enabled_feature_flags_list_file() ->
-    case application:get_env(rabbit, feature_flags_file) of
-        {ok, Val} -> Val;
-        undefined -> throw(feature_flags_file_not_set)
+    case rabbit_prelaunch:get_context() of
+        #{feature_flags_file := File} ->
+            File;
+        _ ->
+            case application:get_env(rabbit, feature_flags_file) of
+                {ok, Val} -> Val;
+                undefined -> throw(feature_flags_file_not_set)
+            end
     end.
 
 copy_feature_states_after_reset(RemoteNode) ->

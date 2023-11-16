@@ -1175,8 +1175,13 @@ get_default_data_param(Param) ->
 %% </ul>
 
 data_dir() ->
-    {ok, DataDir} = application:get_env(rabbit, data_dir),
-    DataDir.
+    case rabbit_prelaunch:get_context() of
+        #{data_dir := DataDir} ->
+            DataDir;
+        _ ->
+            {ok, DataDir} = application:get_env(rabbit, data_dir),
+            DataDir
+    end.
 
 %%---------------------------------------------------------------------------
 %% logging

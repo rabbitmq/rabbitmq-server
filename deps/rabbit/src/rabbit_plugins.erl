@@ -32,7 +32,7 @@ ensure(FileJustChanged) ->
     end.
 
 ensure1(FileJustChanged0) ->
-    {ok, OurFile0} = application:get_env(rabbit, enabled_plugins_file),
+    OurFile0 = enabled_plugins_file(),
     FileJustChanged = filename:nativename(FileJustChanged0),
     OurFile = filename:nativename(OurFile0),
     case OurFile of
@@ -72,39 +72,51 @@ ensure1(FileJustChanged0) ->
 
 -spec plugins_expand_dir() -> file:filename().
 plugins_expand_dir() ->
-    case application:get_env(rabbit, plugins_expand_dir) of
-        {ok, ExpandDir} ->
+    case rabbit_prelaunch:get_context() of
+        #{plugins_expand_dir := ExpandDir} ->
             ExpandDir;
         _ ->
-            filename:join([rabbit:data_dir(), "plugins_expand_dir"])
+            case application:get_env(rabbit, plugins_expand_dir) of
+                {ok, ExpandDir} ->
+                    ExpandDir;
+                undefined ->
+                    filename:join([rabbit:data_dir(), "plugins_expand_dir"])
+            end
     end.
 
 -spec plugins_dir() -> file:filename().
 plugins_dir() ->
-    case application:get_env(rabbit, plugins_dir) of
-        {ok, PluginsDistDir} ->
+    case rabbit_prelaunch:get_context() of
+        #{plugins_path := PluginsDistDir} ->
             PluginsDistDir;
         _ ->
-            filename:join([rabbit:data_dir(), "plugins_dir_stub"])
+            case application:get_env(rabbit, plugins_dir) of
+                {ok, PluginsDistDir} ->
+                    PluginsDistDir;
+                undefined ->
+                    filename:join([rabbit:data_dir(), "plugins_dir_stub"])
+            end
     end.
 
 -spec enabled_plugins_file() -> file:filename().
 enabled_plugins_file() ->
-     case application:get_env(rabbit, enabled_plugins_file) of
-        {ok, Val} ->
-            Val;
+    case rabbit_prelaunch:get_context() of
+        #{enabled_plugins_file := File} ->
+            File;
         _ ->
-            filename:join([rabbit:data_dir(), "enabled_plugins"])
+            case application:get_env(rabbit, enabled_plugins_file) of
+                {ok, File} ->
+                    File;
+                undefined ->
+                    filename:join([rabbit:data_dir(), "enabled_plugins"])
+
+            end
     end.
 
 -spec enabled_plugins() -> [atom()].
 enabled_plugins() ->
-    case application:get_env(rabbit, enabled_plugins_file) of
-        {ok, EnabledFile} ->
-            read_enabled(EnabledFile);
-        _ ->
-            []
-    end.
+    EnabledFile = enabled_plugins_file(),
+    read_enabled(EnabledFile).
 
 %% @doc Prepares the file system and installs all enabled plugins.
 
