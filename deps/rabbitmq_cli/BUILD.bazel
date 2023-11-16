@@ -17,13 +17,6 @@ mix_archive_build(
     archives = ["@hex//:archive"],
 )
 
-mix_archive_build(
-    name = "json_ez",
-    srcs = ["@json//:sources"],
-    out = "json.ez",
-    archives = ["@hex//:archive"],
-)
-
 # Note: All the various rabbitmq-* scripts are just copies of rabbitmqctl
 rabbitmqctl(
     name = "rabbitmqctl",
@@ -39,7 +32,6 @@ rabbitmqctl(
     license_files = glob(["LICENSE*"]),
     source_deps = {
         "@csv//:sources": "csv",
-        "@json//:sources": "json",
     },
     visibility = ["//visibility:public"],
     deps = [
@@ -109,7 +101,6 @@ plt(
     ],
     ez_deps = [
         ":csv_ez",
-        ":json_ez",
     ],
     ignore_warnings = True,
     libs = [":elixir"],
@@ -151,7 +142,6 @@ rabbitmqctl_test(
     source_deps = {
         "@amqp//:sources": "amqp",
         "@csv//:sources": "csv",
-        "@json//:sources": "json",
         "@temp//:sources": "temp",
         "@x509//:sources": "x509",
     },
