@@ -51,20 +51,34 @@ def deps_dir_contents(ctx, deps, dir):
                 lib_info.app_name,
                 rp,
             ))
-            ctx.actions.symlink(
-                output = f,
-                target_file = src,
+            args = ctx.actions.args()
+            args.add(src)
+            args.add(f)
+            ctx.actions.run(
+                inputs = [src],
+                outputs = [f],
+                executable = "cp",
+                arguments = [args],
             )
-            files.extend([f, src])
+            files.append(f)
         for beam in lib_info.beam:
             if not beam.is_directory:
                 f = ctx.actions.declare_file(path_join(
-                    dir, lib_info.app_name, "ebin", beam.basename))
-                ctx.actions.symlink(
-                    output = f,
-                    target_file = beam,
+                    dir,
+                    lib_info.app_name,
+                    "ebin",
+                    beam.basename,
+                ))
+                args = ctx.actions.args()
+                args.add(beam)
+                args.add(f)
+                ctx.actions.run(
+                    inputs = [beam],
+                    outputs = [f],
+                    executable = "cp",
+                    arguments = [args],
                 )
-                files.extend([f, beam])
+                files.append(f)
             else:
                 fail("unexpected directory in", lib_info)
     return files
