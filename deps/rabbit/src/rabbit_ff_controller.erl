@@ -670,8 +670,10 @@ get_forced_feature_flag_names_from_env() ->
 %% @private
 
 get_forced_feature_flag_names_from_config() ->
-    Value = application:get_env(
-              rabbit, forced_feature_flags_on_init, undefined),
+    Value = maps:get(
+              forced_feature_flags_on_init,
+              rabbit_prelaunch:get_context(),
+              undefined),
     case Value of
         undefined ->
             Value;
