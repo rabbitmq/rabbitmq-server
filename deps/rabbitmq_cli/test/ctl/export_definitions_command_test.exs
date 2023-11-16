@@ -111,7 +111,7 @@ defmodule ExportDefinitionsCommandTest do
     {:ok, nil} = @command.run([valid_file_path()], context[:opts])
 
     {:ok, bin} = File.read(valid_file_path())
-    {:ok, map} = JSON.decode(bin)
+    {:ok, map} = :rabbit_json.try_decode(bin)
     assert Map.has_key?(map, "rabbitmq_version")
   end
 
@@ -128,7 +128,7 @@ defmodule ExportDefinitionsCommandTest do
     clear_parameter("/", "federation-upstream", "up-1")
 
     {:ok, bin} = File.read(valid_file_path())
-    {:ok, map} = JSON.decode(bin)
+    {:ok, map} = :rabbit_json.try_decode(bin)
     assert Map.has_key?(map, "rabbitmq_version")
     params = map["parameters"]
     assert is_map(hd(params)["value"])
