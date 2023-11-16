@@ -342,35 +342,39 @@ do_join(RemoteNode) when RemoteNode =/= node() ->
     khepri:info(?RA_CLUSTER_NAME),
 
     %% Ensure the remote node is reachable before we add it.
-    pong = net_adm:ping(RemoteNode),
+    case net_adm:ping(RemoteNode) of
+        pong ->
+            %% We verify the cluster membership before adding `ThisNode' to
+            %% `RemoteNode''s cluster. We do it mostly to keep the same
+            %% behavior as what we do with Mnesia. Otherwise, the interest is
+            %% limited given the check and the actual join are not atomic.
 
-    %% We verify the cluster membership before adding `ThisNode' to
-    %% `RemoteNode''s cluster. We do it mostly to keep the same behavior as
-    %% what we do with Mnesia. Otherwise, the interest is limited given the
-    %% check and the actual join are not atomic.
+            ?LOG_DEBUG(
+               "Adding this node (~p) to Khepri cluster \"~s\" through "
+               "node ~p",
+               [ThisNode, ?RA_CLUSTER_NAME, RemoteNode],
+               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
 
-    ?LOG_DEBUG(
-       "Adding this node (~p) to Khepri cluster \"~s\" through node ~p",
-       [ThisNode, ?RA_CLUSTER_NAME, RemoteNode],
-       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+            %% If the remote node to add is running RabbitMQ, we need to put it
+            %% in maintenance mode at least. We remember that state to revive
+            %% the node only if it was fully running before this code.
+            IsRunning = rabbit:is_running(ThisNode),
+            AlreadyBeingDrained =
+            rabbit_maintenance:is_being_drained_consistent_read(ThisNode),
+            NeedToRevive = IsRunning andalso not AlreadyBeingDrained,
+            maybe_drain_node(IsRunning),
 
-    %% If the remote node to add is running RabbitMQ, we need to put it in
-    %% maintenance mode at least. We remember that state to revive the node
-    %% only if it was fully running before this code.
-    IsRunning = rabbit:is_running(ThisNode),
-    AlreadyBeingDrained =
-    rabbit_maintenance:is_being_drained_consistent_read(ThisNode),
-    NeedToRevive = IsRunning andalso not AlreadyBeingDrained,
-    maybe_drain_node(IsRunning),
+            %% Joining a cluster includes a reset of the local Khepri store.
+            Ret = khepri_cluster:join(?RA_CLUSTER_NAME, RemoteNode),
 
-    %% Joining a cluster includes a reset of the local Khepri store.
-    Ret = khepri_cluster:join(?RA_CLUSTER_NAME, RemoteNode),
+            %% Revive the remote node if it was running and not under
+            %% maintenance before we changed the cluster membership.
+            maybe_revive_node(NeedToRevive),
 
-    %% Revive the remote node if it was running and not under maintenance
-    %% before we changed the cluster membership.
-    maybe_revive_node(NeedToRevive),
-
-    Ret.
+            Ret;
+        pang ->
+            {error, {node_unreachable, RemoteNode}}
+    end.
 
 maybe_drain_node(true) ->
     ok = rabbit_maintenance:drain();
