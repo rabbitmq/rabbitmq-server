@@ -1,5 +1,7 @@
 -module(mc_util).
 
+-include("mc.hrl").
+
 -export([is_valid_shortstr/1,
          is_utf8_no_null/1,
          uuid_to_urn_string/1,
@@ -11,19 +13,14 @@
         ]).
 
 -spec is_valid_shortstr(term()) -> boolean().
-is_valid_shortstr(Bin) when byte_size(Bin) < 256 ->
-    utf8_scan(Bin, fun (C) -> C > 0 end);
+is_valid_shortstr(Bin) when ?IS_SHORTSTR_LEN(Bin) ->
+    is_utf8_no_null(Bin);
 is_valid_shortstr(_) ->
     false.
 
-is_utf8_no_null(<<>>) ->
-    true;
-is_utf8_no_null(<<0, _/binary>>) ->
-    false;
-is_utf8_no_null(<<_/utf8, Rem/binary>>) ->
-    is_utf8_no_null(Rem);
-is_utf8_no_null(_) ->
-    false.
+-spec is_utf8_no_null(term()) -> boolean().
+is_utf8_no_null(Term) ->
+    utf8_scan(Term, fun (C) -> C > 0 end).
 
 -spec uuid_to_urn_string(binary()) -> binary().
 uuid_to_urn_string(<<TL:4/binary, TM:2/binary, THV:2/binary,

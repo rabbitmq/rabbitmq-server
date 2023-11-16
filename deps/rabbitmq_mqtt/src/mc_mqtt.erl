@@ -92,16 +92,13 @@ convert_from(mc_amqp, Sections, Env) ->
              end,
     Props1 = case AmqpProps of
                  #'v1_0.properties'{reply_to = {utf8, Address}} ->
-                     % MqttX = persistent_term:get(?PERSISTENT_TERM_EXCHANGE),
-                     MqttX = maps:get(mqtt_exchange, Env, ?DEFAULT_MQTT_EXCHANGE),
+                     MqttX = maps:get(mqtt_x, Env, ?DEFAULT_MQTT_EXCHANGE),
                      case Address of
-                         % <<"/topic/", Topic/binary>>
-                         %   when MqttX =:= ?DEFAULT_MQTT_EXCHANGE ->
-                         %     add_response_topic(Topic, Props0);
                          <<"/exchange/",
                            MqttX:(byte_size(MqttX))/binary, "/",
                            RoutingKey/binary>> ->
-                             add_response_topic(RoutingKey, Props0);
+                             MqttTopic = rabbit_mqtt_util:amqp_to_mqtt(RoutingKey),
+                             Props0#{'Response-Topic' => MqttTopic};
                          _ ->
                              Props0
                      end;
@@ -272,7 +269,7 @@ convert_to(mc_amqp, #mqtt_msg{qos = Qos,
              end,
     ReplyTo = case Props of
                   #{'Response-Topic' := MqttTopic} ->
-                      Exchange = maps:get(mqtt_exchange, Env, ?DEFAULT_MQTT_EXCHANGE),
+                      Exchange = maps:get(mqtt_x, Env, ?DEFAULT_MQTT_EXCHANGE),
                       Topic = rabbit_mqtt_util:mqtt_to_amqp(MqttTopic),
                       Address = <<"/exchange/", Exchange/binary, "/", Topic/binary>>,
                       {utf8, Address};
@@ -560,7 +557,3 @@ amqp_encode(Data, Acc0) ->
     Bin = amqp10_framing:encode_bin(Data),
     Acc = setelement(5, Acc0, [Bin | element(5, Acc0)]),
     setelement(7, Acc, ?CONTENT_TYPE_AMQP).
-
-add_response_topic(AmqpTopic, PublishProperties) ->
-    MqttTopic = rabbit_mqtt_util:amqp_to_mqtt(AmqpTopic),
-    PublishProperties#{'Response-Topic' => MqttTopic}.
