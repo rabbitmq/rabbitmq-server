@@ -36,7 +36,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
 
       val ->
         Enum.map(val, fn {vhost, val} ->
-          {:ok, val_encoded} = JSON.encode(Map.new(val))
+          {:ok, val_encoded} = :rabbit_json.try_encode(Map.new(val))
           [vhost: vhost, limits: val_encoded]
         end)
     end
@@ -54,7 +54,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
         {:badrpc, node}
 
       val when is_list(val) or is_map(val) ->
-        JSON.encode(Map.new(val))
+        :rabbit_json.try_encode(Map.new(val))
     end
   end
 
