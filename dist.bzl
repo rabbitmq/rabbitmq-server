@@ -336,15 +336,6 @@ def source_archive(
     )
 
     pkg_files(
-        name = "json-files",
-        srcs = [
-            "@json//:sources",
-        ],
-        strip_prefix = "",
-        prefix = "deps/json",
-    )
-
-    pkg_files(
         name = "csv-files",
         srcs = [
             "@csv//:sources",
@@ -358,7 +349,6 @@ def source_archive(
         extension = extension,
         srcs = [
             ":deps-files",
-            ":json-files",
             ":csv-files",
             Label("@rabbitmq-server//:root-licenses"),
         ],
