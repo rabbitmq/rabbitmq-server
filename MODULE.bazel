@@ -361,7 +361,6 @@ use_repo(
     "getopt",
     "gun",
     "jose",
-    "json",
     "observer_cli",
     "prometheus",
     "ranch",
