@@ -145,7 +145,7 @@ convert_from(mc_amqp, Sections, _Env) ->
 
     Headers0 = [to_091(K, V) || {{utf8, K}, V} <- AP,
                                 ?IS_SHORTSTR_LEN(K)],
-    %% Add remaining message annotations as headers?
+    %% Add remaining x- message annotations as headers
     XHeaders = lists:filtermap(fun({{symbol, <<"x-cc">>}, V}) ->
                                        {true, to_091(<<"CC">>, V)};
                                   ({{symbol, <<"x-", _/binary>> = K}, V})
@@ -153,7 +153,8 @@ convert_from(mc_amqp, Sections, _Env) ->
                                        case is_internal_header(K) of
                                            false ->
                                                {true, to_091(K, V)};
-                                           true -> false
+                                           true ->
+                                               false
                                        end;
                                   (_) ->
                                        false
@@ -300,8 +301,7 @@ convert_to(mc_amqp, #content{payload_fragments_rev = Payload} = Content, Env) ->
               undefined ->
                   undefined;
               _ ->
-                  %% TODO: do we need to validate this doesn't fail?
-                  %% Some validation is done in then channel already
+                  %% Channel already checked for valid integer.
                   binary_to_integer(Expiration)
           end,
 
@@ -625,7 +625,7 @@ unwrap({_Type, V}) ->
 
 unwrap_shortstr({utf8, V})
   when is_binary(V) andalso
-       byte_size(V) < 256 ->
+       ?IS_SHORTSTR_LEN(V) ->
     V;
 unwrap_shortstr(_) ->
     undefined.
@@ -684,7 +684,7 @@ message_id({ulong, N}, _HKey, H0) ->
 message_id({binary, B}, HKey, H0) ->
     {[{HKey, binary, B} | H0], undefined};
 message_id({utf8, S}, HKey, H0) ->
-    case byte_size(S) < 256 of
+    case ?IS_SHORTSTR_LEN(S) of
         true ->
             {H0, S};
         false ->

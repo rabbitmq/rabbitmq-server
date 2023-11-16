@@ -11,13 +11,12 @@
 
 all() ->
     [
-     {group, lossless},
-     {group, lossy}
+     {group, tests}
     ].
 
 groups() ->
     [
-     {lossless, [shuffle],
+     {tests, [shuffle],
       [roundtrip_amqp,
        roundtrip_amqp_payload_format_indicator,
        roundtrip_amqp_response_topic,
@@ -27,11 +26,8 @@ groups() ->
        amqp_to_mqtt_amqp_value_section_list,
        amqp_to_mqtt_amqp_value_section_null,
        amqp_to_mqtt_amqp_value_section_int,
-       amqp_to_mqtt_amqp_value_section_boolean
-      ]
-     },
-     {lossy, [shuffle],
-      [roundtrip_amqp_user_property,
+       amqp_to_mqtt_amqp_value_section_boolean,
+       roundtrip_amqp_user_property,
        roundtrip_amqpl_user_property,
        roundtrip_amqp_content_type,
        amqp_to_mqtt_reply_to,
@@ -41,8 +37,7 @@ groups() ->
        mqtt_amqp,
        mqtt_amqp_alt,
        amqp_mqtt
-      ]
-     }
+      ]}
     ].
 
 roundtrip_amqp(_Config) ->
@@ -126,7 +121,7 @@ roundtrip_amqp_payload_format_indicator(_Config) ->
 roundtrip_amqp_response_topic(_Config) ->
     Topic = <<"/rabbit/🐇"/utf8>>,
     Msg0 = mqtt_msg(),
-    Key = mqtt_exchange,
+    Key = mqtt_x,
     MqttExchanges = [<<"amq.topic">>,
                      <<"some-other-topic-exchange">>],
     [begin
@@ -275,7 +270,7 @@ roundtrip_amqp_content_type(_Config) ->
 
 amqp_to_mqtt_reply_to(_Config) ->
     Val = amqp_value({utf8, <<"hey">>}),
-    Key = mqtt_exchange,
+    Key = mqtt_x,
     Env = #{Key => <<"mqtt-topic-exchange">>},
     AmqpProps1 = #'v1_0.properties'{reply_to = {utf8, <<"/exchange/mqtt-topic-exchange/my.routing.key">>}},
     #mqtt_msg{props = Props1} = amqp_to_mqtt([AmqpProps1, Val], Env),
@@ -350,7 +345,7 @@ mqtt_amqpl_alt(_Config) ->
     ok.
 
 mqtt_amqp(_Config) ->
-    Key = mqtt_exchange,
+    Key = mqtt_x,
     Ex = <<"mqtt-topic-exchange">>,
     Env =  #{Key => <<"mqtt-topic-exchange">>},
     Mqtt0 = mqtt_msg(),
@@ -390,7 +385,7 @@ mqtt_amqp(_Config) ->
     ok.
 
 mqtt_amqp_alt(_Config) ->
-    Key = mqtt_exchange,
+    Key = mqtt_x,
     Ex = <<"mqtt-topic-exchange">>,
     Env = #{Key => <<"mqtt-topic-exchange">>},
     CorrId = <<"urn:uuid:550e8400-e29b-41d4-a716-446655440000">>,
@@ -432,7 +427,7 @@ mqtt_amqp_alt(_Config) ->
     ok.
 
 amqp_mqtt(_Config) ->
-    Env = #{mqtt_exchange => <<"mqtt-topic-exchange">>},
+    Env = #{mqtt_x => <<"mqtt-topic-exchange">>},
     H = #'v1_0.header'{priority = {ubyte, 3},
                        ttl = {uint, 20000},
                        durable = true},

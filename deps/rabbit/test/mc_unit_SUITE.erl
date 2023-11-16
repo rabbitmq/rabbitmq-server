@@ -241,10 +241,6 @@ amqpl_death_records(_Config) ->
     {_, array, [{table, T2a}, {table, T2b}]} = header(<<"x-death">>, H2),
     ?assertMatch({_, longstr, <<"dl">>}, header(<<"queue">>, T2a)),
     ?assertMatch({_, longstr, <<"q1">>}, header(<<"queue">>, T2b)),
-
-    ct:pal("H2 ~p", [T2a]),
-    ct:pal("routing headers ~p", [mc:routing_headers(Msg2, [x_headers])]),
-
     ok.
 
 header(K, H) ->
@@ -320,7 +316,6 @@ amqpl_amqp_bin_amqpl(_Config) ->
     %% at this point the type is now present as a message annotation
     ?assertEqual({utf8, <<"45">>}, mc:x_header(<<"x-basic-type">>, Msg10)),
     ?assertEqual(RoutingHeaders, mc:routing_headers(Msg10, [])),
-    % ct:pal("Sections ~p", [mc:protocol_state(Msg10Pre)]),
 
     [
      #'v1_0.header'{} = Hdr10,
@@ -345,22 +340,22 @@ amqpl_amqp_bin_amqpl(_Config) ->
     Get = fun(K, AP) -> amqp_map_get(utf8(K), AP) end,
 
 
-    ?assertMatch({long, 99}, Get(<<"a-stream-offset">>, AP10)),
-    ?assertMatch({utf8, <<"a string">>}, Get(<<"a-string">>, AP10)),
-    ?assertMatch({boolean, false}, Get(<<"a-bool">>, AP10)),
-    ?assertMatch({ubyte, 1}, Get(<<"a-unsignedbyte">>, AP10)),
-    ?assertMatch({ushort, 1}, Get(<<"a-unsignedshort">>, AP10)),
-    ?assertMatch({uint, 1}, Get(<<"a-unsignedint">>, AP10)),
-    ?assertMatch({int, 1}, Get(<<"a-signedint">>, AP10)),
-    ?assertMatch({timestamp, 1000}, Get(<<"a-timestamp">>, AP10)),
-    ?assertMatch({double, 1.0}, Get(<<"a-double">>, AP10)),
-    ?assertMatch({float, 1.0}, Get(<<"a-float">>, AP10)),
-    ?assertMatch(undefined, Get(<<"a-void">>, AP10)),
-    ?assertMatch({binary, <<"data">>}, Get(<<"a-binary">>, AP10)),
+    ?assertEqual({long, 99}, Get(<<"a-stream-offset">>, AP10)),
+    ?assertEqual({utf8, <<"a string">>}, Get(<<"a-string">>, AP10)),
+    ?assertEqual({boolean, false}, Get(<<"a-bool">>, AP10)),
+    ?assertEqual({ubyte, 1}, Get(<<"a-unsignedbyte">>, AP10)),
+    ?assertEqual({ushort, 1}, Get(<<"a-unsignedshort">>, AP10)),
+    ?assertEqual({uint, 1}, Get(<<"a-unsignedint">>, AP10)),
+    ?assertEqual({int, 1}, Get(<<"a-signedint">>, AP10)),
+    ?assertEqual({timestamp, 1000}, Get(<<"a-timestamp">>, AP10)),
+    ?assertEqual({double, 1.0}, Get(<<"a-double">>, AP10)),
+    ?assertEqual({float, 1.0}, Get(<<"a-float">>, AP10)),
+    ?assertEqual(undefined, Get(<<"a-void">>, AP10)),
+    ?assertEqual({binary, <<"data">>}, Get(<<"a-binary">>, AP10)),
     %% x-headers do not go into app props
-    ?assertMatch(undefined, Get(<<"x-stream-filter">>, AP10)),
+    ?assertEqual(undefined, Get(<<"x-stream-filter">>, AP10)),
     %% arrays are not converted
-    ?assertMatch(undefined, Get(<<"a-array">>, AP10)),
+    ?assertEqual(undefined, Get(<<"a-array">>, AP10)),
     %% assert properties
 
     MsgL2 = mc:convert(mc_amqpl, Msg10),
@@ -374,7 +369,6 @@ amqpl_amqp_bin_amqpl(_Config) ->
     ?assertEqual({utf8, <<"msg-id">>}, mc:message_id(MsgL2)),
     ?assertEqual(1, mc:ttl(MsgL2)),
     ?assertEqual({utf8, <<"apple">>}, mc:x_header(<<"x-stream-filter">>, MsgL2)),
-    ct:pal("MSGL2 ~p", [MsgL2]),
     ?assertEqual(RoutingHeaders, mc:routing_headers(MsgL2, [])),
     ok.
 
@@ -415,7 +409,7 @@ mc_util_uuid_to_urn_roundtrip(_Config) ->
     UUID = <<88,184,103,176,129,81,31,86,27,212,115,34,152,7,253,96>>,
     S = mc_util:uuid_to_urn_string(UUID),
     ?assertEqual(<<"urn:uuid:58b867b0-8151-1f56-1bd4-73229807fd60">>, S),
-    ?assertMatch({ok, UUID}, mc_util:urn_string_to_uuid(S)),
+    ?assertEqual({ok, UUID}, mc_util:urn_string_to_uuid(S)),
     ok.
 
 do_n(0, _) ->
@@ -467,8 +461,8 @@ amqp_amqpl_amqp_uuid_correlation_id(_Config) ->
     MsgL = mc:convert(mc_amqpl, Msg),
     MsgOut = mc:convert(mc_amqp, MsgL),
 
-    ?assertMatch({uuid, UUID}, mc:correlation_id(MsgOut)),
-    ?assertMatch({uuid, UUID}, mc:message_id(MsgOut)),
+    ?assertEqual({uuid, UUID}, mc:correlation_id(MsgOut)),
+    ?assertEqual({uuid, UUID}, mc:message_id(MsgOut)),
 
     ok.
 
@@ -485,7 +479,6 @@ amqp_amqpl(_Config) ->
            thead2('x-list', list, [utf8(<<"l">>)]),
            thead2('x-map', map, [{utf8(<<"k">>), utf8(<<"v">>)}])
           ],
-    ct:pal("MAC ~p", [MAC]),
     M =  #'v1_0.message_annotations'{content = MAC},
     P = #'v1_0.properties'{content_type = {symbol, <<"ctype">>},
                            content_encoding = {symbol, <<"cenc">>},
@@ -550,8 +543,8 @@ amqp_amqpl(_Config) ->
 
     ?assertMatch({_, longstr, <<"apple">>}, header(<<"x-stream-filter">>, HL)),
     %% these are not coverted as not x- headers
-    ?assertMatch(undefined, header(<<"list">>, HL)),
-    ?assertMatch(undefined, header(<<"map">>, HL)),
+    ?assertEqual(undefined, header(<<"list">>, HL)),
+    ?assertEqual(undefined, header(<<"map">>, HL)),
     ?assertMatch({_ ,array, [{longstr,<<"l">>}]}, header(<<"x-list">>, HL)),
     ?assertMatch({_, table, [{<<"k">>,longstr,<<"v">>}]}, header(<<"x-map">>, HL)),
 
@@ -708,7 +701,6 @@ amqp_amqpl_amqp_bodies(_Config) ->
                           false ->
                               [Payload]
                       end,
-         % ct:pal("ProtoState ~p", [BodySections]),
          ?assertEqual(AssertBody, BodySections)
      end || Payload <- Bodies],
     ok.

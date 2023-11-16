@@ -110,14 +110,12 @@
 
 %% Convert state to another protocol
 %% all protocols must be able to convert to mc_amqp (AMQP 1.0)
--callback convert_to(Target :: protocol(), proto_state(),
-                     Env :: #{atom() => term()}) ->
+-callback convert_to(Target :: protocol(), proto_state(), environment()) ->
     proto_state() | not_implemented.
 
 %% Convert from another protocol
 %% all protocols must be able to convert from mc_amqp (AMQP 1.0)
--callback convert_from(Source :: protocol(), proto_state(),
-                       Env :: #{atom() => term()}) ->
+-callback convert_from(Source :: protocol(), proto_state(), environment()) ->
     proto_state() | not_implemented.
 
 %% emit a protocol specific state package
@@ -136,8 +134,7 @@
 init(Proto, Data, Anns) ->
     init(Proto, Data, Anns, #{}).
 
--spec init(protocol(), term(), annotations(),
-           environment()) -> state().
+-spec init(protocol(), term(), annotations(), environment()) -> state().
 init(Proto, Data, Anns0, Env)
   when is_atom(Proto)
        andalso is_map(Anns0)
@@ -285,7 +282,7 @@ set_ttl(Value, BasicMsg) ->
 convert(Proto, State) ->
     convert(Proto, State, #{}).
 
--spec convert(protocol(), state(), Env :: #{atom() => term()}) -> state().
+-spec convert(protocol(), state(), environment()) -> state().
 convert(Proto, #?MODULE{protocol = Proto} = State, _Env) ->
     State;
 convert(TargetProto, #?MODULE{protocol = SourceProto,
