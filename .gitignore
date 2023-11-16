@@ -70,6 +70,7 @@ rebar3.crashdump
 .ignore
 *.plt
 *.lock
+_rel
 
 /logs/
 /genhtml/
