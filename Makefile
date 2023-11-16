@@ -21,6 +21,8 @@ include plugins.mk
 # For example build looking_glass on Linux when targeting Docker.
 ADDITIONAL_PLUGINS ?=
 
+BUILD_DEPS = relx
+
 DEPS = rabbit_common rabbit $(PLUGINS) $(ADDITIONAL_PLUGINS)
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
