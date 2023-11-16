@@ -36,7 +36,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUserLimitsCommand do
 
       val ->
         Enum.map(val, fn {user, val} ->
-          {:ok, val_encoded} = JSON.encode(Map.new(val))
+          {:ok, val_encoded} = :rabbit_json.try_encode(Map.new(val))
           [user: user, limits: val_encoded]
         end)
     end
@@ -56,7 +56,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUserLimitsCommand do
         {:badrpc, node}
 
       val when is_list(val) or is_map(val) ->
-        {:ok, val_encoded} = JSON.encode(Map.new(val))
+        {:ok, val_encoded} = :rabbit_json.try_encode(Map.new(val))
         val_encoded
     end
   end

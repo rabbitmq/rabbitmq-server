@@ -558,7 +558,7 @@ defmodule RabbitMQCtl do
   end
 
   defp format_error({:error, :check_failed, err}, %{formatter: "json"}, _) when is_map(err) do
-    {:ok, res} = JSON.encode(err)
+    {:ok, res} = :rabbit_json.try_encode(err)
     {:error, ExitCodes.exit_unavailable(), res}
   end
 
@@ -578,12 +578,12 @@ defmodule RabbitMQCtl do
 
   # Catch all clauses
   defp format_error({:error, err}, %{formatter: "json"}, _) when is_map(err) do
-    {:ok, res} = JSON.encode(err)
+    {:ok, res} = :rabbit_json.try_encode(err)
     {:error, ExitCodes.exit_unavailable(), res}
   end
 
   defp format_error({:error, exit_code, err}, %{formatter: "json"}, _) when is_map(err) do
-    {:ok, res} = JSON.encode(err)
+    {:ok, res} = :rabbit_json.try_encode(err)
     {:error, exit_code, res}
   end
 
