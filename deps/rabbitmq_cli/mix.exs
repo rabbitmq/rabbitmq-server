@@ -22,7 +22,6 @@ defmodule RabbitMQCtl.MixfileBase do
         exclude: [
           CSV,
           CSV.Encode,
-          JSON,
           :mnesia,
           :msacc,
           :observer_cli,
