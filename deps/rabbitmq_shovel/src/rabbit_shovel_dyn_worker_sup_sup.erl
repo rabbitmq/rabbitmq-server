@@ -41,16 +41,18 @@ start_child({VHost, ShovelName} = Name, Def) ->
     LockId = rabbit_shovel_locks:lock(Name),
     cleanup_specs(),
     rabbit_log_shovel:debug("Starting a mirrored supervisor named '~s' in virtual host '~s'", [ShovelName, VHost]),
-    Result = case mirrored_supervisor:start_child(
+    case child_exists(Name)
+        orelse mirrored_supervisor:start_child(
            ?SUPERVISOR,
            {id(Name), {rabbit_shovel_dyn_worker_sup, start_link, [Name, obfuscated_uris_parameters(Def)]},
             transient, ?WORKER_WAIT, worker, [rabbit_shovel_dyn_worker_sup]}) of
+        true                             -> ok;
         {ok,                      _Pid}  -> ok;
         {error, {already_started, _Pid}} -> ok
     end,
     %% release the lock if we managed to acquire one
     rabbit_shovel_locks:unlock(LockId),
-    Result.
+    ok.
 
 obfuscated_uris_parameters(Def) when is_map(Def) ->
     to_map(rabbit_shovel_parameters:obfuscate_uris_in_definition(to_list(Def)));
