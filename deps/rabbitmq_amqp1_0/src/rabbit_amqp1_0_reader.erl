@@ -459,7 +459,7 @@ handle_1_0_session_frame(Channel, Frame, State) ->
             case Frame of
                 #'v1_0.end'{} ->
                     untrack_channel(Channel, State);
-                #'v1_0.transfer'{} ->
+                {#'v1_0.transfer'{}, _MsgPart} ->
                     case (State#v1.connection_state =:= blocking) of
                         true ->
                             ok = rabbit_heartbeat:pause_monitor(
