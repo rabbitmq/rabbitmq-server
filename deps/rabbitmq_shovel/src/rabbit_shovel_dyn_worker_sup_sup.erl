@@ -60,9 +60,11 @@ obfuscated_uris_parameters(Def) when is_list(Def) ->
     rabbit_shovel_parameters:obfuscate_uris_in_definition(Def).
 
 child_exists(Name) ->
-    lists:any(fun ({{_, N}, _, _, _}) -> N =:= Name;
-                  %% older format, pre 3.13.0 and 3.12.8. See rabbitmq/rabbitmq-server#9894.
-                  ({N, _, _, _})      -> N =:= Name
+    Id = id(Name),
+    %% older format, pre 3.13.0 and 3.12.8. See rabbitmq/rabbitmq-server#9894.
+    OldId = old_id(Name),
+    lists:any(fun ({ChildId, _, _, _}) ->
+                      ChildId =:= Id orelse ChildId =:= OldId
               end,
               mirrored_supervisor:which_children(?SUPERVISOR)).
 
@@ -100,7 +102,7 @@ stop_child({VHost, ShovelName} = Name) ->
 cleanup_specs() ->
     Children = mirrored_supervisor:which_children(?SUPERVISOR),
 
-    SupIdSet = sets:from_list([element(1, S) || S <- Children]),
+    ChildIdSet = sets:from_list([element(1, S) || S <- Children]),
     ParamsSet = sets:from_list(
                   lists:flatmap(
                     fun(S) ->
@@ -110,16 +112,16 @@ cleanup_specs() ->
                             [id(Name), old_id(Name)]
                     end,
                     rabbit_runtime_parameters:list_component(<<"shovel">>))),
-    F = fun(SupId, ok) ->
+    F = fun(ChildId, ok) ->
             try
-                _ = mirrored_supervisor:delete_child(?SUPERVISOR, SupId)
+                _ = mirrored_supervisor:delete_child(?SUPERVISOR, ChildId)
             catch _:_:_Stacktrace ->
                 ok
             end,
             ok
         end,
     %% Delete any supervisor children that do not have their respective runtime parameters in the database.
-    SetToCleanUp = sets:subtract(SupIdSet, ParamsSet),
+    SetToCleanUp = sets:subtract(ChildIdSet, ParamsSet),
     ok = sets:fold(F, ok, SetToCleanUp).
 
 %%----------------------------------------------------------------------------
