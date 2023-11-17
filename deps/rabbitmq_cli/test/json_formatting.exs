@@ -29,7 +29,7 @@ defmodule JSONFormattingTest do
         error_check(command, exit_ok())
       end)
 
-    {:ok, doc} = :rabbit_json.try_decode(output)
+    {:ok, doc} = JSON.decode(output)
 
     assert Map.has_key?(doc, "memory")
     assert Map.has_key?(doc, "file_descriptors")
@@ -53,7 +53,7 @@ defmodule JSONFormattingTest do
         error_check(command, exit_ok())
       end)
 
-    {:ok, doc} = :rabbit_json.try_decode(output)
+    {:ok, doc} = JSON.decode(output)
 
     assert Enum.member?(doc["disk_nodes"], node)
     assert Map.has_key?(doc["listeners"], node)
