@@ -54,7 +54,8 @@ groups() ->
        timeout_close_sent,
        max_segment_size_bytes_validation,
        close_connection_on_consumer_update_timeout,
-       set_filter_size
+       set_filter_size,
+       vhost_queue_limit
       ]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
@@ -153,6 +154,14 @@ init_per_testcase(close_connection_on_consumer_update_timeout = TestCase, Config
                                       set_env,
                                       [rabbitmq_stream, request_timeout, 2000]),
     rabbit_ct_helpers:testcase_started(Config, TestCase);
+init_per_testcase(vhost_queue_limit = TestCase, Config) ->
+    QueueCount = rabbit_ct_broker_helpers:rpc(Config,
+                                              0,
+                                              rabbit_amqqueue,
+                                              count,
+                                              [<<"/">>]),
+    ok = rabbit_ct_broker_helpers:set_vhost_limit(Config, 0, <<"/">>, max_queues, QueueCount + 5),
+    rabbit_ct_helpers:testcase_started(Config, TestCase);
 init_per_testcase(TestCase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, TestCase).
 
@@ -177,6 +186,13 @@ end_per_testcase(close_connection_on_consumer_update_timeout = TestCase, Config)
                                       application,
                                       set_env,
                                       [rabbitmq_stream, request_timeout, 60000]),
+    rabbit_ct_helpers:testcase_finished(Config, TestCase);
+end_per_testcase(vhost_queue_limit = TestCase, Config) ->
+    _ = rabbit_ct_broker_helpers:rpc(Config,
+                                     0,
+                                     rabbit_vhost_limit,
+                                     clear,
+                                     [<<"/">>, <<"guest">>]),
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 end_per_testcase(TestCase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, TestCase).
@@ -625,6 +641,66 @@ set_filter_size(Config) ->
 
     _ = test_close(Transport, S, C3),
     closed = wait_for_socket_close(Transport, S, 10),
+    ok.
+
+vhost_queue_limit(Config) ->
+    T = gen_tcp,
+    Port = get_port(T, Config),
+    Opts = get_opts(T),
+    {ok, S} = T:connect("localhost", Port, Opts),
+    C = rabbit_stream_core:init(0),
+    test_peer_properties(T, S, C),
+    test_authenticate(T, S, C),
+    QueueCount = rabbit_ct_broker_helpers:rpc(Config,
+                                              0,
+                                              rabbit_amqqueue,
+                                              count,
+                                              [<<"/">>]),
+    {ok, QueueLimit} = rabbit_ct_broker_helpers:rpc(Config,
+                                                    0,
+                                                    rabbit_vhost_limit,
+                                                    queue_limit,
+                                                    [<<"/">>]),
+
+    PartitionCount = QueueLimit - 1 - QueueCount,
+    Name = atom_to_binary(?FUNCTION_NAME, utf8),
+    Partitions = [unicode:characters_to_binary([Name, <<"-">>, integer_to_binary(N)]) || N <- lists:seq(0, PartitionCount)],
+    Bks = [integer_to_binary(N) || N <- lists:seq(0, PartitionCount)],
+    SsCreationFrame = frame({request, 1, {create_super_stream, Name, Partitions, Bks, #{}}}),
+    ok = T:send(S, SsCreationFrame),
+    {Cmd1, _} = receive_commands(T, S, C),
+    ?assertMatch({response, 1, {create_super_stream, ?RESPONSE_CODE_OK}},
+                 Cmd1),
+
+    SsCreationFrameKo = frame({request, 1, {create_super_stream,
+                                            <<"exceed-queue-limit">>,
+                                            [<<"s1">>, <<"s2">>, <<"s3">>],
+                                            [<<"1">>, <<"2">>, <<"3">>], #{}}}),
+
+    ok = T:send(S, SsCreationFrameKo),
+    {Cmd2, _} = receive_commands(T, S, C),
+    ?assertMatch({response, 1, {create_super_stream, ?RESPONSE_CODE_PRECONDITION_FAILED}},
+                 Cmd2),
+
+    CreateStreamFrame = rabbit_stream_core:frame({request, 1, {create_stream, <<"exceed-queue-limit">>, #{}}}),
+    ok = T:send(S, CreateStreamFrame),
+    {Cmd3, C} = receive_commands(T, S, C),
+    ?assertMatch({response, 1, {create_stream, ?RESPONSE_CODE_PRECONDITION_FAILED}}, Cmd3),
+
+    SsDeletionFrame = frame({request, 1, {delete_super_stream, Name}}),
+    ok = T:send(S, SsDeletionFrame),
+    {Cmd4, _} = receive_commands(T, S, C),
+    ?assertMatch({response, 1, {delete_super_stream, ?RESPONSE_CODE_OK}},
+                 Cmd4),
+
+    ok = T:send(S, rabbit_stream_core:frame({request, 1, {create_stream, Name, #{}}})),
+    {Cmd5, C} = receive_commands(T, S, C),
+    ?assertMatch({response, 1, {create_stream, ?RESPONSE_CODE_OK}}, Cmd5),
+
+    ok = T:send(S, rabbit_stream_core:frame({request, 1, {delete_stream, Name}})),
+    {Cmd6, C} = receive_commands(T, S, C),
+    ?assertMatch({response, 1, {delete_stream, ?RESPONSE_CODE_OK}}, Cmd6),
+
     ok.
 
 consumer_count(Config) ->
