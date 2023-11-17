@@ -711,9 +711,9 @@ clear_topic_permissions(Username, VirtualHost, Exchange, ActingUser) ->
             end)),
         rabbit_log:info("Successfully cleared topic permissions on exchange '~ts' for '~ts' in virtual host '~ts'",
                         [Exchange, Username, VirtualHost]),
-        rabbit_event:notify(permission_deleted, [{user,  Username},
-                                                 {vhost, VirtualHost},
-                                                 {user_who_performed_action, ActingUser}]),
+        rabbit_event:notify(topic_permission_deleted, [{user,  Username},
+                                                       {vhost, VirtualHost},
+                                                       {user_who_performed_action, ActingUser}]),
         R
     catch
         throw:{error, {no_such_vhost, _}} = Error ->
