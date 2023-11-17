@@ -53,6 +53,7 @@ exports_files([
 # gazelle:exclude deps/gun
 # gazelle:exclude deps/inet_tcp_proxy
 # gazelle:exclude deps/jose
+# gazelle:exclude deps/json
 # gazelle:exclude deps/meck
 # gazelle:exclude deps/observer_cli
 # gazelle:exclude deps/osiris
