@@ -388,6 +388,12 @@ use_repo(
     "getopt",
     "gun",
     "jose",
+<<<<<<< HEAD
+=======
+    "json",
+    "khepri",
+    "khepri_mnesia_migration",
+>>>>>>> 7ef4bec607 (Revert "Remove Elixir json package in one more place #9926 #9932")
     "observer_cli",
     "prometheus",
     "ranch",
