@@ -19,6 +19,7 @@ true = Code.append_path(Path.join([System.get_env("DEPS_DIR"), "rabbit_common", 
 true = Code.append_path(Path.join([System.get_env("DEPS_DIR"), "rabbit", "ebin"]))
 
 true = Code.append_path(Path.join(["_build", Atom.to_string(Mix.env()), "lib", "amqp", "ebin"]))
+true = Code.append_path(Path.join(["_build", Atom.to_string(Mix.env()), "lib", "json", "ebin"]))
 true = Code.append_path(Path.join(["_build", Atom.to_string(Mix.env()), "lib", "x509", "ebin"]))
 
 if function_exported?(Mix, :ensure_application!, 1) do
