@@ -408,6 +408,7 @@ use_repo(
     "gun",
     "horus",
     "jose",
+    "json",
     "khepri",
     "khepri_mnesia_migration",
     "observer_cli",
