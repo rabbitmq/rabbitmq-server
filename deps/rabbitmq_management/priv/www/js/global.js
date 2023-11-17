@@ -209,7 +209,7 @@ var HELP = {
     'queue-stream-max-segment-size-bytes':
       'Total segment size for stream segments on disk.<br/>(Sets the x-stream-max-segment-size-bytes argument.)',
 
-    'queue-stream-max-segment-size-bytes':
+    'queue-stream-filter-size-bytes':
       'Size of the filter data attached to each stream chunk.<br/>(Sets the x-stream-filter-size-bytes argument.)',
 
     'queue-auto-delete':
