@@ -1,5 +1,7 @@
 -module(rabbit_stream_utils_SUITE).
 
+-feature(maybe_expr, enable).
+
 -compile(nowarn_export_all).
 -compile(export_all).
 
@@ -17,7 +19,7 @@ suite() ->
     [{timetrap, {seconds, 30}}].
 
 groups() ->
-    [{tests, [], [sort_partitions, filter_spec, filter_defined]}].
+    [{tests, [], [sort_partitions, filter_spec, filter_defined, test_maybe]}].
 
 init_per_suite(Config) ->
     Config.
@@ -100,3 +102,18 @@ binding(Destination, Order) ->
 
 binding(Destination) ->
     #binding{destination = #resource{name = Destination}, args = []}.
+
+test_maybe(_) ->
+    R = maybe
+            ok ?= callme(),
+            S = hello("world"),
+            "bye bye " ++ S
+        end,
+    io:format("Result = ~p", [R]),
+    ok.
+
+callme() ->
+    ok.
+
+hello(S) ->
+    "hello " ++ S.
