@@ -1,0 +1,16 @@
+%% vim:ft=erlang:
+{"3.13.0",
+ [{"3.12.9",
+  [{update, rabbit_misc},
+   %% Caution: API removed. Callers of this module might be reloaded after,
+   %% thus causing `undef' exceptions.
+   {update, rabbit_net},
+   {update, rabbit_registry},
+   %% Caution: API removed. Callers of this module might be reloaded after,
+   %% thus causing `function_clause' exceptions.
+   {update, rabbit_writer}]}],
+ [{"3.12.9",
+  [{update, rabbit_misc},
+   {update, rabbit_net},
+   {update, rabbit_registry},
+   {update, rabbit_writer}]}]}.
