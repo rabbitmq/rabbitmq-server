@@ -15,6 +15,7 @@ defmodule RabbitMQCtl.MixfileBase do
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
       escript: [main_module: RabbitMQCtl, emu_args: "-hidden", path: "escript/rabbitmqctl"],
+      prune_code_paths: false,
       deps: deps(Mix.env()),
       aliases: aliases(),
       xref: [
