@@ -29,13 +29,8 @@ groups() ->
                   roundtrip_classic_queue_with_drain,
                   roundtrip_quorum_queue_with_drain,
                   roundtrip_stream_queue_with_drain,
-<<<<<<< HEAD
-                  message_headers_conversion
-=======
-                  amqp_stream_amqpl,
                   message_headers_conversion,
                   resource_alarm
->>>>>>> 5a870df54c (Fix AMQP connection throttling)
                  ]},
      {metrics, [], [
                     auth_attempt_metrics
