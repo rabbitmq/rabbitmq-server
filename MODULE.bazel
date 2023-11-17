@@ -267,6 +267,30 @@ erlang_package.git_package(
     repository = "michaelklishin/erlang-jose",
 )
 
+<<<<<<< HEAD
+=======
+erlang_package.hex_package(
+    name = "json",
+    build_file = "@rabbitmq-server//bazel:BUILD.json",
+    sha256 = "9abf218dbe4ea4fcb875e087d5f904ef263d012ee5ed21d46e9dbca63f053d16",
+    version = "1.4.1",
+)
+
+erlang_package.git_package(
+    name = "khepri",
+    build_file = "@rabbitmq-server//bazel:BUILD.khepri",
+    commit = "952a52969eaa97a4327806b4fc062238dc3e6214",
+    repository = "rabbitmq/khepri",
+)
+
+erlang_package.git_package(
+    name = "khepri_mnesia_migration",
+    build_file = "@rabbitmq-server//bazel:BUILD.khepri_mnesia_migration",
+    commit = "56d7d123cc3e9dce309582b4d45ea58f3580ee71",
+    repository = "rabbitmq/khepri_mnesia_migration",
+)
+
+>>>>>>> 5a51547d9e (Revert "Remove hex.pm json package #9926 #9932")
 erlang_package.hex_package(
     name = "thoas",
     build_file = "@rabbitmq-server//bazel:BUILD.thoas",
