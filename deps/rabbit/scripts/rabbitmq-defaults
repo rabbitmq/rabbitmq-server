@@ -7,7 +7,7 @@
 ##
 
 ### next line potentially updated in package install steps
-if test -f "$RABBITMQ_HOME/bin/RabbitMQ"; then
+if test -f "$RABBITMQ_HOME/bin/rabbitmq"; then
     SYS_PREFIX=$RABBITMQ_HOME/$RABBITMQ_NODENAME
 else
     SYS_PREFIX=
