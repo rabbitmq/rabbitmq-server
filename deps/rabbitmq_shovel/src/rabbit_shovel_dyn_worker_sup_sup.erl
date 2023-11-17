@@ -72,8 +72,18 @@ stop_child({VHost, ShovelName} = Name) ->
     case get({shovel_worker_autodelete, Name}) of
         true -> ok; %% [1]
         _ ->
-            ok = mirrored_supervisor:terminate_child(?SUPERVISOR, id(Name)),
-            ok = mirrored_supervisor:delete_child(?SUPERVISOR, id(Name)),
+            case mirrored_supervisor:terminate_child(?SUPERVISOR, id(Name)) of
+                ok ->
+                    ok = mirrored_supervisor:delete_child(?SUPERVISOR, id(Name));
+                {error, not_found} ->
+                    %% try older format, pre 3.13.0 and 3.12.8. See rabbitmq/rabbitmq-server#9894.
+                    case mirrored_supervisor:terminate_child(?SUPERVISOR, old_id(Name)) of
+                        ok ->
+                            ok = mirrored_supervisor:delete_child(?SUPERVISOR, old_id(Name));
+                        {error, not_found} ->
+                            ok
+                    end
+            end,
             rabbit_shovel_status:remove(Name)
     end,
     rabbit_shovel_locks:unlock(LockId),
@@ -90,33 +100,38 @@ stop_child({VHost, ShovelName} = Name) ->
 cleanup_specs() ->
     Children = mirrored_supervisor:which_children(?SUPERVISOR),
 
-    %% older format, pre 3.13.0 and 3.12.8. See rabbitmq/rabbitmq-server#9894
-    OldStyleSpecsSet = sets:from_list([element(1, S) || S <- Children]),
-    NewStyleSpecsSet = sets:from_list([element(2, element(1, S)) || S <- Children]),
-    ParamsSet = sets:from_list([ {proplists:get_value(vhost, S), proplists:get_value(name, S)}
-                                 || S <- rabbit_runtime_parameters:list_component(<<"shovel">>) ]),
-    F = fun(Name, ok) ->
+    SupIdSet = sets:from_list([element(1, S) || S <- Children]),
+    ParamsSet = params_to_child_ids(rabbit_khepri:is_enabled()),
+    F = fun(SupId, ok) ->
             try
                 %% The supervisor operation is very unlikely to fail, it's the schema
                 %% data stores that can make a fuss about a non-existent or non-standard value passed in.
                 %% For example, an old style Shovel name is an invalid Khepri query path element. MK.
-                _ = mirrored_supervisor:delete_child(?SUPERVISOR, id(Name))
+                _ = mirrored_supervisor:delete_child(?SUPERVISOR, SupId)
             catch _:_:_Stacktrace ->
                 ok
             end,
             ok
         end,
-    %% Khepri won't handle values in OldStyleSpecsSet in its path well. At the same time,
-    %% those older elements simply cannot exist in Khepri because having Khepri enabled
-    %% means a cluster-wide move to 3.13+, so we can conditionally compute what specs we care about. MK.
-    AllSpecs =
-        case rabbit_khepri:is_enabled() of
-            true  -> NewStyleSpecsSet;
-            false -> sets:union(NewStyleSpecsSet, OldStyleSpecsSet)
-        end,
     %% Delete any supervisor children that do not have their respective runtime parameters in the database.
-    SetToCleanUp = sets:subtract(AllSpecs, ParamsSet),
+    SetToCleanUp = sets:subtract(SupIdSet, ParamsSet),
     ok = sets:fold(F, ok, SetToCleanUp).
+
+params_to_child_ids(_KhepriEnabled = true) ->
+    %% Old id format simply cannot exist in Khepri because having Khepri enabled
+    %% means a cluster-wide move to 3.13+, so we can conditionally compute what specs we care about. MK.
+    sets:from_list([id({proplists:get_value(vhost, S), proplists:get_value(name, S)})
+                    || S <- rabbit_runtime_parameters:list_component(<<"shovel">>)]);
+params_to_child_ids(_KhepriEnabled = false) ->
+    sets:from_list(
+      lists:flatmap(
+        fun(S) ->
+                Name = {proplists:get_value(vhost, S), proplists:get_value(name, S)},
+                %% Supervisor Id format was different pre 3.13.0 and 3.12.8.
+                %% Try both formats to cover the transitionary mixed version cluster period.
+                [id(Name), old_id(Name)]
+        end,
+        rabbit_runtime_parameters:list_component(<<"shovel">>))).
 
 %%----------------------------------------------------------------------------
 
@@ -124,7 +139,8 @@ init([]) ->
     {ok, {{one_for_one, 3, 10}, []}}.
 
 id({V, S} = Name) ->
-    {[V, S], Name};
+    {[V, S], Name}.
+
 %% older format, pre 3.13.0 and 3.12.8. See rabbitmq/rabbitmq-server#9894
-id(Other) ->
-    Other.
+old_id({_V, _S} = Name) ->
+    Name.
