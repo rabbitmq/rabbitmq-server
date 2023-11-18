@@ -27,7 +27,7 @@
 # it easy to accidentally type ctrl-c when trying
 # to reach for ctrl-d. ctrl-c on a live node can
 # have very undesirable results
-+Bi
+#+Bi
 
 +W w
 
