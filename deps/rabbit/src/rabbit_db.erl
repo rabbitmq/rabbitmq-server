@@ -25,6 +25,7 @@
          ensure_dir_exists/0,
          is_init_finished/0,
          clear_init_finished/0]).
+-export([run/1]).
 
 %% Exported to be used by various rabbit_db_* modules
 -export([
@@ -332,3 +333,16 @@ list_in_khepri(Path, Options) ->
         {ok, Map} -> maps:values(Map);
         _         -> []
     end.
+
+%% -------------------------------------------------------------------
+%% run().
+%% -------------------------------------------------------------------
+
+-spec run(Funs) -> Ret when
+      Funs :: #{mnesia := Fun},
+      Fun :: fun(() -> Ret),
+      Ret :: any().
+%% @private
+
+run(Funs) ->
+    rabbit_khepri:handle_fallback(Funs).

@@ -1598,7 +1598,11 @@ handle_fallback(#{mnesia := MnesiaFun, khepri := KhepriFunOrRet})
         _ ->
             mnesia_to_khepri:handle_fallback(
               ?STORE_ID, ?MIGRATION_ID, MnesiaFun, KhepriFunOrRet)
-    end.
+    end;
+handle_fallback(#{mnesia := MnesiaFun})
+  when is_function(MnesiaFun, 0) ->
+    ?assertEqual(disabled, get_feature_state()),
+    MnesiaFun().
 
 -ifdef(TEST).
 -define(FORCED_MDS_KEY, {?MODULE, forced_metadata_store}).

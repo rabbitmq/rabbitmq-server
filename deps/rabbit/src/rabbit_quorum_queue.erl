@@ -27,7 +27,7 @@
 -export([settle/5, dequeue/5, consume/3, cancel/5]).
 -export([credit/5]).
 -export([purge/1]).
--export([stateless_deliver/2, deliver/3]).
+-export([stateless_deliver/2, deliver/2, deliver/3]).
 -export([dead_letter_publish/5]).
 -export([cluster_state/1, status/2]).
 -export([update_consumer_handler/8, update_consumer/9]).
@@ -931,6 +931,9 @@ deliver0(QName, undefined, Msg, QState0) ->
 deliver0(QName, Correlation, Msg, QState0) ->
     rabbit_fifo_client:enqueue(QName, Correlation,
                                Msg, QState0).
+
+deliver(QSs, Msg0) ->
+    deliver(QSs, Msg0, #{}).
 
 deliver(QSs, Msg0, Options) ->
     Correlation = maps:get(correlation, Options, undefined),

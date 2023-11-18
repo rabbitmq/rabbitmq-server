@@ -41,6 +41,7 @@
          handle_down/4,
          handle_event/3,
          module/2,
+         deliver/3,
          deliver/4,
          settle/5,
          credit/5,
@@ -543,6 +544,9 @@ deliver(Qs, Message, Options, State) ->
         exit:Reason ->
             {error, Reason}
     end.
+
+deliver(Qs, Message, State) ->
+    deliver(Qs, Message, #{}, State).
 
 deliver0(Qs, Message0, Options, stateless) ->
     ByTypeAndBindingKeys =

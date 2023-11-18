@@ -268,6 +268,10 @@ handle_message({send_command_and_notify, QPid, ChPid, MethodRecord, Content},
 handle_message({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     rabbit_amqqueue_common:notify_sent_queue_down(QPid),
     State;
+handle_message({inet_reply, _, ok}, State) ->
+    rabbit_event:ensure_stats_timer(State, #wstate.stats_timer, emit_stats);
+handle_message({inet_reply, _, Status}, _State) ->
+    exit({writer, send_failed, Status});
 handle_message(emit_stats, State = #wstate{reader = ReaderPid}) ->
     ReaderPid ! ensure_stats,
     rabbit_event:reset_stats_timer(State, #wstate.stats_timer);

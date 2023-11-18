@@ -39,6 +39,7 @@
          consume/3,
          cancel/5,
          handle_event/3,
+         deliver/2,
          deliver/3,
          settle/5,
          credit/5,
@@ -362,10 +363,15 @@ settlement_action(_Type, _QRef, [], Acc) ->
 settlement_action(Type, QRef, MsgSeqs, Acc) ->
     [{Type, QRef, MsgSeqs} | Acc].
 
+deliver(QSs, Msg0) ->
+    deliver(QSs, Msg0, #{}).
+
 -spec deliver([{amqqueue:amqqueue(), state()}],
               Delivery :: mc:state(),
               rabbit_queue_type:delivery_options()) ->
     {[{amqqueue:amqqueue(), state()}], rabbit_queue_type:actions()}.
+deliver(Qs0, #delivery{message = Message}, Options) ->
+    deliver(Qs0, Message, Options);
 deliver(Qs0, Msg0, Options) ->
     %% add guid to content here instead of in rabbit_basic:message/3,
     %% as classic queues are the only ones that need it
