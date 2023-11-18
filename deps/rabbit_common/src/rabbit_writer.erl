@@ -188,12 +188,15 @@ initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats, GC
           #wstate.stats_timer).
 
 system_continue(Parent, Deb, State) ->
+    rabbit_log:error("WRITER SYSTEM CONTINUE -> ~p~n", [State]),
     mainloop(Deb, State#wstate{reader = Parent}).
 
-system_terminate(Reason, _Parent, _Deb, _State) ->
+system_terminate(Reason, _Parent, _Deb, State) ->
+    rabbit_log:error("WRITER SYSTEM TERMINATE -> ~p~n~p~n", [Reason, State]),
     exit(Reason).
 
 system_code_change(Misc, _Module, _OldVsn, _Extra) ->
+    rabbit_log:error("WRITER SYSTEM CODE CHANGE -> ~p~n", [Misc]),
     {ok, Misc}.
 
 enter_mainloop(Identity, State) ->
@@ -203,36 +206,37 @@ enter_mainloop(Identity, State) ->
     mainloop(Deb, State).
 
 mainloop(Deb, State) ->
-    try
-        mainloop1(Deb, State)
-    catch
-        exit:Error:St ->
-            rabbit_log:error("WRITER EXIT: ~p~n~p~n~p~n", [Error, St, State]),
-            timer:sleep(500),
-            #wstate{reader = ReaderPid, channel = Channel} = State,
-            ReaderPid ! {channel_exit, Channel, Error};
-        C:R:S ->
-            rabbit_log:error("WRITER EXIT: ~p~n~p~n~p~n", [R, S, State]),
-            timer:sleep(500),
-            erlang:raise(C, R, S)
-    end.
+    %try
+        mainloop1(Deb, State).
+    %catch
+        %exit:Error:St ->
+            %rabbit_log:error("WRITER EXIT: ~p~n~p~n~p~n", [Error, St, State]),
+            %timer:sleep(500),
+            %#wstate{reader = ReaderPid, channel = Channel} = State,
+            %ReaderPid ! {channel_exit, Channel, Error};
+        %C:R:S ->
+            %rabbit_log:error("WRITER EXIT: ~p~n~p~n~p~n", [R, S, State]),
+            %timer:sleep(500),
+            %erlang:raise(C, R, S)
+    %end.
 
-mainloop1(Deb, State = #wstate{pending = []}) ->
-    receive
-        Message -> {Deb1, State1} = handle_message(Deb, Message, State),
-                   ?MODULE:mainloop1(Deb1, State1)
-    after ?HIBERNATE_AFTER ->
-            erlang:hibernate(?MODULE, mainloop, [Deb, State])
-    end;
+%mainloop1(Deb, State = #wstate{pending = []}) ->
+    %receive
+        %Message -> {Deb1, State1} = handle_message(Deb, Message, State),
+                   %mainloop1(Deb1, State1)
+    %after ?HIBERNATE_AFTER ->
+            %erlang:hibernate(?MODULE, mainloop, [Deb, State])
+    %end;
 mainloop1(Deb, State) ->
     receive
         Message -> {Deb1, State1} = handle_message(Deb, Message, State),
-                   ?MODULE:mainloop1(Deb1, State1)
-    after 0 ->
-            ?MODULE:mainloop1(Deb, internal_flush(State))
+                   mainloop1(Deb1, internal_flush(State1))
+    %after 0 ->
+            %mainloop1(Deb, internal_flush(State))
     end.
 
 handle_message(Deb, {system, From, Req}, State = #wstate{reader = Parent}) ->
+    rabbit_log:error("WRITER SYSTEM MSG -> ~p~n", [Req]),
     sys:handle_system_msg(Req, From, Parent, ?MODULE, Deb, State);
 handle_message(Deb, Message, State) ->
     {Deb, handle_message(Message, State)}.
