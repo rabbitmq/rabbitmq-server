@@ -29,7 +29,7 @@
 
 -export([start/6, start_link/6, start/7, start_link/7, start/8, start_link/8]).
 
--export([system_continue/3, system_terminate/4, system_code_change/4]).
+-export([system_continue/3, system_terminate/4, system_code_change/4, system_get_state/1, system_replace_state/2]).
 
 -export([send_command/2, send_command/3,
          send_command_sync/2, send_command_sync/3,
@@ -196,6 +196,13 @@ system_terminate(Reason, _Parent, _Deb, _State) ->
 system_code_change(Misc, _Module, _OldVsn, _Extra) ->
     {ok, Misc}.
 
+system_get_state(Misc) ->
+    Misc.
+
+system_replace_state(StateFun, Misc) ->
+    NState = StateFun(Misc),
+    {ok, NState, NState}.
+
 enter_mainloop(Identity, State) ->
     ?LG_PROCESS_TYPE(writer),
     Deb = sys:debug_options([]),
@@ -206,10 +213,16 @@ mainloop(Deb, State) ->
     try
         mainloop1(Deb, State)
     catch
-        exit:Error -> #wstate{reader = ReaderPid, channel = Channel} = State,
-                      ReaderPid ! {channel_exit, Channel, Error}
-    end,
-    done.
+        exit:Error:St ->
+            rabbit_log:error("WRITER EXIT: ~p~n~p~n~p~n", [Error, St, State]),
+            timer:sleep(500),
+            #wstate{reader = ReaderPid, channel = Channel} = State,
+            ReaderPid ! {channel_exit, Channel, Error};
+        C:R:S ->
+            rabbit_log:error("WRITER EXIT: ~p~n~p~n~p~n", [R, S, State]),
+            timer:sleep(500),
+            erlang:raise(C, R, S)
+    end.
 
 mainloop1(Deb, State = #wstate{pending = []}) ->
     receive
@@ -227,6 +240,7 @@ mainloop1(Deb, State) ->
     end.
 
 handle_message(Deb, {system, From, Req}, State = #wstate{reader = Parent}) ->
+    rabbit_log:error("WRITER SYSTEM MSG -> ~p~n", [Req]),
     sys:handle_system_msg(Req, From, Parent, ?MODULE, Deb, State);
 handle_message(Deb, Message, State) ->
     {Deb, handle_message(Message, State)}.
@@ -389,6 +403,7 @@ internal_flush(State0 = #wstate{sock = Sock, pending = Pending}) ->
         ok ->
             ok;
         {error, Reason} ->
+            rabbit_log:error("WRITER SEND -> Sock=~p~nInfo=~p~n", [Sock, inet:info(Sock)]),
             exit({writer, send_failed, Reason})
     end,
     State = State0#wstate{pending = []},

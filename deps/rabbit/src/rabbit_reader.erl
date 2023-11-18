@@ -46,7 +46,7 @@
 -export([start_link/2, info_keys/0, info/1, info/2, force_event_refresh/2,
          shutdown/2]).
 
--export([system_continue/3, system_terminate/4, system_code_change/4]).
+-export([system_continue/3, system_terminate/4, system_code_change/4, system_get_state/1, system_replace_state/2]).
 
 -export([init/3, mainloop/4, recvloop/4]).
 
@@ -169,6 +169,7 @@ init(Parent, HelperSup, Ref) ->
 -spec system_continue(_,_,{[binary()], non_neg_integer(), #v1{}}) -> any().
 
 system_continue(Parent, Deb, {Buf, BufLen, State}) ->
+    %rabbit_log:error("READER SYSTEM CONTINUE -> ~p~n", [State]),
     mainloop(Deb, Buf, BufLen, State#v1{parent = Parent}).
 
 -spec system_terminate(_,_,_,_) -> no_return().
@@ -179,7 +180,16 @@ system_terminate(Reason, _Parent, _Deb, _State) ->
 -spec system_code_change(_,_,_,_) -> {'ok',_}.
 
 system_code_change(Misc, _Module, _OldVsn, _Extra) ->
+    %rabbit_log:error("READER SYSTEM CODE CHANGE -> ~p~n", [Misc]),
     {ok, Misc}.
+
+system_get_state({_Buf, _BufLen, State}) ->
+    State.
+
+system_replace_state(StateFun, {Buf, BufLen, State}) ->
+    NState = StateFun(State),
+    NMisc = {Buf, BufLen, NState},
+    {ok, NState, NMisc}.
 
 -spec info_keys() -> rabbit_types:info_keys().
 
@@ -348,111 +358,101 @@ start_connection(Parent, HelperSup, RanchRef, Deb, Sock) ->
                                          connection_blocked_message_sent = false
                                          },
                 proxy_socket = rabbit_net:maybe_get_proxy_socket(Sock)},
-    try
-        case run({?MODULE, recvloop,
-                  [Deb, [], 0, switch_callback(rabbit_event:init_stats_timer(
+    %try
+        recvloop(Deb, [], 0, switch_callback(rabbit_event:init_stats_timer(
                                                  State, #v1.stats_timer),
-                                               handshake, 8)]}) of
-            %% connection was closed cleanly by the client
-            #v1{connection = #connection{user  = #user{username = Username},
-                                         vhost = VHost}} ->
-                rabbit_log_connection:info("closing AMQP connection ~tp (~ts, vhost: '~ts', user: '~ts')",
-                    [self(), dynamic_connection_name(Name), VHost, Username]);
-            %% just to be more defensive
-            _ ->
-                rabbit_log_connection:info("closing AMQP connection ~tp (~ts)",
-                    [self(), dynamic_connection_name(Name)])
-            end
-    catch
-        Ex ->
-          log_connection_exception(dynamic_connection_name(Name), Ex)
-    after
-        %% We don't call gen_tcp:close/1 here since it waits for
-        %% pending output to be sent, which results in unnecessary
-        %% delays. We could just terminate - the reader is the
-        %% controlling process and hence its termination will close
-        %% the socket. However, to keep the file_handle_cache
-        %% accounting as accurate as possible we ought to close the
-        %% socket w/o delay before termination.
-        rabbit_net:fast_close(RealSocket),
-        rabbit_networking:unregister_connection(self()),
-        rabbit_core_metrics:connection_closed(self()),
-        ClientProperties = case get(client_properties) of
-            undefined ->
-                [];
-            Properties ->
-                Properties
-        end,
-        EventProperties = [{name, Name},
-                           {pid, self()},
-                           {node, node()},
-                           {client_properties, ClientProperties}],
-        EventProperties1 = case get(connection_user_provided_name) of
-           undefined ->
-               EventProperties;
-           ConnectionUserProvidedName ->
-               [{user_provided_name, ConnectionUserProvidedName} | EventProperties]
-        end,
-        rabbit_event:notify(connection_closed, EventProperties1)
-    end,
-    done.
+                                               handshake, 8)).
+    %catch
+        %Ex ->
+          %log_connection_exception(dynamic_connection_name(Name), Ex)
+    %after
+        %rabbit_log_connection:info("closing AMQP connection ~tp (~ts)",
+                                   %[self(), dynamic_connection_name(Name)]),
+        %%% We don't call gen_tcp:close/1 here since it waits for
+        %%% pending output to be sent, which results in unnecessary
+        %%% delays. We could just terminate - the reader is the
+        %%% controlling process and hence its termination will close
+        %%% the socket. However, to keep the file_handle_cache
+        %%% accounting as accurate as possible we ought to close the
+        %%% socket w/o delay before termination.
+        %rabbit_net:fast_close(RealSocket),
+        %rabbit_networking:unregister_connection(self()),
+        %rabbit_core_metrics:connection_closed(self()),
+        %ClientProperties = case get(client_properties) of
+            %undefined ->
+                %[];
+            %Properties ->
+                %Properties
+        %end,
+        %EventProperties = [{name, Name},
+                           %{pid, self()},
+                           %{node, node()},
+                           %{client_properties, ClientProperties}],
+        %EventProperties1 = case get(connection_user_provided_name) of
+           %undefined ->
+               %EventProperties;
+           %ConnectionUserProvidedName ->
+               %[{user_provided_name, ConnectionUserProvidedName} | EventProperties]
+        %end,
+        %rabbit_event:notify(connection_closed, EventProperties1)
+    %end.
 
-log_connection_exception(Name, Ex) ->
-    Severity = case Ex of
-                   connection_closed_with_no_data_received -> debug;
-                   {connection_closed_abruptly, _}         -> warning;
-                   connection_closed_abruptly              -> warning;
-                   _                                       -> error
-               end,
-    log_connection_exception(Severity, Name, Ex).
+%log_connection_exception(Name, Ex) ->
+    %Severity = case Ex of
+                   %connection_closed_with_no_data_received -> debug;
+                   %{connection_closed_abruptly, _}         -> warning;
+                   %connection_closed_abruptly              -> warning;
+                   %_                                       -> error
+               %end,
+    %log_connection_exception(Severity, Name, Ex).
 
-log_connection_exception(Severity, Name, {heartbeat_timeout, TimeoutSec}) ->
-    %% Long line to avoid extra spaces and line breaks in log
-    log_connection_exception_with_severity(Severity,
-        "closing AMQP connection ~tp (~ts):~n"
-        "missed heartbeats from client, timeout: ~ps",
-        [self(), Name, TimeoutSec]);
-log_connection_exception(Severity, Name, {connection_closed_abruptly,
-                                          #v1{connection = #connection{user  = #user{username = Username},
-                                                                       vhost = VHost}}}) ->
-    log_connection_exception_with_severity(Severity,
-        "closing AMQP connection ~tp (~ts, vhost: '~ts', user: '~ts'):~nclient unexpectedly closed TCP connection",
-        [self(), Name, VHost, Username]);
-%% when client abruptly closes connection before connection.open/authentication/authorization
-%% succeeded, don't log username and vhost as 'none'
-log_connection_exception(Severity, Name, {connection_closed_abruptly, _}) ->
-    log_connection_exception_with_severity(Severity,
-        "closing AMQP connection ~tp (~ts):~nclient unexpectedly closed TCP connection",
-        [self(), Name]);
-%% failed connection.tune negotiations
-log_connection_exception(Severity, Name, {handshake_error, tuning, _Channel,
-                                          {exit, #amqp_error{explanation = Explanation},
-                                           _Method, _Stacktrace}}) ->
-    log_connection_exception_with_severity(Severity,
-        "closing AMQP connection ~tp (~ts):~nfailed to negotiate connection parameters: ~ts",
-        [self(), Name, Explanation]);
-%% old exception structure
-log_connection_exception(Severity, Name, connection_closed_abruptly) ->
-    log_connection_exception_with_severity(Severity,
-        "closing AMQP connection ~tp (~ts):~n"
-        "client unexpectedly closed TCP connection",
-        [self(), Name]);
-log_connection_exception(Severity, Name, Ex) ->
-    log_connection_exception_with_severity(Severity,
-        "closing AMQP connection ~tp (~ts):~n~tp",
-        [self(), Name, Ex]).
+%log_connection_exception(Severity, Name, {heartbeat_timeout, TimeoutSec}) ->
+    %%% Long line to avoid extra spaces and line breaks in log
+    %log_connection_exception_with_severity(Severity,
+        %"closing AMQP connection ~tp (~ts):~n"
+        %"missed heartbeats from client, timeout: ~ps",
+        %[self(), Name, TimeoutSec]);
+%log_connection_exception(Severity, Name, {connection_closed_abruptly,
+                                          %#v1{connection = #connection{user  = #user{username = Username},
+                                                                       %vhost = VHost}}}) ->
+    %log_connection_exception_with_severity(Severity,
+        %"closing AMQP connection ~tp (~ts, vhost: '~ts', user: '~ts'):~nclient unexpectedly closed TCP connection",
+        %[self(), Name, VHost, Username]);
+%%% when client abruptly closes connection before connection.open/authentication/authorization
+%%% succeeded, don't log username and vhost as 'none'
+%log_connection_exception(Severity, Name, {connection_closed_abruptly, _}) ->
+    %log_connection_exception_with_severity(Severity,
+        %"closing AMQP connection ~tp (~ts):~nclient unexpectedly closed TCP connection",
+        %[self(), Name]);
+%%% failed connection.tune negotiations
+%log_connection_exception(Severity, Name, {handshake_error, tuning, _Channel,
+                                          %{exit, #amqp_error{explanation = Explanation},
+                                           %_Method, _Stacktrace}}) ->
+    %log_connection_exception_with_severity(Severity,
+        %"closing AMQP connection ~tp (~ts):~nfailed to negotiate connection parameters: ~ts",
+        %[self(), Name, Explanation]);
+%%% old exception structure
+%log_connection_exception(Severity, Name, connection_closed_abruptly) ->
+    %log_connection_exception_with_severity(Severity,
+        %"closing AMQP connection ~tp (~ts):~n"
+        %"client unexpectedly closed TCP connection",
+        %[self(), Name]);
+%log_connection_exception(Severity, Name, Ex) ->
+    %log_connection_exception_with_severity(Severity,
+        %"closing AMQP connection ~tp (~ts):~n~tp",
+        %[self(), Name, Ex]).
 
-log_connection_exception_with_severity(Severity, Fmt, Args) ->
-    case Severity of
-        debug   -> rabbit_log_connection:debug(Fmt, Args);
-        warning -> rabbit_log_connection:warning(Fmt, Args);
-        error   -> rabbit_log_connection:error(Fmt, Args)
-    end.
+%log_connection_exception_with_severity(Severity, Fmt, Args) ->
+    %case Severity of
+        %debug   -> rabbit_log_connection:debug(Fmt, Args);
+        %warning -> rabbit_log_connection:warning(Fmt, Args);
+        %error   -> rabbit_log_connection:error(Fmt, Args)
+    %end.
 
-run({M, F, A}) ->
-    try apply(M, F, A)
-    catch {become, MFA} -> run(MFA)
-    end.
+%run({M, F, A}) ->
+    %try apply(M, F, A)
+    %catch {become, MFA} -> run(MFA)
+    %end.
 
 recvloop(Deb, Buf, BufLen, State = #v1{pending_recv = true}) ->
     mainloop(Deb, Buf, BufLen, State);
@@ -491,6 +491,7 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
                                        connection = #connection{
                                          name = ConnName}}) ->
     Recv = rabbit_net:recv(Sock),
+    %rabbit_log:error("READER RECV -> ~p~n", [Recv]),
     case CS of
         pre_init when Buf =:= [] ->
             %% We only log incoming connections when either the
@@ -525,9 +526,11 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
         {error, Reason} ->
             stop(Reason, State);
         {other, {system, From, Request}} ->
+            %rabbit_log:error("READER SYSTEM MSG -> ~p~n", [Request]),
             sys:handle_system_msg(Request, From, State#v1.parent,
                                   ?MODULE, Deb, {Buf, BufLen, State});
         {other, Other}  ->
+            %rabbit_log:error("READER OTHER -> ~p~n", [Other]),
             case handle_other(Other, State) of
                 stop     -> State;
                 NewState -> recvloop(Deb, Buf, BufLen, NewState)
