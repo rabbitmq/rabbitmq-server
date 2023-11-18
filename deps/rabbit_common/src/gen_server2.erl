@@ -1113,7 +1113,7 @@ system_code_change(GS2State = #gs2_state { mod   = Mod,
         {ok, NewState} ->
             NewGS2State = find_prioritisers(
                             GS2State #gs2_state { state = NewState }),
-            {ok, [NewGS2State]};
+            {ok, NewGS2State};
         Else ->
             Else
     end.
