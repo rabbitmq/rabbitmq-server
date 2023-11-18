@@ -206,10 +206,16 @@ mainloop(Deb, State) ->
     try
         mainloop1(Deb, State)
     catch
-        exit:Error -> #wstate{reader = ReaderPid, channel = Channel} = State,
-                      ReaderPid ! {channel_exit, Channel, Error}
-    end,
-    done.
+        exit:Error:St ->
+            rabbit_log:error("WRITER EXIT: ~p~n~p~n~p~n", [Error, St, State]),
+            timer:sleep(500),
+            #wstate{reader = ReaderPid, channel = Channel} = State,
+            ReaderPid ! {channel_exit, Channel, Error};
+        C:R:S ->
+            rabbit_log:error("WRITER EXIT: ~p~n~p~n~p~n", [R, S, State]),
+            timer:sleep(500),
+            erlang:raise(C, R, S)
+    end.
 
 mainloop1(Deb, State = #wstate{pending = []}) ->
     receive
