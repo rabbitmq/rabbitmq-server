@@ -348,6 +348,8 @@ route(Exchange, Message) ->
 
 -spec route(rabbit_types:exchange(), mc:state(), route_opts()) ->
     route_return().
+route(Exchange, #delivery{message = Message}, Options) ->
+    route(Exchange, Message, Options);
 route(#exchange{name = #resource{name = ?DEFAULT_EXCHANGE_NAME,
                                  virtual_host = VHost}},
       Message, _Opts) ->

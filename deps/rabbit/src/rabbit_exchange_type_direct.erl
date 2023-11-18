@@ -34,6 +34,8 @@ serialise_events() -> false.
 route(#exchange{name = Name, type = Type}, Msg) ->
     route(#exchange{name = Name, type = Type}, Msg, #{}).
 
+route(Exchange, #delivery{message = Message}, Options) ->
+    route(Exchange, Message, Options);
 route(#exchange{name = Name, type = Type}, Msg, _Opts) ->
     Routes = mc:get_annotation(routing_keys, Msg),
     rabbit_db_binding:match_routing_key(Name, Routes, Type =:= direct).
