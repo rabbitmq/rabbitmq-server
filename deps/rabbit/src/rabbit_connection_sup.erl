@@ -65,7 +65,7 @@ start_link(Ref, _Transport, _Opts) ->
                 significant => true,
                 shutdown => ?WORKER_WAIT,
                 type => worker,
-                modules => [rabbit_reader]
+                modules => [rabbit_reader, rabbit_net]
             }
         ),
     {ok, SupPid, ReaderPid}.
