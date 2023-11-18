@@ -56,11 +56,10 @@ msacc_stats(TimeInMs) ->
 % get the full path to the erl executable used to start this VM
 -spec get_erl_path() -> file:filename_all().
 get_erl_path() ->
-    ERTSDir = rabbit_misc:format("erts-~ts", [erlang:system_info(version)]),
-    Bin = filename:join([code:root_dir(), ERTSDir, "bin"]),
+    {ok, [[BinDir]]} = init:get_argument(bindir),
     case os:type() of
         {win32, _} ->
-            filename:join(Bin, "erl.exe");
+            filename:join(BinDir, "erl.exe");
         _ ->
-            filename:join(Bin, "erl")
+            filename:join(BinDir, "erl")
     end.
