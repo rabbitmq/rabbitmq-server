@@ -431,24 +431,36 @@ client_init(Server, Ref, MsgOnDiskFun) when is_pid(Server); is_atom(Server) ->
 
 client_terminate(CState = #client_msstate { client_ref = Ref, reader = Reader }) ->
     ok = server_call(CState, {client_terminate, Ref}),
-    reader_close(Reader).
+    reader_close(Reader);
+client_terminate(OldCState) ->
+    NewCState = client_code_change(OldCState),
+    client_terminate(NewCState).
 
 -spec client_delete_and_terminate(client_msstate()) -> 'ok'.
 
 client_delete_and_terminate(CState = #client_msstate { client_ref = Ref, reader = Reader }) ->
     ok = server_cast(CState, {client_dying, Ref}),
     ok = server_cast(CState, {client_delete, Ref}),
-    reader_close(Reader).
+    reader_close(Reader);
+client_delete_and_terminate(OldCState) ->
+    NewCState = client_code_change(OldCState),
+    client_delete_and_terminate(NewCState).
 
 -spec client_pre_hibernate(client_msstate()) -> client_msstate().
 
 client_pre_hibernate(CState = #client_msstate{ reader = Reader }) ->
     reader_close(Reader),
-    CState#client_msstate{ reader = undefined }.
+    CState#client_msstate{ reader = undefined };
+client_pre_hibernate(OldCState) ->
+    NewCState = client_code_change(OldCState),
+    client_pre_hibernate(NewCState).
 
 -spec client_ref(client_msstate()) -> client_ref().
 
-client_ref(#client_msstate { client_ref = Ref }) -> Ref.
+client_ref(#client_msstate { client_ref = Ref }) -> Ref;
+client_ref(OldCState) ->
+    NewCState = client_code_change(OldCState),
+    client_ref(NewCState).
 
 -spec write_flow(any(), rabbit_types:msg_id(), msg(), client_msstate()) -> 'ok'.
 
@@ -461,12 +473,19 @@ write_flow(MsgRef, MsgId, Msg,
     %% rabbit_variable_queue. We are accessing the
     %% rabbit_amqqueue_process process dictionary.
     credit_flow:send(Server, CreditDiscBound),
-    client_write(MsgRef, MsgId, Msg, flow, CState).
+    client_write(MsgRef, MsgId, Msg, flow, CState);
+write_flow(MsgRef, MsgId, Msg, OldCState) ->
+    NewCState = client_code_change(OldCState),
+    write_flow(MsgRef, MsgId, Msg, NewCState).
 
 -spec write(any(), rabbit_types:msg_id(), msg(), client_msstate()) -> 'ok'.
 
 %% This function is only used by tests.
-write(MsgRef, MsgId, Msg, CState) -> client_write(MsgRef, MsgId, Msg, noflow, CState).
+write(MsgRef, MsgId, Msg, #client_msstate{} = CState) ->
+    client_write(MsgRef, MsgId, Msg, noflow, CState);
+write(MsgRef, MsgId, Msg, OldCState) ->
+    NewCState = client_code_change(OldCState),
+    write(MsgRef, MsgId, Msg, NewCState).
 
 -spec read(rabbit_types:msg_id(), client_msstate()) ->
                      {rabbit_types:ok(msg()) | 'not_found', client_msstate()}.
@@ -484,7 +503,10 @@ read(MsgId,
             end;
         [{MsgId, Msg, _CacheRefCount}] ->
             {{ok, Msg}, CState}
-    end.
+    end;
+read(MsgId, OldCState) ->
+    NewCState = client_code_change(OldCState),
+    read(MsgId, NewCState).
 
 -spec read_many([rabbit_types:msg_id()], client_msstate())
     -> {#{rabbit_types:msg_id() => msg()}, client_msstate()}.
@@ -494,11 +516,14 @@ read(MsgId,
 read_many(_, CState = #client_msstate{ index_module = IndexMod })
         when IndexMod =/= rabbit_msg_store_ets_index ->
     {#{}, CState};
-read_many(MsgIds, CState) ->
+read_many(MsgIds, #client_msstate{} = CState) ->
     file_handle_cache_stats:inc(msg_store_read, length(MsgIds)),
     %% We receive MsgIds in rouhgly the younger->older order so
     %% we can look for messages in the cache directly.
-    read_many_cache(MsgIds, CState, #{}).
+    read_many_cache(MsgIds, CState, #{});
+read_many(MsgIds, OldCState) ->
+    NewCState = client_code_change(OldCState),
+    read_many(MsgIds, NewCState).
 
 %% We read from the cache until we can't. Then we read from disk.
 read_many_cache([MsgId|Tail], CState = #client_msstate{ cur_file_cache_ets = CurFileCacheEts }, Acc) ->
@@ -583,7 +608,11 @@ read_many_file3(MsgIds, CState = #client_msstate{ file_handles_ets = FileHandles
 
 -spec contains(rabbit_types:msg_id(), client_msstate()) -> boolean().
 
-contains(MsgId, CState) -> server_call(CState, {contains, MsgId}).
+contains(MsgId, #client_msstate{} = CState) ->
+    server_call(CState, {contains, MsgId});
+contains(MsgId, OldCState) ->
+    NewCState = client_code_change(OldCState),
+    contains(MsgId, NewCState).
 
 -spec remove([rabbit_types:msg_id()], client_msstate()) -> {'ok', [rabbit_types:msg_id()]}.
 
@@ -594,7 +623,10 @@ remove(MsgIds, CState = #client_msstate { flying_ets = FlyingEts,
     Res = [{MsgId, ets:update_counter(FlyingEts, {CRef, MsgRef}, ?FLYING_REMOVE, {'', ?FLYING_IS_WRITTEN})}
         || {MsgRef, MsgId} <- MsgIds],
     server_cast(CState, {remove, CRef, MsgIds}),
-    {ok, [MsgId || {MsgId, ?FLYING_IS_IGNORED} <- Res]}.
+    {ok, [MsgId || {MsgId, ?FLYING_IS_IGNORED} <- Res]};
+remove(MsgIds, OldCState) ->
+    NewCState = client_code_change(OldCState),
+    remove(MsgIds, NewCState).
 
 %%----------------------------------------------------------------------------
 %% Client-side-only helpers
@@ -1013,8 +1045,35 @@ terminate(Reason, State = #msstate { index_state         = IndexState,
                       current_file_handle = undefined,
                       current_file_offset = 0 }.
 
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+code_change(_OldVsn, #msstate{} = State, _Extra) ->
+    {ok, State};
+code_change(_OldVsn, State, _Extra)
+  when size(State) =:= size(#msstate{}) + 1 ->
+    %% RabbitMQ 3.12.x -> 3.13.x.
+    OldFields = tuple_to_list(State),
+    NewFields =
+      lists:sublist(OldFields, 1, 6) ++
+      [0] ++
+      lists:sublist(OldFields, 8, 1) ++
+      [#{}, undefined] ++
+      lists:sublist(OldFields, 12,  11),
+    NewState0 = list_to_tuple(NewFields),
+    #msstate{current_file_handle = CurHdl} = NewState0,
+    {ok, CurOffset} = file_handle_cache:position(CurHdl, cur),
+    NewState1 = NewState0#msstate{current_file_offset = CurOffset},
+    {ok, NewState1}.
+
+client_code_change(OldCState) ->
+    OldFields = tuple_to_list(OldCState),
+    NewFields =
+      lists:sublist(OldFields, 1, 3) ++
+      [undefined] ++
+      lists:sublist(OldFields, 5, 3) ++
+      lists:sublist(OldFields, 9, 1) ++
+      lists:sublist(OldFields, 11, 3),
+    NewCState = list_to_tuple(NewFields),
+    #client_msstate{} = NewCState,
+    NewCState.
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
