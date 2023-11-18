@@ -195,24 +195,24 @@ init([Identity, State]) ->
 handle_call({send_command_sync, MethodRecord}, _From, State) ->
     State1 = internal_flush(
                internal_send_command_async(MethodRecord, State)),
-    {reply, ok, State1};
+    {reply, ok, State1, 0};
 handle_call({send_command_sync, MethodRecord, Content}, _From, State) ->
     State1 = internal_flush(
                internal_send_command_async(MethodRecord, Content, State)),
-    {reply, ok, State1};
+    {reply, ok, State1, 0};
 handle_call(flush, _From, State) ->
     State1 = internal_flush(State),
-    {reply, ok, State1}.
+    {reply, ok, State1, 0}.
 
 handle_cast(_Message, State) ->
-    rabbit_log:error("WRITER CAST -> ~p~n", [_Message]),
-    {noreply, State}.
+    {noreply, State, 0}.
 
+handle_info(timeout, State) ->
+    State1 = internal_flush(State),
+    {noreply, State1};
 handle_info(Message, State) ->
-    rabbit_log:error("WRITER INFO -> ~p~n", [Message]),
     State1 = handle_message(Message, State),
-    rabbit_log:error("WRITER INFO state: ~p -> ~p~n", [State, State1]),
-    {noreply, State1}.
+    {noreply, State1, 0}.
 
 handle_message({send_command, MethodRecord}, State) ->
     internal_send_command_async(MethodRecord, State);
