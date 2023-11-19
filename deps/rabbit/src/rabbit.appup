@@ -109,6 +109,17 @@
    {update, rabbit_variable_queue},
    {update, rabbit_vhost},
    {update, rabbit_vhost_msg_store},
-   {update, rabbit_vm}]}],
+   {update, rabbit_vm},
+
+   %% Refresh feature flags.
+   {apply, {rabbit_feature_flags, refresh_feature_flags_after_app_load, []}},
+
+   %% Basic rabbit_khepri setup is executed during boot.
+   {apply, {rabbit_khepri, setup, []}},
+
+   %% 3.13.0 comes with a new boot step.
+   {apply, {rabbit_sup, start_restartable_child,
+            [rabbit_quorum_queue_periodic_membership_reconciliation]}}
+  ]}],
  [{"3.12.9",
   []}]}.
