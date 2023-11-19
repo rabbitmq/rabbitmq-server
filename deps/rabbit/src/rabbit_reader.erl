@@ -52,6 +52,8 @@
 
 -export([conserve_resources/3, server_properties/1]).
 
+-export([send_fun/3, recv_fun/1]).
+
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 30).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
@@ -1175,21 +1177,8 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
                         SupPid, Connection#connection.name),
     Frame = rabbit_binary_generator:build_heartbeat_frame(),
     Parent = self(),
-    SendFun =
-        fun() ->
-                case catch rabbit_net:send(Sock, Frame) of
-                    ok ->
-                        ok;
-                    {error, Reason} ->
-                        Parent ! {heartbeat_send_error, Reason},
-                        ok;
-                    Unexpected ->
-                        Parent ! {heartbeat_send_error, Unexpected},
-                        ok
-                end,
-                ok
-        end,
-    ReceiveFun = fun() -> Parent ! heartbeat_timeout end,
+    SendFun = {?MODULE, send_fun, [Parent, Sock, Frame]},
+    ReceiveFun = {?MODULE, recv_fun, [Parent]},
     Heartbeater = rabbit_heartbeat:start(
                     SupPid, Sock, Connection#connection.name,
                     ClientHeartbeat, SendFun, ClientHeartbeat, ReceiveFun),
@@ -1301,6 +1290,21 @@ handle_method0(_Method, State) when ?IS_STOPPING(State) ->
 handle_method0(_Method, #v1{connection_state = S}) ->
     rabbit_misc:protocol_error(
       channel_error, "unexpected method in connection state ~w", [S]).
+
+send_fun(Parent, Sock, Frame) ->
+    case catch rabbit_net:send(Sock, Frame) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            Parent ! {heartbeat_send_error, Reason},
+            ok;
+        Unexpected ->
+            Parent ! {heartbeat_send_error, Unexpected},
+            ok
+    end.
+
+recv_fun(Parent) ->
+    Parent ! heartbeat_timeout.
 
 is_vhost_alive(VHostPath, User) ->
     case rabbit_vhost_sup_sup:is_vhost_alive(VHostPath) of

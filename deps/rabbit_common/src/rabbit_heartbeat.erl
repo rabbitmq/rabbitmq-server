@@ -21,7 +21,7 @@
 
 -type heartbeaters() :: {rabbit_types:maybe(pid()), rabbit_types:maybe(pid())}.
 
--type heartbeat_callback() :: fun (() -> any()).
+-type heartbeat_callback() :: {module(), atom(), [any()]}.
 
 -export_type([heartbeat_timeout/0]).
 -type heartbeat_timeout() :: non_neg_integer().
@@ -74,15 +74,17 @@ start_heartbeat_sender(Sock, TimeoutSec, SendFun, Identity) ->
     %% the 'div 2' is there so that we don't end up waiting for nearly
     %% 2 * TimeoutSec before sending a heartbeat in the boundary case
     %% where the last message was sent just after a heartbeat.
+    {Mod, Fun, Args} = SendFun,
     heartbeater({Sock, TimeoutSec * 1000 div 2, send_oct, 0,
-                 fun () -> SendFun(), continue end}, Identity).
+                 fun () -> erlang:apply(Mod, Fun, Args), continue end}, Identity).
 
 start_heartbeat_receiver(Sock, TimeoutSec, ReceiveFun, Identity) ->
     %% we check for incoming data every interval, and time out after
     %% two checks with no change. As a result we will time out between
     %% 2 and 3 intervals after the last data has been received.
+    {Mod, Fun, Args} = ReceiveFun,
     heartbeater({Sock, TimeoutSec * 1000, recv_oct, 1,
-                 fun () -> ReceiveFun(), stop end}, Identity).
+                 fun () -> erlang:apply(Mod, Fun, Args), stop end}, Identity).
 
 pause_monitor({_Sender,     none}) -> ok;
 pause_monitor({_Sender, Receiver}) -> Receiver ! pause, ok.
