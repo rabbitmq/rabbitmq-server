@@ -170,9 +170,9 @@ _rmq_env_set_erl_libs()
 {
     if [ -n "$ERL_LIBS" ]
     then
-        export ERL_LIBS="$RABBITMQ_HOME/plugins:$ERL_LIBS"
+        export ERL_LIBS="$RABBITMQ_HOME/lib:$RABBITMQ_HOME/plugins:$ERL_LIBS"
     else
-        export ERL_LIBS="$RABBITMQ_HOME/plugins"
+        export ERL_LIBS="$RABBITMQ_HOME/lib:$RABBITMQ_HOME/plugins"
     fi
 }
 
