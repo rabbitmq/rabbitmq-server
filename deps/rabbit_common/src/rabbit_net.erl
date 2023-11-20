@@ -11,7 +11,7 @@
 -include_lib("kernel/include/net_address.hrl").
 
 -export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
-    recv/1, sync_recv/2, async_recv/3, getopts/2,
+    recv/1, sync_recv/2, async_recv/3, port_command/2, getopts/2,
     setopts/2, send/2, close/1, fast_close/1, sockname/1, peername/1,
     peercert/1, connection_string/2, socket_ends/2, is_loopback/1,
     tcp_host/1, unwrap_socket/1, maybe_get_proxy_socket/1,
@@ -159,6 +159,19 @@ async_recv(Sock, Length, infinity) when is_port(Sock) ->
     prim_inet:async_recv(Sock, Length, -1);
 async_recv(Sock, Length, Timeout) when is_port(Sock) ->
     prim_inet:async_recv(Sock, Length, Timeout).
+
+port_command(Sock, Data) when ?IS_SSL(Sock) ->
+    case ssl:send(Sock, Data) of
+        ok              -> self() ! {inet_reply, Sock, ok},
+                           true;
+        {error, Reason} -> erlang:error(Reason)
+    end;
+port_command(Sock, Data) when is_port(Sock) ->
+    case gen_tcp:send(Sock, Data) of
+        ok -> self() ! {inet_reply, Sock, ok},
+              true;
+        {error, Reason} -> erlang:error(Reason)
+    end.
 
 getopts(Sock, Options) when ?IS_SSL(Sock) ->
     ssl:getopts(Sock, Options);

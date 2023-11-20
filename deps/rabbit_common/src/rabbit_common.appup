@@ -8,6 +8,6 @@
    {update, rabbit_registry},
    %% Caution: API removed. Callers of this module might be reloaded after,
    %% thus causing `function_clause' exceptions.
-   {update, rabbit_writer, {advanced, none}}]}],
+   {update, rabbit_writer, {advanced, none}, [rabbit_net]}]}],
  [{"3.12.9",
   []}]}.
