@@ -22,6 +22,7 @@ defmodule RabbitMQCtl.MixfileBase do
         exclude: [
           CSV,
           CSV.Encode,
+          JSON,
           :mnesia,
           :msacc,
           :observer_cli,
@@ -139,6 +140,10 @@ defmodule RabbitMQCtl.MixfileBase do
     is_bazel = System.get_env("IS_BAZEL") != nil
 
     [
+      {
+        :json,
+        path: Path.join(deps_dir, "json")
+      },
       {
         :csv,
         path: Path.join(deps_dir, "csv")
