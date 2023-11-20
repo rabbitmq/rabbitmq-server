@@ -1,0 +1,6 @@
+%% vim:ft=erlang:
+{"3.13.0",
+ [{"3.12.9",
+  [{restart_application, amqp_client}]}],
+ [{"3.12.9",
+  [{restart_application, amqp_client}]}]}.
