@@ -111,6 +111,9 @@
    {update, rabbit_vhost_msg_store},
    {update, rabbit_vm},
 
+   %% Clear the cached product name and version.
+   {apply, {persistent_term, erase, [{rabbit, product}]}},
+
    %% Refresh feature flags.
    {apply, {rabbit_feature_flags, refresh_feature_flags_after_app_load, []}},
 
