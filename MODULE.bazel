@@ -277,6 +277,13 @@ erlang_package.git_package(
     repository = "michaelklishin/erlang-jose",
 )
 
+erlang_package.hex_package(
+    name = "json",
+    build_file = "@rabbitmq-server//bazel:BUILD.json",
+    sha256 = "9abf218dbe4ea4fcb875e087d5f904ef263d012ee5ed21d46e9dbca63f053d16",
+    version = "1.4.1",
+)
+
 erlang_package.git_package(
     name = "khepri",
     build_file = "@rabbitmq-server//bazel:BUILD.khepri",
@@ -401,6 +408,7 @@ use_repo(
     "gun",
     "horus",
     "jose",
+    "json",
     "khepri",
     "khepri_mnesia_migration",
     "observer_cli",
