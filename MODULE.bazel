@@ -268,6 +268,13 @@ erlang_package.git_package(
 )
 
 erlang_package.hex_package(
+    name = "json",
+    build_file = "@rabbitmq-server//bazel:BUILD.json",
+    sha256 = "9abf218dbe4ea4fcb875e087d5f904ef263d012ee5ed21d46e9dbca63f053d16",
+    version = "1.4.1",
+)
+
+erlang_package.hex_package(
     name = "thoas",
     build_file = "@rabbitmq-server//bazel:BUILD.thoas",
     sha256 = "fc763185b932ecb32a554fb735ee03c3b6b1b31366077a2427d2a97f3bd26735",
@@ -361,6 +368,7 @@ use_repo(
     "getopt",
     "gun",
     "jose",
+    "json",
     "observer_cli",
     "prometheus",
     "ranch",
