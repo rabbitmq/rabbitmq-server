@@ -842,5 +842,6 @@ reset_registry() ->
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     _ = code:purge(rabbit_ff_registry),
     _ = code:delete(rabbit_ff_registry),
+    _ = code:load_file(rabbit_ff_registry),
     ?assertNot(rabbit_ff_registry:is_registry_initialized()),
     ok.
