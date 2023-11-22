@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_db_exchange).
@@ -139,7 +139,7 @@ get(Name) ->
     rabbit_db:run(
       #{mnesia => fun() -> get_in_mnesia(Name) end
        }).
- 
+
 get_in_mnesia(Name) ->
     rabbit_mnesia:dirty_read({?MNESIA_TABLE, Name}).
 
@@ -496,7 +496,7 @@ match(Pattern) ->
       #{mnesia => fun() -> match_in_mnesia(Pattern) end
        }).
 
-match_in_mnesia(Pattern) -> 
+match_in_mnesia(Pattern) ->
     case mnesia:transaction(
            fun() ->
                    mnesia:match_object(?MNESIA_TABLE, Pattern, read)

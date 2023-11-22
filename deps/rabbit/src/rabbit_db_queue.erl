@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_db_queue).
@@ -393,7 +393,7 @@ get_many_durable(Names) when is_list(Names) ->
       QName :: rabbit_amqqueue:name(),
       Queue :: amqqueue:amqqueue(),
       UpdateFun :: fun((Queue) -> Queue),
-      Ret :: Queue | not_found. 
+      Ret :: Queue | not_found.
 %% @doc Updates an existing queue record using `UpdateFun'.
 %%
 %% @private
@@ -574,7 +574,7 @@ get_all_by_type_and_node_in_mnesia(VHostName, Type, Node) ->
 %% @doc Writes a queue record if it doesn't exist already or returns the existing one
 %%
 %% @returns the existing record if there is one in the database already, or the newly
-%% created record. 
+%% created record.
 %%
 %% @private
 
@@ -772,7 +772,7 @@ foreach_durable_in_mnesia(UpdateFun, FilterFun) ->
                   _ = [UpdateFun(Q) || Q <- Qs, FilterFun(Q)],
                   ok
           end),
-    ok.    
+    ok.
 
 %% -------------------------------------------------------------------
 %% set_dirty().

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_stream_queue).
@@ -869,7 +869,7 @@ delete_replica(VHost, Name, Node) ->
 delete_all_replicas(Node) ->
     rabbit_log:info("Asked to remove all stream replicas from node ~ts", [Node]),
     Streams = rabbit_amqqueue:list_by_type(stream),
-    Errors = 
+    Errors =
         lists:foldl(fun(Q, Acc) ->
                             QName = amqqueue:get_name(Q),
                             rabbit_log:info("~ts: removing replica on node ~w",
