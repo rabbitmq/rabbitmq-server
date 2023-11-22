@@ -842,5 +842,9 @@ reset_registry() ->
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     _ = code:purge(rabbit_ff_registry),
     _ = code:delete(rabbit_ff_registry),
+    %% After purging the module, we explicitly reload the stub version from the
+    %% disk. We need to do this because if the Erlang VM is running in embedded
+    %% mode, it will refuse to auto-load the module.
+    _ = code:load_file(rabbit_ff_registry),
     ?assertNot(rabbit_ff_registry:is_registry_initialized()),
     ok.
