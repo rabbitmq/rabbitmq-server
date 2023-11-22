@@ -107,6 +107,6 @@ backends if so configured.
 
 ## Copyright & License
 
-(c) 2007-2023 VMware, Inc. or its affiliates.
+(c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
 
 Released under the same license as RabbitMQ.
