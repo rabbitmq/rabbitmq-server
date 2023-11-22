@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(definition_import_SUITE).
@@ -54,7 +54,7 @@ groups() ->
                                import_case19,
                                import_case20
                               ]},
-        
+
         {boot_time_import_using_classic_source, [], [
             import_on_a_booting_node_using_classic_local_source
         ]},

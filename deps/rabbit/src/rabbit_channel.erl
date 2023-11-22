@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_channel).
@@ -2888,7 +2888,7 @@ evaluate_consumer_timeout(State0 = #ch{cfg = #conf{channel = Channel,
 handle_queue_actions(Actions, #ch{} = State0) ->
     WriterPid = State0#ch.cfg#conf.writer_pid,
     lists:foldl(
-      fun 
+      fun
           ({settled, QRef, MsgSeqNos}, S0) ->
               confirm(MsgSeqNos, QRef, S0);
           ({rejected, _QRef, MsgSeqNos}, S0) ->
