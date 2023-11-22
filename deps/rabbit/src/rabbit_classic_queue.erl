@@ -19,6 +19,19 @@
            monitored = #{} :: #{pid() => ok}
           }).
 
+-define(STATIC_KEYS, [name,
+                      durable,
+                      auto_delete,
+                      arguments,
+                      pid,
+                      leader,
+                      members,
+                      owner_pid,
+                      exclusive,
+                      policy,
+                      operator_policy,
+                      effective_policy_definition,
+                      type]).
 
 -opaque state() :: #?STATE{}.
 
@@ -510,6 +523,16 @@ state_info(_State) ->
 -spec info(amqqueue:amqqueue(), all_keys | rabbit_types:info_keys()) ->
     rabbit_types:infos().
 info(Q, Items) ->
+    AllStaticItems = is_list(Items) andalso
+        lists:all(fun(I) -> lists:member(I, ?STATIC_KEYS) end, Items),
+    case AllStaticItems of
+        true ->
+            static_info(Q, Items);
+        false ->
+            info_call(Q, Items)
+    end.
+
+info_call(Q, Items) ->
     QPid = amqqueue:get_pid(Q),
     Req = case Items of
               all_keys -> info;
@@ -524,6 +547,48 @@ info(Q, Items) ->
             %% this is a backwards compatibility clause
             Result
     end.
+
+static_info(Q, Items) ->
+    [{I, i(I, Q)} || I <- Items].
+
+i(name, Q) ->
+    amqqueue:get_name(Q);
+i(durable, Q) ->
+    amqqueue:is_durable(Q);
+i(auto_delete, Q) ->
+    amqqueue:is_auto_delete(Q);
+i(arguments, Q) ->
+    amqqueue:get_arguments(Q);
+i(pid, Q) ->
+    amqqueue:get_pid(Q);
+i(leader, Q) ->
+    node(i(pid, Q));
+i(members, Q) ->
+    [i(leader, Q)];
+i(owner_pid, Q) when ?amqqueue_exclusive_owner_is(Q, none) ->
+    '';
+i(owner_pid, Q) ->
+    amqqueue:get_exclusive_owner(Q);
+i(exclusive, Q) ->
+    ExclusiveOwner = amqqueue:get_exclusive_owner(Q),
+    is_pid(ExclusiveOwner);
+i(policy, Q) ->
+    case rabbit_policy:name(Q) of
+        none   -> '';
+        Policy -> Policy
+    end;
+i(operator_policy, Q) ->
+    case rabbit_policy:name_op(Q) of
+        none   -> '';
+        Policy -> Policy
+    end;
+i(effective_policy_definition, Q) ->
+    case rabbit_policy:effective_definition(Q) of
+        undefined -> [];
+        Def       -> Def
+    end;
+i(type, _) ->
+    classic.
 
 -spec purge(amqqueue:amqqueue()) ->
     {ok, non_neg_integer()}.
