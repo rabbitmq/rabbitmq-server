@@ -397,7 +397,6 @@ mqtt_amqp_alt(_Config) ->
                                         [{<<"key-2">>, <<"val-2">>},
                                          {<<"key-1">>, <<"val-1">>},
                                          {<<"x-stream-filter">>, <<"apple">>}],
-                                        %% TODO uuid
                                     'Correlation-Data' => CorrId,
                                     'Message-Expiry-Interval' => 1001,
                                     'Response-Topic' => <<"tmp/blah/responses">>
@@ -438,9 +437,11 @@ amqp_mqtt(_Config) ->
            thead2('x-list', list, [utf8(<<"l">>)]),
            thead2('x-map', map, [{utf8(<<"k">>), utf8(<<"v">>)}])
           ],
+    CorrIdOut = <<"urn:uuid:550e8400-e29b-41d4-a716-446655440000">>,
+    {ok, CorrUUId} = mc_util:urn_string_to_uuid(CorrIdOut),
     M =  #'v1_0.message_annotations'{content = MAC},
     P = #'v1_0.properties'{content_type = {symbol, <<"text/plain">>},
-                           correlation_id = {utf8, <<"corr-id">>},
+                           correlation_id = {uuid, CorrUUId},
                            creation_time = {timestamp, 10000}
                           },
     AC = [
@@ -469,6 +470,7 @@ amqp_mqtt(_Config) ->
              routing_keys => [<<"apple">>]},
     AMsg = mc:init(mc_amqp, [H, M, P, A, D], Anns),
     Msg = mc:convert(mc_mqtt, AMsg, Env),
+    ?assertMatch({uuid, CorrUUId}, mc:correlation_id(Msg)),
     Mqtt = mc:protocol_state(Msg),
     ?assertMatch(
        #mqtt_msg{qos = 1,
@@ -493,11 +495,9 @@ amqp_mqtt(_Config) ->
                                 {<<"boolean">>,<<"true">>},
                                 {<<"boolean2">>,<<"false">>},
                                 {<<"null">>,<<>>}],
-                           'Correlation-Data' := <<"corr-id">>
-                           % 'Message-Expiry-Interval' := 20000
+                           'Correlation-Data' := CorrIdOut
                           }
                 }, Mqtt),
-
     ok.
 
 mqtt_msg() ->
