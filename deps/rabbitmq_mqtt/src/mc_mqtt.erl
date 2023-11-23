@@ -397,7 +397,12 @@ x_header(_Key, #mqtt_msg{}) ->
     undefined.
 
 property(correlation_id, #mqtt_msg{props = #{'Correlation-Data' := Corr}}) ->
-    {binary, Corr};
+    case mc_util:urn_string_to_uuid(Corr) of
+        {ok, UUId} ->
+            {uuid, UUId};
+        _ ->
+            {binary, Corr}
+    end;
 property(_Key, #mqtt_msg{}) ->
     undefined.
 
