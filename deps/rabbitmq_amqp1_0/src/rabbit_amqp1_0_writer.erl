@@ -29,7 +29,9 @@
           sock :: rabbit_net:socket(),
           max_frame_size :: unlimited | pos_integer(),
           reader :: pid(),
-          pending :: iolist()
+          pending :: iolist(),
+          %% This field is just an optimisation to minimize the cost of erlang:iolist_size/1
+          pending_size :: non_neg_integer()
          }).
 
 -define(HIBERNATE_AFTER, 6_000).
@@ -94,7 +96,8 @@ init({Sock, MaxFrame, ReaderPid}) ->
     State = #state{sock = Sock,
                    max_frame_size = MaxFrame,
                    reader = ReaderPid,
-                   pending = []},
+                   pending = [],
+                   pending_size = 0},
     {ok, State}.
 
 handle_cast({send_command, ChannelNum, MethodRecord}, State0) ->
@@ -126,11 +129,14 @@ format_status(Status) ->
       fun(#state{sock = Sock,
                  max_frame_size = MaxFrame,
                  reader = Reader,
-                 pending = Pending}) ->
+                 pending = Pending,
+                 pending_size = PendingSize}) ->
               #{socket => Sock,
                 max_frame_size => MaxFrame,
                 reader => Reader,
-                pending_bytes => iolist_size(Pending)}
+                %% Below 2 fields should always have the same value.
+                pending => iolist_size(Pending),
+                pending_size => PendingSize}
       end,
       Status).
 
@@ -142,15 +148,19 @@ no_reply(State) ->
     {noreply, State, 0}.
 
 internal_send_command_async(Channel, MethodRecord,
-                            State = #state{pending = Pending}) ->
+                            State = #state{pending = Pending,
+                                           pending_size = PendingSize}) ->
     Frame = assemble_frame(Channel, MethodRecord),
-    maybe_flush(State#state{pending = [Frame | Pending]}).
+    maybe_flush(State#state{pending = [Frame | Pending],
+                            pending_size = PendingSize + iolist_size(Frame)}).
 
 internal_send_command_async(Channel, MethodRecord, Content,
                             State = #state{max_frame_size = MaxFrame,
-                                           pending   = Pending}) ->
+                                           pending = Pending,
+                                           pending_size = PendingSize}) ->
     Frames = assemble_frames(Channel, MethodRecord, Content, MaxFrame),
-    maybe_flush(State#state{pending = [Frames | Pending]}).
+    maybe_flush(State#state{pending = [Frames | Pending],
+                            pending_size = PendingSize + iolist_size(Frames)}).
 
 %% Note: a transfer record can be followed by a number of other
 %% records to make a complete frame but unlike 0-9-1 we may have many
@@ -191,18 +201,20 @@ tcp_send(Sock, Data) ->
 %% TODO doesn't make sense for AMQP 1.0
 -define(FLUSH_THRESHOLD, 1414).
 
-maybe_flush(State = #state{pending = Pending}) ->
-    case iolist_size(Pending) >= ?FLUSH_THRESHOLD of
+maybe_flush(State = #state{pending_size = PendingSize}) ->
+    case PendingSize >= ?FLUSH_THRESHOLD of
         true  -> flush(State);
         false -> State
     end.
 
 flush(State = #state{pending = []}) ->
     State;
-flush(State = #state{sock = Sock, pending = Pending}) ->
+flush(State = #state{sock = Sock,
+                     pending = Pending}) ->
     case rabbit_net:send(Sock, lists:reverse(Pending)) of
         ok ->
-            State#state{pending = []};
+            State#state{pending = [],
+                        pending_size = 0};
         {error, Reason} ->
             exit({writer, send_failed, Reason})
     end.
