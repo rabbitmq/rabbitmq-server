@@ -26,6 +26,7 @@
          normalize/1,
          append_node_prefix/1,
          node_prefix/0]).
+-export([do_query_node_props/1]).
 
 -ifdef(TEST).
 -export([sort_nodes_and_props/1,
@@ -340,11 +341,60 @@ check_discovered_nodes_list_validity(DiscoveredNodes, BadNodeType)
 %% @private
 
 query_node_props(Nodes) when Nodes =/= [] ->
+    {Prefix, _Suffix} = rabbit_nodes_common:parts(node()),
+    PeerName = lists:flatten(
+                 io_lib:format("~s-peerdisc-~s", [Prefix, os:getpid()])),
+    %% We go through a temporary hidden node to query all other discovered
+    %% peers properties, instead of querying them directly.
+    %%
+    %% The reason is that we don't want that Erlang automatically connect all
+    %% nodes together as a side effect (to form the full mesh network by
+    %% default). If we let Erlang do that, we may interfere with the Feature
+    %% flags controller which is globally registered when it performs an
+    %% operation. If all nodes become connected, it's possible two or more
+    %% globally registered controllers end up connected before they are ready
+    %% to be clustered, and thus in the same "namespace". `global' will kill
+    %% all but one of them.
+    %%
+    %% By using a temporary intermediate hidden node, we ask Erlang not to
+    %% connect everyone automatically.
+    VMArgs0 = ["-hidden"],
+    VMArgs1 = case rabbit_prelaunch:get_context() of
+                  #{erlang_cookie := ErlangCookie,
+                    var_origins := #{erlang_cookie := environment}} ->
+                      ["-setcookie", atom_to_list(ErlangCookie) | VMArgs0];
+                  _ ->
+                      VMArgs0
+              end,
+    case peer:start(#{name => PeerName, args => VMArgs1}) of
+        {ok, Pid, Peer} ->
+            ?LOG_DEBUG(
+               "Peer discovery: use temporary hidden node '~ts' to query "
+               "discovered peers properties",
+               [Peer],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+            Ret = erpc:call(Peer, ?MODULE, do_query_node_props, [Nodes]),
+            peer:stop(Pid),
+            Ret;
+        {error, _} = Error ->
+            ?LOG_ERROR(
+               "Peer discovery: failed to start temporary hidden node to "
+               "query discovered peers' properties",
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+            throw(Error)
+    end;
+query_node_props([]) ->
+    [].
+
+do_query_node_props(Nodes) when Nodes =/= [] ->
+    %% Make sure all log messages are forwarded from this temporary hidden
+    %% node to the upstream node, regardless of their level.
+    _ = logger:set_primary_config(level, debug),
     %% TODO: Replace with `rabbit_nodes:list_members/0' when the oldest
     %% supported version has it.
     MembersPerNode = erpc:multicall(Nodes, rabbit_nodes, all, []),
     query_node_props1(Nodes, MembersPerNode, []);
-query_node_props([]) ->
+do_query_node_props([]) ->
     [].
 
 query_node_props1(
