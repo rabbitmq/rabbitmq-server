@@ -315,8 +315,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "prometheus",
     build_file = "@rabbitmq-server//bazel:BUILD.prometheus",
-    sha256 = "2a99bb6dce85e238c7236fde6b0064f9834dc420ddbd962aac4ea2a3c3d59384",
-    version = "4.10.0",
+    sha256 = "719862351aabf4df7079b05dc085d2bbcbe3ac0ac3009e956671b1d5ab88247d",
+    version = "4.11.0",
 )
 
 erlang_package.hex_package(
