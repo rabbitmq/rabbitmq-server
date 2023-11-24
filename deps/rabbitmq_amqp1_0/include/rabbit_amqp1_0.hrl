@@ -1,21 +1,22 @@
 %%-define(debug, true).
 
 -ifdef(debug).
--define(DEBUG0(F), ?SAFE(io:format(F, []))).
--define(DEBUG(F, A), ?SAFE(io:format(F, A))).
+-define(DEBUG0(F), ?SAFE(rabbit_log:debug(F, []))).
+-define(DEBUG(F, A), ?SAFE(rabbit_log:debug(F, A))).
 -else.
 -define(DEBUG0(F), ok).
 -define(DEBUG(F, A), ok).
 -endif.
 
--define(pprint(F), io:format("~p~n", [amqp10_framing:pprint(F)])).
+-define(pprint(F), rabbit_log:debug("~p~n",
+                                    [amqp10_framing:pprint(F)])).
 
 -define(SAFE(F),
         ((fun() ->
                   try F
                   catch __T:__E:__ST ->
-                          io:format("~p:~p thrown debugging~n~p~n",
-                                    [__T, __E, __ST])
+                            rabbit_log:debug("~p:~p thrown debugging~n~p~n",
+                                             [__T, __E, __ST])
                   end
           end)())).
 

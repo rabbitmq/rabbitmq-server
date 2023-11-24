@@ -198,7 +198,7 @@ transfer(Session, Amqp10Msg, Timeout) ->
     gen_statem:call(Session, {transfer, Transfer, Records}, Timeout).
 
 flow(Session, Handle, Flow, RenewAfter) ->
-    gen_statem:cast(Session, {flow, Handle, Flow, RenewAfter}).
+    gen_statem:cast(Session, {flow_link, Handle, Flow, RenewAfter}).
 
 -spec disposition(pid(), link_role(), delivery_number(), delivery_number(), boolean(),
                   amqp10_client_types:delivery_state()) -> ok.
@@ -272,9 +272,18 @@ mapped(cast, 'end', State) ->
     %% We send the first end frame and wait for the reply.
     send_end(State),
     {next_state, end_sent, State};
-mapped(cast, {flow, OutHandle, Flow0, RenewAfter}, State0) ->
-    State = send_flow(fun send/2, OutHandle, Flow0, RenewAfter, State0),
-    {next_state, mapped, State};
+mapped(cast, {flow_link, OutHandle, Flow0, RenewAfter}, State0) ->
+    State = send_flow_link(fun send/2, OutHandle, Flow0, RenewAfter, State0),
+    {keep_state, State};
+mapped(cast, {flow_session, Flow0 = #'v1_0.flow'{incoming_window = {uint, IncomingWindow}}},
+       #state{next_incoming_id = NII,
+              next_outgoing_id = NOI} = State) ->
+    Flow = Flow0#'v1_0.flow'{
+                   next_incoming_id = maybe_uint(NII),
+                   next_outgoing_id = uint(NOI),
+                   outgoing_window = ?UINT_OUTGOING_WINDOW},
+    ok = send(Flow, State),
+    {keep_state, State#state{incoming_window = IncomingWindow}};
 mapped(cast, #'v1_0.end'{error = Err}, State) ->
     %% We receive the first end frame, reply and terminate.
     _ = send_end(State),
@@ -313,7 +322,7 @@ mapped(cast, #'v1_0.attach'{name = {utf8, Name},
     State = State0#state{links = Links#{OutHandle => Link},
                          link_index = maps:remove(Name, LinkIndex),
                          link_handle_index = LHI#{InHandle => OutHandle}},
-    {next_state, mapped, State};
+    {keep_state, State};
 mapped(cast, #'v1_0.detach'{handle = {uint, InHandle},
                             error = Err},
        #state{links = Links, link_handle_index = LHI} = State0) ->
@@ -321,13 +330,13 @@ mapped(cast, #'v1_0.detach'{handle = {uint, InHandle},
               fun (#link{output_handle = OutHandle} = Link, State) ->
                       Reason = reason(Err),
                       ok = notify_link_detached(Link, Reason),
-                      {next_state, mapped,
+                      {keep_state,
                        State#state{links = maps:remove(OutHandle, Links),
                                    link_handle_index = maps:remove(InHandle, LHI)}}
               end);
 mapped(cast, #'v1_0.flow'{handle = undefined} = Flow, State0) ->
     State = handle_session_flow(Flow, State0),
-    {next_state, mapped, State};
+    {keep_state, State};
 mapped(cast, #'v1_0.flow'{handle = {uint, InHandle}} = Flow,
        #state{links = Links} = State0) ->
 
@@ -341,7 +350,7 @@ mapped(cast, #'v1_0.flow'{handle = {uint, InHandle}} = Flow,
     ok = maybe_notify_link_credit(Link0, Link),
     Links1 = Links#{OutHandle => Link},
     State1 = State#state{links = Links1},
-    {next_state, mapped, State1};
+    {keep_state, State1};
 mapped(cast, {#'v1_0.transfer'{handle = {uint, InHandle},
                                more = true} = Transfer, Payload},
        #state{links = Links} = State0) ->
@@ -353,7 +362,7 @@ mapped(cast, {#'v1_0.transfer'{handle = {uint, InHandle},
 
     State = book_partial_transfer_received(
               State0#state{links = Links#{OutHandle => Link1}}),
-    {next_state, mapped, State};
+    {keep_state, State};
 mapped(cast, {#'v1_0.transfer'{handle = {uint, InHandle},
                                delivery_id = MaybeDeliveryId,
                                settled = Settled} = Transfer0, Payload0},
@@ -385,16 +394,16 @@ mapped(cast, {#'v1_0.transfer'{handle = {uint, InHandle},
             % deliver
             TargetPid ! {amqp10_msg, LinkRef, Msg},
             State1 = auto_flow(Link2, State),
-            {next_state, mapped, State1};
+            {keep_state, State1};
         {credit_exhausted, Link2, State} ->
             TargetPid ! {amqp10_msg, LinkRef, Msg},
             notify_credit_exhausted(Link2),
-            {next_state, mapped, State};
+            {keep_state, State};
         {transfer_limit_exceeded, Link2, State} ->
             logger:warning("transfer_limit_exceeded for link ~tp", [Link2]),
             Link = detach_with_error_cond(Link2, State,
                                            ?V_1_0_LINK_ERROR_TRANSFER_LIMIT_EXCEEDED),
-            {next_state, mapped, update_link(Link, State)}
+            {keep_state, update_link(Link, State)}
     end;
 
 
@@ -427,11 +436,11 @@ mapped(cast, #'v1_0.disposition'{role = true,
                           end
                   end, Unsettled0, First, Last),
 
-    {next_state, mapped, State#state{outgoing_unsettled = Unsettled}};
+    {keep_state, State#state{outgoing_unsettled = Unsettled}};
 mapped(cast, Frame, State) ->
     logger:warning("Unhandled session frame ~tp in state ~tp",
                              [Frame, State]),
-    {next_state, mapped, State};
+    {keep_state, State};
 mapped({call, From},
        {transfer, _Transfer, _Parts},
        #state{remote_incoming_window = Window})
@@ -518,9 +527,9 @@ end_sent(_EvtType, #'v1_0.end'{error = Err}, State) ->
     Reason = reason(Err),
     ok = notify_session_ended(State, Reason),
     {stop, normal, State};
-end_sent(_EvtType, _Frame, State) ->
+end_sent(_EvtType, _Frame, _State) ->
     % just drop frames here
-    {next_state, end_sent, State}.
+    keep_state_and_data.
 
 terminate(Reason, _StateName, #state{channel = Channel,
                                      remote_channel = RemoteChannel,
@@ -586,12 +595,12 @@ send_transfer(Transfer0, Parts0, MaxMessageSize, #state{socket = Socket,
            {ok, length(Frames)}
     end.
 
-send_flow(Send, OutHandle,
-          #'v1_0.flow'{link_credit = {uint, Credit}} = Flow0, RenewAfter,
-          #state{links = Links,
-                 next_incoming_id = NII,
-                 next_outgoing_id = NOI,
-                 incoming_window = InWin} = State) ->
+send_flow_link(Send, OutHandle,
+               #'v1_0.flow'{link_credit = {uint, Credit}} = Flow0, RenewAfter,
+               #state{links = Links,
+                      next_incoming_id = NII,
+                      next_outgoing_id = NOI,
+                      incoming_window = InWin} = State) ->
     AutoFlow = case RenewAfter of
                    never -> never;
                    Limit -> {auto, Limit, Credit}
@@ -602,7 +611,6 @@ send_flow(Send, OutHandle,
                          available = Available} = Link} = Links,
     Flow = Flow0#'v1_0.flow'{
                    handle = uint(H),
-                   link_credit = uint(Credit),
                    %% "This value MUST be set if the peer has received the begin
                    %% frame for the session, and MUST NOT be set if it has not." [2.7.4]
                    next_incoming_id = maybe_uint(NII),
@@ -978,9 +986,9 @@ auto_flow(#link{link_credit = LC,
                 auto_flow = {auto, Limit, Credit},
                 output_handle = OutHandle}, State)
   when LC < Limit ->
-    send_flow(fun send/2, OutHandle,
-              #'v1_0.flow'{link_credit = {uint, Credit}},
-              Limit, State);
+    send_flow_link(fun send/2, OutHandle,
+                   #'v1_0.flow'{link_credit = {uint, Credit}},
+                   Limit, State);
 auto_flow(_, State) ->
     State.
 

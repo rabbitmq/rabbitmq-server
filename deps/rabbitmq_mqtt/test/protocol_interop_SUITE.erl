@@ -208,7 +208,7 @@ amqp(Config) ->
     #{correlation_id := Correlation,
       content_type := ContentType,
       reply_to := ReplyToAddress} = amqp10_msg:properties(Msg1),
-    ?assertEqual(<<"/topic/response.topic">>, ReplyToAddress),
+    ?assertEqual(<<"/exchange/amq.topic/response.topic">>, ReplyToAddress),
 
     %% Thanks to the 'Payload-Format-Indicator', we get a single utf8 value.
     ?assertEqual(#'v1_0.amqp_value'{content = {utf8, RequestPayload}}, amqp10_msg:body(Msg1)),

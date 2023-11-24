@@ -80,7 +80,8 @@ groups() ->
        resource_alarm_before_session_begin,
        resource_alarm_after_session_begin,
        max_message_size_client_to_server,
-       max_message_size_server_to_client
+       max_message_size_server_to_client,
+       receive_transfer_flow_order
       ]},
 
      {cluster_size_3, [shuffle],
@@ -1959,6 +1960,59 @@ max_message_size_server_to_client(Config) ->
     ok = amqp10_client:close_connection(Connection),
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     ok = rabbit_ct_client_helpers:close_channel(Ch).
+
+%% This test ensures that the server sends us TRANSFER and FLOW frames in the correct order
+%% even if the server is temporarily not allowed to send us any TRANSFERs due to our incoming
+%% window being closed.
+receive_transfer_flow_order(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName}),
+    ok = rabbit_ct_client_helpers:close_channel(Ch),
+    Address = <<"/amq/queue/", QName/binary>>,
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    DTag = <<"my tag">>,
+    Body = <<"my body">>,
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag, Body, false)),
+    ok = wait_for_settlement(DTag),
+    ok = amqp10_client:detach_link(Sender),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, Address, unsettled),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 5000 -> ct:fail(missing_attached)
+    end,
+    flush(receiver_attached),
+
+    %% Close our incoming window.
+    gen_statem:cast(Session, {flow_session, #'v1_0.flow'{incoming_window = {uint, 0}}}),
+
+    ok = amqp10_client:flow_link_credit(Receiver, 2, never, true),
+    %% Given our incoming window is closed, we shouldn't receive the TRANSFER yet, and threfore
+    %% must not yet receive the FLOW that comes thereafter with drain=true, credit=0, and advanced delivery-count.
+    receive Unexpected -> ct:fail({unexpected, Unexpected})
+    after 300 -> ok
+    end,
+
+    %% Open our incoming window
+    gen_statem:cast(Session, {flow_session, #'v1_0.flow'{incoming_window = {uint, 5}}}),
+    %% Important: We should first receive the TRANSFER,
+    %% and only thereafter the FLOW (and hence the credit_exhausted notification).
+    receive First ->
+                {amqp10_msg, Receiver, Msg} = First,
+                ?assertEqual([Body], amqp10_msg:body(Msg))
+    after 5000 -> ct:fail("timeout receiving message")
+    end,
+    receive Second ->
+                ?assertEqual({amqp10_event, {link, Receiver, credit_exhausted}}, Second)
+    after 5000 -> ct:fail("timeout receiving credit_exhausted")
+    end,
+
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection),
+    ok = delete_queue(Config, QName).
 
 last_queue_confirms(Config) ->
     ClassicQ = <<"my classic queue">>,

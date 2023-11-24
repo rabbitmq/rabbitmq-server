@@ -138,7 +138,7 @@
           %% We omit outgoing-window. We keep the outgoing-window always large and don't
           %% restrict ourselves delivering messages fast to AMQP clients because keeping an
           %% #outgoing_unsettled{} entry in the outgoing_unsettled_map requires far less
-          %% memory than holding the message payload in the pending_transfers queue.
+          %% memory than holding the message payload in the outgoing_pending queue.
           %%
           %% expected implicit transfer-id of next incoming TRANSFER
           next_incoming_id :: transfer_number(),
@@ -171,7 +171,18 @@
           %% These messages were received from queues thanks to sufficient link credit.
           %% However, they are buffered here due to session flow control
           %% (when remote_incoming_window <= 0) before being sent to the AMQP client.
-          pending_transfers = queue:new() :: queue:queue(#pending_transfer{}),
+          %%
+          %% FLOW frames are stored here as well because for a specific outgoing link the order
+          %% in which we send TRANSFER and FLOW frames is important. An outgoing FLOW frame with link flow
+          %% control information must not overtake a TRANSFER frame for the same link just because
+          %% we are throttled by session flow control. (However, we can still send outgoing FLOW frames
+          %% that contain only session flow control information, i.e. where the FLOW's 'handle' field is not set.)
+          %% Example:
+          %% A receiver grants our queue 2 credits with drain=true and the queue only has 1 message available.
+          %% Even when we are limited by session flow control, we must make sure to first send the TRANSFER to the
+          %% client (once the remote_incoming_window got opened) followed by the FLOW with drain=true and credit=0
+          %% and advanced delivery count. Otherwise, we would violate the AMQP protocol spec.
+          outgoing_pending = queue:new() :: queue:queue(#pending_transfer{} | #'v1_0.flow'{}),
 
           %% The link or session endpoint assigns each message a unique delivery-id
           %% from a session scoped sequence number.
@@ -287,8 +298,8 @@ handle_info({{'DOWN', QName}, _MRef, process, QPid, Reason},
     case rabbit_queue_type:handle_down(QPid, QName, Reason, QStates0) of
         {ok, QStates, Actions} ->
             State1 = State0#state{queue_states = QStates},
-            {Reply, State} = handle_queue_actions(Actions, State1),
-            reply0(Reply, State);
+            State = handle_queue_actions(Actions, State1),
+            noreply(State);
         {eol, QStates, QRef} ->
             State = State0#state{queue_states = QStates,
                                  stashed_eol = [QRef | Eol]},
@@ -328,15 +339,9 @@ handle_cast({frame, Frame},
           _:Reason:Stacktrace ->
               {stop, {Reason, Stacktrace}, State0}
     end;
-handle_cast({queue_event, _, _} = QEvent,
-            #state{cfg = #cfg{writer_pid = WriterPid,
-                              channel_num = Ch}} = State0) ->
+handle_cast({queue_event, _, _} = QEvent, State0) ->
     try handle_queue_event(QEvent, State0) of
-        {Replies, State} ->
-            lists:foreach(fun(Reply) ->
-                                  Frame = session_flow_fields(Reply, State),
-                                  rabbit_amqp1_0_writer:send_command(WriterPid, Ch, Frame)
-                          end, Replies),
+        State ->
             noreply_coalesce(State)
     catch exit:#'v1_0.error'{} = Error ->
               log_error_and_close_session(Error, State0)
@@ -393,18 +398,22 @@ log_error_and_close_session(
 noreply_coalesce(#state{stashed_rejected = [],
                         stashed_settled = [],
                         stashed_eol = []} = State) ->
-    {noreply, State};
+    noreply(State);
 noreply_coalesce(State) ->
     Timeout = 0,
     {noreply, State, Timeout}.
 
 noreply(State0) ->
-    State = send_delivery_state_changes(State0),
+    State = send_buffered(State0),
     {noreply, State}.
 
 reply(Reply, State0) ->
-    State = send_delivery_state_changes(State0),
+    State = send_buffered(State0),
     {reply, Reply, State}.
+
+send_buffered(State0) ->
+    State = send_delivery_state_changes(State0),
+    send_pending(State).
 
 %% Send confirms / rejects to publishers.
 send_delivery_state_changes(#state{stashed_rejected = [],
@@ -837,27 +846,24 @@ handle_control({Txfr = #'v1_0.transfer'{handle = ?UINT(Handle)}, MsgPart},
 handle_control(#'v1_0.flow'{handle = Handle} = Flow,
                #state{incoming_links = IncomingLinks,
                       outgoing_links = OutgoingLinks} = State0) ->
-    State1 = session_flow_control_received_flow(Flow, State0),
-    State2 = send_pending_transfers(State1),
+    State = session_flow_control_received_flow(Flow, State0),
     case Handle of
         undefined ->
             %% "If not set, the flow frame is carrying only information
             %% pertaining to the session endpoint." [2.7.4]
-            {noreply, State2};
+            {noreply, State};
         ?UINT(HandleInt) ->
             %% "If set, indicates that the flow frame carries flow state information
             %% for the local link endpoint associated with the given handle." [2.7.4]
             case OutgoingLinks of
                 #{HandleInt := OutgoingLink} ->
-                    {ok, Reply, State} = handle_outgoing_link_flow_control(
-                                           OutgoingLink, Flow, State2),
-                    reply0(Reply, State);
+                    {noreply, handle_outgoing_link_flow_control(OutgoingLink, Flow, State)};
                 _ ->
                     case IncomingLinks of
                         #{HandleInt := _IncomingLink} ->
                             %% We're being told about available messages at
                             %% the sender.  Yawn. TODO at least check transfer-count?
-                            {noreply, State2};
+                            {noreply, State};
                         _ ->
                             %% "If set to a handle that is not currently associated with
                             %% an attached link, the recipient MUST respond by ending the
@@ -1010,13 +1016,13 @@ handle_control(#'v1_0.disposition'{role = ?RECV_ROLE,
 
             State1 = State0#state{outgoing_unsettled_map = UnsettledMap1,
                                   queue_states = QStates},
-            Reply0 = case DispositionSettled of
-                         true  -> [];
-                         false -> [Disposition#'v1_0.disposition'{settled = true,
-                                                                  role = ?SEND_ROLE}]
-                     end,
-            {Reply, State} = handle_queue_actions(Actions, State1),
-            reply0(Reply0 ++ Reply, State)
+            Reply = case DispositionSettled of
+                        true  -> [];
+                        false -> [Disposition#'v1_0.disposition'{settled = true,
+                                                                 role = ?SEND_ROLE}]
+                    end,
+            State = handle_queue_actions(Actions, State1),
+            reply0(Reply, State)
     end;
 
 handle_control(Frame, _State) ->
@@ -1029,34 +1035,35 @@ rabbit_queue_type_settle(QName, SettleOp, Ctag, MsgIds0, QStates) ->
     MsgIds = lists:usort(MsgIds0),
     rabbit_queue_type:settle(QName, SettleOp, Ctag, MsgIds, QStates).
 
-send_pending_transfers(#state{remote_incoming_window = 0} = State) ->
-    State;
-send_pending_transfers(#state{remote_incoming_window = Space,
-                              pending_transfers = Buf0,
-                              queue_states = QStates,
-                              cfg = #cfg{writer_pid = WriterPid,
-                                         channel_num = Ch}} = State0)
-  when Space > 0 ->
+send_pending(#state{remote_incoming_window = Space,
+                    outgoing_pending = Buf0,
+                    cfg = #cfg{writer_pid = WriterPid,
+                               channel_num = Ch}} = State0) ->
     case queue:out(Buf0) of
-        {empty, Buf} ->
-            State0#state{pending_transfers = Buf};
+        {empty, _} ->
+            State0;
+        {{value, #'v1_0.flow'{} = Flow0}, Buf} ->
+            Flow = session_flow_fields(Flow0, State0),
+            rabbit_amqp1_0_writer:send_command(WriterPid, Ch, Flow),
+            send_pending(State0#state{outgoing_pending = Buf});
         {{value, #pending_transfer{
                     frames = Frames,
                     queue_pid = QPid,
                     outgoing_unsettled = #outgoing_unsettled{
                                             consumer_tag = Ctag,
                                             queue_name = QName
-                                           }} = Pending}, Buf1} ->
-            SendFun = case rabbit_queue_type:module(QName, QStates) of
+                                           }} = Pending}, Buf1}
+          when Space > 0 ->
+            SendFun = case rabbit_queue_type:module(QName, State0#state.queue_states) of
                           {ok, rabbit_classic_queue} ->
-                              fun(T, C) ->
+                              fun(Transfer, Sections) ->
                                       rabbit_amqp1_0_writer:send_command_and_notify(
-                                        WriterPid, Ch, QPid, self(), T, C)
+                                        WriterPid, Ch, QPid, self(), Transfer, Sections)
                               end;
                           {ok, _QType} ->
-                              fun(T, C) ->
+                              fun(Transfer, Sections) ->
                                       rabbit_amqp1_0_writer:send_command(
-                                        WriterPid, Ch, T, C)
+                                        WriterPid, Ch, Transfer, Sections)
                               end
                       end,
             %% rabbit_basic:maybe_gc_large_msg(Content, GCThreshold)
@@ -1073,20 +1080,23 @@ send_pending_transfers(#state{remote_incoming_window = Space,
                                       OutgoingLinks0),
                     State2 = State1#state{outgoing_links = OutgoingLinks},
                     State = record_outgoing_unsettled(Pending, State2),
-                    send_pending_transfers(State#state{pending_transfers = Buf1});
+                    send_pending(State#state{outgoing_pending = Buf1});
                 {some, Rest} ->
                     State = session_flow_control_sent_transfers(Space, State0),
                     Buf = queue:in_r(Pending#pending_transfer{frames = Rest}, Buf1),
-                    send_pending_transfers(State#state{pending_transfers = Buf})
-            end
+                    send_pending(State#state{outgoing_pending = Buf})
+            end;
+        {{value, #pending_transfer{}}, _}
+          when Space =:= 0 ->
+            State0
     end.
 
 send_frames(_, [], Left) ->
     {all, Left};
 send_frames(_, Rest, 0) ->
     {some, Rest};
-send_frames(SendFun, [[T, C] | Rest], Left) ->
-    ok = SendFun(T, C),
+send_frames(SendFun, [[Transfer, Sections] | Rest], Left) ->
+    ok = SendFun(Transfer, Sections),
     send_frames(SendFun, Rest, Left - 1).
 
 record_outgoing_unsettled(#pending_transfer{queue_ack_required = true,
@@ -1258,37 +1268,27 @@ handle_queue_event({queue_event, QRef, Evt},
             S = S0#state{queue_states = QStates1},
             handle_queue_actions(Actions, S);
         {eol, Actions} ->
-            {Replies, S1} = handle_queue_actions(Actions, S0),
-            S = S1#state{stashed_eol = [QRef | S1#state.stashed_eol]},
+            S = handle_queue_actions(Actions, S0),
             %%TODO see rabbit_channel:handle_eol()
-            {Replies, S};
+            S#state{stashed_eol = [QRef | S#state.stashed_eol]};
         {protocol_error, _Type, Reason, ReasonArgs} ->
             protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, Reason, ReasonArgs)
     end.
 
-handle_queue_actions(Actions, State0) ->
-    {ReplyRev, State} =
+handle_queue_actions(Actions, State) ->
     lists:foldl(
-      fun ({settled, _QName, _DelIds} = Action,
-           {Reply, S0 = #state{stashed_settled = As}}) ->
-              S = S0#state{stashed_settled = [Action | As]},
-              {Reply, S};
-          ({rejected, _QName, _DelIds} = Action,
-           {Reply, S0 = #state{stashed_rejected = As}}) ->
-              S = S0#state{stashed_rejected = [Action | As]},
-              {Reply, S};
-          ({deliver, CTag, AckRequired, Msgs}, {Reply, S0}) ->
-              S1 = lists:foldl(fun(Msg, S) ->
-                                       handle_deliver(CTag, AckRequired, Msg, S)
-                               end, S0, Msgs),
-              {Reply, S1};
+      fun ({settled, _QName, _DelIds} = Action, S = #state{stashed_settled = As}) ->
+              S#state{stashed_settled = [Action | As]};
+          ({rejected, _QName, _DelIds} = Action, S = #state{stashed_rejected = As}) ->
+              S#state{stashed_rejected = [Action | As]};
+          ({deliver, CTag, AckRequired, Msgs}, S0) ->
+              lists:foldl(fun(Msg, S) ->
+                                  handle_deliver(CTag, AckRequired, Msg, S)
+                          end, S0, Msgs);
           ({credit_reply, Ctag, Credit0, Available, Drain, _LinkStateProperties},
-           {Reply, S0 = #state{outgoing_links = OutgoingLinks0}}) ->
+           S0 = #state{outgoing_links = OutgoingLinks0,
+                       outgoing_pending = Pending}) ->
               Handle = ctag_to_handle(Ctag),
-              %%TODO The order of deliveries and credit replies sent by a queue must always be maintained
-              %% when relaying these via TRANSFER and FLOW frames to the 1.0 client.
-              %% Since TRANSFERs are subject to session flow control and buffered we must not yet
-              %% send this FLOW frame.
               Link = #outgoing_link{delivery_count = Count0} = maps:get(Handle, OutgoingLinks0),
               {Count, Credit, S} = case Drain of
                                        true ->
@@ -1308,26 +1308,25 @@ handle_queue_actions(Actions, State0) ->
                         link_credit = ?UINT(Credit),
                         available = ?UINT(Available),
                         drain = Drain},
-              {[Flow | Reply], S};
-          ({Action, _QName}, Acc)
+              S#state{outgoing_pending = queue:in(Flow, Pending)};
+          ({Action, _QName}, S)
             when Action =:= block orelse
                  Action =:= unblock ->
               %% Ignore since we rely on our own mechanism to detect if a client sends to fast
               %% into a link: If the number of outstanding queue confirmations grows,
               %% we won't grant new credits to publishers.
-              Acc;
-          ({queue_down, _QName}, Acc) ->
+              S;
+          ({queue_down, _QName}, S) ->
               %%TODO
-              Acc
-      end, {[], State0}, Actions),
-    {lists:reverse(ReplyRev), State}.
+              S
+      end, State, Actions).
 
 handle_deliver(ConsumerTag, AckRequired,
                {QName, QPid, MsgId, Redelivered, Mc0},
-               State0 = #state{pending_transfers = Pendings,
-                               outgoing_delivery_id = DeliveryId,
-                               outgoing_links = OutgoingLinks,
-                               cfg = #cfg{outgoing_max_frame_size = MaxFrameSize}}) ->
+               State = #state{outgoing_pending = Pending,
+                              outgoing_delivery_id = DeliveryId,
+                              outgoing_links = OutgoingLinks,
+                              cfg = #cfg{outgoing_max_frame_size = MaxFrameSize}}) ->
     Handle = ctag_to_handle(ConsumerTag),
     case OutgoingLinks of
         #{Handle := #outgoing_link{send_settled = SendSettled,
@@ -1379,21 +1378,20 @@ handle_deliver(ConsumerTag, AckRequired,
                      %% queue sent us the message so that the Ra log can be truncated even if
                      %% the message is sitting here for a long time.
                      delivered_at = os:system_time(millisecond)},
-            Pending = #pending_transfer{
-                         frames = Frames,
-                         queue_ack_required = AckRequired,
-                         queue_pid = QPid,
-                         delivery_id = DeliveryId,
-                         outgoing_unsettled = Del},
-            State = State0#state{outgoing_delivery_id = add(DeliveryId, 1),
-                                 pending_transfers = queue:in(Pending, Pendings)},
-            send_pending_transfers(State);
+            PendingTransfer = #pending_transfer{
+                                 frames = Frames,
+                                 queue_ack_required = AckRequired,
+                                 queue_pid = QPid,
+                                 delivery_id = DeliveryId,
+                                 outgoing_unsettled = Del},
+            State#state{outgoing_delivery_id = add(DeliveryId, 1),
+                        outgoing_pending = queue:in(PendingTransfer, Pending)};
         _ ->
             %% TODO handle missing link -- why does the queue think it's there?
             rabbit_log:warning(
               "No link handle ~b exists for delivery with consumer tag ~p from queue ~tp",
               [Handle, ConsumerTag, QName]),
-            State0
+            State
     end.
 
 %%%%%%%%%%%%%%%%%%%%%
@@ -1510,12 +1508,12 @@ incoming_link_transfer(
                     %% because actions may contain rejections of publishes.
                     {U, Reply0} = process_routing_confirm(
                                     Qs, Settled, DeliveryId, U0),
-                    {Reply1, State} = handle_queue_actions(Actions, State1),
+                    State = handle_queue_actions(Actions, State1),
                     DeliveryCount = add(DeliveryCount0, 1),
                     Credit1 = Credit0 - 1,
-                    {Credit, Reply2} = maybe_grant_link_credit(
+                    {Credit, Reply1} = maybe_grant_link_credit(
                                          Credit1, DeliveryCount, map_size(U), Handle),
-                    Reply = Reply0 ++ Reply1 ++ Reply2,
+                    Reply = Reply0 ++ Reply1,
                     Link = Link0#incoming_link{
                              delivery_count = DeliveryCount,
                              credit = Credit,
@@ -1631,20 +1629,20 @@ handle_outgoing_link_flow_control(
     Drain = default(Drain0, false),
     Echo = default(Echo0, false),
     Properties = default(Properties0, #{}),
+    %%TODO pass MaybeDeliveryCountRcv and LinkdCreditRcv to rabbit_queue_type:credit
+    %% instead of LinkCreditSnd and have the queue make the calculation and maintain the delivery-count ??
     {ok, QStates, Actions} = rabbit_queue_type:credit(
                                QName, Ctag, LinkCreditSnd,
                                Drain, Echo, Properties, QStates0),
     State1 = State0#state{queue_states = QStates},
-    {Replies0, State2} = handle_queue_actions(Actions, State1),
+    State2 = handle_queue_actions(Actions, State1),
     case rabbit_feature_flags:is_enabled(credit_api_v2) of
         true ->
             %% We'll handle the credit_reply queue event async later
             %% thanks to the queue event containing the consumer tag.
-            {ok, Replies0, State2};
+            State2;
         false ->
-            {Replies, State} = process_credit_reply_sync(
-                                 Ctag, QName, LinkCreditSnd, State2),
-            {ok, Replies0 ++ Replies, State}
+            process_credit_reply_sync(Ctag, QName, LinkCreditSnd, State2)
     end.
 
 %% The AMQP 0.9.1 credit extension was poorly designed because a consumer granting
@@ -1669,18 +1667,16 @@ process_credit_reply_sync(
                       credit_reply_timeout(classic, QName)
             end;
         {ok, rabbit_quorum_queue} ->
-            process_credit_reply_sync_quorum_queue(
-              Ctag, QName, Credit, State, []);
+            process_credit_reply_sync_quorum_queue(Ctag, QName, Credit, State);
         {ok, rabbit_stream_queue} ->
             %% Stream is the exception in that the stream client
             %% directly returns the credit_reply action.
-            {[], State};
+            State;
         {error, not_found} ->
-            {[], State}
+            State
     end.
 
-process_credit_reply_sync_quorum_queue(
-  Ctag, QName, Credit, State0, Replies0) ->
+process_credit_reply_sync_quorum_queue(Ctag, QName, Credit, State0) ->
     receive {'$gen_cast',
              {queue_event,
               QName,
@@ -1708,14 +1704,12 @@ process_credit_reply_sync_quorum_queue(
                 Evt = {queue_event, QName, {QuorumQueue, {applied, Applied}}},
                 %% send_drained action must be processed by
                 %% rabbit_fifo_client to advance the delivery count.
-                {Replies1, State} = handle_queue_event(Evt, State0),
-                Replies = Replies0 ++ Replies1,
+                State = handle_queue_event(Evt, State0),
                 case ReceivedCreditReply of
                     true ->
-                        {Replies, State};
+                        State;
                     false ->
-                        process_credit_reply_sync_quorum_queue(
-                          Ctag, QName, Credit, State, Replies)
+                        process_credit_reply_sync_quorum_queue(Ctag, QName, Credit, State)
                 end
     after ?CREDIT_REPLY_TIMEOUT ->
               credit_reply_timeout(quorum, QName)
@@ -2095,7 +2089,7 @@ check_topic_authorisation(_, _, _, _) ->
 
 format_status(
   #{state := #state{cfg = Cfg,
-                    pending_transfers = PendingTransfers,
+                    outgoing_pending = OutgoingPending,
                     remote_incoming_window = RemoteIncomingWindow,
                     remote_outgoing_window = RemoteOutgoingWindow,
                     next_incoming_id = NextIncomingId,
@@ -2111,7 +2105,7 @@ format_status(
                     queue_states = QueueStates}} = Status) ->
 
     State = #{cfg => Cfg,
-              pending_transfers => queue:len(PendingTransfers),
+              outgoing_pending => queue:len(OutgoingPending),
               remote_incoming_window => RemoteIncomingWindow,
               remote_outgoing_window => RemoteOutgoingWindow,
               next_incoming_id => NextIncomingId,
