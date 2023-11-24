@@ -350,8 +350,8 @@ handle_1_0_frame0(Mode, Channel, Payload, State) ->
 parse_1_0_frame(Payload, _Channel) ->
     {PerfDesc, Rest} = amqp10_binary_parser:parse(Payload),
     Perf = amqp10_framing:decode(PerfDesc),
-    ?DEBUG("Channel ~tp ->~n~tp~n~ts~n",
-           [_Channel, amqp10_framing:pprint(Perf),
+    ?DEBUG("~s Channel ~tp ->~n~tp~n~ts~n",
+           [?MODULE, _Channel, amqp10_framing:pprint(Perf),
             case Rest of
                 <<>> -> <<>>;
                 _    -> rabbit_misc:format(

@@ -1359,9 +1359,9 @@ handle_deliver(ConsumerTag, AckRequired,
             Mc = mc:set_annotation(redelivered, Redelivered, Mc1),
             Sections0 = mc:protocol_state(Mc),
             Sections = mc_amqp:serialize(Sections0),
-            ?DEBUG("Outbound content:~n  ~tp",
-                   [[amqp10_framing:pprint(Section) ||
-                     Section <- amqp10_framing:decode_bin(iolist_to_binary(Sections))]]),
+            ?DEBUG("~s Outbound content:~n  ~tp~n",
+                   [?MODULE, [amqp10_framing:pprint(Section) ||
+                              Section <- amqp10_framing:decode_bin(iolist_to_binary(Sections))]]),
             validate_message_size(Sections, MaxMessageSize),
             Frames = case MaxFrameSize of
                          unlimited ->
@@ -1476,8 +1476,8 @@ incoming_link_transfer(
     validate_incoming_message_size(MsgBin),
 
     Sections = amqp10_framing:decode_bin(MsgBin),
-    ?DEBUG("Inbound content:~n  ~tp",
-           [[amqp10_framing:pprint(Section) || Section <- Sections]]),
+    ?DEBUG("~s Inbound content:~n  ~tp",
+           [?MODULE, [amqp10_framing:pprint(Section) || Section <- Sections]]),
     Anns0 = #{exchange => XNameBin},
     Anns = case LinkRKey of
                undefined -> Anns0;

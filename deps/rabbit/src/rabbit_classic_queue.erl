@@ -296,8 +296,11 @@ settle(_QName, Op, _CTag, MsgIds, State) ->
 credit(_QName, CTag, Credit, Drain, Reply, Properties, #?STATE{pid = QPid} = State) ->
     ChPid = self(),
     Request = case credit_api_vsn() of
-                  v2 -> {credit, ChPid, CTag, Credit, Drain, Reply, Properties};
-                  v1 -> {credit, ChPid, CTag, Credit, Drain}
+                  v2 ->
+                      %% TODO use a map for more flexiblity in the future?
+                      {credit, ChPid, CTag, Credit, Drain, Reply, Properties};
+                  v1 ->
+                      {credit, ChPid, CTag, Credit, Drain}
               end,
     delegate:invoke_no_result(QPid, {gen_server2, cast, [Request]}),
     {State, []}.

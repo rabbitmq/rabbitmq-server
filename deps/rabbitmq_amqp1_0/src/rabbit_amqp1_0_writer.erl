@@ -169,8 +169,8 @@ internal_send_command_async(Channel, MethodRecord, Content,
 
 %%TODO respect MaxFrame
 assemble_frames(Channel, Performative, Content, _MaxFrame) ->
-    ?DEBUG("Channel ~tp <-~n~tp~n followed by ~tp bytes of content~n",
-           [Channel, amqp10_framing:pprint(Performative),
+    ?DEBUG("~s Channel ~tp <-~n~tp~n followed by ~tp bytes of content~n",
+           [?MODULE, Channel, amqp10_framing:pprint(Performative),
             iolist_size(Content)]),
     PerfBin = amqp10_framing:encode_bin(Performative),
     amqp10_binary_generator:build_frame(Channel, [PerfBin, Content]).
@@ -179,13 +179,13 @@ assemble_frame(Channel, Performative) ->
     assemble_frame(Channel, Performative, amqp10_framing).
 
 assemble_frame(Channel, Performative, amqp10_framing) ->
-    ?DEBUG("Channel ~tp <-~n~tp~n",
-           [Channel, amqp10_framing:pprint(Performative)]),
+    ?DEBUG("~s Channel ~tp <-~n~tp~n",
+           [?MODULE, Channel, amqp10_framing:pprint(Performative)]),
     PerfBin = amqp10_framing:encode_bin(Performative),
     amqp10_binary_generator:build_frame(Channel, PerfBin);
 assemble_frame(Channel, Performative, rabbit_amqp1_0_sasl) ->
-    ?DEBUG("Channel ~tp <-~n~tp~n",
-           [Channel, amqp10_framing:pprint(Performative)]),
+    ?DEBUG("~s Channel ~tp <-~n~tp~n",
+           [?MODULE, Channel, amqp10_framing:pprint(Performative)]),
     PerfBin = amqp10_framing:encode_bin(Performative),
     amqp10_binary_generator:build_frame(Channel, ?AMQP_SASL_FRAME_TYPE, PerfBin).
 
