@@ -12,8 +12,8 @@
          size/1,
          x_header/2,
          routing_headers/2,
-         convert_to/2,
-         convert_from/2,
+         convert_to/3,
+         convert_from/3,
          protocol_state/2,
          property/2,
          set_property/3,
@@ -54,7 +54,7 @@ init(#content{} = Content0) ->
     Anns = essential_properties(Content),
     {strip_header(Content, ?DELETED_HEADER), Anns}.
 
-convert_from(mc_amqp, Sections) ->
+convert_from(mc_amqp, Sections, _Env) ->
     {H, MAnn, Prop, AProp, BodyRev} =
         lists:foldl(
           fun
@@ -144,15 +144,17 @@ convert_from(mc_amqp, Sections) ->
            end,
 
     Headers0 = [to_091(K, V) || {{utf8, K}, V} <- AP,
-                                byte_size(K) =< ?AMQP_LEGACY_FIELD_NAME_MAX_LEN],
-    %% Add remaining message annotations as headers?
+                                ?IS_SHORTSTR_LEN(K)],
+    %% Add remaining x- message annotations as headers
     XHeaders = lists:filtermap(fun({{symbol, <<"x-cc">>}, V}) ->
                                        {true, to_091(<<"CC">>, V)};
-                                  ({{symbol, K}, V})
-                                    when byte_size(K) =< ?AMQP_LEGACY_FIELD_NAME_MAX_LEN ->
+                                  ({{symbol, <<"x-", _/binary>> = K}, V})
+                                    when ?IS_SHORTSTR_LEN(K) ->
                                        case is_internal_header(K) of
-                                           false -> {true, to_091(K, V)};
-                                           true -> false
+                                           false ->
+                                               {true, to_091(K, V)};
+                                           true ->
+                                               false
                                        end;
                                   (_) ->
                                        false
@@ -161,6 +163,8 @@ convert_from(mc_amqp, Sections) ->
     {Headers, CorrId091} = message_id(CorrId, <<"x-correlation-id">>, Headers1),
 
     UserId1 = unwrap(UserId0),
+    %% user-id is a binary type so we need to validate
+    %% if we can use it as is
     UserId = case mc_util:is_valid_shortstr(UserId1) of
                  true ->
                      UserId1;
@@ -177,9 +181,9 @@ convert_from(mc_amqp, Sections) ->
                                   [] -> undefined;
                                   AllHeaders -> AllHeaders
                               end,
-                    reply_to = unwrap(ReplyTo0),
+                    reply_to = unwrap_shortstr(ReplyTo0),
                     type = Type,
-                    app_id = unwrap(GroupId),
+                    app_id = unwrap_shortstr(GroupId),
                     priority = Priority,
                     correlation_id = CorrId091,
                     content_type = unwrap(ContentType),
@@ -190,7 +194,7 @@ convert_from(mc_amqp, Sections) ->
              properties = BP,
              properties_bin = none,
              payload_fragments_rev = PayloadRev};
-convert_from(_SourceProto, _) ->
+convert_from(_SourceProto, _, _) ->
     not_implemented.
 
 size(#content{properties_bin = PropsBin,
@@ -263,11 +267,11 @@ prepare(store, Content) ->
     rabbit_binary_parser:clear_decoded_content(
       rabbit_binary_generator:ensure_content_encoded(Content, ?PROTOMOD)).
 
-convert_to(?MODULE, Content) ->
+convert_to(?MODULE, Content, _Env) ->
     Content;
-convert_to(mc_amqp, #content{payload_fragments_rev = Payload} = Content) ->
+convert_to(mc_amqp, #content{payload_fragments_rev = Payload} = Content, Env) ->
     #content{properties = Props} = prepare(read, Content),
-    #'P_basic'{message_id = MsgId,
+    #'P_basic'{message_id = MsgId0,
                expiration = Expiration,
                delivery_mode = DelMode,
                headers = Headers0,
@@ -276,7 +280,7 @@ convert_to(mc_amqp, #content{payload_fragments_rev = Payload} = Content) ->
                type = Type,
                priority = Priority,
                app_id = AppId,
-               correlation_id = CorrId,
+               correlation_id = CorrId0,
                content_type = ContentType,
                content_encoding = ContentEncoding,
                timestamp = Timestamp} = Props,
@@ -297,6 +301,7 @@ convert_to(mc_amqp, #content{payload_fragments_rev = Payload} = Content) ->
               undefined ->
                   undefined;
               _ ->
+                  %% Channel already checked for valid integer.
                   binary_to_integer(Expiration)
           end,
 
@@ -304,14 +309,26 @@ convert_to(mc_amqp, #content{payload_fragments_rev = Payload} = Content) ->
                        ttl = wrap(uint, Ttl),
                        %% TODO: check Priority is a ubyte?
                        priority = wrap(ubyte, Priority)},
+    CorrId = case mc_util:urn_string_to_uuid(CorrId0) of
+                 {ok, CorrUUID} ->
+                     {uuid, CorrUUID};
+                 _ ->
+                     wrap(utf8, CorrId0)
+             end,
+    MsgId = case mc_util:urn_string_to_uuid(MsgId0) of
+                 {ok, MsgUUID} ->
+                     {uuid, MsgUUID};
+                 _ ->
+                     wrap(utf8, MsgId0)
+             end,
     P = case amqp10_section_header(?AMQP10_PROPERTIES_HEADER, Headers) of
             undefined ->
-                #'v1_0.properties'{message_id = wrap(utf8, MsgId),
+                #'v1_0.properties'{message_id = MsgId,
                                    user_id = wrap(binary, UserId),
                                    to = undefined,
                                    % subject = wrap(utf8, RKey),
                                    reply_to = wrap(utf8, ReplyTo),
-                                   correlation_id = wrap(utf8, CorrId),
+                                   correlation_id = CorrId,
                                    content_type = wrap(symbol, ContentType),
                                    content_encoding = wrap(symbol, ContentEncoding),
                                    creation_time = wrap(timestamp, ConvertedTs),
@@ -367,8 +384,8 @@ convert_to(mc_amqp, #content{payload_fragments_rev = Payload} = Content) ->
                    end,
 
     Sections = [H, MA, P, AP | BodySections],
-    mc_amqp:convert_from(mc_amqp, Sections);
-convert_to(_TargetProto, _Content) ->
+    mc_amqp:convert_from(mc_amqp, Sections, Env);
+convert_to(_TargetProto, _Content, _Env) ->
     not_implemented.
 
 protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
@@ -606,7 +623,15 @@ unwrap({timestamp, V}) ->
 unwrap({_Type, V}) ->
     V.
 
-to_091(Key, {utf8, V}) when is_binary(V) -> {Key, longstr, V};
+unwrap_shortstr({utf8, V})
+  when is_binary(V) andalso
+       ?IS_SHORTSTR_LEN(V) ->
+    V;
+unwrap_shortstr(_) ->
+    undefined.
+
+to_091(Key, {utf8, V}) -> {Key, longstr, V};
+to_091(Key, {symbol, V}) -> {Key, longstr, V};
 to_091(Key, {long, V}) -> {Key, long, V};
 to_091(Key, {ulong, V}) -> {Key, long, V}; %% TODO: we could try to constrain this
 to_091(Key, {byte, V}) -> {Key, byte, V};
@@ -630,6 +655,7 @@ to_091(Key, {map, M}) ->
     {Key, table, [to_091(unwrap(K), V) || {K, V} <- M]}.
 
 to_091({utf8, V}) -> {longstr, V};
+to_091({symbol, V}) -> {longstr, V};
 to_091({long, V}) -> {long, V};
 to_091({byte, V}) -> {byte, V};
 to_091({ubyte, V}) -> {unsignedbyte, V};
@@ -652,17 +678,17 @@ to_091({map, M}) ->
     {table, [to_091(unwrap(K), V) || {K, V} <- M]}.
 
 message_id({uuid, UUID}, _HKey, H0) ->
-    {H0, mc_util:uuid_to_string(UUID)};
+    {H0, mc_util:uuid_to_urn_string(UUID)};
 message_id({ulong, N}, _HKey, H0) ->
     {H0, erlang:integer_to_binary(N)};
 message_id({binary, B}, HKey, H0) ->
-    {[{HKey, longstr, B} | H0], undefined};
+    {[{HKey, binary, B} | H0], undefined};
 message_id({utf8, S}, HKey, H0) ->
-    case byte_size(S) > 255 of
+    case ?IS_SHORTSTR_LEN(S) of
         true ->
-            {[{HKey, longstr, S} | H0], undefined};
+            {H0, S};
         false ->
-            {H0, S}
+            {[{HKey, longstr, S} | H0], undefined}
     end;
 message_id(undefined, _HKey, H) ->
     {H, undefined}.

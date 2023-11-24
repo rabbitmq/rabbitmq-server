@@ -10,6 +10,7 @@
 -define(QUEUE_TYPE_QOS_0, rabbit_mqtt_qos0_queue).
 -define(PERSISTENT_TERM_MAILBOX_SOFT_LIMIT, mqtt_mailbox_soft_limit).
 -define(PERSISTENT_TERM_EXCHANGE, mqtt_exchange).
+-define(DEFAULT_MQTT_EXCHANGE, <<"amq.topic">>).
 -define(MQTT_GUIDE_URL, <<"https://rabbitmq.com/mqtt.html">>).
 
 -define(MQTT_PROTO_V3, mqtt310).

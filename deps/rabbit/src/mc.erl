@@ -2,6 +2,7 @@
 
 -export([
          init/3,
+         init/4,
          size/1,
          is/1,
          get_annotation/2,
@@ -19,6 +20,7 @@
          routing_headers/2,
          %%
          convert/2,
+         convert/3,
          protocol_state/1,
          prepare/2,
          record_death/3,
@@ -36,6 +38,7 @@
 -type protocol() :: module().
 -type annotations() :: #{internal_ann_key() => term(),
                          x_ann_key() => x_ann_value()}.
+-type environment() :: #{atom() => term()}.
 -type ann_key() :: internal_ann_key() | x_ann_key().
 -type ann_value() :: term().
 
@@ -107,12 +110,12 @@
 
 %% Convert state to another protocol
 %% all protocols must be able to convert to mc_amqp (AMQP 1.0)
--callback convert_to(Target :: protocol(), proto_state()) ->
+-callback convert_to(Target :: protocol(), proto_state(), environment()) ->
     proto_state() | not_implemented.
 
 %% Convert from another protocol
 %% all protocols must be able to convert from mc_amqp (AMQP 1.0)
--callback convert_from(Source :: protocol(), proto_state()) ->
+-callback convert_from(Source :: protocol(), proto_state(), environment()) ->
     proto_state() | not_implemented.
 
 %% emit a protocol specific state package
@@ -128,10 +131,21 @@
 %%% API
 
 -spec init(protocol(), term(), annotations()) -> state().
-init(Proto, Data, Anns)
+init(Proto, Data, Anns) ->
+    init(Proto, Data, Anns, #{}).
+
+-spec init(protocol(), term(), annotations(), environment()) -> state().
+init(Proto, Data, Anns0, Env)
   when is_atom(Proto)
-       andalso is_map(Anns) ->
+       andalso is_map(Anns0)
+       andalso is_map(Env) ->
     {ProtoData, ProtoAnns} = Proto:init(Data),
+    Anns = case maps:size(Env) == 0 of
+               true ->
+                   Anns0;
+               false ->
+                   Anns0#{env => Env}
+           end,
     #?MODULE{protocol = Proto,
              data = ProtoData,
              annotations = maps:merge(ProtoAnns, Anns)}.
@@ -265,18 +279,26 @@ set_ttl(Value, BasicMsg) ->
     mc_compat:set_ttl(Value, BasicMsg).
 
 -spec convert(protocol(), state()) -> state().
-convert(Proto, #?MODULE{protocol = Proto} = State) ->
+convert(Proto, State) ->
+    convert(Proto, State, #{}).
+
+-spec convert(protocol(), state(), environment()) -> state().
+convert(Proto, #?MODULE{protocol = Proto} = State, _Env) ->
     State;
 convert(TargetProto, #?MODULE{protocol = SourceProto,
-                              data = Data0} = State) ->
+                              annotations = Anns,
+                              data = Data0} = State,
+        TargetEnv) ->
     Data = SourceProto:prepare(read, Data0),
+    SourceEnv = maps:get(env, Anns, #{}),
+    Env = maps:merge(SourceEnv, TargetEnv),
     TargetState =
-        case SourceProto:convert_to(TargetProto, Data) of
+        case SourceProto:convert_to(TargetProto, Data, Env) of
             not_implemented ->
-                case TargetProto:convert_from(SourceProto, Data) of
+                case TargetProto:convert_from(SourceProto, Data, Env) of
                     not_implemented ->
-                        AmqpData = SourceProto:convert_to(mc_amqp, Data),
-                        mc_amqp:convert_to(TargetProto, AmqpData);
+                        AmqpData = SourceProto:convert_to(mc_amqp, Data, Env),
+                        mc_amqp:convert_to(TargetProto, AmqpData, Env);
                     TargetState0 ->
                         TargetState0
                 end;
@@ -285,7 +307,7 @@ convert(TargetProto, #?MODULE{protocol = SourceProto,
         end,
     State#?MODULE{protocol = TargetProto,
                   data = TargetState};
-convert(Proto, BasicMsg) ->
+convert(Proto, BasicMsg, _Env) ->
     mc_compat:convert_to(Proto, BasicMsg).
 
 -spec protocol_state(state()) -> term().

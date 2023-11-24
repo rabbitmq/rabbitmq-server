@@ -24,6 +24,7 @@ groups() ->
 
 all_tests() ->
     [
+     mc_util_uuid_to_urn_roundtrip,
      amqpl_defaults,
      amqpl_compat,
      amqpl_table_x_header,
@@ -31,7 +32,13 @@ all_tests() ->
      amqpl_death_records,
      amqpl_amqp_bin_amqpl,
      amqpl_cc_amqp_bin_amqpl,
+     amqp_amqpl_amqp_uuid_correlation_id,
      amqp_amqpl,
+     amqp_amqpl_message_id_ulong,
+     amqp_amqpl_amqp_message_id_uuid,
+     amqp_amqpl_message_id_large,
+     amqp_amqpl_message_id_binary,
+     amqp_amqpl_unsupported_values_not_converted,
      amqp_to_amqpl_data_body,
      amqp_amqpl_amqp_bodies
     ].
@@ -104,7 +111,6 @@ amqpl_compat(_Config) ->
     ?assertEqual({utf8, <<"apple">>}, mc:x_header(<<"x-stream-filter">>, Msg)),
 
     RoutingHeaders = mc:routing_headers(Msg, []),
-    ct:pal("routing headers ~p", [RoutingHeaders]),
     ?assertMatch(#{<<"a-binary">> := <<"data">>,
                    <<"a-bool">> := false,
                    <<"a-double">> := 1.0,
@@ -235,13 +241,6 @@ amqpl_death_records(_Config) ->
     {_, array, [{table, T2a}, {table, T2b}]} = header(<<"x-death">>, H2),
     ?assertMatch({_, longstr, <<"dl">>}, header(<<"queue">>, T2a)),
     ?assertMatch({_, longstr, <<"q1">>}, header(<<"queue">>, T2b)),
-
-    ct:pal("H2 ~p", [T2a]),
-    ct:pal("routing headers ~p", [mc:routing_headers(Msg2, [x_headers])]),
-
-
-
-
     ok.
 
 header(K, H) ->
@@ -265,6 +264,7 @@ amqpl_amqp_bin_amqpl(_Config) ->
                                   {<<"a-float">>, float, 1.0},
                                   {<<"a-void">>, void, undefined},
                                   {<<"a-binary">>, binary, <<"data">>},
+                                  {<<"a-array">>, array, [{long, 1}, {long, 2}]},
                                   {<<"x-stream-filter">>, longstr, <<"apple">>}
                                  ],
                        delivery_mode = 2,
@@ -295,7 +295,9 @@ amqpl_amqp_bin_amqpl(_Config) ->
     ?assertEqual(1, mc:ttl(Msg)),
     ?assertEqual({utf8, <<"apple">>}, mc:x_header(<<"x-stream-filter">>, Msg)),
 
-    RoutingHeaders = mc:routing_headers(Msg, []),
+
+    %% array type non x-headers cannot be converted into amqp
+    RoutingHeaders = maps:remove(<<"a-array">>, mc:routing_headers(Msg, [])),
 
     %% roundtrip to binary
     Msg10Pre = mc:convert(mc_amqp, Msg),
@@ -311,7 +313,50 @@ amqpl_amqp_bin_amqpl(_Config) ->
     ?assertEqual({utf8, <<"msg-id">>}, mc:message_id(Msg10)),
     ?assertEqual(1, mc:ttl(Msg10)),
     ?assertEqual({utf8, <<"apple">>}, mc:x_header(<<"x-stream-filter">>, Msg10)),
+    %% at this point the type is now present as a message annotation
+    ?assertEqual({utf8, <<"45">>}, mc:x_header(<<"x-basic-type">>, Msg10)),
     ?assertEqual(RoutingHeaders, mc:routing_headers(Msg10, [])),
+
+    [
+     #'v1_0.header'{} = Hdr10,
+     #'v1_0.message_annotations'{},
+     #'v1_0.properties'{} = Props10,
+     #'v1_0.application_properties'{content = AP10}
+     | _] = Sections,
+
+    ?assertMatch(#'v1_0.header'{durable = true,
+                                ttl = {uint, 1},
+                                priority = {ubyte, 98}},
+                 Hdr10),
+    ?assertMatch(#'v1_0.properties'{content_encoding = {symbol, <<"gzip">>},
+                                    content_type = {symbol, <<"text/plain">>},
+                                    reply_to = {utf8, <<"reply-to">>},
+                                    creation_time = {timestamp, 99000},
+                                    user_id = {binary, <<"banana">>},
+                                    group_id = {utf8, <<"rmq">>}
+                                   },
+                 Props10),
+
+    Get = fun(K, AP) -> amqp_map_get(utf8(K), AP) end,
+
+
+    ?assertEqual({long, 99}, Get(<<"a-stream-offset">>, AP10)),
+    ?assertEqual({utf8, <<"a string">>}, Get(<<"a-string">>, AP10)),
+    ?assertEqual({boolean, false}, Get(<<"a-bool">>, AP10)),
+    ?assertEqual({ubyte, 1}, Get(<<"a-unsignedbyte">>, AP10)),
+    ?assertEqual({ushort, 1}, Get(<<"a-unsignedshort">>, AP10)),
+    ?assertEqual({uint, 1}, Get(<<"a-unsignedint">>, AP10)),
+    ?assertEqual({int, 1}, Get(<<"a-signedint">>, AP10)),
+    ?assertEqual({timestamp, 1000}, Get(<<"a-timestamp">>, AP10)),
+    ?assertEqual({double, 1.0}, Get(<<"a-double">>, AP10)),
+    ?assertEqual({float, 1.0}, Get(<<"a-float">>, AP10)),
+    ?assertEqual(undefined, Get(<<"a-void">>, AP10)),
+    ?assertEqual({binary, <<"data">>}, Get(<<"a-binary">>, AP10)),
+    %% x-headers do not go into app props
+    ?assertEqual(undefined, Get(<<"x-stream-filter">>, AP10)),
+    %% arrays are not converted
+    ?assertEqual(undefined, Get(<<"a-array">>, AP10)),
+    %% assert properties
 
     MsgL2 = mc:convert(mc_amqpl, Msg10),
 
@@ -353,8 +398,75 @@ amqpl_cc_amqp_bin_amqpl(_Config) ->
 thead2(T, Value) ->
     {symbol(atom_to_binary(T)), {T, Value}}.
 
+thead2(K, T, Value) ->
+    {symbol(atom_to_binary(K)), {T, Value}}.
+
 thead(T, Value) ->
     {utf8(atom_to_binary(T)), {T, Value}}.
+
+mc_util_uuid_to_urn_roundtrip(_Config) ->
+    %% roundtrip uuid test
+    UUID = <<88,184,103,176,129,81,31,86,27,212,115,34,152,7,253,96>>,
+    S = mc_util:uuid_to_urn_string(UUID),
+    ?assertEqual(<<"urn:uuid:58b867b0-8151-1f56-1bd4-73229807fd60">>, S),
+    ?assertEqual({ok, UUID}, mc_util:urn_string_to_uuid(S)),
+    ok.
+
+do_n(0, _) ->
+    ok;
+do_n(N, Fun) ->
+    Fun(),
+    do_n(N -1, Fun).
+
+amqp_amqpl_unsupported_values_not_converted(_Config) ->
+    LongKey = binary:copy(<<"a">>, 256),
+    UTF8Key = <<"I am a 🐰"/utf8>>,
+    APC = [
+           {{utf8, <<"area">>}, {utf8, <<"East Sussex">>}},
+           {{utf8, LongKey}, {utf8, <<"apple">>}},
+           {{utf8, UTF8Key}, {utf8, <<"dog">>}}
+          ],
+    AP =  #'v1_0.application_properties'{content = APC},
+
+    %% invalid utf8
+    UserId = <<0, "banana"/utf8>>,
+    ?assertEqual(false, mc_util:is_valid_shortstr(UserId)),
+
+    P = #'v1_0.properties'{user_id = {binary, UserId}},
+    D =  #'v1_0.data'{content = <<"data">>},
+
+    Anns = #{exchange => <<"exch">>,
+             routing_keys => [<<"apple">>]},
+    Msg = mc:init(mc_amqp, [P, AP, D], Anns),
+    MsgL = mc:convert(mc_amqpl, Msg),
+    #content{properties = #'P_basic'{user_id = undefined,
+                                     headers = HL}} = mc:protocol_state(MsgL),
+    ?assertMatch({_, longstr, <<"East Sussex">>}, header(<<"area">>, HL)),
+    ?assertMatch(undefined, header(LongKey, HL)),
+    %% RabbitMQ does not validate that keys are ascii as per spec
+    %% that's ok after all who really cares?
+    ok.
+
+amqp_amqpl_amqp_uuid_correlation_id(_Config) ->
+    %% ensure uuid correlation ids are correctly roundtripped via urn formatting
+    UUID = crypto:strong_rand_bytes(16),
+
+    P = #'v1_0.properties'{correlation_id = {uuid, UUID},
+                           message_id = {uuid, UUID}},
+    D =  #'v1_0.data'{content = <<"data">>},
+
+    Anns = #{exchange => <<"exch">>,
+             routing_keys => [<<"apple">>]},
+    Msg = mc:init(mc_amqp, [P, D], Anns),
+    MsgL = mc:convert(mc_amqpl, Msg),
+    MsgOut = mc:convert(mc_amqp, MsgL),
+
+    ?assertEqual({uuid, UUID}, mc:correlation_id(MsgOut)),
+    ?assertEqual({uuid, UUID}, mc:message_id(MsgOut)),
+
+    ok.
+
+
 
 amqp_amqpl(_Config) ->
     H = #'v1_0.header'{priority = {ubyte, 3},
@@ -362,8 +474,10 @@ amqp_amqpl(_Config) ->
                        durable = true},
     MAC = [
            {{symbol, <<"x-stream-filter">>}, {utf8, <<"apple">>}},
-          thead2(list, [utf8(<<"1">>)]),
-          thead2(map, [{utf8(<<"k">>), utf8(<<"v">>)}])
+           thead2(list, [utf8(<<"l">>)]),
+           thead2(map, [{utf8(<<"k">>), utf8(<<"v">>)}]),
+           thead2('x-list', list, [utf8(<<"l">>)]),
+           thead2('x-map', map, [{utf8(<<"k">>), utf8(<<"v">>)}])
           ],
     M =  #'v1_0.message_annotations'{content = MAC},
     P = #'v1_0.properties'{content_type = {symbol, <<"ctype">>},
@@ -380,6 +494,7 @@ amqp_amqpl(_Config) ->
           thead(ulong, 5),
           thead(utf8, <<"a-string">>),
           thead(binary, <<"data">>),
+          thead(symbol, <<"symbol">>),
           thead(ubyte, 1),
           thead(short, 2),
           thead(ushort, 3),
@@ -390,6 +505,7 @@ amqp_amqpl(_Config) ->
           thead(timestamp, 7000),
           thead(byte, 128),
           thead(boolean, true),
+          {{utf8, <<"boolean2">>}, false},
           {utf8(<<"null">>), null}
          ],
     A =  #'v1_0.application_properties'{content = AC},
@@ -411,8 +527,10 @@ amqp_amqpl(_Config) ->
     ?assertEqual(3, mc:priority(MsgL)),
     ?assertEqual(true, mc:is_persistent(MsgL)),
     ?assertEqual({utf8, <<"msg-id">>}, mc:message_id(MsgL)),
-    #content{properties = #'P_basic'{headers = HL} = Props} = Content = mc:protocol_state(MsgL),
+    #content{properties = #'P_basic'{headers = HL} = Props} = Content =
+        mc:protocol_state(MsgL),
 
+    %% the user id is valid utf8 shortstr
     ?assertMatch(#'P_basic'{user_id = <<"user-id">>}, Props),
     ?assertMatch(#'P_basic'{reply_to = <<"reply-to">>}, Props),
     ?assertMatch(#'P_basic'{content_type = <<"ctype">>}, Props),
@@ -424,11 +542,17 @@ amqp_amqpl(_Config) ->
     ?assertMatch(#'P_basic'{expiration = <<"20000">>}, Props),
 
     ?assertMatch({_, longstr, <<"apple">>}, header(<<"x-stream-filter">>, HL)),
+    %% these are not coverted as not x- headers
+    ?assertEqual(undefined, header(<<"list">>, HL)),
+    ?assertEqual(undefined, header(<<"map">>, HL)),
+    ?assertMatch({_ ,array, [{longstr,<<"l">>}]}, header(<<"x-list">>, HL)),
+    ?assertMatch({_, table, [{<<"k">>,longstr,<<"v">>}]}, header(<<"x-map">>, HL)),
 
     ?assertMatch({_, long, 5}, header(<<"long">>, HL)),
     ?assertMatch({_, long, 5}, header(<<"ulong">>, HL)),
     ?assertMatch({_, longstr, <<"a-string">>}, header(<<"utf8">>, HL)),
     ?assertMatch({_, binary, <<"data">>}, header(<<"binary">>, HL)),
+    ?assertMatch({_, longstr, <<"symbol">>}, header(<<"symbol">>, HL)),
     ?assertMatch({_, unsignedbyte, 1}, header(<<"ubyte">>, HL)),
     ?assertMatch({_, short, 2}, header(<<"short">>, HL)),
     ?assertMatch({_, unsignedshort, 3}, header(<<"ushort">>, HL)),
@@ -439,6 +563,7 @@ amqp_amqpl(_Config) ->
     ?assertMatch({_, timestamp, 7}, header(<<"timestamp">>, HL)),
     ?assertMatch({_, byte, 128}, header(<<"byte">>, HL)),
     ?assertMatch({_, bool, true}, header(<<"boolean">>, HL)),
+    ?assertMatch({_, bool, false}, header(<<"boolean2">>, HL)),
     ?assertMatch({_, void, undefined}, header(<<"null">>, HL)),
 
     %% validate content is serialisable
@@ -446,6 +571,79 @@ amqp_amqpl(_Config) ->
                                                             1000000,
                                                             rabbit_framing_amqp_0_9_1),
 
+    ok.
+
+amqp_amqpl_message_id_ulong(_Config) ->
+    Num = 9876789,
+    ULong = erlang:integer_to_binary(Num),
+    P = #'v1_0.properties'{message_id = {ulong, Num},
+                           correlation_id = {ulong, Num}},
+    D =  #'v1_0.data'{content = <<"data">>},
+    Anns = #{exchange => <<"exch">>,
+             routing_keys => [<<"apple">>]},
+    Msg = mc:init(mc_amqp, [P, D], Anns),
+    MsgL = mc:convert(mc_amqpl, Msg),
+    ?assertEqual({utf8, ULong}, mc:message_id(MsgL)),
+    ?assertEqual({utf8, ULong}, mc:correlation_id(MsgL)),
+    #content{properties = #'P_basic'{} = Props} = mc:protocol_state(MsgL),
+    ?assertMatch(#'P_basic'{message_id = ULong,
+                            correlation_id = ULong}, Props),
+    %% NB we can't practically roundtrip ulong correlation ids
+    ok.
+
+amqp_amqpl_amqp_message_id_uuid(_Config) ->
+    %% uuid message-ids are roundtripped using a urn uuid format
+    UUId = crypto:strong_rand_bytes(16),
+    Urn = mc_util:uuid_to_urn_string(UUId),
+    P = #'v1_0.properties'{message_id = {uuid, UUId},
+                           correlation_id = {uuid, UUId}},
+    D =  #'v1_0.data'{content = <<"data">>},
+    Anns = #{exchange => <<"exch">>,
+             routing_keys => [<<"apple">>]},
+    Msg = mc:init(mc_amqp, [P, D], Anns),
+    MsgL = mc:convert(mc_amqpl, Msg),
+    ?assertEqual({utf8, Urn}, mc:message_id(MsgL)),
+    ?assertEqual({utf8, Urn}, mc:correlation_id(MsgL)),
+    #content{properties = #'P_basic'{} = Props} = mc:protocol_state(MsgL),
+    ?assertMatch(#'P_basic'{message_id = Urn,
+                            correlation_id = Urn}, Props),
+    %% check roundtrip back
+    Msg2 = mc:convert(mc_amqp, MsgL),
+    ?assertEqual({uuid, UUId}, mc:message_id(Msg2)),
+    ?assertEqual({uuid, UUId}, mc:correlation_id(Msg2)),
+    ok.
+
+
+amqp_amqpl_message_id_large(_Config) ->
+    Orig = binary:copy(<<"hi">>, 256),
+    P = #'v1_0.properties'{message_id = {utf8, Orig},
+                           correlation_id = {utf8, Orig}},
+    D =  #'v1_0.data'{content = <<"data">>},
+    Anns = #{exchange => <<"exch">>,
+             routing_keys => [<<"apple">>]},
+    Msg = mc:init(mc_amqp, [P, D], Anns),
+    MsgL = mc:convert(mc_amqpl, Msg),
+    ?assertEqual(undefined, mc:message_id(MsgL)),
+    ?assertEqual(undefined, mc:correlation_id(MsgL)),
+    #content{properties = #'P_basic'{headers = Hdrs}} = mc:protocol_state(MsgL),
+    ?assertMatch({_, longstr, Orig}, header(<<"x-message-id">>, Hdrs)),
+    ?assertMatch({_, longstr, Orig}, header(<<"x-correlation-id">>, Hdrs)),
+    ok.
+
+amqp_amqpl_message_id_binary(_Config) ->
+    Orig = crypto:strong_rand_bytes(128),
+    P = #'v1_0.properties'{message_id = {binary, Orig},
+                           correlation_id = {binary, Orig}},
+    D =  #'v1_0.data'{content = <<"data">>},
+    Anns = #{exchange => <<"exch">>,
+             routing_keys => [<<"apple">>]},
+    Msg = mc:init(mc_amqp, [P, D], Anns),
+    MsgL = mc:convert(mc_amqpl, Msg),
+    ?assertEqual(undefined, mc:message_id(MsgL)),
+    ?assertEqual(undefined, mc:correlation_id(MsgL)),
+    #content{properties = #'P_basic'{headers = Hdrs}} = mc:protocol_state(MsgL),
+    ?assertMatch({_, binary, Orig}, header(<<"x-message-id">>, Hdrs)),
+    ?assertMatch({_, binary, Orig}, header(<<"x-correlation-id">>, Hdrs)),
     ok.
 
 amqp_to_amqpl_data_body(_Config) ->
@@ -503,158 +701,8 @@ amqp_amqpl_amqp_bodies(_Config) ->
                           false ->
                               [Payload]
                       end,
-         % ct:pal("ProtoState ~p", [BodySections]),
          ?assertEqual(AssertBody, BodySections)
      end || Payload <- Bodies],
-    ok.
-
-unsupported_091_header_is_dropped(_Config) ->
-    Props = #'P_basic'{
-                       headers = [
-                                  {<<"x-received-from">>, array, []}
-                                 ]
-                      },
-    MsgRecord0 = rabbit_msg_record:from_amqp091(Props, <<"payload">>),
-    MsgRecord = rabbit_msg_record:init(
-                  iolist_to_binary(rabbit_msg_record:to_iodata(MsgRecord0))),
-    % meck:unload(),
-    {PropsOut, <<"payload">>} = rabbit_msg_record:to_amqp091(MsgRecord),
-
-    ?assertMatch(#'P_basic'{headers = undefined}, PropsOut),
-
-    ok.
-
-message_id_ulong(_Config) ->
-    Num = 9876789,
-    ULong = erlang:integer_to_binary(Num),
-    P = #'v1_0.properties'{message_id = {ulong, Num},
-                           correlation_id = {ulong, Num}},
-    D =  #'v1_0.data'{content = <<"data">>},
-    Bin = [amqp10_framing:encode_bin(P),
-           amqp10_framing:encode_bin(D)],
-    R = rabbit_msg_record:init(iolist_to_binary(Bin)),
-    {Props, _} = rabbit_msg_record:to_amqp091(R),
-    ?assertMatch(#'P_basic'{message_id = ULong,
-                            correlation_id = ULong,
-                            headers =
-                            [
-                             %% ordering shouldn't matter
-                             {<<"x-correlation-id-type">>, longstr, <<"ulong">>},
-                             {<<"x-message-id-type">>, longstr, <<"ulong">>}
-                            ]},
-                 Props),
-    ok.
-
-message_id_uuid(_Config) ->
-    %% fake a uuid
-    UUId = erlang:md5(term_to_binary(make_ref())),
-    TextUUId = rabbit_data_coercion:to_binary(rabbit_guid:to_string(UUId)),
-    P = #'v1_0.properties'{message_id = {uuid, UUId},
-                           correlation_id = {uuid, UUId}},
-    D =  #'v1_0.data'{content = <<"data">>},
-    Bin = [amqp10_framing:encode_bin(P),
-           amqp10_framing:encode_bin(D)],
-    R = rabbit_msg_record:init(iolist_to_binary(Bin)),
-    {Props, _} = rabbit_msg_record:to_amqp091(R),
-    ?assertMatch(#'P_basic'{message_id = TextUUId,
-                            correlation_id = TextUUId,
-                            headers =
-                            [
-                             %% ordering shouldn't matter
-                             {<<"x-correlation-id-type">>, longstr, <<"uuid">>},
-                             {<<"x-message-id-type">>, longstr, <<"uuid">>}
-                            ]},
-                 Props),
-    ok.
-
-message_id_binary(_Config) ->
-    %% fake a uuid
-    Orig = <<"asdfasdf">>,
-    Text = base64:encode(Orig),
-    P = #'v1_0.properties'{message_id = {binary, Orig},
-                           correlation_id = {binary, Orig}},
-    D =  #'v1_0.data'{content = <<"data">>},
-    Bin = [amqp10_framing:encode_bin(P),
-           amqp10_framing:encode_bin(D)],
-    R = rabbit_msg_record:init(iolist_to_binary(Bin)),
-    {Props, _} = rabbit_msg_record:to_amqp091(R),
-    ?assertMatch(#'P_basic'{message_id = Text,
-                            correlation_id = Text,
-                            headers =
-                            [
-                             %% ordering shouldn't matter
-                             {<<"x-correlation-id-type">>, longstr, <<"binary">>},
-                             {<<"x-message-id-type">>, longstr, <<"binary">>}
-                            ]},
-                 Props),
-    ok.
-
-message_id_large_binary(_Config) ->
-    %% cannot fit in a shortstr
-    Orig = crypto:strong_rand_bytes(500),
-    P = #'v1_0.properties'{message_id = {binary, Orig},
-                           correlation_id = {binary, Orig}},
-    D =  #'v1_0.data'{content = <<"data">>},
-    Bin = [amqp10_framing:encode_bin(P),
-           amqp10_framing:encode_bin(D)],
-    R = rabbit_msg_record:init(iolist_to_binary(Bin)),
-    {Props, _} = rabbit_msg_record:to_amqp091(R),
-    ?assertMatch(#'P_basic'{message_id = undefined,
-                            correlation_id = undefined,
-                            headers =
-                            [
-                             %% ordering shouldn't matter
-                             {<<"x-correlation-id">>, longstr, Orig},
-                             {<<"x-message-id">>, longstr, Orig}
-                            ]},
-                 Props),
-    ok.
-
-message_id_large_string(_Config) ->
-    %% cannot fit in a shortstr
-    Orig = base64:encode(crypto:strong_rand_bytes(500)),
-    P = #'v1_0.properties'{message_id = {utf8, Orig},
-                           correlation_id = {utf8, Orig}},
-    D =  #'v1_0.data'{content = <<"data">>},
-    Bin = [amqp10_framing:encode_bin(P),
-           amqp10_framing:encode_bin(D)],
-    R = rabbit_msg_record:init(iolist_to_binary(Bin)),
-    {Props, _} = rabbit_msg_record:to_amqp091(R),
-    ?assertMatch(#'P_basic'{message_id = undefined,
-                            correlation_id = undefined,
-                            headers =
-                            [
-                             %% ordering shouldn't matter
-                             {<<"x-correlation-id">>, longstr, Orig},
-                             {<<"x-message-id">>, longstr, Orig}
-                            ]},
-                 Props),
-    ok.
-
-reuse_amqp10_binary_chunks(_Config) ->
-    Amqp10MsgAnnotations = #'v1_0.message_annotations'{content =
-                                                       [{{symbol, <<"x-route">>}, {utf8, <<"dummy">>}}]},
-    Amqp10MsgAnnotationsBin = amqp10_encode_bin(Amqp10MsgAnnotations),
-    Amqp10Props = #'v1_0.properties'{group_id = {utf8, <<"my-group">>},
-                                     group_sequence = {uint, 42}},
-    Amqp10PropsBin = amqp10_encode_bin(Amqp10Props),
-    Amqp10AppProps = #'v1_0.application_properties'{content = [{{utf8, <<"foo">>}, {utf8, <<"bar">>}}]},
-    Amqp10AppPropsBin = amqp10_encode_bin(Amqp10AppProps),
-    Amqp091Headers = [{<<"x-amqp-1.0-message-annotations">>, longstr, Amqp10MsgAnnotationsBin},
-                      {<<"x-amqp-1.0-properties">>, longstr, Amqp10PropsBin},
-                      {<<"x-amqp-1.0-app-properties">>, longstr, Amqp10AppPropsBin}],
-    Amqp091Props = #'P_basic'{type= <<"amqp-1.0">>, headers = Amqp091Headers},
-    Body = #'v1_0.amqp_value'{content = {utf8, <<"hello world">>}},
-    EncodedBody = amqp10_encode_bin(Body),
-    R = rabbit_msg_record:from_amqp091(Amqp091Props, EncodedBody),
-    RBin = rabbit_msg_record:to_iodata(R),
-    Amqp10DecodedMsg = amqp10_framing:decode_bin(iolist_to_binary(RBin)),
-    [Amqp10DecodedMsgAnnotations, Amqp10DecodedProps,
-     Amqp10DecodedAppProps, DecodedBody] = Amqp10DecodedMsg,
-    ?assertEqual(Amqp10MsgAnnotations, Amqp10DecodedMsgAnnotations),
-    ?assertEqual(Amqp10Props, Amqp10DecodedProps),
-    ?assertEqual(Amqp10AppProps, Amqp10DecodedAppProps),
-    ?assertEqual(Body, DecodedBody),
     ok.
 
 amqp10_encode_bin(L) when is_list(L) ->
@@ -664,17 +712,6 @@ amqp10_encode_bin(X) ->
 
 %% Utility
 
-test_amqp091_roundtrip(Props, Payload) ->
-    MsgRecord0 = rabbit_msg_record:from_amqp091(Props, Payload),
-    MsgRecord = rabbit_msg_record:init(
-                  iolist_to_binary(rabbit_msg_record:to_iodata(MsgRecord0))),
-    % meck:unload(),
-    {PropsOut, PayloadOut} = rabbit_msg_record:to_amqp091(MsgRecord),
-    ?assertEqual(Props, PropsOut),
-    ?assertEqual(iolist_to_binary(Payload),
-                 iolist_to_binary(PayloadOut)),
-    ok.
-
 utf8(V) ->
     {utf8, V}.
 symbol(V) ->
@@ -682,3 +719,13 @@ symbol(V) ->
 
 amqp_serialize(Msg) ->
     mc_amqp:serialize(mc:protocol_state(Msg)).
+
+amqp_map_get(_K, []) ->
+    undefined;
+amqp_map_get(K, Tuples) ->
+    case lists:keyfind(K, 1, Tuples) of
+        false ->
+            undefined;
+        {_, V}  ->
+            V
+    end.

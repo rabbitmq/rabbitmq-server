@@ -17,7 +17,6 @@
 %% good enough for most use cases
 -define(IS_MC(Msg), element(1, Msg) == mc andalso tuple_size(Msg) == 5).
 
-%% "Field names MUST start with a letter, '$' or '#' and may continue with letters, '$' or '#', digits, or
-%% underlines, to a maximum length of 128 characters." [AMQP 0.9.1 4.2.5.5 Field Tables]
-%% Given that the valid chars are ASCII chars, 1 char is encoded as 1 byte.
--define(AMQP_LEGACY_FIELD_NAME_MAX_LEN, 128).
+%% "Short strings can carry up to 255 octets of UTF-8 data, but
+%% may not contain binary zero octets." [AMQP 0.9.1 $4.2.5.3]
+-define(IS_SHORTSTR_LEN(B), byte_size(B) < 256).
