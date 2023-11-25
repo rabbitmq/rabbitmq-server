@@ -34,10 +34,11 @@ allowed_methods(ReqData, Context) ->
     {[<<"HEAD">>, <<"GET">>, <<"PUT">>, <<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {case policy(ReqData) of
-         not_found -> false;
-         _         -> true
-     end, ReqData, Context}.
+    Result = case policy(ReqData) of
+        not_found -> false;
+        _         -> true
+    end,
+    {Result, ReqData, Context}.
 
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(policy(ReqData), ReqData, Context).
@@ -76,7 +77,10 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 policy(ReqData) ->
-    rabbit_policy:lookup(
-      rabbit_mgmt_util:vhost(ReqData), name(ReqData)).
+    case rabbit_mgmt_util:vhost(ReqData) of
+        not_found -> not_found;
+        none      -> not_found;
+        Value     -> rabbit_policy:lookup(Value, name(ReqData))
+    end.
 
 name(ReqData) -> rabbit_mgmt_util:id(name, ReqData).
