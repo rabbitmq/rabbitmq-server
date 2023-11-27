@@ -39,6 +39,7 @@ endif
 
 dep_amqp_client                       = git_rmq-subfolder rabbitmq-erlang-client $(current_rmq_ref) $(base_rmq_ref) main
 dep_amqp10_client                     = git_rmq-subfolder rabbitmq-amqp1.0-client $(current_rmq_ref) $(base_rmq_ref) main
+dep_oauth2_client                     = git_rmq-subfolder oauth2-client $(current_rmq_ref) $(base_rmq_ref) main
 dep_amqp10_common                     = git_rmq-subfolder rabbitmq-amqp1.0-common $(current_rmq_ref) $(base_rmq_ref) main
 dep_rabbit                            = git_rmq-subfolder rabbitmq-server $(current_rmq_ref) $(base_rmq_ref) main
 dep_rabbit_common                     = git_rmq-subfolder rabbitmq-common $(current_rmq_ref) $(base_rmq_ref) main
@@ -130,6 +131,7 @@ dep_sysmon_handler = hex 1.3.0
 RABBITMQ_COMPONENTS = amqp_client \
 		      amqp10_common \
 		      amqp10_client \
+					oauth2_client \
 		      rabbit \
 		      rabbit_common \
 		      rabbitmq_amqp1_0 \

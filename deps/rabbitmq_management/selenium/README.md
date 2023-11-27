@@ -36,13 +36,20 @@ not see any browser interaction, everything happens in the background, i.e. rabb
 
 To run just one suite, you proceed as follows:
 ```
-suites/oauth-with-uaa.sh
+suites/authnz-mgt/oauth-with-uaa.sh
 ```
 
-And to is run all suites, like the CI does, you run:
+And to a group of suites, like the CI does, you run the command below which runs all
+the management ui suites. If you do not pass `full-suite-management-ui`, `run-suites.sh`
+defaults to `full-suite-management-ui`.
 ```
-./run-suites.sh
+./run-suites.sh full-suite-management-ui
 ```
+
+Other suites files available are:
+
+- `short-suite-management-ui` which only runs a short set of suites
+- `full-suite-authnz` which runs all the suites related to testing auth backends vs protocols
 
 If you want to test your local changes, you can still build an image with these 2 commands from the
 root folder of the `rabbitmq-server` repo:
@@ -56,6 +63,12 @@ The last command prints something like this:
 ```
  => => naming to docker.io/pivotalrabbitmq/rabbitmq:3.11.0-rc.2.51.g4f3e539.dirty                                                                            0.0s
 ```
+
+Or if you prefer to use bazel run instead:
+```
+bazelisk run packaging/docker-image:rabbitmq
+```
+
 
 To run a suite with a particular docker image you do it like this:
 ```
@@ -78,22 +91,22 @@ For instance, say you want to run the test cases for the suite `suites/oauth-wit
 
 First, open a terminal and launch RabbitMQ in the foreground:
 ```
-suites/oauth-with-uaa.sh start-rabbitmq
+suites/authnz-mgt/oauth-with-uaa.sh start-rabbitmq
 ```
 
 Then, launch all the components, the suite depends on, in the background:
 ```
-suites/oauth-with-uaa.sh start-others
+suites/authnz-mgt/oauth-with-uaa.sh start-others
 ```
 
 And finally, run all the test cases for the suite:
 ```
-suites/oauth-with-uaa.sh test
+suites/authnz-mgt/oauth-with-uaa.sh test
 ```
 
 Or just one test case:
 ```
-suites/oauth-with-uaa.sh test happy-login.js
+suites/authnz-mgt/oauth-with-uaa.sh test happy-login.js
 ```
 
 **NOTE**: Nowadays, it is not possible to run all test in interactive mode. It is doable but it has not
@@ -131,7 +144,7 @@ automatically activated when running in interactive mode
 
 The rest of the components the test cases depends on will typically run in docker such as uaa, keycloak, and the rest.
 
-Besides these two profiles, mutually exclusive, you can have as many profiles as needed. It is just a matter of naming the appropriate file (.env, or rabbitmq.conf, etc) with the profile and activating the profile in the test suite script. For instance `suites/oauth-with-uaa.sh` activates two profiles by declaring them in `PROFILES` environment variable as shown below:
+Besides these two profiles, mutually exclusive, you can have as many profiles as needed. It is just a matter of naming the appropriate file (.env, or rabbitmq.conf, etc) with the profile and activating the profile in the test suite script. For instance `suites/authnz-mgt/oauth-with-uaa.sh` activates two profiles by declaring them in `PROFILES` environment variable as shown below:
 ```
 PROFILES="uaa uaa-oauth-provider"
 ```

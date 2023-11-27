@@ -12,6 +12,7 @@
         auth_oauth2.signing_keys.id1 = test/config_schema_SUITE_data/certs/key.pem
         auth_oauth2.signing_keys.id2 = test/config_schema_SUITE_data/certs/cert.pem
         auth_oauth2.jwks_url = https://my-jwt-issuer/jwks.json
+        auth_oauth2.issuer = https://my-jwt-issuer
         auth_oauth2.https.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
         auth_oauth2.https.peer_verification = verify_none
         auth_oauth2.https.depth = 5
@@ -28,23 +29,65 @@
             {extra_scopes_source, <<"my_custom_scope_key">>},
             {preferred_username_claims, [<<"user_name">>, <<"username">>, <<"email">>]},
             {verify_aud, true},
+            {issuer, "https://my-jwt-issuer"},
             {key_config, [
-            {default_key, <<"id1">>},
-            {signing_keys,
-                #{
-                    <<"id1">> => {pem, <<"I'm not a certificate">>},
-                    <<"id2">> => {pem, <<"I'm not a certificate">>}
-                }
-            },
-            {jwks_url, "https://my-jwt-issuer/jwks.json"},
-            {cacertfile, "test/config_schema_SUITE_data/certs/cacert.pem"},
-            {peer_verification, verify_none},
-            {depth, 5},
-            {fail_if_no_peer_cert, false},
-            {hostname_verification, wildcard},
-            {crl_check, true},
-            {algorithms, [<<"HS256">>, <<"RS256">>]}
+              {default_key, <<"id1">>},
+              {signing_keys,
+                  #{
+                      <<"id1">> => {pem, <<"I'm not a certificate">>},
+                      <<"id2">> => {pem, <<"I'm not a certificate">>}
+                  }
+              },
+              {jwks_url, "https://my-jwt-issuer/jwks.json"},              
+              {cacertfile, "test/config_schema_SUITE_data/certs/cacert.pem"},
+              {peer_verification, verify_none},
+              {depth, 5},
+              {fail_if_no_peer_cert, false},
+              {hostname_verification, wildcard},
+              {crl_check, true},
+              {algorithms, [<<"HS256">>, <<"RS256">>]}
             ]
+            }
+        ]}
+        ],[]
+  },
+  {oauth2_pem_config3,
+       "auth_oauth2.resource_server_id = new_resource_server_id
+        auth_oauth2.scope_prefix = new_resource_server_id.
+        auth_oauth2.resource_server_type = new_resource_server_type
+        auth_oauth2.additional_scopes_key = my_custom_scope_key
+        auth_oauth2.preferred_username_claims.1 = user_name
+        auth_oauth2.preferred_username_claims.2 = username
+        auth_oauth2.preferred_username_claims.3 = email
+        auth_oauth2.verify_aud = true
+        auth_oauth2.oauth_providers.uaa.issuer = https://uaa
+        auth_oauth2.oauth_providers.keycloak.token_endpoint = https://keycloak/token
+        auth_oauth2.oauth_providers.keycloak.jwks_uri = https://keycloak/keys
+        auth_oauth2.oauth_providers.keycloak.ssl_options.cacertfile = /mnt/certs/ca_certificate.pem
+        auth_oauth2.oauth_providers.keycloak.ssl_options.verify = verify_none",
+        [
+        {rabbitmq_auth_backend_oauth2, [
+            {resource_server_id,<<"new_resource_server_id">>},
+            {scope_prefix,<<"new_resource_server_id.">>},
+            {resource_server_type,<<"new_resource_server_type">>},
+            {extra_scopes_source, <<"my_custom_scope_key">>},
+            {preferred_username_claims, [<<"user_name">>, <<"username">>, <<"email">>]},
+            {verify_aud, true},
+            {oauth_providers,
+              #{
+                <<"uaa">> => [
+                  {issuer, <<"https://uaa">>}
+                ],
+                <<"keycloak">> => [
+                  {ssl_options, [
+                    {verify, verify_none},
+                    {cacertfile, "/mnt/certs/ca_certificate.pem"}
+                  ]},
+                  {token_endpoint, <<"https://keycloak/token">>},
+                  {jwks_uri, <<"https://keycloak/keys">>}
+                ]
+
+              }
             }
         ]}
         ],[]

@@ -89,6 +89,7 @@ rabbitmq_app(
         "@cowboy//:erlang_app",
         "@cowlib//:erlang_app",
         "@ranch//:erlang_app",
+        "//deps/oauth2_client:erlang_app",
     ],
 )
 

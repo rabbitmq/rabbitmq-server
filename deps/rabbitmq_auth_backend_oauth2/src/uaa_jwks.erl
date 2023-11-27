@@ -1,9 +1,13 @@
 -module(uaa_jwks).
--export([get/1, ssl_options/0]).
+-export([get/1, get/2, ssl_options/0]).
 
 -spec get(string() | binary()) -> {ok, term()} | {error, term()}.
 get(JwksUrl) ->
     httpc:request(get, {JwksUrl, []}, [{ssl, ssl_options()}, {timeout, 60000}], []).
+
+-spec get(string() | binary(), list()) -> {ok, term()} | {error, term()}.
+get(JwksUrl, SslOptions) ->
+    httpc:request(get, {JwksUrl, []}, [{ssl, SslOptions}, {timeout, 60000}], []).
 
 -spec ssl_options() -> list().
 ssl_options() ->

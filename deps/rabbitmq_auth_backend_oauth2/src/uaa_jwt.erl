@@ -16,6 +16,7 @@
 -export([client_id/1, sub/1, client_id/2, sub/2]).
 
 -include_lib("jose/include/jose_jwk.hrl").
+-include_lib("oauth2_client/include/oauth2_client.hrl").
 
 -define(APP, rabbitmq_auth_backend_oauth2).
 
@@ -49,25 +50,40 @@ update_uaa_jwt_signing_keys(SigningKeys) ->
 update_uaa_jwt_signing_keys(UaaEnv0, SigningKeys) ->
     UaaEnv1 = proplists:delete(signing_keys, UaaEnv0),
     UaaEnv2 = [{signing_keys, SigningKeys} | UaaEnv1],
-    application:set_env(?APP, key_config, UaaEnv2).
+    Result = application:set_env(?APP, key_config, UaaEnv2),
+    rabbit_log:debug("replaced key_config fron ~p to ~p (Result:~p)", [UaaEnv0, UaaEnv2, Result]),
+    Result.
 
 -spec update_jwks_signing_keys() -> ok | {error, term()}.
 update_jwks_signing_keys() ->
     UaaEnv = application:get_env(?APP, key_config, []),
+    rabbit_log:debug("update_jwks_signing_keys key_config: ~p ...",[UaaEnv]),
     case proplists:get_value(jwks_url, UaaEnv) of
         undefined ->
-            {error, no_jwks_url};
+          case oauth2_client:get_oauth_provider([jwks_uri]) of
+            {error, {missing_oauth_provider_attributes, [issuer]}} -> {error, key_not_found};
+            {error, _} = Error -> Error;
+            {ok, #oauth_provider{jwks_uri = JwksUrl, ssl_options = SslOptions}} ->
+              rabbit_log:debug("Using jwks_url ~p retrieve signing keys", [JwksUrl]),
+              retrieve_signing_keys(JwksUrl, UaaEnv, SslOptions)
+          end;
         JwksUrl ->
-            rabbit_log:debug("Retrieving signing keys from ~ts", [JwksUrl]),
-            case uaa_jwks:get(JwksUrl) of
-                {ok, {_, _, JwksBody}} ->
-                    KeyList = maps:get(<<"keys">>, jose:decode(erlang:iolist_to_binary(JwksBody)), []),
-                    Keys = maps:from_list(lists:map(fun(Key) -> {maps:get(<<"kid">>, Key, undefined), {json, Key}} end, KeyList)),
-                    update_uaa_jwt_signing_keys(UaaEnv, Keys);
-                {error, _} = Err ->
-                    Err
-            end
+          rabbit_log:debug("Using configured jwks_url ~p to retrieve signing keys",[JwksUrl]),
+          retrieve_signing_keys(JwksUrl, UaaEnv, uaa_jwks:ssl_options())
     end.
+retrieve_signing_keys(JwksUrl, UaaEnv, SslOptions) ->
+  SigningKey = case SslOptions of
+    undefined -> uaa_jwks:get(JwksUrl);
+    _ -> uaa_jwks:get(JwksUrl, SslOptions)
+  end,
+  case SigningKey of
+      {ok, {_, _, JwksBody}} ->
+          KeyList = maps:get(<<"keys">>, jose:decode(erlang:iolist_to_binary(JwksBody)), []),
+          Keys = maps:from_list(lists:map(fun(Key) -> {maps:get(<<"kid">>, Key, undefined), {json, Key}} end, KeyList)),
+          update_uaa_jwt_signing_keys(UaaEnv, Keys);
+      {error, _} = Err ->
+          Err
+  end.
 
 -spec decode_and_verify(binary()) -> {boolean(), map()} | {error, term()}.
 decode_and_verify(Token) ->
