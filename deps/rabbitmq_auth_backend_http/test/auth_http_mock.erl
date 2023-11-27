@@ -1,6 +1,8 @@
 -module(auth_http_mock).
 
 -export([init/2]).
+-include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 %%% CALLBACKS
 

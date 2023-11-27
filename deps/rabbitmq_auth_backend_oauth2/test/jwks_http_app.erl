@@ -7,7 +7,8 @@ start(Port, CertsDir) ->
         cowboy_router:compile(
           [
            {'_', [
-                  {"/jwks", jwks_http_handler, []}
+                  {"/jwks", jwks_http_handler, []},
+                  {"/.well-known/openid-configuration", openid_http_handler, []}
                  ]}
           ]
          ),

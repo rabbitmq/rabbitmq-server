@@ -101,6 +101,8 @@
     [list_to_binary(V) || {_, V} <- Settings]
  end}.
 
+
+
 %% ID of the default signing key
 %%
 %% {default_key, <<"key-1">>},
@@ -144,6 +146,16 @@
                   end, Settings),
     maps:from_list(SigningKeys)
  end}.
+
+{mapping,
+ "auth_oauth2.issuer",
+ "rabbitmq_auth_backend_oauth2.issuer",
+ [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
+
+{mapping,
+ "auth_oauth2.token_endpoint",
+ "rabbitmq_auth_backend_oauth2.token_endpoint",
+ [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
 
 {mapping,
  "auth_oauth2.jwks_url",
@@ -192,4 +204,83 @@
  fun(Conf) ->
      Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.algorithms", Conf),
      [list_to_binary(V) || {_, V} <- Settings]
+ end}.
+
+%% This setting is only required when there are +1 auth_oauth2.oauth_providers
+%% If this setting is omitted, its default to the first oauth_provider
+
+{mapping,
+  "auth_oauth2.default_oauth_provider",
+  "rabbitmq_auth_backend_oauth2.default_oauth_provider",
+  [{datatype, string}]}.
+
+{mapping,
+  "auth_oauth2.oauth_providers.$name.issuer",
+  "rabbitmq_auth_backend_oauth2.oauth_providers",
+  [{datatype, string}, {validators, ["uri", "https_uri"]}]
+}.
+
+{mapping,
+  "auth_oauth2.oauth_providers.$name.token_endpoint",
+  "rabbitmq_auth_backend_oauth2.oauth_providers",
+  [{datatype, string}, {validators, ["uri", "https_uri"]}]
+}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.jwks_uri",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, string}, {validators, ["uri", "https_uri"]}]
+}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.ssl_options.verify",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, {enum, [verify_peer, verify_none]}}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.ssl_options.cacertfile",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, file}, {validators, ["file_accessible"]}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.ssl_options.depth",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, integer}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.ssl_options.hostname_verification",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, {enum, [wildcard, none]}}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.ssl_options.crl_check",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, {enum, [true, false, peer, best_effort]}}]}.
+
+{translation, "rabbitmq_auth_backend_oauth2.oauth_providers",
+ fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.oauth_providers", Conf),
+    AuthBackends  = [{Name, {list_to_atom(Key), list_to_binary(V)}} || {["auth_oauth2","oauth_providers", Name, Key], V} <- Settings ],
+    SslOptions  = [{Name, {ssl_options, {list_to_atom(Key), V}}} || {["auth_oauth2","oauth_providers", Name, "ssl_options", Key], V} <- Settings ],
+
+    KeyFun = fun({Name,_}) -> list_to_binary(Name) end,
+    ValueFun = fun({_,V}) -> V end,
+    NewGroup = maps:groups_from_list(KeyFun, ValueFun, AuthBackends ++ SslOptions),
+
+    ListOrSingleFun = fun(K, List) ->
+      case K of
+        ssl_options -> proplists:get_all_values(K, List);
+        _ ->
+          case proplists:lookup_all(K, List) of
+            [One] -> proplists:get_value(K, List);
+            [One|_] = V -> V
+          end
+      end
+    end,
+    GroupKeyConfigFun = fun(K, List) ->
+        ListKeys = proplists:get_keys(List),
+        [ {K,ListOrSingleFun(K,List)} || K <- ListKeys ]
+     end,
+    maps:map(GroupKeyConfigFun, NewGroup)
+
  end}.

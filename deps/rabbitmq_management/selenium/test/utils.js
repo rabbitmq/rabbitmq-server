@@ -2,7 +2,7 @@ const fs = require('fs')
 const XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest
 const fsp = fs.promises
 const path = require('path')
-const { By, Key, until, Builder, logging } = require('selenium-webdriver')
+const { By, Key, until, Builder, logging, Capabilities } = require('selenium-webdriver')
 require('chromedriver')
 
 const uaaUrl = process.env.UAA_URL || 'http://localhost:8080'
@@ -41,7 +41,12 @@ module.exports = {
     if (!runLocal) {
       builder = builder.usingServer(seleniumUrl)
     }
-    driver = builder.forBrowser('chrome').build()
+    var chromeCapabilities = Capabilities.chrome();
+    chromeCapabilities.setAcceptInsecureCerts(true);
+    driver = builder
+      .forBrowser('chrome')
+      .withCapabilities(chromeCapabilities)
+      .build()
     driver.manage().setTimeouts( { pageLoad: 35000 } )
     return driver
   },

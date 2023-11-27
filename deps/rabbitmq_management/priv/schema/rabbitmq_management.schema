@@ -453,9 +453,12 @@ end}.
 {mapping, "management.oauth_enabled", "rabbitmq_management.oauth_enabled",
     [{datatype, {enum, [true, false]}}]}.
 
-%% The URL of the OIDC/OAuth2 provider
+%% The URL of the OIDC/OAuth2 provider.
+%% If this setting is missing, RabbitMQ resolves this URL using management.oauth_provider_id
+%% setting.
 {mapping, "management.oauth_provider_url", "rabbitmq_management.oauth_provider_url",
       [{datatype, string}]}.
+
 
 %% Your client application's identifier as registered with the OIDC/OAuth2
 {mapping, "management.oauth_client_id", "rabbitmq_management.oauth_client_id",

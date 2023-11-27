@@ -13,14 +13,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "chromedriver": "^118.0.0",
+    "chromedriver": "^119.0.0",
     "ejs": "^3.1.8",
     "express": "^4.18.2",
     "geckodriver": "^3.0.2",
     "http-proxy": "^1.18.1",
     "path": "^0.12.7",
     "proxy": "^1.0.2",
-    "selenium-webdriver": "^4.4.0",
+    "selenium-webdriver": "^4.15.0",
     "xmlhttprequest": "^1.8.0"
   },
   "devDependencies": {

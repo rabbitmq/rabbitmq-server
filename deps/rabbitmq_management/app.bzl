@@ -125,6 +125,7 @@ def all_beam_files(name = "all_beam_files"):
             "//deps/rabbit:erlang_app",
             "//deps/rabbit_common:erlang_app",
             "//deps/rabbitmq_management_agent:erlang_app",
+            "//deps/oauth2_client:erlang_app",
         ],
     )
 
@@ -255,6 +256,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "//deps/rabbit:erlang_app",
             "//deps/rabbit_common:erlang_app",
             "//deps/rabbitmq_management_agent:erlang_app",
+            "//deps/oauth2_client:erlang_app",
         ],
     )
 

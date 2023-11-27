@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+#set -x
+
 SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SUITE=$(caller)
 SUITE=$(basename "${SUITE}" .sh )
@@ -135,6 +137,7 @@ wait_for_message() {
       ((attemps_left--))
       if [[ "$attemps_left" -lt 1 ]]; then
         print "Timed out waiting"
+        save_container_log $1
         exit 1
       fi
   done
@@ -289,31 +292,36 @@ start_keycloak() {
 		--env KEYCLOAK_ADMIN_PASSWORD=admin \
 		--mount type=bind,source=${MOUNT_KEYCLOAK_CONF_DIR},target=/opt/keycloak/data/import/ \
 		${KEYCLOAK_DOCKER_IMAGE} start-dev --import-realm \
-    --https-certificate-file=/opt/keycloak/data/import/server_localhost_certificate.pem \
-    --https-certificate-key-file=/opt/keycloak/data/import/server_localhost_key.pem
+    --https-certificate-file=/opt/keycloak/data/import/server_keycloak_certificate.pem \
+    --https-certificate-key-file=/opt/keycloak/data/import/server_keycloak_key.pem
 
-  wait_for_oidc_endpoint keycloak $KEYCLOAK_URL
+  wait_for_oidc_endpoint keycloak $KEYCLOAK_URL $MOUNT_KEYCLOAK_CONF_DIR/ca_certificate.pem
   end "Keycloak is ready"
 }
 wait_for_oidc_endpoint() {
   NAME=$1
   BASE_URL=$2
   if [[ $BASE_URL == *"localhost"** ]]; then
-    wait_for_oidc_endpoint_local $NAME $BASE_URL
+    wait_for_oidc_endpoint_local $@
   else
-    wait_for_oidc_endpoint_docker $NAME $BASE_URL
+    wait_for_oidc_endpoint_docker $@
   fi
 }
 wait_for_oidc_endpoint_local() {
   NAME=$1
   BASE_URL=$2
-
+  CURL_ARGS="-L --fail "
+  DELAY_BETWEEN_ATTEMPTS=5
+  if [[ "${3:-''}" != "" ]]; then
+    CURL_ARGS="$CURL_ARGS --cacert $3"
+    DELAY_BETWEEN_ATTEMPTS=10
+  fi
   max_retry=10
   counter=0
   print "Waiting for OIDC discovery endpoint $NAME ... (BASE_URL: $BASE_URL)"
-  until (curl -L --fail ${BASE_URL}/.well-known/openid-configuration >/dev/null 2>&1)
+  until (curl $CURL_ARGS ${BASE_URL}/.well-known/openid-configuration >/dev/null 2>&1)
   do
-    sleep 5
+    sleep $DELAY_BETWEEN_ATTEMPTS
     [[ counter -eq $max_retry ]] && print "Failed!" && exit 1
     print "Trying again. Try #$counter"
     ((counter++))
@@ -323,13 +331,20 @@ wait_for_oidc_endpoint_local() {
 wait_for_oidc_endpoint_docker() {
   NAME=$1
   BASE_URL=$2
-
+  CURL_ARGS="-L --fail "
+  DOCKER_ARGS="--rm --net ${DOCKER_NETWORK} "
+  DELAY_BETWEEN_ATTEMPTS=5
+  if [[ $# -gt 2  ]]; then
+    DOCKER_ARGS="$DOCKER_ARGS -v $3:/tmp/ca_certificate.pem"
+    CURL_ARGS="$CURL_ARGS --cacert /tmp/ca_certificate.pem"
+    DELAY_BETWEEN_ATTEMPTS=10
+  fi
   max_retry=10
   counter=0
   print "Waiting for OIDC discovery endpoint $NAME ... (BASE_URL: $BASE_URL)"
-  until (docker run --net ${DOCKER_NETWORK} --rm curlimages/curl:7.85.0 -L --fail ${BASE_URL}/.well-known/openid-configuration >/dev/null 2>&1)
+  until (docker run $DOCKER_ARGS curlimages/curl:7.85.0 $CURL_ARGS ${BASE_URL}/.well-known/openid-configuration >/dev/null 2>&1)
   do
-    sleep 5
+    sleep $DELAY_BETWEEN_ATTEMPTS
     [[ counter -eq $max_retry ]] && print "Failed!" && exit 1
     print "Trying again. Try #$counter"
     ((counter++))
@@ -603,7 +618,10 @@ save_logs() {
 save_container_logs() {
   docker container ls | grep $1 >/dev/null 2>&1 && docker logs $1 &> $LOGS/$1.log || echo "$1 not running"
 }
-
+save_container_log() {
+  echo "Saving container $1 logs to $LOGS/$1.log ..."
+  docker logs $1 &> $LOGS/$1.log
+}
 profiles_with_local_or_docker() {
   if [[ "$PROFILES" != *"local"* && "$PROFILES" != *"docker"* ]]; then
     echo "$PROFILES docker"

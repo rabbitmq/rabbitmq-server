@@ -13,6 +13,7 @@
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("oauth2_client/include/oauth2_client.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -25,12 +26,23 @@ variances(Req, Context) ->
 content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
+
+resolve_oauth_provider_url(DefaultValue) ->
+  case application:get_env(rabbitmq_management, oauth_provider_url) of
+    undefined ->
+      case oauth2_client:get_oauth_provider([issuer]) of
+        {ok, OAuthProvider} -> OAuthProvider#oauth_provider.issuer;
+        {error, _} -> DefaultValue
+      end;
+    {ok, Value} -> Value
+  end.
+
 authSettings() ->
   EnableOAUTH = application:get_env(rabbitmq_management, oauth_enabled, false),
   case EnableOAUTH of
     true ->
       OAuthInitiatedLogonType = application:get_env(rabbitmq_management, oauth_initiated_logon_type, sp_initiated),
-      OAuthProviderUrl = application:get_env(rabbitmq_management, oauth_provider_url, ""),
+      OAuthProviderUrl = resolve_oauth_provider_url(""),
       case OAuthInitiatedLogonType of
         sp_initiated ->
           OAuthClientId = application:get_env(rabbitmq_management, oauth_client_id, ""),

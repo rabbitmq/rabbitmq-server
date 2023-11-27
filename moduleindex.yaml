@@ -328,6 +328,9 @@ meck:
 - meck_util
 my_plugin:
 - my_plugin
+oauth2_client:
+- oauth2_client
+- oauth2_client_app
 observer_cli:
 - observer_cli
 - observer_cli_application
@@ -974,6 +977,9 @@ rabbitmq_mqtt:
 - rabbit_mqtt_retainer_sup
 - rabbit_mqtt_sup
 - rabbit_mqtt_util
+rabbitmq_oauth2_client:
+- oauth2_client
+- oauth2_client_app
 rabbitmq_peer_discovery_aws:
 - rabbit_peer_discovery_aws
 - rabbitmq_peer_discovery_aws
