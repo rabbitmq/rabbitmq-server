@@ -35,11 +35,12 @@ add_this_node(Nodes) ->
         false -> [ThisNode | Nodes]
     end.
 
--spec lock(Node :: node()) -> {ok, {{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}} |
-                              {error, Reason :: string()}.
+-spec lock(Nodes :: [node()]) ->
+    {ok, {{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}} |
+    {error, Reason :: string()}.
 
-lock(Node) ->
-  {ok, {Nodes, _NodeType}} = list_nodes(),
+lock(Nodes) ->
+  Node = node(),
   case lists:member(Node, Nodes) of
     false when Nodes =/= [] ->
       rabbit_log:warning("Local node ~ts is not part of configured nodes ~tp. "

@@ -44,7 +44,7 @@ unregister() ->
 post_registration() ->
     ?DELEGATE:post_registration().
 
--spec lock(Node :: node()) -> {ok, {ResourceId :: string(), LockRequesterId :: node()}} | {error, Reason :: string()}.
+-spec lock(Nodes :: [node()]) -> {ok, {ResourceId :: string(), LockRequesterId :: node()}} | {error, Reason :: string()}.
 lock(Node) ->
     ?DELEGATE:lock(Node).
 
