@@ -22,6 +22,7 @@
          handle_event/3,
          deliver/3,
          settle/5,
+         credit_v1/5,
          credit/7,
          dequeue/5,
          info/2,
@@ -71,6 +72,7 @@
 -type msg() :: term(). %% TODO: refine
 
 -record(stream, {mode :: rabbit_queue_type:consume_mode(),
+                 delivery_count :: none | rabbit_queue_type:delivery_count(),
                  credit :: rabbit_queue_type:credit(),
                  ack :: boolean(),
                  start_offset = 0 :: non_neg_integer(),
@@ -425,11 +427,14 @@ begin_stream(#stream_client{name = QName,
                       {timestamp, _} -> NextOffset;
                       _ -> Offset
                   end,
-    Credit = case Mode of
-                 {simple_prefetch, N} -> N;
-                 credited -> 0
-             end,
+    {DeliveryCount, Credit} = case Mode of
+                                  {simple_prefetch, N} ->
+                                      {none, N};
+                                  {credited, InitialDC} ->
+                                      {InitialDC, 0}
+                              end,
     Str0 = #stream{mode = Mode,
+                   delivery_count = DeliveryCount,
                    credit = Credit,
                    ack = AckRequired,
                    start_offset = StartOffset,
@@ -455,36 +460,48 @@ cancel(_Q, ConsumerTag, OkMsg, ActingUser, #stream_client{readers = Readers0,
             {ok, State}
     end.
 
-credit(QName, CTag, Credit0, Drain, Reply, _LinkStateProperties,
-       #stream_client{readers = Readers0,
+-dialyzer({nowarn_function, credit_v1/5}).
+credit_v1(_, _, _, _, _) ->
+    erlang:error(credit_v1_unsupported).
+
+credit(QName, CTag, DeliveryCountRcv, LinkCreditRcv, Drain, Echo,
+       #stream_client{readers = Readers,
                       name = Name,
                       local_pid = LocalPid} = State0) ->
-    {Readers, DeliverActions, Credit}
-    = case Readers0 of
-          #{CTag := Str0} ->
-              Str1 = Str0#stream{credit = Credit0},
-              {Str2 = #stream{credit = Credit1,
-                              ack = Ack}, Msgs} = stream_entries(
-                                                    QName, Name, LocalPid, Str1),
-              Str = case Drain of
-                        true -> Str2#stream{credit = 0};
-                        false -> Str2
-                    end,
-              {Readers0#{CTag => Str}, [{deliver, CTag, Ack, Msgs}], Credit1};
-          _ ->
-              {Readers0, [], Credit0}
-      end,
-    State = State0#stream_client{readers = Readers},
-    Actions = case Reply orelse
-                   Drain andalso Credit > 0 of
-                  true ->
-                      Available = available_messages(CTag, State),
-                      DeliverActions ++
-                      [{credit_reply, CTag, Credit, Available, Drain, #{}}];
-                  false ->
-                      DeliverActions
-              end,
-    {State, Actions}.
+    case Readers of
+        #{CTag := Str0 = #stream{delivery_count = DeliveryCountSnd}} ->
+            LinkCreditSnd = serial_number:diff(
+                              serial_number:add(DeliveryCountRcv, LinkCreditRcv),
+                              DeliveryCountSnd),
+            Str1 = Str0#stream{credit = LinkCreditSnd},
+            {Str2 = #stream{delivery_count = DeliveryCount,
+                            credit = Credit,
+                            ack = Ack}, Msgs} = stream_entries(QName, Name, LocalPid, Str1),
+            DrainedInsufficientMsgs = Drain andalso Credit > 0,
+            Str = case DrainedInsufficientMsgs of
+                      true ->
+                          Str2#stream{delivery_count = serial_number:add(DeliveryCount, Credit),
+                                      credit = 0};
+                      false ->
+                          Str2
+                  end,
+            DeliverActions = [{deliver, CTag, Ack, Msgs}],
+            State = State0#stream_client{readers = maps:update(CTag, Str, Readers)},
+            Actions = case Echo orelse DrainedInsufficientMsgs of
+                          true ->
+                              DeliverActions ++ [{credit_reply,
+                                                  CTag,
+                                                  Str#stream.delivery_count,
+                                                  Str#stream.credit,
+                                                  available_messages(CTag, State),
+                                                  Drain}];
+                          false ->
+                              DeliverActions
+                      end,
+            {State, Actions};
+        _ ->
+            {State0, []}
+    end.
 
 available_messages(_CTag, _State) ->
     %%TODO As an approximation, query the committed offset and subtract
@@ -1101,7 +1118,8 @@ stream_entries(QName, Name, LocalPid,
             {Str0, []}
     end;
 stream_entries(QName, Name, LocalPid,
-               #stream{credit = Credit,
+               #stream{delivery_count = DC,
+                       credit = Credit,
                        buffer_msgs_rev = Buf0} = Str0)
   when Credit > 0 andalso Buf0 =/= [] ->
     BufLen = length(Buf0),
@@ -1109,11 +1127,13 @@ stream_entries(QName, Name, LocalPid,
         true ->
             %% Entire credit worth of messages can be served from the buffer.
             {Buf, BufMsgsRev} = lists:split(BufLen - Credit, Buf0),
-            {Str0#stream{credit = 0,
+            {Str0#stream{delivery_count = delivery_count_add(DC, Credit),
+                         credit = 0,
                          buffer_msgs_rev = Buf},
              lists:reverse(BufMsgsRev)};
         false ->
-            Str = Str0#stream{credit = Credit - BufLen,
+            Str = Str0#stream{delivery_count = delivery_count_add(DC, BufLen),
+                              credit = Credit - BufLen,
                               buffer_msgs_rev = []},
             stream_entries(QName, Name, LocalPid, Str, Buf0)
     end;
@@ -1125,6 +1145,7 @@ stream_entries(_, _, _, #stream{credit = Credit} = Str, Acc)
     {Str, lists:reverse(Acc)};
 stream_entries(QName, Name, LocalPid,
                #stream{chunk_iterator = Iter0,
+                       delivery_count = DC,
                        credit = Credit,
                        start_offset = StartOffset} = Str0, Acc0) ->
     case osiris_log:iterator_next(Iter0) of
@@ -1144,6 +1165,7 @@ stream_entries(QName, Name, LocalPid,
                                  case Credit >= NumMsgs of
                                      true ->
                                          {Str0#stream{chunk_iterator = Iter,
+                                                      delivery_count = delivery_count_add(DC, NumMsgs),
                                                       credit = Credit - NumMsgs},
                                           MsgsRev ++ Acc0};
                                      false ->
@@ -1152,6 +1174,7 @@ stream_entries(QName, Name, LocalPid,
                                          [] = Str0#stream.buffer_msgs_rev, % assertion
                                          {Buf, MsgsRev1} = lists:split(NumMsgs - Credit, MsgsRev),
                                          {Str0#stream{chunk_iterator = Iter,
+                                                      delivery_count = delivery_count_add(DC, Credit),
                                                       credit = 0,
                                                       buffer_msgs_rev = Buf},
                                           MsgsRev1 ++ Acc0}
@@ -1165,6 +1188,7 @@ stream_entries(QName, Name, LocalPid,
                                      true ->
                                          Msg = entry_to_msg(Entry, Offset, QName, Name, LocalPid),
                                          {Str0#stream{chunk_iterator = Iter,
+                                                      delivery_count = delivery_count_add(DC, 1),
                                                       credit = Credit - 1},
                                           [Msg | Acc0]};
                                      false ->
@@ -1312,3 +1336,8 @@ get_nodes(Q) when ?is_amqqueue(Q) ->
 is_minority(All, Up) ->
     MinQuorum = length(All) div 2 + 1,
     length(Up) < MinQuorum.
+
+delivery_count_add(none, _) ->
+    none;
+delivery_count_add(Count, N) ->
+    serial_number:add(Count, N).

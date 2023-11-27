@@ -90,9 +90,12 @@
           %% Although the source address of a link might be an exchange name and binding key
           %% or a topic filter, an outgoing link will always consume from a queue.
           queue :: rabbit_misc:resource_name(),
-          delivery_count :: sequence_no(),
           send_settled :: boolean(),
-          max_message_size :: unlimited | pos_integer()
+          max_message_size :: unlimited | pos_integer(),
+          %% When credit API v1 is used, our session process holds the delivery-count
+          %% When credit API v2 is used, the queue type implementation holds the delivery-count
+          %% When feature flag credit_api_v2 becomes required, this field should be deleted.
+          delivery_count :: {credit_api_v1, sequence_no()} | credit_api_v2
          }).
 
 -record(outgoing_unsettled, {
@@ -724,34 +727,52 @@ handle_control(#'v1_0.attach'{role = ?RECV_ROLE,
                                outgoing_links = OutgoingLinks0,
                                cfg = #cfg{vhost = Vhost,
                                           user = User = #user{username = Username}}}) ->
-
     ok = validate_attach(Attach),
-    {SndSettled, EffectiveSndSettleMode}
-    = case SndSettleMode of
-          ?V_1_0_SENDER_SETTLE_MODE_SETTLED ->
-              {true, SndSettleMode};
-          _ ->
-              %% In the future, we might want to support sender settle mode mixed where
-              %% we would expect a settlement from the client only for durable messages.
-              {false, ?V_1_0_SENDER_SETTLE_MODE_UNSETTLED}
-      end,
+    {SndSettled, EffectiveSndSettleMode} = case SndSettleMode of
+                                               ?V_1_0_SENDER_SETTLE_MODE_SETTLED ->
+                                                   {true, SndSettleMode};
+                                               _ ->
+                                                   %% In the future, we might want to support sender settle
+                                                   %% mode mixed where we would expect a settlement from the
+                                                   %% client only for durable messages.
+                                                   {false, ?V_1_0_SENDER_SETTLE_MODE_UNSETTLED}
+                                           end,
     case ensure_source(Source, Vhost, User) of
         {ok, QNameBin} ->
-            Spec = #{no_ack => SndSettled,
-                     channel_pid => self(),
-                     limiter_pid => none,
-                     limiter_active => false,
-                     mode => credited,
-                     consumer_tag => handle_to_ctag(HandleInt),
-                     exclusive_consume => false,
-                     args => source_filters_to_consumer_args(Source),
-                     ok_msg => undefined,
-                     acting_user => Username},
             QName = rabbit_misc:r(Vhost, queue, QNameBin),
             check_read_permitted(QName, User),
             case rabbit_amqqueue:with(
                    QName,
                    fun(Q) ->
+                           %% Whether credit API v1 or v2 is used is decided only here at link attachment time.
+                           %% This decision applies to the whole life time of the link.
+                           %% This means even when feature flag credit_api_v2 will be enabled later, this consumer will
+                           %% continue to use credit API v1. This is the safest and easiest solution avoiding
+                           %% transferring link flow control state (the delivery-count) at runtime from this session
+                           %% process to the queue process.
+                           %% Eventually, after feature flag credit_api_v2 gets enabled and a subsequent rolling upgrade,
+                           %% all consumers will use credit API v2.
+                           %% Streams always use credit API v2 since the stream client (rabbit_stream_queue) holds the link
+                           %% flow control state. Hence, credit API mixed version isn't an issue for streams.
+                           {Mode,
+                            DeliveryCount} = case rabbit_feature_flags:is_enabled(credit_api_v2) orelse
+                                                  amqqueue:get_type(Q) =:= rabbit_stream_queue of
+                                                 true ->
+                                                     {{credited, ?INITIAL_DELIVERY_COUNT}, credit_api_v2};
+                                                 false ->
+                                                     {{credited, credit_api_v1}, {credit_api_v1, ?INITIAL_DELIVERY_COUNT}}
+                                             end,
+                           Spec = #{no_ack => SndSettled,
+                                    channel_pid => self(),
+                                    limiter_pid => none,
+                                    limiter_active => false,
+                                    mode => Mode,
+                                    consumer_tag => handle_to_ctag(HandleInt),
+                                    exclusive_consume => false,
+                                    args => source_filters_to_consumer_args(Source),
+                                    ok_msg => undefined,
+                                    acting_user => Username},
+
                            case rabbit_queue_type:consume(Q, Spec, QStates0) of
                                {ok, QStates} ->
                                    OutputHandle = output_handle(InputHandle),
@@ -761,9 +782,9 @@ handle_control(#'v1_0.attach'{role = ?RECV_ROLE,
                                           initial_delivery_count = ?UINT(?INITIAL_DELIVERY_COUNT),
                                           snd_settle_mode = EffectiveSndSettleMode,
                                           rcv_settle_mode = RcvSettleMode,
-                                          %% The queue process monitors our session process. When our session process terminates
-                                          %% (abnormally) any messages checked out to our session process will be requeued.
-                                          %% That's why the we only support RELEASED as the default outcome.
+                                          %% The queue process monitors our session process. When our session process
+                                          %% terminates (abnormally) any messages checked out to our session process
+                                          %% will be requeued. That's why the we only support RELEASED as the default outcome.
                                           source = Source#'v1_0.source'{
                                                             default_outcome = #'v1_0.released'{},
                                                             outcomes = outcomes(Source)},
@@ -778,10 +799,10 @@ handle_control(#'v1_0.attach'{role = ?RECV_ROLE,
                                                             %% maximum size imposed by the link endpoint."
                                                             unlimited
                                                     end,
-                                   Link = #outgoing_link{delivery_count = ?INITIAL_DELIVERY_COUNT,
-                                                         queue = QNameBin,
+                                   Link = #outgoing_link{queue = QNameBin,
                                                          send_settled = SndSettled,
-                                                         max_message_size = MaxMessageSize},
+                                                         max_message_size = MaxMessageSize,
+                                                         delivery_count = DeliveryCount},
                                    %%TODO check that handle is not present in either incoming_links or outgoing_links:
                                    %%"The handle MUST NOT be used for other open links. An attempt to attach
                                    %% using a handle which is already associated with a link MUST be responded to
@@ -1051,8 +1072,7 @@ send_pending(#state{remote_incoming_window = Space,
                     queue_pid = QPid,
                     outgoing_unsettled = #outgoing_unsettled{
                                             consumer_tag = Ctag,
-                                            queue_name = QName
-                                           }} = Pending}, Buf1}
+                                            queue_name = QName}} = Pending}, Buf1}
           when Space > 0 ->
             SendFun = case rabbit_queue_type:module(QName, State0#state.queue_states) of
                           {ok, rabbit_classic_queue} ->
@@ -1074,8 +1094,10 @@ send_pending(#state{remote_incoming_window = Space,
                     HandleInt = ctag_to_handle(Ctag),
                     OutgoingLinks = maps:update_with(
                                       HandleInt,
-                                      fun(Link = #outgoing_link{delivery_count = C}) ->
-                                              Link#outgoing_link{delivery_count = add(C, 1)}
+                                      fun(#outgoing_link{delivery_count = {credit_api_v1, C}} = Link) ->
+                                              Link#outgoing_link{delivery_count = {credit_api_v1, add(C, 1)}};
+                                         (#outgoing_link{delivery_count = credit_api_v2} = Link) ->
+                                              Link
                                       end,
                                       OutgoingLinks0),
                     State2 = State1#state{outgoing_links = OutgoingLinks},
@@ -1285,17 +1307,30 @@ handle_queue_actions(Actions, State) ->
               lists:foldl(fun(Msg, S) ->
                                   handle_deliver(CTag, AckRequired, Msg, S)
                           end, S0, Msgs);
-          ({credit_reply, Ctag, Credit0, Available, Drain, _LinkStateProperties},
+          ({credit_reply, Ctag, DeliveryCount, Credit, Available,  Drain},
+           S = #state{outgoing_pending = Pending}) ->
+              %% credit API v2
+              Handle = ctag_to_handle(Ctag),
+              Flow = #'v1_0.flow'{
+                        handle = ?UINT(Handle),
+                        delivery_count = ?UINT(DeliveryCount),
+                        link_credit = ?UINT(Credit),
+                        available = ?UINT(Available),
+                        drain = Drain},
+              S#state{outgoing_pending = queue:in(Flow, Pending)};
+          ({credit_reply_v1, Ctag, Credit0, Available, Drain},
            S0 = #state{outgoing_links = OutgoingLinks0,
                        outgoing_pending = Pending}) ->
+              %% credit API v1
+              %% Delete this branch when feature flag credit_api_v2 becomes required.
               Handle = ctag_to_handle(Ctag),
-              Link = #outgoing_link{delivery_count = Count0} = maps:get(Handle, OutgoingLinks0),
+              Link = #outgoing_link{delivery_count = {credit_api_v1, Count0}} = maps:get(Handle, OutgoingLinks0),
               {Count, Credit, S} = case Drain of
                                        true ->
                                            Count1 = add(Count0, Credit0),
                                            OutgoingLinks = maps:update(
                                                              Handle,
-                                                             Link#outgoing_link{delivery_count = Count1},
+                                                             Link#outgoing_link{delivery_count = {credit_api_v1,  Count1}},
                                                              OutgoingLinks0),
                                            S1 = S0#state{outgoing_links = OutgoingLinks},
                                            {Count1, 0, S1};
@@ -1608,41 +1643,45 @@ ensure_target(#'v1_0.target'{address = Address,
     end.
 
 handle_outgoing_link_flow_control(
-  #outgoing_link{delivery_count = DeliveryCountSnd,
-                 queue = QNameBin},
+  #outgoing_link{queue = QNameBin,
+                 delivery_count = MaybeDeliveryCountSnd},
   #'v1_0.flow'{handle = ?UINT(HandleInt),
                delivery_count = MaybeDeliveryCountRcv,
-               link_credit = ?UINT(LinkdCreditRcv),
+               link_credit = ?UINT(LinkCreditRcv),
                drain = Drain0,
-               echo = Echo0,
-               properties = Properties0},
+               echo = Echo0},
   State0 = #state{queue_states = QStates0,
                   cfg = #cfg{vhost = Vhost}}) ->
     DeliveryCountRcv = case MaybeDeliveryCountRcv of
-                           ?UINT(Count) -> Count;
-                           undefined -> ?INITIAL_DELIVERY_COUNT
+                           ?UINT(Count) ->
+                               Count;
+                           undefined ->
+                               %% "In the event that the receiver does not yet know the delivery-count,
+                               %% i.e., delivery-countrcv is unspecified, the sender MUST assume that the
+                               %% delivery-countrcv is the first delivery-countsnd sent from sender to
+                               %% receiver, i.e., the delivery-countsnd specified in the flow state carried
+                               %% by the initial attach frame from the sender to the receiver." [2.6.7]
+                               ?INITIAL_DELIVERY_COUNT
                        end,
-    %% See section 2.6.7
-    LinkCreditSnd = diff(add(DeliveryCountRcv, LinkdCreditRcv), DeliveryCountSnd),
     Ctag = handle_to_ctag(HandleInt),
     QName = rabbit_misc:r(Vhost, queue, QNameBin),
     Drain = default(Drain0, false),
     Echo = default(Echo0, false),
-    Properties = default(Properties0, #{}),
-    %%TODO pass MaybeDeliveryCountRcv and LinkdCreditRcv to rabbit_queue_type:credit
-    %% instead of LinkCreditSnd and have the queue make the calculation and maintain the delivery-count ??
-    {ok, QStates, Actions} = rabbit_queue_type:credit(
-                               QName, Ctag, LinkCreditSnd,
-                               Drain, Echo, Properties, QStates0),
-    State1 = State0#state{queue_states = QStates},
-    State2 = handle_queue_actions(Actions, State1),
-    case rabbit_feature_flags:is_enabled(credit_api_v2) of
-        true ->
+    case MaybeDeliveryCountSnd of
+        credit_api_v2 ->
+            {ok, QStates, Actions} = rabbit_queue_type:credit(
+                                       QName, Ctag, DeliveryCountRcv, LinkCreditRcv, Drain, Echo, QStates0),
+            State1 = State0#state{queue_states = QStates},
+            State = handle_queue_actions(Actions, State1),
             %% We'll handle the credit_reply queue event async later
             %% thanks to the queue event containing the consumer tag.
-            State2;
-        false ->
-            process_credit_reply_sync(Ctag, QName, LinkCreditSnd, State2)
+            State;
+        {credit_api_v1, DeliveryCountSnd} ->
+            LinkCreditSnd = diff(add(DeliveryCountRcv, LinkCreditRcv), DeliveryCountSnd),
+            {ok, QStates, Actions} = rabbit_queue_type:credit_v1(QName, Ctag, LinkCreditSnd, Drain, QStates0),
+            State1 = State0#state{queue_states = QStates},
+            State = handle_queue_actions(Actions, State1),
+            process_credit_reply_sync(Ctag, QName, LinkCreditSnd, State)
     end.
 
 %% The AMQP 0.9.1 credit extension was poorly designed because a consumer granting
@@ -1661,17 +1700,13 @@ process_credit_reply_sync(
                       QName,
                       {send_credit_reply, Avail}}} ->
                         %% Convert to credit_api_v2 action.
-                        Action = {credit_reply, Ctag, Credit, Avail, false, #{}},
+                        Action = {credit_reply_v1, Ctag, Credit, Avail, false},
                         handle_queue_actions([Action], State)
             after ?CREDIT_REPLY_TIMEOUT ->
                       credit_reply_timeout(classic, QName)
             end;
         {ok, rabbit_quorum_queue} ->
             process_credit_reply_sync_quorum_queue(Ctag, QName, Credit, State);
-        {ok, rabbit_stream_queue} ->
-            %% Stream is the exception in that the stream client
-            %% directly returns the credit_reply action.
-            State;
         {error, not_found} ->
             State
     end.
@@ -1686,16 +1721,16 @@ process_credit_reply_sync_quorum_queue(Ctag, QName, Credit, State0) ->
 
                 {Applied, ReceivedCreditReply}
                 = lists:mapfoldl(
-                    %% Convert v1 send_credit_reply to credit_api_v2 action.
+                    %% Convert v1 send_credit_reply to credit_reply_v1 action.
                     %% Available refers to *after* and Credit refers to *before*
                     %% quorum queue sends messages.
                     %% We therefore keep the same wrong behaviour of RabbitMQ 3.x.
                     fun({RaIdx, {send_credit_reply, Available}}, _) ->
-                            Action = {credit_reply, Ctag, Credit, Available, false, #{}},
+                            Action = {credit_reply_v1, Ctag, Credit, Available, false},
                             {{RaIdx, Action}, true};
                        ({RaIdx, {multi, [{send_credit_reply, Available},
                                          {send_drained, _} = SendDrained]}}, _) ->
-                            Action = {credit_reply, Ctag, Credit, Available, false, #{}},
+                            Action = {credit_reply_v1, Ctag, Credit, Available, false},
                             {{RaIdx, {multi, [Action, SendDrained]}}, true};
                        (E, Acc) ->
                             {E, Acc}

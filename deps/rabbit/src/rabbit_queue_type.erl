@@ -11,6 +11,7 @@
 
 -include("amqqueue.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("amqp10_common/include/amqp10_types.hrl").
 
 -export([
          init/0,
@@ -43,6 +44,7 @@
          module/2,
          deliver/4,
          settle/5,
+         credit_v1/5,
          credit/7,
          dequeue/5,
          fold_state/3,
@@ -67,10 +69,10 @@
 -type correlation() :: term().
 -type arguments() :: queue_arguments | consumer_arguments.
 -type queue_type() :: rabbit_classic_queue | rabbit_quorum_queue | rabbit_stream_queue.
-%% Link credit can be negative, see AMQP 1.0 [2.6.7].
+%% see AMQP 1.0 §2.6.7
+-type delivery_count() :: sequence_no().
+%% Link credit can be negative, see AMQP 1.0 §2.6.7
 -type credit() :: integer().
-%% https://www.amqp.org/specification/1.0/link-state-properties
--type link_state_properties() :: #{binary() => term()}.
 
 -define(STATE, ?MODULE).
 
@@ -89,8 +91,12 @@
     {settled, queue_name(), [correlation()]} |
     {deliver, rabbit_types:ctag(), boolean(), [rabbit_amqqueue:qmsg()]} |
     {block | unblock, QueueName :: term()} |
-    {credit_reply, rabbit_types:ctag(), credit(), Available :: non_neg_integer(),
-     Drain :: boolean(), link_state_properties()}.
+    %% credit API v2
+    {credit_reply, rabbit_types:ctag(), delivery_count(), credit(),
+     Available :: non_neg_integer(), Drain :: boolean()} |
+    %% credit API v1
+    {credit_reply_v1, rabbit_types:ctag(), credit(),
+     Available :: non_neg_integer(), Drain :: boolean()}.
 
 -type actions() :: [action()].
 
@@ -106,7 +112,8 @@
 
 -opaque state() :: #?STATE{}.
 
--type consume_mode() :: credited | {simple_prefetch, non_neg_integer()}.
+%% Delete atom 'credit_api_v1' when feature flag credit_api_v2 becomes required.
+-type consume_mode() :: {simple_prefetch, non_neg_integer()} | {credited, Initial :: delivery_count() | credit_api_v1}.
 -type consume_spec() :: #{no_ack := boolean(),
                           channel_pid := pid(),
                           limiter_pid => pid() | none,
@@ -133,7 +140,7 @@
               queue_type/0,
               credit/0,
               correlation/0,
-              link_state_properties/0]).
+              delivery_count/0]).
 
 -callback is_enabled() -> boolean().
 
@@ -210,9 +217,13 @@
     {queue_state(), actions()} |
     {'protocol_error', Type :: atom(), Reason :: string(), Args :: term()}.
 
--callback credit(queue_name(), rabbit_types:ctag(), credit(),
-                 Drain :: boolean(), Reply :: boolean(),
-                 link_state_properties(), queue_state()) ->
+%% Delete this callback when feature flag credit_api_v2 becomes required.
+-callback credit_v1(queue_name(), rabbit_types:ctag(), credit(), Drain :: boolean(), queue_state()) ->
+    {queue_state(), actions()}.
+
+%% credit API v2
+-callback credit(queue_name(), rabbit_types:ctag(), delivery_count(), credit(),
+                 Drain :: boolean(), Echo :: boolean(), queue_state()) ->
     {queue_state(), actions()}.
 
 -callback dequeue(queue_name(), NoAck :: boolean(), LimiterPid :: pid(),
@@ -635,15 +646,23 @@ settle(#resource{kind = queue} = QRef, Op, CTag, MsgIds, Ctxs) ->
             end
     end.
 
--spec credit(amqqueue:amqqueue() | queue_name(),
-             rabbit_types:ctag(), credit(), boolean(), boolean(),
-             link_state_properties(), state()) ->
+%% Delete this function when feature flag credit_api_v2 becomes required.
+-spec credit_v1(queue_name(), rabbit_types:ctag(), credit(), boolean(), state()) ->
     {ok, state(), actions()}.
-credit(Q, CTag, Credit, Drain, Reply, Properties, Ctxs) ->
+credit_v1(QName, CTag, LinkCreditSnd, Drain, Ctxs) ->
     #ctx{state = State0,
-         module = Mod} = Ctx = get_ctx(Q, Ctxs),
-    {State, Actions} = Mod:credit(qref(Q), CTag, Credit, Drain, Reply, Properties, State0),
-    {ok, set_ctx(Q, Ctx#ctx{state = State}, Ctxs), Actions}.
+         module = Mod} = Ctx = get_ctx(QName, Ctxs),
+    {State, Actions} = Mod:credit_v1(QName, CTag, LinkCreditSnd, Drain, State0),
+    {ok, set_ctx(QName, Ctx#ctx{state = State}, Ctxs), Actions}.
+
+%% credit API v2
+-spec credit(queue_name(), rabbit_types:ctag(), delivery_count(), credit(), boolean(), boolean(), state()) ->
+    {ok, state(), actions()}.
+credit(QName, CTag, DeliveryCount, Credit, Drain, Echo, Ctxs) ->
+    #ctx{state = State0,
+         module = Mod} = Ctx = get_ctx(QName, Ctxs),
+    {State, Actions} = Mod:credit(QName, CTag, DeliveryCount, Credit, Drain, Echo, State0),
+    {ok, set_ctx(QName, Ctx#ctx{state = State}, Ctxs), Actions}.
 
 -spec dequeue(amqqueue:amqqueue(), boolean(),
               pid(), rabbit_types:ctag(), state()) ->

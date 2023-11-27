@@ -76,6 +76,8 @@
          chunk_disk_msgs/3]).
 -endif.
 
+-import(serial_number, [add/2, diff/2]).
+
 %% command records representing all the protocol actions that are supported
 -record(enqueue, {pid :: option(pid()),
                   seq :: option(msg_seqno()),
@@ -97,7 +99,7 @@
                   msg_ids :: [msg_id()]}).
 -record(credit, {consumer_id :: consumer_id(),
                  credit :: non_neg_integer(),
-                 delivery_count :: non_neg_integer(),
+                 delivery_count :: rabbit_queue_type:delivery_count(),
                  drain :: boolean()}).
 -record(purge, {}).
 -record(purge_nodes, {nodes :: [node()]}).
@@ -277,58 +279,67 @@ apply(#{index := Idx} = Meta,
         _ ->
             {State00, ok, []}
     end;
-apply(Meta, #credit{credit = NewCredit, delivery_count = RemoteDelCnt,
+apply(Meta, #credit{credit = LinkCreditRcv, delivery_count = DeliveryCountRcv,
                     drain = Drain, consumer_id = ConsumerId = {CTag, CPid}},
       #?MODULE{consumers = Cons0,
                service_queue = ServiceQueue0,
                waiting_consumers = Waiting0} = State0) ->
     case Cons0 of
-        #{ConsumerId := #consumer{delivery_count = DelCnt} = Con0} ->
-            %% this can go below 0 when credit is reduced
-            C = max(0, RemoteDelCnt + NewCredit - DelCnt),
+        #{ConsumerId := #consumer{delivery_count = DeliveryCountSnd,
+                                  cfg = Cfg} = Con0} ->
+            LinkCreditSnd = link_credit_snd(DeliveryCountRcv, LinkCreditRcv, DeliveryCountSnd, Cfg),
             %% grant the credit
-            Con1 = Con0#consumer{credit = C},
+            Con1 = Con0#consumer{credit = LinkCreditSnd},
             ServiceQueue = maybe_queue_consumer(ConsumerId, Con1, ServiceQueue0),
-            Cons1 = maps:put(ConsumerId, Con1, Cons0),
             State1 = State0#?MODULE{service_queue = ServiceQueue,
-                                    consumers = Cons1},
+                                    consumers = maps:update(ConsumerId, Con1, Cons0)},
+            {State2, ok, Effects} = checkout(Meta, State0, State1, []),
 
-            {#?MODULE{consumers = Cons2 = #{ConsumerId := Con = #consumer{credit = PostCred,
-                                                                          delivery_count = DeliveryCount0}}} =
-             State2, ok, Effects} = checkout(Meta, State0, State1, []),
+            #?MODULE{consumers = Cons1 = #{ConsumerId := Con2}} = State2,
+            #consumer{credit = PostCred,
+                      delivery_count = PostDeliveryCount} = Con2,
+            DrainedInsufficientMsgs = Drain andalso PostCred > 0,
             Available = messages_ready(State2),
-            CreditReplyV1 = {send_credit_reply, Available},
-            {RespV1, State} = case Drain andalso PostCred > 0 of
-                                  true ->
-                                      %% "advance the delivery-count as much as possible, consuming all link-credit"
-                                      %% [AMQP 1.0, 2.6.7]
-                                      DeliveryCount = DeliveryCount0 + PostCred,
-                                      Cons = maps:update(ConsumerId,
-                                                         Con#consumer{delivery_count = DeliveryCount,
-                                                                      credit = 0},
-                                                         Cons2),
-                                      {{multi, [CreditReplyV1, {send_drained, {CTag, PostCred}}]},
-                                       State2#?MODULE{consumers = Cons}};
-                                  false ->
-                                      {CreditReplyV1, State2}
-                              end,
-            case rabbit_feature_flags:is_enabled(credit_api_v2) of
+            case credit_api_v2(Cfg) of
                 true ->
-                    %% FLOW to AMQP 1.0 client should be sent *after* TRANSFERs.
-                    %% Hence, credit_reply should be sent to queue client *after* delivery effects.
-                    Eff = {send_msg, CPid,
-                           {credit_reply, CTag, PostCred, Available, Drain, #{}},
-                           ?DELIVERY_SEND_MSG_OPTS},
-                    {State, ok, Effects ++ [Eff]};
+                    {Credit, DeliveryCount, State} =
+                    case DrainedInsufficientMsgs of
+                        true ->
+                            AdvancedDeliveryCount = add(PostDeliveryCount, PostCred),
+                            ZeroCredit = 0,
+                            Con = Con2#consumer{delivery_count = AdvancedDeliveryCount,
+                                                credit = ZeroCredit},
+                            Cons = maps:update(ConsumerId, Con, Cons1),
+                            State3 = State2#?MODULE{consumers = Cons},
+                            {ZeroCredit, AdvancedDeliveryCount, State3};
+                        false ->
+                            {PostCred, PostDeliveryCount, State2}
+                    end,
+                    %% We must send to queue client delivery effects before credit_reply such
+                    %% that session process can send to AMQP 1.0 client TRANSFERs before FLOW.
+                    {State, ok, Effects ++ [{send_msg, CPid,
+                                             {credit_reply, CTag, DeliveryCount, Credit, Available, Drain},
+                                             ?DELIVERY_SEND_MSG_OPTS}]};
                 false ->
                     %% We must always send a send_credit_reply because basic.credit is synchronous.
-                    %%
-                    %% Also, we keep the bug that has existed with feature flag credit_api_v2 disabled
-                    %% that the send_drained reply is sent before the delivery effects (resulting in
-                    %% the wrong behaviour that the FLOW to AMQP 1.0 client gets sent before the TRANSFERs).
-                    %% We keep the bug because old rabbit_fifo_client implementations expect a send_drained
-                    %% Ra reply (they can't handle such a Ra effect).
-                    {State, RespV1, Effects}
+                    %% Additionally, we keep the bug of credit API v1 that we send to queue client the
+                    %% send_drained reply before the delivery effects (resulting in the wrong behaviour
+                    %% that the seesion process sends to AMQP 1.0 client the FLOW before the TRANSFERs).
+                    %% We have to keep this bug because old rabbit_fifo_client implementations expect
+                    %% a send_drained Ra reply (they can't handle such a Ra effect).
+                    CreditReply = {send_credit_reply, Available},
+                    case DrainedInsufficientMsgs of
+                        true ->
+                            AdvancedDeliveryCount = PostDeliveryCount + PostCred,
+                            Con = Con2#consumer{delivery_count = AdvancedDeliveryCount,
+                                                credit = 0},
+                            Cons = maps:update(ConsumerId, Con, Cons1),
+                            State = State2#?MODULE{consumers = Cons},
+                            Reply = {multi, [CreditReply, {send_drained, {CTag, PostCred}}]},
+                            {State, Reply, Effects};
+                        false ->
+                            {State2, CreditReply, Effects}
+                    end
             end;
         _ when Waiting0 /= [] ->
             %%TODO next time when we bump the machine version:
@@ -337,20 +348,20 @@ apply(Meta, #credit{credit = NewCredit, delivery_count = RemoteDelCnt,
             %% 2. Support Drain == true, i.e. advance delivery-count, consuming all link-credit since there
             %%    are no messages available for an inactive consumer and send credit_reply with Drain=true.
             case lists:keytake(ConsumerId, 1, Waiting0) of
-                {value, {_, Con0 = #consumer{delivery_count = DelCnt}}, Waiting} ->
-                    %% the consumer is a waiting one
+                {value, {_, Con0 = #consumer{delivery_count = DeliveryCountSnd,
+                                             cfg = Cfg}}, Waiting} ->
+                    LinkCreditSnd = link_credit_snd(DeliveryCountRcv, LinkCreditRcv, DeliveryCountSnd, Cfg),
                     %% grant the credit
-                    C = max(0, RemoteDelCnt + NewCredit - DelCnt),
-                    Con = Con0#consumer{credit = C},
+                    Con = Con0#consumer{credit = LinkCreditSnd},
                     State = State0#?MODULE{waiting_consumers =
                                            [{ConsumerId, Con} | Waiting]},
                     %% No messages are available for inactive consumers.
                     Available = 0,
-                    case rabbit_feature_flags:is_enabled(credit_api_v2) of
+                    case credit_api_v2(Cfg) of
                         true ->
                             {State, ok,
                              {send_msg, CPid,
-                              {credit_reply, CTag, C, Available, false, #{}},
+                              {credit_reply, CTag, DeliveryCountSnd, LinkCreditSnd, Available, false},
                               ?DELIVERY_SEND_MSG_OPTS}};
                         false ->
                             {State, {send_credit_reply, Available}}
@@ -2113,12 +2124,17 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
                         #consumer{checked_out = Checked0,
                                   next_msg_id = Next,
                                   credit = Credit,
-                                  delivery_count = DelCnt} = Con0 ->
+                                  delivery_count = DelCnt0,
+                                  cfg = Cfg} = Con0 ->
                             Checked = maps:put(Next, ConsumerMsg, Checked0),
+                            DelCnt = case credit_api_v2(Cfg) of
+                                         true -> add(DelCnt0, 1);
+                                         false -> DelCnt0 + 1
+                                     end,
                             Con = Con0#consumer{checked_out = Checked,
                                                 next_msg_id = Next + 1,
                                                 credit = Credit - 1,
-                                                delivery_count = DelCnt + 1},
+                                                delivery_count = DelCnt},
                             Size = get_header(size, get_msg_header(ConsumerMsg)),
                             State = update_or_remove_sub(
                                        Meta, ConsumerId, Con,
@@ -2244,7 +2260,8 @@ update_consumer(Meta, {Tag, Pid} = ConsumerId, ConsumerMeta,
                                                      meta = ConsumerMeta,
                                                      priority = Priority,
                                                      credit_mode = Mode},
-                                 credit = Credit}
+                                 credit = Credit,
+                                 delivery_count = initial_delivery_count(ConsumerMeta)}
                end,
     {Consumer, update_or_remove_sub(Meta, ConsumerId, Consumer, State0)};
 update_consumer(Meta, {Tag, Pid} = ConsumerId, ConsumerMeta,
@@ -2278,8 +2295,8 @@ update_consumer(Meta, {Tag, Pid} = ConsumerId, ConsumerMeta,
                                                      meta = ConsumerMeta,
                                                      priority = Priority,
                                                      credit_mode = Mode},
-                                 credit = Credit},
-
+                                 credit = Credit,
+                                 delivery_count = initial_delivery_count(ConsumerMeta)},
             {Consumer,
              State0#?MODULE{waiting_consumers =
                             Waiting ++ [{ConsumerId, Consumer}]}}
@@ -2290,6 +2307,8 @@ merge_consumer(Meta, #consumer{cfg = CCfg, checked_out = Checked} = Consumer,
     NumChecked = map_size(Checked),
     NewCredit = max(0, Credit - NumChecked),
     Mode = credit_mode(Meta, Credit, Mode0),
+    %% TODO Forbid changing credit API version when detaching and attaching
+    %% with same link handle in the same AMQP 1.0 session.
     Consumer#consumer{cfg = CCfg#consumer_cfg{priority = Priority,
                                               meta = ConsumerMeta,
                                               credit_mode = Mode,
@@ -2579,3 +2598,26 @@ get_msg(#enqueue{msg = M}) ->
     M;
 get_msg(#requeue{msg = M}) ->
     M.
+
+-spec initial_delivery_count(consumer_meta()) ->
+    rabbit_queue_type:delivery_count().
+initial_delivery_count(#{initial_delivery_count := Count}) ->
+    %% credit API v2
+    Count;
+initial_delivery_count(_) ->
+    %% credit API v1
+    0.
+
+-spec credit_api_v2(#consumer_cfg{}) ->
+    boolean().
+credit_api_v2(#consumer_cfg{meta = ConsumerMeta}) ->
+    maps:is_key(initial_delivery_count, ConsumerMeta).
+
+%% AMQP 1.0 §2.6.7
+link_credit_snd(DeliveryCountRcv, LinkCreditRcv, DeliveryCountSnd, ConsumerCfg) ->
+    C = case credit_api_v2(ConsumerCfg) of
+            true -> diff(add(DeliveryCountRcv, LinkCreditRcv), DeliveryCountSnd);
+            false -> DeliveryCountRcv + LinkCreditRcv - DeliveryCountSnd
+        end,
+    %% C can be negative when receiver decreases credits while messages are in flight.
+    max(0, C).

@@ -22,6 +22,7 @@
          settle/3,
          return/3,
          discard/3,
+         credit_v1/4,
          credit/6,
          handle_ra_event/4,
          untracked_enqueue/2,
@@ -42,7 +43,13 @@
 
 -record(consumer, {last_msg_id :: seq() | -1 | undefined,
                    ack = false :: boolean(),
-                   delivery_count = 0 :: non_neg_integer()}).
+                   %% 'echo' field from latest FLOW, see AMQP 1.0 §2.7.4
+                   %% Quorum queue server will always echo back to us,
+                   %% but we only emit a credit_reply if Echo=true
+                   echo :: boolean(),
+                   %% Remove this field when feature flag credit_api_v2 becomes required.
+                   delivery_count :: {credit_api_v1, rabbit_queue_type:delivery_count()} | credit_api_v2
+                  }).
 
 -record(cfg, {servers = [] :: [ra:server_id()],
               soft_limit = ?SOFT_LIMIT :: non_neg_integer(),
@@ -353,10 +360,20 @@ checkout(ConsumerTag, NumUnsettled, CreditMode, Meta,
                                         NextMsgId - 1
                                 end
                         end,
+            DeliveryCount = case maps:is_key(initial_delivery_count, Meta) of
+                                true -> credit_api_v2;
+                                false -> {credit_api_v1, 0}
+                            end,
             SDels = maps:update_with(
-                      ConsumerTag, fun (C) -> C#consumer{ack = Ack} end,
+                      ConsumerTag,
+                      %% TODO Forbid changing credit API version when detaching and attaching
+                      %% with same link handle in the same session.
+                      fun (C) -> C#consumer{ack = Ack} end,
                       #consumer{last_msg_id = LastMsgId,
-                                ack = Ack}, CDels0),
+                                ack = Ack,
+                                echo = false,
+                                delivery_count = DeliveryCount},
+                      CDels0),
             {ok, State0#state{leader = Leader,
                               consumer_deliveries = SDels}};
         Err ->
@@ -376,6 +393,19 @@ query_single_active_consumer(#state{leader = Leader}) ->
             Err
     end.
 
+-spec credit_v1(rabbit_types:ctag(),
+                Credit :: non_neg_integer(),
+                Drain :: boolean(),
+                state()) ->
+    {state(), rabbit_queue_type:actions()}.
+credit_v1(ConsumerTag, Credit, Drain,
+          #state{consumer_deliveries = CDels} = State0) ->
+    ConsumerId = consumer_id(ConsumerTag),
+    #consumer{delivery_count = {credit_api_v1, Count}} = maps:get(ConsumerTag, CDels),
+    ServerId = pick_server(State0),
+    Cmd = rabbit_fifo:make_credit(ConsumerId, Credit, Count, Drain),
+    {send_command(ServerId, undefined, Cmd, normal, State0), []}.
+
 %% @doc Provide credit to the queue
 %%
 %% This only has an effect if the consumer uses credit mode: credited
@@ -386,22 +416,22 @@ query_single_active_consumer(#state{leader = Leader}) ->
 %% provided credit).
 %% @param Reply true if the queue client requests a credit_reply queue action
 -spec credit(rabbit_types:ctag(),
+             rabbit_queue_type:delivery_count(),
              rabbit_queue_type:credit(),
              Drain :: boolean(),
-             Reply :: boolean(),
-             rabbit_queue_type:link_state_properties(),
+             Echo :: boolean(),
              state()) ->
-          {state(), rabbit_queue_type:actions()}.
-credit(ConsumerTag, Credit, Drain, _Reply, _Properties,
-       #state{consumer_deliveries = CDels} = State0) ->
+    {state(), rabbit_queue_type:actions()}.
+credit(ConsumerTag, DeliveryCount, Credit, Drain, Echo,
+       #state{consumer_deliveries = CDels0} = State0) ->
     ConsumerId = consumer_id(ConsumerTag),
-    %% the last received msgid provides us with the delivery count if we
-    %% add one as it is 0 indexed
-    C = maps:get(ConsumerTag, CDels, #consumer{last_msg_id = -1}),
     ServerId = pick_server(State0),
-    Cmd = rabbit_fifo:make_credit(ConsumerId, Credit,
-                                  C#consumer.delivery_count, Drain),
-    {send_command(ServerId, undefined, Cmd, normal, State0), []}.
+    Cmd = rabbit_fifo:make_credit(ConsumerId, Credit, DeliveryCount, Drain),
+    CDels = maps:update_with(ConsumerTag,
+                             fun(C) -> C#consumer{echo = Echo} end,
+                             CDels0),
+    State = State0#state{consumer_deliveries = CDels},
+    {send_command(ServerId, undefined, Cmd, normal, State), []}.
 
 %% @doc Cancels a checkout with the rabbit_fifo queue  for the consumer tag
 %%
@@ -567,17 +597,20 @@ handle_ra_event(QName, From, {applied, Seqs},
 handle_ra_event(QName, From, {machine, {delivery, _ConsumerTag, _} = Del}, State0) ->
     handle_delivery(QName, From, Del, State0);
 handle_ra_event(_QName, _From,
-                {machine, {credit_reply, Tag, Credit, _Available,
-                           Drain, _LinkStateProperties} = Action},
-                State0) ->
-    State = case Drain of
-                true -> add_delivery_count(Credit, Tag, State0);
-                false -> State0
-            end,
-    %%TODO filter out Action if local echo state is false and not Drain or
-    %% introduce new #credit_v2{} command that contains an additional Reply boolean when
-    %% we go with a new fifo version.
+                {machine, {credit_reply_v1, _CTag, _Credit, _Available, _Drain = false} = Action},
+                State) ->
     {ok, State, [Action]};
+handle_ra_event(_QName, _From,
+                {machine, {credit_reply, CTag, _DeliveryCount, _Credit, _Available, Drain} = Action},
+                #state{consumer_deliveries = CDels} = State) ->
+    Actions = case CDels of
+                  #{CTag := #consumer{echo = Echo}}
+                    when Echo orelse Drain ->
+                      [Action];
+                  _ ->
+                      []
+              end,
+    {ok, State, Actions};
 handle_ra_event(_QName, _, {machine, {queue_status, Status}},
                 #state{} = State) ->
     %% just set the queue status
@@ -677,8 +710,7 @@ maybe_add_action({send_drained, {Tag, Credit}}, Acc, State0) ->
     %% This function clause should be deleted when
     %% feature flag credit_api_v2 becomes required.
     State = add_delivery_count(Credit, Tag, State0),
-    %% Convert to new credit_api_v2 action.
-    Action = {credit_reply, Tag, Credit, _Avail = 0, _Drain = true, #{}},
+    Action = {credit_reply_v1, Tag, Credit, _Avail = 0, _Drain = true},
     {[Action | Acc], State};
 maybe_add_action(Action, Acc, State) ->
     %% anything else is assumed to be an action
@@ -790,11 +822,14 @@ transform_msgs(QName, QRef, Msgs) ->
               {QName, QRef, MsgId, Redelivered, Msg}
       end, Msgs).
 
-update_consumer(Tag, LastId, DelCntIncr,
-                #consumer{delivery_count = D} = C, Consumers) ->
+update_consumer(Tag, LastId, DelCntIncr, Consumer, Consumers) ->
+    D = case Consumer#consumer.delivery_count of
+            credit_api_v2 -> credit_api_v2;
+            {credit_api_v1, Count} -> {credit_api_v1, Count + DelCntIncr}
+        end,
     maps:put(Tag,
-             C#consumer{last_msg_id = LastId,
-                        delivery_count = D + DelCntIncr},
+             Consumer#consumer{last_msg_id = LastId,
+                               delivery_count = D},
              Consumers).
 
 add_delivery_count(DelCntIncr, Tag, #state{consumer_deliveries = CDels0} = State) ->

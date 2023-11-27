@@ -32,7 +32,8 @@ all_tests() ->
      discard,
      cancel_checkout,
      lost_delivery,
-     credit,
+     credit_api_v1,
+     credit_api_v2,
      untracked_enqueue,
      flow,
      test_queries,
@@ -441,12 +442,7 @@ lost_delivery(Config) ->
                     end),
     ok.
 
-credit(Config) ->
-    Mod = rabbit_feature_flags,
-    meck:new(Mod),
-    %% TODO write tests where credit_api_v2 is enabled
-    meck:expect(Mod, is_enabled, fun(credit_api_v2) -> false end),
-
+credit_api_v1(Config) ->
     ClusterName = ?config(cluster_name, Config),
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
@@ -463,19 +459,19 @@ credit(Config) ->
                                        (D, _) -> error({unexpected_delivery, D})
                                    end),
     %% provide some credit
-    {F6, []} = rabbit_fifo_client:credit(CTag, 1, false, true, #{}, F5),
+    {F6, []} = rabbit_fifo_client:credit_v1(CTag, 1, false, F5),
     {[{_, _, _, _, m1}], [{send_credit_reply, 1}], F7} =
-        process_ra_events(receive_ra_events(1, 1), ClusterName, F6),
+    process_ra_events(receive_ra_events(1, 1), ClusterName, F6),
 
     %% credit and drain
     Drain = true,
-    {F8, []} = rabbit_fifo_client:credit(CTag, 4, Drain, true, #{}, F7),
+    {F8, []} = rabbit_fifo_client:credit_v1(CTag, 4, Drain, F7),
     AvailableAfterCheckout = 0,
     {[{_, _, _, _, m2}],
      [{send_credit_reply, AvailableAfterCheckout},
-      {credit_reply, CTag, _CreditAfterCheckout = 3,
-       AvailableAfterCheckout, Drain, #{}}], F9}
-    = process_ra_events(receive_ra_events(2, 1), ClusterName, F8),
+      {credit_reply_v1, CTag, _CreditAfterCheckout = 3,
+       AvailableAfterCheckout, Drain}],
+     F9} = process_ra_events(receive_ra_events(2, 1), ClusterName, F8),
     flush(),
 
     %% enqueue another message - at this point the consumer credit should be
@@ -487,9 +483,77 @@ credit(Config) ->
                                         (D, _) -> error({unexpected_delivery, D})
                                     end),
     %% credit again and receive the last message
-    {F12, []} = rabbit_fifo_client:credit(CTag, 10, false, true, #{}, F11),
+    {F12, []} = rabbit_fifo_client:credit_v1(CTag, 10, false, F11),
     {[{_, _, _, _, m3}], _, _} = process_ra_events(receive_ra_events(1, 1), ClusterName, F12),
     ok.
+
+credit_api_v2(Config) ->
+    ClusterName = ?config(cluster_name, Config),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterName, [ServerId]),
+    F0 = rabbit_fifo_client:init([ServerId], 4),
+    %% Enqueue 2 messages.
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, m1, F0),
+    {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, m2, F1),
+    {_, _, F3} = process_ra_events(receive_ra_events(2, 0), ClusterName, F2),
+    CTag = <<"my-tag">>,
+    DC0 = 16#ff_ff_ff_ff,
+    DC1 = 0, %% = DC0 + 1 using 32 bit serial number arithmetic
+    {ok, F4} = rabbit_fifo_client:checkout(
+                 %% initial_delivery_count in consumer meta means credit API v2.
+                 CTag, 0, credited, #{initial_delivery_count => DC0}, F3),
+    %% assert no deliveries
+    {_, _, F5} = process_ra_events(receive_ra_events(), ClusterName, F4, [], [],
+                                   fun
+                                       (D, _) -> error({unexpected_delivery, D})
+                                   end),
+    %% Grant 1 credit.
+    {F6, []} = rabbit_fifo_client:credit(CTag, DC0, 1, false, _Echo0 = true, F5),
+    %% We expect exactly 1 message due to 1 credit being granted.
+    {[{_, _, _, _, m1}],
+     %% We expect a credit_reply action due to echo=true
+     [{credit_reply, CTag, DC1, _Credit0 = 0, _Available0 = 1, _Drain0 = false}],
+     F7} = process_ra_events(receive_ra_events(), ClusterName, F6),
+
+    %% Again, grant 1 credit.
+    %% However, because we still use the initial delivery count DC0, rabbit_fifo
+    %% wont' send us a new message since it already sent us m1 for that old delivery-count.
+    %% In other words, this credit top up simulates in-flight deliveries.
+    {F8, []} = rabbit_fifo_client:credit(CTag, DC0, 1, false, _Echo1 = true, F7),
+    {_NoMessages = [],
+     %% We still expect a credit_reply action due to echo=true
+     [{credit_reply, CTag, DC1, _Credit1 = 0, _Available1 = 1, _Drain1 = false}],
+     F9} = process_ra_events(receive_ra_events(), ClusterName, F8),
+
+    %% Grant 4 credits and drain.
+    {F10, []} = rabbit_fifo_client:credit(CTag, DC1, 4, true, _Echo2 = false, F9),
+    %% rabbit_fifo should advance the delivery-count as much as possible
+    %% consuming all credits due to drain=true and insufficient messages in the queue.
+    DC2 = DC1 + 4,
+    %% We expect to receive m2 which is the only message in the queue.
+    {[{_, _, _, _, m2}],
+     %% Even though echo=false, we still expect a credit_reply action due
+     %% drain=true and insufficient messages in the queue.
+     [{credit_reply, CTag, DC2, _Credit2 = 0, _Available2 = 0, _Drain2 = true}],
+     F11} = process_ra_events(receive_ra_events(), ClusterName, F10),
+    flush(),
+
+    %% Enqueue another message.
+    %% At this point the consumer credit should be all used up due to the drain.
+    {ok, F12, []} = rabbit_fifo_client:enqueue(ClusterName, m3, F11),
+    %% assert no deliveries
+    {_, _, F13} = process_ra_events(receive_ra_events(), ClusterName, F12, [], [],
+                                    fun
+                                        (D, _) -> error({unexpected_delivery, D})
+                                    end),
+
+    %% Grant 10 credits and receive the last message.
+    {F14, []} = rabbit_fifo_client:credit(CTag, DC2, 10, false, _Echo = false, F13),
+    ?assertMatch(
+       {[{_, _, _, _, m3}],
+        %% Due to echo=false, we don't expect a credit_reply action.
+        _NoCreditReplyAction = [],
+        _F15}, process_ra_events(receive_ra_events(), ClusterName, F14)).
 
 untracked_enqueue(Config) ->
     ClusterName = ?config(cluster_name, Config),

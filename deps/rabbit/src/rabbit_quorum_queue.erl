@@ -25,7 +25,7 @@
          delete_immediately/1]).
 -export([state_info/1, info/2, stat/1, infos/1, infos/2]).
 -export([settle/5, dequeue/5, consume/3, cancel/5]).
--export([credit/7]).
+-export([credit_v1/5, credit/7]).
 -export([purge/1]).
 -export([stateless_deliver/2, deliver/3]).
 -export([dead_letter_publish/5]).
@@ -780,12 +780,11 @@ settle(_QName, requeue, CTag, MsgIds, QState) ->
 settle(_QName, discard, CTag, MsgIds, QState) ->
     rabbit_fifo_client:discard(quorum_ctag(CTag), MsgIds, QState).
 
--spec credit(rabbit_amqqueue:name(), rabbit_types:ctag(), rabbit_queue_type:credit(),
-             Drain :: boolean(), Reply :: boolean(),
-             rabbit_queue_type:link_state_properties(), rabbit_fifo_client:state()) ->
-    {rabbit_fifo_client:state(), rabbit_queue_type:actions()}.
-credit(_QName, CTag, Credit, Drain, Reply, Properties, QState) ->
-    rabbit_fifo_client:credit(quorum_ctag(CTag), Credit, Drain, Reply, Properties, QState).
+credit_v1(_QName, CTag, Credit, Drain, QState) ->
+    rabbit_fifo_client:credit_v1(quorum_ctag(CTag), Credit, Drain, QState).
+
+credit(_QName, CTag, DeliveryCount, Credit, Drain, Echo, QState) ->
+    rabbit_fifo_client:credit(quorum_ctag(CTag), DeliveryCount, Credit, Drain, Echo, QState).
 
 -spec dequeue(rabbit_amqqueue:name(), NoAck :: boolean(), pid(),
               rabbit_types:ctag(), rabbit_fifo_client:state()) ->
@@ -826,21 +825,28 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
     ConsumerTag = quorum_ctag(ConsumerTag0),
     %% consumer info is used to describe the consumer properties
     AckRequired = not NoAck,
-    {CreditMode, EffectivePrefetch, DeclaredPrefetch} =
+    {CreditMode, EffectivePrefetch, DeclaredPrefetch, ConsumerMeta0} =
         case Mode of
-            credited ->
-                {Mode, 0, 0};
+            {credited, C} ->
+                Meta = if C =:= credit_api_v1 ->
+                              #{};
+                          is_integer(C) ->
+                              #{initial_delivery_count => C}
+                       end,
+                {credited, 0, 0, Meta};
             {simple_prefetch = M, Declared} ->
                 Effective = case Declared of
                                 0 -> ?UNLIMITED_PREFETCH_COUNT;
                                 _ -> Declared
                             end,
-                {M, Effective, Declared}
+                {M, Effective, Declared, #{}}
         end,
-    ConsumerMeta = #{ack => AckRequired,
-                     prefetch => DeclaredPrefetch,
-                     args => Args,
-                     username => ActingUser},
+    ConsumerMeta = maps:merge(
+                     ConsumerMeta0,
+                     #{ack => AckRequired,
+                       prefetch => DeclaredPrefetch,
+                       args => Args,
+                       username => ActingUser}),
     {ok, QState} = rabbit_fifo_client:checkout(ConsumerTag, EffectivePrefetch,
                                                CreditMode, ConsumerMeta,
                                                QState0),

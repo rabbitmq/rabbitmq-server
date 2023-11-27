@@ -1337,11 +1337,10 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
     end;
 
 handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-             Mode, ConsumerTag, ExclusiveConsume, Args, OkMsg, ActingUser},
+             ModeOrPrefetch, ConsumerTag, ExclusiveConsume, Args, OkMsg, ActingUser},
             _From, State = #q{consumers = Consumers,
                               active_consumer = Holder,
                               single_active_consumer_on = SingleActiveConsumerOn}) ->
-    {PrefetchCount, _} = ParsedCreditMode = rabbit_queue_consumers:parse_credit_mode(Mode, Args),
     ConsumerRegistration = case SingleActiveConsumerOn of
         true ->
             case ExclusiveConsume of
@@ -1350,20 +1349,18 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                 false ->
                     Consumers1 = rabbit_queue_consumers:add(
                                    ChPid, ConsumerTag, NoAck,
-                                   LimiterPid, LimiterActive,
-                                   ParsedCreditMode, Args,
-                                   ActingUser, Consumers),
-
-                  case Holder of
-                      none ->
-                          NewConsumer = rabbit_queue_consumers:get(ChPid, ConsumerTag, Consumers1),
-                          {state, State#q{consumers          = Consumers1,
-                                          has_had_consumers  = true,
-                                          active_consumer    = NewConsumer}};
-                      _    ->
-                          {state, State#q{consumers          = Consumers1,
-                                          has_had_consumers  = true}}
-                  end
+                                   LimiterPid, LimiterActive, ModeOrPrefetch,
+                                   Args, ActingUser, Consumers),
+                    case Holder of
+                        none ->
+                            NewConsumer = rabbit_queue_consumers:get(ChPid, ConsumerTag, Consumers1),
+                            {state, State#q{consumers          = Consumers1,
+                                            has_had_consumers  = true,
+                                            active_consumer    = NewConsumer}};
+                        _    ->
+                            {state, State#q{consumers          = Consumers1,
+                                            has_had_consumers  = true}}
+                    end
             end;
         false ->
             case check_exclusive_access(Holder, ExclusiveConsume, State) of
@@ -1371,9 +1368,8 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
               ok     ->
                     Consumers1 = rabbit_queue_consumers:add(
                                    ChPid, ConsumerTag, NoAck,
-                                   LimiterPid, LimiterActive,
-                                   ParsedCreditMode, Args,
-                                   ActingUser, Consumers),
+                                   LimiterPid, LimiterActive, ModeOrPrefetch,
+                                   Args, ActingUser, Consumers),
                     ExclusiveConsumer =
                         if ExclusiveConsume -> {ChPid, ConsumerTag};
                            true             -> Holder
@@ -1400,7 +1396,8 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                     {false, _} ->
                        {true, up}
                 end,
-            rabbit_core_metrics:consumer_created(
+                PrefetchCount = rabbit_queue_consumers:parse_prefetch_count(ModeOrPrefetch),
+                rabbit_core_metrics:consumer_created(
                 ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
                 PrefetchCount, ConsumerIsActive, ActivityStatus, Args),
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
@@ -1631,52 +1628,54 @@ handle_cast(update_mirroring, State = #q{q = Q,
             State1 = State#q{mirroring_policy_version = NewVersion},
             noreply(update_mirroring(Policy, State1))
     end;
-handle_cast({credit, ChPid, CTag, Credit, Drain}, State) ->
-    %% Feature flag credit_api_v2 is disabled,
-    %% i.e. this function clause should be deleted once that feature flag becomes required.
-    handle_cast({credit, ChPid, CTag, Credit, Drain, true, #{}}, State);
 
-handle_cast({credit, ChPid, CTag, Credit, Drain, Reply, LinkStateProperties},
-            #q{consumers = Consumers0,
-               q = Q,
+handle_cast({credit, SessionPid, CTag, Credit, Drain},
+            #q{q = Q,
                backing_queue = BQ,
-               backing_queue_state = BQS0} = State0) ->
+               backing_queue_state = BQS0} = State) ->
+    %% Credit API v1.
+    %% Delete this function clause when feature flag credit_api_v2 becomes required.
+    %% Behave like non-native AMQP 1.0: Send send_credit_reply before deliveries.
+    rabbit_classic_queue:send_credit_reply_credit_api_v1(
+      SessionPid, amqqueue:get_name(Q), BQ:len(BQS0)),
+    handle_cast({credit, SessionPid, CTag, credit_api_v1, Credit, Drain, false}, State);
+handle_cast({credit, SessionPid, CTag, DeliveryCountRcv, Credit, Drain, Echo},
+            #q{consumers = Consumers0,
+               q = Q} = State0) ->
     QName = amqqueue:get_name(Q),
-    Vsn = rabbit_classic_queue:credit_api_vsn(),
-    case Vsn of
-        v1 ->
-            %% Behave like non-native AMQP 1.0:
-            %% Send send_credit_reply before deliveries.
-            rabbit_classic_queue:send_credit_reply(
-              ChPid, QName, CTag, Credit, BQ:len(BQS0),
-              false, LinkStateProperties);
-        v2 ->
-            %% Send credit_reply after deliveries.
-            ok
-    end,
-
     State = #q{backing_queue_state = PostBQS,
-               consumers = Consumers2}
-    = case rabbit_queue_consumers:set_credit(Credit, ChPid, CTag, Consumers0) of
-          unchanged ->
-              State0;
-          {unblocked, Consumers1} ->
-              State1 = State0#q{consumers = Consumers1},
-              run_message_queue(true, State1)
-      end,
-
-    case rabbit_queue_consumers:get_credit(ChPid, CTag) of
-        PostCred
-          when is_integer(PostCred) andalso Drain andalso PostCred > 0 ->
-            unchanged = rabbit_queue_consumers:set_credit(0, ChPid, CTag, Consumers2),
+               backing_queue = BQ} = case rabbit_queue_consumers:process_credit(
+                                            DeliveryCountRcv, Credit, SessionPid, CTag, Consumers0) of
+                                         unchanged ->
+                                             State0;
+                                         {unblocked, Consumers1} ->
+                                             State1 = State0#q{consumers = Consumers1},
+                                             run_message_queue(true, State1)
+                                     end,
+    case rabbit_queue_consumers:get_link_state(SessionPid, CTag) of
+        {credit_api_v1, PostCred}
+          when Drain andalso
+               is_integer(PostCred) andalso PostCred > 0 ->
+            %% credit API v1
+            rabbit_queue_consumers:drained(credit_api_v1, SessionPid, CTag),
+            rabbit_classic_queue:send_drained_credit_api_v1(SessionPid, QName, CTag, PostCred);
+        {PostDeliveryCountSnd, PostCred}
+          when is_integer(PostDeliveryCountSnd) andalso
+               Drain andalso
+               is_integer(PostCred) andalso PostCred > 0 ->
+            %% credit API v2
+            AdvancedDeliveryCount = serial_number:add(PostDeliveryCountSnd, PostCred),
+            rabbit_queue_consumers:drained(AdvancedDeliveryCount, SessionPid, CTag),
             Avail = BQ:len(PostBQS),
             rabbit_classic_queue:send_credit_reply(
-              ChPid, QName, CTag, PostCred, Avail, Drain, LinkStateProperties);
-        PostCred
-          when is_integer(PostCred) andalso Vsn =:= v2 andalso Reply ->
+              SessionPid, QName, CTag, AdvancedDeliveryCount, 0, Avail, Drain);
+        {PostDeliveryCountSnd, PostCred}
+          when is_integer(PostDeliveryCountSnd) andalso
+               Echo ->
+            %% credit API v2
             Avail = BQ:len(PostBQS),
             rabbit_classic_queue:send_credit_reply(
-              ChPid, QName, CTag, PostCred, Avail, Drain, LinkStateProperties);
+              SessionPid, QName, CTag, PostDeliveryCountSnd, PostCred, Avail, Drain);
         _ ->
             ok
     end,

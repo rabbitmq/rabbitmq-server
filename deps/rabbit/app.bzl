@@ -24,7 +24,7 @@ def all_beam_files(name = "all_beam_files"):
         app_name = "rabbit",
         dest = "ebin",
         erlc_opts = "//:erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
+        deps = ["//deps/amqp10_common:erlang_app", "//deps/rabbit_common:erlang_app"],
     )
     erlang_bytecode(
         name = "other_beam",
@@ -286,7 +286,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
         app_name = "rabbit",
         dest = "test",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
+        deps = ["//deps/amqp10_common:erlang_app", "//deps/rabbit_common:erlang_app"],
     )
     erlang_bytecode(
         name = "test_other_beam",

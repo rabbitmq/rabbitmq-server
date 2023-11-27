@@ -41,6 +41,7 @@
          handle_event/3,
          deliver/3,
          settle/5,
+         credit_v1/5,
          credit/7,
          dequeue/5,
          info/2,
@@ -58,7 +59,8 @@
 -export([confirm_to_sender/3,
          send_rejection/3,
          deliver_to_consumer/5,
-         credit_api_vsn/0,
+         send_credit_reply_credit_api_v1/3,
+         send_drained_credit_api_v1/4,
          send_credit_reply/7]).
 
 -spec is_enabled() -> boolean().
@@ -237,20 +239,17 @@ consume(Q, Spec, State0) when ?amqqueue_is_classic(Q) ->
       channel_pid := ChPid,
       limiter_pid := LimiterPid,
       limiter_active := LimiterActive,
-      mode := Mode0,
+      mode := Mode,
       consumer_tag := ConsumerTag,
       exclusive_consume := ExclusiveConsume,
       args := Args0,
       ok_msg := OkMsg,
       acting_user :=  ActingUser} = Spec,
-    {Mode, Args} = case credit_api_vsn() of
-                       v2 -> {Mode0, Args0};
-                       v1 -> consumer_spec_v2_to_v1(Mode0, Args0)
-                   end,
+    {ModeOrPrefetch, Args} = consume_backwards_compat(Mode, Args0),
     case delegate:invoke(QPid,
                          {gen_server2, call,
                           [{basic_consume, NoAck, ChPid, LimiterPid,
-                            LimiterActive, Mode, ConsumerTag,
+                            LimiterActive, ModeOrPrefetch, ConsumerTag,
                             ExclusiveConsume, Args, OkMsg, ActingUser},
                            infinity]}) of
         ok ->
@@ -261,9 +260,18 @@ consume(Q, Spec, State0) when ?amqqueue_is_classic(Q) ->
             Err
     end.
 
-consumer_spec_v2_to_v1({simple_prefetch, PrefetchCount}, Args) ->
-    {PrefetchCount, Args};
-consumer_spec_v2_to_v1(credited, Args) ->
+%% Delete this function when feature flag credit_api_v2 becomes required.
+consume_backwards_compat({simple_prefetch, PrefetchCount} = Mode, Args) ->
+    case rabbit_feature_flags:is_enabled(credit_api_v2) of
+        true -> {Mode, Args};
+        false -> {PrefetchCount, Args}
+    end;
+consume_backwards_compat({credited, InitialDeliveryCount} = Mode, Args)
+  when is_integer(InitialDeliveryCount) ->
+    %% credit API v2
+    {Mode, Args};
+consume_backwards_compat({credited, credit_api_v1}, Args) ->
+    %% credit API v1
     {_PrefetchCount = 0,
      [{<<"x-credit">>, table, [{<<"credit">>, long, 0},
                                {<<"drain">>,  bool, false}]} | Args]}.
@@ -293,15 +301,13 @@ settle(_QName, Op, _CTag, MsgIds, State) ->
                                     [{reject, Op == requeue, MsgIds, ChPid}]}),
     {State, []}.
 
-credit(_QName, CTag, Credit, Drain, Reply, Properties, #?STATE{pid = QPid} = State) ->
-    ChPid = self(),
-    Request = case credit_api_vsn() of
-                  v2 ->
-                      %% TODO use a map for more flexiblity in the future?
-                      {credit, ChPid, CTag, Credit, Drain, Reply, Properties};
-                  v1 ->
-                      {credit, ChPid, CTag, Credit, Drain}
-              end,
+credit_v1(_QName, Ctag, LinkCreditSnd, Drain, #?STATE{pid = QPid} = State) ->
+    Request = {credit, self(), Ctag, LinkCreditSnd, Drain},
+    delegate:invoke_no_result(QPid, {gen_server2, cast, [Request]}),
+    {State, []}.
+
+credit(_QName, Ctag, DeliveryCountRcv, LinkCreditRcv, Drain, Echo, #?STATE{pid = QPid} = State) ->
+    Request = {credit, self(), Ctag, DeliveryCountRcv, LinkCreditRcv, Drain, Echo},
     delegate:invoke_no_result(QPid, {gen_server2, cast, [Request]}),
     {State, []}.
 
@@ -374,8 +380,7 @@ handle_event(_QName, Action, State)
 handle_event(_QName, {send_drained, {Ctag, Credit}}, State) ->
     %% This function clause should be deleted when feature flag
     %% credit_api_v2 becomes required.
-    Action = {credit_reply, Ctag, Credit, _Available = 0,
-              _Drain = true, _Properties = #{}},
+    Action = {credit_reply_v1, Ctag, Credit, _Available = 0, _Drain = true},
     {ok, State, [Action]}.
 
 settlement_action(_Type, _QRef, [], Acc) ->
@@ -642,27 +647,19 @@ deliver_to_consumer(Pid, QName, CTag, AckRequired, Message) ->
     Evt = {deliver, CTag, AckRequired, [Message]},
     send_queue_event(Pid, QName, Evt).
 
-send_credit_reply(Pid, QName, Ctag, Credit, Available, Drain, Properties) ->
-    case credit_api_vsn() of
-        v2 ->
-            Evt = {credit_reply, Ctag, Credit, Available, Drain, Properties},
-            send_queue_event(Pid, QName, Evt);
-        v1 ->
-            case Drain of
-                true ->
-                    Evt = {send_drained, {Ctag, Credit}},
-                    send_queue_event(Pid, QName, Evt);
-                false ->
-                    Evt = {send_credit_reply, Available},
-                    send_queue_event(Pid, QName, Evt)
-            end
-    end.
+%% Delete this function when feature flag credit_api_v2 becomes required.
+send_credit_reply_credit_api_v1(Pid, QName, Available) ->
+    Evt = {send_credit_reply, Available},
+    send_queue_event(Pid, QName, Evt).
+
+%% Delete this function when feature flag credit_api_v2 becomes required.
+send_drained_credit_api_v1(Pid, QName, Ctag, Credit) ->
+    Evt = {send_drained, {Ctag, Credit}},
+    send_queue_event(Pid, QName, Evt).
+
+send_credit_reply(Pid, QName, Ctag, DeliveryCount, Credit, Available, Drain) ->
+    Evt = {credit_reply, Ctag, DeliveryCount, Credit, Available, Drain},
+    send_queue_event(Pid, QName, Evt).
 
 send_queue_event(Pid, QName, Event) ->
     gen_server:cast(Pid, {queue_event, QName, Event}).
-
-credit_api_vsn() ->
-    case rabbit_feature_flags:is_enabled(credit_api_v2) of
-        true -> v2;
-        false -> v1
-    end.

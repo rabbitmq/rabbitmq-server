@@ -79,7 +79,11 @@
 -type consumer_meta() :: #{ack => boolean(),
                            username => binary(),
                            prefetch => non_neg_integer(),
-                           args => list()}.
+                           args => list(),
+                           %% machine version 4
+                           %% set if and only if credit API v2 is in use
+                           initial_delivery_count => rabbit_queue_type:delivery_count()
+                          }.
 %% static meta data associated with a consumer
 
 -type applied_mfa() :: {module(), atom(), list()}.
@@ -117,9 +121,8 @@
          %% max number of messages that can be sent
          %% decremented for each delivery
          credit = 0 : non_neg_integer(),
-         %% total number of checked out messages - ever
-         %% incremented for each delivery
-         delivery_count = 0 :: non_neg_integer()
+         %% AMQP 1.0 §2.6.7
+         delivery_count :: rabbit_queue_type:delivery_count()
         }).
 
 -type consumer() :: #consumer{}.
