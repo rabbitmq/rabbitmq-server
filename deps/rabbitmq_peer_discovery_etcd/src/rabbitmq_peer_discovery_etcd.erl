@@ -44,7 +44,7 @@ unregister() ->
 post_registration() ->
     ?DELEGATE:post_registration().
 
--spec lock(Node :: atom()) -> {'ok', term()} | {'error', string()}.
+-spec lock(Nodes :: [node()]) -> {'ok', term()} | {'error', string()}.
 lock(Node) ->
     ?DELEGATE:lock(Node).
 

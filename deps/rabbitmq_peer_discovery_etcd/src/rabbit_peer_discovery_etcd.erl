@@ -93,9 +93,11 @@ unregister() ->
 post_registration() ->
     ok.
 
--spec lock(Node :: atom()) -> {ok, Data :: term()} | {error, Reason :: string()}.
+-spec lock(Nodes :: [node()]) ->
+    {ok, Data :: term()} | {error, Reason :: string()}.
 
-lock(Node) when is_atom(Node) ->
+lock(Nodes) when is_list(Nodes) ->
+    Node = node(),
     case rabbitmq_peer_discovery_etcd_v3_client:lock(Node) of
         {ok, GeneratedKey} -> {ok, GeneratedKey};
         {error, _} = Error -> Error
