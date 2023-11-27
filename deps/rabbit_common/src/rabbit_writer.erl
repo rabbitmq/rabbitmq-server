@@ -275,6 +275,14 @@ handle_message({inet_reply, _, Status}, _State) ->
 handle_message(emit_stats, State = #wstate{reader = ReaderPid}) ->
     ReaderPid ! ensure_stats,
     rabbit_event:reset_stats_timer(State, #wstate.stats_timer);
+handle_message(ok, State) ->
+    State;
+handle_message({_Ref, ok} = Msg, State) ->
+    rabbit_log:warning("AMQP 0-9-1 channel writer has received a message it does not support: ~p", [Msg]),
+    State;
+handle_message({ok, _Ref} = Msg, State) ->
+    rabbit_log:warning("AMQP 0-9-1 channel writer has received a message it does not support: ~p", [Msg]),
+    State;
 handle_message(Message, _State) ->
     exit({writer, message_not_understood, Message}).
 
