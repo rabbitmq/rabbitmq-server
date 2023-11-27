@@ -63,9 +63,9 @@ unregister() ->
 post_registration() ->
     ok.
 
--spec lock(Node :: atom()) -> not_supported.
+-spec lock(Nodes :: [node()]) -> not_supported.
 
-lock(_Node) ->
+lock(_Nodes) ->
     not_supported.
 
 -spec unlock(Data :: term()) -> ok.

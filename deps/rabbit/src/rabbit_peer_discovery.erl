@@ -613,7 +613,7 @@ join_selected_node(Backend, SelectedNode, NodeType) ->
     ?LOG_DEBUG(
        "Peer discovery: trying to acquire lock",
        #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-    LockResult = lock(Backend),
+    LockResult = lock(Backend, SelectedNode),
     ?LOG_DEBUG(
        "Peer discovery: rabbit_peer_discovery:lock/0 returned ~0tp",
        [LockResult],
@@ -788,18 +788,34 @@ unregister(Backend) ->
       ok
   end.
 
--spec lock(Backend) -> Ret when
+-spec lock(Backend, SelectedNode) -> Ret when
       Backend :: backend(),
+      SelectedNode :: node(),
       Ret :: {ok, Data} | not_supported | {error, Reason},
       Data :: any(),
       Reason :: string().
 
-lock(Backend) ->
+lock(Backend, SelectedNode) ->
     ?LOG_INFO(
        "Peer discovery: will try to lock with peer discovery backend ~ts",
        [Backend],
        #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-    case Backend:lock(node()) of
+    %% We want to acquire a lock for two nodes: this one and the selected
+    %% node. This protects against concurrent cluster joins.
+    %%
+    %% Some backends used to use the entire list of discovered nodes and used
+    %% `global' as the lock implementation. This was a problem because a side
+    %% effect was that all discovered Erlang nodes were connected to each
+    %% other. This led to conflicts in the global process name registry and
+    %% thus processes killed randomly. This was the case with the feature
+    %% flags controller for instance.
+    %%
+    %% Peer discovery shouldn't connect to all discovered nodes before it is
+    %% ready to actually join another node. And it should only connect to that
+    %% specific node, not all of them.
+    ThisNode = node(),
+    NodesToLock = [ThisNode, SelectedNode],
+    case Backend:lock(NodesToLock) of
         {error, Reason} = Error ->
             ?LOG_ERROR(
                "Peer discovery: failed to lock with peer discovery "

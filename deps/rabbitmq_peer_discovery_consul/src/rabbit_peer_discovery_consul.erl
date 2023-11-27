@@ -160,13 +160,15 @@ post_registration() ->
     send_health_check_pass(),
     ok.
 
--spec lock(Node :: atom()) -> {ok, Data :: term()} | {error, Reason :: string()}.
+-spec lock(Nodes :: [node()]) ->
+    {ok, Data :: term()} | {error, Reason :: string()}.
 
-lock(Node) ->
+lock(_Nodes) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     ?LOG_DEBUG(
        "Effective Consul peer discovery configuration: ~tp", [M],
        #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+    Node = node(),
     case create_session(Node, get_config_key(consul_svc_ttl, M)) of
         {ok, SessionId} ->
             TRef = start_session_ttl_updater(SessionId),

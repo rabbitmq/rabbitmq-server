@@ -28,8 +28,7 @@ groups() ->
      {lock, [], [
                  lock_single_node,
                  lock_multiple_nodes,
-                 lock_local_node_not_discovered,
-                 lock_list_nodes_fails
+                 lock_local_node_not_discovered
                 ]}
     ].
 
@@ -76,34 +75,28 @@ registration_support(_Config) ->
 lock_single_node(_Config) ->
   LocalNode = node(),
   Nodes = [LocalNode],
-  meck:expect(rabbit_peer_discovery_aws, list_nodes, 0, {ok, {Nodes, disc}}),
 
-  {ok, {LockId, Nodes}} = rabbit_peer_discovery_aws:lock(LocalNode),
+  {ok, {LockId, Nodes}} = rabbit_peer_discovery_aws:lock([LocalNode]),
   ?assertEqual(ok, rabbit_peer_discovery_aws:unlock({LockId, Nodes})).
 
 lock_multiple_nodes(_Config) ->
   application:set_env(rabbit, cluster_formation, [{internal_lock_retries, 2}]),
   LocalNode = node(),
-  OtherNode = other@host,
-  Nodes = [OtherNode, LocalNode],
-  meck:expect(rabbit_peer_discovery_aws, list_nodes, 0, {ok, {Nodes, disc}}),
+  OtherNodeA = a@host,
+  OtherNodeB = b@host,
 
-  {ok, {{LockResourceId, OtherNode}, Nodes}} = rabbit_peer_discovery_aws:lock(OtherNode),
-  ?assertEqual({error, "Acquiring lock taking too long, bailing out after 2 retries"},
-               rabbit_peer_discovery_aws:lock(LocalNode)),
-  ?assertEqual(ok, rabbitmq_peer_discovery_aws:unlock({{LockResourceId, OtherNode}, Nodes})),
-
-  ?assertEqual({ok, {{LockResourceId, LocalNode}, Nodes}}, rabbit_peer_discovery_aws:lock(LocalNode)),
-  ?assertEqual(ok, rabbitmq_peer_discovery_aws:unlock({{LockResourceId, LocalNode}, Nodes})).
+  meck:expect(rabbit_nodes, lock_id, 1, {rabbit_nodes:cookie_hash(), OtherNodeA}),
+  {ok, {{LockResourceId, OtherNodeA}, [LocalNode, OtherNodeA]}} = rabbit_peer_discovery_aws:lock([LocalNode, OtherNodeA]),
+  meck:expect(rabbit_nodes, lock_id, 1, {rabbit_nodes:cookie_hash(), OtherNodeB}),
+  ?assertEqual({error, "Acquiring lock taking too long, bailing out after 2 retries"}, rabbit_peer_discovery_aws:lock([LocalNode, OtherNodeB])),
+  ?assertEqual(ok, rabbit_peer_discovery_aws:unlock({{LockResourceId, OtherNodeA}, [LocalNode, OtherNodeA]})),
+  ?assertEqual({ok, {{LockResourceId, OtherNodeB}, [LocalNode, OtherNodeB]}}, rabbit_peer_discovery_aws:lock([LocalNode, OtherNodeB])),
+  ?assertEqual(ok, rabbit_peer_discovery_aws:unlock({{LockResourceId, OtherNodeB}, [LocalNode, OtherNodeB]})),
+  meck:unload(rabbit_nodes).
 
 lock_local_node_not_discovered(_Config) ->
-  meck:expect(rabbit_peer_discovery_aws, list_nodes, 0, {ok, {[n1@host, n2@host], disc}} ),
-  Expectation = {error, "Local node me@host is not part of discovered nodes [n1@host,n2@host]"},
-  ?assertEqual(Expectation, rabbit_peer_discovery_aws:lock(me@host)).
-
-lock_list_nodes_fails(_Config) ->
-  meck:expect(rabbit_peer_discovery_aws, list_nodes, 0, {error, "failed for some reason"}),
-  ?assertEqual({error, "failed for some reason"}, rabbit_peer_discovery_aws:lock(me@host)).
+  Expectation = {error, "Local node " ++ atom_to_list(node()) ++ " is not part of discovered nodes [me@host]"},
+  ?assertEqual(Expectation, rabbit_peer_discovery_aws:lock([me@host])).
 
 %%%
 %%% Implementation
