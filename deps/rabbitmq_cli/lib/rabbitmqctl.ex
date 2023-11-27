@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQCtl do
   alias RabbitMQ.CLI.Core.{
@@ -558,7 +558,7 @@ defmodule RabbitMQCtl do
   end
 
   defp format_error({:error, :check_failed, err}, %{formatter: "json"}, _) when is_map(err) do
-    {:ok, res} = :rabbit_json.try_encode(err)
+    {:ok, res} = JSON.encode(err)
     {:error, ExitCodes.exit_unavailable(), res}
   end
 
@@ -578,12 +578,12 @@ defmodule RabbitMQCtl do
 
   # Catch all clauses
   defp format_error({:error, err}, %{formatter: "json"}, _) when is_map(err) do
-    {:ok, res} = :rabbit_json.try_encode(err)
+    {:ok, res} = JSON.encode(err)
     {:error, ExitCodes.exit_unavailable(), res}
   end
 
   defp format_error({:error, exit_code, err}, %{formatter: "json"}, _) when is_map(err) do
-    {:ok, res} = :rabbit_json.try_encode(err)
+    {:ok, res} = JSON.encode(err)
     {:error, exit_code, res}
   end
 

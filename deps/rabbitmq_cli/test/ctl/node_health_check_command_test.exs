@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule NodeHealthCheckCommandTest do
   use ExUnit.Case, async: false
@@ -38,27 +38,11 @@ defmodule NodeHealthCheckCommandTest do
     assert @command.validate([], context[:opts]) == :ok
   end
 
-  test "run: request to a named, active node succeeds", context do
+  test "run: is a no-op", context do
     assert @command.run([], context[:opts])
   end
 
-  test "run: request to a named, active node with an alarm in effect fails", context do
-    set_vm_memory_high_watermark(0.0000000000001)
-    # give VM memory monitor check some time to kick in
-    :timer.sleep(1500)
-    {:healthcheck_failed, _message} = @command.run([], context[:opts])
-
-    reset_vm_memory_high_watermark()
-    :timer.sleep(1500)
-    assert @command.run([], context[:opts]) == :ok
-  end
-
-  test "run: request to a non-existent node returns a badrpc" do
-    assert match?({:badrpc, _}, @command.run([], %{node: :jake@thedog, timeout: 200}))
-  end
-
   test "banner", context do
-    assert @command.banner([], context[:opts]) |> Enum.join("\n") =~ ~r/Checking health/
-    assert @command.banner([], context[:opts]) |> Enum.join("\n") =~ ~r/#{get_rabbit_hostname()}/
+    assert @command.banner([], context[:opts]) |> Enum.join("\n") =~ ~r/DEPRECATED/
   end
 end

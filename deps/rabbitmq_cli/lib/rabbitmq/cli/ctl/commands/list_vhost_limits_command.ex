@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
   alias RabbitMQ.CLI.Core.DocGuide
@@ -36,7 +36,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
 
       val ->
         Enum.map(val, fn {vhost, val} ->
-          {:ok, val_encoded} = :rabbit_json.try_encode(Map.new(val))
+          {:ok, val_encoded} = JSON.encode(Map.new(val))
           [vhost: vhost, limits: val_encoded]
         end)
     end
@@ -54,7 +54,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostLimitsCommand do
         {:badrpc, node}
 
       val when is_list(val) or is_map(val) ->
-        :rabbit_json.try_encode(Map.new(val))
+        JSON.encode(Map.new(val))
     end
   end
 

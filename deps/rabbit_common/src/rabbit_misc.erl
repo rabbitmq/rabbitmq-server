@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_misc).
@@ -82,7 +82,6 @@
 -export([safe_ets_update_counter/3, safe_ets_update_counter/4, safe_ets_update_counter/5,
          safe_ets_update_element/3, safe_ets_update_element/4, safe_ets_update_element/5]).
 -export([is_even/1, is_odd/1]).
--export([is_valid_shortstr/1]).
 
 -export([maps_any/2,
          maps_put_truthy/3,
@@ -1596,21 +1595,6 @@ is_even(N) ->
 -spec is_odd(integer()) -> boolean().
 is_odd(N) ->
     (N band 1) =:= 1.
-
--spec is_valid_shortstr(term()) -> boolean().
-is_valid_shortstr(Bin) when byte_size(Bin) < 256 ->
-    is_utf8_no_null(Bin);
-is_valid_shortstr(_) ->
-    false.
-
-is_utf8_no_null(<<>>) ->
-    true;
-is_utf8_no_null(<<0, _/binary>>) ->
-    false;
-is_utf8_no_null(<<_/utf8, Rem/binary>>) ->
-    is_utf8_no_null(Rem);
-is_utf8_no_null(_) ->
-    false.
 
 -spec maps_put_truthy(Key, Value, Map) -> Map when
       Map :: #{Key => Value}.

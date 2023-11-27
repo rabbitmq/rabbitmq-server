@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 %% This test suite covers protocol interoperability publishing via MQTT 5.0,
@@ -430,7 +430,7 @@ stream(Config) ->
                    content_type => ContentType,
                    %% We expect that reply_to contains a valid address,
                    %% and that the topic format got translated from MQTT to AMQP 0.9.1.
-                   reply_to => <<"/topic/response.topic">>},
+                   reply_to => <<"/exchange/amq.topic/response.topic">>},
                  amqp10_msg:properties(Msg)),
     ?assertEqual(#{<<"rabbit🐇"/utf8>> => <<"carrot🥕"/utf8>>,
                    <<"key">> => <<"val">>},

@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
   alias RabbitMQ.CLI.Core.{Config, DocGuide, ExitCodes, Helpers}
@@ -166,7 +166,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
   #
 
   defp deserialise(bin, "json") do
-    :rabbit_json.try_decode(bin)
+    JSON.decode(bin)
   end
 
   defp deserialise(bin, "erlang") do

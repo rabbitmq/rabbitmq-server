@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 ten_minutes = 10 * 60 * 1000
 
@@ -19,6 +19,7 @@ true = Code.append_path(Path.join([System.get_env("DEPS_DIR"), "rabbit_common", 
 true = Code.append_path(Path.join([System.get_env("DEPS_DIR"), "rabbit", "ebin"]))
 
 true = Code.append_path(Path.join(["_build", Atom.to_string(Mix.env()), "lib", "amqp", "ebin"]))
+true = Code.append_path(Path.join(["_build", Atom.to_string(Mix.env()), "lib", "json", "ebin"]))
 true = Code.append_path(Path.join(["_build", Atom.to_string(Mix.env()), "lib", "x509", "ebin"]))
 
 if function_exported?(Mix, :ensure_application!, 1) do

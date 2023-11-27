@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 -module(rabbit_mqtt_processor).
 
@@ -1549,10 +1549,9 @@ publish_to_queues(
                     conn_name = ConnName,
                     trace_state = TraceState},
          auth_state = #auth_state{user = #user{username = Username}}} = State) ->
-
     Anns = #{exchange => ExchangeNameBin,
              routing_keys => [mqtt_to_amqp(Topic)]},
-    Msg0 = mc:init(mc_mqtt, MqttMsg, Anns),
+    Msg0 = mc:init(mc_mqtt, MqttMsg, Anns, mc_env()),
     Msg = rabbit_message_interceptor:intercept(Msg0),
     case rabbit_exchange:lookup(ExchangeName) of
         {ok, Exchange} ->
@@ -1781,7 +1780,7 @@ maybe_send_will(
                        _ ->
                            Anns0
                    end,
-            Msg = mc:init(mc_mqtt, MqttMsg, Anns),
+            Msg = mc:init(mc_mqtt, MqttMsg, Anns, mc_env()),
             case check_publish_permitted(DefaultX, Topic, State) of
                 ok ->
                     ok = rabbit_queue_type:publish_at_most_once(DefaultX, Msg),
@@ -2033,7 +2032,7 @@ deliver_one_to_client({QNameOrType, QPid, QMsgId, _Redelivered, Mc} = Delivery,
                         true -> ?QOS_1;
                         false -> ?QOS_0
                     end,
-    McMqtt = mc:convert(mc_mqtt, Mc),
+    McMqtt = mc:convert(mc_mqtt, Mc, mc_env()),
     MqttMsg = #mqtt_msg{qos = PublisherQos} = mc:protocol_state(McMqtt),
     QoS = effective_qos(PublisherQos, SubscriberQoS),
     {SettleOp, State1} = maybe_publish_to_client(MqttMsg, Delivery, QoS, State0),
@@ -2536,6 +2535,14 @@ format_status(
       ra_register_state => RaRegisterState,
       queues_soft_limit_exceeded => QSLE,
       qos0_messages_dropped => Qos0MsgsDropped}.
+
+mc_env() ->
+    case persistent_term:get(?PERSISTENT_TERM_EXCHANGE) of
+        ?DEFAULT_MQTT_EXCHANGE ->
+            #{};
+        MqttX ->
+            #{mqtt_x => MqttX}
+    end.
 
 -spec compat(mc:state(), state()) -> mc:state().
 compat(McMqtt, #state{cfg = #cfg{exchange = XName}}) ->

@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule JSONFormattingTest do
   use ExUnit.Case, async: false
@@ -29,7 +29,7 @@ defmodule JSONFormattingTest do
         error_check(command, exit_ok())
       end)
 
-    {:ok, doc} = :rabbit_json.try_decode(output)
+    {:ok, doc} = JSON.decode(output)
 
     assert Map.has_key?(doc, "memory")
     assert Map.has_key?(doc, "file_descriptors")
@@ -53,7 +53,7 @@ defmodule JSONFormattingTest do
         error_check(command, exit_ok())
       end)
 
-    {:ok, doc} = :rabbit_json.try_decode(output)
+    {:ok, doc} = JSON.decode(output)
 
     assert Enum.member?(doc["disk_nodes"], node)
     assert Map.has_key?(doc["listeners"], node)

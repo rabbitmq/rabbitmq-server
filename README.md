@@ -39,6 +39,7 @@ Some key doc guides include
  * [Production checklist](https://rabbitmq.com/production-checklist.html)
  * [Quorum queues](https://rabbitmq.com/quorum-queues.html): a replicated, data safety- and consistency-oriented queue type
  * [Streams](https://rabbitmq.com/streams.html): a persistent and replicated append-only log with non-destructive consumer semantics
+ * [Runtime Parameters and Policies](https://rabbitmq.com/parameters.html)
  * [Runnable tutorials](https://github.com/rabbitmq/rabbitmq-tutorials/)
 
 RabbitMQ documentation is also [developed on GitHub](https://github.com/rabbitmq/rabbitmq-website/).
@@ -77,4 +78,4 @@ RabbitMQ server is [licensed under the MPL 2.0](LICENSE-MPL-RabbitMQ).
 
 ## Copyright
 
-(c) 2007-2023 VMware, Inc. or its affiliates.
+(c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.

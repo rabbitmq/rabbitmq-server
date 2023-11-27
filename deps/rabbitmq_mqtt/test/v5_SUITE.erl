@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 %% This test suite covers MQTT 5.0 features.
 -module(v5_SUITE).
@@ -251,7 +251,9 @@ client_set_max_packet_size_publish(Config) ->
     assert_nothing_received(),
     NumRejected = dead_letter_metric(messages_dead_lettered_rejected_total, Config) - NumRejectedBefore,
     ?assertEqual(1, NumRejected),
-    ok = emqtt:disconnect(C).
+    ok = emqtt:disconnect(C),
+    ok.
+
 
 client_set_max_packet_size_connack(Config) ->
     {C, Connect} = start_client(?FUNCTION_NAME, Config, 0,

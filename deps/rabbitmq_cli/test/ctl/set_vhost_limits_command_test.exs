@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule SetVhostLimitsCommandTest do
   use ExUnit.Case, async: false
@@ -138,6 +138,6 @@ defmodule SetVhostLimitsCommandTest do
 
   defp assert_limits(context) do
     limits = get_vhost_limits(context[:vhost])
-    assert {:ok, limits} == :rabbit_json.try_decode(context[:definition])
+    assert {:ok, limits} == JSON.decode(context[:definition])
   end
 end

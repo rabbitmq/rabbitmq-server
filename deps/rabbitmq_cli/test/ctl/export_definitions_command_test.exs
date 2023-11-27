@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule ExportDefinitionsCommandTest do
   use ExUnit.Case, async: false
@@ -111,7 +111,7 @@ defmodule ExportDefinitionsCommandTest do
     {:ok, nil} = @command.run([valid_file_path()], context[:opts])
 
     {:ok, bin} = File.read(valid_file_path())
-    {:ok, map} = :rabbit_json.try_decode(bin)
+    {:ok, map} = JSON.decode(bin)
     assert Map.has_key?(map, "rabbitmq_version")
   end
 
@@ -128,7 +128,7 @@ defmodule ExportDefinitionsCommandTest do
     clear_parameter("/", "federation-upstream", "up-1")
 
     {:ok, bin} = File.read(valid_file_path())
-    {:ok, map} = :rabbit_json.try_decode(bin)
+    {:ok, map} = JSON.decode(bin)
     assert Map.has_key?(map, "rabbitmq_version")
     params = map["parameters"]
     assert is_map(hd(params)["value"])

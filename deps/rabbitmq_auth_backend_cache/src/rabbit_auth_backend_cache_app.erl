@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_auth_backend_cache_app).
@@ -28,7 +28,7 @@ init([]) ->
     {ok, AuthCacheArgs} = application:get_env(rabbitmq_auth_backend_cache, cache_module_args),
     % Load module to be able to check exported function.
     _ = code:load_file(AuthCache),
-    ChildSpecs = case erlang:function_exported(AuthCache, start_link, 
+    ChildSpecs = case erlang:function_exported(AuthCache, start_link,
                                                length(AuthCacheArgs)) of
         true  -> [{auth_cache, {AuthCache, start_link, AuthCacheArgs},
                   permanent, 5000, worker, [AuthCache]}];
