@@ -367,8 +367,8 @@ tcp_listener_stopped(Protocol, Opts, IPAddress, Port) ->
 -spec record_distribution_listener() -> ok | no_return().
 
 record_distribution_listener() ->
-  {Name, Host} = rabbit_nodes:parts(node()),
-  epmd_port_please(Name, Host).
+  {Name, _Host} = rabbit_nodes:parts(node()),
+  epmd_port_please(Name, "localhost").
 
 
 -spec epmd_port_please(string(),string()) -> ok | no_return().
