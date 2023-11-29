@@ -1,0 +1,34 @@
+
+
+init_mock-auth-backend-ldap() {
+  AUTH_BACKEND_LDAP_DIR=${TEST_CONFIG_DIR}/mock-auth-backend-ldap
+
+  print "> AUTH_BACKEND_LDAP_DIR: ${AUTH_BACKEND_LDAP_DIR}"
+}
+start_mock-auth-backend-ldap() {
+  begin "Starting mock-auth-backend-ldap ..."
+
+  init_mock-auth-backend-ldap
+  kill_container_if_exist mock-auth-backend-ldap
+
+  docker run \
+    --detach \
+    --name mock-auth-backend-ldap \
+    --net ${DOCKER_NETWORK} \
+    --env LDAP_ORGANISATION="Authentication and Tags" \
+    --env LDAP_DOMAIN="example.com" \
+    --env LDAP_ADMIN_PASSWORD="admin" \
+    --publish 389:389 \
+    --publish 636:636 \
+    -v ${AUTH_BACKEND_LDAP_DIR}:/config \
+    osixia/openldap:1.2.1
+
+  wait_for_message mock-auth-backend-ldap "starting"
+  docker exec mock-auth-backend-ldap ldapadd \
+    -x -w "admin" \
+    -H ldap:// \
+    -D "cn=admin,dc=example,dc=com" \
+    -f /config/import.ldif
+
+  end "mock-auth-backend-ldap is ready"
+}

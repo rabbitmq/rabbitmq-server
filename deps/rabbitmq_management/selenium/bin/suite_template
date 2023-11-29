@@ -4,10 +4,6 @@ SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SUITE=$(caller)
 SUITE=$(basename "${SUITE}" .sh )
 
-SELENIUM_DOCKER_IMAGE=selenium/standalone-chrome:103.0
-UAA_DOCKER_IMAGE=cloudfoundry/uaa:75.21.0
-KEYCLOAK_DOCKER_IMAGE=quay.io/keycloak/keycloak:20.0
-HTTPD_DOCKER_IMAGE=httpd:latest
 PADDING=""
 declare -a REQUIRED_COMPONENTS
 
@@ -31,6 +27,13 @@ LOGS=${SELENIUM_ROOT_FOLDER}/logs/${SUITE}
 SCREENS=${SELENIUM_ROOT_FOLDER}/screens/${SUITE}
 CONF_DIR=/tmp/selenium/${SUITE}
 ENV_FILE=$CONF_DIR/.env
+
+for f in $SCRIPT/components/*; do
+  if [[ ! "$f" == *README.md ]]
+  then
+    source $f;
+  fi
+done
 
 parse_arguments() {
   if [[ "$#" -gt 0 ]]
@@ -93,6 +96,9 @@ init_suite() {
   print "> ENV_FILE: ${ENV_FILE} "
   print "> COMMAND: ${COMMAND}"
   end "Initialized suite ..."
+
+  mkdir -p ${LOGS}/${SUITE}
+  mkdir -p ${SCREENS}/${SUITE}
 }
 
 build_mocha_image() {
@@ -103,24 +109,6 @@ build_mocha_image() {
     print "> Built docker image mocha-test:$tag"
   fi
   end "mocha-test image exists"
-}
-
-start_selenium() {
-  begin "Starting selenium  ..."
-
-  print "> SELENIUM_DOCKER_IMAGE: ${SELENIUM_DOCKER_IMAGE}"
-  kill_container_if_exist selenium
-
-  docker run \
-    --detach \
-    --name selenium \
-    --net ${DOCKER_NETWORK} \
-    -p 4444:4444 \
-    --shm-size=2g \
-    ${SELENIUM_DOCKER_IMAGE}
-
-  wait_for_message selenium "Started Selenium Standalone"
-  end "Selenium ready"
 }
 
 kill_container_if_exist() {
@@ -140,165 +128,10 @@ wait_for_message() {
   done
 }
 
-init_rabbitmq() {
-  RABBITMQ_CONFIG_DIR=${TEST_CONFIG_DIR}
-  RABBITMQ_DOCKER_IMAGE=${RABBITMQ_DOCKER_IMAGE:-rabbitmq}
-
-  print "> RABBITMQ_CONFIG_DIR: ${RABBITMQ_CONFIG_DIR}"
-  print "> RABBITMQ_DOCKER_IMAGE: ${RABBITMQ_DOCKER_IMAGE}"
-  [[ -z "${OAUTH_SIGNING_KEY_PATH}" ]] || print "> OAUTH_SIGNING_KEY_PATH: ${OAUTH_SIGNING_KEY_PATH}"
-
-}
-start_rabbitmq() {
-  if [[ "$PROFILES" == *"docker"* ]]; then
-    start_docker_rabbitmq
-  else
-    start_local_rabbitmq
-  fi
-}
-
-start_local_rabbitmq() {
-  begin "Starting rabbitmq ..."
-
-  init_rabbitmq
-
-
-  RABBITMQ_SERVER_ROOT=$(realpath $TEST_DIR/../../../../)
-  MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
-  MOUNT_ADVANCED_CONFIG="/etc/rabbitmq/advanced.config"
-
-  RABBITMQ_TEST_DIR="${RABBITMQ_CONFIG_DIR}"
-  ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_RABBITMQ_CONF
-  print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_RABBITMQ_CONF"
-  ${BIN_DIR}/gen-advanced-config ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_ADVANCED_CONFIG
-  RESULT=$?
-  if [ $RESULT -eq 0 ]; then
-    print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_ADVANCED_CONFIG"
-  	gmake --directory=${RABBITMQ_SERVER_ROOT} run-broker \
-  		RABBITMQ_ENABLED_PLUGINS_FILE=${RABBITMQ_CONFIG_DIR}/enabled_plugins \
-  		RABBITMQ_CONFIG_FILE=/tmp$MOUNT_RABBITMQ_CONF \
-      RABBITMQ_ADVANCED_CONFIG_FILE=/tmp$MOUNT_ADVANCED_CONFIG
-  else
-    gmake --directory=${RABBITMQ_SERVER_ROOT} run-broker \
-  		RABBITMQ_ENABLED_PLUGINS_FILE=${RABBITMQ_CONFIG_DIR}/enabled_plugins \
-  		RABBITMQ_CONFIG_FILE=/tmp$MOUNT_RABBITMQ_CONF
-  fi
-  print "> RABBITMQ_TEST_DIR: ${RABBITMQ_CONFIG_DIR}"
-
-
-}
-start_docker_rabbitmq() {
-  begin "Starting rabbitmq in docker ..."
-
-  init_rabbitmq
-  kill_container_if_exist rabbitmq
-
-  mkdir -p $CONF_DIR/rabbitmq
-  MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
-  MOUNT_ADVANCED_CONFIG="/etc/rabbitmq/advanced.config"
-
-  RABBITMQ_TEST_DIR="/var/rabbitmq" ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/rabbitmq.conf
-  print "> EFFECTIVE RABBITMQ_CONFIG_FILE: $CONF_DIR/rabbitmq/rabbitmq.conf"
-  ${BIN_DIR}/gen-advanced-config ${RABBITMQ_CONFIG_DIR} $ENV_FILE /$CONF_DIR/rabbitmq/advanced.config
-  RESULT=$?
-  if [ $RESULT -eq 0 ]; then
-    print "> EFFECTIVE ADVANCED_CONFIG_FILE: $CONF_DIR/rabbitmq/advanced.config"
-    EXTRA_MOUNTS="-v $CONF_DIR/rabbitmq/advanced.config:${MOUNT_ADVANCED_CONFIG}:ro"
-  fi
-  print "> RABBITMQ_TEST_DIR: /var/rabbitmq"
-
-  docker run \
-    --detach \
-    --name rabbitmq \
-    --net ${DOCKER_NETWORK} \
-    -p 15672:15672 -p 5672:5672 \
-    -v ${RABBITMQ_CONFIG_DIR}/logging.conf:/etc/rabbitmq/conf.d/logging.conf:ro \
-    -v $CONF_DIR/rabbitmq/rabbitmq.conf:${MOUNT_RABBITMQ_CONF}:ro \
-    -v ${RABBITMQ_CONFIG_DIR}/enabled_plugins:/etc/rabbitmq/enabled_plugins \
-    -v ${TEST_DIR}/${OAUTH_SIGNING_KEY_PATH}:/config \
-    -v ${RABBITMQ_CONFIG_DIR}/imports:/var/rabbitmq/imports \
-    ${EXTRA_MOUNTS} \
-    ${RABBITMQ_DOCKER_IMAGE}
-
-  wait_for_message rabbitmq "Server startup complete"
-  end "RabbitMQ ready"
-}
-init_uaa() {
-  UAA_CONFIG_PATH=${UAA_CONFIG_PATH:-oauth/uaa}
-  UAA_CONFIG_DIR=$(realpath ${TEST_DIR}/${UAA_CONFIG_PATH})
-
-  print "> UAA_CONFIG_DIR: ${UAA_CONFIG_DIR}"
-  print "> UAA_URL: ${UAA_URL}"
-  print "> UAA_DOCKER_IMAGE: ${UAA_DOCKER_IMAGE}"
-}
-start_uaa() {
-  begin "Starting UAA ..."
-
-  init_uaa
-  kill_container_if_exist uaa
-
-  MOUNT_UAA_CONF_DIR=$CONF_DIR/uaa
-
-  mkdir -p $MOUNT_UAA_CONF_DIR
-  cp ${UAA_CONFIG_DIR}/* $MOUNT_UAA_CONF_DIR
-  ${BIN_DIR}/gen-uaa-yml ${UAA_CONFIG_DIR} $ENV_FILE $MOUNT_UAA_CONF_DIR/uaa.yml
-  print "> EFFECTIVE UAA_CONFIG_FILE: $MOUNT_UAA_CONF_DIR/uaa.yml"
-
-  docker run \
-    --detach \
-    --name uaa \
-    --net ${DOCKER_NETWORK} \
-    --publish 8080:8080 \
-    --mount "type=bind,source=$MOUNT_UAA_CONF_DIR,target=/uaa" \
-    --env UAA_CONFIG_PATH="/uaa" \
-    --env JAVA_OPTS="-Djava.security.egd=file:/dev/./urandom" \
-    ${UAA_DOCKER_IMAGE}
-
-  wait_for_oidc_endpoint uaa $UAA_URL
-  end "UAA is ready"
-}
-init_keycloak() {
-  KEYCLOAK_CONFIG_PATH=${KEYCLOAK_CONFIG_PATH:-oauth/keycloak}
-  KEYCLOAK_CONFIG_DIR=$(realpath ${TEST_DIR}/${KEYCLOAK_CONFIG_PATH})
-  KEYCLOAK_URL=${OAUTH_PROVIDER_URL}
-
-  print "> KEYCLOAK_CONFIG_DIR: ${KEYCLOAK_CONFIG_DIR}"
-  print "> KEYCLOAK_URL: ${KEYCLOAK_URL}"
-  print "> KEYCLOAK_DOCKER_IMAGE: ${KEYCLOAK_DOCKER_IMAGE}"
-}
-start_keycloak() {
-  begin "Starting keycloak ..."
-
-  init_keycloak
-  kill_container_if_exist keycloak
-
-  MOUNT_KEYCLOAK_CONF_DIR=$CONF_DIR/keycloak
-
-  mkdir -p $MOUNT_KEYCLOAK_CONF_DIR
-  ${BIN_DIR}/gen-keycloak-json ${KEYCLOAK_CONFIG_DIR} $ENV_FILE $MOUNT_KEYCLOAK_CONF_DIR/test-realm.json
-  print "> EFFECTIVE KEYCLOAK_CONFIG_FILE: $MOUNT_KEYCLOAK_CONF_DIR/test-realm.json"
-  cp ${KEYCLOAK_CONFIG_DIR}/*.pem $MOUNT_KEYCLOAK_CONF_DIR
-
-  docker run \
-		--detach \
-		--name keycloak \
-    --net ${DOCKER_NETWORK} \
-		--publish 8080:8080 \
-    --publish 8443:8443 \
-		--env KEYCLOAK_ADMIN=admin \
-		--env KEYCLOAK_ADMIN_PASSWORD=admin \
-		--mount type=bind,source=${MOUNT_KEYCLOAK_CONF_DIR},target=/opt/keycloak/data/import/ \
-		${KEYCLOAK_DOCKER_IMAGE} start-dev --import-realm \
-    --https-certificate-file=/opt/keycloak/data/import/server_localhost_certificate.pem \
-    --https-certificate-key-file=/opt/keycloak/data/import/server_localhost_key.pem
-
-  wait_for_oidc_endpoint keycloak $KEYCLOAK_URL
-  end "Keycloak is ready"
-}
 wait_for_oidc_endpoint() {
   NAME=$1
   BASE_URL=$2
-  if [[ $BASE_URL == *"localhost"** ]]; then
+  if [[ $BASE_URL == *"localhost"** || $BASE_URL == *"0.0.0.0"** ]]; then
     wait_for_oidc_endpoint_local $NAME $BASE_URL
   else
     wait_for_oidc_endpoint_docker $NAME $BASE_URL
@@ -308,7 +141,7 @@ wait_for_oidc_endpoint_local() {
   NAME=$1
   BASE_URL=$2
 
-  max_retry=10
+  max_retry=12
   counter=0
   print "Waiting for OIDC discovery endpoint $NAME ... (BASE_URL: $BASE_URL)"
   until (curl -L --fail ${BASE_URL}/.well-known/openid-configuration >/dev/null 2>&1)
@@ -338,152 +171,6 @@ wait_for_oidc_endpoint_docker() {
 }
 calculate_rabbitmq_url() {
   echo "${RABBITMQ_SCHEME:-http}://$1${PUBLIC_RABBITMQ_PATH:-$RABBITMQ_PATH}"
-}
-init_fakeportal() {
-  FAKEPORTAL_URL=${FAKEPORTAL_URL:-http://fakeportal:3000}
-  FAKEPORTAL_DIR=${SCRIPT}/../fakeportal
-  CLIENT_ID="${CLIENT_ID:-rabbit_idp_user}"
-  CLIENT_SECRET="${CLIENT_SECRET:-rabbit_idp_user}"
-  RABBITMQ_HOST=${RABBITMQ_HOST:-proxy:9090}
-  RABBITMQ_HOST_FOR_FAKEPORTAL=${RABBITMQ_HOST_FOR_FAKEPORTAL:-rabbitmq:15672}
-
-  RABBITMQ_URL=$(calculate_rabbitmq_url $RABBITMQ_HOST)
-  RABBITMQ_URL_FOR_FAKEPORTAL=$(calculate_rabbitmq_url $RABBITMQ_HOST_FOR_FAKEPORTAL)
-
-  print "> FAKEPORTAL_URL: ${FAKEPORTAL_URL}"
-  print "> UAA_URL_FOR_FAKEPORTAL: ${UAA_URL_FOR_FAKEPORTAL}"
-  print "> RABBITMQ_HOST_FOR_FAKEPORTAL: ${RABBITMQ_HOST_FOR_FAKEPORTAL}"
-  print "> RABBITMQ_HOST: ${RABBITMQ_HOST}"
-  print "> CLIENT_ID: ${CLIENT_ID}"
-  print "> CLIENT_SECRET: ${CLIENT_SECRET}"
-  print "> RABBITMQ_URL: ${RABBITMQ_URL}"
-}
-start_fakeportal() {
-  begin "Starting fakeportal ..."
-
-  init_fakeportal
-  kill_container_if_exist fakeportal
-  mocha_test_tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))
-
-  docker run \
-    --detach \
-    --name fakeportal \
-    --net ${DOCKER_NETWORK} \
-    --publish 3000:3000 \
-    --env PORT=3000 \
-    --env RABBITMQ_URL="${RABBITMQ_URL_FOR_FAKEPORTAL}" \
-    --env PROXIED_RABBITMQ_URL="${RABBITMQ_URL}" \
-    --env UAA_URL="${UAA_URL_FOR_FAKEPORTAL}" \
-    --env CLIENT_ID="${CLIENT_ID}" \
-    --env CLIENT_SECRET="${CLIENT_SECRET}" \
-    -v ${FAKEPORTAL_DIR}:/code/fakeportal \
-    mocha-test:${mocha_test_tag} run fakeportal
-
-  wait_for_url $FAKEPORTAL_URL
-  end "Fakeportal is ready"
-}
-
-init_fakeproxy() {
-  FAKEPROXY_URL=${FAKEPROXY_URL:-http://fakeproxy:9090}
-  FAKEPROXY_DIR=${SCRIPT}/../fakeportal
-  CLIENT_ID="${CLIENT_ID:-rabbit_idp_user}"
-  CLIENT_SECRET="${CLIENT_SECRET:-rabbit_idp_user}"
-  RABBITMQ_HOST_FOR_FAKEPROXY=${RABBITMQ_HOST_FOR_FAKEPROXY:-rabbitmq:15672}
-  UAA_URL_FOR_FAKEPROXY=${UAA_URL_FOR_FAKEPROXY:-http://uaa:8080}
-
-  RABBITMQ_URL_FOR_FAKEPROXY=$(calculate_rabbitmq_url $RABBITMQ_HOST_FOR_FAKEPROXY)
-
-  print "> FAKEPROXY_URL: ${FAKEPROXY_URL}"
-  print "> UAA_URL: ${UAA_URL_FOR_FAKEPROXY}"
-  print "> RABBITMQ_HOST_FOR_FAKEPROXY: ${RABBITMQ_HOST_FOR_FAKEPROXY}"
-  print "> CLIENT_ID: ${CLIENT_ID}"
-  print "> CLIENT_SECRET: ${CLIENT_SECRET}"
-  print "> RABBITMQ_URL_FOR_FAKEPROXY: ${RABBITMQ_URL_FOR_FAKEPROXY}"
-
-}
-start_fakeproxy() {
-  begin "Starting fakeproxy ..."
-
-  init_fakeproxy
-  kill_container_if_exist fakeproxy
-  mocha_test_tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))
-
-  docker run \
-    --detach \
-    --name fakeproxy \
-    --net ${DOCKER_NETWORK} \
-    --publish 9090:9090 \
-    --env PORT=9090 \
-    --env RABBITMQ_URL="${RABBITMQ_URL_FOR_FAKEPROXY}" \
-    --env UAA_URL="${UAA_URL_FOR_FAKEPROXY}" \
-    --env CLIENT_ID="${CLIENT_ID}" \
-    --env CLIENT_SECRET="${CLIENT_SECRET}" \
-    -v ${FAKEPROXY_DIR}:/code/fakeportal \
-    mocha-test:${mocha_test_tag} run fakeproxy
-
-  wait_for_url $FAKEPROXY_URL
-  end "fakeproxy is ready"
-
-}
-
-init_mock-auth-backend-http() {
-  AUTH_BACKEND_HTTP_BASEURL=${AUTH_BACKEND_HTTP_BASEURL:-http://localhost:8888}
-  AUTH_BACKEND_HTTP_DIR=${TEST_CASES_DIR}/mock-auth-backend-http
-
-  print "> AUTH_BACKEND_HTTP_BASEURL: ${AUTH_BACKEND_HTTP_BASEURL}"
-  print "> AUTH_BACKEND_HTTP_DIR: ${AUTH_BACKEND_HTTP_DIR}"
-
-}
-start_mock-auth-backend-http() {
-  begin "Starting mock-auth-backend-http ..."
-
-  init_mock-auth-backend-http
-  kill_container_if_exist mock-auth-backend-http
-
-  docker run \
-    --detach \
-    --name mock-auth-backend-http \
-    --net ${DOCKER_NETWORK} \
-    --publish 8888:1080 \
-    --env MOCKSERVER_INITIALIZATION_JSON_PATH="/config/expectationInitialiser.json" \
-    -v ${AUTH_BACKEND_HTTP_DIR}:/config \
-    mockserver/mockserver
-
-  wait_for_url $AUTH_BACKEND_HTTP_BASEURL/ready
-  end "mock-auth-backend-http is ready"
-}
-
-init_mock-auth-backend-ldap() {
-  AUTH_BACKEND_LDAP_DIR=${TEST_CONFIG_DIR}/mock-auth-backend-ldap
-
-  print "> AUTH_BACKEND_LDAP_DIR: ${AUTH_BACKEND_LDAP_DIR}"
-}
-start_mock-auth-backend-ldap() {
-  begin "Starting mock-auth-backend-ldap ..."
-
-  init_mock-auth-backend-ldap
-  kill_container_if_exist mock-auth-backend-ldap
-
-  docker run \
-    --detach \
-    --name mock-auth-backend-ldap \
-    --net ${DOCKER_NETWORK} \
-    --env LDAP_ORGANISATION="Authentication and Tags" \
-    --env LDAP_DOMAIN="example.com" \
-    --env LDAP_ADMIN_PASSWORD="admin" \
-    --publish 389:389 \
-    --publish 636:636 \
-    -v ${AUTH_BACKEND_LDAP_DIR}:/config \
-    osixia/openldap:1.2.1
-
-  wait_for_message mock-auth-backend-ldap "starting"
-  docker exec mock-auth-backend-ldap ldapadd \
-    -x -w "admin" \
-    -H ldap:// \
-    -D "cn=admin,dc=example,dc=com" \
-    -f /config/import.ldif
-
-  end "mock-auth-backend-ldap is ready"
 }
 
 wait_for_url() {
@@ -521,42 +208,6 @@ wait_for_url_docker() {
   done
 }
 
-init_proxy() {
-  HTTPD_CONFIG_DIR=${TEST_CONFIG_DIR}/httpd-proxy
-  PUBLIC_RABBITMQ_HOST=${PUBLIC_RABBITMQ_HOST:-proxy:9090}
-  PROXIED_RABBITMQ_URL=$(calculate_rabbitmq_url $PUBLIC_RABBITMQ_HOST)
-
-  print "> HTTPD_CONFIG: ${HTTPD_CONFIG_DIR}"
-  print "> PUBLIC_RABBITMQ_HOST: ${PUBLIC_RABBITMQ_HOST}"
-  print "> PROXIED_RABBITMQ_URL: ${PROXIED_RABBITMQ_URL}"
-  print "> RABBITMQ_HOST_FOR_PROXY: ${RABBITMQ_HOST_FOR_PROXY}"
-  print "> HTTPD_DOCKER_IMAGE: ${HTTPD_DOCKER_IMAGE}"
-}
-start_proxy() {
-  begin "Starting proxy ..."
-
-  init_proxy
-  kill_container_if_exist proxy
-
-  MOUNT_HTTPD_CONFIG_DIR=$CONF_DIR/httpd
-
-  mkdir -p $MOUNT_HTTPD_CONFIG_DIR
-  ${BIN_DIR}/gen-httpd-conf ${HTTPD_CONFIG_DIR} $ENV_FILE $MOUNT_HTTPD_CONFIG_DIR/httpd.conf
-  print "> EFFECTIVE HTTPD_CONFIG_FILE: $MOUNT_HTTPD_CONFIG_DIR/httpd.conf"
-
-  docker run \
-    --detach \
-    --name proxy \
-    --net ${DOCKER_NETWORK} \
-    --publish 9090:9090 \
-    --mount "type=bind,source=${MOUNT_HTTPD_CONFIG_DIR},target=/usr/local/apache2/conf" \
-    ${HTTPD_DOCKER_IMAGE}
-
-  wait_for_url $PROXIED_RABBITMQ_URL
-  end "Proxy is ready"
-}
-
-
 test() {
   kill_container_if_exist mocha
   begin "Running tests with env variables:"
@@ -565,7 +216,11 @@ test() {
   PUBLIC_RABBITMQ_HOST=${PUBLIC_RABBITMQ_HOST:-$RABBITMQ_HOST}
   RABBITMQ_URL=$(calculate_rabbitmq_url $PUBLIC_RABBITMQ_HOST)
   RABBITMQ_HOSTNAME=${RABBITMQ_HOSTNAME:-rabbitmq}
+  SELENIUM_TIMEOUT=${SELENIUM_TIMEOUT:-20000}
+  SELENIUM_POLLING=${SELENIUM_POLLING:-500}
 
+  print "> SELENIUM_TIMEOUT: ${SELENIUM_TIMEOUT}"
+  print "> SELENIUM_POLLING: ${SELENIUM_POLLING}"
   print "> RABBITMQ_HOST: ${RABBITMQ_HOST}"
   print "> RABBITMQ_HOSTNAME: ${RABBITMQ_HOSTNAME}"
   print "> PUBLIC_RABBITMQ_HOST: ${PUBLIC_RABBITMQ_HOST}"
@@ -584,6 +239,8 @@ test() {
     --env UAA_URL=${UAA_URL} \
     --env FAKE_PORTAL_URL=${FAKEPORTAL_URL} \
     --env RUN_LOCAL=false \
+    --env SELENIUM_TIMEOUT=${SELENIUM_TIMEOUT} \
+    --env SELENIUM_POLLING=${SELENIUM_POLLING} \
     --env PROFILES="${PROFILES}" \
     --env ENV_FILE="/code/.env" \
     -v ${TEST_DIR}:/code/test \
@@ -703,7 +360,7 @@ teardown_local_others() {
   fi
 }
 test_local() {
-  begin "Running local test $1"
+  begin "Running local test ${1:-}"
 
   RABBITMQ_HOST=${RABBITMQ_HOST:-rabbitmq:15672}
   PUBLIC_RABBITMQ_HOST=${PUBLIC_RABBITMQ_HOST:-$RABBITMQ_HOST}
@@ -711,7 +368,11 @@ test_local() {
   export RABBITMQ_HOSTNAME=${RABBITMQ_HOSTNAME:-rabbitmq}
   export RABBITMQ_AMQP_USERNAME=${RABBITMQ_AMQP_USERNAME}
   export RABBITMQ_AMQP_PASSWORD=${RABBITMQ_AMQP_PASSWORD}
+  export SELENIUM_TIMEOUT=${SELENIUM_TIMEOUT:-20000}
+  export SELENIUM_POLLING=${SELENIUM_POLLING:-500}
 
+  print "> SELENIUM_TIMEOUT: ${SELENIUM_TIMEOUT}"
+  print "> SELENIUM_POLLING: ${SELENIUM_POLLING}"
   print "> RABBITMQ_HOST: ${RABBITMQ_HOST}"
   print "> RABBITMQ_HOSTNAME: ${RABBITMQ_HOSTNAME}"
   print "> PUBLIC_RABBITMQ_HOST: ${PUBLIC_RABBITMQ_HOST}"
@@ -723,6 +384,7 @@ test_local() {
   export RUN_LOCAL=true
   export SCREENSHOTS_DIR=${SCREENS}
 
+  export PROFILES
   export ENV_FILE
   npm test $TEST_CASES_DIR/$1
 

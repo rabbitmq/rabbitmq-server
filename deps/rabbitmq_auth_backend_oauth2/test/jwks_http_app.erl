@@ -1,13 +1,14 @@
 -module(jwks_http_app).
 
--export([start/2, stop/0]).
+-export([start/3, stop/0]).
 
-start(Port, CertsDir) ->
+start(Port, CertsDir, Mounts) ->
+    ct:log("Mounts: ~p", [Mounts]),
     Dispatch =
         cowboy_router:compile(
           [
            {'_', [
-                  {"/jwks", jwks_http_handler, []}
+                  {Mount, jwks_http_handler, [{keys, Keys}]} || {Mount,Keys} <- Mounts
                  ]}
           ]
          ),

@@ -1,0 +1,37 @@
+
+HTTPD_DOCKER_IMAGE=httpd:latest
+
+init_proxy() {
+  HTTPD_CONFIG_DIR=${TEST_CONFIG_DIR}/httpd-proxy
+  PUBLIC_RABBITMQ_HOST=${PUBLIC_RABBITMQ_HOST:-proxy:9090}
+  PROXIED_RABBITMQ_URL=$(calculate_rabbitmq_url $PUBLIC_RABBITMQ_HOST)
+
+  print "> HTTPD_CONFIG: ${HTTPD_CONFIG_DIR}"
+  print "> PUBLIC_RABBITMQ_HOST: ${PUBLIC_RABBITMQ_HOST}"
+  print "> PROXIED_RABBITMQ_URL: ${PROXIED_RABBITMQ_URL}"
+  print "> RABBITMQ_HOST_FOR_PROXY: ${RABBITMQ_HOST_FOR_PROXY}"
+  print "> HTTPD_DOCKER_IMAGE: ${HTTPD_DOCKER_IMAGE}"
+}
+start_proxy() {
+  begin "Starting proxy ..."
+
+  init_proxy
+  kill_container_if_exist proxy
+
+  MOUNT_HTTPD_CONFIG_DIR=$CONF_DIR/httpd
+
+  mkdir -p $MOUNT_HTTPD_CONFIG_DIR
+  ${BIN_DIR}/gen-httpd-conf ${HTTPD_CONFIG_DIR} $ENV_FILE $MOUNT_HTTPD_CONFIG_DIR/httpd.conf
+  print "> EFFECTIVE HTTPD_CONFIG_FILE: $MOUNT_HTTPD_CONFIG_DIR/httpd.conf"
+
+  docker run \
+    --detach \
+    --name proxy \
+    --net ${DOCKER_NETWORK} \
+    --publish 9090:9090 \
+    --mount "type=bind,source=${MOUNT_HTTPD_CONFIG_DIR},target=/usr/local/apache2/conf" \
+    ${HTTPD_DOCKER_IMAGE}
+
+  wait_for_url $PROXIED_RABBITMQ_URL
+  end "Proxy is ready"
+}

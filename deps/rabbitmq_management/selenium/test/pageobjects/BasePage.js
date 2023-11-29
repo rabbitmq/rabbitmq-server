@@ -1,4 +1,4 @@
-const { By, Key, until, Builder } = require('selenium-webdriver')
+const { By, Key, until, Builder, Select } = require('selenium-webdriver')
 
 const MENU_TABS = By.css('div#menu ul#tabs')
 const USER = By.css('li#logout')
@@ -20,9 +20,8 @@ module.exports = class BasePage {
 
   constructor (webdriver) {
     this.driver = webdriver
-    // this is another timeout (--timeout 10000) which is the maximum test execution time
-    this.timeout = parseInt(process.env.TIMEOUT) || 5000 // max time waiting to locate an element. Should be less that test timeout
-    this.polling = parseInt(process.env.POLLING) || 500 // how frequent selenium searches for an element
+    this.timeout = parseInt(process.env.SELENIUM_TIMEOUT) || 1000 // max time waiting to locate an element. Should be less that test timeout
+    this.polling = parseInt(process.env.SELENIUM_POLLING) || 500 // how frequent selenium searches for an element    
   }
 
   async isLoaded () {
@@ -87,15 +86,35 @@ module.exports = class BasePage {
     return this.waitForDisplayed(STREAM_CONNECTIONS_TAB)
   }
 
-  async getSelectableVhosts() {
-    let selectable = await this.waitForDisplayed(SELECT_VHOSTS)
-    let options = await selectable.findElements(By.css('option'))
+  async getSelectableOptions(locator) {
+    let selectable = await this.waitForDisplayed(locator)
+    const select = await new Select(selectable)
+    const optionList = await select.getOptions()
+
     let table_model = []
-    for (let option of options) {
-      table_model.push(await option.getText())
+    for (const index in optionList) {
+      const t = await optionList[index].getText()
+      const v = await optionList[index].getAttribute('value')
+      table_model.push({"text":t, "value": v})
     }
+
     return table_model
   }
+  async selectOption(locator, text) {
+    let selectable = await this.waitForDisplayed(locator)
+    const select = await new Select(selectable)
+    return select.selectByVisibleText(text)
+  }
+
+  async getSelectableVhosts() {
+    let table_model = await this.getSelectableOptions(SELECT_VHOSTS)
+    let new_table_model = []
+    for (let i = 0; i < table_model.length; i++) {
+      new_table_model.push(await table_model[i].text)
+    }
+    return new_table_model
+  }
+
 
   async getTable(locator, firstNColumns) {
     let table = await this.waitForDisplayed(locator)
@@ -115,7 +134,8 @@ module.exports = class BasePage {
   async waitForLocated (locator) {
     try {
       return this.driver.wait(until.elementLocated(locator), this.timeout,
-        'Timed out after 30 seconds locating ' + locator, this.polling)
+        'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] seconds locating ' + locator,
+        this.polling)
     }catch(error) {
       console.error("Failed to locate element " + locator)
       throw error
@@ -125,7 +145,8 @@ module.exports = class BasePage {
   async waitForVisible (element) {
     try {
       return this.driver.wait(until.elementIsVisible(element), this.timeout,
-        'Timed out after 30 seconds awaiting till visible ' + element, this.polling)
+        'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
+        this.polling)
     }catch(error) {
       console.error("Failed to find visible element " + element)
       throw error

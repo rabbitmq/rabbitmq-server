@@ -12,6 +12,17 @@ const CREDENTIALS = 'credentials'
 const AUTH_SCHEME = "auth-scheme"
 const LOGGED_IN = 'loggedIn'
 const LOGIN_SESSION_TIMEOUT = "login_session_timeout"
+const AUTH_RESOURCE = 'auth_resource'
+
+function set_auth_resource(resource) {
+  store_local_pref(AUTH_RESOURCE, resource)
+}
+function has_auth_resource() {
+    return get_local_pref(AUTH_RESOURCE) != undefined
+}
+function get_auth_resource() {
+  return get_local_pref(AUTH_RESOURCE)
+}
 
 function has_auth_credentials() {
     return get_local_pref(CREDENTIALS) != undefined && get_local_pref(AUTH_SCHEME) != undefined &&
@@ -28,6 +39,7 @@ function clear_auth() {
     clear_local_pref(AUTH_SCHEME)
     clear_cookie_value(LOGIN_SESSION_TIMEOUT)
     clear_cookie_value(LOGGED_IN)
+    clear_local_pref(AUTH_RESOURCE)
 }
 function set_basic_auth(username, password) {
     set_auth("Basic", b64_encode_utf8(username + ":" + password), default_hard_session_timeout())

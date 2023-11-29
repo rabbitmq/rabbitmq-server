@@ -1,0 +1,20 @@
+
+SELENIUM_DOCKER_IMAGE=selenium/standalone-chrome:103.0
+
+start_selenium() {
+  begin "Starting selenium  ..."
+
+  print "> SELENIUM_DOCKER_IMAGE: ${SELENIUM_DOCKER_IMAGE}"
+  kill_container_if_exist selenium
+
+  docker run \
+    --detach \
+    --name selenium \
+    --net ${DOCKER_NETWORK} \
+    -p 4444:4444 \
+    --shm-size=2g \
+    ${SELENIUM_DOCKER_IMAGE}
+
+  wait_for_message selenium "Started Selenium Standalone"
+  end "Selenium ready"
+}

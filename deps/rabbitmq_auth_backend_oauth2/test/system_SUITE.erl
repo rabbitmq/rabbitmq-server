@@ -36,13 +36,14 @@ groups() ->
                        test_successful_connection_with_simple_strings_for_aud_and_scope,
                        test_successful_token_refresh,
                        test_successful_connection_without_verify_aud,
-                       mqtt
+                       mqtt                      
                       ]},
      {basic_unhappy_path, [], [
                        test_failed_connection_with_expired_token,
                        test_failed_connection_with_a_non_token,
                        test_failed_connection_with_a_token_with_insufficient_vhost_permission,
-                       test_failed_connection_with_a_token_with_insufficient_resource_permission
+                       test_failed_connection_with_a_token_with_insufficient_resource_permission,
+                       more_than_one_resource_server_id_not_allowed_in_one_token
                       ]},
 
      {token_refresh, [], [
@@ -213,9 +214,21 @@ init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
 
+init_per_testcase(multiple_resource_server_ids, Config) ->
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+      [rabbitmq_auth_backend_oauth2, scope_prefix, <<"rmq.">> ]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+      [rabbitmq_auth_backend_oauth2, resource_servers, #{
+          <<"prod">> => [ ],
+          <<"dev">> => [ ]
+      }]),
+  rabbit_ct_helpers:testcase_started(Config, multiple_resource_server_ids),
+  Config;
+
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config.
+
 
 
 %%
@@ -268,6 +281,14 @@ end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
         [rabbitmq_auth_backend_oauth2, scope_aliases]),
   rabbit_ct_helpers:testcase_finished(Config, Testcase),
+  Config;
+
+end_per_testcase(multiple_resource_server_ids, Config) ->
+  rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+      [rabbitmq_auth_backend_oauth2, scope_prefix ]),
+  rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+      [rabbitmq_auth_backend_oauth2, resource_servers ]),
+  rabbit_ct_helpers:testcase_started(Config, multiple_resource_server_ids),
   Config;
 
 end_per_testcase(Testcase, Config) ->
@@ -363,7 +384,7 @@ test_successful_connection_with_simple_strings_for_aud_and_scope(Config) ->
     {_Algo, Token} = generate_valid_token(
         Config,
         <<"rabbitmq.configure:*/* rabbitmq.write:*/* rabbitmq.read:*/*">>,
-        <<"hare rabbitmq">>
+        [<<"hare">>, <<"rabbitmq">>]
     ),
     Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
@@ -626,3 +647,8 @@ test_failed_connection_with_non_existent_scope_alias_in_scope_field(Config) ->
     {_Algo, Token} = generate_valid_token(Config, <<"non-existent alias a8798s7doaisd79">>),
     ?assertMatch({error, not_allowed},
                  open_unmanaged_connection(Config, 0, <<"vhost2">>, <<"username">>, Token)).
+
+
+more_than_one_resource_server_id_not_allowed_in_one_token(Config) ->
+    {_Algo, Token} = generate_valid_token(Config, <<"rmq.configure:*/*">>, [<<"prod">>, <<"dev">>]),
+    {error, _} = open_unmanaged_connection(Config, 0, <<"username">>, Token).

@@ -100,7 +100,16 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+    name = "add_signing_key_command_SUITE",
+    size = "small",
+)
+
+rabbitmq_integration_suite(
     name = "config_schema_SUITE",
+)
+
+rabbitmq_integration_suite(
+    name = "rabbit_oauth2_config_SUITE",
 )
 
 rabbitmq_integration_suite(
@@ -123,6 +132,7 @@ rabbitmq_suite(
         "//deps/rabbit_common:erlang_app",
     ],
 )
+
 
 rabbitmq_integration_suite(
     name = "system_SUITE",

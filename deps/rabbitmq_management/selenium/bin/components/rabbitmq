@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+
+init_rabbitmq() {
+  RABBITMQ_CONFIG_DIR=${TEST_CONFIG_DIR}
+  RABBITMQ_DOCKER_IMAGE=${RABBITMQ_DOCKER_IMAGE:-rabbitmq}
+
+  print "> RABBITMQ_CONFIG_DIR: ${RABBITMQ_CONFIG_DIR}"
+  print "> RABBITMQ_DOCKER_IMAGE: ${RABBITMQ_DOCKER_IMAGE}"
+  [[ -z "${OAUTH_SERVER_CONFIG_BASEDIR}" ]] || print "> OAUTH_SERVER_CONFIG_BASEDIR: ${OAUTH_SERVER_CONFIG_BASEDIR}"
+  [[ -z "${OAUTH_SERVER_CONFIG_DIR}" ]] || print "> OAUTH_SERVER_CONFIG_DIR: ${OAUTH_SERVER_CONFIG_DIR}"
+
+}
+start_rabbitmq() {
+  if [[ "$PROFILES" == *"docker"* ]]; then
+    start_docker_rabbitmq
+  else
+    start_local_rabbitmq
+  fi
+}
+
+start_local_rabbitmq() {
+  begin "Starting rabbitmq ..."
+
+  init_rabbitmq
+
+
+  RABBITMQ_SERVER_ROOT=$(realpath $TEST_DIR/../../../../)
+  MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
+  MOUNT_ADVANCED_CONFIG="/etc/rabbitmq/advanced.config"
+
+  RABBITMQ_TEST_DIR="${RABBITMQ_CONFIG_DIR}"
+  ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_RABBITMQ_CONF
+  print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_RABBITMQ_CONF"
+  ${BIN_DIR}/gen-advanced-config ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_ADVANCED_CONFIG
+  RESULT=$?
+  if [ $RESULT -eq 0 ]; then
+    print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_ADVANCED_CONFIG"
+  	gmake --directory=${RABBITMQ_SERVER_ROOT} run-broker \
+  		RABBITMQ_ENABLED_PLUGINS_FILE=${RABBITMQ_CONFIG_DIR}/enabled_plugins \
+  		RABBITMQ_CONFIG_FILE=/tmp$MOUNT_RABBITMQ_CONF \
+      RABBITMQ_ADVANCED_CONFIG_FILE=/tmp$MOUNT_ADVANCED_CONFIG
+  else
+    gmake --directory=${RABBITMQ_SERVER_ROOT} run-broker \
+  		RABBITMQ_ENABLED_PLUGINS_FILE=${RABBITMQ_CONFIG_DIR}/enabled_plugins \
+  		RABBITMQ_CONFIG_FILE=/tmp$MOUNT_RABBITMQ_CONF
+  fi
+  print "> RABBITMQ_TEST_DIR: ${RABBITMQ_CONFIG_DIR}"
+
+
+}
+start_docker_rabbitmq() {
+  begin "Starting rabbitmq in docker ..."
+
+  init_rabbitmq
+  kill_container_if_exist rabbitmq
+
+  mkdir -p $CONF_DIR/rabbitmq
+  MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
+  MOUNT_ADVANCED_CONFIG="/etc/rabbitmq/advanced.config"
+
+  RABBITMQ_TEST_DIR="/var/rabbitmq" ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/rabbitmq.conf
+  print "> EFFECTIVE RABBITMQ_CONFIG_FILE: $CONF_DIR/rabbitmq/rabbitmq.conf"
+  ${BIN_DIR}/gen-advanced-config ${RABBITMQ_CONFIG_DIR} $ENV_FILE /$CONF_DIR/rabbitmq/advanced.config
+  RESULT=$?
+  if [ $RESULT -eq 0 ]; then
+    print "> EFFECTIVE ADVANCED_CONFIG_FILE: $CONF_DIR/rabbitmq/advanced.config"
+    EXTRA_MOUNTS="-v $CONF_DIR/rabbitmq/advanced.config:${MOUNT_ADVANCED_CONFIG}:ro"
+  fi
+  print "> RABBITMQ_TEST_DIR: /var/rabbitmq"
+
+  docker run \
+    --detach \
+    --name rabbitmq \
+    --net ${DOCKER_NETWORK} \
+    -p 15672:15672 -p 5672:5672 \
+    -v ${RABBITMQ_CONFIG_DIR}/logging.conf:/etc/rabbitmq/conf.d/logging.conf:ro \
+    -v $CONF_DIR/rabbitmq/rabbitmq.conf:${MOUNT_RABBITMQ_CONF}:ro \
+    -v ${RABBITMQ_CONFIG_DIR}/enabled_plugins:/etc/rabbitmq/enabled_plugins \
+    -v ${TEST_DIR}:/config \
+    -v ${RABBITMQ_CONFIG_DIR}/imports:/var/rabbitmq/imports \
+    ${EXTRA_MOUNTS} \
+    ${RABBITMQ_DOCKER_IMAGE}
+
+  wait_for_message rabbitmq "Server startup complete"
+  end "RabbitMQ ready"
+}

@@ -40,12 +40,15 @@ sign_token(Token, Jwk, Jws) ->
     jose_jws:compact(Signed).
 
 fixture_jwk() ->
+  fixture_jwk(<<"token-key">>).
+
+fixture_jwk(TokenKey) ->
     #{<<"alg">> => <<"HS256">>,
       <<"k">> => <<"dG9rZW5rZXk">>,
-      <<"kid">> => <<"token-key">>,
+      <<"kid">> => TokenKey,
       <<"kty">> => <<"oct">>,
       <<"use">> => <<"sig">>,
-      <<"value">> => <<"tokenkey">>}.
+      <<"value">> => TokenKey}.
 
 full_permission_scopes() ->
     [<<"rabbitmq.configure:*/*">>,
@@ -78,7 +81,6 @@ fixture_token_with_scopes(Scopes) ->
 token_with_scopes_and_expiration(Scopes, Expiration) ->
     %% expiration is a timestamp with precision in seconds
     #{<<"exp">> => Expiration,
-      <<"kid">> => <<"token-key">>,
       <<"iss">> => <<"unit_test">>,
       <<"foo">> => <<"bar">>,
       <<"aud">> => [<<"rabbitmq">>],
@@ -87,7 +89,6 @@ token_with_scopes_and_expiration(Scopes, Expiration) ->
 token_without_scopes() ->
     %% expiration is a timestamp with precision in seconds
     #{
-      <<"kid">> => <<"token-key">>,
       <<"iss">> => <<"unit_test">>,
       <<"foo">> => <<"bar">>,
       <<"aud">> => [<<"rabbitmq">>]
@@ -115,14 +116,12 @@ fixture_token_with_full_permissions() ->
 plain_token_without_scopes_and_aud() ->
   %% expiration is a timestamp with precision in seconds
   #{<<"exp">> => default_expiration_moment(),
-    <<"kid">> => <<"token-key">>,
     <<"iss">> => <<"unit_test">>,
     <<"foo">> => <<"bar">>}.
 
 token_with_scope_alias_in_scope_field(Value) ->
     %% expiration is a timestamp with precision in seconds
     #{<<"exp">> => default_expiration_moment(),
-      <<"kid">> => <<"token-key">>,
       <<"iss">> => <<"unit_test">>,
       <<"foo">> => <<"bar">>,
       <<"aud">> => [<<"rabbitmq">>],
@@ -131,7 +130,6 @@ token_with_scope_alias_in_scope_field(Value) ->
 token_with_scope_alias_in_claim_field(Claims, Scopes) ->
     %% expiration is a timestamp with precision in seconds
     #{<<"exp">> => default_expiration_moment(),
-      <<"kid">> => <<"token-key">>,
       <<"iss">> => <<"unit_test">>,
       <<"foo">> => <<"bar">>,
       <<"aud">> => [<<"rabbitmq">>],

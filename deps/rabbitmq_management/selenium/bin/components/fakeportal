@@ -1,0 +1,44 @@
+
+init_fakeportal() {
+  FAKEPORTAL_URL=${FAKEPORTAL_URL:-http://fakeportal:3000}
+  FAKEPORTAL_DIR=${SCRIPT}/../fakeportal
+  CLIENT_ID="${CLIENT_ID:-rabbit_idp_user}"
+  CLIENT_SECRET="${CLIENT_SECRET:-rabbit_idp_user}"
+  RABBITMQ_HOST=${RABBITMQ_HOST:-proxy:9090}
+  RABBITMQ_HOST_FOR_FAKEPORTAL=${RABBITMQ_HOST_FOR_FAKEPORTAL:-rabbitmq:15672}
+
+  RABBITMQ_URL=$(calculate_rabbitmq_url $RABBITMQ_HOST)
+  RABBITMQ_URL_FOR_FAKEPORTAL=$(calculate_rabbitmq_url $RABBITMQ_HOST_FOR_FAKEPORTAL)
+
+  print "> FAKEPORTAL_URL: ${FAKEPORTAL_URL}"
+  print "> UAA_URL_FOR_FAKEPORTAL: ${UAA_URL_FOR_FAKEPORTAL}"
+  print "> RABBITMQ_HOST_FOR_FAKEPORTAL: ${RABBITMQ_HOST_FOR_FAKEPORTAL}"
+  print "> RABBITMQ_HOST: ${RABBITMQ_HOST}"
+  print "> CLIENT_ID: ${CLIENT_ID}"
+  print "> CLIENT_SECRET: ${CLIENT_SECRET}"
+  print "> RABBITMQ_URL: ${RABBITMQ_URL}"
+}
+start_fakeportal() {
+  begin "Starting fakeportal ..."
+
+  init_fakeportal
+  kill_container_if_exist fakeportal
+  mocha_test_tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))
+
+  docker run \
+    --detach \
+    --name fakeportal \
+    --net ${DOCKER_NETWORK} \
+    --publish 3000:3000 \
+    --env PORT=3000 \
+    --env RABBITMQ_URL="${RABBITMQ_URL_FOR_FAKEPORTAL}" \
+    --env PROXIED_RABBITMQ_URL="${RABBITMQ_URL}" \
+    --env UAA_URL="${UAA_URL_FOR_FAKEPORTAL}" \
+    --env CLIENT_ID="${CLIENT_ID}" \
+    --env CLIENT_SECRET="${CLIENT_SECRET}" \
+    -v ${FAKEPORTAL_DIR}:/code/fakeportal \
+    mocha-test:${mocha_test_tag} run fakeportal
+
+  wait_for_url $FAKEPORTAL_URL
+  end "Fakeportal is ready"
+}

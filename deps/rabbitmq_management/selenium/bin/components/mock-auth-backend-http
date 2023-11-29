@@ -1,0 +1,28 @@
+
+
+init_mock-auth-backend-http() {
+  AUTH_BACKEND_HTTP_BASEURL=${AUTH_BACKEND_HTTP_BASEURL:-http://localhost:8888}
+  AUTH_BACKEND_HTTP_DIR=${TEST_CASES_DIR}/mock-auth-backend-http
+
+  print "> AUTH_BACKEND_HTTP_BASEURL: ${AUTH_BACKEND_HTTP_BASEURL}"
+  print "> AUTH_BACKEND_HTTP_DIR: ${AUTH_BACKEND_HTTP_DIR}"
+
+}
+start_mock-auth-backend-http() {
+  begin "Starting mock-auth-backend-http ..."
+
+  init_mock-auth-backend-http
+  kill_container_if_exist mock-auth-backend-http
+
+  docker run \
+    --detach \
+    --name mock-auth-backend-http \
+    --net ${DOCKER_NETWORK} \
+    --publish 8888:1080 \
+    --env MOCKSERVER_INITIALIZATION_JSON_PATH="/config/expectationInitialiser.json" \
+    -v ${AUTH_BACKEND_HTTP_DIR}:/config \
+    mockserver/mockserver
+
+  wait_for_url $AUTH_BACKEND_HTTP_BASEURL/ready
+  end "mock-auth-backend-http is ready"
+}

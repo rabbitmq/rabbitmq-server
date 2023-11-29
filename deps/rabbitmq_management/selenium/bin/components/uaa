@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+UAA_DOCKER_IMAGE=cloudfoundry/uaa:75.21.0
+
+init_uaa() {
+  UAA_CONFIG_PATH=${UAA_CONFIG_PATH:-oauth/uaa}
+  UAA_CONFIG_DIR=$(realpath ${TEST_DIR}/${UAA_CONFIG_PATH})
+
+  print "> UAA_CONFIG_DIR: ${UAA_CONFIG_DIR}"
+  print "> UAA_URL: ${UAA_URL}"
+  print "> UAA_DOCKER_IMAGE: ${UAA_DOCKER_IMAGE}"
+}
+start_uaa() {
+  begin "Starting UAA ..."
+
+  init_uaa
+  kill_container_if_exist uaa
+
+  MOUNT_UAA_CONF_DIR=$CONF_DIR/uaa
+
+  mkdir -p $MOUNT_UAA_CONF_DIR
+  cp ${UAA_CONFIG_DIR}/* $MOUNT_UAA_CONF_DIR
+  ${BIN_DIR}/gen-uaa-yml ${UAA_CONFIG_DIR} $ENV_FILE $MOUNT_UAA_CONF_DIR/uaa.yml
+  print "> EFFECTIVE UAA_CONFIG_FILE: $MOUNT_UAA_CONF_DIR/uaa.yml"
+
+  docker run \
+    --detach \
+    --name uaa \
+    --net ${DOCKER_NETWORK} \
+    --publish 8080:8080 \
+    --mount "type=bind,source=$MOUNT_UAA_CONF_DIR,target=/uaa" \
+    --env UAA_CONFIG_PATH="/uaa" \
+    --env JAVA_OPTS="-Djava.security.egd=file:/dev/./urandom" \
+    ${UAA_DOCKER_IMAGE}
+
+  wait_for_oidc_endpoint uaa $UAA_URL
+  end "UAA is ready"
+}

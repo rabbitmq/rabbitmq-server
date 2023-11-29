@@ -4,6 +4,8 @@ const fsp = fs.promises
 const path = require('path')
 const { By, Key, until, Builder, logging } = require('selenium-webdriver')
 require('chromedriver')
+const UAALoginPage = require('./pageobjects/UAALoginPage')
+const KeycloakLoginPage = require('./pageobjects/KeycloakLoginPage')
 
 const uaaUrl = process.env.UAA_URL || 'http://localhost:8080'
 const baseUrl = process.env.RABBITMQ_URL || 'http://localhost:15672/'
@@ -78,6 +80,23 @@ module.exports = {
 
   captureScreensFor: (driver, test) => {
     return new CaptureScreenshot(driver, require('path').basename(test))
+  },
+
+  idpLoginPage: (driver, preferredIdp) => {
+    if (!preferredIdp) {
+      if (process.env.PROFILES.includes("uaa")) {
+        preferredIdp = "uaa"
+      } else if (process.env.PROFILES.includes("keycloak")) {
+        preferredIdp = "keycloak"
+      } else {
+        throw new Error("Missing uaa or keycloak profiles")
+      }
+    }
+    switch(preferredIdp) {
+      case "uaa": return new UAALoginPage(driver)
+      case "keycloak": return new KeycloakLoginPage(driver)
+      default: new Error("Unsupported ipd " + preferredIdp)
+    }
   },
 
   tokenFor: (client_id, client_secret) => {

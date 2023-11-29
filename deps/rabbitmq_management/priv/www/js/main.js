@@ -22,27 +22,63 @@ function startWithOAuthLogin () {
   store_pref("oauth-return-to", window.location.hash);
 
   if (!oauth.logged_in) {
-    if (oauth.sp_initiated) {
-      get(oauth.readiness_url, 'application/json', function (req) {
+
+    if (oauth.resource_servers.length == 1 && oauth.resource_servers[0].sp_initiated) {
+      get(readiness_url(oauth.resource_servers[0]), 'application/json', function (req) {
         if (req.status !== 200) {
-          renderWarningMessageInLoginStatus(oauth.authority + ' does not appear to be a running OAuth2.0 instance or may not have a trusted SSL certificate')
+          let message = 'Unable to retrieve OpenID configuration from ' + oauth.resource_servers[0].provider_url + '. '
+          switch(req.status) {
+            case 0:
+              message += 'Reason: ' + oauth.resource_servers[0].provider_url + " not reachable"
+              break
+            case 404:
+              message += 'Reason: ' + readiness_url(oauth.resource_servers[0]) + " return 404"
+              break
+            default:
+              message += 'Reason: ' + req.statusText
+          }
+          console.log(message)
+          renderWarningMessageInLoginStatus(message)
+
         } else {
-          replace_content('outer', format('login_oauth', {}))
-          start_app_login()
+          try {
+            validate_openid_configuration(JSON.parse(req.responseText))
+            render_login_oauth()
+            start_app_login()
+          }catch(e) {
+            let message = 'Unable to retrieve OpenID configuration from ' + readiness_url(oauth.resource_servers[0]) +
+              '. Reason: ' + e.message
+            console.log(message)
+            renderWarningMessageInLoginStatus(message)
+          }
         }
       })
     } else {
-      replace_content('outer', format('login_oauth', {}))
+      console.log("Rendering login with " +  JSON.stringify(oauth.resource_servers))
+      render_login_oauth()
       start_app_login()
     }
+
   } else {
     start_app_login()
   }
 }
+function render_login_oauth(message) {
+  replace_content('outer', format('login_oauth', {
+      'message' : message,
+      'resource_servers' : oauth.resource_servers,
+      'errorCode' : message != null ? (message == "Not authorized" ? 401 : 400) : undefined,
+      'oauth_disable_basic_auth' : oauth.oauth_disable_basic_auth
+    }))
+  setup_visibility()
+  $('#login').off('click', 'div.section h2, div.section-hidden h2');
+  $('#login').on('click', 'div.section h2, div.section-hidden h2', function() {
+          toggle_visibility($(this));
+      });
 
-function renderWarningMessageInLoginStatus (message) {
-  replace_content('outer', format('login_oauth', {}))
-  replace_content('login-status', '<p class="warning">' + message + '</p> <button id="loginWindow" onclick="oauth_initiateLogin()">Click here to log in</button>')
+}
+function renderWarningMessageInLoginStatus(message) {
+  render_login_oauth(message)
 }
 
 
@@ -72,7 +108,7 @@ function start_app_login () {
   app = new Sammy.Application(function () {
     this.get('/', function () {})
     this.get('#/', function () {})
-    if (!oauth.enabled) {
+    if (!oauth.enabled || !oauth.oauth_disable_basic_auth) {
       this.put('#/login', function() {
         set_basic_auth(this.params['username'], this.params['password'])
         check_login()
