@@ -26,7 +26,8 @@
          normalize/1,
          append_node_prefix/1,
          node_prefix/0]).
--export([do_query_node_props/1]).
+-export([do_query_node_props/1,
+         group_leader_proxy/2]).
 
 -ifdef(TEST).
 -export([sort_nodes_and_props/1,
@@ -390,20 +391,74 @@ do_query_node_props(Nodes) when Nodes =/= [] ->
     %% Make sure all log messages are forwarded from this temporary hidden
     %% node to the upstream node, regardless of their level.
     _ = logger:set_primary_config(level, debug),
+
+    %% The group leader for all processes on this temporary hidden node is the
+    %% calling process' group leader on the upstream node.
+    %%
+    %% When we use `erpc:call/4' (or the multicall equivalent) to execute code
+    %% on one of the `Nodes', the remotely executed code will also use the
+    %% calling process' group leader by default.
+    %%
+    %% We use this temporary hidden node to ensure the downstream node will
+    %% not connected to the upstream node. Therefore, we must change the group
+    %% leader as well, otherwise any I/O from the downstream node will send a
+    %% message to the upstream node's group leader and thus open a connection.
+    %% This would defeat the entire purpose of this temporary hidden node.
+    %%
+    %% To avoid this, we start a proxy process which we will use as a group
+    %% leader. This process will send all messages it receives to the group
+    %% leader on the upstream node.
+    %%
+    %% There is one caveat: the logger (local to the temporary hidden node)
+    %% forwards log messages to the upstream logger (on the upstream node)
+    %% only if the group leader of that message is a remote PID. Because we
+    %% set a local PID, it stops forwarding log messages originating from that
+    %% temporary hidden node. That's why we use `with_group_leader_proxy/2' to
+    %% set the group leader to our proxy only around the use of `erpc'.
+    %%
+    %% That's a lot just to keep logging working while not reveal the upstream
+    %% node to the downstream node...
+    Parent = self(),
+    UpstreamGroupLeader = erlang:group_leader(),
+    ProxyGroupLeader = spawn_link(
+                         ?MODULE, group_leader_proxy,
+                         [Parent, UpstreamGroupLeader]),
+
     %% TODO: Replace with `rabbit_nodes:list_members/0' when the oldest
     %% supported version has it.
-    MembersPerNode = erpc:multicall(Nodes, rabbit_nodes, all, []),
-    query_node_props1(Nodes, MembersPerNode, []);
-do_query_node_props([]) ->
-    [].
+    MembersPerNode = with_group_leader_proxy(
+                       ProxyGroupLeader,
+                       fun() ->
+                               erpc:multicall(Nodes, rabbit_nodes, all, [])
+                       end),
+    query_node_props1(Nodes, MembersPerNode, [], ProxyGroupLeader).
+
+with_group_leader_proxy(ProxyGroupLeader, Fun) ->
+    UpstreamGroupLeader = erlang:group_leader(),
+    true = erlang:group_leader(ProxyGroupLeader, self()),
+    Ret = Fun(),
+    true = erlang:group_leader(UpstreamGroupLeader, self()),
+    Ret.
+
+group_leader_proxy(Parent, UpstreamGroupLeader) ->
+    receive
+        stop_proxy ->
+            erlang:unlink(Parent),
+            Parent ! proxy_stopped;
+        Message ->
+            UpstreamGroupLeader ! Message,
+            group_leader_proxy(Parent, UpstreamGroupLeader)
+    end.
 
 query_node_props1(
-  [Node | Nodes], [{ok, Members} | MembersPerNode], NodesAndProps) ->
+  [Node | Nodes], [{ok, Members} | MembersPerNode], NodesAndProps,
+  ProxyGroupLeader) ->
     NodeAndProps = {Node, Members},
     NodesAndProps1 = [NodeAndProps | NodesAndProps],
-    query_node_props1(Nodes, MembersPerNode, NodesAndProps1);
+    query_node_props1(Nodes, MembersPerNode, NodesAndProps1, ProxyGroupLeader);
 query_node_props1(
-  [Node | Nodes], [{error, _} = Error | MembersPerNode], NodesAndProps) ->
+  [Node | Nodes], [{error, _} = Error | MembersPerNode], NodesAndProps,
+  ProxyGroupLeader) ->
     %% We consider that an error means the remote node is unreachable or not
     %% ready. Therefore, we exclude it from the list of discovered nodes as we
     %% won't be able to join it anyway.
@@ -412,17 +467,17 @@ query_node_props1(
        "Peer discovery: node '~ts' excluded from the discovered nodes",
        [Node, Error, Node],
        #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-    query_node_props1(Nodes, MembersPerNode, NodesAndProps);
-query_node_props1([], [], NodesAndProps) ->
+    query_node_props1(Nodes, MembersPerNode, NodesAndProps, ProxyGroupLeader);
+query_node_props1([], [], NodesAndProps, ProxyGroupLeader) ->
     NodesAndProps1 = lists:reverse(NodesAndProps),
-    query_node_props2(NodesAndProps1, []).
+    query_node_props2(NodesAndProps1, [], ProxyGroupLeader).
 
-query_node_props2([{Node, Members} | Rest], NodesAndProps) ->
+query_node_props2([{Node, Members} | Rest], NodesAndProps, ProxyGroupLeader) ->
     try
-        StartTime = get_node_start_time(Node, microsecond),
+        StartTime = get_node_start_time(Node, microsecond, ProxyGroupLeader),
         NodeAndProps = {Node, Members, StartTime},
         NodesAndProps1 = [NodeAndProps | NodesAndProps],
-        query_node_props2(Rest, NodesAndProps1)
+        query_node_props2(Rest, NodesAndProps1, ProxyGroupLeader)
     catch
         _:Error:_ ->
             %% If one of the erpc calls we use to get the start time fails,
@@ -435,15 +490,20 @@ query_node_props2([{Node, Members} | Rest], NodesAndProps) ->
                "Peer discovery: node '~ts' excluded from the discovered nodes",
                [Node, Error, Node],
                #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-            query_node_props2(Rest, NodesAndProps)
+            query_node_props2(Rest, NodesAndProps, ProxyGroupLeader)
     end;
-query_node_props2([], NodesAndProps) ->
+query_node_props2([], NodesAndProps, ProxyGroupLeader) ->
     NodesAndProps1 = lists:reverse(NodesAndProps),
-    sort_nodes_and_props(NodesAndProps1).
+    NodesAndProps2 = sort_nodes_and_props(NodesAndProps1),
+    %% Wait for the proxy group leader to flush its inbox.
+    ProxyGroupLeader ! stop_proxy,
+    receive proxy_stopped -> ok end,
+    NodesAndProps2.
 
--spec get_node_start_time(Node, Unit) -> StartTime when
+-spec get_node_start_time(Node, Unit, ProxyGroupLeader) -> StartTime when
       Node :: node(),
       Unit :: erlang:time_unit(),
+      ProxyGroupLeader :: pid(),
       StartTime :: non_neg_integer().
 %% @doc Returns the start time of the given `Node' in `Unit'.
 %%
@@ -463,16 +523,22 @@ query_node_props2([], NodesAndProps) ->
 %%
 %% @private
 
-get_node_start_time(Node, Unit) ->
-    NativeStartTime = erpc:call(Node, erlang, system_info, [start_time]),
-    TimeOffset = erpc:call(Node, erlang, time_offset, []),
-    SystemStartTime = NativeStartTime + TimeOffset,
-    StartTime = erpc:call(
-                  Node, erlang, convert_time_unit,
-                  [SystemStartTime, native, Unit]),
-    StartTime.
+get_node_start_time(Node, Unit, ProxyGroupLeader) ->
+    with_group_leader_proxy(
+      ProxyGroupLeader,
+      fun() ->
+              NativeStartTime = erpc:call(
+                                  Node, erlang, system_info, [start_time]),
+              TimeOffset = erpc:call(Node, erlang, time_offset, []),
+              SystemStartTime = NativeStartTime + TimeOffset,
+              StartTime = erpc:call(
+                            Node, erlang, convert_time_unit,
+                            [SystemStartTime, native, Unit]),
+              StartTime
+      end).
 
--spec sort_nodes_and_props(NodesAndProps) -> SortedNodesAndProps when
+-spec sort_nodes_and_props(NodesAndProps) ->
+    SortedNodesAndProps when
       NodesAndProps :: [node_and_props()],
       SortedNodesAndProps :: [node_and_props()].
 %% @doc Sorts the list of nodes according to their properties.
