@@ -369,7 +369,18 @@ stop-node:
 NODES ?= 3
 
 start-brokers start-cluster: $(DIST_TARGET)
-	@for n in $$(seq $(NODES)); do \
+	@if test '$@' = 'start-cluster'; then \
+		for n in $$(seq $(NODES)); do \
+			nodename="rabbit-$$n@$(HOSTNAME)"; \
+			if test "$$nodeslist"; then \
+				nodeslist="$$nodeslist,'$$nodename'"; \
+			else \
+				nodeslist="'$$nodename'"; \
+			fi; \
+		done; \
+		cluster_nodes_arg="-rabbit cluster_nodes [$$nodeslist]"; \
+	fi; \
+	for n in $$(seq $(NODES)); do \
 		nodename="rabbit-$$n@$(HOSTNAME)"; \
 		$(MAKE) start-background-broker \
 		  NOBUILD=1 \
@@ -386,18 +397,10 @@ start-brokers start-cluster: $(DIST_TARGET)
 		  -rabbitmq_web_stomp_examples listener [{port,$$((61633 + $$n - 1))}] \
 		  -rabbitmq_prometheus tcp_config [{port,$$((15692 + $$n - 1))}] \
 		  -rabbitmq_stream tcp_listeners [$$((5552 + $$n - 1))] \
+		  $$cluster_nodes_arg \
 		  " & \
 	done; \
-	wait && \
-	for n in $$(seq $(NODES)); do \
-		nodename="rabbit-$$n@$(HOSTNAME)"; \
-		if test '$@' = 'start-cluster' && test "$$nodename1"; then \
-			ERL_LIBS="$(DIST_ERL_LIBS)" \
-			  $(RABBITMQCTL) -n "$$nodename" join_cluster "$$nodename1"; \
-		else \
-			nodename1=$$nodename; \
-		fi; \
-	done
+	wait
 
 stop-brokers stop-cluster:
 	@for n in $$(seq $(NODES) -1 1); do \
