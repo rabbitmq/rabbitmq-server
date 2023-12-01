@@ -118,8 +118,23 @@ join(RemoteNode, NodeType)
                     end
             end,
 
-            ok = rabbit_db:reset(),
-            rabbit_feature_flags:copy_feature_states_after_reset(RemoteNode),
+            %% We acquire the feature flags registry reload lock because
+            %% between the time we reset the registry (as part of
+            %% `rabbit_db:reset/0' and the states copy from the remote node,
+            %% there could be a concurrent reload of the registry (for instance
+            %% because of peer discovery on another node) with the
+            %% default/empty states.
+            %%
+            %% To make this work, the lock is also acquired from
+            %% `rabbit_ff_registry_wrapper'.
+            rabbit_ff_registry_factory:acquire_state_change_lock(),
+            try
+                ok = rabbit_db:reset(),
+                rabbit_feature_flags:copy_feature_states_after_reset(
+                  RemoteNode)
+            after
+                rabbit_ff_registry_factory:release_state_change_lock()
+            end,
 
             ?LOG_INFO(
                "DB: joining cluster using remote nodes:~n~tp", [ClusterNodes],
