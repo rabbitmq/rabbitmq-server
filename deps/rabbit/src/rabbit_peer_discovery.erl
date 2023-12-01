@@ -35,7 +35,10 @@
 -endif.
 
 -type backend() :: atom().
--type node_and_props() :: {node(), [node()], non_neg_integer()}.
+-type node_and_props() :: {node(),
+                           [node()],
+                           non_neg_integer(),
+                           boolean() | undefined}.
 
 -define(DEFAULT_BACKEND,   rabbit_peer_discovery_classic_config).
 
@@ -170,9 +173,10 @@ sync_desired_cluster(Backend, RetriesLeft, RetryDelay) ->
     %%      to filter out unreachable nodes and to sort the final list. The
     %%      sorting is important because it determines which node it will try
     %%      to join.
-    %%   3. It joins the selected node using a regular `join_cluster'. This
-    %%      step is protected by a lock if the backend supports this
-    %%      mechanism.
+    %%   3. It joins the selected node using a regular `join_cluster' if the
+    %%      selected node's DB layer is ready. This step is protected by a
+    %%      lock if the backend supports this mechanism. However, if it is not
+    %%      ready, we retry the whole process.
     case discover_cluster_nodes(Backend) of
         {ok, {[ThisNode], _NodeType}} when ThisNode =:= node() ->
             ?LOG_DEBUG(
@@ -184,22 +188,31 @@ sync_desired_cluster(Backend, RetriesLeft, RetryDelay) ->
             NodesAndProps = query_node_props(DiscoveredNodes),
             case can_use_discovered_nodes(DiscoveredNodes, NodesAndProps) of
                 true ->
-                    SelectedNode = select_node_to_join(NodesAndProps),
-                    Ret = join_selected_node(Backend, SelectedNode, NodeType),
-                    case Ret of
-                        ok ->
-                            %% TODO: Check if there are multiple "concurrent"
-                            %% clusters in `NodesAndProps' instead of one, or
-                            %% standalone ready nodes that joined no one.
-                            %%
-                            %% TODO: After some delay, re-evaluate peer
-                            %% discovery, in case there are again multiple
-                            %% clusters or standalone ready nodes.
-                            %%
-                            %% TODO: Remove members which are not in the list
-                            %% returned by the backend.
-                            ok;
-                        {error, _Reason} ->
+                    case select_node_to_join(NodesAndProps) of
+                        SelectedNode when SelectedNode =/= false ->
+                            Ret = join_selected_node(
+                                    Backend, SelectedNode, NodeType),
+                            case Ret of
+                                ok ->
+                                    %% TODO: Check if there are multiple
+                                    %% "concurrent" clusters in
+                                    %% `NodesAndProps' instead of one, or
+                                    %% standalone ready nodes that joined no
+                                    %% one.
+                                    %%
+                                    %% TODO: After some delay, re-evaluate
+                                    %% peer discovery, in case there are again
+                                    %% multiple clusters or standalone ready
+                                    %% nodes.
+                                    %%
+                                    %% TODO: Remove members which are not in
+                                    %% the list returned by the backend.
+                                    ok;
+                                {error, _Reason} ->
+                                    retry_sync_desired_cluster(
+                                      Backend, RetriesLeft, RetryDelay)
+                            end;
+                        false ->
                             retry_sync_desired_cluster(
                               Backend, RetriesLeft, RetryDelay)
                     end;
@@ -475,7 +488,8 @@ query_node_props1([], [], NodesAndProps, ProxyGroupLeader) ->
 query_node_props2([{Node, Members} | Rest], NodesAndProps, ProxyGroupLeader) ->
     try
         StartTime = get_node_start_time(Node, microsecond, ProxyGroupLeader),
-        NodeAndProps = {Node, Members, StartTime},
+        IsReady = is_node_db_ready(Node, ProxyGroupLeader),
+        NodeAndProps = {Node, Members, StartTime, IsReady},
         NodesAndProps1 = [NodeAndProps | NodesAndProps],
         query_node_props2(Rest, NodesAndProps1, ProxyGroupLeader)
     catch
@@ -537,6 +551,40 @@ get_node_start_time(Node, Unit, ProxyGroupLeader) ->
               StartTime
       end).
 
+-spec is_node_db_ready(Node, ProxyGroupLeader) -> IsReady when
+      Node :: node(),
+      ProxyGroupLeader :: pid(),
+      IsReady :: boolean() | undefined.
+%% @doc Returns if the node's DB layer is ready or not.
+%%
+%% @private
+
+is_node_db_ready(Node, ProxyGroupLeader) ->
+    %% This code is running from a temporary hidden node. We derive the real
+    %% node interested in the properties from the group leader.
+    UpstreamGroupLeader = erlang:group_leader(),
+    ThisNode = node(UpstreamGroupLeader),
+    case Node of
+        ThisNode ->
+            %% The current node is running peer discovery, thus way before we
+            %% mark the DB layer as ready. Consider it ready in this case,
+            %% otherwise if the current node is selected, it will loop forever
+            %% waiting for itself to be ready.
+            true;
+        _ ->
+            with_group_leader_proxy(
+              ProxyGroupLeader,
+              fun() ->
+                      try
+                          erpc:call(Node, rabbit_db, is_init_finished, [])
+                      catch
+                          _:{exception, undef,
+                             [{rabbit_db, is_init_finished, _, _} | _]} ->
+                              undefined
+                      end
+              end)
+    end.
+
 -spec sort_nodes_and_props(NodesAndProps) ->
     SortedNodesAndProps when
       NodesAndProps :: [node_and_props()],
@@ -553,8 +601,8 @@ get_node_start_time(Node, Unit, ProxyGroupLeader) ->
 sort_nodes_and_props(NodesAndProps) ->
     NodesAndProps1 = lists:sort(
                        fun(
-                         {NodeA, MembersA, StartTimeA},
-                         {NodeB, MembersB, StartTimeB}) ->
+                         {NodeA, MembersA, StartTimeA, _IsReadyA},
+                         {NodeB, MembersB, StartTimeB, _IsReadyB}) ->
                                length(MembersA) > length(MembersB) orelse
                                (length(MembersA) =:= length(MembersB) andalso
                                 StartTimeA < StartTimeB) orelse
@@ -595,7 +643,7 @@ sort_nodes_and_props(NodesAndProps) ->
 
 can_use_discovered_nodes(DiscoveredNodes, NodesAndProps)
   when NodesAndProps =/= [] ->
-    Nodes = [Node || {Node, _Members, _StartTime} <- NodesAndProps],
+    Nodes = [Node || {Node, _Members, _StartTime, _IsReady} <- NodesAndProps],
 
     ThisNode = node(),
     ThisNodeIsIncluded = lists:member(ThisNode, Nodes),
@@ -640,20 +688,31 @@ can_use_discovered_nodes(_DiscoveredNodes, []) ->
 
 -spec select_node_to_join(NodesAndProps) -> SelectedNode when
       NodesAndProps :: [node_and_props()],
-      SelectedNode :: node().
+      SelectedNode :: node() | false.
 %% @doc Selects the node to join among the sorted list of nodes.
 %%
 %% The selection is simple: we take the first entry. It corresponds to the
 %% oldest node we could reach, clustered with the greatest number of nodes.
 %%
+%% However if the node's DB layer is not ready, we return `false'. This will
+%% tell the calling function to retry the whole process.
+%%
 %% @private
 
-select_node_to_join([{Node, _Members, _StartTime} | _]) ->
+select_node_to_join([{Node, _Members, _StartTime, IsReady} | _])
+  when IsReady =/= false ->
     ?LOG_INFO(
        "Peer discovery: node '~ts' selected for auto-clustering",
        [Node],
        #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-    Node.
+    Node;
+select_node_to_join([{Node, _Members, _StartTime, false} | _]) ->
+    ?LOG_INFO(
+       "Peer discovery: node '~ts' selected for auto-clustering but its "
+       "DB layer is not ready; waiting before retrying...",
+       [Node],
+       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+    false.
 
 -spec join_selected_node(Backend, Node, NodeType) -> Ret when
       Backend :: backend(),
