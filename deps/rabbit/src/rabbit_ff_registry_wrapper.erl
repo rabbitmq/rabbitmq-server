@@ -52,7 +52,7 @@
 get(FeatureName) ->
     case rabbit_ff_registry:get(FeatureName) of
         init_required ->
-            _ = rabbit_ff_registry_factory:initialize_registry(),
+            initialize_registry(),
             get(FeatureName);
         Ret ->
             Ret
@@ -74,7 +74,7 @@ get(FeatureName) ->
 list(Which) ->
     case rabbit_ff_registry:list(Which) of
         init_required ->
-            _ = rabbit_ff_registry_factory:initialize_registry(),
+            initialize_registry(),
             list(Which);
         Ret ->
             Ret
@@ -93,7 +93,7 @@ list(Which) ->
 states() ->
     case rabbit_ff_registry:states() of
         init_required ->
-            _ = rabbit_ff_registry_factory:initialize_registry(),
+            initialize_registry(),
             states();
         Ret ->
             Ret
@@ -115,7 +115,7 @@ states() ->
 is_supported(FeatureName) ->
     case rabbit_ff_registry:is_supported(FeatureName) of
         init_required ->
-            _ = rabbit_ff_registry_factory:initialize_registry(),
+            initialize_registry(),
             is_supported(FeatureName);
         Ret ->
             Ret
@@ -137,7 +137,7 @@ is_supported(FeatureName) ->
 is_enabled(FeatureName) ->
     case rabbit_ff_registry:is_enabled(FeatureName) of
         init_required ->
-            _ = rabbit_ff_registry_factory:initialize_registry(),
+            initialize_registry(),
             is_enabled(FeatureName);
         Ret ->
             Ret
@@ -150,8 +150,22 @@ is_enabled(FeatureName) ->
 inventory() ->
     case rabbit_ff_registry:inventory() of
         init_required ->
-            _ = rabbit_ff_registry_factory:initialize_registry(),
+            initialize_registry(),
             inventory();
         Ret ->
             Ret
+    end.
+
+initialize_registry() ->
+    %% We acquire the feature flags registry reload lock here to make sure we
+    %% don't reload the registry in the middle of a cluster join. Indeed, the
+    %% registry is reset and feature flags states are copied from a remote
+    %% node. Therefore, there is a small window where the registry is not
+    %% loaded and the states on disk do not reflect the intent.
+    rabbit_ff_registry_factory:acquire_state_change_lock(),
+    try
+        _ = rabbit_ff_registry_factory:initialize_registry(),
+        ok
+    after
+        rabbit_ff_registry_factory:release_state_change_lock()
     end.
