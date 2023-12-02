@@ -74,15 +74,18 @@ stop_child({VHost, ShovelName} = Name) ->
     case get({shovel_worker_autodelete, Name}) of
         true -> ok; %% [1]
         _ ->
-            case mirrored_supervisor:terminate_child(?SUPERVISOR, id(Name)) of
+            case stop_and_delete_child(id(Name)) of
                 ok ->
-                    ok = mirrored_supervisor:delete_child(?SUPERVISOR, id(Name));
+                    ok;
                 {error, not_found} ->
-                    %% try older format, pre 3.13.0 and 3.12.8. See rabbitmq/rabbitmq-server#9894.
-                    case mirrored_supervisor:terminate_child(?SUPERVISOR, old_id(Name)) of
-                        ok ->
-                            ok = mirrored_supervisor:delete_child(?SUPERVISOR, old_id(Name));
-                        {error, not_found} ->
+                    case rabbit_khepri:is_enabled() of
+                        true ->
+                            %% Old id format is not supported by and cannot exist in Khepri
+                            ok;
+                        false ->
+                            %% try older format, pre 3.13.0 and 3.12.8.
+                            %% See rabbitmq/rabbitmq-server#9894.
+                            _ = stop_and_delete_child(old_id(Name)),
                             ok
                     end
             end,
@@ -90,6 +93,14 @@ stop_child({VHost, ShovelName} = Name) ->
     end,
     rabbit_shovel_locks:unlock(LockId),
     ok.
+
+stop_and_delete_child(Id) ->
+    case mirrored_supervisor:terminate_child(?SUPERVISOR, Id) of
+        ok ->
+            ok = mirrored_supervisor:delete_child(?SUPERVISOR, Id);
+        {error, not_found} = Error ->
+            Error
+    end.
 
 %% [1] An autodeleting worker removes its own parameter, and thus ends
 %% up here via the parameter callback. It is a transient worker that
