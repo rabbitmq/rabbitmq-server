@@ -19,6 +19,15 @@
                     "protocol": "tcp"
                 }
             ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-create-group": "true",
+                    "awslogs-group": "awslogs-ecs-peer-discovery-aws",
+                    "awslogs-region": "eu-west-1",
+                    "awslogs-stream-prefix": "PLACEHOLDER"
+                }
+            },
             "essential": true,
             "environment": [
                 {
