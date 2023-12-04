@@ -88,14 +88,17 @@ groups() ->
       [
        last_queue_confirms,
        target_queue_deleted,
-       credit_reply_quorum_queue,
        async_notify_settled_classic_queue,
        async_notify_settled_quorum_queue,
        async_notify_settled_stream,
        async_notify_unsettled_classic_queue,
        async_notify_unsettled_quorum_queue,
        async_notify_unsettled_stream,
-       link_flow_control
+       link_flow_control,
+       classic_queue_on_old_node,
+       classic_queue_on_new_node,
+       quorum_queue_on_old_node,
+       quorum_queue_on_new_node
       ]},
 
      {metrics, [shuffle],
@@ -135,15 +138,17 @@ end_per_group(_, Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(T = message_headers_conversion, Config) ->
+init_per_testcase(T, Config)
+  when T =:= message_headers_conversion orelse
+       T =:= roundtrip_with_drain_quorum_queue orelse
+       T =:= timed_get_quorum_queue ->
     case rabbit_ct_broker_helpers:rpc(
            Config, rabbit_feature_flags, is_enabled, [credit_api_v2]) of
         true ->
             rabbit_ct_helpers:testcase_started(Config, T);
         false ->
-            {skip, "Quorum queues are known to behave incorrectly with feature flag "
-             "credit_api_v2 disabled because they send a send_drained queue event "
-             "before sending all available messages."}
+            {skip, "Receiving with drain from quorum queues in credit API v1 have a known "
+             "bug that they reply with send_drained before delivering the message."}
     end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -563,9 +568,6 @@ roundtrip_with_drain(Config, QueueType, QName)
                      Session, <<"test-sender">>, Address),
     wait_for_credit(Sender),
 
-    % Create a new message using a delivery-tag, body and indicate
-    % its settlement status (true meaning no disposition confirmation
-    % will be sent by the receiver).
     OutMsg = amqp10_msg:new(<<"my-tag">>, <<"my-body">>, false),
     ok = amqp10_client:send_msg(Sender, OutMsg),
     ok = wait_for_accepts(1),
@@ -2151,61 +2153,9 @@ target_queue_deleted(Config) ->
                  amqp_channel:call(Ch, #'queue.delete'{queue = QuorumQ})),
     ok = rabbit_ct_client_helpers:close_channel(Ch).
 
-%% This test is mostly interesting in mixed version mode with feature flag
-%% consumer_tag_in_credit_reply disabled.
-credit_reply_quorum_queue(Config) ->
-    %% Place quorum queue leader on the old version node.
-    OldVersionNode = 1,
-    Ch = rabbit_ct_client_helpers:open_channel(Config, OldVersionNode),
-    QName = atom_to_binary(?FUNCTION_NAME),
-    #'queue.declare_ok'{} =  amqp_channel:call(
-                               Ch, #'queue.declare'{
-                                      queue = QName,
-                                      durable = true,
-                                      arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                                                   {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}]}),
-    %% Connect to the new node.
-    OpnConf = connection_config(Config),
-    {ok, Connection} = amqp10_client:open_connection(OpnConf),
-    {ok, Session} = amqp10_client:begin_session_sync(Connection),
-    Address = <<"/amq/queue/", QName/binary>>,
-    {ok, Sender} = amqp10_client:attach_sender_link(
-                     Session, <<"test-sender">>, Address),
-    ok = wait_for_credit(Sender),
-    {ok, Receiver} = amqp10_client:attach_receiver_link(
-                       Session,
-                       <<"test-receiver">>,
-                       Address,
-                       unsettled),
-    receive {amqp10_event, {link, Receiver, attached}} -> ok
-    after 5000 -> ct:fail("missing attached")
-    end,
-    flush(receiver_attached),
-
-    NumMsgs = 10,
-    [begin
-         Bin = integer_to_binary(N),
-         ok = amqp10_client:send_msg(Sender, amqp10_msg:new(Bin, Bin, true))
-     end || N <- lists:seq(1, NumMsgs)],
-
-    %% Grant credits to the sending queue.
-    ok = amqp10_client:flow_link_credit(Receiver, NumMsgs, never),
-
-    %% We should receive all messages.
-    Msgs = receive_messages(Receiver, NumMsgs),
-    FirstMsg = hd(Msgs),
-    LastMsg = lists:last(Msgs),
-    ?assertEqual([<<"1">>], amqp10_msg:body(FirstMsg)),
-    ?assertEqual([integer_to_binary(NumMsgs)], amqp10_msg:body(LastMsg)),
-
-    ExpectedReadyMsgs = 0,
-    ?assertEqual(#'queue.delete_ok'{message_count = ExpectedReadyMsgs},
-                 amqp_channel:call(Ch, #'queue.delete'{queue = QName})),
-    ok = rabbit_ct_client_helpers:close_channel(Ch),
-    ok = amqp10_client:close_connection(Connection).
-
 async_notify_settled_classic_queue(Config) ->
-    %% TODO require ff message_containers
+    %% TODO Bump old version in mixed version tests to 3.13.x,
+    %% require ff message_containers and always run this test case.
     case rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers) of
         ok -> async_notify(settled, <<"classic">>, Config);
         {skip, _} = Skip -> Skip
@@ -2218,7 +2168,8 @@ async_notify_settled_stream(Config) ->
     async_notify(settled, <<"stream">>, Config).
 
 async_notify_unsettled_classic_queue(Config) ->
-    %% TODO require ff message_containers
+    %% TODO Bump old version in mixed version tests to 3.13.x,
+    %% require ff message_containers and always run this test case.
     case rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers) of
         ok -> async_notify(unsettled, <<"classic">>, Config);
         {skip, _} = Skip -> Skip
@@ -2232,6 +2183,7 @@ async_notify_unsettled_stream(Config) ->
 
 %% Test asynchronous notification, figure 2.45.
 async_notify(SenderSettleMode, QType, Config) ->
+    %% Place queue leader on the old node.
     Ch = rabbit_ct_client_helpers:open_channel(Config, 1),
     QName = atom_to_binary(?FUNCTION_NAME),
     #'queue.declare_ok'{} = amqp_channel:call(
@@ -2239,7 +2191,7 @@ async_notify(SenderSettleMode, QType, Config) ->
                                      queue = QName,
                                      durable = true,
                                      arguments = [{<<"x-queue-type">>, longstr, QType}]}),
-
+    %% Connect AMQP client to the new node causing queue client to run the new code.
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
@@ -2385,12 +2337,108 @@ link_flow_control(Config) ->
     delete_queue(Config, QQ),
     delete_queue(Config, CQ).
 
+classic_queue_on_old_node(Config) ->
+    %% TODO Bump old version in mixed version tests to 3.13.x,
+    %% require ff message_containers and always run this test case.
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers) of
+        ok -> queue_and_client_different_nodes(1, 0, <<"classic">>, Config);
+        {skip, _} = Skip -> Skip
+    end.
+
+classic_queue_on_new_node(Config) ->
+    queue_and_client_different_nodes(0, 1, <<"classic">>, Config).
+
+quorum_queue_on_old_node(Config) ->
+    queue_and_client_different_nodes(1, 0, <<"quorum">>, Config).
+
+quorum_queue_on_new_node(Config) ->
+    queue_and_client_different_nodes(0, 1, <<"quorum">>, Config).
+
+%% In mixed version tests, run the queue leader with old code
+%% and queue client with new code, or vice versa.
+queue_and_client_different_nodes(QueueLeaderNode, ClientNode, QueueType, Config) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config, QueueLeaderNode),
+    QName = atom_to_binary(?FUNCTION_NAME),
+    #'queue.declare_ok'{} =  amqp_channel:call(
+                               Ch, #'queue.declare'{queue = QName,
+                                                    durable = true,
+                                                    arguments = [{<<"x-queue-type">>, longstr, QueueType}]}),
+    %% Connect AMQP client to the new node causing queue client to run the new code.
+    OpnConf = connection_config(ClientNode, Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    Address = <<"/amq/queue/", QName/binary>>,
+    {ok, Sender} = amqp10_client:attach_sender_link(
+                     Session, <<"test-sender">>, Address),
+    ok = wait_for_credit(Sender),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session,
+                       <<"test-receiver">>,
+                       Address,
+                       unsettled),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 5000 -> ct:fail("missing attached")
+    end,
+    flush(receiver_attached),
+
+    NumMsgs = 10,
+    [begin
+         Bin = integer_to_binary(N),
+         ok = amqp10_client:send_msg(Sender, amqp10_msg:new(Bin, Bin, true))
+     end || N <- lists:seq(1, NumMsgs)],
+
+    %% Grant credits to the sending queue.
+    ok = amqp10_client:flow_link_credit(Receiver, NumMsgs, never),
+
+    %% We should receive all messages.
+    Msgs = receive_messages(Receiver, NumMsgs),
+    FirstMsg = hd(Msgs),
+    LastMsg = lists:last(Msgs),
+    ?assertEqual([<<"1">>], amqp10_msg:body(FirstMsg)),
+    ?assertEqual([integer_to_binary(NumMsgs)], amqp10_msg:body(LastMsg)),
+    ok = amqp10_client_session:disposition(
+           Session,
+           receiver,
+           amqp10_msg:delivery_id(FirstMsg),
+           amqp10_msg:delivery_id(LastMsg),
+           true,
+           accepted),
+
+    CreditApiV2 = rpc(Config, rabbit_feature_flags, is_enabled, [credit_api_v2]),
+    case QueueType =:= <<"quorum">> andalso not CreditApiV2 of
+        true ->
+            ct:pal("Quorum queues in credit API v1 have a known bug that they "
+                   "reply with send_drained before delivering the message.");
+        false ->
+            %% Send another message and drain.
+            Tag = <<"tag">>,
+            Body = <<"body">>,
+            ok = amqp10_client:send_msg(Sender, amqp10_msg:new(Tag, Body, false)),
+            ok = wait_for_settlement(Tag),
+            ok = amqp10_client:flow_link_credit(Receiver, 999, never, true),
+            [Msg] = receive_messages(Receiver, 1),
+            ?assertEqual([Body], amqp10_msg:body(Msg)),
+            receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
+            after 5000 -> ct:fail("expected credit_exhausted")
+            end,
+            ok = amqp10_client:accept_msg(Receiver, Msg)
+    end,
+
+    ExpectedReadyMsgs = 0,
+    ?assertEqual(#'queue.delete_ok'{message_count = ExpectedReadyMsgs},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = QName})),
+    ok = rabbit_ct_client_helpers:close_channel(Ch),
+    ok = amqp10_client:close_connection(Connection).
+
 %% internal
 %%
 
 connection_config(Config) ->
+    connection_config(0, Config).
+
+connection_config(Node, Config) ->
     Host = ?config(rmq_hostname, Config),
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_amqp),
     #{address => Host,
       port => Port,
       container_id => <<"my container">>,

@@ -298,12 +298,11 @@ apply(Meta, #credit{credit = LinkCreditRcv, delivery_count = DeliveryCountRcv,
             #?MODULE{consumers = Cons1 = #{ConsumerId := Con2}} = State2,
             #consumer{credit = PostCred,
                       delivery_count = PostDeliveryCount} = Con2,
-            DrainedInsufficientMsgs = Drain andalso PostCred > 0,
             Available = messages_ready(State2),
             case credit_api_v2(Cfg) of
                 true ->
                     {Credit, DeliveryCount, State} =
-                    case DrainedInsufficientMsgs of
+                    case Drain andalso PostCred > 0 of
                         true ->
                             AdvancedDeliveryCount = add(PostDeliveryCount, PostCred),
                             ZeroCredit = 0,
@@ -324,11 +323,11 @@ apply(Meta, #credit{credit = LinkCreditRcv, delivery_count = DeliveryCountRcv,
                     %% We must always send a send_credit_reply because basic.credit is synchronous.
                     %% Additionally, we keep the bug of credit API v1 that we send to queue client the
                     %% send_drained reply before the delivery effects (resulting in the wrong behaviour
-                    %% that the seesion process sends to AMQP 1.0 client the FLOW before the TRANSFERs).
+                    %% that the session process sends to AMQP 1.0 client the FLOW before the TRANSFERs).
                     %% We have to keep this bug because old rabbit_fifo_client implementations expect
                     %% a send_drained Ra reply (they can't handle such a Ra effect).
                     CreditReply = {send_credit_reply, Available},
-                    case DrainedInsufficientMsgs of
+                    case Drain of
                         true ->
                             AdvancedDeliveryCount = PostDeliveryCount + PostCred,
                             Con = Con2#consumer{delivery_count = AdvancedDeliveryCount,
@@ -2115,10 +2114,9 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
                             %% recurse without consumer on queue
                             checkout_one(Meta, ExpiredMsg,
                                          InitState#?MODULE{service_queue = SQ1}, Effects1);
-                        #consumer{status = cancelled} ->
-                            checkout_one(Meta, ExpiredMsg,
-                                         InitState#?MODULE{service_queue = SQ1}, Effects1);
-                        #consumer{status = suspected_down} ->
+                        #consumer{status = S}
+                          when S =:= cancelled orelse
+                               S =:= suspected_down ->
                             checkout_one(Meta, ExpiredMsg,
                                          InitState#?MODULE{service_queue = SQ1}, Effects1);
                         #consumer{checked_out = Checked0,

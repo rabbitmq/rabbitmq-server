@@ -80,7 +80,6 @@
                            username => binary(),
                            prefetch => non_neg_integer(),
                            args => list(),
-                           %% machine version 4
                            %% set if and only if credit API v2 is in use
                            initial_delivery_count => rabbit_queue_type:delivery_count()
                           }.
