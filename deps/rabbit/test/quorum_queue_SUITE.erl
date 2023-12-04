@@ -1676,11 +1676,20 @@ declare_during_node_down(Config) ->
 
     publish(Ch, QQ),
     wait_for_messages_ready(Servers, RaName, 1),
-    SubCh = rabbit_ct_client_helpers:open_channel(Config, DownServer),
-    subscribe(SubCh, QQ, false),
-    receive_and_ack(Ch),
-    wait_for_messages_ready(Servers, RaName, 0),
-    ok.
+
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% stop here if mixexd
+            ok;
+        false ->
+            %% further assertions that we can consume from the newly
+            %% started member
+            SubCh = rabbit_ct_client_helpers:open_channel(Config, DownServer),
+            subscribe(SubCh, QQ, false),
+            receive_and_ack(Ch),
+            wait_for_messages_ready(Servers, RaName, 0),
+            ok
+    end.
 
 simple_confirm_availability_on_leader_change(Config) ->
     [Node1, Node2, _Node3] = Servers =
