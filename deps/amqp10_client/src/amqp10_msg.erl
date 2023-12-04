@@ -342,6 +342,8 @@ set_properties(Props, #amqp10_msg{properties = Current} = Msg) ->
                           Acc#'v1_0.properties'{message_id = utf8(V)};
                      (user_id, V, Acc) when is_binary(V) ->
                           Acc#'v1_0.properties'{user_id = {binary, V}};
+                     (user_id, V, Acc) when is_binary(V) orelse is_list(V) ->
+                          Acc#'v1_0.properties'{user_id = binary(V)};
                      (to, V, Acc) ->
                           Acc#'v1_0.properties'{to = utf8(V)};
                      (subject, V, Acc) ->
@@ -422,6 +424,8 @@ wrap_ap_value(true) ->
     {boolean, true};
 wrap_ap_value(false) ->
     {boolean, false};
+wrap_ap_value(F) when is_float(F) ->
+    {double, F};
 wrap_ap_value(V) when is_binary(V) ->
     utf8(V);
 wrap_ap_value(V) when is_list(V) ->
@@ -472,6 +476,8 @@ utf8(V) -> amqp10_client_types:utf8(V).
 sym(B) when is_list(B) -> {symbol, list_to_binary(B)};
 sym(B) when is_binary(B) -> {symbol, B}.
 uint(B) -> {uint, B}.
+binary(B) when is_binary(B) -> {binary, B};
+binary(B) when is_list(B) -> {binary, erlang:list_to_binary(B)}.
 
 has_value(undefined) -> false;
 has_value(_) -> true.
