@@ -239,11 +239,7 @@ start_cluster(Q) ->
                      [QuorumSize, rabbit_misc:rs(QName), Leader]),
     case rabbit_amqqueue:internal_declare(NewQ1, false) of
         {created, NewQ} ->
-            TickTimeout = application:get_env(rabbit, quorum_tick_interval,
-                                              ?TICK_TIMEOUT),
-            SnapshotInterval = application:get_env(rabbit, quorum_snapshot_interval,
-                                                   ?SNAPSHOT_INTERVAL),
-            RaConfs = [make_ra_conf(NewQ, ServerId, TickTimeout, SnapshotInterval)
+            RaConfs = [make_ra_conf(NewQ, ServerId)
                        || ServerId <- members(NewQ)],
             try erpc_call(Leader, ra, start_cluster,
                           [?RA_SYSTEM, RaConfs, ?START_CLUSTER_TIMEOUT],
@@ -625,11 +621,10 @@ recover(_Vhost, Queues) ->
     lists:foldl(
       fun (Q0, {R0, F0}) ->
          {Name, _} = amqqueue:get_pid(Q0),
+         ServerId = {Name, node()},
          QName = amqqueue:get_name(Q0),
-         Nodes = get_nodes(Q0),
-         Formatter = {?MODULE, format_ra_event, [QName]},
-         Res = case ra:restart_server(?RA_SYSTEM, {Name, node()},
-                                      #{ra_event_formatter => Formatter}) of
+         MutConf = make_mutable_config(Q0),
+         Res = case ra:restart_server(?RA_SYSTEM, ServerId, MutConf) of
                    ok ->
                        % queue was restarted, good
                        ok;
@@ -641,10 +636,7 @@ recover(_Vhost, Queues) ->
                                        [rabbit_misc:rs(QName), Err1]),
                        % queue was never started on this node
                        % so needs to be started from scratch.
-                       Machine = ra_machine(Q0),
-                       RaNodes = [{Name, Node} || Node <- Nodes],
-                       case ra:start_server(?RA_SYSTEM, Name, {Name, node()},
-                                            Machine, RaNodes) of
+                       case start_server(make_ra_conf(Q0, ServerId)) of
                            ok -> ok;
                            Err2 ->
                                rabbit_log:warning("recover: quorum queue ~w could not"
@@ -1195,11 +1187,7 @@ add_member(Q, Node, Membership, Timeout) when ?amqqueue_is_quorum(Q) ->
     %% TODO parallel calls might crash this, or add a duplicate in quorum_nodes
     ServerId = {RaName, Node},
     Members = members(Q),
-    TickTimeout = application:get_env(rabbit, quorum_tick_interval,
-                                      ?TICK_TIMEOUT),
-    SnapshotInterval = application:get_env(rabbit, quorum_snapshot_interval,
-                                           ?SNAPSHOT_INTERVAL),
-    Conf = make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership),
+    Conf = make_ra_conf(Q, ServerId, Membership),
     case ra:start_server(?RA_SYSTEM, Conf) of
         ok ->
             ServerIdSpec = maps:with([id, uid, membership], Conf),
@@ -1742,8 +1730,15 @@ members(Q) when ?amqqueue_is_quorum(Q) ->
 format_ra_event(ServerId, Evt, QRef) ->
     {'$gen_cast', {queue_event, QRef, {ServerId, Evt}}}.
 
-make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval) ->
-    make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, voter).
+make_ra_conf(Q, ServerId) ->
+    make_ra_conf(Q, ServerId, voter).
+
+make_ra_conf(Q, ServerId, Membership) ->
+    TickTimeout = application:get_env(rabbit, quorum_tick_interval,
+                                      ?TICK_TIMEOUT),
+    SnapshotInterval = application:get_env(rabbit, quorum_snapshot_interval,
+                                           ?SNAPSHOT_INTERVAL),
+    make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership).
 
 make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership) ->
     QName = amqqueue:get_name(Q),
@@ -1764,6 +1759,16 @@ make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership) ->
                                   tick_timeout => TickTimeout,
                                   machine => RaMachine,
                                   ra_event_formatter => Formatter}).
+
+make_mutable_config(Q) ->
+    QName = amqqueue:get_name(Q),
+    TickTimeout = application:get_env(rabbit, quorum_tick_interval,
+                                      ?TICK_TIMEOUT),
+    Formatter = {?MODULE, format_ra_event, [QName]},
+    #{tick_timeout => TickTimeout,
+      ra_event_formatter => Formatter}.
+
+
 
 get_nodes(Q) when ?is_amqqueue(Q) ->
     #{nodes := Nodes} = amqqueue:get_type_state(Q),
