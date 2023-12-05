@@ -88,7 +88,8 @@
                          rcv_settle_mode => rcv_settle_mode(),
                          filter => filter(),
                          properties => properties(),
-                         max_message_size => max_message_size()
+                         max_message_size => max_message_size(),
+                         handle => link_handle()
                         }.
 
 -type transfer_error() :: {error,
@@ -751,7 +752,7 @@ detach_with_error_cond(Link = #link{output_handle = OutHandle}, State, Cond) ->
     Link#link{state = detach_sent}.
 
 send_attach(Send, #{name := Name, role := Role} = Args, {FromPid, _},
-      #state{next_link_handle = OutHandle, links = Links,
+      #state{next_link_handle = OutHandle0, links = Links,
              link_index = LinkIndex} = State) ->
 
     Source = make_source(Args),
@@ -764,6 +765,16 @@ send_attach(Send, #{name := Name, role := Role} = Args, {FromPid, _},
             {{pid, Pid}, true, undefined, max_message_size(Args)};
         {sender, #{address := TargetAddr}} ->
             {TargetAddr, false, uint(?INITIAL_DELIVERY_COUNT), undefined}
+    end,
+
+    {OutHandle, NextLinkHandle} =
+    case Args of
+        #{handle := Handle} ->
+            %% Client app provided link handle.
+            %% Really only meant for integration tests.
+            {Handle, OutHandle0};
+        _ ->
+            {OutHandle0, OutHandle0 + 1}
     end,
 
     % create attach performative
@@ -791,7 +802,7 @@ send_attach(Send, #{name := Name, role := Role} = Args, {FromPid, _},
                  max_message_size = unpack(MaxMessageSize)},
 
     {State#state{links = Links#{OutHandle => Link},
-                 next_link_handle = OutHandle + 1,
+                 next_link_handle = NextLinkHandle,
                  link_index = LinkIndex#{Name => OutHandle}}, Link#link.ref}.
 
 -spec handle_session_flow(#'v1_0.flow'{}, #state{}) -> #state{}.

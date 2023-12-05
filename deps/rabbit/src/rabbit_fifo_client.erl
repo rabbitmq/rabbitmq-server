@@ -366,8 +366,6 @@ checkout(ConsumerTag, NumUnsettled, CreditMode, Meta,
                             end,
             SDels = maps:update_with(
                       ConsumerTag,
-                      %% TODO Forbid changing credit API version when detaching and attaching
-                      %% with same link handle in the same session.
                       fun (C) -> C#consumer{ack = Ack} end,
                       #consumer{last_msg_id = LastMsgId,
                                 ack = Ack,
@@ -827,10 +825,10 @@ update_consumer(Tag, LastId, DelCntIncr, Consumer, Consumers) ->
             credit_api_v2 -> credit_api_v2;
             {credit_api_v1, Count} -> {credit_api_v1, Count + DelCntIncr}
         end,
-    maps:put(Tag,
-             Consumer#consumer{last_msg_id = LastId,
-                               delivery_count = D},
-             Consumers).
+    maps:update(Tag,
+                Consumer#consumer{last_msg_id = LastId,
+                                  delivery_count = D},
+                Consumers).
 
 add_delivery_count(DelCntIncr, Tag, #state{consumer_deliveries = CDels0} = State) ->
     Con = #consumer{last_msg_id = LastMsgId} = maps:get(Tag, CDels0),

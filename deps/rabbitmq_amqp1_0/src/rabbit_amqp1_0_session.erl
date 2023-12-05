@@ -918,6 +918,19 @@ handle_control(#'v1_0.detach'{handle = Handle = ?UINT(HandleInt),
               QName = rabbit_misc:r(Vhost, queue, QNameBin),
               case rabbit_amqqueue:lookup(QName) of
                   {ok, Q} ->
+                      %%TODO Consider adding a new rabbit_queue_type:remove_consumer API that - from the point of view of
+                      %% the queue process - behaves as if our session process terminated: All messages checked out
+                      %% to this consumer should be re-queued automatically instead of us requeueing them here after cancelling
+                      %% consumption.
+                      %% For AMQP legacy (and STOMP / MQTT) consumer cancellation not requeueing messages is a good approach as
+                      %% clients may want to ack any in-flight messages.
+                      %% For AMQP however, the consuming client can stop cancellations via link-credit=0 and drain=true being
+                      %% sure that no messages are in flight before detaching the link. Hence, AMQP doesn't need the
+                      %% rabbit_queue_type:cancel API semantics.
+                      %% A rabbit_queue_type:remove_consumer API has also the advantage to simplify reasoning about clients
+                      %% first detaching and then re-attaching to the same session with the same link handle (the handle
+                      %% becomes available for re-use once a link is closed): This will result in the same consumer tag,
+                      %% and we ideally disallow "updating" an AMQP consumer.
                       case rabbit_queue_type:cancel(Q, Ctag, undefined, Username, QStates0) of
                           {ok, QStates1} ->
                               {Unsettled1, MsgIds} = remove_link_from_outgoing_unsettled_map(Ctag, Unsettled0),
@@ -2001,6 +2014,7 @@ outcomes(_) ->
 
 -spec handle_to_ctag(link_handle()) -> rabbit_types:ctag().
 handle_to_ctag(Handle) ->
+    %%TODO Can we get rid of the ctag- prefix?
     <<"ctag-", Handle:32/integer>>.
 
 -spec ctag_to_handle(rabbit_types:ctag()) -> link_handle().
