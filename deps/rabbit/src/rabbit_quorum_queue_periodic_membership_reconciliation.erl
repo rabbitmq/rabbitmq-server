@@ -101,7 +101,7 @@ handle_cast(_Msg, State) ->
 
 handle_info(?EVAL_MSG, #state{interval = Interval,
                               trigger_interval = TriggerInterval} = State) ->
-    Res = reconclitiate_quorum_queue_membership(State),
+    Res = reconciliate_quorum_queue_membership(State),
     NewTimeout = case Res of
                      noop ->
                          Interval;
@@ -125,15 +125,15 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %%----------------------------------------------------------------------------
 
-reconclitiate_quorum_queue_membership(State) ->
+reconciliate_quorum_queue_membership(State) ->
     LocalLeaders = rabbit_amqqueue:list_local_leaders(),
     ExpectedNodes = rabbit_nodes:list_members(),
     Running = rabbit_nodes:list_running(),
-    reconclitiate_quorum_members(ExpectedNodes, Running, LocalLeaders, State, noop).
+    reconciliate_quorum_members(ExpectedNodes, Running, LocalLeaders, State, noop).
 
-reconclitiate_quorum_members(_ExpectedNodes, _Running, [], _State, Result) ->
+reconciliate_quorum_members(_ExpectedNodes, _Running, [], _State, Result) ->
     Result;
-reconclitiate_quorum_members(ExpectedNodes, Running, [Q | LocalLeaders],
+reconciliate_quorum_members(ExpectedNodes, Running, [Q | LocalLeaders],
                              #state{target_group_size = TargetSize} = State,
                              OldResult) ->
     Result =
@@ -158,7 +158,7 @@ reconclitiate_quorum_members(ExpectedNodes, Running, [Q | LocalLeaders],
             _ ->
                 noop
         end,
-    reconclitiate_quorum_members(ExpectedNodes, Running, LocalLeaders, State,
+    reconciliate_quorum_members(ExpectedNodes, Running, LocalLeaders, State,
                                  update_result(OldResult, Result)).
 
 maybe_remove(_, #state{auto_remove = false}) ->
