@@ -1097,11 +1097,7 @@ add_member(Q, Node, Timeout) when ?amqqueue_is_quorum(Q) ->
     %% TODO parallel calls might crash this, or add a duplicate in quorum_nodes
     ServerId = {RaName, Node},
     Members = members(Q),
-    TickTimeout = application:get_env(rabbit, quorum_tick_interval,
-                                      ?TICK_TIMEOUT),
-    SnapshotInterval = application:get_env(rabbit, quorum_snapshot_interval,
-                                           ?SNAPSHOT_INTERVAL),
-    Conf = make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval),
+    Conf = make_ra_conf(Q, ServerId),
     case ra:start_server(?RA_SYSTEM, Conf) of
         ok ->
             case ra:add_member(Members, ServerId, Timeout) of
@@ -1602,16 +1598,13 @@ format_ra_event(ServerId, Evt, QRef) ->
     {'$gen_cast', {queue_event, QRef, {ServerId, Evt}}}.
 
 make_ra_conf(Q, ServerId) ->
-    make_ra_conf(Q, ServerId, voter).
-
-make_ra_conf(Q, ServerId, Membership) ->
     TickTimeout = application:get_env(rabbit, quorum_tick_interval,
                                       ?TICK_TIMEOUT),
     SnapshotInterval = application:get_env(rabbit, quorum_snapshot_interval,
                                            ?SNAPSHOT_INTERVAL),
-    make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership).
+    make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval).
 
-make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership) ->
+make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval) ->
     QName = amqqueue:get_name(Q),
     RaMachine = ra_machine(Q),
     [{ClusterName, _} | _] = Members = members(Q),
@@ -1619,16 +1612,16 @@ make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership) ->
     FName = rabbit_misc:rs(QName),
     Formatter = {?MODULE, format_ra_event, [QName]},
     #{cluster_name => ClusterName,
-      id => ServerId,
-      uid => UId,
-      friendly_name => FName,
-      metrics_key => QName,
-      initial_members => Members,
-      log_init_args => #{uid => UId,
-                         snapshot_interval => SnapshotInterval},
-      tick_timeout => TickTimeout,
-      machine => RaMachine,
-      ra_event_formatter => Formatter}.
+        id => ServerId,
+        uid => UId,
+        friendly_name => FName,
+        metrics_key => QName,
+        initial_members => Members,
+        log_init_args => #{uid => UId,
+                            snapshot_interval => SnapshotInterval},
+        tick_timeout => TickTimeout,
+        machine => RaMachine,
+        ra_event_formatter => Formatter}.
 
 make_mutable_config(Q) ->
     QName = amqqueue:get_name(Q),
