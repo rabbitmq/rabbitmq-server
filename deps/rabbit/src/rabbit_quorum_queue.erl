@@ -1612,16 +1612,16 @@ make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval) ->
     FName = rabbit_misc:rs(QName),
     Formatter = {?MODULE, format_ra_event, [QName]},
     #{cluster_name => ClusterName,
-        id => ServerId,
-        uid => UId,
-        friendly_name => FName,
-        metrics_key => QName,
-        initial_members => Members,
-        log_init_args => #{uid => UId,
-                            snapshot_interval => SnapshotInterval},
-        tick_timeout => TickTimeout,
-        machine => RaMachine,
-        ra_event_formatter => Formatter}.
+      id => ServerId,
+      uid => UId,
+      friendly_name => FName,
+      metrics_key => QName,
+      initial_members => Members,
+      log_init_args => #{uid => UId,
+                         snapshot_interval => SnapshotInterval},
+      tick_timeout => TickTimeout,
+      machine => RaMachine,
+      ra_event_formatter => Formatter}.
 
 make_mutable_config(Q) ->
     QName = amqqueue:get_name(Q),
