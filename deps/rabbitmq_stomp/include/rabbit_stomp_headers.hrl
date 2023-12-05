@@ -27,6 +27,7 @@
 -define(HEADER_PERSISTENT, "persistent").
 -define(HEADER_PREFETCH_COUNT, "prefetch-count").
 -define(HEADER_X_STREAM_OFFSET, "x-stream-offset").
+-define(HEADER_X_STREAM_FILTER, "x-stream-filter").
 -define(HEADER_PRIORITY, "priority").
 -define(HEADER_RECEIPT, "receipt").
 -define(HEADER_REDELIVERED, "redelivered").
@@ -50,6 +51,7 @@
 -define(HEADER_X_MESSAGE_TTL, "x-message-ttl").
 -define(HEADER_X_QUEUE_NAME, "x-queue-name").
 -define(HEADER_X_QUEUE_TYPE, "x-queue-type").
+-define(HEADER_X_STREAM_FILTER_SIZE_BYTES, "x-stream-filter-size-bytes").
 
 -define(MESSAGE_ID_SEPARATOR, "@@").
 
@@ -67,7 +69,8 @@
                            ?HEADER_X_MAX_LENGTH_BYTES,
                            ?HEADER_X_MAX_PRIORITY,
                            ?HEADER_X_MESSAGE_TTL,
-                           ?HEADER_X_QUEUE_TYPE
+                           ?HEADER_X_QUEUE_TYPE,
+                           ?HEADER_X_STREAM_FILTER_SIZE_BYTES
                           ]).
 
 -define(HEADER_PARAMS, [
