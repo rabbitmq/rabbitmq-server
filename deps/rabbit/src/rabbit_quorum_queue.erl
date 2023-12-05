@@ -1097,15 +1097,11 @@ add_member(Q, Node, Timeout) when ?amqqueue_is_quorum(Q) ->
     %% TODO parallel calls might crash this, or add a duplicate in quorum_nodes
     ServerId = {RaName, Node},
     Members = members(Q),
-<<<<<<< HEAD
     TickTimeout = application:get_env(rabbit, quorum_tick_interval,
                                       ?TICK_TIMEOUT),
     SnapshotInterval = application:get_env(rabbit, quorum_snapshot_interval,
                                            ?SNAPSHOT_INTERVAL),
     Conf = make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval),
-=======
-    Conf = make_ra_conf(Q, ServerId, Membership),
->>>>>>> ddf896e4e4 (QQ: ensure members that are started late have right config.)
     case ra:start_server(?RA_SYSTEM, Conf) of
         ok ->
             case ra:add_member(Members, ServerId, Timeout) of
@@ -1605,9 +1601,6 @@ members(Q) when ?amqqueue_is_quorum(Q) ->
 format_ra_event(ServerId, Evt, QRef) ->
     {'$gen_cast', {queue_event, QRef, {ServerId, Evt}}}.
 
-<<<<<<< HEAD
-make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval) ->
-=======
 make_ra_conf(Q, ServerId) ->
     make_ra_conf(Q, ServerId, voter).
 
@@ -1619,7 +1612,6 @@ make_ra_conf(Q, ServerId, Membership) ->
     make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership).
 
 make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership) ->
->>>>>>> ddf896e4e4 (QQ: ensure members that are started late have right config.)
     QName = amqqueue:get_name(Q),
     RaMachine = ra_machine(Q),
     [{ClusterName, _} | _] = Members = members(Q),
