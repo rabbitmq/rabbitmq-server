@@ -28,6 +28,7 @@
 -define(HEADER_PREFETCH_COUNT, "prefetch-count").
 -define(HEADER_X_STREAM_OFFSET, "x-stream-offset").
 -define(HEADER_X_STREAM_FILTER, "x-stream-filter").
+-define(HEADER_X_STREAM_MATCH_UNFILTERED, "x-stream-match-unfiltered").
 -define(HEADER_PRIORITY, "priority").
 -define(HEADER_RECEIPT, "receipt").
 -define(HEADER_REDELIVERED, "redelivered").
