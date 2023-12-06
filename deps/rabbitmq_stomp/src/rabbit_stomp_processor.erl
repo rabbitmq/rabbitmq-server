@@ -717,7 +717,9 @@ do_subscribe(Destination, DestHdr, Frame,
     end.
 
 subscribe_arguments(Frame) ->
-    subscribe_arguments([?HEADER_X_STREAM_OFFSET, ?HEADER_X_STREAM_FILTER], Frame, []).
+    subscribe_arguments([?HEADER_X_STREAM_OFFSET,
+                         ?HEADER_X_STREAM_FILTER,
+                         ?HEADER_X_STREAM_MATCH_UNFILTERED], Frame, []).
 
 subscribe_arguments([], _Frame , Acc) ->
     Acc;
@@ -731,7 +733,7 @@ subscribe_argument(?HEADER_X_STREAM_OFFSET, Frame, Acc) ->
         not_found ->
             Acc;
         {OffsetType, OffsetValue} ->
-            [{<<"x-stream-offset">>, OffsetType, OffsetValue}] ++ Acc
+            [{list_to_binary(?HEADER_X_STREAM_OFFSET), OffsetType, OffsetValue}] ++ Acc
     end;
 subscribe_argument(?HEADER_X_STREAM_FILTER, Frame, Acc) ->
     StreamFilter = rabbit_stomp_frame:stream_filter_header(Frame),
@@ -739,7 +741,15 @@ subscribe_argument(?HEADER_X_STREAM_FILTER, Frame, Acc) ->
         not_found ->
             Acc;
         {FilterType, FilterValue} ->
-            [{<<"x-stream-filter">>, FilterType, FilterValue}] ++ Acc
+            [{list_to_binary(?HEADER_X_STREAM_FILTER), FilterType, FilterValue}] ++ Acc
+    end;
+subscribe_argument(?HEADER_X_STREAM_MATCH_UNFILTERED, Frame, Acc) ->
+    MatchUnfiltered = rabbit_stomp_frame:boolean_header(Frame, ?HEADER_X_STREAM_MATCH_UNFILTERED),
+    case MatchUnfiltered of
+        {ok, MU} ->
+            [{list_to_binary(?HEADER_X_STREAM_MATCH_UNFILTERED), bool, MU}] ++ Acc;
+        not_found ->
+            Acc
     end.
 
 check_subscription_access(Destination = {topic, _Topic},
