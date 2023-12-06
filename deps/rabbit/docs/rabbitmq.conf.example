@@ -1037,7 +1037,7 @@
 ##
 # auth_ldap.timeout = infinity
 
-## Or number
+## Or a number
 # auth_ldap.timeout = 500
 
 ## Enable logging of LDAP queries.
@@ -1053,6 +1053,39 @@
 ## Also can be true or network
 # auth_ldap.log = true
 # auth_ldap.log = network
+
+## Client TLS settings for LDAP connections
+##
+
+## enables TLS for connections to the LDAP server
+# auth_ldap.use_ssl   = true
+
+## local filesystem path to a CA certificate bundle file
+# auth_ldap.ssl_options.cacertfile = /path/to/ca_certificate.pem
+
+## local filesystem path to a client certificate file
+# auth_ldap.ssl_options.certfile = /path/to/client_certfile.pem
+
+## local filesystem path to a client private key file
+# auth_ldap.ssl_options.keyfile = /path/to/client_key.pem
+
+## Sets Server Name Indication for LDAP connections.
+## If an LDAP server host is availble via multiple domain names, set this value
+## to the preferred domain name target LDAP server
+# auth_ldap.ssl_options.sni = ldap.identity.eng.megacorp.local
+
+## take wildcards into account when performing hostname verification
+# auth_ldap.ssl_options.hostname_verification = wildcard
+
+## enables peer certificate chain verification
+# auth_ldap.ssl_options.verify = verify_peer
+
+## disables peer certificate chain verification
+# auth_ldap.ssl_options.verify = verify_none
+
+## if target LDAP server does not present a certificate, should the connection be aborted?
+# auth_ldap.ssl_options.fail_if_no_peer_cert = true
+
 
 ##
 ## Authentication
