@@ -983,7 +983,7 @@ which_module(3) -> ?MODULE.
                capacity :: term(),
                gc = #aux_gc{} :: #aux_gc{},
                tick_pid,
-               unused2}).
+               cache = #{} :: map()}).
 
 init_aux(Name) when is_atom(Name) ->
     %% TODO: catch specific exception throw if table already exists
@@ -1102,21 +1102,31 @@ handle_aux(_RaState, cast, tick, #?AUX{name = Name,
 handle_aux(_RaState, cast, eol, #?AUX{name = Name} = Aux, Log, _) ->
     ets:delete(rabbit_fifo_usage, Name),
     {no_reply, Aux, Log};
-handle_aux(_RaState, {call, _From}, oldest_entry_timestamp, Aux,
+handle_aux(_RaState, {call, _From}, oldest_entry_timestamp,
+           #?AUX{cache = Cache} = Aux0,
            Log0, #?MODULE{} = State) ->
-    {Ts, Log} = case smallest_raft_index(State) of
-                    %% if there are no entries, we return current timestamp
-                    %% so that any previously obtained entries are considered
-                    %% older than this
-                    undefined ->
-                        {erlang:system_time(millisecond), Log0};
-                    Idx when is_integer(Idx) ->
-                        %% TODO: make more defensive to avoid potential crash
-                        {{_, _, {_, Meta, _, _}}, Log1} = ra_log:fetch(Idx, Log0),
-                        #{ts := Timestamp} = Meta,
-                        {Timestamp, Log1}
-                end,
-    {reply, {ok, Ts}, Aux, Log};
+    {CachedIdx, CachedTs} = maps:get(oldest_entry, Cache, {undefined, undefined}),
+    case smallest_raft_index(State) of
+        %% if there are no entries, we return current timestamp
+        %% so that any previously obtained entries are considered
+        %% older than this
+        undefined ->
+            Aux1 = Aux0#?AUX{cache = maps:remove(oldest_entry, Cache)},
+            {reply, {ok, erlang:system_time(millisecond)}, Aux1, Log0};
+        CachedIdx ->
+            %% cache hit
+            {reply, {ok, CachedTs}, Aux0, Log0};
+        Idx when is_integer(Idx) ->
+            case ra_log:fetch(Idx, Log0) of
+                {{_, _, {_, #{ts := Timestamp}, _, _}}, Log1} ->
+                    Aux1 = Aux0#?AUX{cache = Cache#{oldest_entry =>
+                                                    {Idx, Timestamp}}},
+                    {reply, {ok, Timestamp}, Aux1, Log1};
+                {undefined, Log1} ->
+                    %% fetch failed
+                    {reply, {error, failed_to_get_timestamp}, Aux0, Log1}
+            end
+    end;
 handle_aux(_RaState, {call, _From}, {peek, Pos}, Aux0,
            Log0, MacState) ->
     case rabbit_fifo:query_peek(Pos, MacState) of

@@ -156,6 +156,7 @@ all_tests() ->
      delete_if_unused,
      queue_ttl,
      peek,
+     oldest_entry_timestamp,
      peek_with_wrong_queue_type,
      message_ttl,
      message_ttl_policy,
@@ -2727,6 +2728,45 @@ peek(Config) ->
                                               peek, [3, QName])),
 
     wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
+    ok.
+
+oldest_entry_timestamp(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-max-in-memory-length">>, long, 2}])),
+
+    Msg1 = <<"msg1">>,
+    VHost = <<"%2F">>,
+    ServerId = binary_to_atom(<<VHost/binary, "_", QQ/binary>>, utf8),
+
+    ?assertMatch({ok, Ts} when is_integer(Ts),
+                 rabbit_ct_broker_helpers:rpc(Config, 0, ra,
+                                              aux_command,
+                                              [ServerId, oldest_entry_timestamp])),
+    publish(Ch, QQ, Msg1),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
+
+    ?assertMatch({ok, Ts} when is_integer(Ts),
+                 rabbit_ct_broker_helpers:rpc(Config, 0, ra,
+                                              aux_command,
+                                              [ServerId, oldest_entry_timestamp])),
+    ?assertMatch({ok, Ts} when is_integer(Ts),
+                 rabbit_ct_broker_helpers:rpc(Config, 0, ra,
+                                              aux_command,
+                                              [ServerId, oldest_entry_timestamp])),
+
+    {'queue.purge_ok', 1} = amqp_channel:call(Ch, #'queue.purge'{queue = QQ}),
+    Now = erlang:system_time(millisecond),
+    timer:sleep(100),
+    ?assertMatch({ok, Ts2} when Ts2 > Now,
+                 rabbit_ct_broker_helpers:rpc(Config, 0, ra,
+                                              aux_command,
+                                              [ServerId, oldest_entry_timestamp])),
+
     ok.
 
 -define(STATUS_MATCH(N, T),
