@@ -16,7 +16,9 @@
          is_authorized_monitor/2, is_authorized_policies/2,
          is_authorized_vhost_visible/2,
          is_authorized_vhost_visible_for_monitoring/2,
-         is_authorized_global_parameters/2]).
+         is_authorized_global_parameters/2,
+         is_authorized_vhost_and_has_resource_permission/4
+]).
 -export([user/1]).
 -export([bad_request/3, service_unavailable/3, bad_request_exception/4, internal_server_error/4,
          id/2, parse_bool/1, parse_int/1, redirect_to_home/3]).
@@ -119,6 +121,10 @@ is_authorized_vhost_visible_for_monitoring(ReqData, Context) ->
     rabbit_web_dispatch_access_control:is_authorized_vhost_visible_for_monitoring(ReqData,
                                                                         Context,
                                                                         auth_config()).
+
+is_authorized_vhost_and_has_resource_permission(ReqData, Context, Resource, Permission) ->
+    rabbit_web_dispatch_access_control:is_authorized_vhost_and_has_resource_permission(
+        ReqData, Context, Resource, Permission, auth_config()).
 
 auth_config() ->
     BasicAuthEnabled = not get_bool_env(rabbitmq_management, disable_basic_auth, false),

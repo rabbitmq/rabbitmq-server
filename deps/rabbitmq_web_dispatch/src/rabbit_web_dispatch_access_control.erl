@@ -17,7 +17,9 @@
          is_authorized_monitor/3, is_authorized_policies/3,
          is_authorized_vhost_visible/3,
          is_authorized_vhost_visible_for_monitoring/3,
-         is_authorized_global_parameters/3]).
+         is_authorized_global_parameters/3,
+         is_authorized_vhost_and_has_resource_permission/5
+]).
 
 -export([list_visible_vhosts/1, list_visible_vhosts_names/1, list_login_vhosts/2]).
 -export([id/2]).
@@ -176,12 +178,12 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, AuthConfig, R
     end.
 
 
-%% Used for connections / channels. A normal user can only see / delete
+%% Used for connections and channels. A normal user can only see / delete
 %% their own stuff. Monitors can see other users' and delete their
 %% own. Admins can do it all.
 is_authorized_user(ReqData, Context, Item, AuthConfig) ->
     is_authorized(ReqData, Context,
-                  <<"User not authorised to access object">>,
+                  <<"User not authorised to access the resource(s)">>,
                   fun(#user{username = Username, tags = Tags}) ->
                           case cowboy_req:method(ReqData) of
                               <<"DELETE">> -> is_admin(Tags);
@@ -190,11 +192,11 @@ is_authorized_user(ReqData, Context, Item, AuthConfig) ->
                   end,
                   AuthConfig).
 
-%% For policies / parameters. Like is_authorized_vhost but you have to
+%% For policies and parameters. Like is_authorized_vhost but you have to
 %% be a policymaker.
 is_authorized_policies(ReqData, Context, AuthConfig) ->
     is_authorized(ReqData, Context,
-                  <<"User not authorised to access object">>,
+                  <<"User not authorised to access the resource(s)">>,
                   fun(User = #user{tags = Tags}) ->
                           is_admin(Tags) orelse
                                            (is_policymaker(Tags) andalso
@@ -210,6 +212,23 @@ is_authorized_global_parameters(ReqData, Context, AuthConfig) ->
                            is_policymaker(Tags)
                   end,
                   AuthConfig).
+
+is_authorized_vhost_and_has_resource_permission(ReqData, Context, Resource, Permission, AuthConfig) ->
+    is_authorized(ReqData, Context,
+                  <<"User not authorised to access this resource">>,
+                  fun(User) ->
+                      try
+                          AuthzData = get_authz_data_as_map(ReqData),
+                          ok =:= rabbit_access_control:check_resource_access(User, Resource, Permission, AuthzData)
+                      catch
+                          exit:Err:_Stacktrace ->
+                              #amqp_error{explanation = Msg} = Err,
+                              _ = rabbit_log:error(Msg),
+                              false
+                      end
+                  end,
+                  AuthConfig).
+
 
 vhost_from_headers(ReqData) ->
     case cowboy_req:header(<<"x-vhost">>, ReqData) of
@@ -263,6 +282,9 @@ get_authz_data(ReqData) ->
     {PeerAddress, _PeerPort} = cowboy_req:peer(ReqData),
     {ip, PeerAddress}.
 
+get_authz_data_as_map(ReqData) ->
+    {PeerAddress, _PeerPort} = cowboy_req:peer(ReqData),
+    #{ip => PeerAddress}.
 
 not_authorised(Reason, ReqData, Context) ->
     %% TODO: consider changing to 403 in 4.0
