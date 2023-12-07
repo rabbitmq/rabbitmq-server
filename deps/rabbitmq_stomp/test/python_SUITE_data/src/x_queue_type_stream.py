@@ -27,6 +27,8 @@ class TestUserGeneratedQueueName(base.BaseTest):
                     'x-queue-type': 'stream',
                     'x-max-age' : '10h',
                     'x-stream-max-segment-size-bytes' : 1048576,
+                    'x-stream-filter-size-bytes' : 32,
+                    'x-stream-match-unfiltered' : True,
                     'durable': True,
                     'auto-delete': False,
                     'id': 1234,

@@ -676,13 +676,7 @@ do_subscribe(Destination, DestHdr, Frame,
                     {stop, normal, close_connection(State)};
                 error ->
                     ExchangeAndKey = parse_routing(Destination, DfltTopicEx),
-                    StreamOffset = rabbit_stomp_frame:stream_offset_header(Frame, undefined),
-                    Arguments = case StreamOffset of
-                                    undefined ->
-                                        [];
-                                    {Type, Value} ->
-                                        [{<<"x-stream-offset">>, Type, Value}]
-                                end,
+                    Arguments = subscribe_arguments(Frame),
                     try
                         amqp_channel:subscribe(Channel,
                                                #'basic.consume'{
@@ -720,6 +714,42 @@ do_subscribe(Destination, DestHdr, Frame,
             end;
         {error, _} = Err ->
             Err
+    end.
+
+subscribe_arguments(Frame) ->
+    subscribe_arguments([?HEADER_X_STREAM_OFFSET,
+                         ?HEADER_X_STREAM_FILTER,
+                         ?HEADER_X_STREAM_MATCH_UNFILTERED], Frame, []).
+
+subscribe_arguments([], _Frame , Acc) ->
+    Acc;
+subscribe_arguments([K | T], Frame, Acc0) ->
+    Acc1 = subscribe_argument(K, Frame, Acc0),
+    subscribe_arguments(T, Frame, Acc1).
+
+subscribe_argument(?HEADER_X_STREAM_OFFSET, Frame, Acc) ->
+    StreamOffset = rabbit_stomp_frame:stream_offset_header(Frame),
+    case StreamOffset of
+        not_found ->
+            Acc;
+        {OffsetType, OffsetValue} ->
+            [{list_to_binary(?HEADER_X_STREAM_OFFSET), OffsetType, OffsetValue}] ++ Acc
+    end;
+subscribe_argument(?HEADER_X_STREAM_FILTER, Frame, Acc) ->
+    StreamFilter = rabbit_stomp_frame:stream_filter_header(Frame),
+    case StreamFilter of
+        not_found ->
+            Acc;
+        {FilterType, FilterValue} ->
+            [{list_to_binary(?HEADER_X_STREAM_FILTER), FilterType, FilterValue}] ++ Acc
+    end;
+subscribe_argument(?HEADER_X_STREAM_MATCH_UNFILTERED, Frame, Acc) ->
+    MatchUnfiltered = rabbit_stomp_frame:boolean_header(Frame, ?HEADER_X_STREAM_MATCH_UNFILTERED),
+    case MatchUnfiltered of
+        {ok, MU} ->
+            [{list_to_binary(?HEADER_X_STREAM_MATCH_UNFILTERED), bool, MU}] ++ Acc;
+        not_found ->
+            Acc
     end.
 
 check_subscription_access(Destination = {topic, _Topic},

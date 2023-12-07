@@ -39,7 +39,8 @@ all() ->
     header_value_with_colon,
     headers_escaping_roundtrip,
     headers_escaping_roundtrip_without_trailing_lf,
-    stream_offset_header
+    stream_offset_header,
+    stream_filter_header
     ].
 
 parse_simple_frame(_) ->
@@ -170,15 +171,33 @@ stream_offset_header(_) ->
         {{"x-stream-offset", "next"}, {longstr, <<"next">>}},
         {{"x-stream-offset", "offset=5000"}, {long, 5000}},
         {{"x-stream-offset", "timestamp=1000"}, {timestamp, 1000}},
-        {{"x-stream-offset", "foo"}, undefined},
-        {{"some-header", "some value"}, undefined}
+        {{"x-stream-offset", "foo"}, not_found},
+        {{"some-header", "some value"}, not_found}
     ],
 
     lists:foreach(fun({Header, Expected}) ->
         ?assertEqual(
             Expected,
-            rabbit_stomp_frame:stream_offset_header(#stomp_frame{headers = [Header]}, undefined)
+            rabbit_stomp_frame:stream_offset_header(#stomp_frame{headers = [Header]})
             )
+    end, TestCases).
+
+stream_filter_header(_) ->
+    TestCases = [
+        {{"x-stream-filter", "banana"}, {array, [{longstr, <<"banana">>}]}},
+        {{"x-stream-filter", "banana,apple"}, {array, [{longstr, <<"banana">>},
+                                                       {longstr, <<"apple">>}]}},
+         {{"x-stream-filter", "banana,apple,orange"}, {array, [{longstr, <<"banana">>},
+                                                               {longstr, <<"apple">>},
+                                                               {longstr, <<"orange">>}]}},
+        {{"some-header", "some value"}, not_found}
+    ],
+
+    lists:foreach(fun({Header, Expected}) ->
+        ?assertEqual(
+            Expected,
+            rabbit_stomp_frame:stream_filter_header(#stomp_frame{headers = [Header]})
+        )
     end, TestCases).
 
 test_frame_serialization(Expected, TrailingLF) ->

@@ -15,7 +15,7 @@
          boolean_header/2, boolean_header/3,
          integer_header/2, integer_header/3,
          binary_header/2, binary_header/3]).
--export([stream_offset_header/2]).
+-export([stream_offset_header/1, stream_filter_header/1]).
 -export([serialize/1, serialize/2]).
 
 initial_state() -> none.
@@ -211,20 +211,33 @@ binary_header(F, K) ->
 
 binary_header(F, K, D) -> default_value(binary_header(F, K), D).
 
-stream_offset_header(F, D) ->
-    case binary_header(F, ?HEADER_X_STREAM_OFFSET, D) of
-        <<"first">> ->
+stream_offset_header(F) ->
+    case binary_header(F, ?HEADER_X_STREAM_OFFSET) of
+        {ok, <<"first">>} ->
             {longstr, <<"first">>};
-        <<"last">> ->
+        {ok, <<"last">>} ->
             {longstr, <<"last">>};
-        <<"next">> ->
+        {ok, <<"next">>} ->
             {longstr, <<"next">>};
-        <<"offset=", OffsetValue/binary>> ->
+        {ok, <<"offset=", OffsetValue/binary>>} ->
             {long, binary_to_integer(OffsetValue)};
-        <<"timestamp=", TimestampValue/binary>> ->
+        {ok, <<"timestamp=", TimestampValue/binary>>} ->
             {timestamp, binary_to_integer(TimestampValue)};
         _ ->
-            D
+            not_found
+    end.
+
+stream_filter_header(F) ->
+    case binary_header(F, ?HEADER_X_STREAM_FILTER) of
+        {ok, Str} ->
+            {array, lists:reverse(
+                      lists:foldl(fun(V, Acc) ->
+                                          [{longstr, V}] ++ Acc
+                                  end,
+                                  [],
+                                  binary:split(Str, <<",">>, [global])))};
+        not_found ->
+            not_found
     end.
 
 serialize(Frame) ->

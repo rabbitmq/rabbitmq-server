@@ -34,7 +34,8 @@ groups() ->
         delete_queue_subscribe,
         temp_destination_queue,
         temp_destination_in_send,
-        blank_destination_in_send
+        blank_destination_in_send,
+        stream_filtering
     ],
 
     [{version_to_group_name(V), [sequence], Tests}
@@ -102,6 +103,13 @@ init_per_testcase0(publish_unauthorized_error, Config) ->
     StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     {ok, ClientFoo} = rabbit_stomp_client:connect(Version, "user", "pass", StompPort),
     rabbit_ct_helpers:set_config(Config, [{client_foo, ClientFoo}]);
+init_per_testcase0(stream_filtering, Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "mixed version clusters are not supported for stream filtering"};
+        _ ->
+            Config
+    end;
 init_per_testcase0(_, Config) ->
     Config.
 
@@ -309,6 +317,162 @@ blank_destination_in_send(Config) ->
     {ok, _Client1, Hdrs, _} = stomp_receive(Client, "ERROR"),
     "Invalid destination" = proplists:get_value("message", Hdrs),
     ok.
+
+stream_filtering(Config) ->
+    Version = ?config(version, Config),
+    Client = ?config(stomp_client, Config),
+    Stream = atom_to_list(?FUNCTION_NAME) ++ "-" ++ integer_to_list(rand:uniform(10000)),
+    %% subscription just to create the stream from STOMP
+    SubDestination = "/topic/stream-queue-test",
+    rabbit_stomp_client:send(
+      Client, "SUBSCRIBE",
+      [{"destination", SubDestination},
+       {"receipt", "foo"},
+       {"x-queue-name", Stream},
+       {"x-queue-type", "stream"},
+       {?HEADER_X_STREAM_FILTER_SIZE_BYTES, "32"},
+       {"durable", "true"},
+       {"auto-delete", "false"},
+       {"id", "1234"},
+       {"prefetch-count", "1"},
+       {"ack", "client"}]),
+    {ok, Client1, _, _} = stomp_receive(Client, "RECEIPT"),
+    rabbit_stomp_client:send(
+      Client1, "UNSUBSCRIBE", [{"destination", SubDestination},
+                               {"id", "1234"},
+                               {"receipt", "bar"}]),
+    {ok, Client2, _, _} = stomp_receive(Client1, "RECEIPT"),
+
+    %% we are going to publish several waves of messages with and without filter values.
+    %% we will then create subscriptions with various filter options
+    %% and make sure we receive only what we asked for and not all the messages.
+
+    StreamDestination = "/amq/queue/" ++ Stream,
+    %% logic to publish a wave of messages with or without a filter value
+    WaveCount = 1000,
+    Publish =
+    fun(C, FilterValue) ->
+            lists:foldl(fun(Seq, C0) ->
+                                Headers0 = [{"destination", StreamDestination},
+                                            {"receipt", integer_to_list(Seq)}],
+                                Headers = case FilterValue of
+                                              undefined ->
+                                                  Headers0;
+                                              _ ->
+                                                  [{"x-stream-filter-value", FilterValue}] ++ Headers0
+                                          end,
+                                rabbit_stomp_client:send(
+                                  C0, "SEND", Headers, ["hello"]),
+                                {ok, C1, _, _} = stomp_receive(C0, "RECEIPT"),
+                                C1
+                        end, C, lists:seq(1, WaveCount))
+    end,
+    %% publishing messages with the "apple" filter value
+    Client3 = Publish(Client2, "apple"),
+    %% publishing messages with no filter value
+    Client4 = Publish(Client3, undefined),
+    %% publishing messages with the "orange" filter value
+    Client5 = Publish(Client4, "orange"),
+
+    %% filtering on "apple"
+    rabbit_stomp_client:send(
+      Client5, "SUBSCRIBE",
+      [{"destination", StreamDestination},
+       {"id", "0"},
+       {"ack", "client"},
+       {"prefetch-count", "1"},
+       {"x-stream-filter", "apple"},
+       {"x-stream-offset", "first"}]),
+    {Client6, AppleMessages} = stomp_receive_messages(Client5, Version),
+    %% we should get less than all the waves combined
+    ?assert(length(AppleMessages) < WaveCount * 3),
+    %% client-side filtering
+    AppleFilteredMessages =
+    lists:filter(fun(H) ->
+                         proplists:get_value("x-stream-filter-value", H) =:= "apple"
+                 end, AppleMessages),
+    %% we should have only the "apple" messages
+    ?assert(length(AppleFilteredMessages) =:= WaveCount),
+    rabbit_stomp_client:send(
+      Client6, "UNSUBSCRIBE", [{"destination", StreamDestination},
+                               {"id", "0"},
+                               {"receipt", "bar"}]),
+    {ok, Client7, _, _} = stomp_receive(Client6, "RECEIPT"),
+
+    %% filtering on "apple" and "orange"
+    rabbit_stomp_client:send(
+      Client7, "SUBSCRIBE",
+      [{"destination", StreamDestination},
+       {"id", "0"},
+       {"ack", "client"},
+       {"prefetch-count", "1"},
+       {"x-stream-filter", "apple,orange"},
+       {"x-stream-offset", "first"}]),
+    {Client8, AppleOrangeMessages} = stomp_receive_messages(Client7, Version),
+    %% we should get less than all the waves combined
+    ?assert(length(AppleOrangeMessages) < WaveCount * 3),
+    %% client-side filtering
+    AppleOrangeFilteredMessages =
+    lists:filter(fun(H) ->
+                         proplists:get_value("x-stream-filter-value", H) =:= "apple" orelse
+                         proplists:get_value("x-stream-filter-value", H) =:= "orange"
+                 end, AppleOrangeMessages),
+    %% we should have only the "apple" and "orange" messages
+    ?assert(length(AppleOrangeFilteredMessages) =:= WaveCount * 2),
+    rabbit_stomp_client:send(
+      Client8, "UNSUBSCRIBE", [{"destination", StreamDestination},
+                               {"id", "0"},
+                               {"receipt", "bar"}]),
+    {ok, Client9, _, _} = stomp_receive(Client8, "RECEIPT"),
+
+    %% filtering on "apple" and messages without a filter value
+    rabbit_stomp_client:send(
+      Client9, "SUBSCRIBE",
+      [{"destination", StreamDestination},
+       {"id", "0"},
+       {"ack", "client"},
+       {"prefetch-count", "1"},
+       {"x-stream-filter", "apple"},
+       {"x-stream-match-unfiltered", "true"},
+       {"x-stream-offset", "first"}]),
+    {Client10, AppleUnfilteredMessages} = stomp_receive_messages(Client9, Version),
+    %% we should get less than all the waves combined
+    ?assert(length(AppleUnfilteredMessages) < WaveCount * 3),
+    %% client-side filtering
+    AppleUnfilteredFilteredMessages =
+    lists:filter(fun(H) ->
+                         proplists:get_value("x-stream-filter-value", H) =:= "apple" orelse
+                         proplists:get_value("x-stream-filter-value", H) =:= undefined
+                 end, AppleUnfilteredMessages),
+    %% we should have only the "apple" messages and messages without a filter value
+    ?assert(length(AppleUnfilteredFilteredMessages) =:= WaveCount * 2),
+    rabbit_stomp_client:send(
+      Client10, "UNSUBSCRIBE", [{"destination", StreamDestination},
+                               {"id", "0"},
+                               {"receipt", "bar"}]),
+    {ok, _, _, _} = stomp_receive(Client10, "RECEIPT"),
+
+    Channel = ?config(amqp_channel, Config),
+    #'queue.delete_ok'{} = amqp_channel:call(Channel,
+                                             #'queue.delete'{queue = list_to_binary(Stream)}),
+    ok.
+
+stomp_receive_messages(Client, Version) ->
+    stomp_receive_messages(Client, [], Version).
+
+stomp_receive_messages(Client, Acc, Version) ->
+    try rabbit_stomp_client:recv(Client) of
+        {#stomp_frame{command = "MESSAGE",
+                      headers = Headers}, Client1} ->
+        MsgHeader = rabbit_stomp_util:msg_header_name(Version),
+        AckValue  = proplists:get_value(MsgHeader, Headers),
+        AckHeader = rabbit_stomp_util:ack_header_name(Version),
+        rabbit_stomp_client:send(Client1, "ACK", [{AckHeader, AckValue}]),
+        stomp_receive_messages(Client1, [Headers] ++ Acc, Version)
+    catch
+      error:{badmatch, {error, timeout}} ->
+            {Client, Acc}
+    end.
 
 stomp_receive(Client, Command) ->
     {#stomp_frame{command     = Command,
