@@ -165,7 +165,7 @@ get_all_in_mnesia() ->
     rabbit_mnesia:dirty_read_all(?MNESIA_TABLE).
 
 -spec get_all(VHostName, Comp) -> Ret when
-      VHostName :: vhost:name() | '_',
+      VHostName :: vhost:name() | '_' | 'undefined',
       Comp :: binary() | '_',
       Ret :: [#runtime_parameters{}].
 %% @doc Gets all non-global runtime parameters matching the given virtual host
