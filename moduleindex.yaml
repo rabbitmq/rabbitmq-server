@@ -803,6 +803,7 @@ rabbit:
 - rabbit_prelaunch_feature_flags
 - rabbit_prelaunch_logging
 - rabbit_prequeue
+- rabbit_presence
 - rabbit_priority_queue
 - rabbit_process
 - rabbit_queue_consumers

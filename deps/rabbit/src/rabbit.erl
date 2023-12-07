@@ -229,6 +229,13 @@
                     {requires,    [core_initialized, recovery]},
                     {enables,     routing_ready}]}).
 
+-rabbit_boot_step({rabbit_presence,
+                   [{description, "rabbit node presence server"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_presence]}},
+                    {requires,    [core_initialized, recovery]},
+                    {enables,     routing_ready}]}).
+
 -rabbit_boot_step({rabbit_looking_glass,
                    [{description, "Looking Glass tracer and profiler"},
                     {mfa,         {rabbit_looking_glass, boot, []}},
