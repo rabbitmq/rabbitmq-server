@@ -7,6 +7,9 @@
 
 -module(rabbit_boot_steps).
 
+-include_lib("kernel/include/logger.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
+
 -export([run_boot_steps/0, run_boot_steps/1, run_cleanup_steps/1]).
 -export([find_steps/0, find_steps/1]).
 
@@ -31,7 +34,14 @@ find_steps() ->
     find_steps(loaded_applications()).
 
 find_steps(Apps) ->
-    All = sort_boot_steps(rabbit_misc:all_module_attributes(rabbit_boot_step)),
+    T0 = erlang:timestamp(),
+    AttrsPerApp = rabbit_misc:rabbitmq_related_module_attributes(rabbit_boot_step),
+    T1 = erlang:timestamp(),
+    ?LOG_DEBUG(
+      "Boot steps: time to find boot steps: ~tp us",
+      [timer:now_diff(T1, T0)],
+      #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    All = sort_boot_steps(AttrsPerApp),
     [Step || {App, _, _} = Step <- All, lists:member(App, Apps)].
 
 run_step(Attributes, AttributeName) ->
