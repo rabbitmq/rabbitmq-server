@@ -988,6 +988,20 @@ is_not_supported(Ret) ->
 classic_config_discovery_node_list(Config) ->
     [Rabbit, Hare] = cluster_members(Config),
 
+    %% We restart the node that is reconfigured during this testcase to make
+    %% sure it has the latest start time. This ensures that peer discovery will
+    %% always select the other node as the one to join.
+    %%
+    %% We do this because this testcase does not really reflect a real world
+    %% situation. Indeed, both nodes have inconsistent peer discovery
+    %% configuration and the configuration is changed at runtime using internal
+    %% calls (which we don't support).
+    %%
+    %% Without this, if node 2 was started first, it will select itself and
+    %% thus boot as a standalone node, expecting node 1 to join it. But node 1
+    %% is ready and never restarted/reconfigured.
+    rabbit_ct_broker_helpers:restart_node(Config, Hare),
+
     ok = stop_app(Config, Hare),
     ok = reset(Config, Hare),
     ok = rpc:call(Hare, application, set_env,

@@ -22,15 +22,25 @@
 
 list_nodes() ->
     case application:get_env(rabbit, cluster_nodes, {[], disc}) of
-        {_Nodes, _NodeType} = Pair -> {ok, Pair};
-        Nodes when is_list(Nodes)  -> {ok, {Nodes, disc}}
+        {Nodes, NodeType} ->
+            {ok, {add_this_node(Nodes), NodeType}};
+        Nodes when is_list(Nodes) ->
+            {ok, {add_this_node(Nodes), disc}}
     end.
 
--spec lock(Node :: node()) -> {ok, {{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}} |
-                              {error, Reason :: string()}.
+add_this_node(Nodes) ->
+    ThisNode = node(),
+    case lists:member(ThisNode, Nodes) of
+        true  -> Nodes;
+        false -> [ThisNode | Nodes]
+    end.
 
-lock(Node) ->
-  {ok, {Nodes, _NodeType}} = list_nodes(),
+-spec lock(Nodes :: [node()]) ->
+    {ok, {{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}} |
+    {error, Reason :: string()}.
+
+lock(Nodes) ->
+  Node = node(),
   case lists:member(Node, Nodes) of
     false when Nodes =/= [] ->
       rabbit_log:warning("Local node ~ts is not part of configured nodes ~tp. "

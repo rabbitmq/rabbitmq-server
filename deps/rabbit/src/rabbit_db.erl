@@ -51,10 +51,21 @@ init() ->
        #{domain => ?RMQLOG_DOMAIN_DB}),
 
     ensure_dir_exists(),
-    rabbit_peer_discovery:log_configured_backend(),
     rabbit_peer_discovery:maybe_init(),
 
     pre_init(IsVirgin),
+
+    case IsVirgin of
+        true ->
+            %% At this point, the database backend could change if the node
+            %% joins a cluster and that cluster uses a different database.
+            ?LOG_INFO(
+               "DB: virgin node -> run peer discovery",
+               #{domain => ?RMQLOG_DOMAIN_DB}),
+            rabbit_peer_discovery:sync_desired_cluster();
+        false ->
+            ok
+    end,
 
     Ret = case rabbit_khepri:is_enabled() of
               true  -> init_using_khepri();
@@ -66,8 +77,8 @@ init() ->
                "DB: initialization successeful",
                #{domain => ?RMQLOG_DOMAIN_DB}),
 
+            rabbit_peer_discovery:maybe_register(),
             init_finished(),
-            post_init(IsVirgin),
 
             ok;
         Error ->
@@ -81,12 +92,6 @@ pre_init(IsVirgin) ->
     Members = rabbit_db_cluster:members(),
     OtherMembers = rabbit_nodes:nodes_excl_me(Members),
     rabbit_db_cluster:ensure_feature_flags_are_in_sync(OtherMembers, IsVirgin).
-
-post_init(false = _IsVirgin) ->
-    rabbit_peer_discovery:maybe_register();
-post_init(true = _IsVirgin) ->
-    %% Registration handled by rabbit_peer_discovery.
-    ok.
 
 init_using_mnesia() ->
     ?LOG_DEBUG(

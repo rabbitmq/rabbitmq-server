@@ -113,34 +113,28 @@ unregister() ->
 post_registration() ->
     ok.
 
--spec lock(Node :: node()) -> {ok, {{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}} |
-                              {error, Reason :: string()}.
+-spec lock(Nodes :: [node()]) ->
+    {ok, {{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}} |
+    {error, Reason :: string()}.
 
-lock(Node) ->
-  %% call list_nodes/0 externally such that meck can mock the function
-  case ?MODULE:list_nodes() of
-    {ok, {[], disc}} ->
-          {error, "Cannot lock since no nodes got discovered."};
-    {ok, {Nodes, disc}} ->
-      case lists:member(Node, Nodes) of
+lock(Nodes) ->
+    Node = node(),
+    case lists:member(Node, Nodes) of
         true ->
-          rabbit_log:info("Will try to lock connecting to nodes ~tp", [Nodes]),
-          LockId = rabbit_nodes:lock_id(Node),
-          Retries = rabbit_nodes:lock_retries(),
-          case global:set_lock(LockId, Nodes, Retries) of
-            true ->
-              {ok, {LockId, Nodes}};
-            false ->
-              {error, io_lib:format("Acquiring lock taking too long, bailing out after ~b retries", [Retries])}
-          end;
+            rabbit_log:info("Will try to lock connecting to nodes ~tp", [Nodes]),
+            LockId = rabbit_nodes:lock_id(Node),
+            Retries = rabbit_nodes:lock_retries(),
+            case global:set_lock(LockId, Nodes, Retries) of
+                true ->
+                    {ok, {LockId, Nodes}};
+                false ->
+                    {error, io_lib:format("Acquiring lock taking too long, bailing out after ~b retries", [Retries])}
+            end;
         false ->
-          %% Don't try to acquire the global lock when our own node is not discoverable by peers.
-          %% We shouldn't run into this branch because our node is running and should have been discovered.
-          {error, lists:flatten(io_lib:format("Local node ~ts is not part of discovered nodes ~tp", [Node, Nodes]))}
-      end;
-    {error, _} = Error ->
-      Error
-  end.
+            %% Don't try to acquire the global lock when our own node is not discoverable by peers.
+            %% We shouldn't run into this branch because our node is running and should have been discovered.
+            {error, lists:flatten(io_lib:format("Local node ~ts is not part of discovered nodes ~tp", [Node, Nodes]))}
+    end.
 
 -spec unlock({{ResourceId :: string(), LockRequestedId :: atom()}, Nodes :: [atom()]}) -> 'ok'.
 unlock({LockId, Nodes}) ->
