@@ -175,6 +175,8 @@ get_all_in_mnesia() ->
 %%
 %% @private
 
+get_all(undefined = _VHostName, Comp) ->
+      get_all('_', Comp);
 get_all(VHostName, Comp)
   when (is_binary(VHostName) orelse VHostName =:= '_') andalso
        (is_binary(Comp) orelse Comp =:= '_') ->
