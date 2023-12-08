@@ -61,7 +61,7 @@ obfuscated_uris_parameters(Def) when is_list(Def) ->
 
 child_exists(Name) ->
     Id = id(Name),
-    %% older format, pre 3.13.0 and 3.12.8. See rabbitmq/rabbitmq-server#9894.
+    %% older format, pre 3.13.0, 3.12.8 and 3.11.25. See rabbitmq/rabbitmq-server#9894.
     OldId = old_id(Name),
     lists:any(fun ({ChildId, _, _, _}) ->
                       ChildId =:= Id orelse ChildId =:= OldId
@@ -78,7 +78,7 @@ stop_child({VHost, ShovelName} = Name) ->
                 ok ->
                     ok = mirrored_supervisor:delete_child(?SUPERVISOR, id(Name));
                 {error, not_found} ->
-                    %% try older format, pre 3.13.0 and 3.12.8. See rabbitmq/rabbitmq-server#9894.
+                    %% try older format, pre 3.13.0, 3.12.8 and 3.11.25. See rabbitmq/rabbitmq-server#9894.
                     case mirrored_supervisor:terminate_child(?SUPERVISOR, old_id(Name)) of
                         ok ->
                             ok = mirrored_supervisor:delete_child(?SUPERVISOR, old_id(Name));
@@ -107,7 +107,7 @@ cleanup_specs() ->
                   lists:flatmap(
                     fun(S) ->
                             Name = {proplists:get_value(vhost, S), proplists:get_value(name, S)},
-                            %% Supervisor Id format was different pre 3.13.0 and 3.12.8.
+                            %% Supervisor Id format was different pre 3.13.0, 3.12.8 and 3.11.25.
                             %% Try both formats to cover the transitionary mixed version cluster period.
                             [id(Name), old_id(Name)]
                     end,
@@ -132,6 +132,6 @@ init([]) ->
 id({V, S} = Name) ->
     {[V, S], Name}.
 
-%% older format, pre 3.13.0 and 3.12.8. See rabbitmq/rabbitmq-server#9894
+%% older format, pre 3.13.0, 3.12.8 and 3.11.25. See rabbitmq/rabbitmq-server#9894
 old_id({_V, _S} = Name) ->
     Name.
