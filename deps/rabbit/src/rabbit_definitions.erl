@@ -439,9 +439,6 @@ apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
     HasExchangesWithoutVirtualHostField = any_orphaned_objects(maps:get(exchanges, Map, [])),
     HasBindingsWithoutVirtualHostField = any_orphaned_objects(maps:get(bindings, Map, [])),
 
-    rabbit_log:debug("HasQueuesWithoutVirtualHostField = ~p, HasExchangesWithoutVirtualHostField = ~p, HasBindingsWithoutVirtualHostField = ~p",
-                     [HasQueuesWithoutVirtualHostField, HasExchangesWithoutVirtualHostField, HasBindingsWithoutVirtualHostField]),
-
     case (HasQueuesWithoutVirtualHostField and HasExchangesWithoutVirtualHostField and HasBindingsWithoutVirtualHostField) of
         true ->
             rabbit_log:error("Definitions import: some queues, exchanges or bindings in the definition file "
