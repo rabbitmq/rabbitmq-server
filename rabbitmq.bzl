@@ -84,8 +84,8 @@ ALL_PLUGINS = [
 LABELS_WITH_TEST_VERSIONS = [
     "//deps/amqp10_common:erlang_app",
     "//deps/rabbit_common:erlang_app",
+    "//deps/rabbitmq_prelaunch:erlang_app",
     "//deps/rabbit:erlang_app",
-    "//deps/rabbit/apps/rabbitmq_prelaunch:erlang_app",
 ]
 
 def all_plugins(rabbitmq_workspace = "@rabbitmq-server"):
