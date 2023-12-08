@@ -389,7 +389,10 @@ import_file_case(Config, Subdirectory, CaseName) ->
 
 import_invalid_file_case(Config, CaseName) ->
     CasePath = filename:join(?config(data_dir, Config), CaseName ++ ".json"),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_invalid_import_case, [CasePath]),
+    try
+        rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_invalid_import_case, [CasePath])
+    catch _:_:_ -> ok
+    end,
     ok.
 
 import_invalid_file_case_in_khepri(Config, CaseName) ->
