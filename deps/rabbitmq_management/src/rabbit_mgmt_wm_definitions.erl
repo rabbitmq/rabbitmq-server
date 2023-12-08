@@ -95,12 +95,14 @@ accept_json(ReqData0, Context) ->
     end.
 
 vhost_definitions(ReqData, VHost, Context) ->
-    %% rabbit_mgmt_wm_<>:basic/1 filters by VHost if it is available
+    %% rabbit_mgmt_wm_<>:basic/1 filters by VHost if it is available.
+    %% TODO: should we stop stripping virtual host? Such files cannot be imported on boot, for example.
     Xs = [strip_vhost(X) || X <- rabbit_mgmt_wm_exchanges:basic(ReqData),
                export_exchange(X)],
     VQs = [Q || Q <- rabbit_mgmt_wm_queues:basic(ReqData), export_queue(Q)],
     Qs = [strip_vhost(Q) || Q <- VQs],
     QNames = [{pget(name, Q), pget(vhost, Q)} || Q <- VQs],
+    %% TODO: should we stop stripping virtual host? Such files cannot be imported on boot, for example.
     Bs = [strip_vhost(B) || B <- rabbit_mgmt_wm_bindings:basic(ReqData),
                             export_binding(B, QNames)],
     {ok, Vsn} = application:get_key(rabbit, vsn),
