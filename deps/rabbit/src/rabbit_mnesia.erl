@@ -117,7 +117,7 @@ init() ->
     %% Peer discovery may have been a no-op if it decided that all other nodes
     %% should join this one. Therefore, we need to look at if this node is
     %% still virgin and finish our init of Mnesia accordingly. In particular,
-    %% this second part crates all our Mnesia tables.
+    %% this second part creates all our Mnesia tables.
     case is_virgin_node() of
         true ->
             init_db_and_upgrade([node()], disc, true, _Retry = true);
