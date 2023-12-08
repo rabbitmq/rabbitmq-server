@@ -41,16 +41,18 @@ start_child({VHost, ShovelName} = Name, Def) ->
     LockId = rabbit_shovel_locks:lock(Name),
     cleanup_specs(),
     rabbit_log_shovel:debug("Starting a mirrored supervisor named '~s' in virtual host '~s'", [ShovelName, VHost]),
-    Result = case mirrored_supervisor:start_child(
+    case child_exists(Name)
+        orelse mirrored_supervisor:start_child(
            ?SUPERVISOR,
            {id(Name), {rabbit_shovel_dyn_worker_sup, start_link, [Name, obfuscated_uris_parameters(Def)]},
             transient, ?WORKER_WAIT, worker, [rabbit_shovel_dyn_worker_sup]}) of
+        true                             -> ok;
         {ok,                      _Pid}  -> ok;
         {error, {already_started, _Pid}} -> ok
     end,
     %% release the lock if we managed to acquire one
     rabbit_shovel_locks:unlock(LockId),
-    Result.
+    ok.
 
 obfuscated_uris_parameters(Def) when is_map(Def) ->
     to_map(rabbit_shovel_parameters:obfuscate_uris_in_definition(to_list(Def)));
@@ -58,7 +60,12 @@ obfuscated_uris_parameters(Def) when is_list(Def) ->
     rabbit_shovel_parameters:obfuscate_uris_in_definition(Def).
 
 child_exists(Name) ->
-    lists:any(fun ({{_, N}, _, _, _}) -> N =:= Name end,
+    Id = id(Name),
+    %% older format, pre 3.13.0, 3.12.8 and 3.11.25. See rabbitmq/rabbitmq-server#9894.
+    OldId = old_id(Name),
+    lists:any(fun ({ChildId, _, _, _}) ->
+                      ChildId =:= Id orelse ChildId =:= OldId
+              end,
               mirrored_supervisor:which_children(?SUPERVISOR)).
 
 stop_child({VHost, ShovelName} = Name) ->
@@ -67,8 +74,18 @@ stop_child({VHost, ShovelName} = Name) ->
     case get({shovel_worker_autodelete, Name}) of
         true -> ok; %% [1]
         _ ->
-            ok = mirrored_supervisor:terminate_child(?SUPERVISOR, id(Name)),
-            ok = mirrored_supervisor:delete_child(?SUPERVISOR, id(Name)),
+            case mirrored_supervisor:terminate_child(?SUPERVISOR, id(Name)) of
+                ok ->
+                    ok = mirrored_supervisor:delete_child(?SUPERVISOR, id(Name));
+                {error, not_found} ->
+                    %% try older format, pre 3.13.0, 3.12.8 and 3.11.25. See rabbitmq/rabbitmq-server#9894.
+                    case mirrored_supervisor:terminate_child(?SUPERVISOR, old_id(Name)) of
+                        ok ->
+                            ok = mirrored_supervisor:delete_child(?SUPERVISOR, old_id(Name));
+                        {error, not_found} ->
+                            ok
+                    end
+            end,
             rabbit_shovel_status:remove(Name)
     end,
     rabbit_shovel_locks:unlock(LockId),
@@ -83,14 +100,29 @@ stop_child({VHost, ShovelName} = Name) ->
 %% See rabbit_shovel_worker:terminate/2
 
 cleanup_specs() ->
-    SpecsSet = sets:from_list([element(2, element(1, S)) || S <- mirrored_supervisor:which_children(?SUPERVISOR)]),
-    ParamsSet = sets:from_list([ {proplists:get_value(vhost, S), proplists:get_value(name, S)}
-                                 || S <- rabbit_runtime_parameters:list_component(<<"shovel">>) ]),
-    F = fun(Name, ok) ->
-            _ = mirrored_supervisor:delete_child(?SUPERVISOR, id(Name)),
+    Children = mirrored_supervisor:which_children(?SUPERVISOR),
+
+    ChildIdSet = sets:from_list([element(1, S) || S <- Children]),
+    ParamsSet = sets:from_list(
+                  lists:flatmap(
+                    fun(S) ->
+                            Name = {proplists:get_value(vhost, S), proplists:get_value(name, S)},
+                            %% Supervisor Id format was different pre 3.13.0, 3.12.8 and 3.11.25.
+                            %% Try both formats to cover the transitionary mixed version cluster period.
+                            [id(Name), old_id(Name)]
+                    end,
+                    rabbit_runtime_parameters:list_component(<<"shovel">>))),
+    F = fun(ChildId, ok) ->
+            try
+                _ = mirrored_supervisor:delete_child(?SUPERVISOR, ChildId)
+            catch _:_:_Stacktrace ->
+                ok
+            end,
             ok
         end,
-    ok = sets:fold(F, ok, sets:subtract(SpecsSet, ParamsSet)).
+    %% Delete any supervisor children that do not have their respective runtime parameters in the database.
+    SetToCleanUp = sets:subtract(ChildIdSet, ParamsSet),
+    ok = sets:fold(F, ok, SetToCleanUp).
 
 %%----------------------------------------------------------------------------
 
@@ -99,3 +131,7 @@ init([]) ->
 
 id({V, S} = Name) ->
     {[V, S], Name}.
+
+%% older format, pre 3.13.0, 3.12.8 and 3.11.25. See rabbitmq/rabbitmq-server#9894
+old_id({_V, _S} = Name) ->
+    Name.
