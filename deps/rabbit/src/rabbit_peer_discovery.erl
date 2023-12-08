@@ -387,9 +387,11 @@ query_node_props(Nodes) when Nodes =/= [] ->
                "discovered peers properties",
                [Peer],
                #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-            Ret = erpc:call(Peer, ?MODULE, do_query_node_props, [Nodes]),
-            peer:stop(Pid),
-            Ret;
+            try
+                erpc:call(Peer, ?MODULE, do_query_node_props, [Nodes])
+            after
+                peer:stop(Pid)
+            end;
         {error, _} = Error ->
             ?LOG_ERROR(
                "Peer discovery: failed to start temporary hidden node to "
@@ -448,10 +450,12 @@ do_query_node_props(Nodes) when Nodes =/= [] ->
 
 with_group_leader_proxy(ProxyGroupLeader, Fun) ->
     UpstreamGroupLeader = erlang:group_leader(),
-    true = erlang:group_leader(ProxyGroupLeader, self()),
-    Ret = Fun(),
-    true = erlang:group_leader(UpstreamGroupLeader, self()),
-    Ret.
+    try
+        true = erlang:group_leader(ProxyGroupLeader, self()),
+        Fun()
+    after
+              true = erlang:group_leader(UpstreamGroupLeader, self())
+    end.
 
 group_leader_proxy(Parent, UpstreamGroupLeader) ->
     receive
