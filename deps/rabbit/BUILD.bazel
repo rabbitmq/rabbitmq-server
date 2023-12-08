@@ -214,7 +214,7 @@ rabbitmq_app(
     priv = [":priv"],
     deps = [
         "//deps/amqp10_common:erlang_app",
-        "//deps/rabbit/apps/rabbitmq_prelaunch:erlang_app",
+        "//deps/rabbitmq_prelaunch:erlang_app",
         "//deps/rabbit_common:erlang_app",
         "@cuttlefish//:erlang_app",
         "@gen_batch_server//:erlang_app",
@@ -978,7 +978,7 @@ rabbitmq_suite(
     name = "unit_config_value_encryption_SUITE",
     size = "medium",
     deps = [
-        "//deps/rabbit/apps/rabbitmq_prelaunch:test_erlang_app",
+        "//deps/rabbitmq_prelaunch:test_erlang_app",
         "//deps/rabbit_common:test_erlang_app",
         "@credentials_obfuscation//:erlang_app",
     ],
