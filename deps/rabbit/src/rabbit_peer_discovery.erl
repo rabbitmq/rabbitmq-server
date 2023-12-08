@@ -97,7 +97,7 @@ lock_acquisition_failure_mode() ->
 
 maybe_init() ->
     Backend = backend(),
-    ?LOG_DEBUG(
+    ?LOG_INFO(
        "Peer discovery: configured backend: ~tp",
        [Backend],
        #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
@@ -387,9 +387,11 @@ query_node_props(Nodes) when Nodes =/= [] ->
                "discovered peers properties",
                [Peer],
                #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-            Ret = erpc:call(Peer, ?MODULE, do_query_node_props, [Nodes]),
-            peer:stop(Pid),
-            Ret;
+            try
+                erpc:call(Peer, ?MODULE, do_query_node_props, [Nodes])
+            after
+                peer:stop(Pid)
+            end;
         {error, _} = Error ->
             ?LOG_ERROR(
                "Peer discovery: failed to start temporary hidden node to "
@@ -448,10 +450,12 @@ do_query_node_props(Nodes) when Nodes =/= [] ->
 
 with_group_leader_proxy(ProxyGroupLeader, Fun) ->
     UpstreamGroupLeader = erlang:group_leader(),
-    true = erlang:group_leader(ProxyGroupLeader, self()),
-    Ret = Fun(),
-    true = erlang:group_leader(UpstreamGroupLeader, self()),
-    Ret.
+    try
+        true = erlang:group_leader(ProxyGroupLeader, self()),
+        Fun()
+    after
+              true = erlang:group_leader(UpstreamGroupLeader, self())
+    end.
 
 group_leader_proxy(Parent, UpstreamGroupLeader) ->
     receive
@@ -511,7 +515,12 @@ query_node_props2([], NodesAndProps, ProxyGroupLeader) ->
     NodesAndProps2 = sort_nodes_and_props(NodesAndProps1),
     %% Wait for the proxy group leader to flush its inbox.
     ProxyGroupLeader ! stop_proxy,
-    receive proxy_stopped -> ok end,
+    receive
+        proxy_stopped ->
+            ok
+    after 120_000 ->
+              ok
+    end,
     NodesAndProps2.
 
 -spec get_node_start_time(Node, Unit, ProxyGroupLeader) -> StartTime when
@@ -678,7 +687,7 @@ can_use_discovered_nodes(DiscoveredNodes, NodesAndProps)
 
     ThisNodeIsIncluded andalso HasEnoughNodes;
 can_use_discovered_nodes(_DiscoveredNodes, []) ->
-    ?LOG_DEBUG(
+    ?LOG_INFO(
        "Peer discovery: discovered no peer nodes to cluster with. "
        "Some discovery backends can filter nodes out based on a "
        "readiness criteria. "
