@@ -515,7 +515,12 @@ query_node_props2([], NodesAndProps, ProxyGroupLeader) ->
     NodesAndProps2 = sort_nodes_and_props(NodesAndProps1),
     %% Wait for the proxy group leader to flush its inbox.
     ProxyGroupLeader ! stop_proxy,
-    receive proxy_stopped -> ok end,
+    receive
+        proxy_stopped ->
+            ok
+    after 120_000 ->
+              ok
+    end,
     NodesAndProps2.
 
 -spec get_node_start_time(Node, Unit, ProxyGroupLeader) -> StartTime when
