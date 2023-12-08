@@ -97,7 +97,7 @@ lock_acquisition_failure_mode() ->
 
 maybe_init() ->
     Backend = backend(),
-    ?LOG_DEBUG(
+    ?LOG_INFO(
        "Peer discovery: configured backend: ~tp",
        [Backend],
        #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
@@ -678,7 +678,7 @@ can_use_discovered_nodes(DiscoveredNodes, NodesAndProps)
 
     ThisNodeIsIncluded andalso HasEnoughNodes;
 can_use_discovered_nodes(_DiscoveredNodes, []) ->
-    ?LOG_DEBUG(
+    ?LOG_INFO(
        "Peer discovery: discovered no peer nodes to cluster with. "
        "Some discovery backends can filter nodes out based on a "
        "readiness criteria. "
