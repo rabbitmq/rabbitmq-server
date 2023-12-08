@@ -132,17 +132,10 @@ define PROJECT_ENV
 	  ]
 endef
 
-# With Erlang.mk default behavior, the value of `$(APPS_DIR)` is always
-# relative to the top-level executed Makefile. In our case, it could be
-# a plugin for instance. However, the rabbitmq_prelaunch application is
-# in this repository, not the plugin's. That's why we need to override
-# this value here.
-APPS_DIR := $(CURDIR)/apps
-
-LOCAL_DEPS = sasl rabbitmq_prelaunch os_mon inets compiler public_key crypto ssl syntax_tools xmerl
+LOCAL_DEPS = sasl os_mon inets compiler public_key crypto ssl syntax_tools xmerl
 
 BUILD_DEPS = rabbitmq_cli
-DEPS = ranch rabbit_common ra sysmon_handler stdout_formatter recon redbug observer_cli osiris amqp10_common syslog systemd seshat khepri khepri_mnesia_migration
+DEPS = ranch rabbit_common rabbitmq_prelaunch ra sysmon_handler stdout_formatter recon redbug observer_cli osiris amqp10_common syslog systemd seshat khepri khepri_mnesia_migration
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
 
 PLT_APPS += mnesia
@@ -170,9 +163,6 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
-
-# See above why we mess with `$(APPS_DIR)`.
-unexport APPS_DIR
 
 ifeq ($(strip $(BATS)),)
 BATS := $(ERLANG_MK_TMP)/bats/bin/bats
