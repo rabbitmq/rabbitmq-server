@@ -439,12 +439,14 @@ apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
     HasExchangesWithoutVirtualHostField = any_orphaned_objects(maps:get(exchanges, Map, [])),
     HasBindingsWithoutVirtualHostField = any_orphaned_objects(maps:get(bindings, Map, [])),
 
+    rabbit_log:debug("HasQueuesWithoutVirtualHostField = ~p, HasExchangesWithoutVirtualHostField = ~p, HasBindingsWithoutVirtualHostField = ~p",
+                     [HasQueuesWithoutVirtualHostField, HasExchangesWithoutVirtualHostField, HasBindingsWithoutVirtualHostField]),
+
     case (HasQueuesWithoutVirtualHostField and HasExchangesWithoutVirtualHostField and HasBindingsWithoutVirtualHostField) of
         true ->
             rabbit_log:error("Definitions import: some queues, exchanges or bindings in the definition file "
                              "are missing the virtual host field. Such files are produced when definitions of "
-                             "a single virtual host are exported. They cannot be used to import definitions at boot time",
-                             []),
+                             "a single virtual host are exported. They cannot be used to import definitions at boot time"),
             throw({error, invalid_definitions_file});
         false ->
             ok
@@ -613,8 +615,8 @@ do_concurrent_for_all(List, WorkPoolFun) ->
            fun() ->
                    _ = try
                        WorkPoolFun(M)
-                   catch {error, E} -> gatherer:in(Gatherer, {error, E});
-                         _:E        -> gatherer:in(Gatherer, {error, E})
+                   catch {error, E}      -> gatherer:in(Gatherer, {error, E});
+                         _:E:_Stacktrace -> gatherer:in(Gatherer, {error, E})
                    end,
                    gatherer:finish(Gatherer)
            end)
@@ -761,6 +763,10 @@ add_queue_int(_Queue, R = #resource{kind = queue,
     Name = R#resource.name,
     rabbit_log:warning("Skipping import of a queue whose name begins with 'amq.', "
                        "name: ~ts, acting user: ~ts", [Name, ActingUser]);
+add_queue_int(_Queue, R = #resource{kind = queue, virtual_host = undefined}, ActingUser) ->
+    Name = R#resource.name,
+    rabbit_log:warning("Skipping import of a queue with an unset virtual host field, "
+    "name: ~ts, acting user: ~ts", [Name, ActingUser]);
 add_queue_int(Queue, Name = #resource{virtual_host = VHostName}, ActingUser) ->
     case rabbit_amqqueue:exists(Name) of
         true ->
