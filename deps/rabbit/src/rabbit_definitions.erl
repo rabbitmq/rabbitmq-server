@@ -409,6 +409,13 @@ should_skip_if_unchanged() ->
     ReachedTargetClusterSize = rabbit_nodes:reached_target_cluster_size(),
     OptedIn andalso ReachedTargetClusterSize.
 
+-spec any_orphaned_objects(list(#{atom() => any()})) -> boolean().
+any_orphaned_objects(Maps) ->
+    Filtered = lists:filter(fun(M) ->
+                              maps:get(<<"vhost">>, M, undefined) =:= undefined
+                            end, Maps),
+    length(Filtered) > 0.
+
 
 -spec apply_defs(Map :: #{atom() => any()}, ActingUser :: rabbit_types:username()) -> 'ok' | {error, term()}.
 
@@ -424,6 +431,25 @@ apply_defs(Map, ActingUser, VHost) when is_binary(VHost) ->
     apply_defs(Map, ActingUser, fun () -> ok end, VHost);
 apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
     Version = maps:get(rabbitmq_version, Map, maps:get(rabbit_version, Map, undefined)),
+
+    %% If any of the queues or exchanges do not have virtual hosts set,
+    %% this definition file was a virtual-host specific import. They cannot be applied
+    %% as "complete" definition imports, most notably, imported on boot.
+    HasQueuesWithoutVirtualHostField = any_orphaned_objects(maps:get(queues, Map, [])),
+    HasExchangesWithoutVirtualHostField = any_orphaned_objects(maps:get(exchanges, Map, [])),
+    HasBindingsWithoutVirtualHostField = any_orphaned_objects(maps:get(bindings, Map, [])),
+
+    case (HasQueuesWithoutVirtualHostField and HasExchangesWithoutVirtualHostField and HasBindingsWithoutVirtualHostField) of
+        true ->
+            rabbit_log:error("Definitions import: some queues, exchanges or bindings in the definition file "
+                             "are missing the virtual host field. Such files are produced when definitions of "
+                             "a single virtual host are exported. They cannot be used to import definitions at boot time",
+                             []),
+            throw({error, invalid_definitions_file});
+        false ->
+            ok
+    end,
+
     try
         concurrent_for_all(users, ActingUser, Map,
                 fun(User, _Username) ->
@@ -828,6 +854,7 @@ validate_limits(All) ->
         undefined -> ok;
         Queues0 ->
             {ok, VHostMap} = filter_out_existing_queues(Queues0),
+            _ = rabbit_log:debug("Definition import. Virtual host map for validation: ~p", [VHostMap]),
             maps:fold(fun validate_vhost_limit/3, ok, VHostMap)
     end.
 
@@ -859,12 +886,21 @@ build_filtered_map([], AccMap) ->
     {ok, AccMap};
 build_filtered_map([Queue|Rest], AccMap0) ->
     {Rec, VHost} = build_queue_data(Queue),
-    case rabbit_amqqueue:exists(Rec) of
-        false ->
-            AccMap1 = maps:update_with(VHost, fun(V) -> V + 1 end, 1, AccMap0),
-            build_filtered_map(Rest, AccMap1);
-        true ->
-            build_filtered_map(Rest, AccMap0)
+    %% If virtual host is not specified in a queue,
+    %% this definition file is likely virtual host-specific.
+    %%
+    %% Skip such queues.
+    case VHost of
+        undefined ->
+            build_filtered_map(Rest, AccMap0);
+        _Other ->
+            case rabbit_amqqueue:exists(Rec) of
+                false ->
+                    AccMap1 = maps:update_with(VHost, fun(V) -> V + 1 end, 1, AccMap0),
+                    build_filtered_map(Rest, AccMap1);
+                true ->
+                    build_filtered_map(Rest, AccMap0)
+            end
     end.
 
 validate_vhost_limit(VHost, AddCount, ok) ->
