@@ -131,8 +131,8 @@ filter_orphaned_objects(Maps) ->
 any_orphaned_objects(Maps) ->
     length(filter_orphaned_objects(Maps)) > 0.
 
--spec any_orphaned_in_definitions(definitions()) -> boolean().
-any_orphaned_in_definitions(DefsMap) ->
+-spec any_orphaned_in_doc(definitions()) -> boolean().
+any_orphaned_in_doc(DefsMap) ->
     any_orphaned_in_category(DefsMap, <<"queues">>)
     orelse any_orphaned_in_category(DefsMap, <<"exchanges">>)
     orelse any_orphaned_in_category(DefsMap, <<"bindings">>).
@@ -155,7 +155,7 @@ validate_orphaned_objects_in_doc_collection(Defs) when is_list(Defs) ->
 validate_orphaned_objects_in_doc(Body) when is_binary(Body) ->
     case decode(Body) of
         {ok, DefsMap}    ->
-            AnyOrphaned = any_orphaned_in_definitions(DefsMap),
+            AnyOrphaned = any_orphaned_in_doc(DefsMap),
             case AnyOrphaned of
                 true  ->
                     log_an_error_about_orphaned_objects();
@@ -488,7 +488,7 @@ apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
     %% If any of the queues or exchanges do not have virtual hosts set,
     %% this definition file was a virtual-host specific import. They cannot be applied
     %% as "complete" definition imports, most notably, imported on boot.
-    AnyOrphaned = any_orphaned_in_definitions(Map),
+    AnyOrphaned = any_orphaned_in_doc(Map),
 
     case AnyOrphaned of
         true ->
