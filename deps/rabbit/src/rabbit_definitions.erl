@@ -80,7 +80,8 @@
                                'bindings' |
                                'exchanges'.
 
--type definition_object() :: #{binary() => any()}.
+-type definition_key() :: binary() | atom().
+-type definition_object() :: #{definition_key() => any()}.
 -type definition_list() :: [definition_object()].
 
 -type definitions() :: #{
@@ -104,18 +105,73 @@ maybe_load_definitions() ->
         {error, E} -> {error, E}
     end.
 
-validate_definitions(Defs) when is_list(Defs) ->
-    lists:foldl(fun(_Body, false) ->
-                     false;
-                   (Body, true) ->
-                       case decode(Body) of
-                           {ok, _Map}    -> true;
-                           {error, _Err} -> false
-                       end
-                end, true, Defs);
-validate_definitions(Body) when is_binary(Body) ->
+-spec validate_parsing_of_doc(any()) -> boolean().
+validate_parsing_of_doc(Body) when is_binary(Body) ->
     case decode(Body) of
         {ok, _Map}    -> true;
+        {error, _Err} -> false
+    end.
+
+-spec validate_parsing_of_doc_collection(list(any())) -> boolean().
+validate_parsing_of_doc_collection(Defs) when is_list(Defs) ->
+    lists:foldl(fun(_Body, false) ->
+        false;
+        (Body, true) ->
+            case decode(Body) of
+                {ok, _Map}    -> true;
+                {error, _Err} -> false
+            end
+    end, true, Defs).
+
+-spec filter_orphaned_objects(definition_list()) -> definition_list().
+filter_orphaned_objects(Maps) ->
+    lists:filter(fun(M) -> maps:get(<<"vhost">>, M, undefined) =:= undefined end, Maps).
+
+-spec any_orphaned_objects(definition_list()) -> boolean().
+any_orphaned_objects(Maps) ->
+    length(filter_orphaned_objects(Maps)) > 0.
+
+-spec any_orphaned_in_definitions(definitions()) -> boolean().
+any_orphaned_in_definitions(DefsMap) ->
+    any_orphaned_in_category(DefsMap, <<"queues">>)
+    orelse any_orphaned_in_category(DefsMap, <<"exchanges">>)
+    orelse any_orphaned_in_category(DefsMap, <<"bindings">>).
+
+-spec any_orphaned_in_category(definitions(), definition_category() | binary()) -> boolean().
+any_orphaned_in_category(DefsMap, Category) ->
+    %% try both binary and atom keys
+    any_orphaned_objects(maps:get(Category, DefsMap,
+                            maps:get(rabbit_data_coercion:to_atom(Category), DefsMap, []))).
+
+-spec validate_orphaned_objects_in_doc_collection(list() | binary()) -> boolean().
+validate_orphaned_objects_in_doc_collection(Defs) when is_list(Defs) ->
+    lists:foldl(fun(_Body, false) ->
+        false;
+        (Body, true) ->
+            validate_parsing_of_doc(Body)
+    end, true, Defs).
+
+-spec validate_orphaned_objects_in_doc(binary()) -> boolean().
+validate_orphaned_objects_in_doc(Body) when is_binary(Body) ->
+    case decode(Body) of
+        {ok, DefsMap}    ->
+            AnyOrphaned = any_orphaned_in_definitions(DefsMap),
+            case AnyOrphaned of
+                true  ->
+                    log_an_error_about_orphaned_objects();
+                false -> ok
+            end,
+            AnyOrphaned;
+        {error, _Err} -> false
+    end.
+
+-spec validate_definitions(list(any()) | binary()) -> boolean().
+validate_definitions(Defs) when is_list(Defs) ->
+    validate_parsing_of_doc_collection(Defs) andalso
+    validate_orphaned_objects_in_doc_collection(Defs);
+validate_definitions(Body) when is_binary(Body) ->
+    case decode(Body) of
+        {ok, Defs}    -> validate_orphaned_objects_in_doc(Defs);
         {error, _Err} -> false
     end.
 
@@ -409,13 +465,10 @@ should_skip_if_unchanged() ->
     ReachedTargetClusterSize = rabbit_nodes:reached_target_cluster_size(),
     OptedIn andalso ReachedTargetClusterSize.
 
--spec any_orphaned_objects(list(#{atom() => any()})) -> boolean().
-any_orphaned_objects(Maps) ->
-    Filtered = lists:filter(fun(M) ->
-                              maps:get(<<"vhost">>, M, undefined) =:= undefined
-                            end, Maps),
-    length(Filtered) > 0.
-
+log_an_error_about_orphaned_objects() ->
+    rabbit_log:error("Definitions import: some queues, exchanges or bindings in the definition file "
+        "are missing the virtual host field. Such files are produced when definitions of "
+        "a single virtual host are exported. They cannot be used to import definitions at boot time").
 
 -spec apply_defs(Map :: #{atom() => any()}, ActingUser :: rabbit_types:username()) -> 'ok' | {error, term()}.
 
@@ -435,15 +488,11 @@ apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
     %% If any of the queues or exchanges do not have virtual hosts set,
     %% this definition file was a virtual-host specific import. They cannot be applied
     %% as "complete" definition imports, most notably, imported on boot.
-    HasQueuesWithoutVirtualHostField = any_orphaned_objects(maps:get(queues, Map, [])),
-    HasExchangesWithoutVirtualHostField = any_orphaned_objects(maps:get(exchanges, Map, [])),
-    HasBindingsWithoutVirtualHostField = any_orphaned_objects(maps:get(bindings, Map, [])),
+    AnyOrphaned = any_orphaned_in_definitions(Map),
 
-    case (HasQueuesWithoutVirtualHostField orelse HasExchangesWithoutVirtualHostField orelse HasBindingsWithoutVirtualHostField) of
+    case AnyOrphaned of
         true ->
-            rabbit_log:error("Definitions import: some queues, exchanges or bindings in the definition file "
-                             "are missing the virtual host field. Such files are produced when definitions of "
-                             "a single virtual host are exported. They cannot be used to import definitions at boot time"),
+            log_an_error_about_orphaned_objects(),
             throw({error, invalid_definitions_file});
         false ->
             ok
@@ -612,8 +661,11 @@ do_concurrent_for_all(List, WorkPoolFun) ->
            fun() ->
                    _ = try
                        WorkPoolFun(M)
-                   catch {error, E}      -> gatherer:in(Gatherer, {error, E});
-                         _:E:_Stacktrace -> gatherer:in(Gatherer, {error, E})
+                   catch {error, E}     -> gatherer:in(Gatherer, {error, E});
+                         _:E:Stacktrace ->
+                             rabbit_log:debug("Definition import: a work pool operation has thrown an exception ~st, stacktrace: ~p",
+                                              [E, Stacktrace]),
+                             gatherer:in(Gatherer, {error, E})
                    end,
                    gatherer:finish(Gatherer)
            end)
@@ -882,21 +934,23 @@ filter_out_existing_queues(VHost, Queues) ->
 
 build_queue_data(Queue) ->
     VHost = maps:get(<<"vhost">>, Queue, undefined),
-    Rec = rv(VHost, queue, <<"name">>, Queue),
-    {Rec, VHost}.
+    case VHost of
+        undefined -> undefined;
+        Value ->
+            Rec = rv(Value, queue, <<"name">>, Queue),
+            {Rec, VHost}
+    end.
 
 build_filtered_map([], AccMap) ->
     {ok, AccMap};
 build_filtered_map([Queue|Rest], AccMap0) ->
-    {Rec, VHost} = build_queue_data(Queue),
     %% If virtual host is not specified in a queue,
     %% this definition file is likely virtual host-specific.
     %%
     %% Skip such queues.
-    case VHost of
-        undefined ->
-            build_filtered_map(Rest, AccMap0);
-        _Other ->
+    case build_queue_data(Queue) of
+        undefined -> build_filtered_map(Rest, AccMap0);
+        {Rec, VHost} when VHost =/= undefined ->
             case rabbit_amqqueue:exists(Rec) of
                 false ->
                     AccMap1 = maps:update_with(VHost, fun(V) -> V + 1 end, 1, AccMap0),
