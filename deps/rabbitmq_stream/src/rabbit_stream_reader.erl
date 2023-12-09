@@ -296,6 +296,9 @@ tcp_connected(enter, _OldState,
               #statem_data{config =
                                #configuration{connection_negotiation_step_timeout
                                                   = StateTimeout}}) ->
+    rabbit_networking:register_non_amqp_connection(self()),
+
+    rabbit_log_connection:warning("STREAM: connection registere"),
     {keep_state_and_data, {state_timeout, StateTimeout, close}};
 tcp_connected(state_timeout, close,
               #statem_data{transport = Transport,
@@ -536,19 +539,11 @@ transition_to_opened(Transport,
                                                          Connection2),
     rabbit_core_metrics:connection_created(self(), Infos),
     rabbit_event:notify(connection_created, Infos),
-    rabbit_networking:register_non_amqp_connection(self()),
-    case rabbit_networking:is_over_node_connection_limit() of
-        false -> {next_state, open,
-                  #statem_data{transport = Transport,
+    {next_state, open,
+     #statem_data{transport = Transport,
                   connection = Connection2,
                   connection_state = NewConnectionState,
-                               config = Configuration}};
-        {true, Limit} ->
-            rabbit_log_connection:warning("Closing socket ~w. Node connections limit (~tp) reached",
-                                          [Limit]),
-            close_immediately(Transport, Connection2#stream_connection.socket),
-            stop
-    end.
+                  config = Configuration}}.
 
 invalid_transition(Transport, Socket, From, To) ->
     rabbit_log_connection:warning("Closing socket ~w. Invalid transition from ~ts "
@@ -1366,14 +1361,29 @@ handle_frame_pre_auth(Transport,
     ServerProperties =
         maps:map(fun(_, V) -> rabbit_data_coercion:to_binary(V) end,
                  ServerProperties0),
-    Frame =
-        rabbit_stream_core:frame({response, CorrelationId,
+
+    case rabbit_networking:is_over_node_connection_limit() of
+        false ->
+            Frame =
+                rabbit_stream_core:frame({response, CorrelationId,
                                   {peer_properties, ?RESPONSE_CODE_OK,
                                    ServerProperties}}),
-    send(Transport, S, Frame),
-    {Connection#stream_connection{client_properties = ClientProperties,
-                                  connection_step = peer_properties_exchanged},
-     State};
+            send(Transport, S, Frame),
+            {Connection#stream_connection{client_properties = ClientProperties,
+                                          connection_step = peer_properties_exchanged},
+             State};
+
+        {true, Limit} ->
+            rabbit_log_connection:warning("Closing socket ~w. Node connections limit (~tp) reached",
+                                          [S, Limit]),
+            response(Transport,
+                     Connection,
+                     peer_properties,
+                     CorrelationId,
+                     ?RESPONSE_CODE_PRECONDITION_FAILED),
+            close_immediately(Transport, Connection#stream_connection.socket),
+            throw({stop, normal})
+    end;
 handle_frame_pre_auth(Transport,
                       #stream_connection{socket = S} = Connection,
                       State,

@@ -123,6 +123,7 @@ init(#mqtt_packet{fixed = #mqtt_packet_fixed{type = ?CONNECT},
     %% alarm and client therefore disconnected due to client side CONNACK timeout.
     case rabbit_net:socket_ends(Socket, inbound) of
         {ok, SocketEnds} ->
+            rabbit_networking:register_non_amqp_connection(self()),
             process_connect(ConnectPacket, Socket, ConnName, SendFun, SocketEnds);
         {error, Reason} ->
             {error, {socket_ends, Reason}}
@@ -187,7 +188,6 @@ process_connect(
 
         {VHostPickedUsing, {VHost, Username2}} = get_vhost(Username1, SslLoginName, Port),
         ?LOG_DEBUG("MQTT connection ~s picked vhost using ~s", [ConnName0, VHostPickedUsing]),
-        rabbit_networking:register_non_amqp_connection(self()),
         ok ?= check_node_connection_limit(),
         ok ?= check_vhost_exists(VHost, Username2, PeerIp),
         ok ?= check_vhost_alive(VHost),

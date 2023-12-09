@@ -469,6 +469,7 @@ connections() ->
 %% however here we count each pid only once.
 count_all_local_connections() ->
     pg_local:count_unique_members(rabbit_non_amqp_connections) +
+        pg_local:count_unique_members(rabbit_amqp10_connections) +
         pg_local:count_unique_members(rabbit_connections).
 
 %% @doc returns false if new connection is allowed and {true, Limit} otherwise

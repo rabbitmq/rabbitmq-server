@@ -494,18 +494,16 @@ node_connection_limit(Config) ->
     Transport = gen_tcp,
     %% Set limit to 0, don't accept any connections
     set_node_limit(Config, 0),
-    {error, not_allowed} = connect_and_authenticate(Transport, Config),
+    open_connection_fails_at_peer_properties(Config),
 
     %% Set limit to 5, accept 5 connections
-    Connections = open_connections_to_limit(Config, Transport, 5),
-    %% But no more than 5
-    {error, not_allowed} = connect_and_authenticate(Transport, Config),
-    close_all_connections(Connections),
+    {Transport, Connections} = open_connections_to_limit(Config, Transport, 5),
+    %% %% But no more than 5
+    open_connection_fails_at_peer_properties(Config),
 
     set_node_limit(Config, infinity),
-    C = connect_and_authenticate(Transport, Config),
-    true = is_pid(C),
-    close_all_connections([C]),
+    Conn = connect_and_authenticate(Transport, Config),
+    close_all_connections(Transport, [Conn | Connections]),
     ok.
 
 unauthenticated_client_rejected_tcp_connected(Config) ->
@@ -1165,8 +1163,19 @@ set_node_limit(Config, Limit) ->
 open_connections_to_limit(Config, Transport, Limit) ->
     set_node_limit(Config, Limit),
     Connections = [connect_and_authenticate(Transport, Config) || _ <- lists:seq(1,Limit)],
-    true = lists:all(fun(E) -> is_pid(E) end, Connections),
     {Transport, Connections}.
 
-close_all_connections({Transport, Connections}) ->
+open_connection_fails_at_peer_properties(Config) ->
+    Transport = gen_tcp,
+    Port = get_stream_port(Config),
+    {ok, S} = gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    C0 = rabbit_stream_core:init(0),
+    PeerPropertiesFrame = request({peer_properties, #{}}),
+    ok = Transport:send(S, PeerPropertiesFrame),
+    {Cmd, _C} = receive_commands(Transport, S, C0),
+    ?assertMatch({response, 1, {peer_properties, ?RESPONSE_CODE_PRECONDITION_FAILED}},
+                 Cmd),
+    ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
+
+close_all_connections(Transport, Connections) ->
     [test_close(Transport, S, C) || {S, C} <- Connections].
