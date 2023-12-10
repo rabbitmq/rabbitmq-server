@@ -94,7 +94,9 @@ load_with_hashing(IsDir, Path, PreviousHash, Algo) when is_boolean(IsDir) ->
                             Other
                     end;
                 false ->
-                    rabbit_log:error("Failed to parse a definition file, path: ~p", [Path]),
+                    rabbit_log:error("Definitions file at path ~p failed validation. The file must be a valid JSON document "
+                                     "and all virtual host-scoped resources must have a virtual host field to be set. "
+                                     "Definition files exported for a single virtual host CANNOT be imported at boot time", [Path]),
                     {error, not_json}
             end
     end.

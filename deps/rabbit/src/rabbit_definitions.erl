@@ -340,6 +340,7 @@ maybe_load_definitions_from_local_filesystem(App, Key) ->
         undefined  -> ok;
         {ok, none} -> ok;
         {ok, Path} ->
+            rabbit_log:debug("~ts.~ts is set to '~ts', will discover definition file(s) to import", [App, Key, Path]),
             IsDir = filelib:is_dir(Path),
             Mod = rabbit_definitions_import_local_filesystem,
             rabbit_log:debug("Will use module ~ts to import definitions", [Mod]),
