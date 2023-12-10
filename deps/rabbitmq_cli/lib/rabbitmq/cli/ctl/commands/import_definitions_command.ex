@@ -121,7 +121,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
       false ->
         {:ok,
          "Successfully started definition import. " <>
-           "This process is asynchronous and can take some time.\n"}
+           "This process is asynchronous and can take some time. Watch target node logs for completion.\n"}
     end
   end
 
