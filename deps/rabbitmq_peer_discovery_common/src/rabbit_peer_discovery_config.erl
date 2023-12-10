@@ -127,7 +127,7 @@ normalize(Type, Value) when Type =:= port ->
 normalize(Type, Value) when Type =:= atom ->
   rabbit_peer_discovery_util:as_atom(Value);
 normalize(Type, Value) when Type =:= list ->
-  rabbit_data_coercion:to_list(Value);
+  rabbit_peer_discovery_util:as_list(Value);
 normalize(Type, Value) when Type =:= integer ->
   rabbit_peer_discovery_util:as_integer(Value);
 normalize(Type, Value) when Type =:= string ->
