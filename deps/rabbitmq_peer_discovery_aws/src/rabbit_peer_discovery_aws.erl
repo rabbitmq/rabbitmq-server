@@ -55,6 +55,11 @@
                                                    env_variable  = "AWS_EC2_REGION",
                                                    default_value = "undefined"
                                                   },
+          aws_hostname_path                 => #peer_discovery_config_entry_meta{
+                                                   type          = list,
+                                                   env_variable  = "AWS_HOSTNAME_PATH",
+                                                   default_value = ["privateDnsName"]
+                                                  },
           aws_use_private_ip                 => #peer_discovery_config_entry_meta{
                                                    type          = atom,
                                                    env_variable  = "AWS_USE_PRIVATE_IP",
@@ -310,12 +315,10 @@ get_hostname_name_from_reservation_set([], Accum) -> Accum;
 get_hostname_name_from_reservation_set([{"item", RI}|T], Accum) ->
     InstancesSet = proplists:get_value("instancesSet", RI),
     Items = [Item || {"item", Item} <- InstancesSet],
-    HostnameKey = select_hostname(),
-    Hostnames = [Hostname || Item <- Items,
-                             {HKey, Hostname} <- Item,
-                             HKey == HostnameKey,
-                             Hostname =/= ""],
-    get_hostname_name_from_reservation_set(T, Accum ++ Hostnames).
+    HostnamePath = get_hostname_path(),
+    Hostnames = [get_recursive(HostnamePath, Item) || Item <- Items],
+    Hostnames2 = [Name || Name <- Hostnames, Name =/= ""],
+    get_hostname_name_from_reservation_set(T, Accum ++ Hostnames2).
 
 get_hostname_names(Path) ->
     case rabbitmq_aws:api_get_request("ec2", Path) of
@@ -341,13 +344,31 @@ get_hostname_by_tags(Tags) ->
             Names
     end.
 
--spec select_hostname() -> string().
-select_hostname() ->
-    case get_config_key(aws_use_private_ip, ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY)) of
-        true  -> "privateIpAddress";
-        false -> "privateDnsName";
-        _     -> "privateDnsName"
+-spec get_hostname_path() -> [string()|integer()].
+get_hostname_path() ->
+    UsePrivateIP = get_config_key(aws_use_private_ip, ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY)),
+    HostnamePath = get_config_key(aws_hostname_path, ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY)),
+    case HostnamePath of
+        ["privateDnsName"] when UsePrivateIP -> ["privateIpAddress"];
+        P -> P
     end.
+
+-spec get_recursive(Path, Props) -> string()
+    when Path :: [string()|integer()],
+         Props :: [{string(), Props}] | string().
+get_recursive([_], []) ->
+    "";
+get_recursive([], List) ->
+    case io_lib:latin1_char_list(List) of
+        true -> List;
+        _ -> ""
+        end;
+get_recursive([Ix|Path], Props) when is_integer(Ix) ->
+    {"item", Props2} = lists:nth(Ix, Props),
+    get_recursive(Path, Props2);
+get_recursive([Key|Path], Props) ->
+    Props2 = proplists:get_value(Key, Props),
+    get_recursive(Path, Props2).
 
 -spec get_tags() -> tags().
 get_tags() ->

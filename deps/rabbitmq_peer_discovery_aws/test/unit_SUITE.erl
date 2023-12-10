@@ -47,14 +47,23 @@ maybe_add_tag_filters(_Config) ->
     ?assertEqual(Expectation, Result).
 
 get_hostname_name_from_reservation_set(_Config) ->
-    {
+    ok = eunit:test({
       foreach,
       fun on_start/0,
       fun on_finish/1,
       [{"from private DNS",
         fun() ->
-                Expectation = ["ip-10-0-16-31.eu-west-1.compute.internal",
-                               "ip-10-0-16-29.eu-west-1.compute.internal"],
+                Expectation = ["ip-10-0-16-29.eu-west-1.compute.internal",
+                               "ip-10-0-16-31.eu-west-1.compute.internal"],
+                ?assertEqual(Expectation,
+                             rabbit_peer_discovery_aws:get_hostname_name_from_reservation_set(
+                               reservation_set(), []))
+        end},
+       {"from arbitrary path",
+        fun() ->
+                os:putenv("AWS_HOSTNAME_PATH", "networkInterfaceSet,1,association,publicDnsName"),
+                Expectation = ["ec2-203-0-113-11.eu-west-1.compute.amazonaws.com",
+                               "ec2-203-0-113-21.eu-west-1.compute.amazonaws.com"],
                 ?assertEqual(Expectation,
                              rabbit_peer_discovery_aws:get_hostname_name_from_reservation_set(
                                reservation_set(), []))
@@ -62,12 +71,12 @@ get_hostname_name_from_reservation_set(_Config) ->
        {"from private IP",
         fun() ->
                 os:putenv("AWS_USE_PRIVATE_IP", "true"),
-                Expectation = ["10.0.16.31", "10.0.16.29"],
+                Expectation = ["10.0.16.29", "10.0.16.31"],
                 ?assertEqual(Expectation,
                              rabbit_peer_discovery_aws:get_hostname_name_from_reservation_set(
                                reservation_set(), []))
         end}]
-    }.
+    }).
 
 registration_support(_Config) ->
     ?assertEqual(false, rabbit_peer_discovery_aws:supports_registration()).
@@ -110,6 +119,7 @@ on_finish(_Config) ->
 
 reset() ->
     application:unset_env(rabbit, cluster_formation),
+    os:unsetenv("AWS_HOSTNAME_PATH"),
     os:unsetenv("AWS_USE_PRIVATE_IP").
 
 reservation_set() ->
@@ -129,6 +139,19 @@ reservation_set() ->
                    {"launchTime","2017-04-07T12:05:10"},
                    {"subnetId","subnet-61ff660"},
                    {"vpcId","vpc-4fe1562b"},
+                   {"networkInterfaceSet", [
+                    {"item", 
+                    [{"association",
+                     [{"publicIp","203.0.113.11"},
+                      {"publicDnsName",
+                       "ec2-203-0-113-11.eu-west-1.compute.amazonaws.com"},
+                      {"ipOwnerId","amazon"}]}]},
+                    {"item", 
+                    [{"association",
+                     [{"publicIp","203.0.113.12"},
+                      {"publicDnsName",
+                       "ec2-203-0-113-12.eu-west-1.compute.amazonaws.com"},
+                      {"ipOwnerId","amazon"}]}]}]},
                    {"privateIpAddress","10.0.16.29"}]}]}]},
      {"item", [{"reservationId","r-006cfdbf8d04c5f01"},
                {"ownerId","248536293561"},
@@ -146,4 +169,17 @@ reservation_set() ->
                    {"launchTime","2017-04-07T12:05:10"},
                    {"subnetId","subnet-61ff660"},
                    {"vpcId","vpc-4fe1562b"},
+                   {"networkInterfaceSet", [
+                    {"item", 
+                    [{"association",
+                     [{"publicIp","203.0.113.21"},
+                      {"publicDnsName",
+                       "ec2-203-0-113-21.eu-west-1.compute.amazonaws.com"},
+                      {"ipOwnerId","amazon"}]}]},
+                    {"item", 
+                    [{"association",
+                     [{"publicIp","203.0.113.22"},
+                      {"publicDnsName",
+                       "ec2-203-0-113-22.eu-west-1.compute.amazonaws.com"},
+                      {"ipOwnerId","amazon"}]}]}]},
                    {"privateIpAddress","10.0.16.31"}]}]}]}].
