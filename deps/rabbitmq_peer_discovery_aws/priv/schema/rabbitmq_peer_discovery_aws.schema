@@ -94,3 +94,17 @@ fun(Conf) ->
             [ {lists:last(K), V} || {K, V} <- Settings ]
     end
 end}.
+
+%% hostname_path
+
+{mapping, "cluster_formation.aws.hostname_path", "rabbit.cluster_formation.peer_discovery_aws.aws_hostname_path", [
+    {datatype, string,
+    {default, ["privateDnsName"]}}
+]}.
+{translation, "rabbit.cluster_formation.peer_discovery_aws.aws_hostname_path",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.aws.hostname_path", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> rabbit_peer_discovery_util:as_list(Value)
+    end
+end}.
