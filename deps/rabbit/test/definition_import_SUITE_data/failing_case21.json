@@ -1,0 +1,33 @@
+{
+  "rabbit_version": "3.12.8",
+  "parameters": [],
+  "policies": [],
+  "queues": [
+    {
+      "name": "qq.1",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "cq.1",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "classic"
+      }
+    },
+    {
+      "name": "sq.1",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "stream"
+      }
+    }
+  ],
+  "exchanges": [],
+  "bindings": []
+}
