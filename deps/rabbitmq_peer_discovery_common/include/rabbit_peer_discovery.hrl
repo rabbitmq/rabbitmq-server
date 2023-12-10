@@ -16,7 +16,14 @@
 % by `httpc`
 -define(DEFAULT_HTTP_TIMEOUT, 2250).
 
--type peer_discovery_config_value() :: atom() | integer() | string() | list() | map() | any() | undefined.
+-type peer_discovery_config_value() :: port()
+                                     | atom()
+                                     | integer()
+                                     | string()
+                                     | proplists:proplist()
+                                     | map()
+                                     | list()
+                                     | undefined.
 
 -record(peer_discovery_config_entry_meta,
         {env_variable  :: string(),
