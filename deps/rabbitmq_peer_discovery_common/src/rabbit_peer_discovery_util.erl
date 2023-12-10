@@ -410,14 +410,18 @@ as_list([]) -> [];
 as_list(Value) when is_atom(Value) ; is_integer(Value) ; is_binary(Value) ->
   [Value];
 as_list(Value) when is_list(Value) ->
+  Parse = fun(T) -> 
+    S = string:strip(T),
+    case string:to_float(S) of
+      {Float, []} -> Float;
+      _ -> case string:to_integer(S) of
+             {Integer, []} -> Integer;
+             _ -> S
+           end
+    end
+  end,
   case io_lib:printable_list(Value) or io_lib:printable_unicode_list(Value) of
-    true -> [case string:to_float(S) of
-               {Float, []} -> Float;
-               _ -> case string:to_integer(S) of
-                      {Integer, []} -> Integer;
-                      _ -> string:strip(S)
-                    end
-             end || S <- string:tokens(Value, ",")];
+    true -> [Parse(T) || T <- string:tokens(Value, ",")];
     false -> Value
   end;
 as_list(Value) ->
