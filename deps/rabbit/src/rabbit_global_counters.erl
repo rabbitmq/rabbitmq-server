@@ -131,13 +131,15 @@
             ]).
 
 boot_step() ->
-    %% Protocol counters
-    init([{protocol, amqp091}]),
+    [begin
+         %% Protocol counters
+         init([{protocol, Proto}]),
 
-    %% Protocol & Queue Type counters
-    init([{protocol, amqp091}, {queue_type, rabbit_classic_queue}]),
-    init([{protocol, amqp091}, {queue_type, rabbit_quorum_queue}]),
-    init([{protocol, amqp091}, {queue_type, rabbit_stream_queue}]),
+         %% Protocol & Queue Type counters
+         init([{protocol, Proto}, {queue_type, rabbit_classic_queue}]),
+         init([{protocol, Proto}, {queue_type, rabbit_quorum_queue}]),
+         init([{protocol, Proto}, {queue_type, rabbit_stream_queue}])
+     end || Proto <- [amqp091, amqp10]],
 
     %% Dead Letter counters
     %%
