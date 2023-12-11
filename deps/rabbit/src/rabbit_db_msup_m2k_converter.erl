@@ -19,7 +19,8 @@
          copy_to_khepri/3,
          delete_from_khepri/3]).
 
--record(?MODULE, {}).
+-record(?MODULE, {store_id :: khepri:store_id(),
+                  record_converters :: [atom()]}).
 
 -spec init_copy_to_khepri(StoreId, MigrationId, Tables) -> Ret when
       StoreId :: khepri:store_id(),
@@ -33,8 +34,10 @@ init_copy_to_khepri(_StoreId, _MigrationId, Tables) ->
     %% Clean up any previous attempt to copy the Mnesia table to Khepri.
     lists:foreach(fun clear_data_in_khepri/1, Tables),
 
-    SubState = #?MODULE{},
-    {ok, SubState}.
+    Converters = discover_converters(?MODULE),
+    State = #?MODULE{store_id = StoreId,
+                     record_converters = Converters},
+    {ok, State}.
 
 -spec copy_to_khepri(Table, Record, State) -> Ret when
       Table :: mnesia_to_khepri:mnesia_table(),
@@ -46,8 +49,11 @@ init_copy_to_khepri(_StoreId, _MigrationId, Tables) ->
 %% @private
 
 copy_to_khepri(mirrored_sup_childspec = Table,
-               #mirrored_sup_childspec{key = {Group, {SimpleId, _}} = Key} = Record,
-               State) ->
+               #mirrored_sup_childspec{} = Record0,
+               #?MODULE{store_id = StoreId,
+                        record_converters = Converters} = State) ->
+    Record = upgrade_record(Converters, Table, Record0),
+    #mirrored_sup_childspec{key = {Group, {SimpleId, _}} = Key} = Record,
     ?LOG_DEBUG(
        "Mnesia->Khepri data copy: [~0p] key: ~0p",
        [Table, Key],
@@ -77,7 +83,9 @@ copy_to_khepri(Table, Record, State) ->
 %% @private
 
 delete_from_khepri(
-  mirrored_sup_childspec = Table, {Group, Id} = Key, State) ->
+  mirrored_sup_childspec = Table, Key0, #?MODULE{store_id = StoreId,
+                                                record_converters = Converters} = State) ->
+    {Group, Id} = Key = upgrade_key(Converters, Table, Key0),
     ?LOG_DEBUG(
        "Mnesia->Khepri data delete: [~0p] key: ~0p",
        [Table, Key],
@@ -102,3 +110,39 @@ clear_data_in_khepri(mirrored_sup_childspec) ->
         ok -> ok;
         Error -> throw(Error)
     end.
+
+%% Khepri paths don't support tuples or records, so the key part of the
+%% #mirrored_sup_childspec{} used by some plugins must be  transformed in a
+%% valid Khepri path during the migration from Mnesia to Khepri.
+%% `rabbit_db_msup_m2k_converter` iterates over all declared converters, which
+%% must implement `rabbit_mnesia_to_khepri_record_converter` behaviour callbacks.
+%%
+%% This mechanism could be reused by any other rabbit_db_*_m2k_converter
+
+discover_converters(MigrationMod) ->
+    Apps = rabbit_misc:rabbitmq_related_apps(),
+    AttrsPerApp = rabbit_misc:module_attributes_from_apps(
+                    rabbit_mnesia_records_to_khepri_db, Apps),
+    discover_converters(MigrationMod, AttrsPerApp, []).
+
+discover_converters(MigrationMod, [{_App, _AppMod, AppConverters} | Rest],
+                           Converters0) ->
+    Converters =
+        lists:foldl(fun({Module, Mod}, Acc) when Module =:= MigrationMod ->
+                            [Mod | Acc];
+                       (_, Acc) ->
+                            Acc
+                    end, Converters0, AppConverters),
+    discover_converters(MigrationMod, Rest, Converters);
+discover_converters(_MigrationMod, [], Converters) ->
+    Converters.
+
+upgrade_record(Converters, Table, Record) ->
+    lists:foldl(fun(Mod, Record0) ->
+                        Mod:upgrade_record(Table, Record0)
+                end, Record, Converters).
+
+upgrade_key(Converters, Table, Key) ->
+    lists:foldl(fun(Mod, Key0) ->
+                        Mod:upgrade_key(Table, Key0)
+                end, Key, Converters).
