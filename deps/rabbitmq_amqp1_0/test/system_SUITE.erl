@@ -115,10 +115,15 @@ build_maven_test_project(Config) ->
 %% -------------------------------------------------------------------
 
 roundtrip(Config) ->
-    run(Config, [
-        {dotnet, "roundtrip"},
-        {java, "RoundTripTest"}
-      ]).
+    case ?config(amqp10_client_library, Config) of
+        dotnet ->
+            {skip, "TODO fix https://github.com/Azure/amqpnetlite/issues/575"};
+        java ->
+            run(Config, [
+                         {dotnet, "roundtrip"},
+                         {java, "RoundTripTest"}
+                        ])
+    end.
 
 streams(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config),

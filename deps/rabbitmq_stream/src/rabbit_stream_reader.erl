@@ -31,6 +31,8 @@
          stream :: stream(),
          reference :: undefined | publisher_reference(),
          leader :: pid(),
+         %% We do not use atomics here for concurrent access. Instead, we use atomics
+         %% to reduce memory copy overhead for record fields that change often.
          message_counters :: atomics:atomics_ref()}).
 -record(consumer_configuration,
         {socket :: rabbit_net:socket(), %% ranch_transport:socket(),
