@@ -513,15 +513,16 @@ deliver0(MsgId, Msg,
                          slow = Slow}, Actions}.
 
 stream_message(Msg, _FilteringSupported = true) ->
-    MsgData = msg_to_iodata(Msg),
-    case mc:x_header(<<"x-stream-filter-value">>, Msg) of
+    ConvertedMsg = mc:convert(mc_amqp, Msg),
+    MsgData = amqp10_msg_to_iodata(ConvertedMsg),
+    case mc:x_header(<<"x-stream-filter-value">>, ConvertedMsg) of
         undefined ->
             MsgData;
         {utf8, Value} ->
             {Value, MsgData}
     end;
 stream_message(Msg, _FilteringSupported = false) ->
-    msg_to_iodata(Msg).
+    amqp10_msg_to_iodata(mc:convert(mc_amqp, Msg)).
 
 -spec dequeue(_, _, _, _, client()) -> no_return().
 dequeue(_, _, _, _, #stream_client{name = Name}) ->
@@ -1120,8 +1121,8 @@ binary_to_msg(#resource{kind = queue,
         _ -> Mc
     end.
 
-msg_to_iodata(Msg0) ->
-    Sections = mc:protocol_state(mc:convert(mc_amqp, Msg0)),
+amqp10_msg_to_iodata(Msg) ->
+    Sections = mc:protocol_state(Msg),
     mc_amqp:serialize(Sections).
 
 capabilities() ->
