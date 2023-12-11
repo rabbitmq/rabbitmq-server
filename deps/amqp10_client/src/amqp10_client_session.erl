@@ -675,7 +675,7 @@ filter_value_type(V)
   when is_integer(V) andalso V >= 0 ->
     {uint, V};
 filter_value_type(VList) when is_list(VList) ->
-    [filter_value_type(V) || V <- VList];
+    {list, [filter_value_type(V) || V <- VList]};
 filter_value_type({T, _} = V) when is_atom(T) ->
     %% looks like an already tagged type, just pass it through
     V.

@@ -88,7 +88,12 @@ init_per_testcase(Testcase, Config) when Testcase =:= message_headers_conversion
         {convert_amqp091_headers_to_app_props, Amqp091ToAmqp10},
         {convert_app_props_to_amqp091_headers, Amqp10ToAmqp091}
       ]),
-    rabbit_ct_helpers:testcase_started(Config1, Testcase);
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true when Testcase =:= stream_filtering ->
+            {skip, "mixed version clusters are not supported for stream filtering"};
+        _ ->
+            rabbit_ct_helpers:testcase_started(Config1, Testcase)
+    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
@@ -627,6 +632,30 @@ stream_filtering(Config) ->
     ?assert(length(AppleFilteredMessages) =:= WaveCount),
     ok = amqp10_client:detach_link(AppleReceiver),
 
+    %% filtering on "apple" and "orange"
+    TerminusDurability = none,
+    Properties = #{},
+    {ok, AppleOrangeReceiver} =
+    amqp10_client:attach_receiver_link(Session, <<"test-receiver">>,
+                                       Address, settled,
+                                       TerminusDurability,
+                                       #{<<"rabbitmq:stream-offset-spec">> => <<"first">>,
+                                         <<"rabbitmq:stream-filter">> => [<<"apple">>, <<"orange">>]},
+                                       Properties),
+    ok = amqp10_client:flow_link_credit(AppleOrangeReceiver, 100, 10),
+
+    AppleOrangeMessages = receive_messages(AppleOrangeReceiver, []),
+    %% we should get less than all the waves combined
+    ?assert(length(AppleOrangeMessages) < WaveCount * 3),
+    %% client-side filtering
+    AppleOrangeFilteredMessages =
+    lists:filter(fun(Msg) ->
+                         AP = amqp10_msg:application_properties(Msg),
+                         maps:get(<<"filter">>, AP) =:= <<"apple">> orelse
+                         maps:get(<<"filter">>, AP) =:= <<"orange">>
+                 end, AppleOrangeMessages),
+    ?assert(length(AppleOrangeFilteredMessages) =:= WaveCount * 2),
+    ok = amqp10_client:detach_link(AppleOrangeReceiver),
 
     %% filtering on "apple" and messages without a filter value
     {ok, AppleUnfilteredReceiver} =
