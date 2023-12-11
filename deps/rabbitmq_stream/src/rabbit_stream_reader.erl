@@ -3881,7 +3881,7 @@ in_vhost(Pid, VHost) ->
     end.
 
 consumers_info(Pid, InfoItems) ->
-    gen_server2:call(Pid, {consumers_info, InfoItems}).
+    gen_statem:call(Pid, {consumers_info, InfoItems}).
 
 consumers_infos(Items,
                 #stream_connection_state{consumers = Consumers}) ->
@@ -3934,7 +3934,7 @@ consumer_i(_Unknown, _) ->
     ?UNKNOWN_FIELD.
 
 publishers_info(Pid, InfoItems) ->
-    gen_server2:call(Pid, {publishers_info, InfoItems}).
+    gen_statem:call(Pid, {publishers_info, InfoItems}).
 
 publishers_infos(Items,
                  #stream_connection{publishers = Publishers}) ->
@@ -3966,7 +3966,7 @@ publisher_i(_Unknow, _) ->
     ?UNKNOWN_FIELD.
 
 info(Pid, InfoItems) ->
-    gen_server2:call(Pid, {info, InfoItems}, infinity).
+    gen_statem:call(Pid, {info, InfoItems}, infinity).
 
 infos(Items, Connection, State) ->
     [{Item, i(Item, Connection, State)} || Item <- Items].
