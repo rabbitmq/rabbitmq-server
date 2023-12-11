@@ -225,7 +225,8 @@ init_per_group(Group, Config) ->
             Config1 = rabbit_ct_helpers:set_config(Config,
                                                    [{rmq_nodes_count, ClusterSize},
                                                     {rmq_nodename_suffix, Group},
-                                                    {tcp_ports_base}]),
+                                                    {tcp_ports_base, {skip_n_nodes, ClusterSize}}
+                                                   ]),
             Config1b = rabbit_ct_helpers:set_config(Config1, [{net_ticktime, 10}]),
             Ret = rabbit_ct_helpers:run_steps(Config1b,
                                               [fun merge_app_env/1 ] ++
@@ -263,7 +264,7 @@ init_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publ
     Config2 = rabbit_ct_helpers:set_config(Config1,
                                            [{rmq_nodes_count, 3},
                                             {rmq_nodename_suffix, Testcase},
-                                            {tcp_ports_base},
+                                            {tcp_ports_base, {skip_n_nodes, 3}},
                                             {queue_name, Q},
                                             {alt_queue_name, <<Q/binary, "_alt">>}
                                            ]),
