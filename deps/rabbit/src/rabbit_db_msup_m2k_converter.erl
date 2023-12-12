@@ -20,7 +20,7 @@
          delete_from_khepri/3]).
 
 -record(?MODULE, {store_id :: khepri:store_id(),
-                  record_converters :: [atom()]}).
+                  record_converters :: [module()]}).
 
 -spec init_copy_to_khepri(StoreId, MigrationId, Tables) -> Ret when
       StoreId :: khepri:store_id(),
