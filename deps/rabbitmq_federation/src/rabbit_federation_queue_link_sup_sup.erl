@@ -11,7 +11,7 @@
 -behaviour(rabbit_mnesia_to_khepri_record_converter).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit/src/mirrored_supervisor.hrl").
+-include_lib("rabbit/include/mirrored_supervisor.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
 -define(SUPERVISOR, ?MODULE).
 
