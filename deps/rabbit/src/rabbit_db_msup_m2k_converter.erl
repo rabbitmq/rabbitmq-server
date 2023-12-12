@@ -30,7 +30,7 @@
       Priv :: #?MODULE{}.
 %% @private
 
-init_copy_to_khepri(_StoreId, _MigrationId, Tables) ->
+init_copy_to_khepri(StoreId, _MigrationId, Tables) ->
     %% Clean up any previous attempt to copy the Mnesia table to Khepri.
     lists:foreach(fun clear_data_in_khepri/1, Tables),
 
@@ -50,8 +50,7 @@ init_copy_to_khepri(_StoreId, _MigrationId, Tables) ->
 
 copy_to_khepri(mirrored_sup_childspec = Table,
                #mirrored_sup_childspec{} = Record0,
-               #?MODULE{store_id = StoreId,
-                        record_converters = Converters} = State) ->
+               #?MODULE{record_converters = Converters} = State) ->
     Record = upgrade_record(Converters, Table, Record0),
     #mirrored_sup_childspec{key = {Group, {SimpleId, _}} = Key} = Record,
     ?LOG_DEBUG(
@@ -83,8 +82,7 @@ copy_to_khepri(Table, Record, State) ->
 %% @private
 
 delete_from_khepri(
-  mirrored_sup_childspec = Table, Key0, #?MODULE{store_id = StoreId,
-                                                record_converters = Converters} = State) ->
+  mirrored_sup_childspec = Table, Key0, #?MODULE{record_converters = Converters} = State) ->
     {Group, Id} = Key = upgrade_key(Converters, Table, Key0),
     ?LOG_DEBUG(
        "Mnesia->Khepri data delete: [~0p] key: ~0p",
