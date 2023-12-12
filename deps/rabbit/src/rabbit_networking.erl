@@ -415,6 +415,8 @@ active_listeners() ->
 
 -spec node_listeners(node()) -> [rabbit_types:listener()].
 
+node_listeners(Node) when node() == Node ->
+    ets:tab2list(?ETS_TABLE);
 node_listeners(Node) ->
     case rabbit_misc:rpc_call(Node, ets, tab2list, [?ETS_TABLE]) of
         {badrpc, _} ->
