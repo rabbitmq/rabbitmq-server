@@ -636,9 +636,10 @@ suggested_queue_nodes(Q, DefNode, AllNodes) when ?is_amqqueue(Q) ->
             case module(Q) of
                 {ok, M} ->
                     Params = policy(<<"ha-params">>, Q),
-                    All = if is_list(AllNodes) -> AllNodes;
-                             is_function(AllNodes) -> AllNodes()
-                          end,
+                    All = case AllNodes of
+                        L when is_list(L)     -> L;
+                        F when is_function(F) -> F()
+                    end,
                     M:suggested_queue_nodes(
                       Params, MNode, SNodes, SSNodes, All);
                 _ ->
