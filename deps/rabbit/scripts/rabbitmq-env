@@ -178,25 +178,13 @@ _rmq_env_set_erl_libs()
 
 run_escript()
 {
-    escript_main="${1:?escript_main must be defined}"
-    shift
     escript="${1:?escript must be defined}"
     shift
 
     _rmq_env_set_erl_libs
 
-    # Important: do not quote RABBITMQ_CTL_ERL_ARGS as they must be
-    # word-split
     # shellcheck disable=SC2086
-    exec erl +B \
-        -boot "$CLEAN_BOOT_FILE" \
-        -noinput -noshell -hidden -smp enable \
-        $RABBITMQ_CTL_ERL_ARGS \
-        -kernel inet_dist_listen_min "$RABBITMQ_CTL_DIST_PORT_MIN" \
-        -kernel inet_dist_listen_max "$RABBITMQ_CTL_DIST_PORT_MAX" \
-        -run escript start \
-        -escript main "$escript_main" \
-        -extra "$escript" "$@"
+    ERL_FLAGS="-boot $CLEAN_BOOT_FILE $RABBITMQ_CTL_ERL_ARGS -kernel inet_dist_listen_min $RABBITMQ_CTL_DIST_PORT_MIN -kernel inet_dist_listen_max $RABBITMQ_CTL_DIST_PORT_MAX" "$escript" "$@"
 }
 
 RABBITMQ_ENV_LOADED=1
