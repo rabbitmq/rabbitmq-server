@@ -545,6 +545,7 @@ def all_srcs(name = "all_srcs"):
             "include/gm_specs.hrl",
             "include/internal_user.hrl",
             "include/mc.hrl",
+            "include/mirrored_supervisor.hrl",
             "include/rabbit_global_counters.hrl",
             "include/vhost.hrl",
             "include/vhost_v2.hrl",
@@ -558,7 +559,6 @@ def all_srcs(name = "all_srcs"):
     filegroup(
         name = "private_hdrs",
         srcs = [
-            "src/mirrored_supervisor.hrl",
             "src/rabbit_feature_flags.hrl",
             "src/rabbit_fifo.hrl",
             "src/rabbit_fifo_dlx.hrl",
