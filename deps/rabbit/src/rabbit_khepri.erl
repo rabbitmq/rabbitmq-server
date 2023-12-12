@@ -130,7 +130,7 @@
          put/2, put/3,
          adv_put/2,
          clear_payload/1,
-         delete/1,
+         delete/1, delete/2,
          delete_or_fail/1,
 
          transaction/1,
@@ -141,6 +141,8 @@
 
          dir/0,
          info/0,
+
+         handle_async_ret/1,
 
          status/0]).
 %% Used during migration to join the standalone Khepri nodes and form the
@@ -895,6 +897,10 @@ clear_payload(Path) ->
 delete(Path) ->
     khepri:delete_many(?STORE_ID, Path, ?DEFAULT_COMMAND_OPTIONS).
 
+delete(Path, Options0) ->
+    Options = maps:merge(?DEFAULT_COMMAND_OPTIONS, Options0),
+    khepri:delete_many(?STORE_ID, Path, Options).
+
 delete_or_fail(Path) ->
     case khepri_adv:delete(?STORE_ID, Path, ?DEFAULT_COMMAND_OPTIONS) of
         {ok, Result} ->
@@ -928,6 +934,7 @@ transaction(Fun, ReadWrite) ->
 transaction(Fun, ReadWrite, Options0) ->
     Options = maps:merge(?DEFAULT_COMMAND_OPTIONS, Options0),
     case khepri:transaction(?STORE_ID, Fun, ReadWrite, Options) of
+        ok -> ok;
         {ok, Result} -> Result;
         {error, Reason} -> throw({error, Reason})
     end.
@@ -938,6 +945,9 @@ clear_store() ->
 info() ->
     ok = setup(),
     khepri:info(?STORE_ID).
+
+handle_async_ret(RaEvent) ->
+    khepri:handle_async_ret(?STORE_ID, RaEvent).
 
 %% -------------------------------------------------------------------
 %% if_has_data_wildcard().
