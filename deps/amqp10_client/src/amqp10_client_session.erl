@@ -708,7 +708,7 @@ filter_value_type(V)
   when is_integer(V) andalso V >= 0 ->
     {uint, V};
 filter_value_type(VList) when is_list(VList) ->
-    [filter_value_type(V) || V <- VList];
+    {list, [filter_value_type(V) || V <- VList]};
 filter_value_type({T, _} = V) when is_atom(T) ->
     %% looks like an already tagged type, just pass it through
     V.
@@ -1215,7 +1215,8 @@ translate_filters_legacy_amqp_no_local_filter_test() ->
     {map,
         [{
             {symbol, <<"apache.org:no-local-filter:list">>},
-            {described, {symbol, <<"apache.org:no-local-filter:list">>}, [{utf8, <<"foo">>}, {utf8, <<"bar">>}]}
+            {described, {symbol, <<"apache.org:no-local-filter:list">>},
+             {list, [{utf8, <<"foo">>}, {utf8, <<"bar">>}]}}
         }]
     } = translate_filters(#{<<"apache.org:no-local-filter:list">> => [<<"foo">>, <<"bar">>]}).
 

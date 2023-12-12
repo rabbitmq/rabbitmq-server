@@ -1842,19 +1842,56 @@ encode_frames(T, Msg, MaxContentLen, Transfers) ->
     end.
 
 source_filters_to_consumer_args(#'v1_0.source'{filter = {map, KVList}}) ->
-    Key = {symbol, <<"rabbitmq:stream-offset-spec">>},
-    case keyfind_unpack_described(Key, KVList) of
-        {_, {timestamp, Ts}} ->
-            [{<<"x-stream-offset">>, timestamp, Ts div 1000}]; %% 0.9.1 uses second based timestamps
-        {_, {utf8, Spec}} ->
-            [{<<"x-stream-offset">>, longstr, Spec}]; %% next, last, first and "10m" etc
-        {_, {_, Offset}} when is_integer(Offset) ->
-            [{<<"x-stream-offset">>, long, Offset}]; %% integer offset
-        _ ->
-            []
-    end;
+    source_filters_to_consumer_args(
+      [<<"rabbitmq:stream-offset-spec">>,
+       <<"rabbitmq:stream-filter">>, <<"rabbitmq:stream-match-unfiltered">>],
+      KVList,
+      []);
 source_filters_to_consumer_args(_Source) ->
     [].
+
+source_filters_to_consumer_args([], _KVList, Acc) ->
+    Acc;
+source_filters_to_consumer_args([<<"rabbitmq:stream-offset-spec">> = H | T], KVList, Acc) ->
+    Key = {symbol, H},
+    Arg = case keyfind_unpack_described(Key, KVList) of
+              {_, {timestamp, Ts}} ->
+                  [{<<"x-stream-offset">>, timestamp, Ts div 1000}]; %% 0.9.1 uses second based timestamps
+              {_, {utf8, Spec}} ->
+                  [{<<"x-stream-offset">>, longstr, Spec}]; %% next, last, first and "10m" etc
+              {_, {_, Offset}} when is_integer(Offset) ->
+                  [{<<"x-stream-offset">>, long, Offset}]; %% integer offset
+              _ ->
+                  []
+          end,
+    source_filters_to_consumer_args(T, KVList, Arg ++ Acc);
+source_filters_to_consumer_args([<<"rabbitmq:stream-filter">> = H | T], KVList, Acc) ->
+    Key = {symbol, H},
+    Arg = case keyfind_unpack_described(Key, KVList) of
+              {_, {list, Filters}} when is_list(Filters) ->
+                  FilterValues = lists:foldl(fun({utf8, Filter}, Fs) ->
+                                                     [{longstr, Filter}] ++ Fs;
+                                                (_, Fs) ->
+                                                     Fs
+                                             end, [], Filters),
+                  [{<<"x-stream-filter">>, array, FilterValues}];
+              {_, {utf8, Filter}} ->
+                  [{<<"x-stream-filter">>, longstr, Filter}];
+              _ ->
+                  []
+          end,
+    source_filters_to_consumer_args(T, KVList, Arg ++ Acc);
+source_filters_to_consumer_args([<<"rabbitmq:stream-match-unfiltered">> = H | T], KVList, Acc) ->
+    Key = {symbol, H},
+    Arg = case keyfind_unpack_described(Key, KVList) of
+              {_, {boolean, MU}} ->
+                  [{<<"x-stream-match-unfiltered">>, bool, MU}];
+              _ ->
+                  []
+          end,
+    source_filters_to_consumer_args(T, KVList, Arg ++ Acc);
+source_filters_to_consumer_args([_ | T], KVList, Acc) ->
+    source_filters_to_consumer_args(T, KVList, Acc).
 
 keyfind_unpack_described(Key, KvList) ->
     %% filterset values _should_ be described values

@@ -81,7 +81,8 @@ groups() ->
        resource_alarm_after_session_begin,
        max_message_size_client_to_server,
        max_message_size_server_to_client,
-       receive_transfer_flow_order
+       receive_transfer_flow_order,
+       stream_filtering
       ]},
 
      {cluster_size_3, [shuffle],
@@ -2429,6 +2430,154 @@ queue_and_client_different_nodes(QueueLeaderNode, ClientNode, QueueType, Config)
                  amqp_channel:call(Ch, #'queue.delete'{queue = QName})),
     ok = rabbit_ct_client_helpers:close_channel(Ch),
     ok = amqp10_client:close_connection(Connection).
+
+
+stream_filtering(Config) ->
+    Host = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    Stream = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "-" ++ integer_to_list(rand:uniform(10000))),
+    Address = <<"/amq/queue/", Stream/binary>>,
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    Args = [{<<"x-queue-type">>, longstr, <<"stream">>}],
+    amqp_channel:call(Ch, #'queue.declare'{queue = Stream,
+                                           durable = true,
+                                           arguments = Args}),
+
+    %% we are going to publish several waves of messages with and without filter values.
+    %% we will then create subscriptions with various filter options
+    %% and make sure we receive only what we asked for and not all the messages.
+
+    WaveCount = 1000,
+    OpnConf = #{address => Host,
+                port => Port,
+                transfer_limit_margin => 10 * WaveCount,
+                container_id => atom_to_binary(?FUNCTION_NAME, utf8),
+                sasl => {plain, <<"guest">>, <<"guest">>}},
+
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+    SenderLinkName = <<"test-sender">>,
+    {ok, Sender} = amqp10_client:attach_sender_link(Session,
+                                                    SenderLinkName,
+                                                    Address),
+
+    wait_for_credit(Sender),
+
+    %% logic to publish a wave of messages with or without a filter value
+    Publish = fun(FilterValue) ->
+                      lists:foreach(fun(Seq) ->
+                                            {AppProps, Anns} =
+                                            case FilterValue of
+                                                undefined ->
+                                                    {#{}, #{}};
+                                                _ ->
+                                                    {#{<<"filter">> => FilterValue},
+                                                     #{<<"x-stream-filter-value">> => FilterValue}}
+                                            end,
+                                            FilterBin = rabbit_data_coercion:to_binary(FilterValue),
+                                            SeqBin = rabbit_data_coercion:to_binary(Seq),
+                                            DTag = <<FilterBin/binary, SeqBin/binary>>,
+                                            Msg0 = amqp10_msg:new(DTag, <<"my-body">>, false),
+                                            Msg1 = amqp10_msg:set_application_properties(AppProps, Msg0),
+                                            Msg2 = amqp10_msg:set_message_annotations(Anns, Msg1),
+                                            ok = amqp10_client:send_msg(Sender, Msg2),
+                                            ok = wait_for_settlement(DTag)
+                                    end, lists:seq(1, WaveCount))
+              end,
+
+    %% publishing messages with the "apple" filter value
+    Publish("apple"),
+    %% publishing messages with no filter value
+    Publish(undefined),
+    %% publishing messages with the "orange" filter value
+    Publish("orange"),
+    ok = amqp10_client:detach_link(Sender),
+
+    % filtering on "apple"
+    TerminusDurability = none,
+    Properties = #{},
+    {ok, AppleReceiver} =
+    amqp10_client:attach_receiver_link(Session, <<"test-receiver">>,
+                                       Address, settled,
+                                       TerminusDurability,
+                                       #{<<"rabbitmq:stream-offset-spec">> => <<"first">>,
+                                         <<"rabbitmq:stream-filter">> => <<"apple">>},
+                                       Properties),
+    ok = amqp10_client:flow_link_credit(AppleReceiver, 100, 10),
+
+    AppleMessages = receive_all_messages(AppleReceiver, []),
+    %% we should get less than all the waves combined
+    ?assert(length(AppleMessages) < WaveCount * 3),
+    %% client-side filtering
+    AppleFilteredMessages =
+    lists:filter(fun(Msg) ->
+                         maps:get(<<"filter">>, amqp10_msg:application_properties(Msg)) =:= <<"apple">>
+                 end, AppleMessages),
+    ?assert(length(AppleFilteredMessages) =:= WaveCount),
+    ok = amqp10_client:detach_link(AppleReceiver),
+
+    %% filtering on "apple" and "orange"
+    TerminusDurability = none,
+    Properties = #{},
+    {ok, AppleOrangeReceiver} =
+    amqp10_client:attach_receiver_link(Session, <<"test-receiver">>,
+                                       Address, settled,
+                                       TerminusDurability,
+                                       #{<<"rabbitmq:stream-offset-spec">> => <<"first">>,
+                                         <<"rabbitmq:stream-filter">> => [<<"apple">>, <<"orange">>]},
+                                       Properties),
+    ok = amqp10_client:flow_link_credit(AppleOrangeReceiver, 100, 10),
+
+    AppleOrangeMessages = receive_all_messages(AppleOrangeReceiver, []),
+    %% we should get less than all the waves combined
+    ?assert(length(AppleOrangeMessages) < WaveCount * 3),
+    %% client-side filtering
+    AppleOrangeFilteredMessages =
+    lists:filter(fun(Msg) ->
+                         AP = amqp10_msg:application_properties(Msg),
+                         maps:get(<<"filter">>, AP) =:= <<"apple">> orelse
+                         maps:get(<<"filter">>, AP) =:= <<"orange">>
+                 end, AppleOrangeMessages),
+    ?assert(length(AppleOrangeFilteredMessages) =:= WaveCount * 2),
+    ok = amqp10_client:detach_link(AppleOrangeReceiver),
+
+    %% filtering on "apple" and messages without a filter value
+    {ok, AppleUnfilteredReceiver} =
+    amqp10_client:attach_receiver_link(Session, <<"test-receiver">>,
+                                       Address, settled,
+                                       TerminusDurability,
+                                       #{<<"rabbitmq:stream-offset-spec">> => <<"first">>,
+                                         <<"rabbitmq:stream-filter">> => <<"apple">>,
+                                         <<"rabbitmq:stream-match-unfiltered">> => {boolean, true}},
+                                       Properties),
+    ok = amqp10_client:flow_link_credit(AppleUnfilteredReceiver, 100, 10),
+
+    AppleUnfilteredMessages = receive_all_messages(AppleUnfilteredReceiver, []),
+    %% we should get less than all the waves combined
+    ?assert(length(AppleUnfilteredMessages) < WaveCount * 3),
+    %% client-side filtering
+    AppleUnfilteredFilteredMessages =
+    lists:filter(fun(Msg) ->
+                         AP = amqp10_msg:application_properties(Msg),
+                         maps:is_key(<<"filter">>, AP) =:= false orelse
+                         maps:get(<<"filter">>, AP) =:= <<"apple">>
+                 end, AppleUnfilteredMessages),
+    ?assert(length(AppleUnfilteredFilteredMessages) =:= WaveCount * 2),
+    ok = amqp10_client:detach_link(AppleUnfilteredReceiver),
+
+    delete_queue(Config, Stream),
+    ok = amqp10_client:close_connection(Connection),
+    ok.
+
+receive_all_messages(Receiver, Acc) ->
+    receive
+        {amqp10_msg, Receiver, InMsg} ->
+            ok = amqp10_client:accept_msg(Receiver, InMsg),
+            receive_all_messages(Receiver, [InMsg] ++ Acc)
+    after 1000 ->
+        Acc
+    end.
+
 
 %% internal
 %%
