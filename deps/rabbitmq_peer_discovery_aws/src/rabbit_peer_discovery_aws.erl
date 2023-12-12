@@ -10,7 +10,6 @@
 -module(rabbit_peer_discovery_aws).
 -behaviour(rabbit_peer_discovery_backend).
 
--include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_peer_discovery_common/include/rabbit_peer_discovery.hrl").
 
 -export([init/0, list_nodes/0, supports_registration/0, register/0, unregister/0,
@@ -18,6 +17,8 @@
 
 -type tags() :: map().
 -type filters() :: [{string(), string()}].
+-type props() :: [{string(), props()}] | string().
+-type path() :: [string() | integer()].
 
 -ifdef(TEST).
 -compile(export_all).
@@ -311,12 +312,13 @@ get_node_list_from_tags(M) when map_size(M) =:= 0 ->
 get_node_list_from_tags(Tags) ->
     {ok, {[?UTIL_MODULE:node_name(N) || N <- get_hostname_by_tags(Tags)], disc}}.
 
+-spec get_hostname_name_from_reservation_set(props(), [string()]) -> [string()].
 get_hostname_name_from_reservation_set([], Accum) -> Accum;
 get_hostname_name_from_reservation_set([{"item", RI}|T], Accum) ->
     InstancesSet = proplists:get_value("instancesSet", RI),
     Items = [Item || {"item", Item} <- InstancesSet],
     HostnamePath = get_hostname_path(),
-    Hostnames = [get_recursive(HostnamePath, Item) || Item <- Items],
+    Hostnames = [get_hostname(HostnamePath, Item) || Item <- Items],
     Hostnames2 = [Name || Name <- Hostnames, Name =/= ""],
     get_hostname_name_from_reservation_set(T, Accum ++ Hostnames2).
 
@@ -344,7 +346,7 @@ get_hostname_by_tags(Tags) ->
             Names
     end.
 
--spec get_hostname_path() -> [string()|integer()].
+-spec get_hostname_path() -> path().
 get_hostname_path() ->
     UsePrivateIP = get_config_key(aws_use_private_ip, ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY)),
     HostnamePath = get_config_key(aws_hostname_path, ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY)),
@@ -353,22 +355,22 @@ get_hostname_path() ->
         P -> P
     end.
 
--spec get_recursive(Path, Props) -> string()
-    when Path :: [string()|integer()],
-         Props :: [{string(), Props}] | string().
-get_recursive([_], []) ->
-    "";
-get_recursive([], List) ->
+-spec get_hostname(path(), props()) -> string().
+get_hostname(Path, Props) ->
+    List = lists:foldl(fun get_value/2, Props, Path),
     case io_lib:latin1_char_list(List) of
         true -> List;
         _ -> ""
-        end;
-get_recursive([Ix|Path], Props) when is_integer(Ix) ->
-    {"item", Props2} = lists:nth(Ix, Props),
-    get_recursive(Path, Props2);
-get_recursive([Key|Path], Props) ->
-    Props2 = proplists:get_value(Key, Props),
-    get_recursive(Path, Props2).
+    end.
+
+-spec get_value(string()|integer(), props()) -> props().
+get_value(_, []) ->
+    [];
+get_value(Key, Props) when is_integer(Key) ->
+    {"item", Props2} = lists:nth(Key, Props),
+    Props2;
+get_value(Key, Props) ->
+    proplists:get_value(Key, Props).
 
 -spec get_tags() -> tags().
 get_tags() ->
