@@ -1844,7 +1844,8 @@ encode_frames(T, Msg, MaxContentLen, Transfers) ->
 source_filters_to_consumer_args(#'v1_0.source'{filter = {map, KVList}}) ->
     source_filters_to_consumer_args(
       [<<"rabbitmq:stream-offset-spec">>,
-       <<"rabbitmq:stream-filter">>, <<"rabbitmq:stream-match-unfiltered">>],
+       <<"rabbitmq:stream-filter">>,
+       <<"rabbitmq:stream-match-unfiltered">>],
       KVList,
       []);
 source_filters_to_consumer_args(_Source) ->
@@ -1868,13 +1869,13 @@ source_filters_to_consumer_args([<<"rabbitmq:stream-offset-spec">> = H | T], KVL
 source_filters_to_consumer_args([<<"rabbitmq:stream-filter">> = H | T], KVList, Acc) ->
     Key = {symbol, H},
     Arg = case keyfind_unpack_described(Key, KVList) of
-              {_, {list, Filters}} when is_list(Filters) ->
-                  FilterValues = lists:foldl(fun({utf8, Filter}, Fs) ->
-                                                     [{longstr, Filter}] ++ Fs;
-                                                (_, Fs) ->
-                                                     Fs
-                                             end, [], Filters),
-                  [{<<"x-stream-filter">>, array, FilterValues}];
+              {_, {list, Filters0}} when is_list(Filters0) ->
+                  Filters = lists:foldl(fun({utf8, Filter}, L) ->
+                                                [{longstr, Filter} | L];
+                                           (_, L) ->
+                                                L
+                                        end, [], Filters0),
+                  [{<<"x-stream-filter">>, array, Filters}];
               {_, {utf8, Filter}} ->
                   [{<<"x-stream-filter">>, longstr, Filter}];
               _ ->
