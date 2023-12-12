@@ -2428,13 +2428,12 @@ message_size(Msg) ->
 priority(Msg) ->
     case mc:is(Msg) of
         true ->
-            %% TODO: validate mapping is correct (see AMQP spec)
             case mc:priority(Msg) of
                 undefined ->
                     normal;
-                P when P =< 3 ->
+                P when P < 5 ->
                     low;
-                P when P =< 6 ->
+                5 ->
                     normal;
                 _ ->
                     high
