@@ -80,6 +80,9 @@ build:local --color=auto
 # so we set this flag
 build --@io_bazel_rules_docker//transitions:enable=false
 
+# Controls the remote cache key - change this to invalidate the cache.
+build --remote_instance_name=7
+
 # Try importing a user specific .bazelrc
 # You can create your own by copying and editing the template-user.bazelrc template:
 # cp template-user.bazelrc user.bazelrc
