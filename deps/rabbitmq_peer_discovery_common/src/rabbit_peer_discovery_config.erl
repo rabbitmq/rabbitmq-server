@@ -120,14 +120,14 @@ get_integer_from_env_variable_or_map(Map, OSKey, AppKey, Default) ->
 %%--------------------------------------------------------------------
 -spec normalize(Type  :: atom(),
                 Value :: atom() | boolean() | integer() | string() | list()) ->
-  atom() | integer() | string().
+  peer_discovery_config_value().
 %% TODO: switch these to use delegate to rabbit_data_coercion:*
 normalize(Type, Value) when Type =:= port ->
   rabbit_peer_discovery_util:parse_port(Value);
 normalize(Type, Value) when Type =:= atom ->
   rabbit_peer_discovery_util:as_atom(Value);
 normalize(Type, Value) when Type =:= list ->
-  rabbit_data_coercion:to_list(Value);
+  rabbit_peer_discovery_util:as_list(Value);
 normalize(Type, Value) when Type =:= integer ->
   rabbit_peer_discovery_util:as_integer(Value);
 normalize(Type, Value) when Type =:= string ->
