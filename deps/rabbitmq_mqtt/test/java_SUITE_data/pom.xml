@@ -19,7 +19,7 @@
     <junit.version>5.10.1</junit.version>
     <assertj.version>3.24.2</assertj.version>
     <logback.version>1.2.13</logback.version>
-    <maven-surefire-plugin.version>3.2.2</maven-surefire-plugin.version>
+    <maven-surefire-plugin.version>3.2.3</maven-surefire-plugin.version>
     <groovy-maven-plugin.version>2.1.1</groovy-maven-plugin.version>
     <groovy.version>2.4.21</groovy.version>
     <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
