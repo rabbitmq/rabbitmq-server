@@ -169,6 +169,8 @@ dispatcher() ->
      {"/user-limits/:user",                                    rabbit_mgmt_wm_user_limits, []},
      {"/feature-flags",                                        rabbit_mgmt_wm_feature_flags, []},
      {"/feature-flags/:name/enable",                           rabbit_mgmt_wm_feature_flag_enable, []},
+     {"/deprecated-features",                                  rabbit_mgmt_wm_deprecated_features, [all]},
+     {"/deprecated-features/used",                             rabbit_mgmt_wm_deprecated_features, [used]},
      {"/whoami",                                               rabbit_mgmt_wm_whoami, []},
      {"/permissions",                                          rabbit_mgmt_wm_permissions, []},
      {"/permissions/:vhost/:user",                             rabbit_mgmt_wm_permission, []},

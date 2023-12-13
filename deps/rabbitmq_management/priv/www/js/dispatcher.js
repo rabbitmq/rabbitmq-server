@@ -330,6 +330,9 @@ dispatcher_add(function(sammy) {
             update();
         return false;
     });
+    path('#/deprecated-features', {'deprecated_features': {path:    '/deprecated-features',
+                                                           options: {sort:true}},
+                                   'used_deprecated_features': '/deprecated-features/used'}, 'deprecated-features');
     sammy.put('#/logout', function() {
         // clear a local storage value used by earlier versions
         clear_auth()

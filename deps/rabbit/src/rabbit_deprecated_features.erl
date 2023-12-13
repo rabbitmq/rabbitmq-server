@@ -367,9 +367,9 @@ list(used) ->
       fun(FeatureName, FeatureProps) ->
               ?IS_DEPRECATION(FeatureProps)
                   and
-                  is_deprecated_feature_in_use(
-                    #{feature_name => FeatureName,
-                      feature_props => FeatureProps}) =:= true
+                    (is_deprecated_feature_in_use(
+                       #{feature_name => FeatureName,
+                         feature_props => FeatureProps}) =:= true)
       end,
       rabbit_ff_registry_wrapper:list(all)).
 
@@ -631,4 +631,6 @@ is_deprecated_feature_in_use(
             erlang:apply(CallbackMod, CallbackFun, [Args]);
         _ ->
             undefined
-    end.
+    end;
+is_deprecated_feature_in_use(_) ->
+    undefined.

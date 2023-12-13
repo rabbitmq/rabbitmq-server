@@ -311,6 +311,7 @@ function update() {
     clearInterval(timer);
     with_update(function(html) {
             update_navigation();
+            update_warnings();
             replace_content('main', html);
             postprocess();
             postprocess_partial();
@@ -384,6 +385,41 @@ function update_navigation() {
 
     replace_content('tabs', l1);
     replace_content('rhs', l2);
+}
+
+function update_warnings() {
+    feature_flags = JSON.parse(sync_get('/feature-flags'));
+    var needs_enable = false;
+    for (var i = 0; i < feature_flags.length; i++) {
+         var feature_flag = feature_flags[i];
+         if (feature_flag.state == "disabled" && feature_flag.stability != "experimental") {
+             needs_enable = true;
+         }
+    }
+    deprecated_features = JSON.parse(sync_get('/deprecated-features/used'));
+    var needs_deprecate = false;
+    if (deprecated_features.length > 0) {
+        needs_deprecate = true;
+    }
+    var l1 = '<p class="warning">';
+    if (needs_enable) {
+        l1 += '<span>&#9888;</span> All stable feature flags must be enabled after completing an upgrade. <a href="#/feature-flags">[Learn more]</a>';
+    }
+    if (needs_deprecate) {
+        if (needs_enable) {
+            l1 += '<br/>'
+        }
+        l1 += '<span>&#9888;</span> Deprecated features are being used. <a href="#/feature-flags">[Learn more]</a>'
+    }
+    l1 += '</p>';
+    if (needs_enable || needs_deprecate) {
+      $('#main').addClass('with-warnings');
+      $('#rhs').addClass('with-warnings');
+      replace_content('warnings', l1);
+  } else {
+      $('#main').removeClass('with-warnings');
+      $('#rhs').removeClass('with-warnings');
+  }
 }
 
 function navigation_tab_id(value) {
