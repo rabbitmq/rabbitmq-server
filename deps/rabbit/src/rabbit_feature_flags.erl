@@ -699,10 +699,9 @@ info(Options) when is_map(Options) ->
 
 get_state(FeatureName) when is_atom(FeatureName) ->
     IsEnabled = is_enabled(FeatureName),
-    IsSupported = is_supported(FeatureName),
     case IsEnabled of
         true  -> enabled;
-        false -> case IsSupported of
+        false -> case is_supported(FeatureName) of
                      true  -> disabled;
                      false -> unavailable
                  end

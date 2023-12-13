@@ -285,23 +285,21 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   end
 
   defp listeners_of(node, timeout) do
-    # This may seem inefficient since this call returns all known listeners
-    # in the cluster, so why do we run it on every node? See the badrpc clause,
-    # some nodes may be inavailable or partitioned from other nodes. This way we
-    # gather as complete a picture as possible. MK.
+    node = to_atom(node)
+
     listeners =
       case :rabbit_misc.rpc_call(
-             to_atom(node),
+             node,
              :rabbit_networking,
-             :active_listeners,
-             [],
+             :node_listeners,
+             [node],
              timeout
            ) do
         {:badrpc, _} -> []
         xs -> xs
       end
 
-    {node, listeners_on(listeners, node)}
+    {node, listeners}
   end
 
   defp versions_by_node(node, timeout) do
