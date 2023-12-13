@@ -48,14 +48,14 @@ maybe_add_tag_filters(_Config) ->
     ?assertEqual(Expectation, Result).
 
 get_hostname_name_from_reservation_set(_Config) ->
-    {
+    ok = eunit:test({
       foreach,
       fun on_start/0,
       fun on_finish/1,
       [{"from private DNS",
         fun() ->
-                Expectation = ["ip-10-0-16-31.eu-west-1.compute.internal",
-                               "ip-10-0-16-29.eu-west-1.compute.internal"],
+                Expectation = ["ip-10-0-16-29.eu-west-1.compute.internal",
+                               "ip-10-0-16-31.eu-west-1.compute.internal"],
                 ?assertEqual(Expectation,
                              rabbit_peer_discovery_aws:get_hostname_name_from_reservation_set(
                                reservation_set(), []))
@@ -63,12 +63,12 @@ get_hostname_name_from_reservation_set(_Config) ->
        {"from private IP",
         fun() ->
                 os:putenv("AWS_USE_PRIVATE_IP", "true"),
-                Expectation = ["10.0.16.31", "10.0.16.29"],
+                Expectation = ["10.0.16.29", "10.0.16.31"],
                 ?assertEqual(Expectation,
                              rabbit_peer_discovery_aws:get_hostname_name_from_reservation_set(
                                reservation_set(), []))
         end}]
-    }.
+    }).
 
 registration_support(_Config) ->
     ?assertEqual(false, rabbit_peer_discovery_aws:supports_registration()).
