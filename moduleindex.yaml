@@ -714,6 +714,7 @@ rabbit:
 - rabbit_definitions_hashing
 - rabbit_definitions_import_https
 - rabbit_definitions_import_local_filesystem
+- rabbit_depr_ff_extra
 - rabbit_deprecated_features
 - rabbit_diagnostics
 - rabbit_direct
