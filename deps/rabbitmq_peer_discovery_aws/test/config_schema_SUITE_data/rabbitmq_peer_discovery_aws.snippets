@@ -91,5 +91,17 @@
                 ]}
             ]}
         ], [rabbitmq_peer_discovery_aws]
+    },
+    {aws_hostname_path,
+        "cluster_formation.aws.hostname_path = banana, 1, apple",
+        [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_aws, [
+                        {aws_hostname_path, ["banana", 1, "apple"]}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_aws]
     }
 ].
