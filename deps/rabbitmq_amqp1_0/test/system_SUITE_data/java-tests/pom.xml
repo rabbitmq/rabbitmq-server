@@ -14,7 +14,7 @@
     <spotless.version>2.41.1</spotless.version>
     <google-java-format.version>1.17.0</google-java-format.version>
     <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
-    <maven-surefire-plugin.version>3.2.2</maven-surefire-plugin.version>
+    <maven-surefire-plugin.version>3.2.3</maven-surefire-plugin.version>
   </properties>
   <dependencies>
     <dependency>
