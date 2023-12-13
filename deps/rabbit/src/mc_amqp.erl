@@ -63,6 +63,10 @@
 init(Sections) when is_list(Sections) ->
     Msg = decode(Sections, #msg{}),
     init(Msg);
+init(Amqp10Msg) when element(1, Amqp10Msg) =:= amqp10_msg ->
+    [#'v1_0.transfer'{}| AmqpRecords] = amqp10_msg:to_amqp_records(Amqp10Msg),
+    Msg = decode(AmqpRecords, #msg{}),
+    init(Msg);
 init(#msg{} = Msg) ->
     %% TODO: as the essential annotations, durable, priority, ttl and delivery_count
     %% is all we are interested in it isn't necessary to keep hold of the

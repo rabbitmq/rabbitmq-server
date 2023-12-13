@@ -250,8 +250,8 @@ message_prop_conversion(Config) ->
                 ?assertEqual(<<"payload">>, Payload),
                 ?assertEqual(2, ReceivedDeliveryMode),
                 ?assertEqual({longstr, <<"binary">>}, rabbit_misc:table_lookup(Headers2, <<"x-binary">>)),
-                ?assertEqual({long, 33}, rabbit_misc:table_lookup(Headers2, <<"x-int">>)),
-                ?assertEqual({long, -33}, rabbit_misc:table_lookup(Headers2, <<"x-negative-int">>)),
+                ?assertEqual({unsignedint, 33}, rabbit_misc:table_lookup(Headers2, <<"x-int">>)),
+                ?assertEqual({signedint, -33}, rabbit_misc:table_lookup(Headers2, <<"x-negative-int">>)),
                 ?assertEqual({double, 1.3}, rabbit_misc:table_lookup(Headers2, <<"x-float">>)),
                 ?assertEqual({bool, true}, rabbit_misc:table_lookup(Headers2, <<"x-true">>)),
                 ?assertEqual({bool, false}, rabbit_misc:table_lookup(Headers2, <<"x-false">>)),
@@ -324,7 +324,8 @@ message_prop_conversion_no_props(Config) ->
                 ?assertEqual(<<"payload">>, ReceivedPayload),
                 ?assertEqual(1, ReceivedDeliveryMode),
                 ?assertEqual(<<"x">>, ReceivedClusterId),
-                ?assertEqual(4, ReceivedPriority),
+                % AMQP 1.0 default priority is 4 but I don't think it's a protocol error to not fill it
+                ?assertEqual(undefined, ReceivedPriority),
 
                 ?assertNotEqual(undefined, rabbit_misc:table_lookup(ReceivedHeaders, <<"x-shovelled">>)),
 

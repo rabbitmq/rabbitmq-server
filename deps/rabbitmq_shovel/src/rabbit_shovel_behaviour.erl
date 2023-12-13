@@ -24,7 +24,7 @@
          dest_protocol/1,
          source_endpoint/1,
          dest_endpoint/1,
-         forward/4,
+         forward/3,
          ack/3,
          nack/3,
          status/1,
@@ -79,8 +79,7 @@
 
 -callback ack(Tag :: tag(), Multi :: boolean(), state()) -> state().
 -callback nack(Tag :: tag(), Multi :: boolean(), state()) -> state().
--callback forward(Tag :: tag(), Props :: #{atom() => any()},
-                  Payload :: binary(), state()) ->
+-callback forward(Tag :: tag(), mc:state(), state()) ->
     state() | {stop, any()}.
 -callback status(state()) -> rabbit_shovel_status:blocked_status() | ignore.
 
@@ -141,10 +140,10 @@ source_endpoint(#{source := #{module := Mod}} = State) ->
 dest_endpoint(#{dest := #{module := Mod}} = State) ->
     Mod:dest_endpoint(State).
 
--spec forward(tag(), #{atom() => any()}, binary(), state()) ->
+-spec forward(tag(), mc:state(), state()) ->
     state() | {stop, any()}.
-forward(Tag, Props, Payload, #{dest := #{module := Mod}} = State) ->
-    Mod:forward(Tag, Props, Payload, State).
+forward(Tag, Message, #{dest := #{module := Mod}} = State) ->
+    Mod:forward(Tag, Message, State).
 
 -spec ack(tag(), boolean(), state()) -> state().
 ack(Tag, Multi, #{source := #{module := Mod}} = State) ->

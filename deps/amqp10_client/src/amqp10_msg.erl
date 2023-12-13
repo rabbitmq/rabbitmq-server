@@ -28,6 +28,7 @@
          new/3,
          set_handle/2,
          set_settled/2,
+         set_delivery_tag/2,
          set_message_format/2,
          set_headers/2,
          set_properties/2,
@@ -297,6 +298,10 @@ set_handle(Handle, #amqp10_msg{transfer = T} = Msg) ->
 -spec set_settled(boolean(), amqp10_msg()) -> amqp10_msg().
 set_settled(Settled, #amqp10_msg{transfer = T} = Msg) ->
     Msg#amqp10_msg{transfer = T#'v1_0.transfer'{settled = Settled}}.
+
+-spec set_delivery_tag(binary(), amqp10_msg()) -> amqp10_msg().
+set_delivery_tag(Tag, #amqp10_msg{transfer = T} = Msg) when is_binary(Tag) ->
+    Msg#amqp10_msg{transfer = T#'v1_0.transfer'{delivery_tag = {binary, Tag}}}.
 
 %% @doc Set amqp message headers.
 -spec set_headers(#{atom() => any()}, amqp10_msg()) -> amqp10_msg().
