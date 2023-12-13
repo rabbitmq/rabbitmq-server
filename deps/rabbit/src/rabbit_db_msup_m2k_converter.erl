@@ -19,8 +19,7 @@
          copy_to_khepri/3,
          delete_from_khepri/3]).
 
--record(?MODULE, {store_id :: khepri:store_id(),
-                  record_converters :: [module()]}).
+-record(?MODULE, {record_converters :: [module()]}).
 
 -spec init_copy_to_khepri(StoreId, MigrationId, Tables) -> Ret when
       StoreId :: khepri:store_id(),
@@ -30,14 +29,13 @@
       Priv :: #?MODULE{}.
 %% @private
 
-init_copy_to_khepri(StoreId, _MigrationId, Tables) ->
+init_copy_to_khepri(_StoreId, _MigrationId, Tables) ->
     %% Clean up any previous attempt to copy the Mnesia table to Khepri.
     lists:foreach(fun clear_data_in_khepri/1, Tables),
 
     Converters = discover_converters(?MODULE),
-    State = #?MODULE{store_id = StoreId,
-                     record_converters = Converters},
-    {ok, State}.
+    SubState = #?MODULE{record_converters = Converters},
+    {ok, SubState}.
 
 -spec copy_to_khepri(Table, Record, State) -> Ret when
       Table :: mnesia_to_khepri:mnesia_table(),
@@ -50,7 +48,9 @@ init_copy_to_khepri(StoreId, _MigrationId, Tables) ->
 
 copy_to_khepri(mirrored_sup_childspec = Table,
                #mirrored_sup_childspec{} = Record0,
-               #?MODULE{record_converters = Converters} = State) ->
+               State) ->
+    #?MODULE{record_converters = Converters} =
+        rabbit_db_m2k_converter:get_sub_state(?MODULE, State),
     Record = upgrade_record(Converters, Table, Record0),
     #mirrored_sup_childspec{key = {Group, {SimpleId, _}} = Key} = Record,
     ?LOG_DEBUG(
@@ -81,8 +81,9 @@ copy_to_khepri(Table, Record, State) ->
       Reason :: any().
 %% @private
 
-delete_from_khepri(
-  mirrored_sup_childspec = Table, Key0, #?MODULE{record_converters = Converters} = State) ->
+delete_from_khepri(mirrored_sup_childspec = Table, Key0, State) ->
+    #?MODULE{record_converters = Converters} =
+        rabbit_db_m2k_converter:get_sub_state(?MODULE, State),
     {Group, Id} = Key = upgrade_key(Converters, Table, Key0),
     ?LOG_DEBUG(
        "Mnesia->Khepri data delete: [~0p] key: ~0p",
