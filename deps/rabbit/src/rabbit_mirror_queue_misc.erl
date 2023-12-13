@@ -609,19 +609,22 @@ promote_slave([SPid | SPids]) ->
 -spec initial_queue_node(amqqueue:amqqueue(), node()) -> node().
 
 initial_queue_node(Q, DefNode) ->
-    {MNode, _SNodes} = suggested_queue_nodes(Q, DefNode, rabbit_nodes:list_running()),
+    {MNode, _SNodes} = suggested_queue_nodes(Q, DefNode, fun rabbit_nodes:list_running/0),
     MNode.
 
 -spec suggested_queue_nodes(amqqueue:amqqueue()) ->
           {node(), [node()]}.
 
-suggested_queue_nodes(Q)      -> suggested_queue_nodes(Q, rabbit_nodes:list_running()).
+suggested_queue_nodes(Q)      -> suggested_queue_nodes(Q, fun rabbit_nodes:list_running/0).
 suggested_queue_nodes(Q, All) -> suggested_queue_nodes(Q, node(), All).
 
 %% The third argument exists so we can pull a call to
 %% rabbit_nodes:list_running() out of a loop or transaction
 %% or both.
-suggested_queue_nodes(Q, DefNode, All) when ?is_amqqueue(Q) ->
+-spec suggested_queue_nodes(amqqueue:amqqueue(), node(), Nodes | fun(() -> Nodes)) ->
+    {node(), Nodes} when
+      Nodes :: [node()].
+suggested_queue_nodes(Q, DefNode, AllNodes) when ?is_amqqueue(Q) ->
     Owner = amqqueue:get_exclusive_owner(Q),
     {MNode0, SNodes, SSNodes} = actual_queue_nodes(Q),
     MNode = case MNode0 of
@@ -629,13 +632,21 @@ suggested_queue_nodes(Q, DefNode, All) when ?is_amqqueue(Q) ->
                 _    -> MNode0
             end,
     case Owner of
-        none -> Params = policy(<<"ha-params">>, Q),
-                case module(Q) of
-                    {ok, M} -> M:suggested_queue_nodes(
-                                 Params, MNode, SNodes, SSNodes, All);
-                    _       -> {MNode, []}
-                end;
-        _    -> {MNode, []}
+        none ->
+            case module(Q) of
+                {ok, M} ->
+                    Params = policy(<<"ha-params">>, Q),
+                    All = case AllNodes of
+                        L when is_list(L)     -> L;
+                        F when is_function(F) -> F()
+                    end,
+                    M:suggested_queue_nodes(
+                      Params, MNode, SNodes, SSNodes, All);
+                _ ->
+                    {MNode, []}
+            end;
+        _ ->
+            {MNode, []}
     end.
 
 policy(Policy, Q) ->
