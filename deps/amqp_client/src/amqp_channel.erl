@@ -876,11 +876,8 @@ do(Method, Content, Flow, #state{driver = direct, writer = W}) ->
 
 
 flush_writer(#state{driver = network, writer = Writer}) ->
-    try
-        rabbit_writer:flush(Writer)
-    catch
-        exit:noproc -> ok
-    end;
+    _ = catch rabbit_writer:flush(Writer),
+    ok;
 flush_writer(#state{driver = direct}) ->
     ok.
 amqp_msg(none) ->
