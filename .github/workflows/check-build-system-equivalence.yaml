@@ -34,7 +34,7 @@ jobs:
       run: |
         echo "archives_dir=$(readlink -f bazel-bin)" >> $GITHUB_ENV
     - name: UPLOAD package-generic-unix.tar.xz
-      uses: actions/upload-artifact@v3.1.2
+      uses: actions/upload-artifact@v4
       with:
         name: bazel-package-generic-unix.tar.xz
         path: ${{ env.archives_dir }}/package-generic-unix.tar.xz
@@ -68,7 +68,7 @@ jobs:
           PACKAGES_DIR="$PWD/PACKAGES" \
           VERSION="$VERSION"
     - name: UPLOAD package-generic-unix.tar.xz
-      uses: actions/upload-artifact@v3.1.2
+      uses: actions/upload-artifact@v4
       with:
         name: make-package-generic-unix.tar.xz
         path: PACKAGES/rabbitmq-server-generic-unix-*.tar.xz
