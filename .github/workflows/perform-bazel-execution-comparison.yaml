@@ -38,7 +38,7 @@ jobs:
           --config=rbe-${{ matrix.erlang_version }} \
           --execution_log_binary_file=/tmp/exec.log
     - name: SAVE EXECUTION LOG BINARY
-      uses: actions/upload-artifact@v3.1.3
+      uses: actions/upload-artifact@v4.0.0
       with:
         name: execution-log-binary-A
         path: /tmp/exec.log
@@ -73,7 +73,7 @@ jobs:
           --config=rbe-${{ matrix.erlang_version }} \
           --execution_log_binary_file=/tmp/exec.log
     - name: SAVE EXECUTION LOG BINARY
-      uses: actions/upload-artifact@v3.1.3
+      uses: actions/upload-artifact@v4.0.0
       with:
         name: execution-log-binary-B
         path: /tmp/exec.log
@@ -106,7 +106,7 @@ jobs:
           --output_path=/tmp/execution-log-binary-A.log.txt \
           --output_path=/tmp/execution-log-binary-B.log.txt
     - name: SAVE PARSED LOGS
-      uses: actions/upload-artifact@v3.1.3
+      uses: actions/upload-artifact@v4.0.0
       with:
         name: parsed-logs
         path: /tmp/execution-log-binary-*.log.txt
