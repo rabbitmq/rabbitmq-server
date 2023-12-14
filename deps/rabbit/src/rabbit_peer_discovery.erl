@@ -355,9 +355,8 @@ check_discovered_nodes_list_validity(DiscoveredNodes, BadNodeType)
 %% @private
 
 query_node_props(Nodes) when Nodes =/= [] ->
-    {Prefix, _Suffix} = rabbit_nodes_common:parts(node()),
-    PeerName = lists:flatten(
-                 io_lib:format("~s-peerdisc-~s", [Prefix, os:getpid()])),
+    {Prefix, Suffix} = rabbit_nodes_common:parts(node()),
+    PeerName = peer:random_name(Prefix),
     %% We go through a temporary hidden node to query all other discovered
     %% peers properties, instead of querying them directly.
     %%
@@ -372,15 +371,22 @@ query_node_props(Nodes) when Nodes =/= [] ->
     %%
     %% By using a temporary intermediate hidden node, we ask Erlang not to
     %% connect everyone automatically.
+    Context = rabbit_prelaunch:get_context(),
     VMArgs0 = ["-hidden"],
-    VMArgs1 = case rabbit_prelaunch:get_context() of
+    VMArgs1 = case Context of
                   #{erlang_cookie := ErlangCookie,
                     var_origins := #{erlang_cookie := environment}} ->
                       ["-setcookie", atom_to_list(ErlangCookie) | VMArgs0];
                   _ ->
                       VMArgs0
               end,
-    case peer:start(#{name => PeerName, args => VMArgs1}) of
+    PeerStartArg = case Context of
+                       #{nodename_type := longnames} ->
+                           #{name => PeerName, host => Suffix, longnames => true, args => VMArgs1};
+                       _ ->
+                           #{name => PeerName, args => VMArgs1}
+                   end,
+    case peer:start(PeerStartArg) of
         {ok, Pid, Peer} ->
             ?LOG_DEBUG(
                "Peer discovery: use temporary hidden node '~ts' to query "
