@@ -85,7 +85,8 @@ force_close_connection(ReqData, Conn, Pid) ->
         network ->
             rabbit_networking:close_connection(Pid, Reason);
         _ ->
-            % best effort, this will work for connections to the stream plugin
-            gen_server:cast(Pid, {shutdown, Reason})
-    end,
-    ok.
+            %% Best effort will work for following plugins:
+            %% rabbitmq_stream, rabbitmq_mqtt, rabbitmq_web_mqtt
+            _ = Pid ! {shutdown, Reason},
+            ok
+    end.
