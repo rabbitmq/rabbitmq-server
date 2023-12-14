@@ -6,7 +6,9 @@
 %%
 
 -module(rabbit_shovel_dyn_worker_sup_sup).
+
 -behaviour(mirrored_supervisor).
+-behaviour(rabbit_mnesia_to_khepri_record_converter).
 
 -export([start_link/0, init/1, adjust/2, stop_child/1, cleanup_specs/0]).
 
@@ -14,8 +16,42 @@
 -import(rabbit_data_coercion, [to_map/1, to_list/1]).
 
 -include("rabbit_shovel.hrl").
+-include_lib("rabbit/include/mirrored_supervisor.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -define(SUPERVISOR, ?MODULE).
+
+%% Khepri paths don't support tuples or records, so the key part of the
+%% #mirrored_sup_childspec{} used by some plugins must be  transformed in a
+%% valid Khepri path during the migration from Mnesia to Khepri.
+%% `rabbit_db_msup_m2k_converter` iterates over all declared converters, which
+%% must implement `rabbit_mnesia_to_khepri_record_converter` behaviour callbacks.
+%%
+%% This mechanism could be reused by any other rabbit_db_*_m2k_converter
+-export([upgrade_record/2, upgrade_key/2]).
+
+-rabbit_mnesia_records_to_khepri_db(
+   [
+    {rabbit_db_msup_m2k_converter, ?MODULE}
+   ]).
+
+-spec upgrade_record(Table, Record) -> Record when
+      Table :: mnesia_to_khepri:mnesia_table(),
+      Record :: tuple().
+upgrade_record(mirrored_sup_childspec,
+               #mirrored_sup_childspec{key = {?MODULE, {A, B} = OldId}} = Record)
+  when is_binary(A) and is_binary(B) ->
+    Record#mirrored_sup_childspec{key = {?MODULE, id(OldId)}};
+upgrade_record(_Table, Record) ->
+    Record.
+
+-spec upgrade_key(Table, Key) -> Key when
+      Table :: mnesia_to_khepri:mnesia_table(),
+      Key :: any().
+upgrade_key(mirrored_sup_childspec, {?MODULE, {A, B} = OldId})
+  when is_binary(A) and is_binary(B) ->
+    {?MODULE, id(OldId)};
+upgrade_key(_Table, Key) ->
+    Key.
 
 start_link() ->
     Pid = case mirrored_supervisor:start_link(
