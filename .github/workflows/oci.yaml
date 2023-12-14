@@ -77,7 +77,7 @@ jobs:
         id: resolve-artifact-path
 
       - name: Save the package as a workflow artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         continue-on-error: true
         with:
           name: package-generic-unix-${{ steps.load-info.outputs.otp }}.tar.xz
