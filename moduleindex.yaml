@@ -1060,6 +1060,7 @@ rabbitmq_management:
 - rabbit_mgmt_wm_connections_vhost
 - rabbit_mgmt_wm_consumers
 - rabbit_mgmt_wm_definitions
+- rabbit_mgmt_wm_deprecated_features
 - rabbit_mgmt_wm_environment
 - rabbit_mgmt_wm_exchange
 - rabbit_mgmt_wm_exchange_publish
