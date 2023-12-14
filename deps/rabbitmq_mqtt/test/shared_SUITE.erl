@@ -1217,19 +1217,27 @@ management_plugin_connection(Config) ->
     KeepaliveSecs = 99,
     ClientId = atom_to_binary(?FUNCTION_NAME),
     Node = atom_to_binary(get_node_config(Config, 0, nodename)),
-    C = connect(ClientId, Config, [{keepalive, KeepaliveSecs}]),
 
+    C1 = connect(ClientId, Config, [{keepalive, KeepaliveSecs}]),
     eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
     [#{client_properties := #{client_id := ClientId},
        timeout := KeepaliveSecs,
        node := Node,
        name := ConnectionName}] = http_get(Config, "/connections"),
-
     process_flag(trap_exit, true),
     http_delete(Config,
                 "/connections/" ++ binary_to_list(uri_string:quote((ConnectionName))),
                 ?NO_CONTENT),
-    await_exit(C),
+    await_exit(C1),
+    ?assertEqual([], http_get(Config, "/connections")),
+    eventually(?_assertEqual([], all_connection_pids(Config)), 500, 3),
+
+    C2 = connect(ClientId, Config, [{keepalive, KeepaliveSecs}]),
+    eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
+    http_delete(Config,
+                "/connections/username/guest",
+                ?NO_CONTENT),
+    await_exit(C2),
     ?assertEqual([], http_get(Config, "/connections")),
     eventually(?_assertEqual([], all_connection_pids(Config)), 500, 3).
 
