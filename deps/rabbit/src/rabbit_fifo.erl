@@ -2028,15 +2028,10 @@ take_next_msg(#?MODULE{returns = Returns0,
     end.
 
 get_next_msg(#?MODULE{returns = Returns0,
-                       messages = Messages0}) ->
+                      messages = Messages0}) ->
     case lqueue:get(Returns0, empty) of
         empty ->
-            case hinoloq:out(Messages0) of
-                empty ->
-                    empty;
-                {Msg, _} ->
-                    Msg
-            end;
+            hinoloq:get(Messages0);
         Msg ->
             Msg
     end.

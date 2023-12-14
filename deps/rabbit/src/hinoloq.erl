@@ -3,6 +3,7 @@
 -export([
          new/0,
          in/3,
+         get/1,
          out/1,
          len/1,
          peek_all/1,
@@ -52,10 +53,20 @@ dequeue(#?MODULE{items = Items0,
             end,
     {Item, State#?MODULE{items = Items,
                          state = {Cur, Rem - 1}}};
-dequeue(#?MODULE{items = Items,
-                 weights = {H, N, L},
-                 state = {Cur, _}} = State) ->
-    % current state is either out of credits or items
+dequeue(State) ->
+    dequeue(next_state(State)).
+
+get0(#?MODULE{items = Items0,
+              state = {Cur, Rem}})
+  when Rem > 0 andalso is_map_key(Cur, Items0) ->
+    {_Cnt, Q0} = maps:get(Cur, Items0),
+    queue:get(Q0);
+get0(State) ->
+    get0(next_state(State)).
+
+next_state(#?MODULE{items = Items,
+                    weights = {H, N, L},
+                    state = {Cur, _}} = State) ->
     Next = case Cur of
                high when is_map_key(normal, Items) ->
                    {normal, N};
@@ -70,8 +81,12 @@ dequeue(#?MODULE{items = Items,
                _ ->
                    {high, H}
            end,
-    dequeue(State#?MODULE{state = Next}).
+    State#?MODULE{state = Next}.
 
+get(#?MODULE{items = Items}) when map_size(Items) == 0 ->
+    empty;
+get(State0) ->
+    get0(State0).
 
 out(#?MODULE{items = Items}) when map_size(Items) == 0 ->
     empty;
