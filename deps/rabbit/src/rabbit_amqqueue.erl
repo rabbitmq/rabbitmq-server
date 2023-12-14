@@ -2027,7 +2027,7 @@ notify_transient_queues_deleted(QueueDeletions) ->
       fun(Queue) ->
               ok = rabbit_event:notify(queue_deleted,
                                        [{name, Queue},
-                                        {kind, rabbit_classic_queue},
+                                        {type, rabbit_classic_queue},
                                         {user, ?INTERNAL_USER}])
       end,
       QueueDeletions).
