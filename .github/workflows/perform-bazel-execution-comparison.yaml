@@ -96,7 +96,7 @@ jobs:
       run: |
         bazelisk build src/tools/execlog:parser
     - name: FETCH LOGS
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
     - name: PARSE LOGS
       run: |
         bazel/bazel-bin/src/tools/execlog/parser \
