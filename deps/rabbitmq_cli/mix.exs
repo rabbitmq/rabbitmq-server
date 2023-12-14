@@ -14,7 +14,11 @@ defmodule RabbitMQCtl.MixfileBase do
       elixir: ">= 1.13.4 and < 1.16.0",
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
-      escript: [main_module: RabbitMQCtl, emu_args: "-hidden", path: "escript/rabbitmqctl"],
+      escript: [
+        main_module: RabbitMQCtl,
+        emu_args: "-noinput -hidden",
+        path: "escript/rabbitmqctl"
+      ],
       prune_code_paths: false,
       deps: deps(Mix.env()),
       aliases: aliases(),
