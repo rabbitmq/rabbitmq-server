@@ -2426,9 +2426,9 @@ priority(Msg) ->
             case mc:priority(Msg) of
                 undefined ->
                     normal;
-                P when P < 5 ->
+                P when P < 4 ->
                     low;
-                5 ->
+                4 ->
                     normal;
                 _ ->
                     high
