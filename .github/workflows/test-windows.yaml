@@ -11,17 +11,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - erlang_version: "26.1"
-          elixir_version: "1.15.2"
-        metadata_store:
-          - mnesia
-          - khepri
+          - erlang_version: "26.2"
+          - elixir_version: "1.15.7"
+        metadata_store: [mnesia, khepri]
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
     - name: CONFIGURE ERLANG
-      uses: erlef/setup-beam@v1.16
+      uses: erlef/setup-beam@v1
       with:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: ${{ matrix.elixir_version }}
