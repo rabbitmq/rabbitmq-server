@@ -122,11 +122,11 @@ jobs:
         otp-version: ${{ env.erlang_version }}
         elixir-version: ${{ env.elixir_version }}
     - name: DOWNLOAD bazel-package-generic-unix.tar.xz
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: bazel-package-generic-unix-${{ env.VERSION }}.tar.xz
     - name: DOWNLOAD make-package-generic-unix.tar.xz
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: make-package-generic-unix-${{ env.VERSION }}.tar.xz
     - name: EXPAND & COMPARE
