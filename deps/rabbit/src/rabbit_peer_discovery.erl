@@ -382,9 +382,13 @@ query_node_props(Nodes) when Nodes =/= [] ->
               end,
     PeerStartArg = case Context of
                        #{nodename_type := longnames} ->
-                           #{name => PeerName, host => Suffix, longnames => true, args => VMArgs1};
+                           #{name => PeerName,
+                             host => Suffix,
+                             longnames => true,
+                             args => VMArgs1};
                        _ ->
-                           #{name => PeerName, args => VMArgs1}
+                           #{name => PeerName,
+                             args => VMArgs1}
                    end,
     case peer:start(PeerStartArg) of
         {ok, Pid, Peer} ->
