@@ -34,6 +34,12 @@ bazel_dep(
     version = "3.14.0",
 )
 
+git_override(
+    module_name = "rules_erlang",
+    commit = "942c5c1e032c2cff2b946a041b5e3bcb62346951",
+    remote = "https://github.com/rabbitmq/rules_erlang.git",
+)
+
 bazel_dep(
     name = "com_github_rabbitmq_looking_glass",
     version = "0.2.1",
