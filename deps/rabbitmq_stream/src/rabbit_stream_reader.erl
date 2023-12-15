@@ -25,13 +25,17 @@
 -type publisher_id() :: byte().
 -type publisher_reference() :: binary().
 -type subscription_id() :: byte().
+-type internal_id() :: integer().
 
 -record(publisher,
         {publisher_id :: publisher_id(),
          stream :: stream(),
          reference :: undefined | publisher_reference(),
          leader :: pid(),
-         message_counters :: atomics:atomics_ref()}).
+         message_counters :: atomics:atomics_ref(),
+         %% use to distinguish a stale publisher from a live publisher with the same ID
+         %% used only for publishers without a reference (dedup off)
+         internal_id :: internal_id()}).
 -record(consumer_configuration,
         {socket :: rabbit_net:socket(), %% ranch_transport:socket(),
          member_pid :: pid(),
@@ -96,7 +100,9 @@
          deliver_version :: rabbit_stream_core:command_version(),
          request_timeout :: pos_integer(),
          outstanding_requests_timer :: undefined | erlang:reference(),
-         filtering_supported :: boolean()}).
+         filtering_supported :: boolean(),
+         %% internal sequence used for publishers
+         internal_sequence = 0 :: integer()}).
 -record(configuration,
         {initial_credits :: integer(),
          credits_required_for_unblocking :: integer(),
@@ -1034,16 +1040,17 @@ open(cast,
                   config = Configuration} =
          StatemData) ->
     ByPublisher =
-        lists:foldr(fun({PublisherId, PublishingId}, Acc) ->
-                       case maps:is_key(PublisherId, Publishers) of
-                           true ->
+        lists:foldr(fun({PublisherId, InternalId, PublishingId}, Acc) ->
+                       case Publishers of
+                           #{PublisherId := #publisher{internal_id = InternalId}} ->
                                case maps:get(PublisherId, Acc, undefined) of
                                    undefined ->
                                        Acc#{PublisherId => [PublishingId]};
                                    Ids ->
                                        Acc#{PublisherId => [PublishingId | Ids]}
                                end;
-                           false -> Acc
+                           _ ->
+                               Acc
                        end
                     end,
                     #{}, CorrelationList),
@@ -1773,7 +1780,8 @@ handle_frame_post_auth(Transport,
                             {Connection0, State};
                         {ClusterLeader,
                          #stream_connection{publishers = Publishers0,
-                                            publisher_to_ids = RefIds0} =
+                                            publisher_to_ids = RefIds0,
+                                            internal_sequence = InternalSequence} =
                              Connection1} ->
                             {PublisherReference, RefIds1} =
                                 case WriterRef of
@@ -1791,7 +1799,8 @@ handle_frame_post_auth(Transport,
                                            leader = ClusterLeader,
                                            message_counters =
                                                atomics:new(3,
-                                                           [{signed, false}])},
+                                                           [{signed, false}]),
+                                           internal_id = InternalSequence},
                             response(Transport,
                                      Connection0,
                                      declare_publisher,
@@ -1802,12 +1811,10 @@ handle_frame_post_auth(Transport,
                                                                              Connection1),
                                                                     PublisherId,
                                                                     PublisherReference),
-                            {Connection1#stream_connection{publishers =
-                                                               Publishers0#{PublisherId
-                                                                                =>
-                                                                                Publisher},
-                                                           publisher_to_ids =
-                                                               RefIds1},
+                            {Connection1#stream_connection{
+                               publishers = Publishers0#{PublisherId => Publisher},
+                               publisher_to_ids = RefIds1,
+                               internal_sequence = InternalSequence + 1},
                              State}
                     end;
                 {_, _} ->
@@ -1881,6 +1888,7 @@ handle_frame_post_auth(Transport,
         #{PublisherId := Publisher} ->
             #publisher{stream = Stream,
                        reference = Reference,
+                       internal_id = InternalId,
                        leader = Leader,
                        message_counters = Counters} =
                 Publisher,
@@ -1891,6 +1899,7 @@ handle_frame_post_auth(Transport,
                     rabbit_stream_utils:write_messages(Version, Leader,
                                                        Reference,
                                                        PublisherId,
+                                                       InternalId,
                                                        Messages),
                     sub_credits(Credits, MessageCount),
                     {Connection, State};
