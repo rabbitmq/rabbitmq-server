@@ -486,7 +486,7 @@ events(Config) ->
                                            {exclusive, false},
                                            {arguments, []}],
                                           ConsumerCreated),
-                        classic
+                        rabbit_classic_queue
                 end,
     assert_event_type(queue_created, E2),
     assert_event_prop([{name, QueueName},
