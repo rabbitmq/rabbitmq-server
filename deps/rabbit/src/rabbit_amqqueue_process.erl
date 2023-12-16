@@ -1716,9 +1716,12 @@ handle_cast({sync_start, _, _}, State = #q{q = Q}) ->
       Name, "Stopping after receiving sync_start from another master", []),
     stop(State).
 
-handle_info({maybe_expire, Vsn}, State = #q{args_policy_version = Vsn}) ->
+handle_info({maybe_expire, Vsn}, State = #q{q = Q, expires = Expiry, args_policy_version = Vsn}) ->
     case is_unused(State) of
-        true  -> stop(State);
+        true  ->
+            QResource = rabbit_misc:rs(amqqueue:get_name(Q)),
+            rabbit_log_queue:debug("Deleting '~ts' on expiry after ~tp milliseconds", [QResource, Expiry]),
+            stop(State);
         false -> noreply(State#q{expiry_timer_ref = undefined})
     end;
 
