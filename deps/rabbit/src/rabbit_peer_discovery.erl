@@ -372,7 +372,7 @@ query_node_props(Nodes) when Nodes =/= [] ->
     %% By using a temporary intermediate hidden node, we ask Erlang not to
     %% connect everyone automatically.
     Context = rabbit_prelaunch:get_context(),
-    VMArgs0 = ["-hidden"],
+    VMArgs0 = ["-boot", "no_dot_erlang", "-hidden"],
     VMArgs1 = case Context of
                   #{erlang_cookie := ErlangCookie,
                     var_origins := #{erlang_cookie := environment}} ->
@@ -380,20 +380,23 @@ query_node_props(Nodes) when Nodes =/= [] ->
                   _ ->
                       VMArgs0
               end,
+    VMArgs2 = maybe_add_tls_arguments(VMArgs1),
     PeerStartArg = case Context of
                        #{nodename_type := longnames} ->
                            #{name => PeerName,
                              host => Suffix,
                              longnames => true,
-                             args => VMArgs1};
+                             args => VMArgs2};
                        _ ->
                            #{name => PeerName,
-                             args => VMArgs1}
+                             args => VMArgs2}
                    end,
+    ?LOG_DEBUG("Peer discovery: peer node arguments: ~tp",
+               [PeerStartArg]),
     case peer:start(PeerStartArg) of
         {ok, Pid, Peer} ->
             ?LOG_DEBUG(
-               "Peer discovery: use temporary hidden node '~ts' to query "
+               "Peer discovery: using temporary hidden node '~ts' to query "
                "discovered peers properties",
                [Peer],
                #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
@@ -411,6 +414,41 @@ query_node_props(Nodes) when Nodes =/= [] ->
     end;
 query_node_props([]) ->
     [].
+
+maybe_add_tls_arguments(VMArgs0) ->
+    case init:get_argument(proto_dist) of
+        {ok, [["inet_tls"]]} ->
+            add_tls_arguments(inet_tls, VMArgs0);
+        {ok, [["inet6_tls"]]} ->
+            add_tls_arguments(inet6_tls, VMArgs0);
+        error ->
+            VMArgs0
+    end.
+
+add_tls_arguments(InetDistModule, VMArgs0) ->
+    VMArgs1 = case InetDistModule of
+                  inet_tls ->
+                      ProtoDistArg = ["-proto_dist", "inet_tls" | VMArgs0],
+                      ["-pa", filename:dirname(code:which(inet_tls_dist)) | ProtoDistArg];
+                  inet6_tls ->
+                      ProtoDistArg = ["-proto_dist", "inet6_tls" | VMArgs0],
+                      ["-pa", filename:dirname(code:which(inet6_tls_dist)) | ProtoDistArg]
+              end,
+    VMArgs2 = case init:get_argument(ssl_dist_opt) of
+                  {ok, SslDistOpts0} ->
+                      SslDistOpts1 = [["-ssl_dist_opt" | SslDistOpt] || SslDistOpt <- SslDistOpts0],
+                      SslDistOpts2 = lists:concat(SslDistOpts1),
+                      SslDistOpts2 ++ VMArgs1;
+                  error ->
+                      VMArgs1
+              end,
+    VMArgs3 = case init:get_argument(ssl_dist_optfile) of
+                  {ok, [[SslDistOptfileArg]]} ->
+                      ["-ssl_dist_optfile", SslDistOptfileArg | VMArgs2];
+                  error ->
+                      VMArgs2
+              end,
+    VMArgs3.
 
 do_query_node_props(Nodes) when Nodes =/= [] ->
     %% Make sure all log messages are forwarded from this temporary hidden
