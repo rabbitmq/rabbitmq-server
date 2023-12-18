@@ -429,14 +429,17 @@ add_tls_arguments(InetDistModule, VMArgs0) ->
     VMArgs1 = case InetDistModule of
                   inet_tls ->
                       ProtoDistArg = ["-proto_dist", "inet_tls" | VMArgs0],
-                      ["-pa", filename:dirname(code:which(inet_tls_dist)) | ProtoDistArg];
+                      ["-pa", filename:dirname(code:which(inet_tls_dist))
+                       | ProtoDistArg];
                   inet6_tls ->
                       ProtoDistArg = ["-proto_dist", "inet6_tls" | VMArgs0],
-                      ["-pa", filename:dirname(code:which(inet6_tls_dist)) | ProtoDistArg]
+                      ["-pa", filename:dirname(code:which(inet6_tls_dist))
+                       | ProtoDistArg]
               end,
     VMArgs2 = case init:get_argument(ssl_dist_opt) of
                   {ok, SslDistOpts0} ->
-                      SslDistOpts1 = [["-ssl_dist_opt" | SslDistOpt] || SslDistOpt <- SslDistOpts0],
+                      SslDistOpts1 = [["-ssl_dist_opt" | SslDistOpt]
+                                      || SslDistOpt <- SslDistOpts0],
                       SslDistOpts2 = lists:concat(SslDistOpts1),
                       SslDistOpts2 ++ VMArgs1;
                   error ->
