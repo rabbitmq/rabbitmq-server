@@ -153,6 +153,7 @@ endef
 DOCS_DIR     = docs
 MANPAGES     = $(wildcard $(DOCS_DIR)/*.[0-9])
 WEB_MANPAGES = $(patsubst %,%.html,$(MANPAGES))
+MD_MANPAGES  = $(patsubst %,%.md,$(MANPAGES))
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
@@ -271,7 +272,7 @@ docs:: manpages web-manpages
 manpages: $(MANPAGES)
 	@:
 
-web-manpages: $(WEB_MANPAGES)
+web-manpages: $(WEB_MANPAGES) $(MD_MANPAGES)
 	@:
 
 # We use mandoc(1) to convert manpages to HTML plus an awk script which
@@ -299,7 +300,12 @@ web-manpages: $(WEB_MANPAGES)
 	  } } \
 	  ' > "$@"
 
+%.md: %
+	$(gen_verbose) mandoc -T markdown -O 'fragment,man=%N.%S.md' "$<" | \
+	  sed -E -e 's/\{/\&lcub;/g' \
+	> "$@"
+
 distclean:: distclean-manpages
 
 distclean-manpages::
-	$(gen_verbose) rm -f $(WEB_MANPAGES)
+	$(gen_verbose) rm -f $(WEB_MANPAGES) $(MD_MANPAGES)
