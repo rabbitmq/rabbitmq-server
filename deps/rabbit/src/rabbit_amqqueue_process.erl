@@ -1720,7 +1720,7 @@ handle_info({maybe_expire, Vsn}, State = #q{q = Q, expires = Expiry, args_policy
     case is_unused(State) of
         true  ->
             QResource = rabbit_misc:rs(amqqueue:get_name(Q)),
-            rabbit_log_queue:debug("Deleting '~ts' on expiry after ~tp milliseconds", [QResource, Expiry]),
+            rabbit_log_queue:debug("Deleting 'classic ~ts' on expiry after ~tp milliseconds", [QResource, Expiry]),
             stop(State);
         false -> noreply(State#q{expiry_timer_ref = undefined})
     end;
