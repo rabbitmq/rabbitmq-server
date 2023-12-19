@@ -65,9 +65,14 @@ fetch(Key, FetchFun, FunArgs, Timeout) ->
     ProcName = process_name(Key),
     Pid = case whereis(ProcName) of
             undefined ->
-                {ok, P} = supervisor:start_child(rabbit_mgmt_db_cache_sup,
-                                                 ?CHILD(Key)),
-                P;
+                case supervisor:start_child(rabbit_mgmt_db_cache_sup,
+                                            ?CHILD(Key)) of
+                    {ok, P} ->
+                        P;
+                    {error, {already_started, P}} ->
+                        %% A parallel request started the cache meanwhile
+                        P
+                end;
             P -> P
           end,
     gen_server:call(Pid, {fetch, FetchFun, FunArgs}, Timeout).
