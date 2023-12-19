@@ -809,7 +809,8 @@ direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
                       rabbit_log:warning(ErrorMsg, [Explanation]),
                       bad_request(list_to_binary(Explanation), ReqData1, Context);
                   {badrpc, Reason} ->
-                      rabbit_log:warning(ErrorMsg, [Reason]),
+                      Msg = io_lib:format("~tp", [Reason]),
+                      rabbit_log:warning(ErrorMsg, [Msg]),
                       bad_request(
                         list_to_binary(
                           io_lib:format("Request to node ~ts failed with ~tp",
