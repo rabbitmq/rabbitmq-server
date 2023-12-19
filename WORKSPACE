@@ -100,9 +100,15 @@ http_file(
 
 http_file(
     name = "otp_src_25_3",
+<<<<<<< HEAD
     downloaded_file_path = "OTP-25.3.2.6.tar.gz",
     sha256 = "67e0f5c209a335cfc216a57b1f016072a69eb9683d36d6d101bf2f60a2e45926",
     urls = ["https://github.com/erlang/otp/archive/OTP-25.3.2.6.tar.gz"],
+=======
+    downloaded_file_path = "OTP-25.3.2.8.tar.gz",
+    sha256 = "6b8a6dcfd294ee9d88e47721a6f897603532575329fea587240776c02b232d38",
+    urls = ["https://github.com/erlang/otp/archive/OTP-25.3.2.8.tar.gz"],
+>>>>>>> 3987c1ac3c (Adopt otp 25.3.2.8)
 )
 
 load(

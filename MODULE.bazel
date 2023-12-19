@@ -72,8 +72,19 @@ erlang_config.internal_erlang_from_github_release(
 
 erlang_config.internal_erlang_from_github_release(
     name = "25_3",
+<<<<<<< HEAD
     sha256 = "14f519bb63f9cc8d1db62ef7c58abc56fa94f8f76d918d23acad374f38434088",
     version = "25.3.2.6",
+=======
+    sha256 = "9424d7713b361c8a24690515acbd7e0fd37b67d54cad1e1e4af146eae0e335d3",
+    version = "25.3.2.8",
+)
+
+erlang_config.internal_erlang_from_github_release(
+    name = "26",
+    sha256 = "47853ea9230643a0a31004433f07a71c1b92d6e0094534f629e3b75dbc62f193",
+    version = "26.0.2",
+>>>>>>> 3987c1ac3c (Adopt otp 25.3.2.8)
 )
 
 erlang_config.internal_erlang_from_http_archive(
