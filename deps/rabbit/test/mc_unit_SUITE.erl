@@ -294,7 +294,7 @@ amqpl_amqp_bin_amqpl(_Config) ->
     ?assertEqual({utf8, <<"msg-id">>}, mc:message_id(Msg)),
     ?assertEqual(1, mc:ttl(Msg)),
     ?assertEqual({utf8, <<"apple">>}, mc:x_header(<<"x-stream-filter">>, Msg)),
-
+    ?assert(is_integer(mc:get_annotation(rts, Msg))),
 
     %% array type non x-headers cannot be converted into amqp
     RoutingHeaders = maps:remove(<<"a-array">>, mc:routing_headers(Msg, [])),
@@ -316,6 +316,7 @@ amqpl_amqp_bin_amqpl(_Config) ->
     %% at this point the type is now present as a message annotation
     ?assertEqual({utf8, <<"45">>}, mc:x_header(<<"x-basic-type">>, Msg10)),
     ?assertEqual(RoutingHeaders, mc:routing_headers(Msg10, [])),
+    ?assert(is_integer(mc:get_annotation(rts, Msg10))),
 
     [
      #'v1_0.header'{} = Hdr10,
@@ -370,6 +371,7 @@ amqpl_amqp_bin_amqpl(_Config) ->
     ?assertEqual(1, mc:ttl(MsgL2)),
     ?assertEqual({utf8, <<"apple">>}, mc:x_header(<<"x-stream-filter">>, MsgL2)),
     ?assertEqual(RoutingHeaders, mc:routing_headers(MsgL2, [])),
+    ?assert(is_integer(mc:get_annotation(rts, MsgL2))),
     ok.
 
 amqpl_cc_amqp_bin_amqpl(_Config) ->
