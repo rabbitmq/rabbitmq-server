@@ -71,11 +71,12 @@ accept_content(ReqData, Context) ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(io_lib:format(F ++ "~n", A)), ReqData, Context)
     end.
 
-delete_resource(ReqData, Context = #context{user = #user{username = ActingUser}}) ->
+delete_resource(ReqData, Context) ->
     %% We need to retrieve manually if-unused and if-empty, as the HTTP API uses '-'
     %% while the record uses '_'
     IfUnused = <<"true">> =:= rabbit_mgmt_util:qs_val(<<"if-unused">>, ReqData),
     IfEmpty = <<"true">> =:= rabbit_mgmt_util:qs_val(<<"if-empty">>, ReqData),
+<<<<<<< HEAD
     VHost = rabbit_mgmt_util:id(vhost, ReqData),
     QName = rabbit_mgmt_util:id(queue, ReqData),
     Name = rabbit_misc:r(VHost, queue, QName),
@@ -96,6 +97,15 @@ delete_resource(ReqData, Context = #context{user = #user{username = ActingUser}}
         {error, not_found} ->
             {true, ReqData, Context}
    end.
+=======
+    Name = rabbit_mgmt_util:id(queue, ReqData),
+    rabbit_mgmt_util:direct_request(
+      'queue.delete',
+      fun rabbit_mgmt_format:format_accept_content/1,
+      [{queue, Name},
+       {if_unused, IfUnused},
+       {if_empty, IfEmpty}], "Delete queue error: ~ts", ReqData, Context).
+>>>>>>> 7ebaae7ef0 (Revert "HTTP API: DELETE /api/queues/{vhost}/{name} use internal API call")
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
