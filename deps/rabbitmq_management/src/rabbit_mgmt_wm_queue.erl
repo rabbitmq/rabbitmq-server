@@ -96,10 +96,14 @@ delete_resource(ReqData, Context = #context{user = #user{username = ActingUser}}
    end.
 
 is_authorized(ReqData, Context) ->
-    VHost = rabbit_mgmt_util:id(vhost, ReqData),
-    QName = rabbit_mgmt_util:id(queue, ReqData),
-    QRes  = rabbit_misc:r(VHost, queue, QName),
-    rabbit_mgmt_util:is_authorized_vhost_and_has_resource_permission(ReqData, Context, QRes, configure).
+    case cowboy_req:method(ReqData) of
+        <<"DELETE">> ->
+            has_resource_permissions(configure, ReqData, Context);
+        <<"PUT">> ->
+            has_resource_permissions(configure, ReqData, Context);
+        _ ->
+            rabbit_mgmt_util:is_authorized_vhost(ReqData, Context)
+    end.
 
 %%--------------------------------------------------------------------
 
@@ -131,3 +135,9 @@ queue(VHost, QName) ->
         {ok, Q}            -> rabbit_mgmt_format:queue(Q);
         {error, not_found} -> not_found
     end.
+
+has_resource_permissions(Permission, ReqData, Context) ->
+    VHost = rabbit_mgmt_util:id(vhost, ReqData),
+    QName = rabbit_mgmt_util:id(queue, ReqData),
+    QRes  = rabbit_misc:r(VHost, queue, QName),
+    rabbit_mgmt_util:is_authorized_vhost_and_has_resource_permission(ReqData, Context, QRes, Permission).
