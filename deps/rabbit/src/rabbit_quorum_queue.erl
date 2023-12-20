@@ -359,26 +359,27 @@ local_or_remote_handler(ChPid, Module, Function, Args) ->
     end.
 
 become_leader(QName, Name) ->
+    %% as this function is called synchronously when a ra node becomes leader
+    %% we need to ensure there is no chance of blocking as else the ra node
+    %% may not be able to establish its leadership
+    spawn(fun () -> become_leader0(QName, Name) end).
+
+become_leader0(QName, Name) ->
     Fun = fun (Q1) ->
                   amqqueue:set_state(
                     amqqueue:set_pid(Q1, {Name, node()}),
                     live)
           end,
-    %% as this function is called synchronously when a ra node becomes leader
-    %% we need to ensure there is no chance of blocking as else the ra node
-    %% may not be able to establish its leadership
-    spawn(fun() ->
-                  _ = rabbit_amqqueue:update(QName, Fun),
-                  case rabbit_amqqueue:lookup(QName) of
-                      {ok, Q0} when ?is_amqqueue(Q0) ->
-                          Nodes = get_nodes(Q0),
-                          [_ = erpc_call(Node, ?MODULE, rpc_delete_metrics,
-                                         [QName], ?RPC_TIMEOUT)
-                           || Node <- Nodes, Node =/= node()];
-                      _ ->
-                          ok
-                  end
-          end).
+    _ = rabbit_amqqueue:update(QName, Fun),
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q0} when ?is_amqqueue(Q0) ->
+            Nodes = get_nodes(Q0),
+            [_ = erpc_call(Node, ?MODULE, rpc_delete_metrics,
+                           [QName], ?RPC_TIMEOUT)
+             || Node <- Nodes, Node =/= node()];
+        _ ->
+            ok
+    end.
 
 -spec all_replica_states() -> {node(), #{atom() => atom()}}.
 all_replica_states() ->
@@ -550,7 +551,7 @@ handle_tick(QName,
               catch
                   _:Err ->
                       rabbit_log:debug("~ts: handle tick failed with ~p",
-                             [rabbit_misc:rs(QName), Err]),
+                                       [rabbit_misc:rs(QName), Err]),
                       ok
               end
       end).
@@ -566,7 +567,7 @@ repair_leader_record(QName, Self) ->
             rabbit_log:debug("~ts: repairing leader record",
                              [rabbit_misc:rs(QName)]),
             {_, Name} = erlang:process_info(Self, registered_name),
-            become_leader(QName, Name),
+            become_leader0(QName, Name),
             ok
     end,
     ok.
