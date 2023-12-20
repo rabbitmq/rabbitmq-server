@@ -756,7 +756,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                     NodeConfig1 = rabbit_ct_helpers:set_config(
                                     NodeConfig,
                                     [{effective_srcdir, SrcDir},
-                                    {make_vars_for_node_startup, MakeVars}]),
+                                     {make_vars_for_node_startup, MakeVars}]),
                     query_node(Config, NodeConfig1);
                 _ ->
                     AbortCmd = ["stop-node" | MakeVars],
@@ -766,19 +766,24 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
         RunCmd ->
             UseSecondary = CanUseSecondary andalso
                 rabbit_ct_helpers:get_config(Config, rabbitmq_run_secondary_cmd) =/= undefined,
-            EnabledPluginsMakeVars = case {UseSecondary, WithPlugins} of
-                {_, false} ->
-                    ["RABBITMQ_ENABLED_PLUGINS=rabbit"];
-                {true, _} ->
-                    [{"RABBITMQ_ENABLED_PLUGINS=~ts", [filename:basename(SrcDir)]}];
-                _ ->
-                    []
-            end,
+            PluginsMakeVars = case {UseSecondary, WithPlugins} of
+                                  {_, false} ->
+                                      ["LEAVE_PLUGINS_DISABLED=1"];
+                                  {true, _} ->
+                                      case filename:basename(SrcDir) of
+                                          "rabbit" ->
+                                              ["LEAVE_PLUGINS_DISABLED=1"];
+                                          Plugin ->
+                                              [{"RABBITMQ_ENABLED_PLUGINS=~ts", [Plugin]}]
+                                      end;
+                                  _ ->
+                                      []
+                              end,
             RmqRun = case CanUseSecondary of
-                false -> RunCmd;
-                _ -> rabbit_ct_helpers:get_config(Config, rabbitmq_run_secondary_cmd, RunCmd)
-            end,
-            case rabbit_ct_helpers:exec([RmqRun, "-C", SrcDir] ++ EnabledPluginsMakeVars ++ Cmd) of
+                         false -> RunCmd;
+                         _ -> rabbit_ct_helpers:get_config(Config, rabbitmq_run_secondary_cmd, RunCmd)
+                     end,
+            case rabbit_ct_helpers:exec([RmqRun, "-C", SrcDir] ++ PluginsMakeVars ++ Cmd) of
                 {ok, _} ->
                     NodeConfig1 = rabbit_ct_helpers:set_config(
                                     NodeConfig,
