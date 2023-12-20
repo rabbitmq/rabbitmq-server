@@ -1994,7 +1994,9 @@ queue_purge_test(Config) ->
     http_delete(Config, "/queues/%2F/myqueue/contents", {group, '2xx'}),
     http_delete(Config, "/queues/%2F/badqueue/contents", ?NOT_FOUND),
     http_delete(Config, "/queues/%2F/exclusive/contents", ?BAD_REQUEST),
-    http_delete(Config, "/queues/%2F/exclusive", {group, '2xx'}),
+    http_delete(Config, "/queues/%2F/exclusive", ?BAD_REQUEST),
+    #'basic.get_empty'{} =
+        amqp_channel:call(Ch, #'basic.get'{queue = <<"myqueue">>}),
     close_channel(Ch),
     close_connection(Conn),
     http_delete(Config, "/queues/%2F/myqueue", {group, '2xx'}),
