@@ -18,11 +18,7 @@
 
 %% API
 -export([enforce_correct_name/1,
-<<<<<<< HEAD
-         write_messages/4,
-=======
-         write_messages/6,
->>>>>>> 42bdcfb8e4 (Add incremental ID for non-dedup stream publishers)
+         write_messages/5,
          parse_map/2,
          auth_mechanisms/1,
          auth_mechanism_to_module/2,
@@ -58,30 +54,26 @@ check_name(<<"">>) ->
 check_name(_Name) ->
     ok.
 
-<<<<<<< HEAD
-write_messages(_ClusterLeader, undefined, _PublisherId, <<>>) ->
-=======
-write_messages(_Version, _ClusterLeader, _PublisherRef, _PublisherId, _InternalId, <<>>) ->
->>>>>>> 42bdcfb8e4 (Add incremental ID for non-dedup stream publishers)
+write_messages(_ClusterLeader, undefined, _PublisherId, _InternalId, <<>>) ->
     ok;
 write_messages(ClusterLeader,
                undefined,
                PublisherId,
+               InternalId,
                <<PublishingId:64,
                  0:1,
                  MessageSize:31,
                  Message:MessageSize/binary,
                  Rest/binary>>) ->
-    % FIXME handle write error
-    ok =
-        osiris:write(ClusterLeader,
-                     undefined,
-                     {PublisherId, PublishingId},
-                     Message),
-    write_messages(ClusterLeader, undefined, PublisherId, Rest);
+    ok = osiris:write(ClusterLeader,
+                      undefined,
+                      {PublisherId, InternalId, PublishingId},
+                      Message),
+    write_messages(ClusterLeader, undefined, PublisherId, InternalId, Rest);
 write_messages(ClusterLeader,
                undefined,
                PublisherId,
+               InternalId,
                <<PublishingId:64,
                  1:1,
                  CompressionType:3,
@@ -91,18 +83,16 @@ write_messages(ClusterLeader,
                  BatchSize:32,
                  Batch:BatchSize/binary,
                  Rest/binary>>) ->
-    % FIXME handle write error
-    ok =
-        osiris:write(ClusterLeader,
-                     undefined,
-                     {PublisherId, PublishingId},
-                     {batch,
-                      MessageCount,
-                      CompressionType,
-                      UncompressedSize,
-                      Batch}),
-    write_messages(ClusterLeader, undefined, PublisherId, Rest);
-write_messages(_ClusterLeader, _PublisherRef, _PublisherId, <<>>) ->
+    ok = osiris:write(ClusterLeader,
+                      undefined,
+                      {PublisherId, InternalId, PublishingId},
+                      {batch,
+                       MessageCount,
+                       CompressionType,
+                       UncompressedSize,
+                       Batch}),
+    write_messages(ClusterLeader, undefined, PublisherId, InternalId, Rest);
+write_messages(_ClusterLeader, _PublisherRef, _PublisherId, _InternalId, <<>>) ->
     ok;
 write_messages(ClusterLeader,
                PublisherRef,
@@ -113,16 +103,9 @@ write_messages(ClusterLeader,
                  MessageSize:31,
                  Message:MessageSize/binary,
                  Rest/binary>>) ->
-<<<<<<< HEAD
-    % FIXME handle write error
     ok = osiris:write(ClusterLeader, PublisherRef, PublishingId, Message),
-    write_messages(ClusterLeader, PublisherRef, PublisherId, Rest);
+    write_messages(ClusterLeader, PublisherRef, PublisherId, InternalId, Rest);
 write_messages(ClusterLeader,
-=======
-    write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
-                    PublishingId, Message, Rest);
-write_messages(?VERSION_1 = V, ClusterLeader,
->>>>>>> 42bdcfb8e4 (Add incremental ID for non-dedup stream publishers)
                PublisherRef,
                PublisherId,
                InternalId,
@@ -135,60 +118,15 @@ write_messages(?VERSION_1 = V, ClusterLeader,
                  BatchSize:32,
                  Batch:BatchSize/binary,
                  Rest/binary>>) ->
-<<<<<<< HEAD
-    % FIXME handle write error
-    ok =
-        osiris:write(ClusterLeader,
-                     PublisherRef,
-                     PublishingId,
-                     {batch,
-                      MessageCount,
-                      CompressionType,
-                      UncompressedSize,
-                      Batch}),
-    write_messages(ClusterLeader, PublisherRef, PublisherId, Rest).
-=======
-    Data = {batch, MessageCount, CompressionType, UncompressedSize, Batch},
-    write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
-                    PublishingId, Data, Rest);
-write_messages(?VERSION_2 = V, ClusterLeader,
-               PublisherRef,
-               PublisherId,
-               InternalId,
-               <<PublishingId:64,
-                 -1:16/signed,
-                 0:1,
-                 MessageSize:31,
-                 Message:MessageSize/binary,
-                 Rest/binary>>) ->
-    write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
-                    PublishingId, Message, Rest);
-write_messages(?VERSION_2 = V, ClusterLeader,
-               PublisherRef,
-               PublisherId,
-               InternalId,
-               <<PublishingId:64,
-                 FilterValueLength:16, FilterValue:FilterValueLength/binary,
-                 0:1,
-                 MessageSize:31,
-                 Message:MessageSize/binary,
-                 Rest/binary>>) ->
-    write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
-                    PublishingId, {FilterValue, Message}, Rest).
-
-write_messages0(Vsn, ClusterLeader, PublisherRef, PublisherId, InternalId, PublishingId, Data, Rest) ->
-    Corr = case PublisherRef of
-               undefined ->
-                   %% we add the internal ID to detect late confirms from a stale publisher
-                   {PublisherId, InternalId, PublishingId};
-               _ ->
-                   %% we cannot add the internal ID because the correlation ID must be an integer
-                   %% when deduplication is activated.
-                   PublishingId
-           end,
-    ok = osiris:write(ClusterLeader, PublisherRef, Corr, Data),
-    write_messages(Vsn, ClusterLeader, PublisherRef, PublisherId, InternalId, Rest).
->>>>>>> 42bdcfb8e4 (Add incremental ID for non-dedup stream publishers)
+    ok = osiris:write(ClusterLeader,
+                      PublisherRef,
+                      PublishingId,
+                      {batch,
+                       MessageCount,
+                       CompressionType,
+                       UncompressedSize,
+                       Batch}),
+    write_messages(ClusterLeader, PublisherRef, PublisherId, InternalId, Rest).
 
 parse_map(<<>>, _Count) ->
     {#{}, <<>>};

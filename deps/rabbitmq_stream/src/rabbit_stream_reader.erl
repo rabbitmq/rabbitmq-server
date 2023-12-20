@@ -99,14 +99,9 @@
          outstanding_requests :: #{integer() => #request{}},
          deliver_version :: rabbit_stream_core:command_version(),
          request_timeout :: pos_integer(),
-<<<<<<< HEAD
-         outstanding_requests_timer :: undefined | erlang:reference()}).
-=======
          outstanding_requests_timer :: undefined | erlang:reference(),
-         filtering_supported :: boolean(),
          %% internal sequence used for publishers
          internal_sequence = 0 :: integer()}).
->>>>>>> 42bdcfb8e4 (Add incremental ID for non-dedup stream publishers)
 -record(configuration,
         {initial_credits :: integer(),
          credits_required_for_unblocking :: integer(),
