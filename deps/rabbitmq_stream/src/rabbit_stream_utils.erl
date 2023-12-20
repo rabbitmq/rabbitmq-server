@@ -18,7 +18,7 @@
 
 %% API
 -export([enforce_correct_name/1,
-         write_messages/4,
+         write_messages/5,
          parse_map/2,
          auth_mechanisms/1,
          auth_mechanism_to_module/2,
@@ -54,26 +54,26 @@ check_name(<<"">>) ->
 check_name(_Name) ->
     ok.
 
-write_messages(_ClusterLeader, undefined, _PublisherId, <<>>) ->
+write_messages(_ClusterLeader, undefined, _PublisherId, _InternalId, <<>>) ->
     ok;
 write_messages(ClusterLeader,
                undefined,
                PublisherId,
+               InternalId,
                <<PublishingId:64,
                  0:1,
                  MessageSize:31,
                  Message:MessageSize/binary,
                  Rest/binary>>) ->
-    % FIXME handle write error
-    ok =
-        osiris:write(ClusterLeader,
-                     undefined,
-                     {PublisherId, PublishingId},
-                     Message),
-    write_messages(ClusterLeader, undefined, PublisherId, Rest);
+    ok = osiris:write(ClusterLeader,
+                      undefined,
+                      {PublisherId, InternalId, PublishingId},
+                      Message),
+    write_messages(ClusterLeader, undefined, PublisherId, InternalId, Rest);
 write_messages(ClusterLeader,
                undefined,
                PublisherId,
+               InternalId,
                <<PublishingId:64,
                  1:1,
                  CompressionType:3,
@@ -83,33 +83,32 @@ write_messages(ClusterLeader,
                  BatchSize:32,
                  Batch:BatchSize/binary,
                  Rest/binary>>) ->
-    % FIXME handle write error
-    ok =
-        osiris:write(ClusterLeader,
-                     undefined,
-                     {PublisherId, PublishingId},
-                     {batch,
-                      MessageCount,
-                      CompressionType,
-                      UncompressedSize,
-                      Batch}),
-    write_messages(ClusterLeader, undefined, PublisherId, Rest);
-write_messages(_ClusterLeader, _PublisherRef, _PublisherId, <<>>) ->
+    ok = osiris:write(ClusterLeader,
+                      undefined,
+                      {PublisherId, InternalId, PublishingId},
+                      {batch,
+                       MessageCount,
+                       CompressionType,
+                       UncompressedSize,
+                       Batch}),
+    write_messages(ClusterLeader, undefined, PublisherId, InternalId, Rest);
+write_messages(_ClusterLeader, _PublisherRef, _PublisherId, _InternalId, <<>>) ->
     ok;
 write_messages(ClusterLeader,
                PublisherRef,
                PublisherId,
+               InternalId,
                <<PublishingId:64,
                  0:1,
                  MessageSize:31,
                  Message:MessageSize/binary,
                  Rest/binary>>) ->
-    % FIXME handle write error
     ok = osiris:write(ClusterLeader, PublisherRef, PublishingId, Message),
-    write_messages(ClusterLeader, PublisherRef, PublisherId, Rest);
+    write_messages(ClusterLeader, PublisherRef, PublisherId, InternalId, Rest);
 write_messages(ClusterLeader,
                PublisherRef,
                PublisherId,
+               InternalId,
                <<PublishingId:64,
                  1:1,
                  CompressionType:3,
@@ -119,17 +118,15 @@ write_messages(ClusterLeader,
                  BatchSize:32,
                  Batch:BatchSize/binary,
                  Rest/binary>>) ->
-    % FIXME handle write error
-    ok =
-        osiris:write(ClusterLeader,
-                     PublisherRef,
-                     PublishingId,
-                     {batch,
-                      MessageCount,
-                      CompressionType,
-                      UncompressedSize,
-                      Batch}),
-    write_messages(ClusterLeader, PublisherRef, PublisherId, Rest).
+    ok = osiris:write(ClusterLeader,
+                      PublisherRef,
+                      PublishingId,
+                      {batch,
+                       MessageCount,
+                       CompressionType,
+                       UncompressedSize,
+                       Batch}),
+    write_messages(ClusterLeader, PublisherRef, PublisherId, InternalId, Rest).
 
 parse_map(<<>>, _Count) ->
     {#{}, <<>>};
