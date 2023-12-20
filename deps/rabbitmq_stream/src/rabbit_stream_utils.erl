@@ -20,7 +20,7 @@
 
 %% API
 -export([enforce_correct_name/1,
-         write_messages/5,
+         write_messages/6,
          parse_map/2,
          auth_mechanisms/1,
          auth_mechanism_to_module/2,
@@ -60,21 +60,23 @@ check_name(<<"">>) ->
 check_name(_Name) ->
     ok.
 
-write_messages(_Version, _ClusterLeader, _PublisherRef, _PublisherId, <<>>) ->
+write_messages(_Version, _ClusterLeader, _PublisherRef, _PublisherId, _InternalId, <<>>) ->
     ok;
 write_messages(?VERSION_1 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
+               InternalId,
                <<PublishingId:64,
                  0:1,
                  MessageSize:31,
                  Message:MessageSize/binary,
                  Rest/binary>>) ->
-    write_messages0(V, ClusterLeader, PublisherRef, PublisherId,
+    write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
                     PublishingId, Message, Rest);
 write_messages(?VERSION_1 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
+               InternalId,
                <<PublishingId:64,
                  1:1,
                  CompressionType:3,
@@ -85,38 +87,45 @@ write_messages(?VERSION_1 = V, ClusterLeader,
                  Batch:BatchSize/binary,
                  Rest/binary>>) ->
     Data = {batch, MessageCount, CompressionType, UncompressedSize, Batch},
-    write_messages0(V, ClusterLeader, PublisherRef, PublisherId,
+    write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
                     PublishingId, Data, Rest);
 write_messages(?VERSION_2 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
+               InternalId,
                <<PublishingId:64,
                  -1:16/signed,
                  0:1,
                  MessageSize:31,
                  Message:MessageSize/binary,
                  Rest/binary>>) ->
-    write_messages0(V, ClusterLeader, PublisherRef, PublisherId,
+    write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
                     PublishingId, Message, Rest);
 write_messages(?VERSION_2 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
+               InternalId,
                <<PublishingId:64,
                  FilterValueLength:16, FilterValue:FilterValueLength/binary,
                  0:1,
                  MessageSize:31,
                  Message:MessageSize/binary,
                  Rest/binary>>) ->
-    write_messages0(V, ClusterLeader, PublisherRef, PublisherId,
+    write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
                     PublishingId, {FilterValue, Message}, Rest).
 
-write_messages0(Vsn, ClusterLeader, PublisherRef, PublisherId, PublishingId, Data, Rest) ->
+write_messages0(Vsn, ClusterLeader, PublisherRef, PublisherId, InternalId, PublishingId, Data, Rest) ->
     Corr = case PublisherRef of
-               undefined -> {PublisherId, PublishingId};
-               _ -> PublishingId
+               undefined ->
+                   %% we add the internal ID to detect late confirms from a stale publisher
+                   {PublisherId, InternalId, PublishingId};
+               _ ->
+                   %% we cannot add the internal ID because the correlation ID must be an integer
+                   %% when deduplication is activated.
+                   PublishingId
            end,
     ok = osiris:write(ClusterLeader, PublisherRef, Corr, Data),
-    write_messages(Vsn, ClusterLeader, PublisherRef, PublisherId, Rest).
+    write_messages(Vsn, ClusterLeader, PublisherRef, PublisherId, InternalId, Rest).
 
 parse_map(<<>>, _Count) ->
     {#{}, <<>>};
