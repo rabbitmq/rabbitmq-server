@@ -413,6 +413,8 @@ info(backing_queue_status, #state{bq = BQ, bqss = BQSs}) ->
           end, nothing, BQSs);
 info(head_message_timestamp, #state{bq = BQ, bqss = BQSs}) ->
     find_head_message_timestamp(BQ, BQSs, '');
+info(oldest_message_received_timestamp, #state{bq = BQ, bqss = BQSs}) ->
+    find_oldest_message_received_timestamp(BQ, BQSs);
 info(online, _) ->
     '';
 info(Item, #state{bq = BQ, bqss = BQSs}) ->
@@ -688,6 +690,28 @@ find_head_message_timestamp(BQ, [{_, BQSN} | Rest], Timestamp) ->
     end;
 find_head_message_timestamp(_, [], Timestamp) ->
     Timestamp.
+
+find_oldest_message_received_timestamp(BQ, BQs) ->
+    %% Oldest message timestamp among all priority queues
+    Timestamps =
+        lists:foldl(
+          fun({_, BQSN}, Acc) ->
+                  case oldest_message_received_timestamp(BQ, BQSN) of
+                      '' -> Acc;
+                      Ts -> [Ts | Acc]
+                  end
+          end, [], BQs),
+    case Timestamps of
+        [] -> '';
+        _ -> lists:min(Timestamps)
+    end.
+
+oldest_message_received_timestamp(BQ, BQSN) ->
+    MsgCount = BQ:len(BQSN) + BQ:info(messages_unacknowledged_ram, BQSN),
+    if
+        MsgCount =/= 0 -> BQ:info(oldest_message_received_timestamp, BQSN);
+        true -> ''
+    end.
 
 zip_msgs_and_acks(Pubs, AckTags) ->
     lists:zipwith(
