@@ -71,29 +71,18 @@ accept_content(ReqData, Context) ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(io_lib:format(F ++ "~n", A)), ReqData, Context)
     end.
 
-delete_resource(ReqData, Context = #context{user = #user{username = ActingUser}}) ->
+delete_resource(ReqData, Context) ->
     %% We need to retrieve manually if-unused and if-empty, as the HTTP API uses '-'
     %% while the record uses '_'
     IfUnused = <<"true">> =:= rabbit_mgmt_util:qs_val(<<"if-unused">>, ReqData),
     IfEmpty = <<"true">> =:= rabbit_mgmt_util:qs_val(<<"if-empty">>, ReqData),
-    VHost = rabbit_mgmt_util:id(vhost, ReqData),
-    QName = rabbit_mgmt_util:id(queue, ReqData),
-    Name = rabbit_misc:r(VHost, queue, QName),
-    case rabbit_amqqueue:lookup(Name) of
-        {ok, Q} ->
-            IsExclusive = amqqueue:is_exclusive(Q),
-            ExclusiveOwnerPid = amqqueue:get_exclusive_owner(Q),
-            try rabbit_amqqueue:delete_with(Q, ExclusiveOwnerPid, IfUnused, IfEmpty, ActingUser, IsExclusive) of
-                {ok, _} ->
-                    {true, ReqData, Context}
-            catch
-                _:#amqp_error{explanation = Explanation} ->
-                    rabbit_log:warning("Delete queue error: ~ts", [Explanation]),
-                    rabbit_mgmt_util:bad_request(list_to_binary(Explanation), ReqData, Context)
-            end;
-        {error, not_found} ->
-            {true, ReqData, Context}
-   end.
+    Name = rabbit_mgmt_util:id(queue, ReqData),
+    rabbit_mgmt_util:direct_request(
+      'queue.delete',
+      fun rabbit_mgmt_format:format_accept_content/1,
+      [{queue, Name},
+       {if_unused, IfUnused},
+       {if_empty, IfEmpty}], "Delete queue error: ~ts", ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
