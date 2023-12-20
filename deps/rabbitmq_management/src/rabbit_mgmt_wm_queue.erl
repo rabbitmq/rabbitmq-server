@@ -77,6 +77,7 @@ delete_resource(ReqData, Context) ->
     IfUnused = <<"true">> =:= rabbit_mgmt_util:qs_val(<<"if-unused">>, ReqData),
     IfEmpty = <<"true">> =:= rabbit_mgmt_util:qs_val(<<"if-empty">>, ReqData),
 <<<<<<< HEAD
+<<<<<<< HEAD
    VHost = rabbit_mgmt_util:id(vhost, ReqData),
 =======
 <<<<<<< HEAD
@@ -102,6 +103,8 @@ delete_resource(ReqData, Context) ->
             {true, ReqData, Context}
    end.
 =======
+=======
+>>>>>>> 685c4f6027 (Resolve a conflict #10185 #10187)
     Name = rabbit_mgmt_util:id(queue, ReqData),
     rabbit_mgmt_util:direct_request(
       'queue.delete',
@@ -109,7 +112,6 @@ delete_resource(ReqData, Context) ->
       [{queue, Name},
        {if_unused, IfUnused},
        {if_empty, IfEmpty}], "Delete queue error: ~ts", ReqData, Context).
->>>>>>> 7ebaae7ef0 (Revert "HTTP API: DELETE /api/queues/{vhost}/{name} use internal API call")
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
