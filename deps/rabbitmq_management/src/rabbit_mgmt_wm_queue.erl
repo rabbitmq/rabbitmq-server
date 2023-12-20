@@ -76,28 +76,6 @@ delete_resource(ReqData, Context) ->
     %% while the record uses '_'
     IfUnused = <<"true">> =:= rabbit_mgmt_util:qs_val(<<"if-unused">>, ReqData),
     IfEmpty = <<"true">> =:= rabbit_mgmt_util:qs_val(<<"if-empty">>, ReqData),
-<<<<<<< HEAD
-    VHost = rabbit_mgmt_util:id(vhost, ReqData),
-    QName = rabbit_mgmt_util:id(queue, ReqData),
-    Name = rabbit_misc:r(VHost, queue, QName),
-    case rabbit_amqqueue:lookup(Name) of
-        {ok, Q} ->
-            case rabbit_amqqueue:delete(Q, IfUnused, IfEmpty, ActingUser) of
-                {ok, _} ->
-                    {true, ReqData, Context};
-                {error, not_empty} ->
-                    Explanation = io_lib:format("~ts not empty", [rabbit_misc:rs(Name)]),
-                    rabbit_log:warning("Delete queue error: ~ts", [Explanation]),
-                    rabbit_mgmt_util:bad_request(list_to_binary(Explanation), ReqData, Context);
-                {error, in_use} ->
-                    Explanation = io_lib:format("~ts in use", [rabbit_misc:rs(Name)]),
-                    rabbit_log:warning("Delete queue error: ~ts", [Explanation]),
-                    rabbit_mgmt_util:bad_request(list_to_binary(Explanation), ReqData, Context)
-            end;
-        {error, not_found} ->
-            {true, ReqData, Context}
-   end.
-=======
     Name = rabbit_mgmt_util:id(queue, ReqData),
     rabbit_mgmt_util:direct_request(
       'queue.delete',
@@ -105,7 +83,6 @@ delete_resource(ReqData, Context) ->
       [{queue, Name},
        {if_unused, IfUnused},
        {if_empty, IfEmpty}], "Delete queue error: ~ts", ReqData, Context).
->>>>>>> 7ebaae7ef0 (Revert "HTTP API: DELETE /api/queues/{vhost}/{name} use internal API call")
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
