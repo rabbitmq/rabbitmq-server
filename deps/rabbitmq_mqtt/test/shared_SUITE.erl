@@ -174,6 +174,11 @@ end_per_group(_, Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_testcase(rabbit_mqtt_qos0_queue_kill_node = T, Config) ->
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, rabbit_mqtt_qos0_queue) of
+        ok -> init_per_testcase0(T, Config);
+        {skip, _} = Skip -> Skip
+    end;
 init_per_testcase(T, Config)
   when T =:= management_plugin_connection;
        T =:= management_plugin_enable ->
