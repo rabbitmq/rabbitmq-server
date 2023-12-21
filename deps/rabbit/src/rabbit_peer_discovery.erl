@@ -444,39 +444,36 @@ add_tls_arguments(InetDistModule, VMArgs0) ->
                       ["-pa", filename:dirname(code:which(inet6_tls_dist))
                        | ProtoDistArg]
               end,
-    %% In the next case, RabbitMQ has been configured with additional Erlang VM arguments such as this:
+    %% In the next case, RabbitMQ has been configured with additional Erlang VM
+    %% arguments such as this:
     %%
     %% SERVER_ADDITIONAL_ERL_ARGS="-pa $ERL_SSL_PATH -proto_dist inet_tls
     %%     -ssl_dist_opt server_cacertfile /etc/rabbitmq/ca_certificate.pem
-    %%     -ssl_dist_opt server_certfile /etc/rabbitmq/server_rmq0.local_certificate.pem
-    %%     -ssl_dist_opt server_keyfile /etc/rabbitmq/server_rmq0.local_key.pem
+    %%     -ssl_dist_opt server_certfile /etc/rabbitmq/server_certificate.pem
+    %%     -ssl_dist_opt server_keyfile /etc/rabbitmq/server_key.pem
     %%     -ssl_dist_opt server_verify verify_peer
     %%     -ssl_dist_opt server_fail_if_no_peer_cert true
     %%     -ssl_dist_opt client_cacertfile /etc/rabbitmq/ca_certificate.pem
-    %%     -ssl_dist_opt client_certfile /etc/rabbitmq/client_rmq0.local_certificate.pem
-    %%     -ssl_dist_opt client_keyfile /etc/rabbitmq/client_rmq0.local_key.pem
+    %%     -ssl_dist_opt client_certfile /etc/rabbitmq/client_certificate.pem
+    %%     -ssl_dist_opt client_keyfile /etc/rabbitmq/client_key.pem
     %%     -ssl_dist_opt client_verify verify_peer"
     %%
     %% `init:get_argument(ssl_dist_opt)' returns the following data structure:
     %%
     %% (rabbit@rmq0.local)1> init:get_argument(ssl_dist_opt).
-    %% {ok,[["server_cacertfile",
-    %%       "/etc/rabbitmq/ca_certificate.pem"],
-    %%      ["server_certfile",
-    %%       "/etc/rabbitmq/server_rmq0.local_certificate.pem"],
-    %%      ["server_keyfile","/etc/rabbitmq/server_rmq0.local_key.pem"],
+    %% {ok,[["server_cacertfile", "/etc/rabbitmq/ca_certificate.pem"],
+    %%      ["server_certfile", "/etc/rabbitmq/server_certificate.pem"],
+    %%      ["server_keyfile","/etc/rabbitmq/server_key.pem"],
     %%      ["server_verify","verify_peer"],
     %%      ["server_fail_if_no_peer_cert","true"],
     %%      ["client_cacertfile","/etc/rabbitmq/ca_certificate.pem"],
-    %%      ["client_certfile",
-    %%       "/etc/rabbitmq/client_rmq0.local_certificate.pem"],
-    %%      ["client_keyfile","/etc/rabbitmq/client_rmq0.local_key.pem"],
+    %%      ["client_certfile", "/etc/rabbitmq/client_certificate.pem"],
+    %%      ["client_keyfile","/etc/rabbitmq/client_key.pem"],
     %%      ["client_verify","verify_peer"]]}
     %%
     %% Which is then translated into arguments to `peer:start/1':
     %% #{args =>
-    %%    ["-ssl_dist_opt",
-    %%     "server_cacertfile",
+    %%    ["-ssl_dist_opt","server_cacertfile",
     %%     "/etc/rabbitmq/ca_certificate.pem",
     %%     "-ssl_dist_opt","server_certfile",
     %%     "/etc/rabbitmq/server_rmq2.local_certificate.pem",
@@ -506,11 +503,14 @@ add_tls_arguments(InetDistModule, VMArgs0) ->
                   _ ->
                       VMArgs1
               end,
-    %% In the next case, RabbitMQ has been configured with additional Erlang VM arguments such as this:
+    %% In the next case, RabbitMQ has been configured with additional Erlang VM
+    %% arguments such as this:
     %%
-    %% SERVER_ADDITIONAL_ERL_ARGS="-pa $ERL_SSL_PATH -proto_dist inet_tls -ssl_dist_optfile /etc/rabbitmq/inter_node_tls.config"
+    %% SERVER_ADDITIONAL_ERL_ARGS="-pa $ERL_SSL_PATH -proto_dist inet_tls
+    %%     -ssl_dist_optfile /etc/rabbitmq/inter_node_tls.config"
     %%
-    %% This code adds the `ssl_dist_optfile' argument to the peer node's argument list
+    %% This code adds the `ssl_dist_optfile' argument to the peer node's
+    %% argument list.
     VMArgs3 = case init:get_argument(ssl_dist_optfile) of
                   {ok, [[SslDistOptfileArg]]} ->
                       ["-ssl_dist_optfile", SslDistOptfileArg | VMArgs2];
