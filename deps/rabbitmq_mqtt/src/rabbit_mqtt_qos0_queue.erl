@@ -68,8 +68,7 @@ is_stateful() ->
     false.
 
 -spec declare(amqqueue:amqqueue(), node()) ->
-    {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
-    {'absent', amqqueue:amqqueue(), rabbit_amqqueue:absent_reason()}.
+    {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()}.
 declare(Q0, _Node) ->
     Q1 = case amqqueue:get_pid(Q0) of
              none ->
@@ -93,6 +92,20 @@ declare(Q0, _Node) ->
                                  {arguments, amqqueue:get_arguments(Q)},
                                  {user_who_performed_action, ActingUser}]),
             {new, Q};
+        {absent, OldQ, nodedown} ->
+            %% This case body can be deleted once Mnesia is unsupported.
+            OldPid = amqqueue:get_pid(OldQ),
+            OldNode = node(OldPid),
+            rabbit_log_queue:debug(
+              "Overwriting record of ~s of type ~s on node ~s since "
+              "formerly hosting node ~s seems to be down (former pid ~p)",
+              [rabbit_misc:rs(amqqueue:get_name(Q1)), ?MODULE, node(), OldNode, OldPid]),
+            case rabbit_amqqueue:internal_declare(Q1, true) of
+                {created, Q} ->
+                    {new, Q};
+                Other ->
+                    Other
+            end;
         Other ->
             Other
     end.

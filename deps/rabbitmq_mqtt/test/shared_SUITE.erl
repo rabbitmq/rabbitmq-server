@@ -142,6 +142,7 @@ cluster_size_3_tests() ->
      flow_quorum_queue,
      flow_stream,
      rabbit_mqtt_qos0_queue,
+     rabbit_mqtt_qos0_queue_kill_node,
      cli_list_queues,
      delete_create_queue,
      session_reconnect,
@@ -1211,6 +1212,40 @@ rabbit_mqtt_qos0_queue(Config) ->
 
     ok = emqtt:disconnect(Sub),
     ok = emqtt:disconnect(Pub).
+
+rabbit_mqtt_qos0_queue_kill_node(Config) ->
+    Topic = atom_to_binary(?FUNCTION_NAME),
+    Pub = connect(<<"publisher">>, Config, 2, []),
+
+    SubscriberId = <<"subscriber">>,
+    Sub0 = connect(SubscriberId, Config, 0, []),
+    {ok, _, [0]} = emqtt:subscribe(Sub0, Topic, qos0),
+    ok = emqtt:publish(Pub, Topic, <<"m0">>, qos0),
+    ok = expect_publishes(Sub0, Topic, [<<"m0">>]),
+
+    process_flag(trap_exit, true),
+    ok = rabbit_ct_broker_helpers:kill_node(Config, 0),
+    %% Wait a bit to ensure that Mnesia deletes the queue record on nodes 1 and 2 from Mnesia
+    %% table rabbit_queue (but the queue record is still present in rabbit_durable_queue).
+    timer:sleep(500),
+    Sub1 = connect(SubscriberId, Config, 1, []),
+    {ok, _, [0]} = emqtt:subscribe(Sub1, Topic, qos0),
+    ok = emqtt:publish(Pub, Topic, <<"m1">>, qos0),
+    ok = expect_publishes(Sub1, Topic, [<<"m1">>]),
+
+    %% Start node 0 to have a majority for Khepri.
+    ok = rabbit_ct_broker_helpers:start_node(Config, 0),
+    ok = rabbit_ct_broker_helpers:kill_node(Config, 1),
+    %% This time, do not wait. Mnesia will contain the queue record in rabbit_durable_queue,
+    %% but this time Mnesia may or may not contain the queue record in rabbit_queue.
+    Sub2 = connect(SubscriberId, Config, 2, []),
+    {ok, _, [0]} = emqtt:subscribe(Sub2, Topic, qos0),
+    ok = emqtt:publish(Pub, Topic, <<"m2">>, qos0),
+    ok = expect_publishes(Sub2, Topic, [<<"m2">>]),
+
+    ok = emqtt:disconnect(Sub2),
+    ok = emqtt:disconnect(Pub),
+    ok = rabbit_ct_broker_helpers:start_node(Config, 1).
 
 %% Test that MQTT connection can be listed and closed via the rabbitmq_management plugin.
 management_plugin_connection(Config) ->
