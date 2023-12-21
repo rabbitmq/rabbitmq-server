@@ -115,13 +115,8 @@ dep_cowboy = hex 2.10.0
 dep_cowlib = hex 2.12.1
 dep_credentials_obfuscation = hex 3.4.0
 dep_looking_glass = git https://github.com/rabbitmq/looking_glass.git main
-<<<<<<< HEAD
-dep_prometheus = hex 4.10.0
-dep_ra = hex 2.6.3
-=======
 dep_prometheus = hex 4.11.0
-dep_ra = hex 2.7.0
->>>>>>> 8c787609de (Bump prometheus dependency to 4.11.0)
+dep_ra = hex 2.6.3
 dep_ranch = hex 2.1.0
 dep_recon = hex 2.5.3
 dep_redbug = hex 2.0.7
