@@ -381,7 +381,8 @@ become_leader0(QName, Name) ->
             Nodes = get_nodes(Q0),
             [_ = erpc_call(Node, ?MODULE, rpc_delete_metrics,
                            [QName], ?RPC_TIMEOUT)
-             || Node <- Nodes, Node =/= node()];
+             || Node <- Nodes, Node =/= node()],
+            ok;
         _ ->
             ok
     end.
@@ -572,7 +573,7 @@ repair_leader_record(QName, Self) ->
             rabbit_log:debug("~ts: repairing leader record",
                              [rabbit_misc:rs(QName)]),
             {_, Name} = erlang:process_info(Self, registered_name),
-            become_leader0(QName, Name),
+            ok = become_leader0(QName, Name),
             ok
     end,
     ok.
