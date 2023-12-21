@@ -102,6 +102,7 @@ subgroups() ->
       ]},
      {cluster_size_3, [],
       [
+       rabbit_mqtt_qos0_queue_kill_node,
        queue_down_qos1,
        consuming_classic_mirrored_queue_down,
        consuming_classic_queue_down,
@@ -109,7 +110,6 @@ subgroups() ->
        flow_quorum_queue,
        flow_stream,
        rabbit_mqtt_qos0_queue,
-       rabbit_mqtt_qos0_queue_kill_node,
        cli_list_queues,
        maintenance,
        delete_create_queue,
