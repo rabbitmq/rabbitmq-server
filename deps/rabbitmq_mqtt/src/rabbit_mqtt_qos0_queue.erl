@@ -91,8 +91,8 @@ declare(Q0, _Node) ->
             rabbit_log_queue:debug(
               "Overwriting record of ~s of type ~s on node ~s since "
               "formerly hosting node ~s seems to be down (former pid ~p)",
-              [rabbit_misc:rs(amqqueue:get_name(Q1)), ?MODULE, node(), OldNode, OldPid]),
-            case rabbit_amqqueue:internal_declare(Q1, true) of
+              [rabbit_misc:rs(amqqueue:get_name(Q0)), ?MODULE, node(), OldNode, OldPid]),
+            case rabbit_amqqueue:internal_declare(Q0, true) of
                 {created, Q} ->
                     {new, Q};
                 Other ->

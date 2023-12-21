@@ -109,6 +109,7 @@ subgroups() ->
        flow_quorum_queue,
        flow_stream,
        rabbit_mqtt_qos0_queue,
+       rabbit_mqtt_qos0_queue_kill_node,
        cli_list_queues,
        maintenance,
        delete_create_queue,
@@ -118,80 +119,6 @@ subgroups() ->
       ]}
     ].
 
-<<<<<<< HEAD
-=======
-cluster_size_1_tests() ->
-    [
-     global_counters %% must be the 1st test case
-     ,block_only_publisher
-     ,many_qos1_messages
-     ,session_expiry
-     ,management_plugin_connection
-     ,management_plugin_enable
-     ,disconnect
-     ,pubsub_shared_connection
-     ,pubsub_separate_connections
-     ,will_with_disconnect
-     ,will_without_disconnect
-     ,decode_basic_properties
-     ,quorum_queue_rejects
-     ,events
-     ,internal_event_handler
-     ,non_clean_sess_reconnect_qos1
-     ,non_clean_sess_reconnect_qos0
-     ,non_clean_sess_reconnect_qos0_and_qos1
-     ,non_clean_sess_empty_client_id
-     ,subscribe_same_topic_same_qos
-     ,subscribe_same_topic_different_qos
-     ,subscribe_multiple
-     ,large_message_mqtt_to_mqtt
-     ,large_message_amqp_to_mqtt
-     ,keepalive
-     ,keepalive_turned_off
-     ,block
-     ,amqp_to_mqtt_qos0
-     ,clean_session_disconnect_client
-     ,clean_session_node_restart
-     ,clean_session_node_kill
-     ,rabbit_status_connection_count
-     ,trace
-     ,trace_large_message
-     ,max_packet_size_unauthenticated
-     ,max_packet_size_authenticated
-     ,default_queue_type
-     ,incoming_message_interceptors
-     ,utf8
-     ,retained_message_conversion
-     ,bind_exchange_to_exchange
-     ,bind_exchange_to_exchange_single_message
-    ].
-
-cluster_size_3_tests() ->
-    [
-     pubsub,
-     queue_down_qos1,
-     consuming_classic_queue_down,
-     flow_quorum_queue,
-     flow_stream,
-     rabbit_mqtt_qos0_queue,
-     rabbit_mqtt_qos0_queue_kill_node,
-     cli_list_queues,
-     delete_create_queue,
-     session_reconnect,
-     session_takeover,
-     duplicate_client_id,
-     maintenance
-    ].
-
-mnesia_store_tests() ->
-    [
-     consuming_classic_mirrored_queue_down,
-     flow_classic_mirrored_queue,
-     publish_to_all_queue_types_qos0,
-     publish_to_all_queue_types_qos1
-    ].
-
->>>>>>> 9487189dc6 (Overwrite rabbit_mqtt_qos0_queue record from crashed node)
 suite() ->
     [{timetrap, {minutes, 10}}].
 
