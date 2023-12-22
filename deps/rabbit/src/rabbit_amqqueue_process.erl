@@ -89,7 +89,7 @@
             mirroring_policy_version = 0,
             %% running | flow | idle
             status,
-            %% true | false
+            %% boolean()
             single_active_consumer_on
            }).
 
