@@ -1,0 +1,10 @@
+[
+  {
+    "httpRequest": {
+      "path": "/ready"
+    },
+    "httpResponse": {
+      "body": "ok"
+    }
+  }
+]
