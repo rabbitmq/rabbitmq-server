@@ -91,7 +91,7 @@
                 waiting_set        = gb_trees:empty(),
                 only_acks_received = true,
 
-                %% true | false, only relevant in the direct
+                %% boolean(), only relevant in the direct
                 %% client case.
                 %% when true, consumers will manually notify
                 %% queue pids using rabbit_amqqueue_common:notify_sent/2
