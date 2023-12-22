@@ -34,7 +34,7 @@ description() ->
 
 user_login_authentication(Username, AuthProps) ->
 
-    case http_req(p(user_path), q([{username, Username}]++extractOtherCredentials(AuthProps))) of
+    case http_req(p(user_path), q([{username, Username}]++extract_other_credentials(AuthProps))) of
         {error, _} = E  -> E;
         "deny"          -> {refused, "Denied by the backing HTTP service", []};
         "allow" ++ Rest -> Tags = [rabbit_data_coercion:to_atom(T) ||
@@ -57,7 +57,7 @@ user_login_authentication(Username, AuthProps) ->
 %% However, it may happen that the user was authenticated via rabbit_auth_backend_cache, in that case,
 %% the property `rabbit_auth_backend_cache` is a function which returns a proplist with all the credentials used
 %% on the first succcessful login.
-resolveUsingPersistedCredentials(AuthProps) ->
+resolve_using_persisted_credentials(AuthProps) ->
   case proplists:get_value(rabbit_auth_backend_http, AuthProps, none) of
       none -> case proplists:get_value(rabbit_auth_backend_cache, AuthProps, none) of
                   none -> AuthProps;
@@ -74,10 +74,10 @@ is_internal_property(rabbit_auth_backend_http) -> true;
 is_internal_property(rabbit_auth_backend_cache) -> true;
 is_internal_property(_Other) -> false.
 
-extractOtherCredentials(AuthProps) ->
+extract_other_credentials(AuthProps) ->
   PublicAuthProps = [{K,V} || {K,V} <-AuthProps, not is_internal_property(K)],
   case PublicAuthProps of
-    [] -> resolveUsingPersistedCredentials(AuthProps);
+    [] -> resolve_using_persisted_credentials(AuthProps);
     _ -> PublicAuthProps
   end.
 
