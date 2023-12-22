@@ -33,8 +33,6 @@ describe('Having MQTT protocol enbled and the following auth_backends: ' + backe
       expectations.push(expectUser({ "username": "mqtt_u", "password": "mqtt_p", "client_id": client_id, "vhost": "/" }, "allow"))
       expectations.push(expectVhost({ "username": "mqtt_u", "vhost": "/"}, "allow"))
       expectations.push(expectResource({ "username": "mqtt_u", "vhost": "/", "resource": "queue", "name": "mqtt-will-selenium-client", "permission":"configure", "tags":"", "client_id" : client_id }, "allow"))
-//      expectations.push(expectResource({ "username": "httpuser", "vhost": "/", "resource": "queue", "name": "my-queue", "permission":"read", "tags":""}, "allow"))
-//      expectations.push(expectResource({ "username": "httpuser", "vhost": "/", "resource": "exchange", "name": "amq.default", "permission":"write", "tags":""}, "allow"))
     }
   })
 
@@ -46,9 +44,7 @@ describe('Having MQTT protocol enbled and the following auth_backends: ' + backe
     })
     client.on('connect', function(err) {
       client.end()
-    })
-    console.log("After connect")
-
+    })    
   })
 
   after(function () {
