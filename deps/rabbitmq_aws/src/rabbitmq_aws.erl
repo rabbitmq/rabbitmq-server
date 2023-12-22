@@ -42,7 +42,7 @@
 -spec get(Service :: string(),
           Path :: path()) -> result().
 %% @doc Perform a HTTP GET request to the AWS API for the specified service. The
-%%      response will automatically be decoded if it is either in JSON or XML
+%%      response will automatically be decoded if it is either in JSON, or XML
 %%      format.
 %% @end
 get(Service, Path) ->
@@ -243,7 +243,7 @@ handle_msg(_Request, State) ->
 -spec endpoint(State :: state(), Host :: string(),
                Service :: string(), Path :: string()) -> string().
 %% @doc Return the endpoint URL, either by constructing it with the service
-%%      information passed in or by using the passed in Host value.
+%%      information passed in, or by using the passed in Host value.
 %% @ednd
 endpoint(#state{region = Region}, undefined, Service, Path) ->
   lists:flatten(["https://", endpoint_host(Region, Service), Path]);
@@ -354,9 +354,8 @@ local_time() ->
 
 
 -spec maybe_decode_body(ContentType :: {nonempty_string(), nonempty_string()}, Body :: body()) -> list() | body().
-%% @doc Attempt to decode the response body based upon the mime type that is
-%%      presented.
-%% @end.
+%% @doc Attempt to decode the response body by its MIME
+%% @end
 maybe_decode_body({"application", "x-amz-json-1.0"}, Body) ->
   rabbitmq_aws_json:decode(Body);
 maybe_decode_body({"application", "json"}, Body) ->
