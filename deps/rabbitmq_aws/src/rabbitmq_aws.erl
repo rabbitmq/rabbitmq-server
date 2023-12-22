@@ -386,10 +386,10 @@ perform_request(State, Service, Method, Headers, Path, Body, Options, Host) ->
                             Headers, Path, Body, Options, Host).
 
 
--spec perform_request_has_creds(true | false, State :: state(),
-                                Service :: string(), Method :: method(),
-                                Headers :: headers(), Path :: path(), Body :: body(),
-                                Options :: http_options(), Host :: string() | undefined)
+-spec perform_request_has_creds(HasCreds :: boolean(), State :: state(),
+                                Service  :: string(), Method :: method(),
+                                Headers  :: headers(), Path :: path(), Body :: body(),
+                                Options  :: http_options(), Host :: string() | undefined)
     -> {Result :: result(), NewState :: state()}.
 %% @doc Invoked after checking to see if there are credentials. If there are,
 %%      validate they have not or will not expire, performing the request if not,
@@ -402,10 +402,10 @@ perform_request_has_creds(false, State, _, _, _, _, _, _, _) ->
   perform_request_creds_error(State).
 
 
--spec perform_request_creds_expired(true | false, State :: state(),
-                                    Service :: string(), Method :: method(),
-                                    Headers :: headers(), Path :: path(), Body :: body(),
-                                    Options :: http_options(), Host :: string() | undefined)
+-spec perform_request_creds_expired(CredsExp :: boolean(), State :: state(),
+                                    Service  :: string(), Method :: method(),
+                                    Headers  :: headers(), Path :: path(), Body :: body(),
+                                    Options  :: http_options(), Host :: string() | undefined)
   -> {Result :: result(), NewState :: state()}.
 %% @doc Invoked after checking to see if the current credentials have expired.
 %%      If they haven't, perform the request, otherwise try and refresh the
