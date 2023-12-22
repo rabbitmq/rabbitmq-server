@@ -4,10 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "mocha --recursive --trace-warnings --timeout 40000",
     "fakeportal": "node fakeportal/app.js",
     "fakeproxy": "node fakeportal/proxy.js",
-    "amqp10_roundtriptest" : "export $(cat $ENV_FILE | xargs)&& ./run-amqp10-roundtriptest"
+    "amqp10_roundtriptest": "eval $(cat $ENV_FILE ) &&./run-amqp10-roundtriptest",
+    "test": " eval $(cat $ENV_FILE ) && mocha --recursive --trace-warnings --timeout 40000"
   },
   "keywords": [],
   "author": "",
@@ -18,6 +18,7 @@
     "express": "^4.18.2",
     "geckodriver": "^3.0.2",
     "http-proxy": "^1.18.1",
+    "mqtt": "^5.3.3",
     "path": "^0.12.7",
     "proxy": "^1.0.2",
     "selenium-webdriver": "^4.4.0",
