@@ -12,17 +12,12 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - "24.3"
         - "25.0"
         - "25.1"
         - "25.2"
         - "25.3"
         - "26.1"
         include:
-        - erlang_version: "24.3"
-          name: '24'
-          branch: v3.10.x
-          labels: ""
         - erlang_version: "25.0"
           name: '25_0'
           branch: main
@@ -35,21 +30,18 @@ jobs:
           labels: |
             backport-v3.12.x
             backport-v3.11.x
-            backport-v3.10.x
         - erlang_version: "25.2"
           name: '25_2'
           branch: main
           labels: |
             backport-v3.12.x
             backport-v3.11.x
-            backport-v3.10.x
         - erlang_version: "25.3"
           name: '25_3'
           branch: main
           labels: |
             backport-v3.12.x
             backport-v3.11.x
-            backport-v3.10.x
         - erlang_version: "26.1"
           name: '26_1'
           branch: main
