@@ -294,11 +294,11 @@ get_content_type(Headers) ->
   end,
   parse_content_type(Value).
 
--spec has_credentials() -> true | false.
+-spec has_credentials() -> boolean().
 has_credentials() ->
   gen_server:call(rabbitmq_aws, has_credentials).
 
--spec has_credentials(state()) -> true | false.
+-spec has_credentials(state()) -> boolean().
 %% @doc check to see if there are credentials made available in the current state
 %%      returning false if not or if they have expired.
 %% @end
@@ -307,7 +307,7 @@ has_credentials(#state{access_key = Key}) when Key /= undefined -> true;
 has_credentials(_) -> false.
 
 
--spec expired_credentials(Expiration :: calendar:datetime()) -> true | false.
+-spec expired_credentials(Expiration :: calendar:datetime()) -> boolean().
 %% @doc Indicates if the date that is passed in has expired.
 %% end
 expired_credentials(undefined) -> false;
