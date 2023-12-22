@@ -46,9 +46,17 @@ user_login_authentication(Username, AuthProps) ->
         Other           -> {error, {bad_response, Other}}
     end.
 
-%% Credentials (e.g. password) maybe directly in the password attribute in AuthProps
-%% or as a Function with the attribute rabbit_auth_backend_http if the user was already authenticated with http backend
-%% or as a Function with the attribute rabbit_auth_backend_cache if the user was already authenticated via cache backend
+%% When some protocols, such as MQTT, uses an internal AMQP client, to interact with RabbitMQ core,
+%% it happens that the main protocol authenticates the user passing all credentials (e.g. password, client_id, vhost)
+%% however the internal AMQP client also performs further authentications. THe latter authentication
+%% attempt lacks of all credentials. Instead those credentials are persisted behind a function call
+%% that returns an AuthProps.
+%% If the user was first authenticated by rabbit_auth_backend_http, there will be one property called
+%% `rabbit_auth_backend_http` whose value is a function that returns a proplist with all the credentials used
+%% on the first successful login.
+%% However, it may happen that the user was authenticated via rabbit_auth_backend_cache, in that case,
+%% the property `rabbit_auth_backend_cache` is a function which returns a proplist with all the credentials used
+%% on the first succcessful login.
 resolveUsingPersistedCredentials(AuthProps) ->
   case proplists:get_value(rabbit_auth_backend_http, AuthProps, none) of
       none -> case proplists:get_value(rabbit_auth_backend_cache, AuthProps, none) of
@@ -67,7 +75,7 @@ is_internal_property(rabbit_auth_backend_cache) -> true;
 is_internal_property(_Other) -> false.
 
 extractOtherCredentials(AuthProps) ->
-  PublicAuthProps = [{K,V} || {K,V} <-AuthProps, not is_internal_property(K)],  
+  PublicAuthProps = [{K,V} || {K,V} <-AuthProps, not is_internal_property(K)],
   case PublicAuthProps of
     [] -> resolveUsingPersistedCredentials(AuthProps);
     _ -> PublicAuthProps
