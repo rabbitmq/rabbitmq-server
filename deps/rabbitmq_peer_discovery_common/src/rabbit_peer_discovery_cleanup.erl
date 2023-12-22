@@ -266,7 +266,7 @@ maybe_cleanup(State, UnreachableNodes) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_remove_nodes(PartitionedNodes :: [node()],
-                         WarnOnly :: true | false) -> ok.
+                         WarnOnly :: boolean()) -> ok.
 maybe_remove_nodes([], _) -> ok;
 maybe_remove_nodes([Node | Nodes], true) ->
     ?LOG_WARNING(
