@@ -246,7 +246,7 @@ node_name_parse(Value) ->
 %% result of the IPv4 check is processed.
 %% @end
 %%--------------------------------------------------------------------
--spec node_name_parse(IsIPv4 :: true | false, Value :: string())
+-spec node_name_parse(IsIPv4 :: boolean(), Value :: string())
     -> string().
 node_name_parse(true, Value) -> Value;
 node_name_parse(false, Value) ->
