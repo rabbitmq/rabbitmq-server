@@ -32,7 +32,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([], %{node: node_name, timeout: timeout}) do
+  def run([], %{node: node_name, timeout: timeout} = opts) do
     status =
       case :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :cli_cluster_status, []) do
         {:badrpc, {:EXIT, {:undef, _}}} ->
@@ -72,7 +72,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
             maintenance_status_by_node =
               Enum.map(
                 nodes,
-                fn n -> maintenance_status_by_node(n, per_node_timeout(timeout, count)) end
+                fn n -> maintenance_status_by_node(n, per_node_timeout(timeout, count), opts) end
               )
 
             cpu_cores_by_node =
@@ -340,26 +340,26 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
      }}
   end
 
-  defp maintenance_status_by_node(node, timeout) do
+  defp maintenance_status_by_node(node, timeout, opts) do
     target = to_atom(node)
+    formatter = Map.get(opts, :formatter)
+
+    rpc_result =
+      :rabbit_misc.rpc_call(target, :rabbit_maintenance, :status_local_read, [target], timeout)
 
     result =
-      case :rabbit_misc.rpc_call(
-             target,
-             :rabbit_maintenance,
-             :status_local_read,
-             [target],
-             timeout
-           ) do
-        {:badrpc, _} -> "unknown"
-        :regular -> "not under maintenance"
-        :draining -> magenta("marked for maintenance")
+      case {rpc_result, formatter} do
+        {{:badrpc, _}, _} -> "unknown"
+        {:regular, _} -> "not under maintenance"
+        {:draining, "json"} -> "marked for maintenance"
+        {:draining, _} -> magenta("marked for maintenance")
         # forward compatibility: should we figure out a way to know when
         # draining completes (it involves inherently asynchronous cluster
         # operations such as quorum queue leader re-election), we'd introduce
         # a new state
-        :drained -> magenta("marked for maintenance")
-        value -> to_string(value)
+        {:drained, "json"} -> "marked for maintenance"
+        {:drained, _} -> magenta("marked for maintenance")
+        {value, _} -> to_string(value)
       end
 
     {node, result}
