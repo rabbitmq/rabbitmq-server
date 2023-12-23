@@ -33,8 +33,7 @@ description() ->
 %%--------------------------------------------------------------------
 
 user_login_authentication(Username, AuthProps) ->
-
-    case http_req(p(user_path), q([{username, Username}]++extract_other_credentials(AuthProps))) of
+    case http_req(p(user_path), q([{username, Username}] ++ extract_other_credentials(AuthProps))) of
         {error, _} = E  -> E;
         "deny"          -> {refused, "Denied by the backing HTTP service", []};
         "allow" ++ Rest -> Tags = [rabbit_data_coercion:to_atom(T) ||
