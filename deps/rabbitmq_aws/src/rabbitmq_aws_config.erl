@@ -290,7 +290,7 @@ ini_file_data(Path) ->
   ini_file_data(Path, filelib:is_file(Path)).
 
 
--spec ini_file_data(Path :: string(), FileExists :: true | false)
+-spec ini_file_data(Path :: string(), FileExists :: boolean())
   -> list() | {error, atom()}.
 %% @doc Return the parsed ini file for the specified path.
 %% @end

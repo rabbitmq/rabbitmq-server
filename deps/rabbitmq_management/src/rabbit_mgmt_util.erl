@@ -537,7 +537,7 @@ pagination_params(ReqData) ->
                                   [PageNum, PageSize])})
     end.
 
--spec maybe_reverse([any()], string() | true | false) -> [any()].
+-spec maybe_reverse([any()], string() | boolean()) -> [any()].
 maybe_reverse([], _) ->
     [];
 maybe_reverse(RangeList, true) when is_list(RangeList) ->
