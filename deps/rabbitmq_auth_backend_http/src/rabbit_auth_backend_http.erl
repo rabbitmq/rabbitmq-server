@@ -46,24 +46,27 @@ user_login_authentication(Username, AuthProps) ->
         Other           -> {error, {bad_response, Other}}
     end.
 
-%% When some protocols, such as MQTT, uses an internal AMQP client, to interact with RabbitMQ core,
-%% it happens that the main protocol authenticates the user passing all credentials (e.g. password, client_id, vhost)
-%% however the internal AMQP client also performs further authentications. THe latter authentication
-%% attempt lacks of all credentials. Instead those credentials are persisted behind a function call
+%% When a protocol plugin uses an internal AMQP 0-9-1 client to interact with RabbitMQ core,
+%% what happens that the plugin authenticates the entire authentication context (e.g. all of: password, client_id, vhost, etc)
+%% and the internal AMQP 0-9-1 client also performs further authentication.
+%%
+%% In the latter case, the complete set of credentials are persisted behind a function call
 %% that returns an AuthProps.
 %% If the user was first authenticated by rabbit_auth_backend_http, there will be one property called
 %% `rabbit_auth_backend_http` whose value is a function that returns a proplist with all the credentials used
 %% on the first successful login.
-%% However, it may happen that the user was authenticated via rabbit_auth_backend_cache, in that case,
+%%
+%% When rabbit_auth_backend_cache is involved,
 %% the property `rabbit_auth_backend_cache` is a function which returns a proplist with all the credentials used
-%% on the first succcessful login.
+%% on the first successful login.
 resolve_using_persisted_credentials(AuthProps) ->
-  case proplists:get_value(rabbit_auth_backend_http, AuthProps, none) of
-      none -> case proplists:get_value(rabbit_auth_backend_cache, AuthProps, none) of
-                  none -> AuthProps;
-                  CacheAuthPropsFun -> AuthProps ++ CacheAuthPropsFun()
-              end;
-      HttpAuthPropsFun -> AuthProps ++ HttpAuthPropsFun()
+  case proplists:get_value(rabbit_auth_backend_http, AuthProps, undefined) of
+    undefined ->
+      case proplists:get_value(rabbit_auth_backend_cache, AuthProps, undefined) of
+          undefined -> AuthProps;
+          CacheAuthPropsFun -> AuthProps ++ CacheAuthPropsFun()
+      end;
+    HttpAuthPropsFun -> AuthProps ++ HttpAuthPropsFun()
   end.
 
 
