@@ -22,9 +22,8 @@
 
 -type amqp10_prim() ::
     null |
-    true |
-    false |
-    {boolean, true | false} |
+    boolean() | 
+    {boolean, boolean()} |
     {ubyte, byte()} |
     {ushort, non_neg_integer()} |
     {uint, non_neg_integer()} |
