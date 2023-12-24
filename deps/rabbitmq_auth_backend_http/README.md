@@ -84,6 +84,9 @@ against the URIs listed in the configuration file. It will add query string
 * `username`: the name of the user
 * `password`: the password provided (may be missing if e.g. rabbitmq-auth-mechanism-ssl is used)
 
+Note: This request may include additional http request parameters in addition to the ones listed above.
+For instance, if the user accessed RabbitMQ via the MQTT protocol, it is expected `client_id` and `vhost` request parameters too.
+
 ### vhost_path
 
 * `username`: the name of the user
@@ -99,6 +102,9 @@ Note that you cannot create arbitrary virtual hosts using this plugin; you can o
 * `resource`: the type of resource (`exchange`, `queue`, `topic`)
 * `name`: the name of the resource
 * `permission`:the access level to the resource (`configure`, `write`, `read`): see [the Access Control guide](http://www.rabbitmq.com/access-control.html) for their meaning
+
+Note: This request may include additional http request parameters in addition to the ones listed above.
+For instance, if the user accessed RabbitMQ via the MQTT protocol, it is expected `client_id` request parameter too.
 
 ### topic_path
 

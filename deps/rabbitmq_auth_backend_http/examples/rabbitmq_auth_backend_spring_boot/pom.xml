@@ -16,13 +16,13 @@
         <developer>
             <email>rabbitmq-core@groups.vmware.com</email>
             <name>Team RabbitMQ</name>
-            <organization>VMware, Inc. or its affiliates.</organization>
+            <organization>Broadcom Inc. and/or its subsidiaries.</organization>
             <organizationUrl>https://rabbitmq.com</organizationUrl>
         </developer>
     </developers>
 
     <organization>
-        <name>VMware, Inc. or its affiliates.</name>
+        <name>Broadcom Inc. and/or its subsidiaries.</name>
         <url>https://www.rabbitmq.com</url>
     </organization>
 
