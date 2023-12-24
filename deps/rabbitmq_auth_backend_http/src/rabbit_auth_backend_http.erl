@@ -33,8 +33,7 @@ description() ->
 %%--------------------------------------------------------------------
 
 user_login_authentication(Username, AuthProps) ->
-
-    case http_req(p(user_path), q([{username, Username}|extractPassword(AuthProps)])) of
+    case http_req(p(user_path), q([{username, Username}] ++ extract_other_credentials(AuthProps))) of
         {error, _} = E  -> E;
         "deny"          -> {refused, "Denied by the backing HTTP service", []};
         "allow" ++ Rest -> Tags = [rabbit_data_coercion:to_atom(T) ||
@@ -42,25 +41,48 @@ user_login_authentication(Username, AuthProps) ->
 
                            {ok, #auth_user{username = Username,
                                            tags     = Tags,
-                                           impl     = fun() -> proplists:get_value(password, AuthProps, none) end}};
+                                           impl     = fun() -> proplists:delete(username, AuthProps) end}};
         Other           -> {error, {bad_response, Other}}
     end.
 
-%% Credentials (i.e. password) maybe directly in the password attribute in AuthProps
-%% or as a Function with the attribute rabbit_auth_backend_http if the user was already authenticated with http backend
-%% or as a Function with the attribute rabbit_auth_backend_cache if the user was already authenticated via cache backend
-extractPassword(AuthProps) ->
-    case proplists:get_value(password, AuthProps, none) of
-        none ->
-            case proplists:get_value(rabbit_auth_backend_http, AuthProps, none) of
-                none -> case proplists:get_value(rabbit_auth_backend_cache, AuthProps, none) of
-                            none -> [];
-                            PasswordFun -> [{password, PasswordFun()}]
-                        end;
-                PasswordFun -> [{password, PasswordFun()}]
-            end;
-        Password -> [{password, Password}]
-    end.
+%% When a protocol plugin uses an internal AMQP 0-9-1 client to interact with RabbitMQ core,
+%% what happens that the plugin authenticates the entire authentication context (e.g. all of: password, client_id, vhost, etc)
+%% and the internal AMQP 0-9-1 client also performs further authentication.
+%%
+%% In the latter case, the complete set of credentials are persisted behind a function call
+%% that returns an AuthProps.
+%% If the user was first authenticated by rabbit_auth_backend_http, there will be one property called
+%% `rabbit_auth_backend_http` whose value is a function that returns a proplist with all the credentials used
+%% on the first successful login.
+%%
+%% When rabbit_auth_backend_cache is involved,
+%% the property `rabbit_auth_backend_cache` is a function which returns a proplist with all the credentials used
+%% on the first successful login.
+resolve_using_persisted_credentials(AuthProps) ->
+  case proplists:get_value(rabbit_auth_backend_http, AuthProps, undefined) of
+    undefined ->
+      case proplists:get_value(rabbit_auth_backend_cache, AuthProps, undefined) of
+          undefined -> AuthProps;
+          CacheAuthPropsFun -> AuthProps ++ CacheAuthPropsFun()
+      end;
+    HttpAuthPropsFun -> AuthProps ++ HttpAuthPropsFun()
+  end.
+
+
+%% Some protocols may add additional credentials into the AuthProps that should be propagated to
+%% the external authentication backends
+%% This function excludes any attribute that starts with rabbit_auth_backend_
+is_internal_property(rabbit_auth_backend_http) -> true;
+is_internal_property(rabbit_auth_backend_cache) -> true;
+is_internal_property(_Other) -> false.
+
+extract_other_credentials(AuthProps) ->
+  PublicAuthProps = [{K,V} || {K,V} <-AuthProps, not is_internal_property(K)],
+  case PublicAuthProps of
+    [] -> resolve_using_persisted_credentials(AuthProps);
+    _ -> PublicAuthProps
+  end.
+
 
 user_login_authorization(Username, AuthProps) ->
     case user_login_authentication(Username, AuthProps) of
