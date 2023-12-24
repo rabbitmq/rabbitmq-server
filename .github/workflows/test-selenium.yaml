@@ -42,7 +42,7 @@ jobs:
       DOCKER_NETWORK: rabbitmq_net
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Configure OTP & Elixir
       uses: erlef/setup-beam@v1.16
@@ -51,7 +51,7 @@ jobs:
         elixir-version: ${{ matrix.elixir_version }}
 
     - name: Mount Bazel Cache
-      uses: actions/cache@v3.2.5
+      uses: actions/cache@v3.3.2
       with:
         path: "/home/runner/repo-cache/"
         key: ${{ runner.os }}-repo-cache-${{ hashFiles('MODULE.bazel','WORKSPACE','bazel/bzlmod/secondary_umbrella.bzl') }}
@@ -101,12 +101,13 @@ jobs:
 
     - name: Upload Test Artifacts
       if: always()
-      uses: actions/upload-artifact@v3.1.2
+      uses: actions/upload-artifact@v4.0.0
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
         path: |
           logs/*
           screens/*
+          /tmp/selenium/*
 
   summary-selenium:
     needs:
