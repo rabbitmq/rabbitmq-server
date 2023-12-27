@@ -13,15 +13,17 @@ for (const element of profiles.split(" ")) {
 
 describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + backends, function () {
   let expectations = []
+  let username = process.env.RABBITMQ_AMQP_USERNAME
+  let password = process.env.RABBITMQ_AMQP_PASSWORD
 
   before(function () {
-    if ( backends.includes("http") ) {
+    if (backends.includes("http") && username.includes("http")) {
       reset()
-      expectations.push(expectUser({ "username": "httpuser", "password": "httppassword" }, "allow"))
-      expectations.push(expectVhost({ "username": "httpuser", "vhost": "/"}, "allow"))
-      expectations.push(expectResource({ "username": "httpuser", "vhost": "/", "resource": "queue", "name": "my-queue", "permission":"configure", "tags":""}, "allow"))
-      expectations.push(expectResource({ "username": "httpuser", "vhost": "/", "resource": "queue", "name": "my-queue", "permission":"read", "tags":""}, "allow"))
-      expectations.push(expectResource({ "username": "httpuser", "vhost": "/", "resource": "exchange", "name": "amq.default", "permission":"write", "tags":""}, "allow"))
+      expectations.push(expectUser({ "username": username, "password": password}, "allow"))
+      expectations.push(expectVhost({ "username": username, "vhost": "/"}, "allow"))
+      expectations.push(expectResource({ "username": username, "vhost": "/", "resource": "queue", "name": "my-queue", "permission":"configure", "tags":""}, "allow"))
+      expectations.push(expectResource({ "username": username, "vhost": "/", "resource": "queue", "name": "my-queue", "permission":"read", "tags":""}, "allow"))
+      expectations.push(expectResource({ "username": username, "vhost": "/", "resource": "exchange", "name": "amq.default", "permission":"write", "tags":""}, "allow"))
     }
   })
 
