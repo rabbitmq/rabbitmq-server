@@ -49,6 +49,24 @@ scrape_configs:
           - 'rmq0-dist-metrics:15692'
           - 'rmq1-dist-metrics:15692'
           - 'rmq2-dist-metrics:15692'
+  - job_name: 'rabbitmq-server-detailed'
+    metrics_path: "/metrics/detailed"
+    params:
+      family: ["queue_coarse_metrics"]
+    static_configs:
+      - targets:
+          - 'rmq0:15692'
+          - 'rmq1:15692'
+          - 'rmq2:15692'
+          - 'rmq0-dist-tls:15692'
+          - 'rmq1-dist-tls:15692'
+          - 'rmq2-dist-tls:15692'
+          - 'rmq0-qq:15692'
+          - 'rmq1-qq:15692'
+          - 'rmq2-qq:15692'
+          - 'rmq0-dist-metrics:15692'
+          - 'rmq1-dist-metrics:15692'
+          - 'rmq2-dist-metrics:15692'
   - job_name: 'rabbitmq-perf-test'
     static_configs:
       - targets:
