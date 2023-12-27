@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_stream_connections_mgmt).
@@ -19,28 +19,10 @@
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
 dispatcher() ->
-    case rabbit_stream_management_utils:is_feature_flag_enabled() of
-        true ->
-            [{"/stream/connections", ?MODULE, []}];
-        false ->
-            []
-    end.
+    [{"/stream/connections", ?MODULE, []}].
 
 web_ui() ->
-    case rabbit_stream_management_utils:is_feature_flag_enabled() of
-        true ->
-            [{javascript, <<"stream.js">>}];
-        false ->
-            rabbit_log:warning("Unable to show the stream management plugin. "
-                               "The stream_queue feature flag is disabled. "
-                               ++ "Enable stream_queue feature flag then disable "
-                                  "and re-enable the rabbitmq_stream_management "
-                                  "plugin. ",
-                               "See https://www.rabbitmq.com/feature-flags.html "
-                               "to learn more",
-                               []),
-            []
-    end.
+    [{javascript, <<"stream.js">>}].
 
 %%--------------------------------------------------------------------
 

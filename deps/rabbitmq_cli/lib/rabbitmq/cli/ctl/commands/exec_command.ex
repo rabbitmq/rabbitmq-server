@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
   alias RabbitMQ.CLI.Core.DocGuide
@@ -30,7 +30,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExecCommand do
 
   def validate([string], _) do
     try do
-      Code.compile_string(string)
+      _ = Code.compile_string(string)
       :ok
     rescue
       ex in SyntaxError ->

@@ -1,3 +1,4 @@
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 load(
     ":secondary_umbrella.bzl",
@@ -95,6 +96,7 @@ elixir_config = module_extension(
 )
 
 def _rbe(ctx):
+    root_rbe_repo_props = []
     rbe_repo_props = []
     for mod in ctx.modules:
         for repo in mod.tags.git_repository:
@@ -105,17 +107,29 @@ def _rbe(ctx):
                 props["tag"] = repo.tag
             if repo.branch != "":
                 props["branch"] = repo.branch
-            if not props in rbe_repo_props:
+            if mod.is_root:
+                if not props in root_rbe_repo_props:
+                    root_rbe_repo_props.append(props)
+            elif not props in rbe_repo_props:
                 rbe_repo_props.append(props)
 
-    if len(rbe_repo_props) > 1:
-        fail("Multiple definitions for @rbe exist: {}".format(rbe_repo_props))
+    if len(root_rbe_repo_props) > 1:
+        fail("Multiple definitions for @rbe exist in root module: {}".format(rbe_repo_props))
 
-    if len(rbe_repo_props) > 0:
+    if len(root_rbe_repo_props) > 0:
         git_repository(
             name = "rbe",
-            **rbe_repo_props[0]
+            **root_rbe_repo_props[0]
         )
+    else:
+        if len(rbe_repo_props) > 1:
+            fail("Multiple definitions for @rbe exist: {}".format(rbe_repo_props))
+
+        if len(rbe_repo_props) > 0:
+            git_repository(
+                name = "rbe",
+                **rbe_repo_props[0]
+            )
 
 git_repository_tag = tag_class(attrs = {
     "remote": attr.string(),
@@ -136,4 +150,33 @@ def _secondary_umbrella(ctx):
 
 secondary_umbrella = module_extension(
     implementation = _secondary_umbrella,
+)
+
+def _hex(ctx):
+    http_archive(
+        name = "hex",
+        sha256 = "0e3e3290d0fcbdc6bb0526b73ca174d68dcff4d53ee86015c49ad0493e39ee65",
+        strip_prefix = "hex-2.0.5",
+        urls = ["https://github.com/hexpm/hex/archive/refs/tags/v2.0.5.zip"],
+        build_file_content = """\
+load(
+    "@rabbitmq-server//bazel/elixir:mix_archive_build.bzl",
+    "mix_archive_build",
+)
+
+mix_archive_build(
+    name = "archive",
+    srcs = [
+        "mix.exs",
+    ] + glob([
+        "lib/**/*",
+    ]),
+    out = "hex.ez",
+    visibility = ["//visibility:public"],
+)
+""",
+    )
+
+hex = module_extension(
+    implementation = _hex,
 )

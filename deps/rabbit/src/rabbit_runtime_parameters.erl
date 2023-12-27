@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_runtime_parameters).
@@ -28,7 +28,7 @@
 %% Runtime parameter values are then looked up by the modules that
 %% need to use them.
 %%
-%% Parameters are stored in Mnesia and can be global. Their changes
+%% Parameters are stored in the database and can be global. Their changes
 %% are broadcasted over rabbit_event.
 %%
 %% Global parameters keys are atoms and values are JSON documents.
@@ -44,7 +44,8 @@
 
 -export([parse_set/5, set/5, set_any/5, clear/4, clear_any/4, list/0, list/1,
          list_component/1, list/2, list_formatted/1, list_formatted/3,
-         lookup/3, value/3, value/4, info_keys/0, clear_component/2]).
+         lookup/3, value/3, value/4, info_keys/0, clear_vhost/2,
+         clear_component/2]).
 
 -export([parse_set_global/3, set_global/3, value_global/1, value_global/2,
          list_global/0, list_global_formatted/0, list_global_formatted/2,
@@ -54,12 +55,15 @@
 
 -type ok_or_error_string() :: 'ok' | {'error_string', string()}.
 -type ok_thunk_or_error_string() :: ok_or_error_string() | fun(() -> 'ok').
-
+-export_type([ok_or_error_string/0]).
 %%---------------------------------------------------------------------------
 
 -import(rabbit_misc, [pget/2]).
 
 -define(TABLE, rabbit_runtime_parameters).
+-define(INTERNAL_RUNTIME_PARAMETER_NAMES, [
+    imported_definition_hash_value
+]).
 
 %%---------------------------------------------------------------------------
 
@@ -101,7 +105,7 @@ parse_set_global(Name, String, ActingUser) ->
 set_global(Name, Term, ActingUser)  ->
     NameAsAtom = rabbit_data_coercion:to_atom(Name),
     rabbit_log:debug("Setting global parameter '~ts' to ~tp", [NameAsAtom, Term]),
-    mnesia_update(NameAsAtom, Term),
+    _ = rabbit_db_rtparams:set(NameAsAtom, Term),
     event_notify(parameter_set, none, global, [{name,  NameAsAtom},
                                                {value, Term},
                                                {user_who_performed_action, ActingUser}]),
@@ -126,28 +130,45 @@ set_any0(VHost, Component, Name, Term, User) ->
                      [Name, VHost, Component, Term]),
     case lookup_component(Component) of
         {ok, Mod} ->
-            case flatten_errors(
-                   Mod:validate(VHost, Component, Name, Term, get_user(User))) of
+            case is_within_limit(Component) of
                 ok ->
-                    case mnesia_update(VHost, Component, Name, Term) of
-                        {old, Term} ->
+                    case flatten_errors(Mod:validate(VHost, Component, Name, Term, get_user(User)))  of
+                        ok ->
+                            case rabbit_db_rtparams:set(VHost, Component, Name, Term) of
+                                {old, Term} ->
+                                    ok;
+                                _           ->
+                                    ActingUser = get_username(User),
+                                    event_notify(
+                                    parameter_set, VHost, Component,
+                                    [{name,  Name},
+                                    {value, Term},
+                                    {user_who_performed_action, ActingUser}]),
+                                    Mod:notify(VHost, Component, Name, Term, ActingUser)
+                            end,
                             ok;
-                        _           ->
-                            ActingUser = get_username(User),
-                            event_notify(
-                              parameter_set, VHost, Component,
-                              [{name,  Name},
-                               {value, Term},
-                               {user_who_performed_action, ActingUser}]),
-                            Mod:notify(VHost, Component, Name, Term, ActingUser)
-                    end,
-                    ok;
+                        E ->
+                            E
+                    end;
                 E ->
                     E
             end;
         E ->
             E
     end.
+
+-spec is_within_limit(binary()) -> ok | {errors, list()}.
+
+is_within_limit(Component) ->
+    Params = application:get_env(rabbit, runtime_parameters, []),
+    Limits = proplists:get_value(limits, Params, []),
+    Limit = proplists:get_value(Component, Limits, -1),
+    case Limit < 0 orelse count_component(Component) < Limit of
+       true -> ok;
+       false -> {errors, [{"component ~ts is limited to ~tp per node", [Component, Limit]}]}
+    end.
+
+count_component(Component) -> length(list_component(Component)).
 
 %% Validate only an user record as expected by the API before #rabbitmq-event-exchange-10
 get_user(#user{} = User) ->
@@ -162,23 +183,6 @@ get_username(none) ->
 get_username(Any) ->
     Any.
 
-mnesia_update(Key, Term) ->
-    rabbit_misc:execute_mnesia_transaction(mnesia_update_fun(Key, Term)).
-
-mnesia_update(VHost, Comp, Name, Term) ->
-    rabbit_misc:execute_mnesia_transaction(
-      rabbit_vhost:with(VHost, mnesia_update_fun({VHost, Comp, Name}, Term))).
-
-mnesia_update_fun(Key, Term) ->
-    fun () ->
-            Res = case mnesia:read(?TABLE, Key, read) of
-                      []       -> new;
-                      [Params] -> {old, Params#runtime_parameters.value}
-                      end,
-            ok = mnesia:write(?TABLE, c(Key, Term), write),
-            Res
-    end.
-
 -spec clear(rabbit_types:vhost(), binary(), binary(), rabbit_types:username())
            -> ok_thunk_or_error_string().
 
@@ -189,66 +193,41 @@ clear(VHost, Component, Name, ActingUser) ->
 
 clear_global(Key, ActingUser) ->
     KeyAsAtom = rabbit_data_coercion:to_atom(Key),
-    Notify = fun() ->
-                    event_notify(parameter_set, none, global,
-                                 [{name,  KeyAsAtom},
-                                  {user_who_performed_action, ActingUser}]),
-                    ok
-             end,
     case value_global(KeyAsAtom) of
         not_found ->
             {error_string, "Parameter does not exist"};
         _         ->
-            F = fun () ->
-                ok = mnesia:delete(?TABLE, KeyAsAtom, write)
-                end,
-            ok = rabbit_misc:execute_mnesia_transaction(F),
-            case mnesia:is_transaction() of
-                true  -> Notify;
-                false -> Notify()
-            end
+            ok = rabbit_db_rtparams:delete(KeyAsAtom),
+            event_notify(parameter_cleared, none, global,
+                         [{name,  KeyAsAtom},
+                          {user_who_performed_action, ActingUser}])
     end.
 
-clear_component(Component, ActingUser) ->
-    case list_component(Component) of
-        [] ->
-            ok;
-        Xs ->
-            [clear(pget(vhost, X),
-                   pget(component, X),
-                   pget(name, X),
-                   ActingUser) || X <- Xs],
-            ok
-    end.
+clear_vhost(VHostName, _ActingUser) when is_binary(VHostName) ->
+    ok = rabbit_db_rtparams:delete(VHostName, '_', '_').
+
+clear_component(<<"policy">>, _) ->
+    {error_string, "policies may not be cleared using this method"};
+clear_component(Component, _ActingUser) ->
+    ok = rabbit_db_rtparams:delete('_', Component, '_').
 
 -spec clear_any(rabbit_types:vhost(), binary(), binary(), rabbit_types:username())
                      -> ok_thunk_or_error_string().
 
 clear_any(VHost, Component, Name, ActingUser) ->
-    Notify = fun () ->
-                     case lookup_component(Component) of
-                         {ok, Mod} -> event_notify(
-                                        parameter_cleared, VHost, Component,
-                                        [{name, Name},
-                                         {user_who_performed_action, ActingUser}]),
-                                      Mod:notify_clear(VHost, Component, Name, ActingUser);
-                         _         -> ok
-                     end
-             end,
     case lookup(VHost, Component, Name) of
         not_found -> {error_string, "Parameter does not exist"};
-        _         -> mnesia_clear(VHost, Component, Name),
-                     case mnesia:is_transaction() of
-                         true  -> Notify;
-                         false -> Notify()
-                     end
+        _         ->
+            rabbit_db_rtparams:delete(VHost, Component, Name),
+            case lookup_component(Component) of
+                {ok, Mod} -> event_notify(
+                               parameter_cleared, VHost, Component,
+                               [{name, Name},
+                                {user_who_performed_action, ActingUser}]),
+                             Mod:notify_clear(VHost, Component, Name, ActingUser);
+                _         -> ok
+            end
     end.
-
-mnesia_clear(VHost, Component, Name) ->
-    F = fun () ->
-                ok = mnesia:delete(?TABLE, {VHost, Component, Name}, write)
-        end,
-    ok = rabbit_misc:execute_mnesia_transaction(rabbit_vhost:with(VHost, F)).
 
 event_notify(_Event, _VHost, <<"policy">>, _Props) ->
     ok;
@@ -262,7 +241,7 @@ event_notify(Event, VHost, Component, Props) ->
 
 list() ->
     [p(P) || #runtime_parameters{ key = {_VHost, Comp, _Name}} = P <-
-             rabbit_misc:dirty_read_all(?TABLE), Comp /= <<"policy">>].
+             rabbit_db_rtparams:get_all(), Comp /= <<"policy">>].
 
 -spec list(rabbit_types:vhost() | '_') -> [rabbit_types:infos()].
 
@@ -278,27 +257,20 @@ list_component(Component) -> list('_',   Component).
                 -> [rabbit_types:infos()].
 
 list(VHost, Component) ->
-    mnesia:async_dirty(
-      fun () ->
-              case VHost of
-                  '_' -> ok;
-                  _   -> rabbit_vhost:assert(VHost)
-              end,
-              Match = #runtime_parameters{key = {VHost, Component, '_'},
-                                          _   = '_'},
-              [p(P) || #runtime_parameters{key = {_VHost, Comp, _Name}} = P <-
-                           mnesia:match_object(?TABLE, Match, read),
-                       Comp =/= <<"policy">> orelse Component =:= <<"policy">>]
-      end).
+    [p(P) || #runtime_parameters{key = {_VHost, Comp, _Name}} = P <-
+             rabbit_db_rtparams:get_all(VHost, Component),
+             Comp =/= <<"policy">> orelse Component =:= <<"policy">>].
 
 list_global() ->
     %% list only atom keys
-    mnesia:async_dirty(
-        fun () ->
-            Match = #runtime_parameters{key = '_', _ = '_'},
-            [p(P) || P <- mnesia:match_object(?TABLE, Match, read),
-                is_atom(P#runtime_parameters.key)]
-        end).
+    All = [p(P) || P <- rabbit_db_rtparams:get_all(),
+                   is_atom(P#runtime_parameters.key)],
+    %% filter out global parameters that are not meant to be exposed
+    %% publicly
+    lists:filter(fun(PL) ->
+                    Name = proplists:get_value(name, PL),
+                    not lists:member(Name, ?INTERNAL_RUNTIME_PARAMETER_NAMES)
+                 end, All).
 
 -spec list_formatted(rabbit_types:vhost()) -> [rabbit_types:infos()].
 
@@ -376,25 +348,13 @@ value0(Key, Default) ->
     Params#runtime_parameters.value.
 
 lookup0(Key, DefaultFun) ->
-    case mnesia:dirty_read(?TABLE, Key) of
-        []  -> DefaultFun();
-        [R] -> R
+    case rabbit_db_rtparams:get(Key) of
+        undefined -> DefaultFun();
+        Record    -> Record
     end.
 
 lookup_missing(Key, Default) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () ->
-              case mnesia:read(?TABLE, Key, read) of
-                  []  -> Record = c(Key, Default),
-                         mnesia:write(?TABLE, Record, write),
-                         Record;
-                  [R] -> R
-              end
-      end).
-
-c(Key, Default) ->
-    #runtime_parameters{key   = Key,
-                        value = Default}.
+    rabbit_db_rtparams:get_or_set(Key, Default).
 
 p(#runtime_parameters{key = {VHost, Component, Name}, value = Value}) ->
     [{vhost,     VHost},

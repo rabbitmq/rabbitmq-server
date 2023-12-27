@@ -51,14 +51,14 @@
 -type expiration() :: calendar:datetime() | undefined.
 -type security_token() :: nonempty_string() | undefined.
 -type region() :: nonempty_string() | undefined.
--type path() :: ssl:path().
+-type path() :: string().
 
 -type sc_ok() :: {ok, access_key(), secret_access_key(), expiration(), security_token()}.
 -type sc_error() :: {error, Reason :: atom()}.
 -type security_credentials() :: sc_ok() | sc_error().
 
 -record(imdsv2token, { token :: security_token() | undefined,
-                       expiration :: expiration() | undefined}).
+                       expiration :: non_neg_integer() | undefined}).
 
 -type imdsv2token() :: #imdsv2token{}.
 
@@ -102,7 +102,7 @@
 -type headers() :: [header()].
 -type body() :: string() | binary().
 
--type ssl_options() :: [ssl:ssl_option()].
+-type ssl_options() :: [ssl:tls_client_option()].
 
 -type http_option() :: {timeout, timeout()} |
                        {connect_timeout, timeout()} |
@@ -132,6 +132,7 @@
                         {error, term()}.
 
 -type result_ok() :: {ok, {ResponseHeaders :: headers(), Response :: list()}}.
--type result_error() :: {error, Message :: reason_phrase(), {ResponseHeaders :: headers(), Response :: list()} | undefined} |
-                        {error, {credentials, Reason :: string()}}.
+-type result_error() :: {'error', Message :: reason_phrase(), {ResponseHeaders :: headers(), Response :: list()} | undefined} |
+                        {'error', {credentials, Reason :: string()}} |
+                        {'error', string()}.
 -type result() :: result_ok() | result_error().

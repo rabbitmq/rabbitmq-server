@@ -65,19 +65,32 @@ fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("mqtt.exchange", Conf))
 end}.
 
-%% Specify TTL (time to live) to control the lifetime of non-clean sessions.
-%%
-%% {subscription_ttl, 1800000},
 {mapping, "mqtt.subscription_ttl", "rabbitmq_mqtt.subscription_ttl", [
     {datatype, [{enum, [undefined, infinity]}, integer]}
 ]}.
 
 {translation, "rabbitmq_mqtt.subscription_ttl",
 fun(Conf) ->
-    case cuttlefish:conf_get("mqtt.subscription_ttl", Conf, undefined) of
-        undefined -> undefined;
-        infinity  -> undefined;
-        Ms        -> Ms
+    cuttlefish:invalid(
+        "Since 3.13 mqtt.subscription_ttl (in milliseconds) is unsupported. "
+        "Use mqtt.max_session_expiry_interval_seconds (in seconds) instead.")
+end}.
+
+%% Defines the maximum Session Expiry Interval in seconds allowed by the server.
+%% 'infinity' means the session does not expire.
+%% An MQTT 5.0 client can choose a lower value.
+
+{mapping, "mqtt.max_session_expiry_interval_seconds", "rabbitmq_mqtt.max_session_expiry_interval_seconds", [
+    {datatype, [integer, {atom, infinity}]}
+]}.
+
+{translation, "rabbitmq_mqtt.max_session_expiry_interval_seconds",
+fun(Conf) ->
+    case cuttlefish:conf_get("mqtt.max_session_expiry_interval_seconds", Conf) of
+        N when is_integer(N) andalso N < 0 ->
+            cuttlefish:invalid("negative integer not allowed");
+        Valid ->
+            Valid
     end
 end}.
 
@@ -266,3 +279,40 @@ end}.
 
 {mapping, "mqtt.durable_queue_type", "rabbitmq_mqtt.durable_queue_type",
     [{datatype, {enum, [classic, quorum]}}]}.
+
+%% If feature flag rabbit_mqtt_qos0_queue is enabled, a pseudo queue of type rabbit_mqtt_qos0_queue is
+%% created for an MQTT "Clean Session" that subscribes with QoS 0. This queue type holds MQTT messages
+%% directly in the MQTT connection process mailbox. This queue type has no flow control which
+%% means MQTT messages might arrive faster in the Erlang mailbox than being sent to the subscribing MQTT
+%% client. To protect against high memory usage, RabbitMQ intentionally drops QoS 0 messages if both
+%% 1.) the number of messages in the MQTT connection process mailbox exceeds mailbox_soft_limit, and
+%% 2.) the socket sending to the MQTT client is busy (i.e. not sending fast enough).
+%% Note that there can be other messages in the mailbox (e.g. MQTT messages sent from the MQTT client to
+%% RabbitMQ or confirmations from another queue type to the MQTT connection process) which are
+%% obviously not dropped. However, these other messages also contribute to the `mailbox_soft_limit`.
+%% Setting mailbox_soft_limit to 0 disables the overload protection mechanism to drop QoS 0 messages.
+%% Setting mailbox_soft_limit to a very high value decreases the likelihood of intentionally dropping
+%% QoS 0 messages while increasing the risk of causing a cluster wide memory alarm.
+%%
+%% {mailbox_soft_limit, 30},
+{mapping, "mqtt.mailbox_soft_limit", "rabbitmq_mqtt.mailbox_soft_limit",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
+%% Maximum packet size
+
+{mapping, "mqtt.max_packet_size_unauthenticated", "rabbitmq_mqtt.max_packet_size_unauthenticated", [
+    {datatype, integer},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "mqtt.max_packet_size_authenticated", "rabbitmq_mqtt.max_packet_size_authenticated", [
+    {datatype, integer},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
+%% Topic Aliax Maximum
+
+{mapping, "mqtt.topic_alias_maximum", "rabbitmq_mqtt.topic_alias_maximum", [
+    {datatype, integer},
+    {validators, ["non_negative_integer"]}
+]}.

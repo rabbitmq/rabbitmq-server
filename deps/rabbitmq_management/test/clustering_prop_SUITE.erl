@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(clustering_prop_SUITE).
@@ -170,7 +170,7 @@ force_all() ->
 
 clear_all_table_data() ->
     [ets:delete_all_objects(T) || {T, _} <- ?CORE_TABLES],
-    [ets:delete_all_objects(T) || {T, _} <- ?TABLES],
+    rabbit_mgmt_storage:reset(),
     [gen_server:call(P, purge_cache)
      || {_, P, _, _} <- supervisor:which_children(rabbit_mgmt_db_cache_sup)].
 
@@ -264,7 +264,7 @@ trace_fun(Config, MFs) ->
     Nodename2 = get_node_config(Config, 1, nodename),
     dbg:tracer(process, {fun(A,_) ->
                                  ct:pal(?LOW_IMPORTANCE,
-                                        "TRACE: ~p", [A])
+                                        "TRACE: ~tp", [A])
                          end, ok}),
     dbg:n(Nodename1),
     dbg:n(Nodename2),
@@ -274,7 +274,7 @@ trace_fun(Config, MFs) ->
 
 dump_table(Config, Table) ->
     Data = rabbit_ct_broker_helpers:rpc(Config, 0, ets, tab2list, [Table]),
-    ct:pal(?LOW_IMPORTANCE, "Node 0: Dump of table ~p:~n~p~n", [Table, Data]),
+    ct:pal(?LOW_IMPORTANCE, "Node 0: Dump of table ~tp:~n~tp~n", [Table, Data]),
     Data0 = rabbit_ct_broker_helpers:rpc(Config, 1, ets, tab2list, [Table]),
-    ct:pal(?LOW_IMPORTANCE, "Node 1: Dump of table ~p:~n~p~n", [Table, Data0]).
+    ct:pal(?LOW_IMPORTANCE, "Node 1: Dump of table ~tp:~n~tp~n", [Table, Data0]).
 

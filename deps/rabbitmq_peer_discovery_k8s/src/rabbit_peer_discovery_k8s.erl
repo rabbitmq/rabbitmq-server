@@ -4,7 +4,7 @@
 %%
 %% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2015-2016 AWeber Communications
-%% Copyright (c) 2016-2022 VMware, Inc. or its affiliates. All rights reserved.
+%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates. All rights reserved.
 %%
 
 -module(rabbit_peer_discovery_k8s).
@@ -31,7 +31,7 @@ init() ->
     ok = application:ensure_started(inets),
     %% we cannot start this plugin yet since it depends on the rabbit app,
     %% which is in the process of being started by the time this function is called
-    application:load(rabbitmq_peer_discovery_common),
+    _ = application:load(rabbitmq_peer_discovery_common),
     rabbit_peer_discovery_httpc:maybe_configure_proxy(),
     rabbit_peer_discovery_httpc:maybe_configure_inet6().
 
@@ -44,9 +44,9 @@ list_nodes() ->
       Nodes = lists:map(fun node_name/1, Addresses),
       {ok, {Nodes, disc}};
     {error, Reason} ->
-      Details = io_lib:format("Failed to fetch a list of nodes from Kubernetes API: ~s", [Reason]),
+      Details = io_lib:format("Failed to fetch a list of nodes from Kubernetes API: ~ts", [Reason]),
       rabbit_log:error(Details),
-      send_event("Warning", "Failed", Details),
+      _ = send_event("Warning", "Failed", Details),
       {error, Reason}
   end.
 
@@ -57,7 +57,7 @@ supports_registration() ->
 
 -spec post_registration() -> ok | {error, Reason :: string()}.
 post_registration() ->
-    Details = io_lib:format("Node ~s is registered", [node()]),
+    Details = io_lib:format("Node ~ts is registered", [node()]),
     send_event("Normal", "Created", Details).
 
 -spec register() -> ok.
@@ -68,33 +68,29 @@ register() ->
 unregister() ->
     ok.
 
--spec lock(Node :: node()) -> {ok, {{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}} |
-                              {error, Reason :: string()}.
+-spec lock(Nodes :: [node()]) ->
+    {ok, {{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}} |
+    {error, Reason :: string()}.
 
-lock(Node) ->
-  %% call list_nodes/0 externally such that meck can mock the function
-  case ?MODULE:list_nodes() of
-    {ok, {Nodes, disc}} ->
-      case lists:member(Node, Nodes) of
+lock(Nodes) ->
+    Node = node(),
+    case lists:member(Node, Nodes) of
         true ->
-          rabbit_log:info("Will try to lock connecting to nodes ~p", [Nodes]),
-          LockId = rabbit_nodes:lock_id(Node),
-          Retries = rabbit_nodes:lock_retries(),
-          case global:set_lock(LockId, Nodes, Retries) of
-            true ->
-              {ok, {LockId, Nodes}};
-            false ->
-              {error, io_lib:format("Acquiring lock taking too long, bailing out after ~b retries", [Retries])}
-          end;
+            rabbit_log:info("Will try to lock connecting to nodes ~tp", [Nodes]),
+            LockId = rabbit_nodes:lock_id(Node),
+            Retries = rabbit_nodes:lock_retries(),
+            case global:set_lock(LockId, Nodes, Retries) of
+                true ->
+                    {ok, {LockId, Nodes}};
+                false ->
+                    {error, io_lib:format("Acquiring lock taking too long, bailing out after ~b retries", [Retries])}
+            end;
         false ->
-          %% Don't try to acquire the global lock when local node is not discoverable by peers.
-          %% This branch is just an additional safety check. We should never run into this branch
-          %% because the local Pod is in state 'Running' and we listed both ready and not-ready addresses.
-          {error, lists:flatten(io_lib:format("Local node ~s is not part of discovered nodes ~p", [Node, Nodes]))}
-      end;
-    {error, _} = Error ->
-      Error
-  end.
+            %% Don't try to acquire the global lock when local node is not discoverable by peers.
+            %% This branch is just an additional safety check. We should never run into this branch
+            %% because the local Pod is in state 'Running' and we listed both ready and not-ready addresses.
+            {error, lists:flatten(io_lib:format("Local node ~ts is not part of discovered nodes ~tp", [Node, Nodes]))}
+    end.
 
 -spec unlock({{ResourceId :: string(), LockRequestedId :: atom()}, Nodes :: [atom()]}) -> 'ok'.
 unlock({LockId, Nodes}) ->
@@ -144,8 +140,7 @@ node_name(Address) ->
 %% Discover peers as quickly as possible not waiting for their readiness check to succeed.
 %% @end
 %%
--spec address([map()]) -> list().
-
+-spec address(map()) -> list().
 address(Subset) ->
   maps:get(<<"notReadyAddresses">>, Subset, []) ++
   maps:get(<<"addresses">>, Subset, []).

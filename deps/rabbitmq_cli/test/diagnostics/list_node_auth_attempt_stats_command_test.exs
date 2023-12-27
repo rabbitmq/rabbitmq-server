@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule ListNodeAuthAttemptStatsCommandTest do
   use ExUnit.Case, async: false
@@ -24,12 +24,15 @@ defmodule ListNodeAuthAttemptStatsCommandTest do
 
   test "validate: providing any arguments fails validation", context do
     assert @command.validate(["a"], context[:opts]) ==
-      {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
   end
 
-    @tag test_timeout: 3000
+  @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})))
+    assert match?(
+             {:badrpc, _},
+             @command.run([], Map.merge(context[:opts], %{node: :jake@thedog}))
+           )
   end
 
   @tag test_timeout: 15000

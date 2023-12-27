@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_reader).
@@ -66,6 +66,8 @@
 -record(v1, {
           %% parent process
           parent,
+          %% Ranch ref
+          ranch_ref,
           %% socket
           sock,
           %% connection state, see connection record
@@ -143,12 +145,6 @@
 
 %%--------------------------------------------------------------------------
 
--type resource_alert() :: {WasAlarmSetForNode :: boolean(),
-                           IsThereAnyAlarmsWithSameSourceInTheCluster :: boolean(),
-                           NodeForWhichAlarmWasSetOrCleared :: node()}.
-
-%%--------------------------------------------------------------------------
-
 -spec start_link(pid(), any()) -> rabbit_types:ok(pid()).
 
 start_link(HelperSup, Ref) ->
@@ -168,7 +164,7 @@ init(Parent, HelperSup, Ref) ->
     {ok, Sock} = rabbit_networking:handshake(Ref,
         application:get_env(rabbit, proxy_protocol, false)),
     Deb = sys:debug_options([]),
-    start_connection(Parent, HelperSup, Deb, Sock).
+    start_connection(Parent, HelperSup, Ref, Deb, Sock).
 
 -spec system_continue(_,_,{[binary()], non_neg_integer(), #v1{}}) -> any().
 
@@ -210,13 +206,15 @@ info(Pid, Items) ->
 force_event_refresh(Pid, Ref) ->
     gen_server:cast(Pid, {force_event_refresh, Ref}).
 
--spec conserve_resources(pid(), atom(), resource_alert()) -> 'ok'.
+-spec conserve_resources(pid(),
+                         rabbit_alarm:resource_alarm_source(),
+                         rabbit_alarm:resource_alert()) -> 'ok'.
 
 conserve_resources(Pid, Source, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Source, Conserve},
     ok.
 
--spec server_properties(rabbit_types:protocol()) ->
+-spec server_properties(rabbit_types:protocol() | 'amqp_1_0') ->
           rabbit_framing:amqp_table().
 
 server_properties(Protocol) ->
@@ -267,10 +265,10 @@ server_capabilities(_) ->
 %%--------------------------------------------------------------------------
 
 socket_error(Reason) when is_atom(Reason) ->
-    rabbit_log_connection:error("Error on AMQP connection ~p: ~s",
+    rabbit_log_connection:error("Error on AMQP connection ~tp: ~ts",
         [self(), rabbit_misc:format_inet_error(Reason)]);
 socket_error(Reason) ->
-    Fmt = "Error on AMQP connection ~p:~n~p",
+    Fmt = "Error on AMQP connection ~tp:~n~tp",
     Args = [self(), Reason],
     case Reason of
         %% The socket was closed while upgrading to SSL.
@@ -293,10 +291,10 @@ socket_op(Sock, Fun) ->
                            exit(normal)
     end.
 
--spec start_connection(pid(), pid(), any(), rabbit_net:socket()) ->
+-spec start_connection(pid(), pid(), ranch:ref(), any(), rabbit_net:socket()) ->
           no_return().
 
-start_connection(Parent, HelperSup, Deb, Sock) ->
+start_connection(Parent, HelperSup, RanchRef, Deb, Sock) ->
     process_flag(trap_exit, true),
     RealSocket = rabbit_net:unwrap_socket(Sock),
     Name = case rabbit_net:connection_string(Sock, inbound) of
@@ -314,6 +312,7 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
         socket_op(Sock, fun (S) -> rabbit_net:socket_ends(S, inbound) end),
     ?store_proc_name(Name),
     State = #v1{parent              = Parent,
+                ranch_ref           = RanchRef,
                 sock                = RealSocket,
                 connection          = #connection{
                   name               = Name,
@@ -357,11 +356,11 @@ start_connection(Parent, HelperSup, Deb, Sock) ->
             %% connection was closed cleanly by the client
             #v1{connection = #connection{user  = #user{username = Username},
                                          vhost = VHost}} ->
-                rabbit_log_connection:info("closing AMQP connection ~p (~ts, vhost: '~ts', user: '~ts')",
+                rabbit_log_connection:info("closing AMQP connection ~tp (~ts, vhost: '~ts', user: '~ts')",
                     [self(), dynamic_connection_name(Name), VHost, Username]);
             %% just to be more defensive
             _ ->
-                rabbit_log_connection:info("closing AMQP connection ~p (~ts)",
+                rabbit_log_connection:info("closing AMQP connection ~tp (~ts)",
                     [self(), dynamic_connection_name(Name)])
             end
     catch
@@ -410,37 +409,37 @@ log_connection_exception(Name, Ex) ->
 log_connection_exception(Severity, Name, {heartbeat_timeout, TimeoutSec}) ->
     %% Long line to avoid extra spaces and line breaks in log
     log_connection_exception_with_severity(Severity,
-        "closing AMQP connection ~p (~s):~n"
+        "closing AMQP connection ~tp (~ts):~n"
         "missed heartbeats from client, timeout: ~ps",
         [self(), Name, TimeoutSec]);
 log_connection_exception(Severity, Name, {connection_closed_abruptly,
                                           #v1{connection = #connection{user  = #user{username = Username},
                                                                        vhost = VHost}}}) ->
     log_connection_exception_with_severity(Severity,
-        "closing AMQP connection ~p (~ts, vhost: '~ts', user: '~ts'):~nclient unexpectedly closed TCP connection",
+        "closing AMQP connection ~tp (~ts, vhost: '~ts', user: '~ts'):~nclient unexpectedly closed TCP connection",
         [self(), Name, VHost, Username]);
 %% when client abruptly closes connection before connection.open/authentication/authorization
 %% succeeded, don't log username and vhost as 'none'
 log_connection_exception(Severity, Name, {connection_closed_abruptly, _}) ->
     log_connection_exception_with_severity(Severity,
-        "closing AMQP connection ~p (~s):~nclient unexpectedly closed TCP connection",
+        "closing AMQP connection ~tp (~ts):~nclient unexpectedly closed TCP connection",
         [self(), Name]);
 %% failed connection.tune negotiations
 log_connection_exception(Severity, Name, {handshake_error, tuning, _Channel,
                                           {exit, #amqp_error{explanation = Explanation},
                                            _Method, _Stacktrace}}) ->
     log_connection_exception_with_severity(Severity,
-        "closing AMQP connection ~p (~s):~nfailed to negotiate connection parameters: ~s",
+        "closing AMQP connection ~tp (~ts):~nfailed to negotiate connection parameters: ~ts",
         [self(), Name, Explanation]);
 %% old exception structure
 log_connection_exception(Severity, Name, connection_closed_abruptly) ->
     log_connection_exception_with_severity(Severity,
-        "closing AMQP connection ~p (~s):~n"
+        "closing AMQP connection ~tp (~ts):~n"
         "client unexpectedly closed TCP connection",
         [self(), Name]);
 log_connection_exception(Severity, Name, Ex) ->
     log_connection_exception_with_severity(Severity,
-        "closing AMQP connection ~p (~s):~n~p",
+        "closing AMQP connection ~tp (~ts):~n~tp",
         [self(), Name, Ex]).
 
 log_connection_exception_with_severity(Severity, Fmt, Args) ->
@@ -500,11 +499,11 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
             %%
             %% The goal is to not log TCP healthchecks (a connection
             %% with no data received) unless specified otherwise.
-            Fmt = "accepting AMQP connection ~p (~s)",
+            Fmt = "accepting AMQP connection ~tp (~ts)",
             Args = [self(), ConnName],
             case Recv of
-                closed -> rabbit_log_connection:debug(Fmt, Args);
-                _      -> rabbit_log_connection:info(Fmt, Args)
+                closed -> _ = rabbit_log_connection:debug(Fmt, Args);
+                _      -> _ = rabbit_log_connection:info(Fmt, Args)
             end;
         _ ->
             ok
@@ -519,10 +518,10 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
             stop(tcp_healthcheck, State);
         closed ->
             stop(closed, State);
-        {other, {heartbeat_send_error, Reason}} ->
+        {other, {heartbeat_send_error, _}=ErrHeartbeat} ->
             %% The only portable way to detect disconnect on blocked
             %% connection is to wait for heartbeat send failure.
-            stop(Reason, State);
+            stop(ErrHeartbeat, State);
         {error, Reason} ->
             stop(Reason, State);
         {other, {system, From, Request}} ->
@@ -568,7 +567,7 @@ handle_other({'EXIT', Parent, normal}, State = #v1{parent = Parent}) ->
     stop(closed, State);
 handle_other({'EXIT', Parent, Reason}, State = #v1{parent = Parent}) ->
     Msg = io_lib:format("broker forced connection closure with reason '~w'", [Reason]),
-    terminate(Msg, State),
+    _ = terminate(Msg, State),
     %% this is what we are expected to do according to
     %% https://www.erlang.org/doc/man/sys.html
     %%
@@ -646,7 +645,7 @@ switch_callback(State, Callback, Length) ->
 terminate(Explanation, State) when ?IS_RUNNING(State) ->
     {normal, handle_exception(State, 0,
                               rabbit_misc:amqp_error(
-                                connection_forced, "~s", [Explanation], none))};
+                                connection_forced, "~ts", [Explanation], none))};
 terminate(_Explanation, State) ->
     {force, State}.
 
@@ -746,9 +745,9 @@ wait_for_channel_termination(N, TimerRef,
                     wait_for_channel_termination(N-1, TimerRef, State1);
                 {_, uncontrolled} ->
                     rabbit_log_connection:error(
-                        "Error on AMQP connection ~p (~ts, vhost: '~ts',"
-                        " user: '~ts', state: ~tp), channel ~p:"
-                        "error while terminating:~n~p",
+                        "Error on AMQP connection ~tp (~ts, vhost: '~ts',"
+                        " user: '~ts', state: ~tp), channel ~tp:"
+                        "error while terminating:~n~tp",
                         [self(), ConnName, VHost, User#user.username,
                          CS, Channel, Reason]),
                     handle_uncontrolled_channel_close(ChPid),
@@ -775,11 +774,11 @@ termination_kind(normal) -> controlled;
 termination_kind(_)      -> uncontrolled.
 
 format_hard_error(#amqp_error{name = N, explanation = E, method = M}) ->
-    io_lib:format("operation ~s caused a connection exception ~s: ~p", [M, N, E]);
+    io_lib:format("operation ~ts caused a connection exception ~ts: ~tp", [M, N, E]);
 format_hard_error(Reason) ->
     case io_lib:deep_char_list(Reason) of
         true  -> Reason;
-        false -> rabbit_misc:format("~p", [Reason])
+        false -> rabbit_misc:format("~tp", [Reason])
     end.
 
 log_hard_error(#v1{connection_state = CS,
@@ -788,7 +787,7 @@ log_hard_error(#v1{connection_state = CS,
                                    user  = User,
                                    vhost = VHost}}, Channel, Reason) ->
     rabbit_log_connection:error(
-        "Error on AMQP connection ~p (~s, vhost: '~ts',"
+        "Error on AMQP connection ~tp (~ts, vhost: '~ts',"
         " user: '~ts', state: ~tp), channel ~tp:~n ~ts",
         [self(), ConnName, VHost, User#user.username, CS, Channel, format_hard_error(Reason)]).
 
@@ -808,7 +807,7 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol,
                  Channel, Reason = #amqp_error{name = access_refused,
                                                explanation = ErrMsg}) ->
     rabbit_log_connection:error(
-        "Error on AMQP connection ~p (~s, state: ~p):~n~s",
+        "Error on AMQP connection ~tp (~ts, state: ~tp):~n~ts",
         [self(), ConnName, starting, ErrMsg]),
     %% respect authentication failure notification capability
     case rabbit_misc:table_lookup(Capabilities,
@@ -827,7 +826,7 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol,
                  Channel, Reason = #amqp_error{name = not_allowed,
                                                explanation = ErrMsg}) ->
     rabbit_log_connection:error(
-        "Error on AMQP connection ~p (~s, user: '~s', state: ~p):~n~s",
+        "Error on AMQP connection ~tp (~ts, user: '~ts', state: ~tp):~n~ts",
         [self(), ConnName, User#user.username, opening, ErrMsg]),
     send_error_on_channel0_and_close(Channel, Protocol, Reason, State);
 handle_exception(State = #v1{connection = #connection{protocol = Protocol},
@@ -844,8 +843,8 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol,
                  Channel, Reason = #amqp_error{name = not_allowed,
                                                explanation = ErrMsg}) ->
     rabbit_log_connection:error(
-        "Error on AMQP connection ~p (~s,"
-        " user: '~s', state: ~p):~n~s",
+        "Error on AMQP connection ~tp (~ts,"
+        " user: '~ts', state: ~tp):~n~ts",
         [self(), ConnName, User#user.username, tuning, ErrMsg]),
     send_error_on_channel0_and_close(Channel, Protocol, Reason, State);
 handle_exception(State, Channel, Reason) ->
@@ -858,7 +857,7 @@ handle_exception(State, Channel, Reason) ->
 %% more input
 -spec fatal_frame_error(_, _, _, _, _) -> no_return().
 fatal_frame_error(Error, Type, Channel, Payload, State) ->
-    frame_error(Error, Type, Channel, Payload, State),
+    _ = frame_error(Error, Type, Channel, Payload, State),
     %% grace period to allow transmission of error
     timer:sleep(?SILENT_CLOSE_DELAY * 1000),
     throw(fatal_frame_error).
@@ -867,14 +866,14 @@ frame_error(Error, Type, Channel, Payload, State) ->
     {Str, Bin} = payload_snippet(Payload),
     handle_exception(State, Channel,
                      rabbit_misc:amqp_error(frame_error,
-                                            "type ~p, ~s octets = ~p: ~p",
+                                            "type ~tp, ~ts octets = ~tp: ~tp",
                                             [Type, Str, Bin, Error], none)).
 
 unexpected_frame(Type, Channel, Payload, State) ->
     {Str, Bin} = payload_snippet(Payload),
     handle_exception(State, Channel,
                      rabbit_misc:amqp_error(unexpected_frame,
-                                            "type ~p, ~s octets = ~p",
+                                            "type ~tp, ~ts octets = ~tp",
                                             [Type, Str, Bin], none)).
 
 payload_snippet(Payload) when size(Payload) =< 16 ->
@@ -918,7 +917,7 @@ create_channel(Channel,
             {ok, {ChPid, AState}, State#v1{channel_count = ChannelCount + 1}};
         {true, Limit} ->
             {error, rabbit_misc:amqp_error(not_allowed,
-                        "number of channels opened for user '~s' has reached "
+                        "number of channels opened for user '~ts' has reached "
                         "the maximum allowed user limit of (~w)",
                         [Username, Limit], 'none')}
     end.
@@ -1192,9 +1191,11 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
                     ok ->
                         ok;
                     {error, Reason} ->
-                        Parent ! {heartbeat_send_error, Reason};
+                        Parent ! {heartbeat_send_error, Reason},
+                        ok;
                     Unexpected ->
-                        Parent ! {heartbeat_send_error, Unexpected}
+                        Parent ! {heartbeat_send_error, Unexpected},
+                        ok
                 end,
                 ok
         end,
@@ -1211,7 +1212,8 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
              heartbeater = Heartbeater};
 
 handle_method0(#'connection.open'{virtual_host = VHost},
-               State = #v1{connection_state = opening,
+               State = #v1{ranch_ref        = RanchRef,
+                           connection_state = opening,
                            connection       = Connection = #connection{
                                                 log_name = ConnName,
                                                 user = User = #user{username = Username},
@@ -1219,7 +1221,7 @@ handle_method0(#'connection.open'{virtual_host = VHost},
                            helper_sup       = SupPid,
                            sock             = Sock,
                            throttle         = Throttle}) ->
-
+    ok = is_over_node_connection_limit(RanchRef),
     ok = is_over_vhost_connection_limit(VHost, User),
     ok = is_over_user_connection_limit(User),
     ok = rabbit_access_control:check_vhost_access(User, VHost, {socket, Sock}, #{}),
@@ -1247,8 +1249,8 @@ handle_method0(#'connection.open'{virtual_host = VHost},
     rabbit_event:notify(connection_created, Infos),
     maybe_emit_stats(State1),
     rabbit_log_connection:info(
-        "connection ~p (~s): "
-        "user '~s' authenticated and granted access to vhost '~ts'",
+        "connection ~tp (~ts): "
+        "user '~ts' authenticated and granted access to vhost '~ts'",
         [self(), dynamic_connection_name(ConnName), Username, VHost]),
     State1;
 handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
@@ -1273,8 +1275,8 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
                                            log_name   = ConnName} = Conn,
                            sock       = Sock}) when ?IS_RUNNING(State) ->
     rabbit_log_connection:debug(
-        "connection ~p (~s) of user '~s': "
-        "asked to update secret, reason: ~s",
+        "connection ~tp (~ts) of user '~ts': "
+        "asked to update secret, reason: ~ts",
         [self(), dynamic_connection_name(ConnName), Username, Reason]),
     case rabbit_access_control:update_state(User, NewSecret) of
       {ok, User1} ->
@@ -1285,21 +1287,21 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
         %% Any secret update errors coming from the authz backend will be handled in the other branch.
         %% Therefore we optimistically do no error handling here. MK.
         lists:foreach(fun(Ch) ->
-          rabbit_log:debug("Updating user/auth backend state for channel ~p", [Ch]),
+          rabbit_log:debug("Updating user/auth backend state for channel ~tp", [Ch]),
           _ = rabbit_channel:update_user_state(Ch, User1)
         end, all_channels()),
         ok = send_on_channel0(Sock, #'connection.update_secret_ok'{}, Protocol),
         rabbit_log_connection:info(
-            "connection ~p (~s): "
-            "user '~s' updated secret, reason: ~s",
+            "connection ~tp (~ts): "
+            "user '~ts' updated secret, reason: ~ts",
             [self(), dynamic_connection_name(ConnName), Username, Reason]),
         State#v1{connection = Conn#connection{user = User1}};
       {refused, Message} ->
-        rabbit_log_connection:error("Secret update was refused for user '~s': ~p",
+        rabbit_log_connection:error("Secret update was refused for user '~ts': ~tp",
                                     [Username, Message]),
         rabbit_misc:protocol_error(not_allowed, "New secret was refused by one of the backends", []);
       {error, Message} ->
-        rabbit_log_connection:error("Secret update for user '~s' failed: ~p",
+        rabbit_log_connection:error("Secret update for user '~ts' failed: ~tp",
                                     [Username, Message]),
         rabbit_misc:protocol_error(not_allowed,
                                   "Secret update failed", [])
@@ -1315,29 +1317,51 @@ is_vhost_alive(VHostPath, User) ->
         true  -> ok;
         false ->
             rabbit_misc:protocol_error(internal_error,
-                            "access to vhost '~ts' refused for user '~s': "
+                            "access to vhost '~ts' refused for user '~ts': "
                             "vhost '~ts' is down",
                             [VHostPath, User#user.username, VHostPath])
+    end.
+
+is_over_node_connection_limit(RanchRef) ->
+    Limit = rabbit_misc:get_env(rabbit, connection_max, infinity),
+    case Limit of
+        infinity -> ok;
+        N when is_integer(N) ->
+            #{active_connections := ActiveConns} = ranch:info(RanchRef),
+
+            case ActiveConns > Limit of
+                false -> ok;
+                true ->
+                    rabbit_misc:protocol_error(not_allowed,
+                                            "connection refused: "
+                                            "node connection limit (~tp) is reached",
+                                            [Limit])
+            end
     end.
 
 is_over_vhost_connection_limit(VHostPath, User) ->
     try rabbit_vhost_limit:is_over_connection_limit(VHostPath) of
         false         -> ok;
         {true, Limit} -> rabbit_misc:protocol_error(not_allowed,
-                            "access to vhost '~ts' refused for user '~s': "
-                            "connection limit (~p) is reached",
+                            "access to vhost '~ts' refused for user '~ts': "
+                            "connection limit (~tp) is reached",
                             [VHostPath, User#user.username, Limit])
     catch
         throw:{error, {no_such_vhost, VHostPath}} ->
-            rabbit_misc:protocol_error(not_allowed, "vhost ~ts not found", [VHostPath])
+            rabbit_misc:protocol_error(not_allowed, "vhost ~ts not found", [VHostPath]);
+        throw:{error, {cannot_get_limit, VHostPath, timeout}} ->
+            rabbit_misc:protocol_error(not_allowed,
+                                       "access to vhost '~ts' refused for user '~ts': "
+                                       "connection limit cannot be queried, timeout",
+                                       [VHostPath, User#user.username])
     end.
 
 is_over_user_connection_limit(#user{username = Username}) ->
     case rabbit_auth_backend_internal:is_over_connection_limit(Username) of
         false -> ok;
         {true, Limit} -> rabbit_misc:protocol_error(not_allowed,
-                            "connection refused for user '~s': "
-                            "user connection limit (~p) is reached",
+                            "connection refused for user '~ts': "
+                            "user connection limit (~tp) is reached",
                             [Username, Limit])
     end.
 
@@ -1362,7 +1386,7 @@ fail_negotiation(Field, MinOrMax, ServerValue, ClientValue) ->
                end,
     ClientValueDetail = get_client_value_detail(Field, ClientValue),
     rabbit_misc:protocol_error(
-      not_allowed, "negotiated ~w = ~w~s is ~w than the ~w allowed value (~w)",
+      not_allowed, "negotiated ~w = ~w~ts is ~w than the ~w allowed value (~w)",
       [Field, ClientValue, ClientValueDetail, S1, S2, ServerValue], 'connection.tune').
 
 get_env(Key) ->
@@ -1376,7 +1400,7 @@ auth_mechanism_to_module(TypeBin, Sock) ->
     case rabbit_registry:binary_to_type(TypeBin) of
         {error, not_found} ->
             rabbit_misc:protocol_error(
-              command_invalid, "unknown authentication mechanism '~s'",
+              command_invalid, "unknown authentication mechanism '~ts'",
               [TypeBin]);
         T ->
             case {lists:member(T, auth_mechanisms(Sock)),
@@ -1386,7 +1410,7 @@ auth_mechanism_to_module(TypeBin, Sock) ->
                 _ ->
                     rabbit_misc:protocol_error(
                       command_invalid,
-                      "invalid authentication mechanism '~s'", [T])
+                      "invalid authentication mechanism '~ts'", [T])
             end
     end.
 
@@ -1403,18 +1427,10 @@ auth_phase(Response,
            State = #v1{connection = Connection =
                            #connection{protocol       = Protocol,
                                        auth_mechanism = {Name, AuthMechanism},
-                                       auth_state     = AuthState},
+                                       auth_state     = AuthState,
+                                       host           = RemoteAddress},
                        sock = Sock}) ->
-    rabbit_log:debug("Raw client connection hostname during authN phase: ~p", [Connection#connection.host]),
-    RemoteAddress = case Connection#connection.host of
-        %% the hostname was already resolved, e.g. by reverse DNS lookups
-        Bin when is_binary(Bin) -> Bin;
-        %% the hostname is an IP address
-        Tuple when is_tuple(Tuple) ->
-            rabbit_data_coercion:to_binary(inet:ntoa(Connection#connection.host));
-        Other -> rabbit_data_coercion:to_binary(Other)
-    end,
-    rabbit_log:debug("Resolved client hostname during authN phase: ~s", [RemoteAddress]),
+    rabbit_log:debug("Client address during authN phase: ~tp", [RemoteAddress]),
     case AuthMechanism:handle_response(Response, AuthState) of
         {refused, Username, Msg, Args} ->
             rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, amqp091),
@@ -1439,7 +1455,7 @@ auth_phase(Response,
                                        [], State);
                 not_allowed ->
                     rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, amqp091),
-                    auth_fail(Username, "user '~s' can only connect via "
+                    auth_fail(Username, "user '~ts' can only connect via "
                               "localhost", [Username], Name, State)
             end,
             Tune = #'connection.tune'{frame_max   = get_env(frame_max),
@@ -1461,14 +1477,14 @@ auth_fail(Username, Msg, Args, AuthName,
     notify_auth_result(Username, user_authentication_failure,
       [{error, rabbit_misc:format(Msg, Args)}], State),
     AmqpError = rabbit_misc:amqp_error(
-                  access_refused, "~s login refused: ~s",
+                  access_refused, "~ts login refused: ~ts",
                   [AuthName, io_lib:format(Msg, Args)], none),
     case rabbit_misc:table_lookup(Capabilities,
                                   <<"authentication_failure_close">>) of
         {bool, true} ->
             SafeMsg = io_lib:format(
                         "Login was refused using authentication "
-                        "mechanism ~s. For details see the broker "
+                        "mechanism ~ts. For details see the broker "
                         "logfile.", [AuthName]),
             AmqpError1 = AmqpError#amqp_error{explanation = SafeMsg},
             {0, CloseMethod} = rabbit_binary_generator:map_exception(
@@ -1503,13 +1519,18 @@ i(SockStat,           S) when SockStat =:= recv_oct;
                 fun ([{_, I}]) -> I end, S);
 i(ssl, #v1{sock = Sock, proxy_socket = ProxySock}) ->
     rabbit_net:proxy_ssl_info(Sock, ProxySock) /= nossl;
-i(ssl_protocol,       S) -> ssl_info(fun ({P,         _}) -> P end, S);
-i(ssl_key_exchange,   S) -> ssl_info(fun ({_, {K, _, _}}) -> K end, S);
-i(ssl_cipher,         S) -> ssl_info(fun ({_, {_, C, _}}) -> C end, S);
-i(ssl_hash,           S) -> ssl_info(fun ({_, {_, _, H}}) -> H end, S);
-i(peer_cert_issuer,   S) -> cert_info(fun rabbit_ssl:peer_cert_issuer/1,   S);
-i(peer_cert_subject,  S) -> cert_info(fun rabbit_ssl:peer_cert_subject/1,  S);
-i(peer_cert_validity, S) -> cert_info(fun rabbit_ssl:peer_cert_validity/1, S);
+i(SSL, #v1{sock = Sock, proxy_socket = ProxySock})
+  when SSL =:= ssl;
+       SSL =:= ssl_protocol;
+       SSL =:= ssl_key_exchange;
+       SSL =:= ssl_cipher;
+       SSL =:= ssl_hash ->
+    rabbit_ssl:info(SSL, {Sock, ProxySock});
+i(Cert, #v1{sock = Sock})
+  when Cert =:= peer_cert_issuer;
+       Cert =:= peer_cert_subject;
+       Cert =:= peer_cert_validity ->
+    rabbit_ssl:cert_info(Cert, Sock);
 i(channels,           #v1{channel_count = ChannelCount}) -> ChannelCount;
 i(state, #v1{connection_state = ConnectionState,
              throttle         = #throttle{blocked_by = Reasons,
@@ -1570,25 +1591,6 @@ socket_info(Get, Select, #v1{sock = Sock}) ->
                           _ -> 0
                       end;
         {error, _} -> 0
-    end.
-
-ssl_info(F, #v1{sock = Sock, proxy_socket = ProxySock}) ->
-    case rabbit_net:proxy_ssl_info(Sock, ProxySock) of
-        nossl       -> '';
-        {error, _}  -> '';
-        {ok, Items} ->
-            P = proplists:get_value(protocol, Items),
-            #{cipher := C,
-              key_exchange := K,
-              mac := H} = proplists:get_value(selected_cipher_suite, Items),
-            F({P, {K, C, H}})
-    end.
-
-cert_info(F, #v1{sock = Sock}) ->
-    case rabbit_net:peercert(Sock) of
-        nossl      -> '';
-        {error, _} -> '';
-        {ok, Cert} -> list_to_binary(F(Cert))
     end.
 
 maybe_emit_stats(State) ->
@@ -1654,7 +1656,7 @@ blocked_by_message(#throttle{blocked_by = Reasons}) ->
   %% it is entirely transient
   Reasons1 = sets:del_element(flow, Reasons),
   RStr = string:join([format_blocked_by(R) || R <- sets:to_list(Reasons1)], " & "),
-  list_to_binary(rabbit_misc:format("low on ~s", [RStr])).
+  list_to_binary(rabbit_misc:format("low on ~ts", [RStr])).
 
 format_blocked_by({resource, memory}) -> "memory";
 format_blocked_by({resource, disk})   -> "disk";
@@ -1766,7 +1768,7 @@ augment_connection_log_name(#connection{name = Name} = Connection) ->
             Connection;
         UserSpecifiedName ->
             LogName = <<Name/binary, " - ", UserSpecifiedName/binary>>,
-            rabbit_log_connection:info("connection ~p (~s) has a client-provided name: ~s", [self(), Name, UserSpecifiedName]),
+            rabbit_log_connection:info("connection ~tp (~ts) has a client-provided name: ~ts", [self(), Name, UserSpecifiedName]),
             ?store_proc_name(LogName),
             Connection#connection{log_name = LogName}
     end.

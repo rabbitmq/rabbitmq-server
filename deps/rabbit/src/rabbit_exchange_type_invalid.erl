@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_exchange_type_invalid).
@@ -10,9 +10,9 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, serialise_events/0, route/2]).
+-export([description/0, serialise_events/0, route/2, route/3]).
 -export([validate/1, validate_binding/2,
-         create/2, delete/3, policy_changed/2, add_binding/3,
+         create/2, delete/2, policy_changed/2, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2]).
 -export([info/1, info/2]).
 
@@ -26,20 +26,23 @@ description() ->
 
 serialise_events() -> false.
 
--spec route(rabbit_types:exchange(), rabbit_types:delivery()) -> no_return().
+-spec route(rabbit_types:exchange(), mc:state()) -> no_return().
+route(Exchange, Msg) ->
+    route(Exchange, Msg, #{}).
 
-route(#exchange{name = Name, type = Type}, _) ->
+-spec route(rabbit_types:exchange(), mc:state(), map()) -> no_return().
+route(#exchange{name = Name, type = Type}, _, _Opts) ->
     rabbit_misc:protocol_error(
       precondition_failed,
-      "Cannot route message through ~s: exchange type ~s not found",
+      "Cannot route message through ~ts: exchange type ~ts not found",
       [rabbit_misc:rs(Name), Type]).
 
 validate(_X) -> ok.
 validate_binding(_X, _B) -> ok.
-create(_Tx, _X) -> ok.
-delete(_Tx, _X, _Bs) -> ok.
+create(_Serial, _X) -> ok.
+delete(_Serial, _X) -> ok.
 policy_changed(_X1, _X2) -> ok.
-add_binding(_Tx, _X, _B) -> ok.
-remove_bindings(_Tx, _X, _Bs) -> ok.
+add_binding(_Serial, _X, _B) -> ok.
+remove_bindings(_Serial, _X, _Bs) -> ok.
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).

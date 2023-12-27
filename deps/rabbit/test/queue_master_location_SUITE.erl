@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(queue_master_location_SUITE).
@@ -26,6 +26,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -40,19 +41,20 @@ all() ->
 
 groups() ->
     [
-      {cluster_size_3, [], [
-          declare_args,
-          declare_policy,
-          declare_invalid_policy,
-          declare_policy_nodes,
-          declare_policy_all,
-          declare_policy_exactly,
-          declare_config,
-          calculate_min_master,
-          calculate_min_master_with_bindings,
-          calculate_random,
-          calculate_client_local
-        ]},
+      {cluster_size_3, [], [{non_mirrored, [], [
+                                            declare_args,
+                                            declare_policy,
+                                            declare_config,
+                                            calculate_min_master,
+                                            calculate_min_master_with_bindings,
+                                            calculate_random,
+                                            calculate_client_local
+                                           ]},
+                            {mirrored, [], [declare_invalid_policy,
+                                            declare_policy_nodes,
+                                            declare_policy_all,
+                                            declare_policy_exactly]}]
+      },
 
       {maintenance_mode, [], [
           declare_with_min_masters_and_some_nodes_under_maintenance,
@@ -82,6 +84,15 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+init_per_group(mirrored, Config) ->
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            Config;
+        {khepri, _} ->
+            {skip, "Classic queue mirroring not supported by Khepri"}
+    end;
+init_per_group(non_mirrored, Config) ->
+    Config;
 init_per_group(cluster_size_3, Config) ->
     rabbit_ct_helpers:set_config(Config, [
         %% Replaced with a list of node names later
@@ -99,7 +110,7 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     ClusterSize = ?config(rmq_nodes_count, Config),
     Nodenames = [
-      list_to_atom(rabbit_misc:format("~s-~b", [Testcase, I]))
+      list_to_atom(rabbit_misc:format("~ts-~b", [Testcase, I]))
       || I <- lists:seq(1, ClusterSize)
     ],
     TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
@@ -203,7 +214,7 @@ declare_policy_exactly(Config) ->
     Node0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     rabbit_ct_broker_helpers:control_action(sync_queue, Node0,
                                             [binary_to_list(Q)], [{"-p", "/"}]),
-    wait_for_sync(Config, Node0, QueueRes, 1),
+    ?awaitMatch(true, synced(Config, Node0, QueueRes, 1), 60000),
 
     {ok, Queue} = rabbit_ct_broker_helpers:rpc(Config, Node0,
                                                rabbit_amqqueue, lookup, [QueueRes]),
@@ -274,7 +285,7 @@ declare_with_all_nodes_under_maintenance(Config, Locator) ->
     rabbit_ct_broker_helpers:mark_as_being_drained(Config, 2),
 
     QName = rabbit_data_coercion:to_binary(
-        rabbit_misc:format("qm.tests.~s.maintenance.case2", [Locator])),
+        rabbit_misc:format("qm.tests.~ts.maintenance.case2", [Locator])),
     Resource = rabbit_misc:r(<<"/">>, queue, QName),
     Record = declare(Config, Resource, false, false, _Args = [], none),
     %% when queue master locator returns no node, the node that handles
@@ -458,18 +469,6 @@ verify_client_local(Config, Q) ->
 set_location_policy(Config, Name, Strategy) ->
     ok = rabbit_ct_broker_helpers:set_policy(Config, 0,
       Name, <<".*">>, <<"queues">>, [{<<"queue-master-locator">>, Strategy}]).
-
-wait_for_sync(Config, Nodename, Q, ExpectedSSPidLen) ->
-    wait_for_sync(Config, Nodename, Q, ExpectedSSPidLen, 600).
-
-wait_for_sync(_, _, _, _, 0) ->
-    throw(sync_timeout);
-wait_for_sync(Config, Nodename, Q, ExpectedSSPidLen, N) ->
-    case synced(Config, Nodename, Q, ExpectedSSPidLen) of
-        true  -> ok;
-        false -> timer:sleep(100),
-                 wait_for_sync(Config, Nodename, Q, ExpectedSSPidLen, N-1)
-    end.
 
 synced(Config, Nodename, Q, ExpectedSSPidLen) ->
     Args = [<<"/">>, [name, synchronised_slave_pids]],

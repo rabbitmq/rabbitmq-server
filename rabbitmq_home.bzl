@@ -10,22 +10,29 @@ RabbitmqHomeInfo = provider(
 )
 
 def _copy_script(ctx, script):
-    dest = ctx.actions.declare_file(path_join(ctx.label.name, "sbin", script.basename))
+    dest = ctx.actions.declare_file(
+        path_join(ctx.label.name, "sbin", script.basename),
+    )
     ctx.actions.expand_template(
         template = script,
         output = dest,
         substitutions = {},
+        is_executable = True,
     )
     return dest
 
-def link_escript(ctx, escript):
+def copy_escript(ctx, escript):
     e = ctx.attr._rabbitmqctl_escript.files_to_run.executable
-    s = ctx.actions.declare_file(path_join(ctx.label.name, "escript", escript))
-    ctx.actions.symlink(
-        output = s,
-        target_file = e,
+    dest = ctx.actions.declare_file(
+        path_join(ctx.label.name, "escript", escript.basename),
     )
-    return s
+    ctx.actions.run(
+        inputs = [e],
+        outputs = [dest],
+        executable = "cp",
+        arguments = [e.path, dest.path],
+    )
+    return dest
 
 def _plugins_dir_links(ctx, plugin):
     lib_info = plugin[ErlangAppInfo]
@@ -48,7 +55,7 @@ def _plugins_dir_links(ctx, plugin):
         if f.is_directory:
             if f.basename != "ebin":
                 fail("{} contains a directory in 'beam' that is not an ebin dir".format(lib_info.lib_name))
-            o = ctx.actions.declare_file(path_join(plugin_path, "ebin"))
+            o = ctx.actions.declare_directory(path_join(plugin_path, "ebin"))
         else:
             o = ctx.actions.declare_file(path_join(plugin_path, "ebin", f.basename))
         ctx.actions.symlink(
@@ -80,16 +87,7 @@ def _impl(ctx):
         source_scripts = ctx.files._scripts_windows
     scripts = [_copy_script(ctx, script) for script in source_scripts]
 
-    rabbitmq_ctl_copies = [
-        "rabbitmq-diagnostics",
-        "rabbitmq-plugins",
-        "rabbitmq-queues",
-        "rabbitmq-streams",
-        "rabbitmq-tanzu",
-        "rabbitmq-upgrade",
-        "rabbitmqctl",
-    ]
-    escripts = [link_escript(ctx, escript) for escript in rabbitmq_ctl_copies]
+    escripts = [copy_escript(ctx, escript) for escript in ctx.files._escripts]
 
     plugins = flatten([_plugins_dir_links(ctx, plugin) for plugin in plugins])
 
@@ -110,6 +108,18 @@ def _impl(ctx):
     ]
 
 RABBITMQ_HOME_ATTRS = {
+    "_escripts": attr.label_list(
+        default = [
+            "//deps/rabbit:scripts/rabbitmq-diagnostics",
+            "//deps/rabbit:scripts/rabbitmq-plugins",
+            "//deps/rabbit:scripts/rabbitmq-queues",
+            "//deps/rabbit:scripts/rabbitmq-streams",
+            "//deps/rabbit:scripts/rabbitmq-upgrade",
+            "//deps/rabbit:scripts/rabbitmqctl",
+            "//deps/rabbit:scripts/vmware-rabbitmq",
+        ],
+        allow_files = True,
+    ),
     "_scripts": attr.label_list(
         default = [
             "//deps/rabbit:scripts/rabbitmq-defaults",
@@ -119,9 +129,9 @@ RABBITMQ_HOME_ATTRS = {
             "//deps/rabbit:scripts/rabbitmq-queues",
             "//deps/rabbit:scripts/rabbitmq-server",
             "//deps/rabbit:scripts/rabbitmq-streams",
-            "//deps/rabbit:scripts/rabbitmq-tanzu",
             "//deps/rabbit:scripts/rabbitmq-upgrade",
             "//deps/rabbit:scripts/rabbitmqctl",
+            "//deps/rabbit:scripts/vmware-rabbitmq",
         ],
         allow_files = True,
     ),
@@ -134,9 +144,9 @@ RABBITMQ_HOME_ATTRS = {
             "//deps/rabbit:scripts/rabbitmq-queues.bat",
             "//deps/rabbit:scripts/rabbitmq-server.bat",
             "//deps/rabbit:scripts/rabbitmq-streams.bat",
-            "//deps/rabbit:scripts/rabbitmq-tanzu.bat",
             "//deps/rabbit:scripts/rabbitmq-upgrade.bat",
             "//deps/rabbit:scripts/rabbitmqctl.bat",
+            "//deps/rabbit:scripts/vmware-rabbitmq.bat",
         ],
         allow_files = True,
     ),

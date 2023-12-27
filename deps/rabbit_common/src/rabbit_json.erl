@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_json).
@@ -38,27 +38,29 @@ try_decode(JSON, Opts) ->
         {error, Reason}
     end.
 
--spec encode(thoas:json_term()) -> iodata().
+-spec encode(thoas:input_term()) -> iodata().
 encode(Term) ->
     encode(Term, ?DEFAULT_ENCODE_OPTIONS).
 
--spec encode(thoas:json_term(), thoas:encode_options()) -> iodata().
+-spec encode(thoas:input_term(), thoas:encode_options()) -> iodata().
 encode(Term, Opts) ->
     %% Fixup for JSON encoding
     %% * Transforms any Funs into strings
     %% See rabbit_mgmt_format:format_nulls/1
-    F = fun(V) when is_function(V) ->
+    F = fun
+            (V) when is_function(V) ->
                 rabbit_data_coercion:to_binary(V);
-            (V) -> V
+            (V) ->
+                V
         end,
     thoas:encode(fixup_terms(Term, F), Opts).
 
--spec try_encode(thoas:json_term()) -> {ok, iodata()} |
+-spec try_encode(thoas:input_term()) -> {ok, iodata()} |
 				     {error, Reason :: term()}.
 try_encode(Term) ->
     try_encode(Term, ?DEFAULT_ENCODE_OPTIONS).
 
--spec try_encode(thoas:json_term(), thoas:decode_options()) ->
+-spec try_encode(thoas:input_term(), thoas:encode_options()) ->
 			{ok, iodata()} | {error, Reason :: term()}.
 try_encode(Term, Opts) ->
     try

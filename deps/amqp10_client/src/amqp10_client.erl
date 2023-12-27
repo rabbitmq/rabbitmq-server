@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(amqp10_client).
@@ -32,6 +32,7 @@
          detach_link/1,
          send_msg/2,
          accept_msg/2,
+         settle_msg/3,
          flow_link_credit/3,
          flow_link_credit/4,
          echo/1,
@@ -86,6 +87,7 @@
 -spec open_connection(inet:socket_address() | inet:hostname(),
                       inet:port_number()) -> supervisor:startchild_ret().
 open_connection(Addr, Port) ->
+    _ = ensure_started(),
     open_connection(#{address => Addr, port => Port, notify => self(),
                       sasl => anon}).
 
@@ -96,14 +98,19 @@ open_connection(Addr, Port) ->
 -spec open_connection(connection_config()) ->
     supervisor:startchild_ret().
 open_connection(ConnectionConfig0) ->
+    _ = ensure_started(),
+
     Notify = maps:get(notify, ConnectionConfig0, self()),
     NotifyWhenOpened = maps:get(notify_when_opened, ConnectionConfig0, self()),
     NotifyWhenClosed = maps:get(notify_when_closed, ConnectionConfig0, self()),
-    amqp10_client_connection:open(ConnectionConfig0#{
+    ConnectionConfig1 = ConnectionConfig0#{
         notify => Notify,
         notify_when_opened => NotifyWhenOpened,
         notify_when_closed => NotifyWhenClosed
-    }).
+    },
+    Sasl = maps:get(sasl, ConnectionConfig1),
+    ConnectionConfig2 = ConnectionConfig1#{sasl => amqp10_client_connection:encrypt_sasl(Sasl)},
+    amqp10_client_connection:open(ConnectionConfig2).
 
 %% @doc Opens a connection using a connection_config map
 %% This is asynchronous and will notify completion to the caller using
@@ -268,7 +275,16 @@ attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter) ->
                            snd_settle_mode(), terminus_durability(), filter(),
                            properties()) ->
     {ok, link_ref()}.
-attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter, Properties) ->
+attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter, Properties)
+  when is_pid(Session) andalso
+       is_binary(Name) andalso
+       is_binary(Source) andalso
+       (SettleMode == unsettled orelse
+        SettleMode == settled orelse
+        SettleMode == mixed) andalso
+       is_atom(Durability) andalso
+       is_map(Filter) andalso
+       is_map(Properties) ->
     AttachArgs = #{name => Name,
                    role => {receiver, #{address => Source,
                                         durable => Durability}, self()},
@@ -335,11 +351,18 @@ send_msg(#link_ref{role = sender, session = Session,
 
 %% @doc Accept a message on a the link referred to be the 'LinkRef'.
 -spec accept_msg(link_ref(), amqp10_msg:amqp10_msg()) -> ok.
-accept_msg(#link_ref{role = receiver, session = Session}, Msg) ->
+accept_msg(LinkRef, Msg) ->
+    settle_msg(LinkRef, Msg, accepted).
+
+%% @doc Settle a message on a the link referred to be the 'LinkRef' using
+%% the chosen delivery state.
+-spec settle_msg(link_ref(), amqp10_msg:amqp10_msg(),
+                 amqp10_client_types:delivery_state()) -> ok.
+settle_msg(#link_ref{role = receiver,
+                     session = Session}, Msg, Settlement) ->
     DeliveryId = amqp10_msg:delivery_id(Msg),
     amqp10_client_session:disposition(Session, receiver, DeliveryId,
-                                      DeliveryId, true, accepted).
-
+                                      DeliveryId, true, Settlement).
 %% @doc Get a single message from a link.
 %% Flows a single link credit then awaits delivery or timeout.
 -spec get_msg(link_ref()) -> {ok, amqp10_msg:amqp10_msg()} | {error, timeout}.
@@ -480,6 +503,8 @@ try_to_existing_atom(L) when is_list(L) ->
             throw({non_existent_atom, L})
     end.
 
+ensure_started() ->
+    _ = application:ensure_all_started(credentials_obfuscation).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

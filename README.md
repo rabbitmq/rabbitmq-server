@@ -8,7 +8,7 @@ multi-protocol messaging and streaming broker. It supports:
  * AMQP 0-9-1
  * AMQP 1.0
  * [RabbitMQ Stream Protocol](https://rabbitmq.com/streams.html)
- * MQTT 3.1.1
+ * MQTT 3.1, 3.1.1, and 5.0
  * STOMP 1.0 through 1.2
 
 
@@ -26,6 +26,7 @@ multi-protocol messaging and streaming broker. It supports:
 
  * [RabbitMQ tutorials](https://rabbitmq.com/getstarted.html)
  * [All documentation guides](https://rabbitmq.com/documentation.html)
+ * [RabbitMQ blog](https://blog.rabbitmq.com/)
 
 Some key doc guides include
 
@@ -38,22 +39,22 @@ Some key doc guides include
  * [Production checklist](https://rabbitmq.com/production-checklist.html)
  * [Quorum queues](https://rabbitmq.com/quorum-queues.html): a replicated, data safety- and consistency-oriented queue type
  * [Streams](https://rabbitmq.com/streams.html): a persistent and replicated append-only log with non-destructive consumer semantics
+ * [Runtime Parameters and Policies](https://rabbitmq.com/parameters.html)
  * [Runnable tutorials](https://github.com/rabbitmq/rabbitmq-tutorials/)
 
 RabbitMQ documentation is also [developed on GitHub](https://github.com/rabbitmq/rabbitmq-website/).
 
 ## Commercial Features and Support
 
- * [Commercial edition of RabbitMQ](https://tanzu.vmware.com/rabbitmq)
+ * [Commercial edition of RabbitMQ](https://www.vmware.com/products/rabbitmq.html)
  * [Commercial edition for Kubernetes](https://rabbitmq.com/kubernetes/tanzu/installation.html)
  * [Commercial support](https://rabbitmq.com/services.html) from [VMware](https://vmware.com) for open source RabbitMQ
 
 ## Getting Help from the Community
 
  * [GitHub Discussions](https://github.com/rabbitmq/rabbitmq-server/discussions/)
- * [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users)
- * [Community Slack](https://rabbitmq-slack.herokuapp.com/)
- * `#rabbitmq` on Freenode
+ * [Community Discord server](https://rabbitmq.com/discord/)
+ * `#rabbitmq` on [Libera Chat](https://libera.chat/)
 
 
 ## Contributing
@@ -70,10 +71,11 @@ RabbitMQ server is [licensed under the MPL 2.0](LICENSE-MPL-RabbitMQ).
 
 ## Building From Source and Packaging
 
+ * [Contributor resources](https://github.com/rabbitmq/contribute)
  * [Building RabbitMQ from Source](https://rabbitmq.com/build-server.html)
  * [Building RabbitMQ Distribution Packages](https://rabbitmq.com/build-server.html)
 
 
 ## Copyright
 
-(c) 2007-2022 VMware, Inc. or its affiliates.
+(c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_direct_reply_to).
@@ -22,7 +22,7 @@
 %% API
 %%
 
--type decoded_pid_and_key() :: {ok, pid(), binary()} | {error, any()}.
+-type decoded_pid_and_key() :: {ok, pid(), binary()}.
 
 -spec compute_key_and_suffix_v1(pid()) -> {binary(), binary()}.
 %% This original pid encoding function produces values that exceed routing key length limit
@@ -63,16 +63,17 @@ compute_key_and_suffix_v2(Pid) ->
 
 -spec decode_reply_to_v2(binary(), #{non_neg_integer() => node()}) -> decoded_pid_and_key() | {error, any()}.
 decode_reply_to_v2(Bin, CandidateNodes) ->
-    case string:lexemes(Bin, ".") of
-        [PidEnc, Key] ->
-            RawPidBin = base64:decode(PidEnc),
-            PidParts0 = #{node := ShortenedNodename} = pid_recomposition:from_binary(RawPidBin),
-            {_, NodeHash} = rabbit_nodes_common:parts(ShortenedNodename),
-            case maps:get(list_to_integer(NodeHash), CandidateNodes, undefined) of
-                undefined -> error;
-                Candidate ->
-                    PidParts = maps:update(node, Candidate, PidParts0),
-                    {ok, pid_recomposition:recompose(PidParts), unicode:characters_to_binary(Key)}
-            end;
-        _             -> {error, unrecognized_format}
+    try
+        [PidEnc, Key] = binary:split(Bin, <<".">>),
+        RawPidBin = base64:decode(PidEnc),
+        PidParts0 = #{node := ShortenedNodename} = pid_recomposition:from_binary(RawPidBin),
+        {_, NodeHash} = rabbit_nodes_common:parts(ShortenedNodename),
+        case maps:get(list_to_integer(NodeHash), CandidateNodes, undefined) of
+            undefined -> {error, target_node_not_found};
+            Candidate ->
+                PidParts = maps:update(node, Candidate, PidParts0),
+                {ok, pid_recomposition:recompose(PidParts), Key}
+        end
+    catch
+        error:_ -> {error, unrecognized_format}
     end.

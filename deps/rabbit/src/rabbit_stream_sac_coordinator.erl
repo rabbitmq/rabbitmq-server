@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2021-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2021-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_stream_sac_coordinator).
@@ -39,7 +39,7 @@
          handle_connection_down/2,
          consumer_groups/3,
          group_consumers/5,
-         is_ff_enabled/0]).
+         overview/1]).
 
 %% Single Active Consumer API
 -spec register_consumer(binary(),
@@ -49,8 +49,7 @@
                         pid(),
                         binary(),
                         integer()) ->
-                           {ok, boolean()} | {error, feature_flag_disabled} |
-                           {error, term()}.
+                           {ok, boolean()} | {error, term()}.
 register_consumer(VirtualHost,
                   Stream,
                   PartitionIndex,
@@ -58,77 +57,69 @@ register_consumer(VirtualHost,
                   ConnectionPid,
                   Owner,
                   SubscriptionId) ->
-    maybe_sac_execute(fun() ->
-                         process_command({sac,
-                                          #command_register_consumer{vhost =
-                                                                         VirtualHost,
-                                                                     stream =
-                                                                         Stream,
-                                                                     partition_index
-                                                                         =
-                                                                         PartitionIndex,
-                                                                     consumer_name
-                                                                         =
-                                                                         ConsumerName,
-                                                                     connection_pid
-                                                                         =
-                                                                         ConnectionPid,
-                                                                     owner =
-                                                                         Owner,
-                                                                     subscription_id
-                                                                         =
-                                                                         SubscriptionId}})
-                      end).
+    process_command({sac,
+                     #command_register_consumer{vhost =
+                                                VirtualHost,
+                                                stream =
+                                                Stream,
+                                                partition_index
+                                                =
+                                                PartitionIndex,
+                                                consumer_name
+                                                =
+                                                ConsumerName,
+                                                connection_pid
+                                                =
+                                                ConnectionPid,
+                                                owner =
+                                                Owner,
+                                                subscription_id
+                                                =
+                                                SubscriptionId}}).
 
 -spec unregister_consumer(binary(),
                           binary(),
                           binary(),
                           pid(),
                           integer()) ->
-                             ok | {error, feature_flag_disabled} |
-                             {error, term()}.
+                             ok | {error, term()}.
 unregister_consumer(VirtualHost,
                     Stream,
                     ConsumerName,
                     ConnectionPid,
                     SubscriptionId) ->
-    maybe_sac_execute(fun() ->
-                         process_command({sac,
-                                          #command_unregister_consumer{vhost =
-                                                                           VirtualHost,
-                                                                       stream =
-                                                                           Stream,
-                                                                       consumer_name
-                                                                           =
-                                                                           ConsumerName,
-                                                                       connection_pid
-                                                                           =
-                                                                           ConnectionPid,
-                                                                       subscription_id
-                                                                           =
-                                                                           SubscriptionId}})
-                      end).
+    process_command({sac,
+                     #command_unregister_consumer{vhost =
+                                                  VirtualHost,
+                                                  stream =
+                                                  Stream,
+                                                  consumer_name
+                                                  =
+                                                  ConsumerName,
+                                                  connection_pid
+                                                  =
+                                                  ConnectionPid,
+                                                  subscription_id
+                                                  =
+                                                  SubscriptionId}}).
 
--spec activate_consumer(binary(), binary(), binary()) ->
-                           ok | {error, feature_flag_disabled}.
+-spec activate_consumer(binary(), binary(), binary()) -> ok.
 activate_consumer(VirtualHost, Stream, ConsumerName) ->
-    maybe_sac_execute(fun() ->
-                         process_command({sac,
-                                          #command_activate_consumer{vhost =
-                                                                         VirtualHost,
-                                                                     stream =
-                                                                         Stream,
-                                                                     consumer_name
-                                                                         =
-                                                                         ConsumerName}})
-                      end).
+    process_command({sac,
+                     #command_activate_consumer{vhost =
+                                                VirtualHost,
+                                                stream =
+                                                Stream,
+                                                consumer_name
+                                                =
+                                                ConsumerName}}).
 
 process_command(Cmd) ->
     case rabbit_stream_coordinator:process_command(Cmd) of
         {ok, Res, _} ->
             Res;
         {error, _} = Err ->
-            rabbit_log:warning("SAC coordinator command ~p returned error ~p",
+            rabbit_log:warning("SAC coordinator command ~tp returned error ~tp",
                                [Cmd, Err]),
             Err
     end.
@@ -136,63 +127,64 @@ process_command(Cmd) ->
 %% return the current groups for a given virtual host
 -spec consumer_groups(binary(), [atom()]) ->
                          {ok,
-                          [term()] | {error, feature_flag_disabled | atom()}}.
+                          [term()] | {error, atom()}}.
 consumer_groups(VirtualHost, InfoKeys) ->
-    maybe_sac_execute(fun() ->
-                         case ra:local_query({rabbit_stream_coordinator,
-                                              node()},
-                                             fun(State) ->
-                                                SacState =
-                                                    rabbit_stream_coordinator:sac_state(State),
-                                                consumer_groups(VirtualHost,
-                                                                InfoKeys,
-                                                                SacState)
-                                             end)
-                         of
-                             {ok, {_, Result}, _} -> Result;
-                             {error, noproc} ->
-                                 %% not started yet, so no groups
-                                 {ok, []};
-                             {error, _} = Err -> Err;
-                             {timeout, _} -> {error, timeout}
-                         end
-                      end).
+    case ra:local_query({rabbit_stream_coordinator,
+                         node()},
+                        fun(State) ->
+                                SacState =
+                                rabbit_stream_coordinator:sac_state(State),
+                                consumer_groups(VirtualHost,
+                                                InfoKeys,
+                                                SacState)
+                        end)
+    of
+        {ok, {_, Result}, _} -> Result;
+        {error, noproc} ->
+            %% not started yet, so no groups
+            {ok, []};
+        {error, _} = Err -> Err;
+        {timeout, _} -> {error, timeout}
+    end.
 
 %% get the consumers of a given group in a given virtual host
 -spec group_consumers(binary(), binary(), binary(), [atom()]) ->
                          {ok, [term()]} |
-                         {error, feature_flag_disabled | atom()}.
+                         {error, atom()}.
 group_consumers(VirtualHost, Stream, Reference, InfoKeys) ->
-    maybe_sac_execute(fun() ->
-                         case ra:local_query({rabbit_stream_coordinator,
-                                              node()},
-                                             fun(State) ->
-                                                SacState =
-                                                    rabbit_stream_coordinator:sac_state(State),
-                                                group_consumers(VirtualHost,
-                                                                Stream,
-                                                                Reference,
-                                                                InfoKeys,
-                                                                SacState)
-                                             end)
-                         of
-                             {ok, {_, {ok, _} = Result}, _} -> Result;
-                             {ok, {_, {error, _} = Err}, _} -> Err;
-                             {error, noproc} ->
-                                 %% not started yet, so the group cannot exist
-                                 {error, not_found};
-                             {error, _} = Err -> Err;
-                             {timeout, _} -> {error, timeout}
-                         end
-                      end).
-
-maybe_sac_execute(Fun) ->
-    case rabbit_stream_sac_coordinator:is_ff_enabled() of
-        true ->
-            Fun();
-        false ->
-            {error, feature_flag_disabled}
+    case ra:local_query({rabbit_stream_coordinator,
+                         node()},
+                        fun(State) ->
+                                SacState =
+                                rabbit_stream_coordinator:sac_state(State),
+                                group_consumers(VirtualHost,
+                                                Stream,
+                                                Reference,
+                                                InfoKeys,
+                                                SacState)
+                        end)
+    of
+        {ok, {_, {ok, _} = Result}, _} -> Result;
+        {ok, {_, {error, _} = Err}, _} -> Err;
+        {error, noproc} ->
+            %% not started yet, so the group cannot exist
+            {error, not_found};
+        {error, _} = Err -> Err;
+        {timeout, _} -> {error, timeout}
     end.
+
+-spec overview(state()) -> map().
+overview(undefined) ->
+    undefined;
+overview(#?MODULE{groups = Groups}) ->
+    GroupsOverview =
+        maps:map(fun(_,
+                     #group{consumers = Consumers, partition_index = Idx}) ->
+                    #{num_consumers => length(Consumers),
+                      partition_index => Idx}
+                 end,
+                 Groups),
+    #{num_groups => map_size(Groups), groups => GroupsOverview}.
 
 -spec init_state() -> state().
 init_state() ->
@@ -239,7 +231,7 @@ apply(#command_unregister_consumer{vhost = VirtualHost,
                     of
                         {value, Consumer} ->
                             G1 = remove_from_group(Consumer, Group0),
-                            handle_consumer_removal(G1, Consumer);
+                            handle_consumer_removal(G1, Consumer, Stream, ConsumerName);
                         false ->
                             {Group0, []}
                     end,
@@ -258,16 +250,15 @@ apply(#command_activate_consumer{vhost = VirtualHost,
     {G, Eff} =
         case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
             undefined ->
-                rabbit_log:warning("trying to activate consumer in group ~p, but "
+                rabbit_log:warning("Trying to activate consumer in group ~tp, but "
                                    "the group does not longer exist",
                                    [{VirtualHost, Stream, ConsumerName}]),
                 {undefined, []};
             Group ->
                 #consumer{pid = Pid, subscription_id = SubId} =
                     evaluate_active_consumer(Group),
-                Group1 =
-                    update_consumer_state_in_group(Group, Pid, SubId, true),
-                {Group1, [notify_consumer_effect(Pid, SubId, true)]}
+                    Group1 = update_consumer_state_in_group(Group, Pid, SubId, true),
+                {Group1, [notify_consumer_effect(Pid, SubId, Stream, ConsumerName, true)]}
         end,
     StreamGroups1 =
         update_groups(VirtualHost, Stream, ConsumerName, G, StreamGroups0),
@@ -507,7 +498,8 @@ do_register_consumer(VirtualHost,
     Effects =
         case Active of
             true ->
-                [notify_consumer_effect(ConnectionPid, SubscriptionId, Active)];
+                [notify_consumer_effect(ConnectionPid, SubscriptionId,
+                                        Stream, ConsumerName, Active)];
             _ ->
                 []
         end,
@@ -535,7 +527,8 @@ do_register_consumer(VirtualHost,
                               active = true},
                 G1 = add_to_group(Consumer0, Group0),
                 {G1,
-                 [notify_consumer_effect(ConnectionPid, SubscriptionId, true)]};
+                 [notify_consumer_effect(ConnectionPid, SubscriptionId,
+                                         Stream, ConsumerName, true)]};
             _G ->
                 %% whatever the current state is, the newcomer will be passive
                 Consumer0 =
@@ -561,11 +554,14 @@ do_register_consumer(VirtualHost,
                                                                 false),
                                  [notify_consumer_effect(ActPid,
                                                          ActSubId,
+                                                         Stream,
+                                                         ConsumerName,
                                                          false,
                                                          true)]}
                         end;
                     false ->
-                        %% no active consumer in the (non-empty) group, we are waiting for the reply of a former active
+                        %% no active consumer in the (non-empty) group,
+                        %% we are waiting for the reply of a former active
                         {G1, []}
                 end
         end,
@@ -579,10 +575,10 @@ do_register_consumer(VirtualHost,
         lookup_consumer(ConnectionPid, SubscriptionId, Group1),
     {State#?MODULE{groups = StreamGroups1}, {ok, Active}, Effects}.
 
-handle_consumer_removal(#group{consumers = []} = G, _) ->
+handle_consumer_removal(#group{consumers = []} = G, _, _, _) ->
     {G, []};
 handle_consumer_removal(#group{partition_index = -1} = Group0,
-                        Consumer) ->
+                        Consumer, Stream, ConsumerName) ->
     case Consumer of
         #consumer{active = true} ->
             %% this is the active consumer we remove, computing the new one
@@ -590,16 +586,16 @@ handle_consumer_removal(#group{partition_index = -1} = Group0,
             case lookup_active_consumer(Group1) of
                 {value, #consumer{pid = Pid, subscription_id = SubId}} ->
                     %% creating the side effect to notify the new active consumer
-                    {Group1, [notify_consumer_effect(Pid, SubId, true)]};
+                    {Group1, [notify_consumer_effect(Pid, SubId, Stream, ConsumerName, true)]};
                 _ ->
                     %% no active consumer found in the group, nothing to do
                     {Group1, []}
             end;
         #consumer{active = false} ->
-            %% not the active consumer, nothing to do."),
+            %% not the active consumer, nothing to do.
             {Group0, []}
     end;
-handle_consumer_removal(Group0, Consumer) ->
+handle_consumer_removal(Group0, Consumer, Stream, ConsumerName) ->
     case lookup_active_consumer(Group0) of
         {value,
          #consumer{pid = ActPid, subscription_id = ActSubId} =
@@ -614,7 +610,8 @@ handle_consumer_removal(Group0, Consumer) ->
                                                     ActPid,
                                                     ActSubId,
                                                     false),
-                     [notify_consumer_effect(ActPid, ActSubId, false, true)]}
+                     [notify_consumer_effect(ActPid, ActSubId,
+                                             Stream, ConsumerName, false, true)]}
             end;
         false ->
             case Consumer#consumer.active of
@@ -623,26 +620,54 @@ handle_consumer_removal(Group0, Consumer) ->
                     #consumer{pid = P, subscription_id = SID} =
                         evaluate_active_consumer(Group0),
                     {update_consumer_state_in_group(Group0, P, SID, true),
-                     [notify_consumer_effect(P, SID, true)]};
+                     [notify_consumer_effect(P, SID,
+                                             Stream, ConsumerName, true)]};
                 false ->
-                    %% no active consumer in the (non-empty) group, we are waiting for the reply of a former active
+                    %% no active consumer in the (non-empty) group,
+                    %% we are waiting for the reply of a former active
                     {Group0, []}
             end
     end.
 
-notify_consumer_effect(Pid, SubId, Active) ->
-    notify_consumer_effect(Pid, SubId, Active, false).
+message_type() ->
+    case has_unblock_group_support() of
+        true ->
+            map;
+        false ->
+            tuple
+    end.
 
-notify_consumer_effect(Pid, SubId, Active, false = _SteppingDown) ->
+notify_consumer_effect(Pid, SubId, Stream, Name, Active) ->
+    notify_consumer_effect(Pid, SubId, Stream, Name, Active, false).
+
+notify_consumer_effect(Pid, SubId, Stream, Name, Active, SteppingDown) ->
+    notify_consumer_effect(Pid, SubId, Stream, Name, Active, SteppingDown, message_type()).
+
+notify_consumer_effect(Pid, SubId, _Stream, _Name, Active, false = _SteppingDown, tuple) ->
     mod_call_effect(Pid,
                     {sac,
-                     {{subscription_id, SubId}, {active, Active},
+                     {{subscription_id, SubId},
+                      {active, Active},
                       {extra, []}}});
-notify_consumer_effect(Pid, SubId, Active, true = _SteppingDown) ->
+notify_consumer_effect(Pid, SubId, _Stream, _Name, Active, true = _SteppingDown, tuple) ->
     mod_call_effect(Pid,
                     {sac,
-                     {{subscription_id, SubId}, {active, Active},
-                      {extra, [{stepping_down, true}]}}}).
+                     {{subscription_id, SubId},
+                      {active, Active},
+                      {extra, [{stepping_down, true}]}}});
+notify_consumer_effect(Pid, SubId, Stream, Name, Active, false = _SteppingDown, map) ->
+    mod_call_effect(Pid,
+                    {sac, #{subscription_id => SubId,
+                            stream => Stream,
+                            consumer_name => Name,
+                            active => Active}});
+notify_consumer_effect(Pid, SubId, Stream, Name, Active, true = _SteppingDown, map) ->
+    mod_call_effect(Pid,
+                    {sac, #{subscription_id => SubId,
+                            stream => Stream,
+                            consumer_name => Name,
+                            active => Active,
+                            stepping_down => true}}).
 
 maybe_create_group(VirtualHost,
                    Stream,
@@ -752,5 +777,5 @@ send_message(ConnectionPid, Msg) ->
     ConnectionPid ! Msg,
     ok.
 
-is_ff_enabled() ->
-    rabbit_feature_flags:is_enabled(stream_single_active_consumer).
+has_unblock_group_support() ->
+    rabbit_feature_flags:is_enabled(stream_sac_coordinator_unblock_group).

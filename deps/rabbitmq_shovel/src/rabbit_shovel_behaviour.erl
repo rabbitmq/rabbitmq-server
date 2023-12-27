@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_shovel_behaviour).
@@ -27,6 +27,7 @@
          forward/4,
          ack/3,
          nack/3,
+         status/1,
          % common functions
          decr_remaining_unacked/1,
          decr_remaining/2
@@ -79,8 +80,9 @@
 -callback ack(Tag :: tag(), Multi :: boolean(), state()) -> state().
 -callback nack(Tag :: tag(), Multi :: boolean(), state()) -> state().
 -callback forward(Tag :: tag(), Props :: #{atom() => any()},
-                  Payload :: binary(), state()) -> state().
-
+                  Payload :: binary(), state()) ->
+    state() | {stop, any()}.
+-callback status(state()) -> rabbit_shovel_status:blocked_status() | ignore.
 
 -spec parse(atom(), binary(), {source | destination, proplists:proplist()}) ->
     source_config() | dest_config().
@@ -139,7 +141,8 @@ source_endpoint(#{source := #{module := Mod}} = State) ->
 dest_endpoint(#{dest := #{module := Mod}} = State) ->
     Mod:dest_endpoint(State).
 
--spec forward(tag(), #{atom() => any()}, binary(), state()) -> state().
+-spec forward(tag(), #{atom() => any()}, binary(), state()) ->
+    state() | {stop, any()}.
 forward(Tag, Props, Payload, #{dest := #{module := Mod}} = State) ->
     Mod:forward(Tag, Props, Payload, State).
 
@@ -151,7 +154,12 @@ ack(Tag, Multi, #{source := #{module := Mod}} = State) ->
 nack(Tag, Multi, #{source := #{module := Mod}} = State) ->
     Mod:nack(Tag, Multi, State).
 
+status(#{dest := #{module := Mod}} = State) ->
+    Mod:status(State).
+
 %% Common functions
+
+%% Count down until we stop publishing in on-confirm mode
 decr_remaining_unacked(State = #{source := #{remaining_unacked := unlimited}}) ->
     State;
 decr_remaining_unacked(State = #{source := #{remaining_unacked := 0}}) ->
@@ -159,6 +167,7 @@ decr_remaining_unacked(State = #{source := #{remaining_unacked := 0}}) ->
 decr_remaining_unacked(State = #{source := #{remaining_unacked := N} = Src}) ->
     State#{source => Src#{remaining_unacked =>  N - 1}}.
 
+%% Count down until we shut down in all modes
 decr_remaining(_N, State = #{source := #{remaining := unlimited}}) ->
     State;
 decr_remaining(N, State = #{source := #{remaining := M} = Src,
@@ -166,7 +175,7 @@ decr_remaining(N, State = #{source := #{remaining := M} = Src,
     case M > N of
         true  -> State#{source => Src#{remaining => M - N}};
         false ->
-            rabbit_log_shovel:info("shutting down Shovel '~s', no messages left to transfer", [Name]),
-            rabbit_log_shovel:debug("shutting down Shovel '~s', no messages left to transfer. Shovel state: ~p", [Name, State]),
+            rabbit_log_shovel:info("shutting down Shovel '~ts', no messages left to transfer", [Name]),
+            rabbit_log_shovel:debug("shutting down Shovel '~ts', no messages left to transfer. Shovel state: ~tp", [Name, State]),
             exit({shutdown, autodelete})
     end.

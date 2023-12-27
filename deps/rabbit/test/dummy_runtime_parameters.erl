@@ -2,14 +2,14 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(dummy_runtime_parameters).
 -behaviour(rabbit_runtime_parameter).
 -behaviour(rabbit_policy_validator).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([validate/5, notify/5, notify_clear/4]).
 -export([register/0, unregister/0]).
@@ -40,10 +40,14 @@ notify_clear(_, _, _, _) -> ok.
 %----------------------------------------------------------------------------
 
 register_policy_validator() ->
+    rabbit_registry:register(operator_policy_validator, <<"testeven">>, ?MODULE),
+    rabbit_registry:register(operator_policy_validator, <<"testpos">>,  ?MODULE),
     rabbit_registry:register(policy_validator, <<"testeven">>, ?MODULE),
     rabbit_registry:register(policy_validator, <<"testpos">>,  ?MODULE).
 
 unregister_policy_validator() ->
+    rabbit_registry:unregister(operator_policy_validator, <<"testeven">>),
+    rabbit_registry:unregister(operator_policy_validator, <<"testpos">>),
     rabbit_registry:unregister(policy_validator, <<"testeven">>),
     rabbit_registry:unregister(policy_validator, <<"testpos">>).
 

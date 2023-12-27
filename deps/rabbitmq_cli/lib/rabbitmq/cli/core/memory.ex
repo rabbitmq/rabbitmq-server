@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.Memory do
   alias RabbitMQ.CLI.InformationUnit, as: IU
@@ -32,6 +32,7 @@ defmodule RabbitMQ.CLI.Core.Memory do
   def compute_relative_values(all_pairs) when is_map(all_pairs) do
     compute_relative_values(Enum.into(all_pairs, []))
   end
+
   def compute_relative_values(all_pairs) do
     num_pairs = Keyword.delete(all_pairs, :strategy)
     # Includes RSS, allocated and runtime-used ("erlang") values.
@@ -56,21 +57,27 @@ defmodule RabbitMQ.CLI.Core.Memory do
   def formatted_watermark(val) when is_float(val) do
     %{relative: val}
   end
+
   def formatted_watermark({:relative, val}) when is_float(val) do
     %{relative: val}
   end
+
   def formatted_watermark(:infinity) do
     %{relative: 1.0}
   end
+
   def formatted_watermark({:absolute, val}) do
     %{absolute: parse_watermark(val)}
   end
+
   def formatted_watermark(val) when is_integer(val) do
     %{absolute: parse_watermark(val)}
   end
+
   def formatted_watermark(val) when is_bitstring(val) do
     %{absolute: parse_watermark(val)}
   end
+
   def formatted_watermark(val) when is_list(val) do
     %{absolute: parse_watermark(val)}
   end
@@ -78,21 +85,24 @@ defmodule RabbitMQ.CLI.Core.Memory do
   def parse_watermark({:absolute, n}) do
     case IU.parse(n) do
       {:ok, parsed} -> parsed
-      err           -> err
+      err -> err
     end
   end
+
   def parse_watermark(n) when is_bitstring(n) do
-    case IU.parse(n) do
+    case IU.parse(to_charlist(n)) do
       {:ok, parsed} -> parsed
-      err           -> err
+      err -> err
     end
   end
+
   def parse_watermark(n) when is_list(n) do
     case IU.parse(n) do
       {:ok, parsed} -> parsed
-      err           -> err
+      err -> err
     end
   end
+
   def parse_watermark(n) when is_float(n) or is_integer(n) do
     n
   end

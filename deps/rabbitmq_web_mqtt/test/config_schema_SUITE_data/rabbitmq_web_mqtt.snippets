@@ -48,6 +48,18 @@
      [{max_connections, 5000}]}],
    [rabbitmq_web_mqtt]},
 
+  {use_file_handle_cache_is_off,
+   "web_mqtt.use_file_handle_cache = false",
+   [{rabbitmq_web_mqtt,
+     [{use_file_handle_cache, false}]}],
+   [rabbitmq_web_mqtt]},
+
+  {use_file_handle_cache_is_on,
+   "web_mqtt.use_file_handle_cache = true",
+   [{rabbitmq_web_mqtt,
+     [{use_file_handle_cache, true}]}],
+   [rabbitmq_web_mqtt]},
+
  {ssl_listener,
   "web_mqtt.ssl.listener = 127.0.0.4:15672",
   [{rabbitmq_web_mqtt,

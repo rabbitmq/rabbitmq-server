@@ -43,8 +43,7 @@ non-fatal byte-counts in frames and inaccuracies in flow-control from peers.
     {protocol_strict_mode, false}
 
 
-Configuration example using [sysctl config format](https://next.rabbitmq.com/configure.html#config-file-formats)
-(currently only available in RabbitMQ master):
+Configuration example using [sysctl config format](https://rabbitmq.com/configure.html#config-file-formats):
 
     amqp1_0.default_user  = guest
     amqp1_0.default_vhost = /
@@ -136,7 +135,7 @@ The headers and properties map as follows:
       content-encoding     <--------------->   content-encoding
       absolute-expiry-time                                     [7]
       creation-time        <--------------->   timestamp
-    Application headers    <-------/------->   headers         [8]
+    Application Properties <-------/------->   headers         [8]
 
 [1] `durable` is `true` if and only if `delivery-mode` is `2`.
 
@@ -156,12 +155,12 @@ of its integer value.
 [7] `absolute-expiry-time` has no corresponding field in AMQP 0-9-1,
 and is not supported in RabbitMQ in any case.
 
-[8] The application headers section and the `basic.properties` field
+[8] The application properties section and the `basic.properties` field
 `headers` are natural analogues. However, rather than try to transcode
 an AMQP 1.0 map to an AMQP 0-9-1 field-table, currently we discard
-application headers (of AMQP 1.0 messages) and headers (of AMQP 0-9-1
+application properties (of AMQP 1.0 messages) and headers (of AMQP 0-9-1
 messages sent through to AMQP 1.0). In other words, the (AMQP 1.0)
-application headers section is only available to AMQP 1.0 clients, and
+application properties section is only available to AMQP 1.0 clients, and
 the (AMQP 0-9-1) headers field is only available to AMQP 0-9-1
 clients.
 
@@ -186,8 +185,8 @@ For targets, addresses are:
 
 For sources, addresses are:
 
-    = "/exchange/"  X "/" RK  Consume from temp queue bound to X with routing key RK
-    | "/topic/"     RK        Consume from temp queue bound to amq.topic with routing key RK
+    = "/exchange/"  X "/" BK  Consume from temp queue bound to X with binding key BK
+    | "/topic/"     BK        Consume from temp queue bound to amq.topic with binding key BK
     | "/amq/queue/" Q         Consume from Q
     | "/queue/"     Q         Consume from Q
     | Q (no leading slash)    Consume from Q
@@ -195,6 +194,9 @@ For sources, addresses are:
 The intent is that the source and destination address formats should be
 mostly the same as those supported by the STOMP plugin, to the extent
 permitted by AMQP 1.0 semantics.
+
+Address format `"/amq/queue/" Q` refers to existing queues, i.e. queues created outside the RabbitMQ AMQP 1.0 plugin.
+Other address formats, e.g. `"/queue/" Q` refer to queues managed by the RabbitMQ AMQP 1.0 plugin, i.e. the plugin will declare such queues.
 
 ## Virtual Hosts
 

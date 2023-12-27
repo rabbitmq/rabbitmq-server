@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 ##
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
@@ -38,18 +38,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], opts) do
-    run(~w(pid user consumer_count messages_unacknowledged), opts)
+    run(~w(pid user consumer_count messages_unacknowledged) |> Enum.map(&to_charlist/1), opts)
   end
 
   def run([_ | _] = args, %{node: node_name, timeout: timeout}) do
     info_keys = InfoKeys.prepare_info_keys(args)
+    broker_keys = InfoKeys.broker_keys(info_keys)
 
     Helpers.with_nodes_in_cluster(node_name, fn nodes ->
       RpcStream.receive_list_items(
         node_name,
         :rabbit_channel,
         :emit_info_all,
-        [nodes, info_keys],
+        [nodes, broker_keys],
         timeout,
         info_keys,
         Kernel.length(nodes)

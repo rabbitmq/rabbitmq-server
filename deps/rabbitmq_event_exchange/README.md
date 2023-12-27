@@ -11,8 +11,8 @@ the management plugin for stats.
 
 ## How it Works
 
-It declares a topic exchange called 'amq.rabbitmq.event' in the default
-virtual host. All events are published to this exchange with routing
+It declares a topic exchange called `amq.rabbitmq.event` **in the default
+virtual host**. All events are published to this exchange with routing
 keys like 'exchange.created', 'binding.deleted' etc, so you can
 subscribe to only the events you're interested in.
 
@@ -23,26 +23,11 @@ gets published, don't allow them access.
 
 ## Installation
 
-### With RabbitMQ 3.6.0 or Later
-
-Most recent RabbitMQ version ships with this plugin.
-As of RabbitMQ `3.6.0` this plugin is included into the RabbitMQ distribution.
-
-Enable it with the following command:
+This plugin ships with RabbitMQ. Like with all other plugins, it must be
+enabled before it can be used:
 
 ```bash
-rabbitmq-plugins enable rabbitmq_event_exchange
-```
-
-### With RabbitMQ 3.5.x
-
-You can download a pre-built binary of this plugin from
-the [RabbitMQ Community Plugins](https://www.rabbitmq.com/community-plugins.html) page.
-
-Then run the following command:
-
-```bash
-rabbitmq-plugins enable rabbitmq_event_exchange
+[sudo] rabbitmq-plugins enable rabbitmq_event_exchange
 ```
 
 ## Event format

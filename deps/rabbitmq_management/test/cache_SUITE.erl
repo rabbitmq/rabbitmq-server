@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(cache_SUITE).
@@ -59,7 +59,7 @@ end_per_testcase(_Testcase, Config) ->
 %% tests
 
 name(Config) ->
-    ct:pal(?LOW_IMPORTANCE, "Priv: ~p", [?config(priv_dir, Config)]),
+    ct:pal(?LOW_IMPORTANCE, "Priv: ~tp", [?config(priv_dir, Config)]),
     rabbit_mgmt_db_cache_banana = rabbit_mgmt_db_cache:process_name(banana).
 
 fetch_new_key(_Config) ->

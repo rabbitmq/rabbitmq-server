@@ -427,6 +427,10 @@ end}.
 {mapping, "ssl_options.bypass_pem_cache", "ssl.bypass_pem_cache",
     [{datatype, {enum, [true, false]}}]}.
 
+
+{mapping, "metadata_store.khepri.default_timeout", "rabbit.khepri_default_timeout",
+    [{datatype, integer}]}.
+
 %% ===========================================================================
 
 %% Choose the available SASL mechanism(s) to expose.
@@ -460,6 +464,8 @@ fun(Conf) ->
         (internal) -> rabbit_auth_backend_internal;
         (ldap)     -> rabbit_auth_backend_ldap;
         (http)     -> rabbit_auth_backend_http;
+        (oauth)    -> rabbit_auth_backend_oauth2;
+        (oauth2)   -> rabbit_auth_backend_oauth2;
         (cache)    -> rabbit_auth_backend_cache;
         (amqp)     -> rabbit_auth_backend_amqp;
         (dummy)    -> rabbit_auth_backend_dummy;
@@ -616,8 +622,6 @@ end}.
     {datatype, string}
 ]}.
 
-
-
 %%
 %% Default User / VHost
 %% ====================
@@ -679,6 +683,163 @@ fun(Conf) ->
     Read      = proplists:get_value(["default_permissions", "read"], Settings),
     Write     = proplists:get_value(["default_permissions", "write"], Settings),
     [list_to_binary(Configure), list_to_binary(Read), list_to_binary(Write)]
+end}.
+
+%%
+%% Extra Default Users
+%% ====================
+%%
+
+{mapping, "default_users.$name.vhost_pattern", "rabbit.default_users", [
+    {validators, ["valid_regex"]},
+    {datatype, string}
+]}.
+
+{mapping, "default_users.$name.password", "rabbit.default_users", [
+    {datatype, string}
+]}.
+
+{mapping, "default_users.$name.configure", "rabbit.default_users", [
+    {validators, ["valid_regex"]},
+    {datatype, string}
+]}.
+
+{mapping, "default_users.$name.read", "rabbit.default_users", [
+    {validators, ["valid_regex"]},
+    {datatype, string}
+]}.
+
+{mapping, "default_users.$name.write", "rabbit.default_users", [
+    {validators, ["valid_regex"]},
+    {datatype, string}
+]}.
+
+{mapping, "default_users.$name.tags", "rabbit.default_users", [
+    {datatype, {list, atom}}
+]}.
+
+{translation, "rabbit.default_users", fun(Conf) ->
+    case rabbit_cuttlefish:aggregate_props(Conf, ["default_users"]) of
+        [] -> cuttlefish:unset();
+        Props -> Props
+    end
+end}.
+
+%%
+%% Default Policies
+%% ====================
+%%
+
+{mapping, "default_policies.operator.$id.vhost_pattern", "rabbit.default_policies.operator", [
+    {validators, ["valid_regex"]},
+    {datatype, string}
+]}.
+
+{mapping, "default_policies.operator.$id.queue_pattern", "rabbit.default_policies.operator", [
+    {validators, ["valid_regex"]},
+    {datatype, string}
+]}.
+
+{mapping, "default_policies.operator.$id.expires", "rabbit.default_policies.operator", [
+    {datatype, {duration, ms}}
+]}.
+
+{mapping, "default_policies.operator.$id.message_ttl", "rabbit.default_policies.operator", [
+    {datatype, {duration, ms}}
+]}.
+
+{mapping, "default_policies.operator.$id.max_length", "rabbit.default_policies.operator", [
+    {validators, ["non_zero_positive_integer"]},
+    {datatype, integer}
+]}.
+
+{mapping, "default_policies.operator.$id.max_length_bytes", "rabbit.default_policies.operator", [
+    {validators, ["non_zero_positive_integer"]},
+    {datatype, bytesize}
+]}.
+
+{mapping, "default_policies.operator.$id.max_in_memory_bytes", "rabbit.default_policies.operator", [
+        {validators, ["non_zero_positive_integer"]},
+        {datatype, bytesize}
+    ]}.
+
+{mapping, "default_policies.operator.$id.max_in_memory_length", "rabbit.default_policies.operator",
+    [
+        {validators, ["non_zero_positive_integer"]},
+        {datatype, integer}
+    ]}.
+
+{mapping, "default_policies.operator.$id.delivery_limit", "rabbit.default_policies.operator", [
+    {validators, ["non_zero_positive_integer"]},
+    {datatype, integer}
+]}.
+
+{mapping, "default_policies.operator.$id.classic_queues.ha_mode", "rabbit.default_policies.operator", [
+    {datatype, string}
+]}.
+
+{mapping, "default_policies.operator.$id.classic_queues.ha_params", "rabbit.default_policies.operator", [
+    {datatype, [integer, {list, string}]}
+]}.
+
+{mapping, "default_policies.operator.$id.classic_queues.ha_sync_mode", "rabbit.default_policies.operator", [
+    {datatype, string}
+]}.
+
+{mapping, "default_policies.operator.$id.classic_queues.queue_version", "rabbit.default_policies.operator",
+    [
+        {validators, ["non_zero_positive_integer"]},
+        {datatype, integer}
+    ]}.
+
+{translation, "rabbit.default_policies.operator", fun(Conf) ->
+    Props = rabbit_cuttlefish:aggregate_props(
+                Conf,
+                ["default_policies", "operator"],
+                fun({["default_policies","operator",ID,"classic_queues"|T], V}) ->
+                    NewV = case T of
+                              ["ha_sync_mode"] ->
+                                  list_to_binary(V);
+                              ["ha_mode"] ->
+                                  list_to_binary(V);
+                              _ -> V
+                          end,
+                    {["default_policies","operator",ID|T], NewV};
+                   ({["default_policies","operator",ID, "queue_pattern"], V}) ->
+                    {["default_policies","operator",ID,"queue_pattern"], list_to_binary(V)};
+                   (E) -> E
+                end),
+    case Props of
+        [] -> cuttlefish:unset();
+        Props -> Props
+    end
+end}.
+
+%%
+%% Default VHost Limits
+%% ====================
+%%
+
+{mapping, "default_limits.vhosts.$id.pattern", "rabbit.default_limits.vhosts", [
+    {validators, ["valid_regex"]},
+    {datatype, string}
+]}.
+
+{mapping, "default_limits.vhosts.$id.max_connections", "rabbit.default_limits.vhosts", [
+    {validators, [ "non_zero_positive_integer"]},
+    {datatype, integer}
+]}.
+
+{mapping, "default_limits.vhosts.$id.max_queues", "rabbit.default_limits.vhosts", [
+    {validators, [ "non_zero_positive_integer"]},
+    {datatype, integer}
+]}.
+
+{translation, "rabbit.default_limits.vhosts", fun(Conf) ->
+    case rabbit_cuttlefish:aggregate_props(Conf, ["default_limits", "vhosts"]) of
+        [] -> cuttlefish:unset();
+        Props -> Props
+    end
 end}.
 
 %% Tags for default user
@@ -747,6 +908,33 @@ end}.
  end
 }.
 
+{mapping, "ranch_connection_max", "rabbit.ranch_connection_max",
+  [{datatype, [{atom, infinity}, integer]}]}.
+
+{translation, "rabbit.ranch_connection_max",
+ fun(Conf) ->
+  case cuttlefish:conf_get("ranch_connection_max", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      infinity  -> infinity;
+      Val when is_integer(Val) -> Val;
+      _         -> cuttlefish:invalid("should be a non-negative integer")
+  end
+ end
+}.
+
+{mapping, "vhost_max", "rabbit.vhost_max",
+  [{datatype, [{atom, infinity}, integer]}, {validators, ["non_negative_integer"]}]}.
+
+{translation, "rabbit.vhost_max",
+ fun(Conf) ->
+  case cuttlefish:conf_get("vhost_max", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      infinity  -> infinity;
+      Val when is_integer(Val) -> Val;
+      _         -> cuttlefish:invalid("should be a non-negative integer")
+  end
+ end
+}.
 
 {mapping, "max_message_size", "rabbit.max_message_size",
     [{datatype, integer}, {validators, ["max_message_size"]}]}.
@@ -890,7 +1078,12 @@ fun(Conf) ->
     case {Absolute, Relative} of
         {undefined, undefined} -> cuttlefish:invalid("No vm watermark defined");
         {_,         undefined} -> {absolute, Absolute};
-        _                      -> Relative
+        {undefined, _}         -> Relative;
+        _                      ->
+            cuttlefish:warn("Both vm_memory_high_watermark.absolute and "
+                            "vm_memory_high_watermark.relative are configured. "
+                            "vm_memory_high_watermark.absolute has precedence"),
+            {absolute, Absolute}
     end
 end}.
 
@@ -958,7 +1151,12 @@ fun(Conf) ->
     case {Absolute, Relative} of
         {undefined, undefined} -> cuttlefish:invalid("No disk limit defined");
         {_,         undefined} -> Absolute;
-        _                      -> {mem_relative, Relative}
+        {undefined, _}         -> {mem_relative, Relative};
+        _                      ->
+            cuttlefish:warn("Both disk_free_limit.absolute and "
+                            "disk_free_limit.relative are configured. "
+                            "disk_free_limit.absolute has precedence"),
+            Absolute
     end
 end}.
 
@@ -1942,6 +2140,31 @@ end}.
     {datatype, integer}
 ]}.
 
+%%
+%% Feature flags and deprecated features
+%% =====================================
+%%
+
+{mapping,
+ "deprecated_features.permit.$name", "rabbit.permit_deprecated_features",
+ [{datatype, {enum, [true, false]}}]
+}.
+
+%% This converts:
+%%     deprecated_features.permit.my_feature = true
+%% to:
+%%     {rabbit, [{permit_deprecated_features, #{my_feature => true}}]}.
+
+{translation, "rabbit.permit_deprecated_features",
+ fun(Conf) ->
+         Settings = cuttlefish_variable:filter_by_prefix(
+                      "deprecated_features.permit", Conf),
+         maps:from_list(
+           [{list_to_atom(FeatureName), State}
+            || {["deprecated_features", "permit", FeatureName], State}
+               <- Settings])
+ end}.
+
 % ==========================
 % Kernel section
 % ==========================
@@ -2142,7 +2365,7 @@ end}.
 
 {mapping, "raft.segment_max_entries", "ra.segment_max_entries", [
   {datatype, integer},
-  {validators, ["non_zero_positive_integer"]}
+  {validators, ["non_zero_positive_integer", "non_zero_positive_16_bit_integer"]}
 ]}.
 
 {translation, "ra.segment_max_entries",
@@ -2237,6 +2460,20 @@ end}.
     end
 }.
 
+{mapping, "raft.adaptive_failure_detector.poll_interval", "aten.poll_interval", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{translation, "aten.poll_interval",
+  fun(Conf) ->
+      case cuttlefish:conf_get("raft.adaptive_failure_detector.poll_interval", Conf, undefined) of
+          undefined -> cuttlefish:unset();
+          Val       -> Val
+      end
+  end
+}.
+
 %%
 %% Backing queue version
 %%
@@ -2248,7 +2485,7 @@ end}.
 
 {translation, "rabbit.classic_queue_default_version",
     fun(Conf) ->
-        case cuttlefish:conf_get("classic_queue.default_version", Conf, 1) of
+        case cuttlefish:conf_get("classic_queue.default_version", Conf, 2) of
             1 -> 1;
             2 -> 2;
             _ -> cuttlefish:unset()
@@ -2258,6 +2495,77 @@ end}.
 
 {mapping, "quorum_queue.compute_checksums", "rabbit.quorum_compute_checksums", [
     {datatype, {enum, [true, false]}}]}.
+
+{mapping, "quorum_queue.property_equivalence.relaxed_checks_on_redeclaration", "rabbit.quorum_relaxed_checks_on_redeclaration", [
+    {datatype, {enum, [true, false]}}]}.
+
+
+%%
+%% Quorum Queue membership reconciliation
+%%
+
+{mapping, "quorum_queue.continuous_membership_reconciliation.enabled", "rabbit.quorum_membership_reconciliation_enabled", [
+    {datatype, {enum, [true, false]}}]}.
+
+{mapping, "quorum_queue.continuous_membership_reconciliation.auto_remove", "rabbit.quorum_membership_reconciliation_auto_remove", [
+    {datatype, {enum, [true, false]}}]}.
+
+{mapping, "quorum_queue.continuous_membership_reconciliation.interval", "rabbit.quorum_membership_reconciliation_interval", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+{mapping, "quorum_queue.continuous_membership_reconciliation.trigger_interval", "rabbit.quorum_membership_reconciliation_trigger_interval", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+{mapping, "quorum_queue.continuous_membership_reconciliation.target_group_size", "rabbit.quorum_membership_reconciliation_target_group_size", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+
+%%
+%% Runtime parameters
+%%
+
+{mapping, "runtime_parameters.limits.$category", "rabbit.runtime_parameters.limits", [
+    {datatype, integer},
+    {validators, ["non_negative_integer"]}
+]}.
+
+{translation, "rabbit.runtime_parameters.limits",
+    fun(Conf) ->
+        case cuttlefish_variable:filter_by_prefix("runtime_parameters.limits", Conf) of
+            [] -> cuttlefish:unset();
+            Ss -> [ {list_to_binary(Category), Limit} || {[_, _, Category], Limit} <- Ss ]
+        end
+    end
+}.
+
+%%
+%% Message interceptors
+%%
+{mapping, "message_interceptors.incoming.$interceptor.overwrite", "rabbit.incoming_message_interceptors", [
+    {datatype, {enum, [true, false]}}]}.
+
+{translation, "rabbit.incoming_message_interceptors",
+    fun(Conf) ->
+         case cuttlefish_variable:filter_by_prefix("message_interceptors", Conf) of
+             [] ->
+                 cuttlefish:unset();
+             L ->
+                 [begin
+                      Interceptor = list_to_atom(Interceptor0),
+                      case lists:member(Interceptor, [set_header_timestamp,
+                                                      set_header_routing_node]) of
+                          true ->
+                              {Interceptor, Overwrite};
+                          false ->
+                              cuttlefish:invalid(io_lib:format("~p is invalid", [Interceptor]))
+                      end
+                  end || {["message_interceptors", "incoming", Interceptor0, "overwrite"], Overwrite} <- L]
+         end
+    end
+}.
 
 % ===============================
 % Validators
@@ -2320,3 +2628,14 @@ end}.
 fun(Int) when is_integer(Int) ->
     Int >= 1
 end}.
+
+{validator, "non_zero_positive_16_bit_integer", "number should be between 1 and 65535",
+fun(Int) when is_integer(Int) ->
+    (Int >= 1) and (Int =< 65535)
+end}.
+
+{validator, "valid_regex", "string must be a valid regular expression",
+ fun("")     -> false;
+    (String) -> {Res, _ } = re:compile(String),
+                Res =:= ok
+ end}.

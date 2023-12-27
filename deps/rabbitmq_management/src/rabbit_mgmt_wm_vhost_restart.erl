@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_vhost_restart).
@@ -42,7 +42,7 @@ accept_content(ReqData, Context) ->
         {error, {already_started, _}} ->
             {true, ReqData, Context};
         {error, Err} ->
-            Message = io_lib:format("Request to node ~s failed with ~p",
+            Message = io_lib:format("Request to node ~ts failed with ~tp",
                                     [Node, Err]),
             rabbit_mgmt_util:bad_request(list_to_binary(Message), ReqData, Context)
     end.

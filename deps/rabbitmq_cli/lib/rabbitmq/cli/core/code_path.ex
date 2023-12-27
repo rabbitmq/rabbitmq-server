@@ -2,17 +2,23 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.CodePath do
   alias RabbitMQ.CLI.Core.{Config, Paths, Platform}
 
   def add_plugins_to_load_path(opts) do
-    with {:ok, plugins_dir} <- Paths.plugins_dir(opts) do
-      String.split(to_string(plugins_dir), Platform.path_separator())
-      |> Enum.map(&add_directory_plugins_to_load_path/1)
+    case Paths.plugins_dir(opts) do
+      {:error, _} ->
+        :ok
 
-      :ok
+      val ->
+        with {:ok, plugins_dir} <- val do
+          String.split(to_string(plugins_dir), Platform.path_separator())
+          |> Enum.each(&add_directory_plugins_to_load_path/1)
+
+          :ok
+        end
     end
   end
 
@@ -55,9 +61,9 @@ defmodule RabbitMQ.CLI.Core.CodePath do
 
     case :erl_prim_loader.list_dir(app_dir) do
       {:ok, list} ->
-        case Enum.member?(list, 'ebin') do
+        case Enum.member?(list, ~c"ebin") do
           true ->
-            ebin_dir = :filename.join(app_dir, 'ebin')
+            ebin_dir = :filename.join(app_dir, ~c"ebin")
             Code.append_path(ebin_dir)
 
           false ->
@@ -93,11 +99,11 @@ defmodule RabbitMQ.CLI.Core.CodePath do
       _ ->
         case Application.load(:rabbit) do
           :ok ->
-            Code.ensure_loaded(:rabbit_plugins)
+            _ = Code.ensure_loaded(:rabbit_plugins)
             :ok
 
           {:error, {:already_loaded, :rabbit}} ->
-            Code.ensure_loaded(:rabbit_plugins)
+            _ = Code.ensure_loaded(:rabbit_plugins)
             :ok
 
           {:error, err} ->

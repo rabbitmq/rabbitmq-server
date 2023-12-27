@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 -module('Elixir.RabbitMQ.CLI.Ctl.Commands.DecommissionMqttNodeCommand').
 
@@ -54,15 +54,14 @@ run([Node], #{node := NodeName,
         {badrpc, _} = Error ->
             Error;
         nodedown ->
-            {ok, list_to_binary(io_lib:format("Node ~s is down but has been successfully removed"
+            {ok, list_to_binary(io_lib:format("Node ~ts is down but has been successfully removed"
                                          " from the cluster", [Node]))};
         Result ->
             %% 'ok' or 'timeout'
-            %% TODO: Ra will timeout if the node is not a cluster member - should this be fixed??
             Result
     end.
 
-banner([Node], _) -> list_to_binary(io_lib:format("Removing node ~s from the list of MQTT nodes...", [Node])).
+banner([Node], _) -> list_to_binary(io_lib:format("Removing node ~ts from the list of MQTT nodes...", [Node])).
 
 output(Result, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(Result).

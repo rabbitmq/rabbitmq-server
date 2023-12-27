@@ -39,8 +39,8 @@ endef
 # Release artifacts are put in $(PACKAGES_DIR).
 PACKAGES_DIR ?= $(abspath PACKAGES)
 
-LOCAL_DEPS = xmerl
-DEPS = rabbit_common
+LOCAL_DEPS = xmerl ssl public_key
+DEPS = rabbit_common credentials_obfuscation
 TEST_DEPS = rabbitmq_ct_helpers rabbit meck
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk

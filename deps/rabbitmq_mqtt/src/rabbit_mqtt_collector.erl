@@ -2,17 +2,18 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mqtt_collector).
 
 -include("mqtt_machine.hrl").
 
--export([register/2, register/3, unregister/2, list/0, leave/1]).
+-export([register/2, register/3, unregister/2,
+         list/0, list_pids/0, leave/1]).
 
 %%----------------------------------------------------------------------------
--spec register(term(), pid()) -> {ok, reference()} | {error, term()}.
+-spec register(client_id_ra(), pid()) -> {ok, reference()} | {error, term()}.
 register(ClientId, Pid) ->
     {ClusterName, _} = NodeId = mqtt_node:server_id(),
     case ra_leaderboard:lookup_leader(ClusterName) of
@@ -27,7 +28,7 @@ register(ClientId, Pid) ->
             register(Leader, ClientId, Pid)
     end.
 
--spec register(ra:server_id(), term(), pid()) ->
+-spec register(ra:server_id(), client_id_ra(), pid()) ->
     {ok, reference()} | {error, term()}.
 register(ServerId, ClientId, Pid) ->
     Corr = make_ref(),
@@ -35,6 +36,7 @@ register(ServerId, ClientId, Pid) ->
     erlang:send_after(5000, self(), {ra_event, undefined, register_timeout}),
     {ok, Corr}.
 
+-spec unregister(client_id_ra(), pid()) -> ok.
 unregister(ClientId, Pid) ->
     {ClusterName, _} = mqtt_node:server_id(),
     case ra_leaderboard:lookup_leader(ClusterName) of
@@ -44,31 +46,39 @@ unregister(ClientId, Pid) ->
             send_ra_command(Leader, {unregister, ClientId, Pid}, no_correlation)
     end.
 
+-spec list_pids() -> [pid()].
+list_pids() ->
+    list(fun(#machine_state{pids = Pids}) -> maps:keys(Pids) end).
+
+-spec list() -> term().
 list() ->
+    list(fun(#machine_state{client_ids = Ids}) -> maps:to_list(Ids) end).
+
+list(QF) ->
     {ClusterName, _} = mqtt_node:server_id(),
-     QF = fun (#machine_state{client_ids = Ids}) -> maps:to_list(Ids) end,
     case ra_leaderboard:lookup_leader(ClusterName) of
         undefined ->
             NodeIds = mqtt_node:all_node_ids(),
             case ra:leader_query(NodeIds, QF) of
-                {ok, {_, Ids}, _} -> Ids;
+                {ok, {_, Result}, _} -> Result;
                 {timeout, _}      ->
-                    rabbit_log:debug("~s:list/0 leader query timed out",
+                    rabbit_log:debug("~ts:list/1 leader query timed out",
                                      [?MODULE]),
                     []
             end;
         Leader ->
             case ra:leader_query(Leader, QF) of
-                {ok, {_, Ids}, _} -> Ids;
+                {ok, {_, Result}, _} -> Result;
                 {error, _} ->
                     [];
                 {timeout, _}      ->
-                    rabbit_log:debug("~s:list/0 leader query timed out",
+                    rabbit_log:debug("~ts:list/1 leader query timed out",
                                      [?MODULE]),
                     []
             end
     end.
 
+-spec leave(binary()) ->  ok | timeout | nodedown.
 leave(NodeBin) ->
     Node = binary_to_atom(NodeBin, utf8),
     ServerId = mqtt_node:server_id(),

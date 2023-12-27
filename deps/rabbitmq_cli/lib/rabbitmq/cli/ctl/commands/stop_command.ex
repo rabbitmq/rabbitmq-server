@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -55,12 +55,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StopCommand do
 
   def usage_additional() do
     [
-      ["<pidfile>", "node PID file path to monitor. To avoid using a PID file, use 'rabbitmqctl shutdown'"],
+      [
+        "<pidfile>",
+        "node PID file path to monitor. To avoid using a PID file, use 'rabbitmqctl shutdown'"
+      ],
       ["--idempotent", "return success if target node is not running (cannot be contacted)"]
     ]
   end
 
-  def description(), do: "Stops RabbitMQ and its runtime (Erlang VM). Requires a local node pid file path to monitor progress."
+  def description(),
+    do:
+      "Stops RabbitMQ and its runtime (Erlang VM). Requires a local node pid file path to monitor progress."
 
   def help_section(), do: :node_management
 

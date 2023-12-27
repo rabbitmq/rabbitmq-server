@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_policy).
@@ -34,10 +34,11 @@ allowed_methods(ReqData, Context) ->
     {[<<"HEAD">>, <<"GET">>, <<"PUT">>, <<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {case policy(ReqData) of
-         not_found -> false;
-         _         -> true
-     end, ReqData, Context}.
+    Result = case policy(ReqData) of
+        not_found -> false;
+        _         -> true
+    end,
+    {Result, ReqData, Context}.
 
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(policy(ReqData), ReqData, Context).
@@ -76,7 +77,10 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 policy(ReqData) ->
-    rabbit_policy:lookup(
-      rabbit_mgmt_util:vhost(ReqData), name(ReqData)).
+    case rabbit_mgmt_util:vhost(ReqData) of
+        not_found -> not_found;
+        none      -> not_found;
+        Value     -> rabbit_policy:lookup(Value, name(ReqData))
+    end.
 
 name(ReqData) -> rabbit_mgmt_util:id(name, ReqData).

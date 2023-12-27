@@ -1,7 +1,7 @@
 # Security Policy
 
 Team RabbitMQ will investigate all responsibly disclosed vulnerabilities that affect
-a recent version in one of the [supported release series](https://www.rabbitmq.com/versions.html). 
+a recent version in one of the [supported release series](https://www.rabbitmq.com/versions.html).
 We ask all reporters to provide a reasonable amount of information that can be used to reproduce
 the observed behavior.
 
@@ -10,7 +10,7 @@ the observed behavior.
 RabbitMQ Core team really appreciates responsible vulnerability reports
 from security researchers and our user community.
 
-To responsibly disclose a vulnerability, please email `security@rabbitmq.com` or
+To responsibly disclose a vulnerability, please use [GitHub Security Advisories](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing/privately-reporting-a-security-vulnerability) or email `rabbitmq-core@groups.vmware.com` or
 [sign up for RabbitMQ community Slack](https://rabbitmq-slack.herokuapp.com) and
 send a DM to @michaelklishin. For reports received via Slack, a separate private
 channel will be set up so that multiple RabbitMQ maintainers can access the disclosed
@@ -29,7 +29,7 @@ A received vulnerability report will be acknowledged by a RabbitMQ core team or 
 
 As the security issue moves from triage, to identified fix, to release planning we will keep the reporter updated.
 
-### When Should I Report a Vulnerability? 
+### When Should I Report a Vulnerability?
 
  * You think you discovered a potential security vulnerability in RabbitMQ
  * You think you discovered a potential security vulnerability in one of RabbitMQ client libraries or dependencies
@@ -63,9 +63,9 @@ When VMware products that depend on RabbitMQ are also affected, the disclosure p
 further to allow those projects to ship patch releases.
 
 
-## Tanzu RabbitMQ
+## VMware RabbitMQ
 
-[Tanzu RabbitMQ](https://tanzu.vmware.com/rabbitmq) is covered by the [VMware Security Response Policy](https://www.vmware.com/support/policies/security_response.html).
+[VMware RabbitMQ](https://www.vmware.com/products/rabbitmq.html) is covered by the [VMware Security Response Policy](https://www.vmware.com/support/policies/security_response.html).
 
-Vulnerabilities found in Tanzu RabbitMQ can be reported to the RabbitMQ core team or
+Vulnerabilities found in VMware RabbitMQ can be reported to the RabbitMQ core team or
 via the [VMware Security Response Center](https://www.vmware.com/security/vsrc.html).

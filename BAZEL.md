@@ -33,6 +33,18 @@ Create a `user.bazelrc` by making a copy of `user-template.bazelrc` and updating
 
 `bazel run broker`
 
+You can set different environment variables to control some configuration aspects, like this:
+
+```
+    RABBITMQ_CONFIG_FILES=/path/to/conf.d \
+    RABBITMQ_NODENAME=<node>@localhost \
+    RABBITMQ_NODE_PORT=7000 \
+    bazel run broker
+```
+
+This will start RabbitMQ with configs being read from the provided directory. It also will start a node with a given node name, and with all listening ports calculated from the given one - this way you can start non-conflicting rabbits even from different checkouts on a single machine.
+
+
 ### Running tests
 
 Many rabbit tests spawn single or clustered rabbit nodes, and therefore it's best to run test suites sequentially on a single machine. Hence the `build --local_test_jobs=1` flag used in `.bazelrc`. Additionally, it may be reasonable to disable test sharding and stream test output when running tests locally with `--test_output=streamed` as an additional argument (to just disable sharding, but not stream output, use `--test_sharding_strategy=disabled`). Naturally that restriction does not hold if utilizing remote execution (as is the case for RabbitMQ's CI pipelines).
@@ -58,6 +70,22 @@ Note: This takes quite some time on a single machine.
 ### Run an individual common test suite
 
 `bazel test //deps/rabbit:lazy_queue_SUITE`
+
+## Add/update an external dependency
+
+### from hex.pm
+
+1. `bazel run gazelle-update-repos -- hex.pm/accept@0.3.5` to generate/update `bazel/BUILD.accept`
+1. Add/update the entry in MODULE.bazel
+
+### from github 
+
+1. `bazel run gazelle-update-repos -- --testonly github.com/extend/ct_helper@master`
+1. Add/update the entry in MODULE.bazel
+
+## Update BUILD files
+
+`bazel run gazelle`
 
 ## Additional Useful Commands
 

@@ -1,31 +1,41 @@
 name: Peer Discovery AWS Integration Test
 on:
+  push:
+    paths-ignore:
+      - '.github/workflows/secondary-umbrella.yaml'
+      - '.github/workflows/update-elixir-patches.yaml'
+      - '.github/workflows/update-otp-patches.yaml'
   workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
 jobs:
   peer-discovery-aws-integration-test:
     name: Integration Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         include:
-        - image_tag_suffix: otp-max
-          erlang_version: "25"
+          - image_tag_suffix: otp-max-bazel
+            otp_version_id: 26_1
     timeout-minutes: 45
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: WAIT FOR OCI IMAGE WORKFLOW
-      uses: lewagon/wait-on-check-action@v1.1.2
+      uses: lewagon/wait-on-check-action@v1.3.3
       with:
         ref: ${{ github.ref }}
-        check-name: build-publish-dev (${{ matrix.image_tag_suffix }})
+        check-name: build-publish-dev-bazel (${{ matrix.image_tag_suffix }}, ${{ matrix.otp_version_id }})
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         wait-interval: 30 # seconds
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v3.0.8
+      uses: actions/cache@v3.3.2
       with:
         path: "/home/runner/repo-cache/"
-        key: repo-cache
+        key: ${{ runner.os }}-repo-cache-${{ hashFiles('MODULE.bazel','WORKSPACE','bazel/bzlmod/secondary_umbrella.bzl') }}
+        restore-keys: |
+          ${{ runner.os }}-repo-cache-
     - name: CONFIGURE BAZEL
       run: |
         cat << EOF >> user.bazelrc
@@ -46,11 +56,11 @@ jobs:
 
         branch_or_tag="${GITHUB_REF##*/}"
         bazelisk test //deps/rabbitmq_peer_discovery_aws:integration_SUITE \
-          --config=rbe-${{ matrix.erlang_version }} \
+          --config=rbe-${{ matrix.otp_version_id }} \
           --test_tag_filters=aws \
           --build_tests_only \
           --test_env AWS_ACCESS_KEY_ID=${{ secrets.CONCOURSE_AWS_ACCESS_KEY_ID }} \
           --test_env AWS_SECRET_ACCESS_KEY=${{ secrets.CONCOURSE_AWS_SECRET_ACCESS_KEY }} \
-          --test_env RABBITMQ_IMAGE="pivotalrabbitmq/rabbitmq:${{ github.sha }}-otp-max" \
-          --test_env AWS_ECS_CLUSTER_NAME="rabbitmq-peer-discovery-aws-actions-${branch_or_tag//./-}" \
+          --test_env RABBITMQ_IMAGE="pivotalrabbitmq/rabbitmq:${{ github.sha }}-otp-max-bazel" \
+          --test_env AWS_ECS_CLUSTER_NAME="rabbitmq-peer-discovery-aws-actions-${branch_or_tag//[._]/-}" \
           --verbose_failures

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_auth_backend_ldap).
@@ -17,7 +17,7 @@
 
 -export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/4, check_topic_access/4,
-         state_can_expire/0]).
+         state_can_expire/0, format_multi_attr/1, format_multi_attr/2]).
 
 -export([get_connections/0]).
 
@@ -49,24 +49,24 @@ purge_connections() ->
 
 user_login_authentication(Username, []) ->
     %% Without password, e.g. EXTERNAL
-    ?L("CHECK: passwordless login for ~s", [Username]),
+    ?L("CHECK: passwordless login for ~ts", [Username]),
     R = with_ldap(creds(none),
                   fun(LDAP) -> do_login(Username, unknown, none, LDAP) end),
-    ?L("DECISION: passwordless login for ~s: ~p",
+    ?L("DECISION: passwordless login for ~ts: ~tp",
        [Username, log_result(R)]),
     R;
 
 user_login_authentication(Username, AuthProps) when is_list(AuthProps) ->
-    case pget(password, AuthProps) of
+    case extractPassword(AuthProps) of
         undefined -> user_login_authentication(Username, []);
         <<>> ->
             %% Password "" is special in LDAP, see
             %% https://tools.ietf.org/html/rfc4513#section-5.1.2
-            ?L("CHECK: unauthenticated login for ~s", [Username]),
-            ?L("DECISION: unauthenticated login for ~s: denied", [Username]),
-            {refused, "user '~s' - unauthenticated bind not allowed", [Username]};
+            ?L("CHECK: unauthenticated login for ~ts", [Username]),
+            ?L("DECISION: unauthenticated login for ~ts: denied", [Username]),
+            {refused, "user '~ts' - unauthenticated bind not allowed", [Username]};
         PW ->
-            ?L("CHECK: login for ~s", [Username]),
+            ?L("CHECK: login for ~ts", [Username]),
             R = case dn_lookup_when() of
                     prebind -> UserDN = username_to_dn_prebind(Username),
                                with_ldap({ok, {UserDN, PW}},
@@ -74,12 +74,31 @@ user_login_authentication(Username, AuthProps) when is_list(AuthProps) ->
                     _       -> with_ldap({ok, {simple_bind_fill_pattern(Username), PW}},
                                          login_fun(Username, unknown, PW, AuthProps))
                 end,
-            ?L("DECISION: login for ~s: ~p", [Username, log_result(R)]),
+            ?L("DECISION: login for ~ts: ~tp", [Username, log_result(R)]),
             R
     end;
 
-user_login_authentication(Username, AuthProps) ->
-    exit({unknown_auth_props, Username, AuthProps}).
+user_login_authentication(Username, _AuthProps) ->
+    {refused, "user '~ts' - unauthenticated. Not enough credentials", [Username]}.
+
+%% Credentials (i.e. password) maybe directly in the password attribute in AuthProps
+%% or as a Function with the attribute rabbit_auth_backend_ldap if the user was already authenticated with http backend
+%% or as a Function with the attribute rabbit_auth_backend_cache if the user was already authenticated via cache backend
+extractPassword(AuthProps) ->
+    case proplists:get_value(password, AuthProps, none) of
+        none ->
+            case proplists:get_value(rabbit_auth_backend_ldap, AuthProps, none) of
+                none -> case proplists:get_value(rabbit_auth_backend_cache, AuthProps, none) of
+                            none -> undefined;
+                            PasswordFun ->
+                                (PasswordFun())#impl.password
+                        end;
+                PasswordFun ->
+                    (PasswordFun())#impl.password
+            end;
+        Password ->
+            Password
+    end.
 
 user_login_authorization(Username, AuthProps) ->
     case user_login_authentication(Username, AuthProps) of
@@ -88,26 +107,28 @@ user_login_authorization(Username, AuthProps) ->
     end.
 
 check_vhost_access(User = #auth_user{username = Username,
-                                     impl     = #impl{user_dn = UserDN}},
+                                     impl     = ImplFun},
                    VHost, AuthzData) ->
+    UserDN = (ImplFun())#impl.user_dn,
     OptionsArgs = context_as_options(AuthzData, undefined),
     ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     Args = [{username, Username},
             {user_dn,  UserDN},
             {vhost,    VHost}] ++ OptionsArgs ++ ADArgs,
-    ?L("CHECK: ~s for ~s", [log_vhost(Args), log_user(User)]),
+    ?L("CHECK: ~ts for ~ts", [log_vhost(Args), log_user(User)]),
     R0 = evaluate_ldap(env(vhost_access_query), Args, User),
     R1 = ensure_rabbit_authz_backend_result(R0),
-    ?L("DECISION: ~s for ~s: ~p (~p)",
+    ?L("DECISION: ~ts for ~ts: ~tp (~tp)",
        [log_vhost(Args), log_user(User),
         log_result(R0), log_result(R1)]),
     R1.
 
 check_resource_access(User = #auth_user{username = Username,
-                                        impl     = #impl{user_dn = UserDN}},
+                                        impl     = ImplFun},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
                       Permission,
                       AuthzContext) ->
+    UserDN = (ImplFun())#impl.user_dn,
     OptionsArgs = context_as_options(AuthzContext, undefined),
     ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     Args = [{username,   Username},
@@ -116,19 +137,20 @@ check_resource_access(User = #auth_user{username = Username,
             {resource,   Type},
             {name,       Name},
             {permission, Permission}] ++ OptionsArgs ++ ADArgs,
-    ?L("CHECK: ~s for ~s", [log_resource(Args), log_user(User)]),
+    ?L("CHECK: ~ts for ~ts", [log_resource(Args), log_user(User)]),
     R0 = evaluate_ldap(env(resource_access_query), Args, User),
     R1 = ensure_rabbit_authz_backend_result(R0),
-    ?L("DECISION: ~s for ~s: ~p (~p)",
+    ?L("DECISION: ~ts for ~ts: ~tp (~tp)",
        [log_resource(Args), log_user(User),
         log_result(R0), log_result(R1)]),
     R1.
 
 check_topic_access(User = #auth_user{username = Username,
-                                     impl     = #impl{user_dn = UserDN}},
+                                     impl     = ImplFun},
                    #resource{virtual_host = VHost, kind = topic = Resource, name = Name},
                    Permission,
                    Context) ->
+    UserDN = (ImplFun())#impl.user_dn,
     OptionsArgs = context_as_options(Context, undefined),
     ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     Args = [{username,   Username},
@@ -137,10 +159,10 @@ check_topic_access(User = #auth_user{username = Username,
             {resource,   Resource},
             {name,       Name},
             {permission, Permission}] ++ OptionsArgs ++ ADArgs,
-    ?L("CHECK: ~s for ~s", [log_resource(Args), log_user(User)]),
+    ?L("CHECK: ~ts for ~ts", [log_resource(Args), log_user(User)]),
     R0 = evaluate_ldap(env(topic_access_query), Args, User),
     R1 = ensure_rabbit_authz_backend_result(R0),
-    ?L("DECISION: ~s for ~s: ~p (~p)",
+    ?L("DECISION: ~ts for ~ts: ~tp (~tp)",
         [log_resource(Args), log_user(User),
          log_result(R0), log_result(R1)]),
     R1.
@@ -190,17 +212,17 @@ create_option_name_with_namespace(Namespace, Key) ->
     ).
 
 evaluate(Query, Args, User, LDAP) ->
-    ?L1("evaluating query: ~p", [Query]),
+    ?L1("evaluating query: ~tp", [Query]),
     evaluate0(Query, Args, User, LDAP).
 
 evaluate0({constant, Bool}, _Args, _User, _LDAP) ->
-    ?L1("evaluated constant: ~p", [Bool]),
+    ?L1("evaluated constant: ~tp", [Bool]),
     Bool;
 
 evaluate0({for, [{Type, Value, SubQuery}|Rest]}, Args, User, LDAP) ->
     case pget(Type, Args) of
         undefined -> {error, {args_do_not_contain, Type, Args}};
-        Value     -> ?L1("selecting subquery ~s = ~s", [Type, Value]),
+        Value     -> ?L1("selecting subquery ~ts = ~ts", [Type, Value]),
                      evaluate(SubQuery, Args, User, LDAP);
         _         -> evaluate0({for, Rest}, Args, User, LDAP)
     end;
@@ -213,18 +235,19 @@ evaluate0({exists, DNPattern}, Args, _User, LDAP) ->
     Filter = eldap:present("objectClass"),
     DN = fill(DNPattern, Args),
     R = object_exists(DN, Filter, LDAP),
-    ?L1("evaluated exists for \"~s\": ~p", [DN, R]),
+    ?L1("evaluated exists for \"~ts\": ~tp", [DN, R]),
     R;
 
 evaluate0({in_group, DNPattern}, Args, User, LDAP) ->
     evaluate({in_group, DNPattern, "member"}, Args, User, LDAP);
 
 evaluate0({in_group, DNPattern, Desc}, Args,
-          #auth_user{impl = #impl{user_dn = UserDN}}, LDAP) ->
+          #auth_user{impl = ImplFun}, LDAP) ->
+    UserDN = (ImplFun())#impl.user_dn,
     Filter = eldap:equalityMatch(Desc, UserDN),
     DN = fill(DNPattern, Args),
     R = object_exists(DN, Filter, LDAP),
-    ?L1("evaluated in_group for \"~s\": ~p", [DN, R]),
+    ?L1("evaluated in_group for \"~ts\": ~tp", [DN, R]),
     R;
 
 evaluate0({in_group_nested, DNPattern}, Args, User, LDAP) ->
@@ -234,7 +257,7 @@ evaluate0({in_group_nested, DNPattern, Desc}, Args, User, LDAP) ->
     evaluate({in_group_nested, DNPattern, Desc, subtree},
              Args, User, LDAP);
 evaluate0({in_group_nested, DNPattern, Desc, Scope}, Args,
-          #auth_user{impl = #impl{user_dn = UserDN}}, LDAP) ->
+          #auth_user{impl = ImplFun}, LDAP) ->
     GroupsBase = case env(group_lookup_base) of
                      none ->
                          get_expected_env_str(dn_lookup_base, none);
@@ -250,11 +273,12 @@ evaluate0({in_group_nested, DNPattern, Desc, Scope}, Args,
             onelevel     -> eldap:singleLevel();
             one_level    -> eldap:singleLevel()
         end,
+    UserDN = (ImplFun())#impl.user_dn,
     search_nested_group(LDAP, Desc, GroupsBase, EldapScope, UserDN, GroupDN, []);
 
 evaluate0({'not', SubQuery}, Args, User, LDAP) ->
     R = evaluate(SubQuery, Args, User, LDAP),
-    ?L1("negated result to ~s", [R]),
+    ?L1("negated result to ~ts", [R]),
     not R;
 
 evaluate0({'and', Queries}, Args, User, LDAP) when is_list(Queries) ->
@@ -262,7 +286,7 @@ evaluate0({'and', Queries}, Args, User, LDAP) when is_list(Queries) ->
                         % Treat any non-true result as false
                         (_Q, _Result) -> false
                     end, true, Queries),
-    ?L1("'and' result: ~s", [R]),
+    ?L1("'and' result: ~ts", [R]),
     R;
 
 evaluate0({'or', Queries}, Args, User, LDAP) when is_list(Queries) ->
@@ -270,7 +294,7 @@ evaluate0({'or', Queries}, Args, User, LDAP) when is_list(Queries) ->
                         % Treat any non-true result as false
                         (Q,  _Result) -> evaluate(Q, Args, User, LDAP)
                     end, false, Queries),
-    ?L1("'or' result: ~s", [R]),
+    ?L1("'or' result: ~ts", [R]),
     R;
 
 evaluate0({equals, StringQuery1, StringQuery2}, Args, User, LDAP) ->
@@ -278,7 +302,7 @@ evaluate0({equals, StringQuery1, StringQuery2}, Args, User, LDAP) ->
                       R  = if String1 =:= String2 -> true;
                               true -> is_multi_attr_member(String1, String2)
                            end,
-                      ?L1("evaluated equals \"~s\", \"~s\": ~s",
+                      ?L1("evaluated equals \"~ts\", \"~ts\": ~ts",
                           [format_multi_attr(String1),
                            format_multi_attr(String2), R]),
                       R
@@ -327,13 +351,13 @@ evaluate0(StringPattern, Args, User, LDAP) when is_list(StringPattern) ->
 
 evaluate0({string, StringPattern}, Args, _User, _LDAP) ->
     R = fill(StringPattern, Args),
-    ?L1("evaluated string for \"~s\"", [R]),
+    ?L1("evaluated string for \"~ts\"", [R]),
     R;
 
 evaluate0({attribute, DNPattern, AttributeName}, Args, _User, LDAP) ->
     DN = fill(DNPattern, Args),
     R = attribute(DN, AttributeName, LDAP),
-    ?L1("evaluated attribute \"~s\" for \"~s\": ~p",
+    ?L1("evaluated attribute \"~ts\" for \"~ts\": ~tp",
         [AttributeName, DN, format_multi_attr(R)]),
     R;
 
@@ -348,7 +372,7 @@ search_groups(LDAP, Desc, GroupsBase, Scope, DN) ->
                        {attributes, ["dn"]},
                        {scope, Scope}]) of
         {error, _} = E ->
-            ?L("error searching for parent groups for \"~s\": ~p", [DN, E]),
+            ?L("error searching for parent groups for \"~ts\": ~tp", [DN, E]),
             [];
         {ok, {referral, Referrals}} ->
             {error, {referrals_not_supported, Referrals}};
@@ -367,7 +391,7 @@ search_groups(LDAP, Desc, GroupsBase, Scope, DN) ->
 search_nested_group(LDAP, Desc, GroupsBase, Scope, CurrentDN, TargetDN, Path) ->
     case lists:member(CurrentDN, Path) of
         true  ->
-            ?L("recursive cycle on DN ~s while searching for group ~s",
+            ?L("recursive cycle on DN ~ts while searching for group ~ts",
                [CurrentDN, TargetDN]),
             false;
         false ->
@@ -432,7 +456,7 @@ do_match_multi(S1, S2) ->
     do_match(S1, S2).
 
 log_match(String, RE, Result) ->
-    ?L1("evaluated match \"~s\" against RE \"~s\": ~s",
+    ?L1("evaluated match \"~ts\" against RE \"~ts\": ~ts",
         [format_multi_attr(String),
          format_multi_attr(RE), Result]).
 
@@ -499,7 +523,7 @@ with_ldap({ok, Creds}, Fun, Servers) ->
                 network ->
                     Pre = "    LDAP network traffic: ",
                     rabbit_log_ldap:info(
-                      "    LDAP connecting to servers: ~p", [Servers]),
+                      "    LDAP connecting to servers: ~tp", [Servers]),
                     [{log, fun(1, S, A) -> rabbit_log_ldap:warning(Pre ++ S, A);
                               (2, S, A) ->
                                    rabbit_log_ldap:info(Pre ++ S, scrub_creds(A, []))
@@ -507,7 +531,7 @@ with_ldap({ok, Creds}, Fun, Servers) ->
                 network_unsafe ->
                     Pre = "    LDAP network traffic: ",
                     rabbit_log_ldap:info(
-                      "    LDAP connecting to servers: ~p", [Servers]),
+                      "    LDAP connecting to servers: ~tp", [Servers]),
                     [{log, fun(1, S, A) -> rabbit_log_ldap:warning(Pre ++ S, A);
                               (2, S, A) -> rabbit_log_ldap:info(   Pre ++ S, A)
                            end} | Opts0];
@@ -551,7 +575,7 @@ with_login(Creds, Servers, Opts, Fun, RetriesLeft) ->
                          {UserDN, Password} ->
                              case eldap:simple_bind(LDAP, UserDN, Password) of
                                  ok ->
-                                     ?L1("bind succeeded: ~s",
+                                     ?L1("bind succeeded: ~ts",
                                          [scrub_dn(UserDN, env(log))]),
                                      case call_ldap_fun(Fun, LDAP, UserDN) of
                                          {error, ldap_closed} ->
@@ -561,7 +585,7 @@ with_login(Creds, Servers, Opts, Fun, RetriesLeft) ->
                                          Other -> Other
                                      end;
                                  {error, invalidCredentials} ->
-                                     ?L1("bind returned \"invalid credentials\": ~s",
+                                     ?L1("bind returned \"invalid credentials\": ~ts",
                                          [scrub_dn(UserDN, env(log))]),
                                      {refused, UserDN, []};
                                  {error, ldap_closed} ->
@@ -571,7 +595,7 @@ with_login(Creds, Servers, Opts, Fun, RetriesLeft) ->
                                      purge_connection(Creds, Servers, Opts),
                                      with_login(Creds, Servers, Opts, Fun, RetriesLeft - 1);
                                  {error, E} ->
-                                     ?L1("bind error: ~p ~p",
+                                     ?L1("bind error: ~tp ~tp",
                                          [scrub_dn(UserDN, env(log)), E]),
                                      %% Do not report internal bind error to a client
                                      {error, ldap_bind_error}
@@ -583,7 +607,7 @@ with_login(Creds, Servers, Opts, Fun, RetriesLeft) ->
                  end,
             Result;
         Error ->
-            ?L1("connect error: ~p", [Error]),
+            ?L1("connect error: ~tp", [Error]),
             case Error of
                 {error, {gen_tcp_error, _}} -> Error;
                 %% Do not report internal connection error to a client
@@ -609,7 +633,7 @@ call_ldap_fun(Fun, LDAP, UserDN) ->
             %% ditto
             {error, {gen_tcp_error, E}};
         {error, E} ->
-            ?L1("evaluate error: ~s ~p", [scrub_dn(UserDN, env(log)), E]),
+            ?L1("evaluate error: ~ts ~tp", [scrub_dn(UserDN, env(log)), E]),
             {error, ldap_evaluate_error};
         Other -> Other
     end.
@@ -625,7 +649,7 @@ get_or_create_conn(IsAnon, Servers, Opts) ->
         {ok, Conn} ->
             Timeout = rabbit_misc:pget(idle_timeout, Opts, infinity),
             %% Defer the timeout by re-setting it.
-            set_connection_timeout(Key, Timeout),
+            _ = set_connection_timeout(Key, Timeout),
             {ok, {eldap_pooled, Conn}};
         error      ->
             {Timeout, EldapOpts} = case lists:keytake(idle_timeout, 1, Opts) of
@@ -640,7 +664,7 @@ get_or_create_conn(IsAnon, Servers, Opts) ->
                 %% Non-zero timeout, put it in the pool
                 {{ok, Conn}, Timeout} ->
                     put(ldap_conns, maps:put(Key, Conn, Conns)),
-                    set_connection_timeout(Key, Timeout),
+                    _ = set_connection_timeout(Key, Timeout),
                     {ok, {eldap_pooled, Conn}};
                 {Error, _} ->
                     Error
@@ -675,13 +699,31 @@ get_attributes(AttrName, [#eldap_entry{attributes = A}|Rem]) ->
 get_attributes(AttrName, [_|Rem])    -> get_attributes(AttrName, Rem).
 
 %% Format multiple attribute values for logging
-format_multi_attr(Attrs) ->
-    format_multi_attr(io_lib:printable_list(Attrs), Attrs).
+%% The attribute can be:
+%%  - an ascii string (Erlang recognizes it as a printable_list)
+%%  - an non-ascii string (Erlang does not recognize it as a printable_list)
+%%  - a list/array of strings, which may contain ascii only or non-ascii and ascii characters
+utf8_list_to_string(List) -> unicode:characters_to_list(list_to_binary(List)).
+join_utf8_list(Acc, Sep, List) -> Acc ++ utf8_list_to_string(List) ++ Sep.
 
+format_multi_attr_value(Acc, _Sep, []) -> Acc;
+format_multi_attr_value(Acc, Sep, [H|T]) when is_list(H) ->
+  [H1|_T1] = H,
+  case H1 of
+    V when is_list(V) -> format_multi_attr_value(join_utf8_list(Acc, Sep, V), Sep, T);
+    _ -> format_multi_attr_value(join_utf8_list(Acc, Sep, H), Sep, T)
+  end;
+format_multi_attr_value(Acc, Sep, List) -> join_utf8_list(Acc, Sep, List).
+
+format_multi_attr(Attrs) -> format_multi_attr(io_lib:printable_list(Attrs), Attrs).
 format_multi_attr(true, Attrs)                     -> Attrs;
-format_multi_attr(_,    Attrs) when is_list(Attrs) -> string:join(Attrs, "; ");
+format_multi_attr(_,    Attrs) when is_list(Attrs) ->
+  [H|_T] = Attrs,
+  case H of
+    V when is_list(V) -> format_multi_attr_value("", "; ", Attrs);
+    _ -> utf8_list_to_string(Attrs)
+  end;
 format_multi_attr(_,    Error)                     -> Error.
-
 
 %% In case of multiple attributes, check for equality bi-directionally
 is_multi_attr_member(Str1, Str2) ->
@@ -752,8 +794,8 @@ at_least(Ver) ->
 get_expected_env_str(Key, Default) ->
     V = case env(Key) of
             Default ->
-                rabbit_log_ldap:warning("rabbitmq_auth_backend_ldap configuration key '~p' is set to "
-                                        "the default value of '~p', expected to get a non-default value",
+                rabbit_log_ldap:warning("rabbitmq_auth_backend_ldap configuration key '~tp' is set to "
+                                        "the default value of '~tp', expected to get a non-default value",
                                         [Key, Default]),
                 Default;
             V0 ->
@@ -786,8 +828,9 @@ do_login(Username, PrebindUserDN, Password, VHost, LDAP) ->
                  _       -> PrebindUserDN
              end,
     User = #auth_user{username     = Username,
-                      impl         = #impl{user_dn  = UserDN,
-                                           password = Password}},
+                      impl         = fun() -> #impl{user_dn  = UserDN,
+                                                    password = Password}
+                                     end},
     DTQ = fun (LDAPn) -> do_tag_queries(Username, UserDN, User, VHost, LDAPn) end,
     TagRes = case env(other_bind) of
                  as_user -> DTQ(LDAP);
@@ -800,12 +843,12 @@ do_login(Username, PrebindUserDN, Password, VHost, LDAP) ->
 
 do_tag_queries(Username, UserDN, User, VHost, LDAP) ->
     {ok, [begin
-              ?L1("CHECK: does ~s have tag ~s?", [Username, Tag]),
+              ?L1("CHECK: does ~ts have tag ~ts?", [Username, Tag]),
               VhostArgs = vhost_if_defined(VHost),
               ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
               EvalArgs = [{username, Username}, {user_dn, UserDN}] ++ VhostArgs ++ ADArgs,
               R = evaluate(Q, EvalArgs, User, LDAP),
-              ?L1("DECISION: does ~s have tag ~s? ~p",
+              ?L1("DECISION: does ~ts have tag ~ts? ~tp",
                   [Username, Tag, R]),
               {Tag, R}
           end || {Tag, Q} <- env(tag_queries)]}.
@@ -848,17 +891,17 @@ dn_lookup(Username, LDAP) ->
         %% support #eldap_search_result before and after
         %% https://github.com/erlang/otp/pull/5538
         {ok, {eldap_search_result, [#eldap_entry{object_name = DN}], _Referrals}}->
-            ?L1("DN lookup: ~s -> ~s", [Username, DN]),
+            ?L1("DN lookup: ~ts -> ~ts", [Username, DN]),
             DN;
         {ok, {eldap_search_result, [#eldap_entry{object_name = DN}], _Referrals, _Controls}}->
-            ?L1("DN lookup: ~s -> ~s", [Username, DN]),
+            ?L1("DN lookup: ~ts -> ~ts", [Username, DN]),
             DN;
         {ok, {eldap_search_result, Entries, _Referrals}} ->
-            rabbit_log_ldap:warning("Searching for DN for ~s, got back ~p",
+            rabbit_log_ldap:warning("Searching for DN for ~ts, got back ~tp",
                                [Filled, Entries]),
             Filled;
         {ok, {eldap_search_result, Entries, _Referrals, _Controls}} ->
-            rabbit_log_ldap:warning("Searching for DN for ~s, got back ~p",
+            rabbit_log_ldap:warning("Searching for DN for ~ts, got back ~tp",
                                [Filled, Entries]),
             Filled;
         {error, _} = E ->
@@ -882,7 +925,8 @@ creds(User) -> creds(User, env(other_bind)).
 
 creds(none, as_user) ->
     {error, "'other_bind' set to 'as_user' but no password supplied"};
-creds(#auth_user{impl = #impl{user_dn = UserDN, password = PW}}, as_user) ->
+creds(#auth_user{impl = ImplFun}, as_user) ->
+    #impl{user_dn = UserDN, password = PW} = ImplFun(),
     {ok, {UserDN, PW}};
 creds(_, Creds) ->
     {ok, Creds}.
@@ -940,9 +984,9 @@ log(Fmt,  Args) -> case env(log) of
                    end.
 
 fill(Fmt, Args) ->
-    ?L2("filling template \"~s\" with~n            ~p", [Fmt, Args]),
+    ?L2("filling template \"~ts\" with~n            ~tp", [Fmt, Args]),
     R = rabbit_auth_backend_ldap_util:fill(Fmt, Args),
-    ?L2("template result: \"~s\"", [R]),
+    ?L2("template result: \"~ts\"", [R]),
     R.
 
 log_result({ok, #auth_user{}}) -> ok;
@@ -951,12 +995,12 @@ log_result(false)              -> denied;
 log_result({refused, _, _})    -> denied;
 log_result(E)                  -> E.
 
-log_user(#auth_user{username = U}) -> rabbit_misc:format("\"~s\"", [U]).
+log_user(#auth_user{username = U}) -> rabbit_misc:format("\"~ts\"", [U]).
 
 log_vhost(Args) ->
-    rabbit_misc:format("access to vhost \"~s\"", [pget(vhost, Args)]).
+    rabbit_misc:format("access to vhost \"~ts\"", [pget(vhost, Args)]).
 
 log_resource(Args) ->
-    rabbit_misc:format("~s permission for ~s \"~s\" in \"~s\"",
+    rabbit_misc:format("~ts permission for ~ts \"~ts\" in \"~ts\"",
                        [pget(permission, Args), pget(resource, Args),
                         pget(name, Args), pget(vhost, Args)]).

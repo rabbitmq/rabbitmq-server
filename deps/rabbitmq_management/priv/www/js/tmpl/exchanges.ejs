@@ -1,13 +1,13 @@
 <h1>Exchanges</h1>
-<div class="section">
+<div class="section" id="exchanges-paging-section">
    <%= paginate_ui(exchanges, 'exchanges') %>
-</div> 
-<div class="updatable">
+</div>
+<div class="updatable" id="exchanges-table-section">
 <% if (exchanges.items.length > 0) { %>
 <table class="list">
  <thead>
   <tr>
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
    <th><%= fmt_sort('Virtual host', 'vhost') %></th>
 <% } %>
    <th><%= fmt_sort('Name',         'name') %></th>
@@ -42,7 +42,7 @@
     var exchange = exchanges.items[i];
 %>
   <tr<%= alt_rows(i, exchange.arguments)%>>
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
    <td><%= fmt_string(exchange.vhost) %></td>
 <% } %>
    <td><%= link_exchange(exchange.vhost, exchange.name, exchange.arguments) %></td>
@@ -84,7 +84,8 @@
   </div>
 </div>
 
-<div class="section-hidden">
+<% if (ac.canAccessVhosts()) { %>
+<div class="section-hidden" id="add-new-exchange">
   <h2>Add a new exchange</h2>
   <div class="hider">
     <form action="#/exchanges" method="put">
@@ -166,4 +167,5 @@
       <input type="submit" value="Add exchange"/>
     </form>
   </div>
+  <% } %>
 </div>

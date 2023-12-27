@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_epmd_monitor).
@@ -84,19 +84,19 @@ check_epmd(State = #state{mod  = Mod,
     {ok, State#state{port = Port1}}.
 
 handle_port_please(init, noport, Me, Port) ->
-    rabbit_log:info("epmd does not know us, re-registering as ~s", [Me]),
+    rabbit_log:info("epmd does not know us, re-registering as ~ts", [Me]),
     {ok, Port};
 handle_port_please(check, noport, Me, Port) ->
-    rabbit_log:warning("epmd does not know us, re-registering ~s at port ~b", [Me, Port]),
+    rabbit_log:warning("epmd does not know us, re-registering ~ts at port ~b", [Me, Port]),
     {ok, Port};
 handle_port_please(_, closed, _Me, Port) ->
     rabbit_log:error("epmd monitor failed to retrieve our port from epmd: closed"),
     {ok, Port};
 handle_port_please(init, {port, NewPort, _Version}, _Me, _Port) ->
-    rabbit_log:info("epmd monitor knows us, inter-node communication (distribution) port: ~p", [NewPort]),
+    rabbit_log:info("epmd monitor knows us, inter-node communication (distribution) port: ~tp", [NewPort]),
     {ok, NewPort};
 handle_port_please(check, {port, NewPort, _Version}, _Me, _Port) ->
     {ok, NewPort};
 handle_port_please(_, {error, Error}, _Me, Port) ->
-    rabbit_log:error("epmd monitor failed to retrieve our port from epmd: ~p", [Error]),
+    rabbit_log:error("epmd monitor failed to retrieve our port from epmd: ~tp", [Error]),
     {ok, Port}.

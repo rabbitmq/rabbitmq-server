@@ -2,9 +2,8 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
-
 -module(rabbit_auth_backend_oauth2).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -18,7 +17,7 @@
          check_topic_access/4, check_token/1, state_can_expire/0, update_state/2]).
 
 % for testing
--export([post_process_payload/1]).
+-export([post_process_payload/1, get_expanded_scopes/2]).
 
 -import(rabbit_data_coercion, [to_map/1]).
 
@@ -34,6 +33,7 @@
 
 -define(APP, rabbitmq_auth_backend_oauth2).
 -define(RESOURCE_SERVER_ID, resource_server_id).
+-define(SCOPE_PREFIX, scope_prefix).
 %% a term defined for Rich Authorization Request tokens to identify a RabbitMQ permission
 -define(RESOURCE_SERVER_TYPE, resource_server_type).
 %% verify server_server_id aud field is on the aud field
@@ -42,6 +42,9 @@
 -define(COMPLEX_CLAIM_APP_ENV_KEY, extra_scopes_source).
 %% scope aliases map "role names" to a set of scopes
 -define(SCOPE_MAPPINGS_APP_ENV_KEY, scope_aliases).
+%% list of JWT claims (such as <<"sub">>) used to determine the username
+-define(PREFERRED_USERNAME_CLAIMS, preferred_username_claims).
+-define(DEFAULT_PREFERRED_USERNAME_CLAIMS, [<<"sub">>, <<"client_id">>]).
 
 %%
 %% Key JWT fields
@@ -74,29 +77,29 @@ user_login_authorization(Username, AuthProps) ->
         Else                          -> Else
     end.
 
-check_vhost_access(#auth_user{impl = DecodedToken},
+check_vhost_access(#auth_user{impl = DecodedTokenFun},
                    VHost, _AuthzData) ->
-    with_decoded_token(DecodedToken,
-        fun() ->
-            Scopes      = get_scopes(DecodedToken),
+    with_decoded_token(DecodedTokenFun(),
+        fun(_Token) ->
+            Scopes      = get_scopes(DecodedTokenFun()),
             ScopeString = rabbit_oauth2_scope:concat_scopes(Scopes, ","),
-            rabbit_log:debug("Matching virtual host '~s' against the following scopes: ~s", [VHost, ScopeString]),
+            rabbit_log:debug("Matching virtual host '~ts' against the following scopes: ~ts", [VHost, ScopeString]),
             rabbit_oauth2_scope:vhost_access(VHost, Scopes)
         end).
 
-check_resource_access(#auth_user{impl = DecodedToken},
+check_resource_access(#auth_user{impl = DecodedTokenFun},
                       Resource, Permission, _AuthzContext) ->
-    with_decoded_token(DecodedToken,
-        fun() ->
-            Scopes = get_scopes(DecodedToken),
+    with_decoded_token(DecodedTokenFun(),
+        fun(Token) ->
+            Scopes = get_scopes(Token),
             rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes)
         end).
 
-check_topic_access(#auth_user{impl = DecodedToken},
+check_topic_access(#auth_user{impl = DecodedTokenFun},
                    Resource, Permission, Context) ->
-    with_decoded_token(DecodedToken,
-        fun() ->
-            Scopes = get_scopes(DecodedToken),
+    with_decoded_token(DecodedTokenFun(),
+        fun(Token) ->
+            Scopes = get_expanded_scopes(Token, Resource),
             rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes)
         end).
 
@@ -109,17 +112,17 @@ update_state(AuthUser, NewToken) ->
       {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
         {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid"};
       {refused, Err} ->
-        {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~p", [Err])};
+        {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~tp", [Err])};
       {ok, DecodedToken} ->
           Tags = tags_from(DecodedToken),
 
           {ok, AuthUser#auth_user{tags = Tags,
-                                  impl = DecodedToken}}
+                                  impl = fun() -> DecodedToken end}}
   end.
 
 %%--------------------------------------------------------------------
 
-authenticate(Username0, AuthProps0) ->
+authenticate(_, AuthProps0) ->
     AuthProps = to_map(AuthProps0),
     Token     = token_from_context(AuthProps),
     case check_token(Token) of
@@ -128,19 +131,21 @@ authenticate(Username0, AuthProps0) ->
         {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
           {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
         {refused, Err} ->
-          {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
+          {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
         {ok, DecodedToken} ->
-            Func = fun() ->
-                        Username = username_from(Username0, DecodedToken),
-                        Tags     = tags_from(DecodedToken),
+            Func = fun(Token0) ->
+                        Username = username_from(
+                          application:get_env(?APP, ?PREFERRED_USERNAME_CLAIMS, []),
+                          Token0),
+                        Tags     = tags_from(Token0),
 
                         {ok, #auth_user{username = Username,
                                         tags = Tags,
-                                        impl = DecodedToken}}
+                                        impl = fun() -> Token0 end}}
                    end,
             case with_decoded_token(DecodedToken, Func) of
                 {error, Err} ->
-                    {refused, "Authentication using an OAuth 2/JWT token failed: ~p", [Err]};
+                    {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
                 Else ->
                     Else
             end
@@ -148,7 +153,7 @@ authenticate(Username0, AuthProps0) ->
 
 with_decoded_token(DecodedToken, Fun) ->
     case validate_token_expiry(DecodedToken) of
-        ok               -> Fun();
+        ok               -> Fun(DecodedToken);
         {error, Msg} = Err ->
             rabbit_log:error(Msg),
             Err
@@ -157,12 +162,22 @@ with_decoded_token(DecodedToken, Fun) ->
 validate_token_expiry(#{<<"exp">> := Exp}) when is_integer(Exp) ->
     Now = os:system_time(seconds),
     case Exp =< Now of
-        true  -> {error, rabbit_misc:format("Provided JWT token has expired at timestamp ~p (validated at ~p)", [Exp, Now])};
+        true  -> {error, rabbit_misc:format("Provided JWT token has expired at timestamp ~tp (validated at ~tp)", [Exp, Now])};
         false -> ok
     end;
 validate_token_expiry(#{}) -> ok.
 
--spec check_token(binary()) -> {ok, map()} | {error, term()}.
+-spec check_token(binary() | map()) ->
+          {'ok', map()} |
+          {'error', term() }|
+          {'refused',
+           'signature_invalid' |
+           {'error', term()} |
+           {'invalid_aud', term()}}.
+
+check_token(DecodedToken) when is_map(DecodedToken) ->
+    {ok, DecodedToken};
+
 check_token(Token) ->
     Settings = application:get_all_env(?APP),
     case uaa_jwt:decode_and_verify(Token) of
@@ -426,7 +441,7 @@ map_rich_auth_permissions_to_scopes(ResourceServerId,
   [ #{?ACTIONS_FIELD := Actions, ?LOCATIONS_FIELD := Locations }  | T ], Acc) ->
   ResourcePaths = map_locations_to_permission_resource_paths(ResourceServerId, Locations),
   case ResourcePaths of
-    [] -> Acc;
+    [] -> map_rich_auth_permissions_to_scopes(ResourceServerId, T, Acc);
     _ -> Scopes = case Actions of
           undefined -> [];
           ActionsAsList when is_list(ActionsAsList) ->
@@ -481,26 +496,31 @@ post_process_payload_in_rich_auth_request_format(#{<<"authorization_details">> :
 
 
 
-validate_payload(#{?SCOPE_JWT_FIELD := _Scope } = DecodedToken) ->
+validate_payload(DecodedToken) ->
     ResourceServerEnv = application:get_env(?APP, ?RESOURCE_SERVER_ID, <<>>),
     ResourceServerId = rabbit_data_coercion:to_binary(ResourceServerEnv),
-    validate_payload(DecodedToken, ResourceServerId).
+    ScopePrefix = application:get_env(?APP, ?SCOPE_PREFIX, <<ResourceServerId/binary, ".">>),
+    validate_payload(DecodedToken, ResourceServerId, ScopePrefix).
 
-validate_payload(#{?SCOPE_JWT_FIELD := Scope, ?AUD_JWT_FIELD := Aud} = DecodedToken, ResourceServerId) ->
+validate_payload(#{?SCOPE_JWT_FIELD := Scope, ?AUD_JWT_FIELD := Aud} = DecodedToken, ResourceServerId, ScopePrefix) ->
     case check_aud(Aud, ResourceServerId) of
-        ok           -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ResourceServerId)}};
+        ok           -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ScopePrefix)}};
         {error, Err} -> {refused, {invalid_aud, Err}}
     end;
-validate_payload(#{?SCOPE_JWT_FIELD := Scope} = DecodedToken, ResourceServerId) ->
+validate_payload(#{?AUD_JWT_FIELD := Aud} = DecodedToken, ResourceServerId, _ScopePrefix) ->
+    case check_aud(Aud, ResourceServerId) of
+        ok           -> {ok, DecodedToken};
+        {error, Err} -> {refused, {invalid_aud, Err}}
+    end;
+validate_payload(#{?SCOPE_JWT_FIELD := Scope} = DecodedToken, _ResourceServerId, ScopePrefix) ->
   case application:get_env(?APP, ?VERIFY_AUD, true) of
     true -> {error, {badarg, {aud_field_is_missing}}};
-    false -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ResourceServerId)}}
+    false -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ScopePrefix)}}
   end.
 
 filter_scopes(Scopes, <<"">>) -> Scopes;
-filter_scopes(Scopes, ResourceServerId)  ->
-    PrefixPattern = <<ResourceServerId/binary, ".">>,
-    matching_scopes_without_prefix(Scopes, PrefixPattern).
+filter_scopes(Scopes, ScopePrefix)  ->
+    matching_scopes_without_prefix(Scopes, ScopePrefix).
 
 check_aud(_, <<>>)    -> ok;
 check_aud(Aud, ResourceServerId) ->
@@ -519,11 +539,67 @@ check_aud(Aud, ResourceServerId) ->
 
 %%--------------------------------------------------------------------
 
-get_scopes(#{?SCOPE_JWT_FIELD := Scope}) -> Scope.
+get_scopes(#{?SCOPE_JWT_FIELD := Scope}) -> Scope;
+get_scopes(#{}) -> [].
+
+-spec get_expanded_scopes(map(), #resource{}) -> [binary()].
+get_expanded_scopes(Token, #resource{virtual_host = VHost}) ->
+  Context = #{ token => Token , vhost => VHost},
+  case maps:get(?SCOPE_JWT_FIELD, Token, []) of
+    [] -> [];
+    Scopes -> lists:map(fun(Scope) -> list_to_binary(parse_scope(Scope, Context)) end, Scopes)
+  end.
+
+parse_scope(Scope, Context) ->
+  { Acc0, _} = lists:foldl(fun(Elem, { Acc, Stage }) -> parse_scope_part(Elem, Acc, Stage, Context) end,
+    { [], undefined }, re:split(Scope,"([\{.*\}])",[{return,list},trim])),
+  Acc0.
+
+parse_scope_part(Elem, Acc, Stage, Context) ->
+  case Stage of
+    error -> {Acc, error};
+    undefined ->
+      case Elem of
+        "{" -> { Acc, fun capture_var_name/3};
+        Value -> { Acc ++ Value, Stage}
+      end;
+    _ -> Stage(Elem, Acc, Context)
+  end.
+
+capture_var_name(Elem, Acc, #{ token := Token, vhost := Vhost}) ->
+  { Acc ++ resolve_scope_var(Elem, Token, Vhost), fun expect_closing_var/3}.
+
+expect_closing_var("}" , Acc, _Context) -> { Acc , undefined };
+expect_closing_var(_ , _Acc, _Context) -> {"", error}.
+
+resolve_scope_var(Elem, Token, Vhost) ->
+  case Elem of
+    "vhost" -> binary_to_list(Vhost);
+    _ ->
+      ElemAsBinary = list_to_binary(Elem),
+      binary_to_list(case maps:get(ElemAsBinary, Token, ElemAsBinary) of
+                          Value when is_binary(Value) -> Value;
+                          _ -> ElemAsBinary
+                        end)
+  end.
+
+%% A token may be present in the password credential or in the rabbit_auth_backend_oauth2
+%% credential.  The former is the most common scenario for the first time authentication.
+%% However, there are scenarios where the same user (on the same connection) is authenticated
+%% more than once. When this scenario occurs, we extract the token from the credential
+%% called rabbit_auth_backend_oauth2 whose value is the Decoded token returned during the
+%% first authentication.
 
 -spec token_from_context(map()) -> binary() | undefined.
 token_from_context(AuthProps) ->
-    maps:get(password, AuthProps, undefined).
+    case maps:get(password, AuthProps, undefined) of
+        undefined ->
+            case maps:get(rabbit_auth_backend_oauth2, AuthProps, undefined) of
+                undefined -> undefined;
+                Impl -> Impl()
+            end;
+        Token -> Token
+    end.
 
 %% Decoded tokens look like this:
 %%
@@ -542,24 +618,32 @@ token_from_context(AuthProps) ->
 %%   <<"sub">>         => <<"rabbit_client">>,
 %%   <<"zid">>         => <<"uaa">>}
 
--spec username_from(binary(), map()) -> binary() | undefined.
-username_from(ClientProvidedUsername, DecodedToken) ->
-    ClientId = uaa_jwt:client_id(DecodedToken, undefined),
-    Sub      = uaa_jwt:sub(DecodedToken, undefined),
+-spec username_from(list(), map()) -> binary() | undefined.
+username_from(PreferredUsernameClaims, DecodedToken) ->
+    UsernameClaims = append_or_return_default(PreferredUsernameClaims, ?DEFAULT_PREFERRED_USERNAME_CLAIMS),
+    ResolvedUsernameClaims = lists:filtermap(fun(Claim) -> find_claim_in_token(Claim, DecodedToken) end, UsernameClaims),
+    Username = case ResolvedUsernameClaims of
+      [ ] -> <<"unknown">>;
+      [ _One ] -> _One;
+      [ _One | _ ] -> _One
+    end,
+    rabbit_log:debug("Computing username from client's JWT token: ~ts -> ~ts ",
+      [lists:flatten(io_lib:format("~p",[ResolvedUsernameClaims])), Username]),
+    Username.
 
-    rabbit_log:debug("Computing username from client's JWT token, client ID: '~s', sub: '~s'",
-                     [ClientId, Sub]),
+append_or_return_default(ListOrBinary, Default) ->
+  case ListOrBinary of
+    VarList when is_list(VarList) -> VarList ++ Default;
+    VarBinary when is_binary(VarBinary) -> [VarBinary] ++ Default;
+    _ -> Default
+  end.
 
-    case uaa_jwt:client_id(DecodedToken, Sub) of
-        undefined ->
-            case ClientProvidedUsername of
-                undefined -> undefined;
-                <<>>      -> undefined;
-                _Other    -> ClientProvidedUsername
-            end;
-        Value     ->
-            Value
-    end.
+find_claim_in_token(Claim, Token) ->
+  case maps:get(Claim, Token, undefined) of
+    undefined -> false;
+    ClaimValue when is_binary(ClaimValue) -> {true, ClaimValue};
+    _ -> false
+  end.
 
 -define(TAG_SCOPE_PREFIX, <<"tag:">>).
 

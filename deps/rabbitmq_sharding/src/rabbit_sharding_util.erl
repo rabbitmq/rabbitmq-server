@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_sharding_util).
@@ -42,7 +42,7 @@ exchange_bin(#resource{name = XBin}) -> XBin.
 
 make_queue_name(QBin, NodeBin, QNum) ->
     %% we do this to prevent unprintable characters in queue names
-    QNumBin = list_to_binary(lists:flatten(io_lib:format("~p", [QNum]))),
+    QNumBin = list_to_binary(lists:flatten(io_lib:format("~tp", [QNum]))),
     <<"sharding: ", QBin/binary, " - ", NodeBin/binary, " - ", QNumBin/binary>>.
 
 a2b(A) -> list_to_binary(atom_to_list(A)).

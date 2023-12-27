@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 # Default output implementation for plugin commands
 defmodule RabbitMQ.CLI.Plugins.ErrorOutput do
@@ -12,9 +12,7 @@ defmodule RabbitMQ.CLI.Plugins.ErrorOutput do
     quote do
       def output({:error, {:enabled_plugins_mismatch, cli_path, node_path}}, opts) do
         {:error, ExitCodes.exit_dataerr(),
-         "Could not update enabled plugins file at #{cli_path}: target node #{opts[:node]} uses a different path (#{
-           node_path
-         })"}
+         "Could not update enabled plugins file at #{cli_path}: target node #{opts[:node]} uses a different path (#{node_path})"}
       end
 
       def output({:error, {:cannot_read_enabled_plugins_file, path, :eacces}}, _opts) do

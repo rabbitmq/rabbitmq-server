@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_node_monitor).
@@ -12,6 +12,7 @@
 -export([start_link/0]).
 -export([running_nodes_filename/0,
          cluster_status_filename/0, coordination_filename/0,
+         stream_filename/0,
          quorum_filename/0, default_quorum_filename/0,
          prepare_cluster_status_files/0,
          write_cluster_status/1, read_cluster_status/0,
@@ -33,6 +34,7 @@
 -define(NODE_REPLY_TIMEOUT, 5000).
 -define(RABBIT_UP_RPC_TIMEOUT, 2000).
 -define(RABBIT_DOWN_PING_INTERVAL, 1000).
+-define(NODE_DISCONNECTION_TIMEOUT, 1000).
 
 -record(state, {monitors, partitions, subscribers, down_ping_timer,
                 keepalive_timer, autoheal, guid, node_guids}).
@@ -62,26 +64,29 @@ start_link() -> gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 -spec running_nodes_filename() -> string().
 
 running_nodes_filename() ->
-    filename:join(rabbit_mnesia:dir(), "nodes_running_at_shutdown").
+    filename:join(rabbit:data_dir(), "nodes_running_at_shutdown").
 
 -spec cluster_status_filename() -> string().
 
 cluster_status_filename() ->
-    filename:join(rabbit_mnesia:dir(), "cluster_nodes.config").
+    filename:join(rabbit:data_dir(), "cluster_nodes.config").
 
 coordination_filename() ->
-    filename:join(rabbit_mnesia:dir(), "coordination").
+    filename:join(rabbit:data_dir(), "coordination").
+
+stream_filename() ->
+    filename:join(rabbit:data_dir(), "stream").
 
 quorum_filename() ->
     ra_env:data_dir().
 
 default_quorum_filename() ->
-    filename:join(rabbit_mnesia:dir(), "quorum").
+    filename:join(rabbit:data_dir(), "quorum").
 
 -spec prepare_cluster_status_files() -> 'ok' | no_return().
 
 prepare_cluster_status_files() ->
-    rabbit_mnesia:ensure_mnesia_dir(),
+    rabbit_db:ensure_dir_exists(),
     RunningNodes1 = case try_read_file(running_nodes_filename()) of
                         {ok, [Nodes]} when is_list(Nodes) -> Nodes;
                         {ok, Other}                       -> corrupt_cluster_status_files(Other);
@@ -163,16 +168,16 @@ notify_node_up() ->
 
 notify_joined_cluster() ->
     NewMember = node(),
-    Nodes = rabbit_nodes:all_running() -- [NewMember],
+    Nodes = rabbit_nodes:list_running() -- [NewMember],
     gen_server:abcast(Nodes, ?SERVER,
-                      {joined_cluster, node(), rabbit_mnesia:node_type()}),
+                      {joined_cluster, node(), rabbit_db_cluster:node_type()}),
 
     ok.
 
 -spec notify_left_cluster(node()) -> 'ok'.
 
 notify_left_cluster(Node) ->
-    Nodes = rabbit_nodes:all_running(),
+    Nodes = rabbit_nodes:list_running(),
     gen_server:abcast(Nodes, ?SERVER, {left_cluster, Node}),
     ok.
 
@@ -305,11 +310,14 @@ find_blocked_global_peers() ->
     Snapshot1 = snapshot_global_dict(),
     timer:sleep(10_000),
     Snapshot2 = snapshot_global_dict(),
+    logger:debug("global's sync tags 10s ago: ~p~n"
+                 "global's sync tags now: ~p",
+                 [Snapshot1, Snapshot2]),
     find_blocked_global_peers1(Snapshot2, Snapshot1).
 
 snapshot_global_dict() ->
-    {status, _, _, [Dict | _]} = sys:get_status(global_name_server),
-    [E || {{sync_tag_his, _}, _} = E <- Dict].
+    {status, _Pid, _Mod, [PDict | _]} = sys:get_status(global_name_server),
+    [E || {{sync_tag_his, _}, _} = E <- PDict].
 
 find_blocked_global_peers1([{{sync_tag_his, Peer}, _} = Item | Rest],
   OlderSnapshot) ->
@@ -323,19 +331,48 @@ find_blocked_global_peers1([], _) ->
 
 unblock_global_peer(PeerNode) ->
     ThisNode = node(),
-    PeerState = rpc:call(PeerNode, sys, get_status, [global_name_server]),
+
+    PeerState = erpc:call(PeerNode, sys, get_state, [global_name_server]),
+    ThisState = sys:get_state(global_name_server),
+    PeerToThisCid = connection_id(PeerState, ThisNode),
+    ThisToPeerCid = connection_id(ThisState, PeerNode),
+
+    logger:info(
+      "global hang workaround: faking nodedown / nodeup between peer node ~s "
+      "(connection ID to us: ~p) and our node ~s (connection ID to peer: ~p)",
+      [PeerNode, PeerToThisCid, ThisNode, ThisToPeerCid]),
     logger:debug(
-      "Global hang workaround: global state on ~s seems inconsistent~n"
-      " * Peer global state:  ~p~n"
-      " * Local global state: ~p~n"
-      "Faking nodedown/nodeup between ~s and ~s",
-      [PeerNode, PeerState, sys:get_status(global_name_server),
-       PeerNode, ThisNode]),
-    {global_name_server, ThisNode} ! {nodedown, PeerNode},
-    {global_name_server, PeerNode} ! {nodedown, ThisNode},
-    {global_name_server, ThisNode} ! {nodeup, PeerNode},
-    {global_name_server, PeerNode} ! {nodeup, ThisNode},
+      "peer global state: ~tp~nour global state: ~tp",
+      [erpc:call(PeerNode, sys, get_status, [global_name_server]),
+       sys:get_status(global_name_server)]),
+
+    {ThisDownMsg, ThisUpMsg} = messages(ThisToPeerCid, PeerNode),
+    {PeerDownMsg, PeerUpMsg} = messages(PeerToThisCid, ThisNode),
+    {global_name_server, ThisNode} ! ThisDownMsg,
+    {global_name_server, PeerNode} ! PeerDownMsg,
+    {global_name_server, ThisNode} ! ThisUpMsg,
+    {global_name_server, PeerNode} ! PeerUpMsg,
     ok.
+
+connection_id(State, Node) ->
+    case element(3, State) of
+        #{{connection_id, Node} := ConnectionId} ->
+            ConnectionId;
+        _ ->
+            undefined
+    end.
+
+%% The nodedown and nodeup message format handled by global differs due to
+%% https://github.com/erlang/otp/commit/9274e89857d294f85702e0d5d42fb196e8e12d6a
+messages(undefined, Node) ->
+    %% OTP < 25.1
+    {{nodedown, Node},
+     {nodeup, Node}};
+messages(ConnectionId, Node) ->
+    %% OTP >= 25.1
+    Cid = #{connection_id => ConnectionId},
+    {{nodedown, Node, Cid},
+     {nodeup, Node, Cid}}.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -347,18 +384,28 @@ init([]) ->
     %% writing out the cluster status files - bad things can then
     %% happen.
     process_flag(trap_exit, true),
-    net_kernel:monitor_nodes(true, [nodedown_reason]),
-    {ok, _} = mnesia:subscribe(system),
-    %% If the node has been restarted, Mnesia can trigger a system notification
-    %% before the monitor subscribes to receive them. To avoid autoheal blocking due to
-    %% the inconsistent database event never arriving, we being monitoring all running
-    %% nodes as early as possible. The rest of the monitoring ops will only be triggered
-    %% when notifications arrive.
-    Nodes = possibly_partitioned_nodes(),
-    startup_log(Nodes),
-    Monitors = lists:foldl(fun(Node, Monitors0) ->
-                                   pmon:monitor({rabbit, Node}, Monitors0)
-                           end, pmon:new(), Nodes),
+    _ = net_kernel:monitor_nodes(true, [nodedown_reason]),
+    Monitors = case rabbit_khepri:is_enabled() of
+                   true ->
+                       startup_log(),
+                       pmon:new();
+                   false ->
+                       {ok, _} = mnesia:subscribe(system),
+
+                       %% If the node has been restarted, Mnesia can trigger a
+                       %% system notification before the monitor subscribes to
+                       %% receive them. To avoid autoheal blocking due to the
+                       %% inconsistent database event never arriving, we being
+                       %% monitoring all running nodes as early as possible.
+                       %% The rest of the monitoring ops will only be
+                       %% triggered when notifications arrive.
+                       Nodes = possibly_partitioned_nodes(),
+                       startup_log(Nodes),
+                       lists:foldl(
+                         fun(Node, Monitors0) ->
+                                 pmon:monitor({rabbit, Node}, Monitors0)
+                         end, pmon:new(), Nodes)
+               end,
     {ok, ensure_keepalive_timer(#state{monitors    = Monitors,
                                        subscribers = pmon:new(),
                                        partitions  = [],
@@ -377,11 +424,11 @@ handle_call(_Request, _From, State) ->
     {noreply, State}.
 
 handle_cast(notify_node_up, State = #state{guid = GUID}) ->
-    Nodes = rabbit_nodes:all_running() -- [node()],
+    Nodes = rabbit_nodes:list_reachable() -- [node()],
     gen_server:abcast(Nodes, ?SERVER,
-                      {node_up, node(), rabbit_mnesia:node_type(), GUID}),
+                      {node_up, node(), rabbit_db_cluster:node_type(), GUID}),
     %% register other active rabbits with this rabbit
-    DiskNodes = rabbit_mnesia:cluster_nodes(disc),
+    DiskNodes = rabbit_db_cluster:disc_members(),
     [gen_server:cast(?SERVER, {node_up, N, case lists:member(N, DiskNodes) of
                                                true  -> disc;
                                                false -> ram
@@ -434,7 +481,7 @@ handle_cast({announce_guid, Node, GUID}, State = #state{node_guids = GUIDs}) ->
 handle_cast({check_partial_partition, Node, Rep, NodeGUID, MyGUID, RepGUID},
             State = #state{guid       = MyGUID,
                            node_guids = GUIDs}) ->
-    case lists:member(Node, rabbit_nodes:all_running()) andalso
+    case lists:member(Node, rabbit_mnesia:cluster_nodes(running)) andalso
         maps:find(Node, GUIDs) =:= {ok, NodeGUID} of
         true  -> spawn_link( %%[1]
                    fun () ->
@@ -442,16 +489,17 @@ handle_cast({check_partial_partition, Node, Rep, NodeGUID, MyGUID, RepGUID},
                                {badrpc, _} -> ok;
                                NodeGUID ->
                                    rabbit_log:warning("Received a 'DOWN' message"
-                                                      " from ~p but still can"
+                                                      " from ~tp but still can"
                                                       " communicate with it ",
                                                       [Node]),
                                    cast(Rep, {partial_partition,
                                                          Node, node(), RepGUID});
                                 _ ->
-                                   rabbit_log:warning("Node ~p was restarted", [Node]),
+                                   rabbit_log:warning("Node ~tp was restarted", [Node]),
                                    ok
                            end
-                   end);
+                   end),
+                 ok;
         false -> ok
     end,
     {noreply, State};
@@ -473,8 +521,8 @@ handle_cast({check_partial_partition, _Node, _Reporter,
 handle_cast({partial_partition, NotReallyDown, Proxy, MyGUID},
             State = #state{guid = MyGUID}) ->
     FmtBase = "Partial partition detected:~n"
-        " * We saw DOWN from ~s~n"
-        " * We can still see ~s which can see ~s~n",
+        " * We saw DOWN from ~ts~n"
+        " * We can still see ~ts which can see ~ts~n",
     ArgsBase = [NotReallyDown, Proxy, NotReallyDown],
     case application:get_env(rabbit, cluster_partition_handling) of
         {ok, pause_minority} ->
@@ -488,7 +536,7 @@ handle_cast({partial_partition, NotReallyDown, Proxy, MyGUID},
             case in_preferred_partition(PreferredNodes) of
                 true  -> rabbit_log:error(
                            FmtBase ++ "We will therefore intentionally "
-                           "disconnect from ~s", ArgsBase ++ [Proxy]),
+                           "disconnect from ~ts", ArgsBase ++ [Proxy]),
                          upgrade_to_full_partition(Proxy);
                 false -> rabbit_log:info(
                            FmtBase ++ "We are about to pause, no need "
@@ -497,7 +545,7 @@ handle_cast({partial_partition, NotReallyDown, Proxy, MyGUID},
             {noreply, State};
         {ok, _} ->
             rabbit_log:error(
-              FmtBase ++ "We will therefore intentionally disconnect from ~s",
+              FmtBase ++ "We will therefore intentionally disconnect from ~ts",
               ArgsBase ++ [Proxy]),
             upgrade_to_full_partition(Proxy),
             {noreply, State}
@@ -510,7 +558,7 @@ handle_cast({partial_partition, _GUID, _Reporter, _Proxy}, State) ->
 %% messages reliably when another node disconnects from us. Therefore
 %% we are told just before the disconnection so we can reciprocate.
 handle_cast({partial_partition_disconnect, Other}, State) ->
-    rabbit_log:error("Partial partition disconnect from ~s", [Other]),
+    rabbit_log:error("Partial partition disconnect from ~ts", [Other]),
     disconnect(Other),
     {noreply, State};
 
@@ -519,14 +567,19 @@ handle_cast({partial_partition_disconnect, Other}, State) ->
 %% mnesia propagation.
 handle_cast({node_up, Node, NodeType},
             State = #state{monitors = Monitors}) ->
-    rabbit_log:info("rabbit on node ~p up", [Node]),
-    {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    write_cluster_status({add_node(Node, AllNodes),
-                          case NodeType of
-                              disc -> add_node(Node, DiscNodes);
-                              ram  -> DiscNodes
-                          end,
-                          add_node(Node, RunningNodes)}),
+    rabbit_log:info("rabbit on node ~tp up", [Node]),
+    case rabbit_khepri:is_enabled() of
+        true ->
+            ok;
+        false ->
+            {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
+            write_cluster_status({add_node(Node, AllNodes),
+                                  case NodeType of
+                                      disc -> add_node(Node, DiscNodes);
+                                      ram  -> DiscNodes
+                                  end,
+                                  add_node(Node, RunningNodes)})
+    end,
     ok = handle_live_rabbit(Node),
     Monitors1 = case pmon:is_monitored({rabbit, Node}, Monitors) of
                     true ->
@@ -537,21 +590,32 @@ handle_cast({node_up, Node, NodeType},
     {noreply, maybe_autoheal(State#state{monitors = Monitors1})};
 
 handle_cast({joined_cluster, Node, NodeType}, State) ->
-    {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    write_cluster_status({add_node(Node, AllNodes),
-                          case NodeType of
-                              disc -> add_node(Node, DiscNodes);
-                              ram  -> DiscNodes
-                          end,
-                          RunningNodes}),
-    rabbit_log:debug("Node '~p' has joined the cluster", [Node]),
+    case rabbit_khepri:is_enabled() of
+        true ->
+            ok;
+        false ->
+            {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
+            write_cluster_status({add_node(Node, AllNodes),
+                                  case NodeType of
+                                      disc -> add_node(Node, DiscNodes);
+                                      ram  -> DiscNodes
+                                  end,
+                                  RunningNodes})
+    end,
+    rabbit_log:debug("Node '~tp' has joined the cluster", [Node]),
     rabbit_event:notify(node_added, [{node, Node}]),
     {noreply, State};
 
 handle_cast({left_cluster, Node}, State) ->
-    {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    write_cluster_status({del_node(Node, AllNodes), del_node(Node, DiscNodes),
-                          del_node(Node, RunningNodes)}),
+    case rabbit_khepri:is_enabled() of
+        true ->
+            ok;
+        false ->
+            {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
+            write_cluster_status(
+              {del_node(Node, AllNodes), del_node(Node, DiscNodes),
+               del_node(Node, RunningNodes)})
+    end,
     {noreply, State};
 
 handle_cast({subscribe, Pid}, State = #state{subscribers = Subscribers}) ->
@@ -565,10 +629,16 @@ handle_cast(_Msg, State) ->
 
 handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason},
             State = #state{monitors = Monitors, subscribers = Subscribers}) ->
-    rabbit_log:info("rabbit on node ~p down", [Node]),
-    {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
-    write_cluster_status({AllNodes, DiscNodes, del_node(Node, RunningNodes)}),
-    [P ! {node_down, Node} || P <- pmon:monitored(Subscribers)],
+    rabbit_log:info("rabbit on node ~tp down", [Node]),
+    case rabbit_khepri:is_enabled() of
+        true ->
+            ok;
+        false ->
+            {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
+            write_cluster_status(
+              {AllNodes, DiscNodes, del_node(Node, RunningNodes)})
+    end,
+    _ = [P ! {node_down, Node} || P <- pmon:monitored(Subscribers)],
     {noreply, handle_dead_rabbit(
                 Node,
                 State#state{monitors = pmon:erase({rabbit, Node}, Monitors)})};
@@ -577,27 +647,16 @@ handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #state{subscribers = Subscribers}) ->
     {noreply, State#state{subscribers = pmon:erase(Pid, Subscribers)}};
 
-handle_info({nodedown, Node, Info}, State = #state{guid       = MyGUID,
-                                                   node_guids = GUIDs}) ->
-    rabbit_log:info("node ~p down: ~p",
+handle_info({nodedown, Node, Info}, State) ->
+    rabbit_log:info("node ~tp down: ~tp",
                     [Node, proplists:get_value(nodedown_reason, Info)]),
-    Check = fun (N, CheckGUID, DownGUID) ->
-                    cast(N, {check_partial_partition,
-                             Node, node(), DownGUID, CheckGUID, MyGUID})
-            end,
-    case maps:find(Node, GUIDs) of
-        {ok, DownGUID} -> Alive = rabbit_nodes:all_running()
-                              -- [node(), Node],
-                          [case maps:find(N, GUIDs) of
-                               {ok, CheckGUID} -> Check(N, CheckGUID, DownGUID);
-                               error           -> ok
-                           end || N <- Alive];
-        error          -> ok
-    end,
-    {noreply, handle_dead_node(Node, State)};
+    case rabbit_khepri:is_enabled() of
+        true  -> {noreply, State};
+        false -> handle_nodedown_using_mnesia(Node, State)
+    end;
 
 handle_info({nodeup, Node, _Info}, State) ->
-    rabbit_log:info("node ~p up", [Node]),
+    rabbit_log:info("node ~tp up", [Node]),
     {noreply, State};
 
 handle_info({mnesia_system_event,
@@ -656,7 +715,7 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, State) ->
-    rabbit_misc:stop_timer(State, #state.down_ping_timer),
+    _ = rabbit_misc:stop_timer(State, #state.down_ping_timer),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -665,6 +724,23 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 %% Functions that call the module specific hooks when nodes go up/down
 %%----------------------------------------------------------------------------
+
+handle_nodedown_using_mnesia(Node, State = #state{guid       = MyGUID,
+                                                  node_guids = GUIDs}) ->
+    Check = fun (N, CheckGUID, DownGUID) ->
+                    cast(N, {check_partial_partition,
+                             Node, node(), DownGUID, CheckGUID, MyGUID})
+            end,
+    _ = case maps:find(Node, GUIDs) of
+        {ok, DownGUID} -> Alive = rabbit_mnesia:cluster_nodes(running)
+                              -- [node(), Node],
+                          [case maps:find(N, GUIDs) of
+                               {ok, CheckGUID} -> Check(N, CheckGUID, DownGUID);
+                               error           -> ok
+                           end || N <- Alive];
+        error          -> ok
+    end,
+    {noreply, handle_dead_node(Node, State)}.
 
 handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
     %% In general in rabbit_node_monitor we care about whether the
@@ -700,7 +776,7 @@ handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
         {ok, autoheal} ->
             State#state{autoheal = rabbit_autoheal:node_down(Node, Autoheal)};
         {ok, Term} ->
-            rabbit_log:warning("cluster_partition_handling ~p unrecognised, "
+            rabbit_log:warning("cluster_partition_handling ~tp unrecognised, "
                                "assuming 'ignore'", [Term]),
             State
     end.
@@ -758,7 +834,7 @@ do_run_outside_app_fun(Fun) ->
         Fun()
     catch _:E:Stacktrace ->
             rabbit_log:error(
-              "rabbit_outside_app_process:~n~p~n~p",
+              "rabbit_outside_app_process:~n~tp~n~tp",
               [E, Stacktrace])
     end.
 
@@ -770,29 +846,35 @@ wait_for_cluster_recovery(Condition) ->
                  wait_for_cluster_recovery(Condition)
     end.
 
-handle_dead_rabbit(Node, State = #state{partitions = Partitions,
-                                        autoheal   = Autoheal}) ->
+handle_dead_rabbit(Node, State) ->
     %% TODO: This may turn out to be a performance hog when there are
     %% lots of nodes.  We really only need to execute some of these
     %% statements on *one* node, rather than all of them.
     ok = rabbit_amqqueue:on_node_down(Node),
     ok = rabbit_alarm:on_node_down(Node),
+    State1 = case rabbit_khepri:is_enabled() of
+                 true  -> State;
+                 false -> on_node_down_using_mnesia(Node, State)
+             end,
+    ensure_ping_timer(State1).
+
+on_node_down_using_mnesia(Node, State = #state{partitions = Partitions,
+                                               autoheal   = Autoheal}) ->
     ok = rabbit_mnesia:on_node_down(Node),
-    ok = rabbit_networking:on_node_down(Node),
+    ok = rabbit_quorum_queue_periodic_membership_reconciliation:on_node_down(Node),
     %% If we have been partitioned, and we are now in the only remaining
     %% partition, we no longer care about partitions - forget them. Note
     %% that we do not attempt to deal with individual (other) partitions
     %% going away. It's only safe to forget anything about partitions when
     %% there are no partitions.
     Down = Partitions -- alive_rabbit_nodes(),
-    NoLongerPartitioned = rabbit_nodes:all_running(),
+    NoLongerPartitioned = rabbit_mnesia:cluster_nodes(running),
     Partitions1 = case Partitions -- Down -- NoLongerPartitioned of
                       [] -> [];
                       _  -> Partitions
                   end,
-    ensure_ping_timer(
-      State#state{partitions = Partitions1,
-                  autoheal   = rabbit_autoheal:rabbit_down(Node, Autoheal)}).
+    State#state{partitions = Partitions1,
+                autoheal   = rabbit_autoheal:rabbit_down(Node, Autoheal)}.
 
 ensure_ping_timer(State) ->
     rabbit_misc:ensure_timer(
@@ -807,12 +889,25 @@ ensure_keepalive_timer(State) ->
 handle_live_rabbit(Node) ->
     ok = rabbit_amqqueue:on_node_up(Node),
     ok = rabbit_alarm:on_node_up(Node),
+    case rabbit_khepri:is_enabled() of
+        true  -> ok;
+        false -> on_node_up_using_mnesia(Node)
+    end,
+    ok = rabbit_quorum_queue_periodic_membership_reconciliation:on_node_up(Node).
+
+on_node_up_using_mnesia(Node) ->
     ok = rabbit_mnesia:on_node_up(Node).
 
-maybe_autoheal(State = #state{partitions = []}) ->
+maybe_autoheal(State) ->
+    case rabbit_khepri:is_enabled() of
+        true  -> State;
+        false -> maybe_autoheal1(State)
+    end.
+
+maybe_autoheal1(State = #state{partitions = []}) ->
     State;
 
-maybe_autoheal(State = #state{autoheal = AState}) ->
+maybe_autoheal1(State = #state{autoheal = AState}) ->
     case all_nodes_up() of
         true  -> State#state{autoheal = rabbit_autoheal:maybe_start(AState)};
         false -> State
@@ -856,18 +951,27 @@ upgrade_to_full_partition(Proxy) ->
 %% detect a very short partition. So we want to force a slightly
 %% longer disconnect. Unfortunately we don't have a way to blacklist
 %% individual nodes; the best we can do is turn off auto-connect
-%% altogether.
+%% altogether. If Node is not already part of the connected nodes, then
+%% there's no need to repeat disabling dist_auto_connect and executing
+%% disconnect_node/1, which can result in application_controller
+%% timeouts and crash node monitor process. This also implies that
+%% the already disconnected node was already processed. In an
+%% unstable network, if we get consecutive 'up' and 'down' messages,
+%% then we expect disconnect_node/1 to be executed.
 disconnect(Node) ->
-    application:set_env(kernel, dist_auto_connect, never),
-    erlang:disconnect_node(Node),
-    timer:sleep(1000),
-    application:unset_env(kernel, dist_auto_connect),
-    ok.
+    case lists:member(Node, nodes()) of
+        true ->
+            application:set_env(kernel, dist_auto_connect, never),
+            erlang:disconnect_node(Node),
+            timer:sleep(?NODE_DISCONNECTION_TIMEOUT),
+            application:unset_env(kernel, dist_auto_connect);
+        false ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 
-%% mnesia:system_info(db_nodes) (and hence
-%% rabbit_nodes:all_running()) does not return all nodes
+%% mnesia:system_info(db_nodes) does not return all nodes
 %% when partitioned, just those that we are sharing Mnesia state
 %% with. So we have a small set of replacement functions
 %% here. "rabbit" in a function's name implies we test if the rabbit
@@ -882,7 +986,7 @@ majority() ->
     majority([]).
 
 majority(NodesDown) ->
-    Nodes = rabbit_nodes:all(),
+    Nodes = rabbit_nodes:list_members(),
     AliveNodes = alive_nodes(Nodes) -- NodesDown,
     length(AliveNodes) / length(Nodes) > 0.5.
 
@@ -895,47 +999,54 @@ in_preferred_partition(PreferredNodes) ->
     in_preferred_partition(PreferredNodes, []).
 
 in_preferred_partition(PreferredNodes, NodesDown) ->
-    Nodes = rabbit_nodes:all(),
+    Nodes = rabbit_nodes:list_members(),
     RealPreferredNodes = [N || N <- PreferredNodes, lists:member(N, Nodes)],
     AliveNodes = alive_nodes(RealPreferredNodes) -- NodesDown,
     RealPreferredNodes =:= [] orelse AliveNodes =/= [].
 
 all_nodes_up() ->
-    Nodes = rabbit_nodes:all(),
+    Nodes = rabbit_nodes:list_members(),
     length(alive_nodes(Nodes)) =:= length(Nodes).
 
 -spec all_rabbit_nodes_up() -> boolean().
 
 all_rabbit_nodes_up() ->
-    Nodes = rabbit_nodes:all(),
+    Nodes = rabbit_nodes:list_members(),
     length(alive_rabbit_nodes(Nodes)) =:= length(Nodes).
 
-alive_nodes() -> alive_nodes(rabbit_nodes:all()).
+alive_nodes() -> rabbit_nodes:list_reachable().
 
 -spec alive_nodes([node()]) -> [node()].
 
-alive_nodes(Nodes) -> [N || N <- Nodes, lists:member(N, [node()|nodes()])].
+alive_nodes(Nodes) -> rabbit_nodes:filter_reachable(Nodes).
 
-alive_rabbit_nodes() -> alive_rabbit_nodes(rabbit_nodes:all()).
+alive_rabbit_nodes() -> rabbit_nodes:list_running().
 
 -spec alive_rabbit_nodes([node()]) -> [node()].
 
 alive_rabbit_nodes(Nodes) ->
-    [N || N <- alive_nodes(Nodes), rabbit:is_running(N)].
+    rabbit_nodes:filter_running(Nodes).
 
 %% This one is allowed to connect!
 
 -spec ping_all() -> 'ok'.
 
 ping_all() ->
-    [net_adm:ping(N) || N <- rabbit_nodes:all()],
+    [net_adm:ping(N) || N <- rabbit_nodes:list_members()],
     ok.
 
 possibly_partitioned_nodes() ->
-    alive_rabbit_nodes() -- rabbit_nodes:all_running().
+    alive_rabbit_nodes() -- rabbit_mnesia:cluster_nodes(running).
 
-startup_log([]) ->
-    rabbit_log:info("Starting rabbit_node_monitor", []);
+startup_log() ->
+    rabbit_log:info("Starting rabbit_node_monitor (partition handling strategy unapplicable with Khepri)", []).
+
 startup_log(Nodes) ->
-    rabbit_log:info("Starting rabbit_node_monitor, might be partitioned from ~p",
-                    [Nodes]).
+    {ok, M} = application:get_env(rabbit, cluster_partition_handling),
+    startup_log(Nodes, M).
+
+startup_log([], PartitionHandling) ->
+    rabbit_log:info("Starting rabbit_node_monitor (in ~tp mode)", [PartitionHandling]);
+startup_log(Nodes, PartitionHandling) ->
+    rabbit_log:info("Starting rabbit_node_monitor (in ~tp mode), might be partitioned from ~tp",
+                    [PartitionHandling, Nodes]).

@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -19,28 +19,36 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand do
     switch_cookie = opts[:erlang_cookie]
     home_dir = get_home_dir()
     cookie_file_path = Path.join(home_dir, ".erlang.cookie")
-    cookie_file_stat = case File.stat(Path.join(home_dir, ".erlang.cookie")) do
-      {:error, :enoent} -> nil
-      {:ok, value}     -> value
-    end
-    cookie_file_type = case cookie_file_stat do
-      nil   -> nil
-      value -> value.type
-    end
-    cookie_file_access = case cookie_file_stat do
-      nil   -> nil
-      value -> value.access
-    end
-    cookie_file_size = case cookie_file_stat do
-      nil   -> nil
-      value -> value.size
-    end
+
+    cookie_file_stat =
+      case File.stat(Path.join(home_dir, ".erlang.cookie")) do
+        {:error, :enoent} -> nil
+        {:ok, value} -> value
+      end
+
+    cookie_file_type =
+      case cookie_file_stat do
+        nil -> nil
+        value -> value.type
+      end
+
+    cookie_file_access =
+      case cookie_file_stat do
+        nil -> nil
+        value -> value.access
+      end
+
+    cookie_file_size =
+      case cookie_file_stat do
+        nil -> nil
+        value -> value.size
+      end
 
     %{
       os_env_cookie_set: System.get_env("RABBITMQ_ERLANG_COOKIE") != nil,
       os_env_cookie_value_length: String.length(System.get_env("RABBITMQ_ERLANG_COOKIE") || ""),
       switch_cookie_set: switch_cookie != nil,
-      switch_cookie_value_length: String.length(to_string(switch_cookie) || ""),
+      switch_cookie_value_length: String.length(to_string(switch_cookie)),
       effective_user: System.get_env("USER"),
       home_dir: home_dir,
       cookie_file_path: cookie_file_path,
@@ -66,7 +74,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand do
       "Cookie file exists? #{result[:cookie_file_exists]}",
       "Cookie file type: #{result[:cookie_file_type] || "(n/a)"}",
       "Cookie file access: #{result[:cookie_file_access] || "(n/a)"}",
-      "Cookie file size: #{result[:cookie_file_size] || "(n/a)"}",
+      "Cookie file size: #{result[:cookie_file_size] || "(n/a)"}"
     ]
 
     switch_lines = [
@@ -106,11 +114,11 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand do
   """
   def get_home_dir() do
     homedrive = System.get_env("HOMEDRIVE")
-    homepath  = System.get_env("HOMEPATH")
+    homepath = System.get_env("HOMEPATH")
 
     case {homedrive != nil, homepath != nil} do
       {true, true} -> "#{homedrive}#{homepath}"
-      _            -> System.get_env("HOME")
+      _ -> System.get_env("HOME")
     end
   end
 end

@@ -1,9 +1,6 @@
 -module(mqtt_machine_SUITE).
 
--compile(export_all).
-
--export([
-         ]).
+-compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -30,24 +27,6 @@ groups() ->
     [
      {tests, [], all_tests()}
     ].
-
-init_per_suite(Config) ->
-    Config.
-
-end_per_suite(_Config) ->
-    ok.
-
-init_per_group(_Group, Config) ->
-    Config.
-
-end_per_group(_Group, _Config) ->
-    ok.
-
-init_per_testcase(_TestCase, Config) ->
-    Config.
-
-end_per_testcase(_TestCase, _Config) ->
-    ok.
 
 %%%===================================================================
 %%% Test cases

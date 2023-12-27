@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
   alias RabbitMQ.CLI.Core.{Config, DocGuide}
@@ -24,15 +24,28 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
   end
 
   def run([], %{node: node_name} = opts) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :force_load_next_boot, []) do
+    ret =
+      case :rabbit_misc.rpc_call(node_name, :rabbit_db, :force_load_on_next_boot, []) do
+        {:badrpc, {:EXIT, {:undef, _}}} ->
+          :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :force_load_next_boot, [])
+
+        ret0 ->
+          ret0
+      end
+
+    case ret do
       {:badrpc, :nodedown} ->
-        case Config.get_option(:mnesia_dir, opts) do
+        case Config.get_option(:data_dir, opts) do
           nil ->
-            {:error, :mnesia_dir_not_found}
+            {:error, :data_dir_not_found}
 
           dir ->
             File.write(Path.join(dir, "force_load"), "")
         end
+
+      {:error, :not_supported} ->
+        {:error, RabbitMQ.CLI.Core.ExitCodes.exit_usage(),
+         "This command is not supported by node #{node_name}"}
 
       _ ->
         :ok
@@ -51,7 +64,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceBootCommand do
 
   def help_section(), do: :cluster_management
 
-  def description(), do: "Forces node to start even if it cannot contact or rejoin any of its previously known peers"
+  def description(),
+    do:
+      "Forces node to start even if it cannot contact or rejoin any of its previously known peers"
 
   def banner(_, _), do: nil
 end

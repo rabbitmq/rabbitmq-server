@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rfc6455_client).
@@ -87,9 +87,12 @@ close(WS, WsReason) ->
 start_conn(State = #state{transport = Transport}, AuthInfo, Protocols, TcpPreface) ->
     {ok, Socket} = case TcpPreface of
         <<>> ->
+            TlsOpts = case Transport of
+                ssl -> [{verify, verify_none}];
+                _   -> []
+              end,
             Transport:connect(State#state.host, State#state.port,
-                              [binary,
-                               {packet, 0}]);
+                              [binary, {packet, 0}] ++ TlsOpts);
         _ ->
             {ok, Socket0} = gen_tcp:connect(State#state.host, State#state.port,
                                             [binary,
@@ -97,7 +100,7 @@ start_conn(State = #state{transport = Transport}, AuthInfo, Protocols, TcpPrefac
             gen_tcp:send(Socket0, TcpPreface),
             case Transport of
                 gen_tcp -> {ok, Socket0};
-                ssl -> Transport:connect(Socket0, [])
+                ssl -> Transport:connect(Socket0, [{verify, verify_none}])
             end
     end,
 

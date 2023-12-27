@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_file).
@@ -16,6 +16,7 @@
 -export([lock_file/1]).
 -export([read_file_info/1]).
 -export([filename_as_a_directory/1]).
+-export([filename_to_binary/1, binary_to_filename/1]).
 
 -import(file_handle_cache, [with_handle/1, with_handle/2]).
 
@@ -327,4 +328,24 @@ filename_as_a_directory(FileName) ->
             FileName;
         _ ->
             FileName ++ "/"
+    end.
+
+-spec filename_to_binary(file:filename()) ->
+    binary().
+filename_to_binary(Name) when is_list(Name) ->
+    case unicode:characters_to_binary(Name, unicode, file:native_name_encoding()) of
+        Bin when is_binary(Bin) ->
+            Bin;
+        Other ->
+            erlang:error(Other)
+    end.
+
+-spec binary_to_filename(binary()) ->
+    file:filename().
+binary_to_filename(Bin) when is_binary(Bin) ->
+    case unicode:characters_to_list(Bin, file:native_name_encoding()) of
+        Name when is_list(Name) ->
+            Name;
+        Other ->
+            erlang:error(Other)
     end.

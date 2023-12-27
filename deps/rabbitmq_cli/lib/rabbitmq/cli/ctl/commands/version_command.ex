@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.VersionCommand do
   alias RabbitMQ.CLI.Core.{Validators, Version}
@@ -21,13 +21,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.VersionCommand do
   def run([], %{formatter: "json"}) do
     {:ok, %{version: Version.local_version()}}
   end
+
   def run([], %{formatter: "csv"}) do
     row = [version: Version.local_version()]
     {:ok, [row]}
   end
+
   def run([], _opts) do
     {:ok, Version.local_version()}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def help_section, do: :help

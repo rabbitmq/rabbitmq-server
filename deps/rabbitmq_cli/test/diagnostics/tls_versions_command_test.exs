@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule TlsVersionsCommandTest do
   use ExUnit.Case
@@ -17,10 +17,11 @@ defmodule TlsVersionsCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000
+     }}
   end
 
   test "merge_defaults: is a no-op" do
@@ -37,11 +38,15 @@ defmodule TlsVersionsCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})))
+    assert match?(
+             {:badrpc, _},
+             @command.run([], Map.merge(context[:opts], %{node: :jake@thedog}))
+           )
   end
 
-  test "run when formatter is set to JSON: return a document with a list of supported TLS versions", context do
-    m  = @command.run([], Map.merge(context[:opts], %{formatter: "json"})) |> Map.new
+  test "run when formatter is set to JSON: return a document with a list of supported TLS versions",
+       context do
+    m = @command.run([], Map.merge(context[:opts], %{formatter: "json"})) |> Map.new()
     xs = Map.get(m, :available)
 
     # assert that we have a list and tlsv1.2 is included
@@ -50,7 +55,7 @@ defmodule TlsVersionsCommandTest do
   end
 
   test "run and output: return a list of supported TLS versions", context do
-    m          = @command.run([], context[:opts])
+    m = @command.run([], context[:opts])
     {:ok, res} = @command.output(m, context[:opts])
 
     # assert that we have a list and tlsv1.2 is included

@@ -14,8 +14,8 @@ services:
   rmq0-dist-metrics: &rabbitmq
     # https://network.pivotal.io/products/rabbitmq/
     # This is a commercial edition of RabbitMQ that requires a valid Tanzu Network account
-    # Learn more: https://rabbitmq.com/tanzu
-    image: dev.registry.pivotal.io/rabbitmq/vmware-tanzu-rabbitmq:1.0.0
+    # Learn more: https://www.vmware.com/products/rabbitmq.html
+    image: dev.registry.pivotal.io/rabbitmq/vmware-rabbitmq:1.4.2
     networks:
       - "rabbitmq-prometheus"
     ports:

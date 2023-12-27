@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_peer_discovery_classic_config).
@@ -22,18 +22,28 @@
 
 list_nodes() ->
     case application:get_env(rabbit, cluster_nodes, {[], disc}) of
-        {_Nodes, _NodeType} = Pair -> {ok, Pair};
-        Nodes when is_list(Nodes)  -> {ok, {Nodes, disc}}
+        {Nodes, NodeType} ->
+            {ok, {add_this_node(Nodes), NodeType}};
+        Nodes when is_list(Nodes) ->
+            {ok, {add_this_node(Nodes), disc}}
     end.
 
--spec lock(Node :: node()) -> {ok, {{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}} |
-                              {error, Reason :: string()}.
+add_this_node(Nodes) ->
+    ThisNode = node(),
+    case lists:member(ThisNode, Nodes) of
+        true  -> Nodes;
+        false -> [ThisNode | Nodes]
+    end.
 
-lock(Node) ->
-  {ok, {Nodes, _NodeType}} = list_nodes(),
+-spec lock(Nodes :: [node()]) ->
+    {ok, {{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}} |
+    {error, Reason :: string()}.
+
+lock(Nodes) ->
+  Node = node(),
   case lists:member(Node, Nodes) of
     false when Nodes =/= [] ->
-      rabbit_log:warning("Local node ~s is not part of configured nodes ~p. "
+      rabbit_log:warning("Local node ~ts is not part of configured nodes ~tp. "
                       "This might lead to incorrect cluster formation.", [Node, Nodes]);
     _ -> ok
   end,

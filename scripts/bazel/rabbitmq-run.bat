@@ -99,6 +99,7 @@ if not exist "%TEST_TMPDIR%" mkdir %TEST_TMPDIR%
 
 if not exist "%RABBITMQ_LOG_BASE%" mkdir %RABBITMQ_LOG_BASE%
 if not exist "%RABBITMQ_MNESIA_BASE%" mkdir %RABBITMQ_MNESIA_BASE%
+if not exist "%RABBITMQ_PLUGINS_DIR%" mkdir %RABBITMQ_PLUGINS_DIR%
 if not exist "%RABBITMQ_PLUGINS_EXPAND_DIR%" mkdir %RABBITMQ_PLUGINS_EXPAND_DIR%
 
 if "%CMD%" == "run-broker" (

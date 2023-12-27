@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 -module('Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConnectionsCommand').
 
@@ -53,8 +53,9 @@ help_section() ->
     {plugin, stream}.
 
 validate(Args, _) ->
+    ValidKeys = lists:map(fun atom_to_list/1, ?INFO_ITEMS),
     case 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':validate_info_keys(Args,
-                                                               ?INFO_ITEMS)
+                                                               ValidKeys)
     of
         {ok, _} ->
             ok;
@@ -63,7 +64,7 @@ validate(Args, _) ->
     end.
 
 merge_defaults([], Opts) ->
-    merge_defaults([<<"conn_name">>], Opts);
+    merge_defaults([<<"node">>, <<"conn_name">>], Opts);
 merge_defaults(Args, Opts) ->
     {Args, maps:merge(#{verbose => false}, Opts)}.
 

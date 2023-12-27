@@ -2,8 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
-
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule ReportTest do
   use ExUnit.Case, async: false
@@ -23,11 +22,11 @@ defmodule ReportTest do
 
   test "validate: with extra arguments, status returns an arg count error", context do
     assert @command.validate(["extra"], context[:opts]) ==
-    {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
   end
 
   test "run: report request to a reachable node succeeds", context do
-    output = @command.run([], context[:opts]) |> Enum.to_list
+    output = @command.run([], context[:opts]) |> Enum.to_list()
 
     assert_stream_without_errors(output)
   end
@@ -38,7 +37,7 @@ defmodule ReportTest do
   end
 
   test "banner", context do
-    assert @command.banner([], context[:opts])
-      =~ ~r/Reporting server status of node #{get_rabbit_hostname()}/
+    assert @command.banner([], context[:opts]) =~
+             ~r/Reporting server status of node #{get_rabbit_hostname()}/
   end
 end

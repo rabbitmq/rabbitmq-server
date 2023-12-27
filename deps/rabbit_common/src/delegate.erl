@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(delegate).
@@ -169,9 +169,6 @@ demonitor(Ref) when is_reference(Ref) ->
 demonitor({Name, Pid}) ->
     gen_server2:cast(Name, {demonitor, self(), Pid}).
 
-invoke_no_result(Pid, FunOrMFA = {gen_server2, _F, _A}) when is_pid(Pid) ->
-    _ = safe_invoke(Pid, FunOrMFA), %% we don't care about any error
-    ok;
 invoke_no_result(Pid, FunOrMFA) when is_pid(Pid) andalso node(Pid) =:= node() ->
     %% Optimization, avoids calling invoke_no_result/3.
     %%
@@ -192,9 +189,6 @@ invoke_no_result(Pid, FunOrMFA) when is_pid(Pid) ->
     ok;
 invoke_no_result([], _FunOrMFA) -> %% optimisation
     ok;
-invoke_no_result([Pid], FunOrMFA = {gen_server2, _F, _A}) when is_pid(Pid) -> %% optimisation
-    _ = safe_invoke(Pid, FunOrMFA), %% must not die
-    ok;
 invoke_no_result([Pid], FunOrMFA) when node(Pid) =:= node() -> %% optimisation
     _ = safe_invoke(Pid, FunOrMFA), %% must not die
     ok;
@@ -204,9 +198,6 @@ invoke_no_result([Pid], FunOrMFA) ->
                        {invoke, FunOrMFA,
                         maps:from_list([{RemoteNode, [Pid]}])}),
     ok;
-invoke_no_result(Pids, FunOrMFA = {gen_server2, _F, _A}) when is_list(Pids) ->
-    {LocalCallPids, Grouped} = group_local_call_pids_by_node(Pids),
-    invoke_no_result(Pids, FunOrMFA, LocalCallPids, Grouped);
 invoke_no_result(Pids, FunOrMFA) when is_list(Pids) ->
     {LocalPids, Grouped} = group_pids_by_node(Pids),
     invoke_no_result(Pids, FunOrMFA, LocalPids, Grouped).
@@ -236,12 +227,12 @@ group_pids_by_node(Pids) ->
 
 group_local_call_pids_by_node(Pids) ->
     {LocalPids0, Grouped0} = group_pids_by_node(Pids),
-    maps:fold(fun(K, V, {AccIn, MapsIn}) -> 
+    maps:fold(fun(K, V, {AccIn, MapsIn}) ->
         case V of
             %% just one Pid for the node
             [SinglePid] -> {[SinglePid | AccIn], MapsIn};
-            %% If the value is a list of more than one pid, 
-            %% the (K,V) will be put into the new map which will be called 
+            %% If the value is a list of more than one pid,
+            %% the (K,V) will be put into the new map which will be called
             %% through delegate to reduce inter-node communication.
             _ -> {AccIn, maps:update_with(K, fun(V1) -> V1 end, V, MapsIn)}
         end

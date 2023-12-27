@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.ServerVersionCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -13,12 +13,14 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ServerVersionCommand do
 
   def run([], %{node: node_name, timeout: timeout}) do
     :rabbit_data_coercion.to_binary(
-      :rabbit_misc.rpc_call(node_name, :rabbit_misc, :version, [], timeout))
+      :rabbit_misc.rpc_call(node_name, :rabbit_misc, :version, [], timeout)
+    )
   end
 
   def output(result, %{formatter: "json"}) do
     {:ok, %{"result" => "ok", "value" => result}}
   end
+
   def output(result, _options) when is_bitstring(result) do
     {:ok, result}
   end

@@ -5,8 +5,16 @@
 %%
 %% ----------------------------------------------------------------------------
 
-%% A prefix used for scopes in UAA to avoid scope collisions (or unintended overlap). It is an empty string by default.
+%% OAuth Resource identity. Usage:
+%% - This is the identity of a RabbitMQ server/cluster used as the
+%% recipient of JWT Tokens (see audience claim, https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.3).
+%% - This is also the resource identifier used by RabbitMQ server/cluster in the authorization and access token
+%% requests (https://datatracker.ietf.org/doc/html/draft-ietf-oauth-resource-indicators-05#page-3)
 %%
+%% Up to version 3.12, RabbitMQ's scopes followed this pattern : <resource_server_id>.<scope>.
+%% Nowadays, there is a new setting called scope_prefix and RabbitMQ's scopes follow this pattern instead:
+%% <scope_prefix><scope>. Note that there is no dot in between.
+%% The default value of this setting is `<resource_server_id>.`.
 %% {resource_server_id, <<"my_rabbit_server">>},
 
 {mapping,
@@ -19,6 +27,20 @@
  fun(Conf) -> list_to_binary(cuttlefish:conf_get("auth_oauth2.resource_server_id", Conf))
  end}.
 
+%% A prefix used for scopes to avoid scope collisions (or unintended overlap). If not configured,
+%% it is defaulted to `<resource_server_id>.` to maintain backward compatibility. Empty string is a permitted value.
+%%
+%% {scope_prefix, <<"api:/rabbitmq:">>},
+
+{mapping,
+ "auth_oauth2.scope_prefix",
+ "rabbitmq_auth_backend_oauth2.scope_prefix",
+ [{datatype, string}]}.
+
+{translation,
+ "rabbitmq_auth_backend_oauth2.scope_prefix",
+ fun(Conf) -> list_to_binary(cuttlefish:conf_get("auth_oauth2.scope_prefix", Conf))
+ end}.
 
 %% An identifier used for JWT Tokens compliant with Rich Authorization Request spec
 %% RabbitMq uses this field as discriminator to filter out permissions meant for RabbitMQ
@@ -38,7 +60,7 @@
 
 %% Configure the plugin to also look in other fields using additional_scopes_key (maps to extra_scopes_source in the old format)
 %%
-%% {additional_rabbitmq_scopes, <<"my_custom_scope_key">>},
+%% {additional_scopes_key, <<"my_custom_scope_key">>},
 
 {mapping,
  "auth_oauth2.additional_scopes_key",
@@ -60,6 +82,24 @@
  "rabbitmq_auth_backend_oauth2.verify_aud",
  [{datatype, {enum, [true, false]}}]}.
 
+%% Configure the preferred username's JWT claim(s). These are the JWT claims or attributes
+%% used to determine the user's identity, a.k.a username.
+%% RabbitMQ appends `sub` and `client_id` claims.
+%% e.g. RabbitMQ first looks for username claim. If it is not present, it looks for user_name
+%% and so forth. If it cannot find any, it defauls to unknown.
+%% {preferred_username_claims, [<<"username">>, <<"user_name">>, <<"email">> ]},
+
+{mapping,
+ "auth_oauth2.preferred_username_claims.$preferred_username_claims",
+ "rabbitmq_auth_backend_oauth2.preferred_username_claims",
+ [{datatype, string}]}.
+
+{translation,
+ "rabbitmq_auth_backend_oauth2.preferred_username_claims",
+ fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.preferred_username_claims", Conf),
+    [list_to_binary(V) || {_, V} <- Settings]
+ end}.
 
 %% ID of the default signing key
 %%

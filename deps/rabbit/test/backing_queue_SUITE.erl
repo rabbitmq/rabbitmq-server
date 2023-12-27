@@ -1,8 +1,8 @@
-%% This Source Code Form is subject to the terms of the Mozilla Public
+ % This Source Code Form is subject to the terms of the Mozilla Public
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(backing_queue_SUITE).
@@ -11,6 +11,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("amqqueue.hrl").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
@@ -20,7 +21,6 @@
 -define(VHOST, <<"/">>).
 
 -define(VARIABLE_QUEUE_TESTCASES, [
-    variable_queue_dynamic_duration_change,
     variable_queue_partial_segments_delta_thing,
     variable_queue_all_the_bits_not_covered_elsewhere_A,
     variable_queue_all_the_bits_not_covered_elsewhere_B,
@@ -44,8 +44,6 @@
     bq_queue_index,
     bq_queue_index_props,
     {variable_queue_default, [parallel], ?VARIABLE_QUEUE_TESTCASES},
-    {variable_queue_lazy, [parallel], ?VARIABLE_QUEUE_TESTCASES ++
-                                      [variable_queue_mode_change]},
     bq_variable_queue_delete_msg_store_files_callback,
     bq_queue_recover
   ]).
@@ -122,7 +120,7 @@ init_per_group1(backing_queue_tests, Config) ->
               ?MODULE, setup_backing_queue_test_group, [Config]);
         _ ->
             {skip, rabbit_misc:format(
-               "Backing queue module not supported by this test group: ~p~n",
+               "Backing queue module not supported by this test group: ~tp~n",
                [Module])}
     end;
 init_per_group1(backing_queue_v1, Config) ->
@@ -143,8 +141,6 @@ init_per_group1(backing_queue_embed_limit_1024, Config) ->
     Config;
 init_per_group1(variable_queue_default, Config) ->
     rabbit_ct_helpers:set_config(Config, {variable_queue_type, default});
-init_per_group1(variable_queue_lazy, Config) ->
-    rabbit_ct_helpers:set_config(Config, {variable_queue_type, lazy});
 %% @todo These groups are no longer used?
 init_per_group1(from_cluster_node1, Config) ->
     rabbit_ct_helpers:set_config(Config, {test_direction, {0, 1}});
@@ -221,8 +217,12 @@ msg_store(Config) ->
       ?MODULE, msg_store1, [Config]).
 
 msg_store1(_Config) ->
+    %% We simulate the SeqId (used as a message ref for the flying optimisation)
+    %% using the process dictionary.
+    GenRefFun = fun(Key) -> V = case get(Key) of undefined -> 0; V0 -> V0 end, put(Key, V + 1), V end,
+    GenRef = fun() -> GenRefFun(msc) end,
     restart_msg_store_empty(),
-    MsgIds = [msg_id_bin(M) || M <- lists:seq(1,100)],
+    MsgIds = [{GenRef(), msg_id_bin(M)} || M <- lists:seq(1,100)],
     {MsgIds1stHalf, MsgIds2ndHalf} = lists:split(length(MsgIds) div 2, MsgIds),
     Ref = rabbit_guid:gen(),
     {Cap, MSCState} = msg_store_client_init_capture(
@@ -233,7 +233,7 @@ msg_store1(_Config) ->
     %% check we don't contain any of the msgs we're about to publish
     false = msg_store_contains(false, MsgIds, MSCState),
     %% test confirm logic
-    passed = test_msg_store_confirms([hd(MsgIds)], Cap, MSCState),
+    passed = test_msg_store_confirms([hd(MsgIds)], Cap, GenRef, MSCState),
     %% check we don't contain any of the msgs we're about to publish
     false = msg_store_contains(false, MsgIds, MSCState),
     %% publish the first half
@@ -248,7 +248,7 @@ msg_store1(_Config) ->
     %% count code. We need to do this through a 2nd client since a
     %% single client is not supposed to write the same message more
     %% than once without first removing it.
-    ok = msg_store_write(MsgIds2ndHalf, MSC2State),
+    ok = msg_store_write([{GenRefFun(msc2), MsgId} || {_, MsgId} <- MsgIds2ndHalf], MSC2State),
     %% check they're still all in there
     true = msg_store_contains(true, MsgIds, MSCState),
     %% sync on the 2nd half
@@ -262,7 +262,7 @@ msg_store1(_Config) ->
     %% read them all again - this will hit the cache, not disk
     MSCState2 = msg_store_read(MsgIds, MSCState1),
     %% remove them all
-    ok = msg_store_remove(MsgIds, MSCState2),
+    {ok, _} = msg_store_remove(MsgIds, MSCState2),
     %% check first half doesn't exist
     false = msg_store_contains(false, MsgIds1stHalf, MSCState2),
     %% check second half does exist
@@ -276,16 +276,16 @@ msg_store1(_Config) ->
     ok = rabbit_variable_queue:stop_msg_store(?VHOST),
     ok = rabbit_variable_queue:start_msg_store(?VHOST,
            [], {fun ([]) -> finished;
-                    ([MsgId|MsgIdsTail])
+                    ([{_, MsgId}|MsgIdsTail])
                       when length(MsgIdsTail) rem 2 == 0 ->
                         {MsgId, 1, MsgIdsTail};
-                    ([MsgId|MsgIdsTail]) ->
+                    ([{_, MsgId}|MsgIdsTail]) ->
                         {MsgId, 0, MsgIdsTail}
                 end, MsgIds2ndHalf}),
     MSCState5 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
     %% check we have the right msgs left
     lists:foldl(
-      fun (MsgId, Bool) ->
+      fun ({_, MsgId}, Bool) ->
               not(Bool = rabbit_msg_store:contains(MsgId, MSCState5))
       end, false, MsgIds2ndHalf),
     ok = rabbit_msg_store:client_terminate(MSCState5),
@@ -300,7 +300,7 @@ msg_store1(_Config) ->
     ok = rabbit_msg_store:client_terminate(
            msg_store_read(MsgIds1stHalf, MSCState6)),
     MSCState7 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
-    ok = msg_store_remove(MsgIds1stHalf, MSCState7),
+    {ok, _} = msg_store_remove(MsgIds1stHalf, MSCState7),
     ok = rabbit_msg_store:client_terminate(MSCState7),
     %% restart empty
     restart_msg_store_empty(), %% now safe to reuse msg_ids
@@ -308,34 +308,41 @@ msg_store1(_Config) ->
     {ok, FileSize} = application:get_env(rabbit, msg_store_file_size_limit),
     PayloadSizeBits = 65536,
     BigCount = trunc(100 * FileSize / (PayloadSizeBits div 8)),
-    MsgIdsBig = [msg_id_bin(X) || X <- lists:seq(1, BigCount)],
+    MsgIdsBig = [{GenRef(), msg_id_bin(X)} || X <- lists:seq(1, BigCount)],
     Payload = << 0:PayloadSizeBits >>,
     ok = with_msg_store_client(
            ?PERSISTENT_MSG_STORE, Ref,
            fun (MSCStateM) ->
-                   [ok = rabbit_msg_store:write(MsgId, Payload, MSCStateM) ||
-                       MsgId <- MsgIdsBig],
+                   [ok = rabbit_msg_store:write(SeqId, MsgId, Payload, MSCStateM) ||
+                       {SeqId, MsgId} <- MsgIdsBig],
                    MSCStateM
            end),
     %% now read them to ensure we hit the fast client-side reading
     ok = foreach_with_msg_store_client(
            ?PERSISTENT_MSG_STORE, Ref,
-           fun (MsgId, MSCStateM) ->
+           fun ({_, MsgId}, MSCStateM) ->
                    {{ok, Payload}, MSCStateN} = rabbit_msg_store:read(
                                                   MsgId, MSCStateM),
                    MSCStateN
            end, MsgIdsBig),
-    %% .., then 3s by 1...
-    ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref,
-                          [msg_id_bin(X) || X <- lists:seq(BigCount, 1, -3)]),
-    %% .., then remove 3s by 2, from the young end first. This hits
-    %% GC (under 50% good data left, but no empty files. Must GC).
-    ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref,
-                          [msg_id_bin(X) || X <- lists:seq(BigCount-1, 1, -3)]),
-    %% .., then remove 3s by 3, from the young end first. This hits
-    %% GC...
-    ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref,
-                          [msg_id_bin(X) || X <- lists:seq(BigCount-2, 1, -3)]),
+    %% We remove every other other message first, then do it again a second
+    %% time with another set of messages and then a third time. We start
+    %% with younger messages on purpose. So we split the list in three
+    %% lists keeping the message reference.
+    Part = fun
+        PartFun([], _, Acc) ->
+            Acc;
+        PartFun([E|Tail], N, Acc) ->
+            Pos = 1 + (N rem 3),
+            AccL = element(Pos, Acc),
+            PartFun(Tail, N + 1, setelement(Pos, Acc, [E|AccL]))
+    end,
+    {One, Two, Three} = Part(MsgIdsBig, 0, {[], [], []}),
+    ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref, One),
+    %% This is likely to hit GC (under 50% good data left in files, but no empty files).
+    ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref, Two),
+    %% Files are empty now and will get removed.
+    ok = msg_store_remove(?PERSISTENT_MSG_STORE, Ref, Three),
     %% ensure empty
     ok = with_msg_store_client(
            ?PERSISTENT_MSG_STORE, Ref,
@@ -344,7 +351,7 @@ msg_store1(_Config) ->
                    MSCStateM
            end),
     %%
-    passed = test_msg_store_client_delete_and_terminate(),
+    passed = test_msg_store_client_delete_and_terminate(fun() -> GenRefFun(msc_cdat) end),
     %% restart empty
     restart_msg_store_empty(),
     passed.
@@ -368,7 +375,7 @@ on_disk_capture([_|_], _Awaiting, Pid) ->
 on_disk_capture(OnDisk, Awaiting, Pid) ->
     receive
         {on_disk, MsgIdsS} ->
-            MsgIds = gb_sets:to_list(MsgIdsS),
+            MsgIds = sets:to_list(MsgIdsS),
             on_disk_capture(OnDisk ++ (MsgIds -- Awaiting), Awaiting -- MsgIds,
                             Pid);
         stop ->
@@ -380,7 +387,8 @@ on_disk_capture(OnDisk, Awaiting, Pid) ->
             end
     end.
 
-on_disk_await(Pid, MsgIds) when is_list(MsgIds) ->
+on_disk_await(Pid, MsgIds0) when is_list(MsgIds0) ->
+    {_, MsgIds} = lists:unzip(MsgIds0),
     Pid ! {await, MsgIds, self()},
     receive
         {Pid, arrived} -> ok;
@@ -399,29 +407,29 @@ msg_store_client_init_capture(MsgStore, Ref) ->
     {Pid, rabbit_vhost_msg_store:client_init(?VHOST, MsgStore, Ref,
                                              fun (MsgIds, _ActionTaken) ->
                                                  Pid ! {on_disk, MsgIds}
-                                             end, undefined)}.
+                                             end)}.
 
 msg_store_contains(Atom, MsgIds, MSCState) ->
     Atom = lists:foldl(
-             fun (MsgId, Atom1) when Atom1 =:= Atom ->
+             fun ({_, MsgId}, Atom1) when Atom1 =:= Atom ->
                      rabbit_msg_store:contains(MsgId, MSCState) end,
              Atom, MsgIds).
 
 msg_store_read(MsgIds, MSCState) ->
-    lists:foldl(fun (MsgId, MSCStateM) ->
+    lists:foldl(fun ({_, MsgId}, MSCStateM) ->
                         {{ok, MsgId}, MSCStateN} = rabbit_msg_store:read(
                                                      MsgId, MSCStateM),
                         MSCStateN
                 end, MSCState, MsgIds).
 
 msg_store_write(MsgIds, MSCState) ->
-    ok = lists:foldl(fun (MsgId, ok) ->
-                             rabbit_msg_store:write(MsgId, MsgId, MSCState)
+    ok = lists:foldl(fun ({SeqId, MsgId}, ok) ->
+                             rabbit_msg_store:write(SeqId, MsgId, MsgId, MSCState)
                      end, ok, MsgIds).
 
 msg_store_write_flow(MsgIds, MSCState) ->
-    ok = lists:foldl(fun (MsgId, ok) ->
-                             rabbit_msg_store:write_flow(MsgId, MsgId, MSCState)
+    ok = lists:foldl(fun ({SeqId, MsgId}, ok) ->
+                             rabbit_msg_store:write_flow(SeqId, MsgId, MsgId, MSCState)
                      end, ok, MsgIds).
 
 msg_store_remove(MsgIds, MSCState) ->
@@ -430,7 +438,7 @@ msg_store_remove(MsgIds, MSCState) ->
 msg_store_remove(MsgStore, Ref, MsgIds) ->
     with_msg_store_client(MsgStore, Ref,
                           fun (MSCStateM) ->
-                                  ok = msg_store_remove(MsgIds, MSCStateM),
+                                  {ok, _} = msg_store_remove(MsgIds, MSCStateM),
                                   MSCStateM
                           end).
 
@@ -443,36 +451,42 @@ foreach_with_msg_store_client(MsgStore, Ref, Fun, L) ->
       lists:foldl(fun (MsgId, MSCState) -> Fun(MsgId, MSCState) end,
                   msg_store_client_init(MsgStore, Ref), L)).
 
-test_msg_store_confirms(MsgIds, Cap, MSCState) ->
+test_msg_store_confirms(MsgIds, Cap, GenRef, MSCState) ->
     %% write -> confirmed
-    ok = msg_store_write(MsgIds, MSCState),
-    ok = on_disk_await(Cap, MsgIds),
+    MsgIds1 = [{GenRef(), MsgId} || {_, MsgId} <- MsgIds],
+    ok = msg_store_write(MsgIds1, MSCState),
+    ok = on_disk_await(Cap, MsgIds1),
     %% remove -> _
-    ok = msg_store_remove(MsgIds, MSCState),
+    {ok, []} = msg_store_remove(MsgIds1, MSCState),
     ok = on_disk_await(Cap, []),
     %% write, remove -> confirmed
-    ok = msg_store_write(MsgIds, MSCState),
-    ok = msg_store_remove(MsgIds, MSCState),
-    ok = on_disk_await(Cap, MsgIds),
+    MsgIds2 = [{GenRef(), MsgId} || {_, MsgId} <- MsgIds],
+    ok = msg_store_write(MsgIds2, MSCState),
+    {ok, ConfirmedMsgIds2} = msg_store_remove(MsgIds2, MSCState),
+    ok = on_disk_await(Cap, lists:filter(fun({_, MsgId}) -> not lists:member(MsgId, ConfirmedMsgIds2) end, MsgIds2)),
     %% write, remove, write -> confirmed, confirmed
-    ok = msg_store_write(MsgIds, MSCState),
-    ok = msg_store_remove(MsgIds, MSCState),
-    ok = msg_store_write(MsgIds, MSCState),
-    ok = on_disk_await(Cap, MsgIds ++ MsgIds),
+    MsgIds3 = [{GenRef(), MsgId} || {_, MsgId} <- MsgIds],
+    ok = msg_store_write(MsgIds3, MSCState),
+    {ok, ConfirmedMsgIds3} = msg_store_remove(MsgIds3, MSCState),
+    MsgIds4 = [{GenRef(), MsgId} || {_, MsgId} <- MsgIds],
+    ok = msg_store_write(MsgIds4, MSCState),
+    ok = on_disk_await(Cap, lists:filter(fun({_, MsgId}) -> not lists:member(MsgId, ConfirmedMsgIds3) end, MsgIds3) ++ MsgIds4),
     %% remove, write -> confirmed
-    ok = msg_store_remove(MsgIds, MSCState),
-    ok = msg_store_write(MsgIds, MSCState),
-    ok = on_disk_await(Cap, MsgIds),
+    {ok, []} = msg_store_remove(MsgIds4, MSCState),
+    MsgIds5 = [{GenRef(), MsgId} || {_, MsgId} <- MsgIds],
+    ok = msg_store_write(MsgIds5, MSCState),
+    ok = on_disk_await(Cap, MsgIds5),
     %% remove, write, remove -> confirmed
-    ok = msg_store_remove(MsgIds, MSCState),
-    ok = msg_store_write(MsgIds, MSCState),
-    ok = msg_store_remove(MsgIds, MSCState),
-    ok = on_disk_await(Cap, MsgIds),
+    {ok, []} = msg_store_remove(MsgIds5, MSCState),
+    MsgIds6 = [{GenRef(), MsgId} || {_, MsgId} <- MsgIds],
+    ok = msg_store_write(MsgIds6, MSCState),
+    {ok, ConfirmedMsgIds6} = msg_store_remove(MsgIds6, MSCState),
+    ok = on_disk_await(Cap, lists:filter(fun({_, MsgId}) -> not lists:member(MsgId, ConfirmedMsgIds6) end, MsgIds6)),
     %% confirmation on timer-based sync
-    passed = test_msg_store_confirm_timer(),
+    passed = test_msg_store_confirm_timer(GenRef),
     passed.
 
-test_msg_store_confirm_timer() ->
+test_msg_store_confirm_timer(GenRef) ->
     Ref = rabbit_guid:gen(),
     MsgId  = msg_id_bin(1),
     Self = self(),
@@ -481,37 +495,39 @@ test_msg_store_confirm_timer() ->
         ?PERSISTENT_MSG_STORE,
         Ref,
         fun (MsgIds, _ActionTaken) ->
-            case gb_sets:is_member(MsgId, MsgIds) of
+            case sets:is_element(MsgId, MsgIds) of
                 true  -> Self ! on_disk;
                 false -> ok
             end
-        end, undefined),
-    ok = msg_store_write([MsgId], MSCState),
-    ok = msg_store_keep_busy_until_confirm([msg_id_bin(2)], MSCState, false),
-    ok = msg_store_remove([MsgId], MSCState),
+        end),
+    MsgIdsChecked = [{GenRef(), MsgId}],
+    ok = msg_store_write(MsgIdsChecked, MSCState),
+    ok = msg_store_keep_busy_until_confirm([msg_id_bin(2)], GenRef, MSCState, false),
+    {ok, _} = msg_store_remove(MsgIdsChecked, MSCState),
     ok = rabbit_msg_store:client_delete_and_terminate(MSCState),
     passed.
 
-msg_store_keep_busy_until_confirm(MsgIds, MSCState, Blocked) ->
+msg_store_keep_busy_until_confirm(MsgIds, GenRef, MSCState, Blocked) ->
     After = case Blocked of
                 false -> 0;
                 true  -> ?MAX_WAIT
             end,
     Recurse = fun () -> msg_store_keep_busy_until_confirm(
-                          MsgIds, MSCState, credit_flow:blocked()) end,
+                          MsgIds, GenRef, MSCState, credit_flow:blocked()) end,
     receive
         on_disk            -> ok;
         {bump_credit, Msg} -> credit_flow:handle_bump_msg(Msg),
                               Recurse()
     after After ->
-            ok = msg_store_write_flow(MsgIds, MSCState),
-            ok = msg_store_remove(MsgIds, MSCState),
+            MsgIds1 = [{GenRef(), MsgId} || MsgId <- MsgIds],
+            ok = msg_store_write_flow(MsgIds1, MSCState),
+            {ok, _} = msg_store_remove(MsgIds1, MSCState),
             Recurse()
     end.
 
-test_msg_store_client_delete_and_terminate() ->
+test_msg_store_client_delete_and_terminate(GenRef) ->
     restart_msg_store_empty(),
-    MsgIds = [msg_id_bin(M) || M <- lists:seq(1, 10)],
+    MsgIds = [{GenRef(), msg_id_bin(M)} || M <- lists:seq(1, 10)],
     Ref = rabbit_guid:gen(),
     MSCState = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
     ok = msg_store_write(MsgIds, MSCState),
@@ -912,7 +928,7 @@ bq_queue_recover1(Config) ->
                   rabbit_variable_queue:fetch(true, VQ1),
               CountMinusOne = rabbit_variable_queue:len(VQ2),
               _VQ3 = rabbit_variable_queue:delete_and_terminate(shutdown, VQ2),
-              ok = rabbit_amqqueue:internal_delete(QName, <<"acting-user">>)
+              ok = rabbit_amqqueue:internal_delete(Q1, <<"acting-user">>)
       end),
     passed.
 
@@ -934,42 +950,6 @@ get_queue_sup_pid([{_, SupPid, _, _} | Rest], QueuePid) ->
 get_queue_sup_pid([], _QueuePid) ->
     undefined.
 
-variable_queue_dynamic_duration_change(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_dynamic_duration_change1, [Config]).
-
-variable_queue_dynamic_duration_change1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_dynamic_duration_change2/2,
-      ?config(variable_queue_type, Config)).
-
-variable_queue_dynamic_duration_change2(VQ0, _QName) ->
-    IndexMod = index_mod(),
-    SegmentSize = IndexMod:next_segment_boundary(0),
-
-    %% start by sending in a couple of segments worth
-    Len = 2*SegmentSize,
-    VQ1 = variable_queue_publish(false, Len, VQ0),
-    %% squeeze and relax queue
-    Churn = Len div 32,
-    VQ2 = publish_fetch_and_ack(Churn, Len, VQ1),
-
-    {Duration, VQ3} = rabbit_variable_queue:ram_duration(VQ2),
-    VQ7 = lists:foldl(
-            fun (Duration1, VQ4) ->
-                    {_Duration, VQ5} = rabbit_variable_queue:ram_duration(VQ4),
-                    VQ6 = variable_queue_set_ram_duration_target(
-                            Duration1, VQ5),
-                    publish_fetch_and_ack(Churn, Len, VQ6)
-            end, VQ3, [Duration / 4, 0, Duration / 4, infinity]),
-
-    %% drain
-    {VQ8, AckTags} = variable_queue_fetch(Len, false, false, Len, VQ7),
-    {_Guids, VQ9} = rabbit_variable_queue:ack(AckTags, VQ8),
-    {empty, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
-
-    VQ10.
-
 variable_queue_partial_segments_delta_thing(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, variable_queue_partial_segments_delta_thing1, [Config]).
@@ -988,26 +968,28 @@ variable_queue_partial_segments_delta_thing2(VQ0, _QName) ->
     {_Duration, VQ2} = rabbit_variable_queue:ram_duration(VQ1),
     VQ3 = check_variable_queue_status(
             variable_queue_set_ram_duration_target(0, VQ2),
-            %% one segment in q3, and half a segment in delta
-            [{delta, {delta, SegmentSize, HalfSegment, OneAndAHalfSegment}},
-             {q3, SegmentSize},
-             {len, SegmentSize + HalfSegment}]),
+            %% We only have one message in memory because the amount in memory
+            %% depends on the consume rate, which is nil in this test.
+            [{delta, {delta, 1, OneAndAHalfSegment - 1, 0, OneAndAHalfSegment}},
+             {q3, 1},
+             {len, OneAndAHalfSegment}]),
     VQ4 = variable_queue_set_ram_duration_target(infinity, VQ3),
     VQ5 = check_variable_queue_status(
             variable_queue_publish(true, 1, VQ4),
             %% one alpha, but it's in the same segment as the deltas
-            [{q1, 1},
-             {delta, {delta, SegmentSize, HalfSegment, OneAndAHalfSegment}},
-             {q3, SegmentSize},
-             {len, SegmentSize + HalfSegment + 1}]),
+            %% @todo That's wrong now! v1/v2
+            [{delta, {delta, 1, OneAndAHalfSegment, 0, OneAndAHalfSegment + 1}},
+             {q3, 1},
+             {len, OneAndAHalfSegment + 1}]),
     {VQ6, AckTags} = variable_queue_fetch(SegmentSize, true, false,
                                           SegmentSize + HalfSegment + 1, VQ5),
     VQ7 = check_variable_queue_status(
             VQ6,
-            %% the half segment should now be in q3
-            [{q1, 1},
-             {delta, {delta, undefined, 0, undefined}},
-             {q3, HalfSegment},
+            %% We only read from delta up to the end of the segment, so
+            %% after fetching exactly one segment, we should have no
+            %% messages in memory.
+            [{delta, {delta, SegmentSize, HalfSegment + 1, 0, OneAndAHalfSegment + 1}},
+             {q3, 0},
              {len, HalfSegment + 1}]),
     {VQ8, AckTags1} = variable_queue_fetch(HalfSegment + 1, true, false,
                                            HalfSegment + 1, VQ7),
@@ -1305,20 +1287,11 @@ variable_queue_ack_limiting2(VQ0, _Config) ->
     %% fetch half the messages
     {VQ4, _AckTags} = variable_queue_fetch(Len div 2, false, false, Len, VQ3),
 
-    VQ5 = check_variable_queue_status(
-            VQ4, [{len,                         Len div 2},
-                  {messages_unacknowledged_ram, Len div 2},
-                  {messages_ready_ram,          Len div 2},
-                  {messages_ram,                Len}]),
+    %% We only check the length anymore because
+    %% that's the only predictable stats we got.
+    VQ5 = check_variable_queue_status(VQ4, [{len, Len div 2}]),
 
-    %% ensure all acks go to disk on 0 duration target
-    VQ6 = check_variable_queue_status(
-            variable_queue_set_ram_duration_target(0, VQ5),
-            [{len,                         Len div 2},
-             {target_ram_count,            0},
-             {messages_unacknowledged_ram, 0},
-             {messages_ready_ram,          0},
-             {messages_ram,                0}]),
+    VQ6 = variable_queue_set_ram_duration_target(0, VQ5),
 
     VQ6.
 
@@ -1507,24 +1480,12 @@ pub_res(VQS) ->
     VQS.
 
 make_publish(IsPersistent, PayloadFun, PropFun, N) ->
-    {rabbit_basic:message(
-       rabbit_misc:r(<<>>, exchange, <<>>),
-       <<>>, #'P_basic'{delivery_mode = case IsPersistent of
-                                            true  -> 2;
-                                            false -> 1
-                                        end},
-       PayloadFun(N)),
+    {message(IsPersistent, PayloadFun, N),
      PropFun(N, #message_properties{size = 10}),
      false}.
 
 make_publish_delivered(IsPersistent, PayloadFun, PropFun, N) ->
-    {rabbit_basic:message(
-       rabbit_misc:r(<<>>, exchange, <<>>),
-       <<>>, #'P_basic'{delivery_mode = case IsPersistent of
-                                            true  -> 2;
-                                            false -> 1
-                                        end},
-       PayloadFun(N)),
+    {message(IsPersistent, PayloadFun, N),
      PropFun(N, #message_properties{size = 10})}.
 
 queue_name(Config, Name) ->
@@ -1606,7 +1567,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                           MsgId, SeqId, rabbit_msg_store,
                           #message_properties{size = 10},
                           Persistent, infinity, QiN),
-                  ok = rabbit_msg_store:write(MsgId, MsgId, MSCState),
+                  ok = rabbit_msg_store:write(SeqId, MsgId, MsgId, MSCState),
                   {QiM, [{SeqId, MsgId} | SeqIdsMsgIdsAcc]}
           end, {Qi, []}, SeqIds),
     %% do this just to force all of the publishes through to the msg_store:
@@ -1618,7 +1579,7 @@ nop(_) -> ok.
 nop(_, _) -> ok.
 
 msg_store_client_init(MsgStore, Ref) ->
-    rabbit_vhost_msg_store:client_init(?VHOST, MsgStore, Ref,  undefined, undefined).
+    rabbit_vhost_msg_store:client_init(?VHOST, MsgStore, Ref,  undefined).
 
 variable_queue_init(Q, Recover) ->
     rabbit_variable_queue:init(
@@ -1626,7 +1587,7 @@ variable_queue_init(Q, Recover) ->
              true  -> non_clean_shutdown;
              false -> new;
              Terms -> Terms
-         end, fun nop/2, fun nop/2, fun nop/1, fun nop/1).
+         end, fun nop/2, fun nop/1, fun nop/1).
 
 variable_queue_read_terms(QName) ->
     #resource { kind = queue,
@@ -1643,32 +1604,29 @@ publish_and_confirm(Q, Payload, Count) ->
     QTState =
     lists:foldl(
       fun (Seq, Acc0) ->
-              Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
+              BMsg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
                                          <<>>, #'P_basic'{delivery_mode = 2},
                                          Payload),
-              Delivery = #delivery{mandatory = false, sender = self(),
-                                   confirm = true, message = Msg, msg_seq_no = Seq,
-                                   flow = noflow},
-              {ok, Acc, _Actions} = rabbit_queue_type:deliver([Q], Delivery, Acc0),
+              Content = BMsg#basic_message.content,
+              Ex = BMsg#basic_message.exchange_name,
+              {ok, Msg} = mc_amqpl:message(Ex, <<>>, Content),
+              Options = #{correlation => Seq},
+              {ok, Acc, _Actions} = rabbit_queue_type:deliver([Q], Msg,
+                                                              Options, Acc0),
               Acc
       end, QTState0, Seqs),
-    wait_for_confirms(gb_sets:from_list(Seqs)),
+    wait_for_confirms(sets:from_list(Seqs, [{version, 2}])),
     QTState.
 
 wait_for_confirms(Unconfirmed) ->
-    case gb_sets:is_empty(Unconfirmed) of
+    case sets:is_empty(Unconfirmed) of
         true  -> ok;
         false ->
             receive
-                {'$gen_cast',
-                 {queue_event, _QName, {confirm, Confirmed, _}}} ->
+                {'$gen_cast', {queue_event, _QName, {confirm, Confirmed, _}}} ->
                     wait_for_confirms(
-                      rabbit_misc:gb_sets_difference(
-                        Unconfirmed, gb_sets:from_list(Confirmed)));
-                {'$gen_cast', {confirm, Confirmed, _}} ->
-                    wait_for_confirms(
-                      rabbit_misc:gb_sets_difference(
-                        Unconfirmed, gb_sets:from_list(Confirmed)))
+                      sets:subtract(
+                        Unconfirmed, sets:from_list(Confirmed, [{version, 2}])))
             after ?TIMEOUT ->
                       flush(),
                       exit(timeout_waiting_for_confirm)
@@ -1687,10 +1645,9 @@ with_fresh_variable_queue(Fun, Mode) ->
                        S0 = variable_queue_status(VQ),
                        assert_props(S0, [{q1, 0}, {q2, 0},
                                          {delta,
-                                          {delta, undefined, 0, undefined}},
+                                          {delta, undefined, 0, 0, undefined}},
                                          {q3, 0}, {q4, 0},
                                          {len, 0}]),
-                       %% @todo Some tests probably don't keep this after restart (dropwhile_(sync)_restart, A2).
                        VQ1 = set_queue_mode(Mode, VQ),
                        try
                            _ = rabbit_variable_queue:delete_and_terminate(
@@ -1708,10 +1665,7 @@ with_fresh_variable_queue(Fun, Mode) ->
     passed.
 
 set_queue_mode(Mode, VQ) ->
-    VQ1 = rabbit_variable_queue:set_queue_mode(Mode, VQ),
-    S1 = variable_queue_status(VQ1),
-    assert_props(S1, [{mode, Mode}]),
-    VQ1.
+    rabbit_variable_queue:set_queue_mode(Mode, VQ).
 
 variable_queue_publish(IsPersistent, Count, VQ) ->
     variable_queue_publish(IsPersistent, Count, fun (_N, P) -> P end, VQ).
@@ -1724,15 +1678,9 @@ variable_queue_publish(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
     variable_queue_wait_for_shuffling_end(
       lists:foldl(
         fun (N, VQN) ->
-
+                Msg = message(IsPersistent, PayloadFun, N),
                 rabbit_variable_queue:publish(
-                  rabbit_basic:message(
-                    rabbit_misc:r(<<>>, exchange, <<>>),
-                    <<>>, #'P_basic'{delivery_mode = case IsPersistent of
-                                                         true  -> 2;
-                                                         false -> 1
-                                                     end},
-                    PayloadFun(N)),
+                  Msg,
                   PropFun(N, #message_properties{size = 10}),
                   false, self(), noflow, VQN)
         end, VQ, lists:seq(Start, Start + Count - 1))).
@@ -1775,9 +1723,9 @@ variable_queue_batch_publish0(IsPersistent, Start, Count, PropFun, PayloadFun,
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
     lists:foldl(fun (N, {VQN, AckTagsAcc}) ->
                         Rem = Len - N,
-                        {{#basic_message { is_persistent = IsPersistent },
-                          IsDelivered, AckTagN}, VQM} =
+                        {{Msg, IsDelivered, AckTagN}, VQM} =
                             rabbit_variable_queue:fetch(true, VQN),
+                        IsPersistent = mc:is_persistent(Msg),
                         Rem = rabbit_variable_queue:len(VQM),
                         {VQM, [AckTagN | AckTagsAcc]}
                 end, {VQ, []}, lists:seq(1, Count)).
@@ -1792,7 +1740,11 @@ assert_prop(List, Prop, Value) ->
     end.
 
 assert_props(List, PropVals) ->
-    [assert_prop(List, Prop, Value) || {Prop, Value} <- PropVals].
+    Res = [assert_prop(List, Prop, Value) || {Prop, Value} <- PropVals],
+    case lists:usort(Res) of
+        [ok] -> ok;
+        Error -> error(Error -- [ok])
+    end.
 
 variable_queue_set_ram_duration_target(Duration, VQ) ->
     variable_queue_wait_for_shuffling_end(
@@ -1825,6 +1777,9 @@ variable_queue_wait_for_shuffling_end(VQ) ->
     end.
 
 msg2int(#basic_message{content = #content{ payload_fragments_rev = P}}) ->
+    binary_to_term(list_to_binary(lists:reverse(P)));
+msg2int(Msg) ->
+    #content{payload_fragments_rev = P} = mc:protocol_state(Msg),
     binary_to_term(list_to_binary(lists:reverse(P))).
 
 ack_subset(AckSeqs, Interval, Rem) ->
@@ -1866,9 +1821,7 @@ variable_queue_with_holes(VQ0) ->
             true, Count + 1, Interval,
             fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ7),
     %% assertions
-    Status = variable_queue_status(VQ8),
-
-    vq_with_holes_assertions(VQ8, proplists:get_value(mode, Status)),
+    vq_with_holes_assertions(VQ8),
     Depth = Count + Interval,
     Depth = rabbit_variable_queue:depth(VQ8),
     Len = Depth - length(Subset3),
@@ -1876,21 +1829,14 @@ variable_queue_with_holes(VQ0) ->
 
     {Seq3, Seq -- Seq3, lists:seq(Count + 1, Count + Interval), VQ8}.
 
-vq_with_holes_assertions(VQ, default) ->
+vq_with_holes_assertions(VQ) ->
     [false =
          case V of
-             {delta, _, 0, _} -> true;
-             0                -> true;
-             _                -> false
+             {delta, _, 0, _, _} -> true;
+             0                   -> true;
+             _                   -> false
          end || {K, V} <- variable_queue_status(VQ),
-                lists:member(K, [q1, delta, q3])];
-vq_with_holes_assertions(VQ, lazy) ->
-    [false =
-         case V of
-             {delta, _, 0, _} -> true;
-             _                -> false
-         end || {K, V} <- variable_queue_status(VQ),
-                lists:member(K, [delta])].
+                lists:member(K, [delta, q3])].
 
 check_variable_queue_status(VQ0, Props) ->
     VQ1 = variable_queue_wait_for_shuffling_end(VQ0),
@@ -1901,8 +1847,21 @@ check_variable_queue_status(VQ0, Props) ->
 flush() ->
     receive
         Any ->
-            ct:pal("flush ~p", [Any]),
+            ct:pal("flush ~tp", [Any]),
             flush()
     after 0 ->
               ok
     end.
+
+message(IsPersistent, PayloadFun, N) ->
+    #basic_message{content = Content,
+                   exchange_name = Ex,
+                   id = Id} =
+        rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
+                             <<>>, #'P_basic'{delivery_mode = case IsPersistent of
+                                                                  true  -> 2;
+                                                                  false -> 1
+                                                              end},
+                             PayloadFun(N)),
+        {ok, Msg} = mc_amqpl:message(Ex, <<>>, Content, #{id => Id}),
+        Msg.

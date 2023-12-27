@@ -1,31 +1,52 @@
-load("@bazel_skylib//rules:select_file.bzl", "select_file")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
+load(":rabbitmqctl_check_formatted.bzl", "rabbitmqctl_check_formatted_test")
 load(":rabbitmqctl_test.bzl", "rabbitmqctl_test")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
-load("//:rabbitmq.bzl", "STARTS_BACKGROUND_BROKER_TAG")
+load("//:rabbitmq.bzl", "RABBITMQ_DIALYZER_OPTS", "STARTS_BACKGROUND_BROKER_TAG", "without")
+load(
+    "@rabbitmq-server//bazel/elixir:mix_archive_build.bzl",
+    "mix_archive_build",
+)
+
+mix_archive_build(
+    name = "csv_ez",
+    srcs = ["@csv//:sources"],
+    out = "csv.ez",
+    archives = ["@hex//:archive"],
+)
+
+mix_archive_build(
+    name = "json_ez",
+    srcs = ["@json//:sources"],
+    out = "json.ez",
+    archives = ["@hex//:archive"],
+)
 
 # Note: All the various rabbitmq-* scripts are just copies of rabbitmqctl
 rabbitmqctl(
     name = "rabbitmqctl",
     srcs = [
-        "mix.exs",
         "config/config.exs",
+        "mix.exs",
     ] + glob([
         "lib/**/*.ex",
     ]),
+    archives = [
+        "@hex//:archive",
+    ],
     license_files = glob(["LICENSE*"]),
+    source_deps = {
+        "@csv//:sources": "csv",
+        "@json//:sources": "json",
+    },
     visibility = ["//visibility:public"],
     deps = [
         "//deps/rabbit_common:erlang_app",
+        "@observer_cli//:erlang_app",
+        "@stdout_formatter//:erlang_app",
     ],
-)
-
-select_file(
-    name = "fetched_srcs",
-    srcs = ":rabbitmqctl",
-    subpath = "deps.tar",
-    visibility = ["//visibility:public"],
 )
 
 rabbitmq_home(
@@ -35,6 +56,7 @@ rabbitmq_home(
         "//deps/rabbit:erlang_app",
         "//deps/rabbitmq_federation:erlang_app",
         "//deps/rabbitmq_stomp:erlang_app",
+        "//deps/rabbitmq_stream_management:erlang_app",
         "//deps/amqp_client:erlang_app",
     ],
 )
@@ -46,23 +68,104 @@ rabbitmq_run(
     visibility = ["//visibility:public"],
 )
 
-rabbitmqctl_test(
-    name = "rabbitmqctl_tests",
-    size = "large",
+rabbitmqctl_check_formatted_test(
+    name = "check_formatted",
+    size = "small",
     srcs = [
-        "mix.exs",
+        ".formatter.exs",
         "config/config.exs",
+        "mix.exs",
     ] + glob([
         "lib/**/*.ex",
         "test/**/*.exs",
     ]),
     data = glob(["test/fixtures/**/*"]),
+    target_compatible_with = select({
+        "@platforms//os:macos": [
+            "@platforms//os:macos",
+            "@elixir_config//:elixir_1_15",
+        ],
+        "//conditions:default": [
+            "@platforms//os:linux",
+            "@elixir_config//:elixir_1_15",
+        ],
+    }),
+)
+
+test_suite(
+    name = "rabbitmqctl_check_formatted",
+    tests = ["check_formatted"],
+)
+
+plt(
+    name = "deps_plt",
+    apps = [
+        "kernel",
+        "stdlib",
+        "erts",
+        "mnesia",
+        "public_key",
+        "runtime_tools",
+    ],
+    ez_deps = [
+        ":csv_ez",
+        ":json_ez",
+    ],
+    ignore_warnings = True,
+    libs = [":elixir"],
+    deps = [
+        ":elixir",
+        "//bazel/elixir:logger",
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+    ],
+)
+
+dialyze(
+    dialyzer_opts = without(
+        # Some Elixir.CSV, Elixir.JSON and Elixir.Logger functions are unknown
+        "-Wunknown",
+        RABBITMQ_DIALYZER_OPTS,
+    ),
+    libs = [":elixir"],
+    plt = ":deps_plt",
+)
+
+rabbitmqctl_test(
+    name = "tests",
+    size = "large",
+    srcs = [
+        ".formatter.exs",
+        "config/config.exs",
+        "mix.exs",
+    ] + glob([
+        "lib/**/*.ex",
+        "test/**/*.exs",
+    ]),
+    archives = [
+        "@hex//:archive",
+    ],
+    data = glob(["test/fixtures/**/*"]),
     flaky = True,
     rabbitmq_run = ":rabbitmq-for-cli-tests-run",
+    source_deps = {
+        "@amqp//:sources": "amqp",
+        "@csv//:sources": "csv",
+        "@json//:sources": "json",
+        "@temp//:sources": "temp",
+        "@x509//:sources": "x509",
+    },
     tags = [STARTS_BACKGROUND_BROKER_TAG],
     deps = [
         "//deps/amqp_client:erlang_app",
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
+        "@observer_cli//:erlang_app",
+        "@stdout_formatter//:erlang_app",
     ],
+)
+
+test_suite(
+    name = "rabbitmqctl_tests",
+    tests = ["tests"],
 )

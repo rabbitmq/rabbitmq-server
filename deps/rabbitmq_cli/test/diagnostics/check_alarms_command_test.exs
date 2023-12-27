@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule CheckAlarmsCommandTest do
   use ExUnit.Case, async: false
@@ -24,10 +24,11 @@ defmodule CheckAlarmsCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000
+     }}
   end
 
   test "merge_defaults: nothing to do" do
@@ -44,7 +45,10 @@ defmodule CheckAlarmsCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})))
+    assert match?(
+             {:badrpc, _},
+             @command.run([], Map.merge(context[:opts], %{node: :jake@thedog}))
+           )
   end
 
   test "run: when target node has no alarms in effect, returns an empty list", context do
@@ -55,9 +59,11 @@ defmodule CheckAlarmsCommandTest do
 
   test "run: when target node has an alarm in effect, returns it", context do
     old_watermark = status()[:vm_memory_high_watermark]
-    on_exit(fn() ->
+
+    on_exit(fn ->
       set_vm_memory_high_watermark(old_watermark)
     end)
+
     # 2000 bytes will trigger an alarm
     set_vm_memory_high_watermark({:absolute, 2000})
 
@@ -66,7 +72,6 @@ defmodule CheckAlarmsCommandTest do
 
     set_vm_memory_high_watermark(old_watermark)
   end
-
 
   test "output: when target node has no alarms in effect, returns a success", context do
     assert [] == status()[:alarms]
@@ -85,17 +90,18 @@ defmodule CheckAlarmsCommandTest do
           ],
           [
             :file_descriptor_limit,
-            {{:resource_limit, :disk,   :hare@warp10},   []},
-            {{:resource_limit, :memory, :hare@warp10},   []},
-            {{:resource_limit, :disk,   :rabbit@warp10}, []},
+            {{:resource_limit, :disk, :hare@warp10}, []},
+            {{:resource_limit, :memory, :hare@warp10}, []},
+            {{:resource_limit, :disk, :rabbit@warp10}, []},
             {{:resource_limit, :memory, :rabbit@warp10}, []}
           ]
         ] do
-        assert match?({:error, _, _}, @command.output(input, context[:opts]))
+      assert match?({:error, _, _}, @command.output(input, context[:opts]))
     end
   end
 
-  test "output: when target node has an alarm in effect and --silent is passed, returns a silent failure", _context do
+  test "output: when target node has an alarm in effect and --silent is passed, returns a silent failure",
+       _context do
     for input <- [
           [
             :file_descriptor_limit
@@ -106,13 +112,13 @@ defmodule CheckAlarmsCommandTest do
           ],
           [
             :file_descriptor_limit,
-            {{:resource_limit, :disk,   :hare@warp10},   []},
-            {{:resource_limit, :memory, :hare@warp10},   []},
-            {{:resource_limit, :disk,   :rabbit@warp10}, []},
+            {{:resource_limit, :disk, :hare@warp10}, []},
+            {{:resource_limit, :memory, :hare@warp10}, []},
+            {{:resource_limit, :disk, :rabbit@warp10}, []},
             {{:resource_limit, :memory, :rabbit@warp10}, []}
           ]
         ] do
-        assert {:error, :check_failed} == @command.output(input, %{silent: true})
+      assert {:error, :check_failed} == @command.output(input, %{silent: true})
     end
   end
 end

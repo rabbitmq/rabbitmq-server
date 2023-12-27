@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_http_SUITE).
@@ -11,6 +11,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -import(rabbit_ct_client_helpers, [close_connection/1, close_channel/1,
                                    open_unmanaged_connection/1]).
@@ -18,10 +19,11 @@
                                 assert_keys/2, assert_no_keys/2,
                                 http_get/2, http_get/3, http_get/5,
                                 http_get_no_auth/3,
+                                http_get_no_decode/5,
                                 http_put/4, http_put/6,
                                 http_post/4, http_post/6,
                                 http_upload_raw/8,
-                                http_delete/3, http_delete/5,
+                                http_delete/3, http_delete/4, http_delete/5,
                                 http_put_raw/4, http_post_accept_json/4,
                                 req/4, auth_header/2,
                                 assert_permanent_redirect/3,
@@ -64,6 +66,7 @@ all_tests() -> [
     users_legacy_administrator_test,
     adding_a_user_with_password_test,
     adding_a_user_with_password_hash_test,
+    adding_a_user_with_generated_password_hash_test,
     adding_a_user_with_permissions_in_single_operation_test,
     adding_a_user_without_tags_fails_test,
     adding_a_user_without_password_or_hash_test,
@@ -80,6 +83,7 @@ all_tests() -> [
     multiple_invalid_connections_test,
     exchanges_test,
     queues_test,
+    crashed_queues_test,
     quorum_queues_test,
     stream_queues_have_consumers_field,
     bindings_test,
@@ -89,6 +93,7 @@ all_tests() -> [
     permissions_administrator_test,
     permissions_vhost_test,
     permissions_amqp_test,
+    permissions_queue_delete_test,
     permissions_connection_channel_consumer_test,
     consumers_cq_test,
     consumers_qq_test,
@@ -98,6 +103,7 @@ all_tests() -> [
     definitions_remove_things_test,
     definitions_server_named_queue_test,
     definitions_with_charset_test,
+    definitions_default_queue_type_test,
     long_definitions_test,
     long_definitions_multipart_test,
     aliveness_test,
@@ -110,6 +116,7 @@ all_tests() -> [
     connections_channels_pagination_test,
     exchanges_pagination_test,
     exchanges_pagination_permissions_test,
+    queues_detailed_test,
     queue_pagination_test,
     queue_pagination_columns_test,
     queues_pagination_permissions_test,
@@ -122,6 +129,7 @@ all_tests() -> [
     get_fail_test,
     publish_test,
     publish_large_message_test,
+    publish_large_message_exceeding_http_request_body_size_test,
     publish_accept_json_test,
     publish_fail_test,
     publish_base64_test,
@@ -129,6 +137,8 @@ all_tests() -> [
     if_empty_unused_test,
     parameters_test,
     global_parameters_test,
+    disabled_operator_policy_test,
+    operator_policy_test,
     policy_test,
     policy_permissions_test,
     issue67_test,
@@ -139,13 +149,18 @@ all_tests() -> [
     rates_test,
     single_active_consumer_cq_test,
     single_active_consumer_qq_test,
-%%    oauth_test,  %% disabled until we are able to enable oauth2 plugin
+    %% This test needs the OAuth 2 plugin to be enabled
+    %% oauth_test,
     disable_basic_auth_test,
     login_test,
     csp_headers_test,
     auth_attempts_test,
     user_limits_list_test,
-    user_limit_set_test
+    user_limit_set_test,
+    config_environment_test,
+    disabled_qq_replica_opers_test,
+    list_deprecated_features_test,
+    list_used_deprecated_features_test
 ].
 
 %% -------------------------------------------------------------------
@@ -205,6 +220,23 @@ init_per_testcase(Testcase = stream_queues_have_consumers_field, Config) ->
         _ ->
             rabbit_ct_helpers:testcase_started(Config, Testcase)
     end;
+init_per_testcase(Testcase = disabled_operator_policy_test, Config) ->
+    Restrictions = [{operator_policy_changes, [{disabled, true}]}],
+    rabbit_ct_broker_helpers:rpc_all(Config,
+      application, set_env, [rabbitmq_management, restrictions, Restrictions]),
+    rabbit_ct_helpers:testcase_started(Config, Testcase);
+init_per_testcase(Testcase = disabled_qq_replica_opers_test, Config) ->
+    Restrictions = [{quorum_queue_replica_operations, [{disabled, true}]}],
+    rabbit_ct_broker_helpers:rpc_all(Config,
+      application, set_env, [rabbitmq_management, restrictions, Restrictions]),
+    rabbit_ct_helpers:testcase_started(Config, Testcase);
+init_per_testcase(queues_detailed_test, Config) ->
+    IsEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                  Config, detailed_queues_endpoint),
+    case IsEnabled of
+        true  -> Config;
+        false -> {skip, "The detailed queues endpoint is not available."}
+    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"rabbit_mgmt_SUITE:init_per_testcase">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -257,6 +289,25 @@ end_per_testcase0(permissions_vhost_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"myvhost2">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"myuser1">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"myuser2">>),
+    Config;
+end_per_testcase0(config_environment_test, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                 [rabbit, config_environment_test_env]),
+    Config;
+end_per_testcase0(disabled_operator_policy_test, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                 [rabbitmq_management, restrictions]),
+    Config;
+end_per_testcase0(disabled_qq_replica_opers_test, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                 [rabbitmq_management, restrictions]),
+    Config;
+end_per_testcase0(Testcase, Config)
+  when Testcase == list_deprecated_features_test;
+       Testcase == list_used_deprecated_features_test ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_feature_flags,
+                                      clear_injected_test_feature_flags,
+                                      []),
     Config;
 end_per_testcase0(_, Config) -> Config.
 
@@ -330,7 +381,7 @@ ets_tables_memory_test(Config) ->
     Path = "/nodes/" ++ binary_to_list(maps:get(name, Node)) ++ "/memory/ets",
     Result = http_get(Config, Path, ?OK),
     assert_keys([ets_tables_memory], Result),
-    NonMgmtKeys = [rabbit_vhost,rabbit_user_permission],
+    NonMgmtKeys = [tracked_connection, tracked_channel],
     Keys = [queue_stats, vhost_stats_coarse_conn_stats,
         connection_created_stats, channel_process_stats, consumer_stats,
         queue_msg_rates],
@@ -377,7 +428,7 @@ assert_percentage(Breakdown0, ExtraMargin) ->
             ok
     end.
 
-println(What) -> io:format("~p~n", [What]).
+println(What) -> io:format("~tp~n", [What]).
 
 auth_test(Config) ->
     http_put(Config, "/users/user", [{password, <<"user">>},
@@ -575,6 +626,17 @@ adding_a_user_with_password_hash_test(Config) ->
                                        {password_hash, <<"2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b">>}],
              [?CREATED, ?NO_CONTENT]),
     http_delete(Config, "/users/user11", ?NO_CONTENT).
+
+adding_a_user_with_generated_password_hash_test(Config) ->
+    #{ok := HashedPassword} = http_get(Config, "/auth/hash_password/some_password"),
+
+    http_put(Config, "/users/user12", [{tags, <<"administrator">>},
+                                       {password_hash, HashedPassword}],
+             [?CREATED, ?NO_CONTENT]),
+    % If the get succeeded, the hashed password generation is correct
+    User = http_get(Config, "/users/user12", "user12", "some_password", ?OK),
+    ?assertEqual(maps:get(password_hash, User), HashedPassword),
+    http_delete(Config, "/users/user12", ?NO_CONTENT).
 
 adding_a_user_with_permissions_in_single_operation_test(Config) ->
     QArgs = #{},
@@ -991,6 +1053,10 @@ queues_test(Config) ->
              ?BAD_REQUEST),
 
     http_put(Config, "/queues/%2F/baz", Good, {group, '2xx'}),
+    %% Wait until metrics are emitted and stats collected
+    ?awaitMatch(true, maps:is_key(storage_version,
+                                  http_get(Config, "/queues/%2F/baz")),
+                30000),
     Queues = http_get(Config, "/queues/%2F"),
     Queue = http_get(Config, "/queues/%2F/foo"),
     assert_list([#{name        => <<"baz">>,
@@ -998,19 +1064,22 @@ queues_test(Config) ->
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
-                   arguments   => #{}},
+                   arguments   => #{},
+                   storage_version => 2},
                  #{name        => <<"foo">>,
                    vhost       => <<"/">>,
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
-                   arguments   => #{}}], Queues),
+                   arguments   => #{},
+                   storage_version => 2}], Queues),
     assert_item(#{name        => <<"foo">>,
                   vhost       => <<"/">>,
                   durable     => true,
                   auto_delete => false,
                   exclusive   => false,
-                  arguments   => #{}}, Queue),
+                  arguments   => #{},
+                  storage_version => 2}, Queue),
 
     http_delete(Config, "/queues/%2F/foo", {group, '2xx'}),
     http_delete(Config, "/queues/%2F/baz", {group, '2xx'}),
@@ -1019,6 +1088,36 @@ queues_test(Config) ->
 
     http_delete(Config, "/queues/downvhost/foo", {group, '2xx'}),
     http_delete(Config, "/queues/downvhost/bar", {group, '2xx'}),
+    passed.
+
+crashed_queues_test(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Q = #resource{virtual_host = <<"/">>, kind = queue, name = <<"crashingqueue">>},
+
+    QArgs = #{},
+    http_put(Config, "/queues/%2F/crashingqueue", QArgs, {group, '2xx'}),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+            rabbit_amqqueue_control, await_state, [Node, Q, running]),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+        rabbit_amqqueue, kill_queue_hard, [Node, Q]),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+            rabbit_amqqueue_control, await_state, [Node, Q, crashed]),
+
+    CrashedQueue  = http_get(Config, "/queues/%2F/crashingqueue"),
+
+    assert_item(#{name        => <<"crashingqueue">>,
+                  vhost       => <<"/">>,
+                  state       => <<"crashed">>,
+                  durable     => false,
+                  auto_delete => false,
+                  exclusive   => false,
+                  arguments   => #{}}, CrashedQueue),
+
+    http_delete(Config, "/queues/%2F/crashingqueue", {group, '2xx'}),
+    http_delete(Config, "/queues/%2F/crashingqueue", ?NOT_FOUND),
     passed.
 
 quorum_queues_test(Config) ->
@@ -1327,6 +1426,18 @@ permissions_amqp_test(Config) ->
              ?NOT_AUTHORISED),
     http_put(Config, "/queues/%2F/bar-queue", QArgs, "nonexistent", "nonexistent",
              ?NOT_AUTHORISED),
+    http_delete(Config, "/users/myuser", {group, '2xx'}),
+    passed.
+
+permissions_queue_delete_test(Config) ->
+    QArgs = #{},
+    PermArgs = [{configure, <<"foo.*">>}, {write, <<".*">>}, {read, <<".*">>}],
+    http_put(Config, "/users/myuser", [{password, <<"myuser">>},
+                                       {tags, <<"management">>}], {group, '2xx'}),
+    http_put(Config, "/permissions/%2F/myuser", PermArgs, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/bar-queue", QArgs, {group, '2xx'}),
+    http_delete(Config, "/queues/%2F/bar-queue", "myuser", "myuser", ?NOT_AUTHORISED),
+    http_delete(Config, "/queues/%2F/bar-queue", {group, '2xx'}),
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     passed.
 
@@ -1667,10 +1778,33 @@ long_definitions_vhosts(long_definitions_multipart_test) ->
     [#{name => <<"long_definitions_test-", Bin/binary, (integer_to_binary(N))/binary>>} ||
      N <- lists:seq(1, 16)].
 
+defs_default_queue_type_vhost(Config, QueueType) ->
+    register_parameters_and_policy_validator(Config),
+
+    %% Create a test vhost
+    http_put(Config, "/vhosts/test-vhost", #{default_queue_type => QueueType}, {group, '2xx'}),
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+    http_put(Config, "/permissions/test-vhost/guest", PermArgs, {group, '2xx'}),
+
+    %% Import queue definition without an explicit queue type
+    http_post(Config, "/definitions/test-vhost",
+              #{queues => [#{name => <<"test-queue">>, durable => true}]},
+              {group, '2xx'}),
+
+    %% And check whether it was indeed created with the default type
+    Q = http_get(Config, "/queues/test-vhost/test-queue", ?OK),
+    ?assertEqual(QueueType, maps:get(type, Q)),
+
+    %% Remove the test vhost
+    http_delete(Config, "/vhosts/test-vhost", {group, '2xx'}),
+    ok.
+
+definitions_default_queue_type_test(Config) ->
+    defs_default_queue_type_vhost(Config, <<"classic">>),
+    defs_default_queue_type_vhost(Config, <<"quorum">>).
+
 defs_vhost(Config, Key, URI, CreateMethod, Args) ->
     Rep1 = fun (S, S2) -> re:replace(S, "<vhost>", S2, [{return, list}]) end,
-    ReplaceVHostInArgs = fun(M, V2) -> maps:map(fun(vhost, _) -> V2;
-        (_, V1)    -> V1 end, M) end,
 
     %% Create test vhost
     http_put(Config, "/vhosts/test", none, {group, '2xx'}),
@@ -1678,41 +1812,49 @@ defs_vhost(Config, Key, URI, CreateMethod, Args) ->
     http_put(Config, "/permissions/test/guest", PermArgs, {group, '2xx'}),
 
     %% Test against default vhost
-    defs_vhost(Config, Key, URI, Rep1, "%2F", "test", CreateMethod,
-               ReplaceVHostInArgs(Args, <<"/">>), ReplaceVHostInArgs(Args, <<"test">>),
+    defs_vhost(Config, Key, URI, Rep1, "%2F", "test", CreateMethod, Args,
                fun(URI2) -> http_delete(Config, URI2, {group, '2xx'}) end),
 
     %% Test against test vhost
-    defs_vhost(Config, Key, URI, Rep1, "test", "%2F", CreateMethod,
-               ReplaceVHostInArgs(Args, <<"test">>), ReplaceVHostInArgs(Args, <<"/">>),
+    defs_vhost(Config, Key, URI, Rep1, "test", "%2F", CreateMethod, Args,
                fun(URI2) -> http_delete(Config, URI2, {group, '2xx'}) end),
 
     %% Remove test vhost
     http_delete(Config, "/vhosts/test", {group, '2xx'}).
 
-
-defs_vhost(Config, Key, URI0, Rep1, VHost1, VHost2, CreateMethod, Args1, Args2,
+defs_vhost(Config, Key, URI0, Rep1, VHost1, VHost2, CreateMethod, Args,
            DeleteFun) ->
     %% Create the item
-    URI2 = create(Config, CreateMethod, Rep1(URI0, VHost1), Args1),
+    URI2 = create(Config, CreateMethod, Rep1(URI0, VHost1), Args),
+
     %% Make sure it ends up in definitions
     Definitions = http_get(Config, "/definitions/" ++ VHost1, ?OK),
-    true = lists:any(fun(I) -> test_item(Args1, I) end, maps:get(Key, Definitions)),
+    true = lists:any(fun(I) -> test_item(Args, I) end, maps:get(Key, Definitions)),
+
+    %% `vhost` is implied when importing/exporting for a single
+    %% virtual host, let's make sure that it doesn't accidentally
+    %% appear in the exported definitions. This can (and did) cause a
+    %% confusion about which part of the request to use as the source
+    %% for the vhost name.
+    case [ I || #{vhost := _} = I <- maps:get(Key, Definitions)] of
+        [] -> ok;
+        WithVHost -> error({vhost_included_in, Key, WithVHost})
+    end,
 
     %% Make sure it is not in the other vhost
     Definitions0 = http_get(Config, "/definitions/" ++ VHost2, ?OK),
-    false = lists:any(fun(I) -> test_item(Args2, I) end, maps:get(Key, Definitions0)),
+    false = lists:any(fun(I) -> test_item(Args, I) end, maps:get(Key, Definitions0)),
 
     %% Post the definitions back
     http_post(Config, "/definitions/" ++ VHost2, Definitions, {group, '2xx'}),
 
     %% Make sure it is now in the other vhost
     Definitions1 = http_get(Config, "/definitions/" ++ VHost2, ?OK),
-    true = lists:any(fun(I) -> test_item(Args2, I) end, maps:get(Key, Definitions1)),
+    true = lists:any(fun(I) -> test_item(Args, I) end, maps:get(Key, Definitions1)),
 
     %% Delete it
     DeleteFun(URI2),
-    URI3 = create(Config, CreateMethod, Rep1(URI0, VHost2), Args2),
+    URI3 = create(Config, CreateMethod, Rep1(URI0, VHost2), Args),
     DeleteFun(URI3),
     passed.
 
@@ -1731,15 +1873,13 @@ definitions_vhost_test(Config) ->
     defs_vhost(Config, bindings, "/bindings/<vhost>/e/amq.direct/e/amq.fanout", post,
                #{routing_key => <<"routing">>, arguments => #{}}),
     defs_vhost(Config, policies, "/policies/<vhost>/my-policy", put,
-               #{vhost      => vhost,
-                 name       => <<"my-policy">>,
+               #{name       => <<"my-policy">>,
                  pattern    => <<".*">>,
                  definition => #{testpos => [1, 2, 3]},
                  priority   => 1}),
 
     defs_vhost(Config, parameters, "/parameters/vhost-limits/<vhost>/limits", put,
-               #{vhost      => vhost,
-                 name       => <<"limits">>,
+               #{name       => <<"limits">>,
                  component  => <<"vhost-limits">>,
                  value      => #{ 'max-connections' => 100 }}),
     Upload =
@@ -1766,7 +1906,7 @@ definitions_password_test(Config) ->
                    tags              => [<<"management">>]},
     http_post(Config, "/definitions", Config35, {group, '2xx'}),
     Definitions35 = http_get(Config, "/definitions", ?OK),
-    ct:pal("Definitions35: ~p", [Definitions35]),
+    ct:pal("Definitions35: ~tp", [Definitions35]),
     Users35 = maps:get(users, Definitions35),
     true = lists:any(fun(I) -> test_item(Expected35, I) end, Users35),
 
@@ -2134,8 +2274,8 @@ queue_pagination_test(Config) ->
     ?assertEqual(1, maps:get(page, PageOfTwo)),
     ?assertEqual(2, maps:get(page_size, PageOfTwo)),
     ?assertEqual(2, maps:get(page_count, PageOfTwo)),
-    assert_list([#{name => <<"test0">>, vhost => <<"/">>},
-                 #{name => <<"test2_reg">>, vhost => <<"/">>}
+    assert_list([#{name => <<"test0">>, vhost => <<"/">>, storage_version => 2},
+                 #{name => <<"test2_reg">>, vhost => <<"/">>, storage_version => 2}
                 ], maps:get(items, PageOfTwo)),
 
     SortedByName = http_get(Config, "/queues?sort=name&page=1&page_size=2", ?OK),
@@ -2162,8 +2302,18 @@ queue_pagination_test(Config) ->
                  #{name => <<"test2_reg">>, vhost => <<"/">>},
                  #{name => <<"reg_test3">>, vhost =><<"vh1">>}
                 ], maps:get(items, FirstPage)),
-
-
+    %% The reduced API version just has the most useful fields.
+    %% garbage_collection is not one of them
+    IsEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                  Config, detailed_queues_endpoint),
+    case IsEnabled of
+        true  ->
+            [?assertNot(maps:is_key(garbage_collection, Item)) ||
+                Item <- maps:get(items, FirstPage)];
+        false ->
+            [?assert(maps:is_key(garbage_collection, Item)) ||
+                Item <- maps:get(items, FirstPage)]
+    end,
     ReverseSortedByName = http_get(Config,
                                    "/queues?page=2&page_size=2&sort=name&sort_reverse=true",
                                    ?OK),
@@ -2262,12 +2412,61 @@ queue_pagination_columns_test(Config) ->
           vhost => <<"vh1">>}
     ], maps:get(items, ColumnsNameVhost)),
 
+    ?awaitMatch(
+       true,
+       begin
+           ColumnsGarbageCollection = http_get(Config, "/queues?columns=name,garbage_collection&page=2&page_size=2", ?OK),
+           %% The reduced API version just has the most useful fields,
+           %% but we can still query any info item using `columns`
+           lists:all(fun(Item) ->
+                             maps:is_key(garbage_collection, Item)
+                     end,
+                     maps:get(items, ColumnsGarbageCollection))
+       end, 30000),
 
     http_delete(Config, "/queues/%2F/queue_a", {group, '2xx'}),
     http_delete(Config, "/queues/vh1/queue_b", {group, '2xx'}),
     http_delete(Config, "/queues/%2F/queue_c", {group, '2xx'}),
     http_delete(Config, "/queues/vh1/queue_d", {group, '2xx'}),
     http_delete(Config, "/vhosts/vh1", {group, '2xx'}),
+    passed.
+
+queues_detailed_test(Config) ->
+    QArgs = #{},
+    http_put(Config, "/queues/%2F/queue_a", QArgs, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/queue_c", QArgs, {group, '2xx'}),
+
+    ?awaitMatch(
+       true,
+       begin
+           Detailed = http_get(Config, "/queues/detailed", ?OK),
+           lists:all(fun(Item) ->
+                             maps:is_key(garbage_collection, Item)
+                     end, Detailed)
+       end, 30000),
+
+    Detailed = http_get(Config, "/queues/detailed", ?OK),
+    ?assertNot(lists:any(fun(Item) ->
+                                 maps:is_key(backing_queue_status, Item)
+                         end, Detailed)),
+    %% It's null
+    ?assert(lists:any(fun(Item) ->
+                              maps:is_key(single_active_consumer_tag, Item)
+                      end, Detailed)),
+
+    Reduced = http_get(Config, "/queues", ?OK),
+    ?assertNot(lists:any(fun(Item) ->
+                                 maps:is_key(garbage_collection, Item)
+                         end, Reduced)),
+    ?assertNot(lists:any(fun(Item) ->
+                                 maps:is_key(backing_queue_status, Item)
+                         end, Reduced)),
+    ?assertNot(lists:any(fun(Item) ->
+                                 maps:is_key(single_active_consumer_tag, Item)
+                         end, Reduced)),
+
+    http_delete(Config, "/queues/%2F/queue_a", {group, '2xx'}),
+    http_delete(Config, "/queues/%2F/queue_c", {group, '2xx'}),
     passed.
 
 queues_pagination_permissions_test(Config) ->
@@ -2569,7 +2768,7 @@ get_fail_test(Config) ->
     passed.
 
 
--define(LARGE_BODY_BYTES, 25000000).
+-define(LARGE_BODY_BYTES, 5000000).
 
 publish_test(Config) ->
     Headers = #{'x-forwarding' => [#{uri => <<"amqp://localhost/%2F/upstream">>}]},
@@ -2610,6 +2809,19 @@ publish_large_message_test(Config) ->
                                   {encoding, auto}], ?OK),
   assert_item(Msg, Msg3),
   http_delete(Config, "/queues/%2F/publish_accept_json_test", {group, '2xx'}),
+  passed.
+
+-define(EXCESSIVELY_LARGE_BODY_BYTES, 35000000).
+
+publish_large_message_exceeding_http_request_body_size_test(Config) ->
+  Headers = #{'x-forwarding' => [#{uri => <<"amqp://localhost/%2F/upstream">>}]},
+  Body = binary:copy(<<"a">>, ?EXCESSIVELY_LARGE_BODY_BYTES),
+  Msg = msg(<<"large_message_exceeding_http_request_body_size_test">>, Headers, Body),
+  http_put(Config, "/queues/%2F/large_message_exceeding_http_request_body_size_test", #{}, {group, '2xx'}),
+  %% exceeds the default HTTP API request body size limit
+  http_post_accept_json(Config, "/exchanges/%2F/amq.default/publish",
+                                     Msg, ?BAD_REQUEST),
+  http_delete(Config, "/queues/%2F/large_message_exceeding_http_request_body_size_test", {group, '2xx'}),
   passed.
 
 publish_accept_json_test(Config) ->
@@ -2773,6 +2985,53 @@ global_parameters_test(Config) ->
     InitialCount = length(http_get(Config, "/global-parameters")),
     passed.
 
+operator_policy_test(Config) ->
+    register_parameters_and_policy_validator(Config),
+    PolicyPos  = #{vhost      => <<"/">>,
+                   name       => <<"policy_pos">>,
+                   pattern    => <<".*">>,
+                   definition => #{testpos => [1,2,3]},
+                   priority   => 10},
+    PolicyEven = #{vhost      => <<"/">>,
+                   name       => <<"policy_even">>,
+                   pattern    => <<".*">>,
+                   definition => #{testeven => [1,2,3,4]},
+                   priority   => 10},
+    http_put(Config,
+             "/operator-policies/%2F/policy_pos",
+             PolicyPos,
+             {group, '2xx'}),
+    http_put(Config,
+             "/operator-policies/%2F/policy_even",
+             PolicyEven,
+             {group, '2xx'}),
+    assert_item(PolicyPos,  http_get(Config, "/operator-policies/%2F/policy_pos",  ?OK)),
+    assert_item(PolicyEven, http_get(Config, "/operator-policies/%2F/policy_even", ?OK)),
+    List = [PolicyPos, PolicyEven],
+    assert_list(List, http_get(Config, "/operator-policies",     ?OK)),
+    assert_list(List, http_get(Config, "/operator-policies/%2F", ?OK)),
+
+    http_delete(Config, "/operator-policies/%2F/policy_pos", {group, '2xx'}),
+    http_delete(Config, "/operator-policies/%2F/policy_even", {group, '2xx'}),
+    0 = length(http_get(Config, "/operator-policies")),
+    0 = length(http_get(Config, "/operator-policies/%2F")),
+    unregister_parameters_and_policy_validator(Config),
+    passed.
+
+disabled_operator_policy_test(Config) ->
+    register_parameters_and_policy_validator(Config),
+    PolicyPos  = #{vhost      => <<"/">>,
+                   name       => <<"policy_pos">>,
+                   pattern    => <<".*">>,
+                   definition => #{testpos => [1,2,3]},
+                   priority   => 10},
+    http_put(Config, "/operator-policies/%2F/policy_pos", PolicyPos, ?METHOD_NOT_ALLOWED),
+    http_delete(Config, "/operator-policies/%2F/policy_pos", ?METHOD_NOT_ALLOWED),
+    0 = length(http_get(Config, "/operator-policies",     ?OK)),
+    0 = length(http_get(Config, "/operator-policies/%2F", ?OK)),
+    unregister_parameters_and_policy_validator(Config),
+    passed.
+
 policy_test(Config) ->
     register_parameters_and_policy_validator(Config),
     PolicyPos  = #{vhost      => <<"/">>,
@@ -2827,7 +3086,7 @@ policy_permissions_test(Config) ->
     http_put(Config, "/permissions/v/mgmt",   Perms, {group, '2xx'}),
 
     Policy = [{pattern,    <<".*">>},
-              {definition, [{<<"ha-mode">>, <<"all">>}]}],
+              {definition, [{<<"max-length-bytes">>, 3000000}]}],
     Param = [{value, <<"">>}],
 
     http_put(Config, "/policies/%2F/HA", Policy, {group, '2xx'}),
@@ -2905,12 +3164,13 @@ extensions_test(Config) ->
     [#{javascript := <<"dispatcher.js">>}] = http_get(Config, "/extensions", ?OK),
     passed.
 
+
 cors_test(Config) ->
     %% With CORS disabled. No header should be received.
     R = req(Config, get, "/overview", [auth_header("guest", "guest")]),
-    io:format("CORS test R: ~p~n", [R]),
+    io:format("CORS test R: ~tp~n", [R]),
     {ok, {_, HdNoCORS, _}} = R,
-    io:format("CORS test HdNoCORS: ~p~n", [HdNoCORS]),
+    io:format("CORS test HdNoCORS: ~tp~n", [HdNoCORS]),
     false = lists:keymember("access-control-allow-origin", 1, HdNoCORS),
     %% The Vary header should include "Origin" regardless of CORS configuration.
     {_, "accept, accept-encoding, origin"} = lists:keyfind("vary", 1, HdNoCORS),
@@ -2957,7 +3217,7 @@ check_cors_all_endpoints(Config) ->
     Endpoints = get_all_http_endpoints(),
 
     [begin
-        ct:pal("Options for ~p~n", [EP]),
+        ct:pal("Options for ~tp~n", [EP]),
         {ok, {{_, 200, _}, _, _}} = req(Config, options, EP, [{"origin", "https://rabbitmq.com"}])
     end
      || EP <- Endpoints].
@@ -3322,8 +3582,7 @@ login_test(Config) ->
     ?assertEqual(200, CodeAct),
 
     %% Extract the authorization header
-    [Cookie, _Version] = binary:split(list_to_binary(proplists:get_value("set-cookie", Headers)),
-                                      <<";">>, [global]),
+    Cookie = list_to_binary(proplists:get_value("set-cookie", Headers)),
     [_, Auth] = binary:split(Cookie, <<"=">>, []),
 
     %% Request the overview with the auth obtained
@@ -3429,6 +3688,77 @@ auth_attempts_test(Config) ->
     ?assertEqual(0, maps:get(auth_attempts_failed, Amqp091_3)),
 
     passed.
+
+
+config_environment_test(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbitmq_management,
+                                  config_environment_test_env,
+                                  config_environment_test_value]),
+    ResultString = http_get_no_decode(Config, "/config/effective",
+                                      "guest", "guest", ?OK),
+    CleanString = re:replace(ResultString, "\\s+", "", [global,{return,list}]),
+    {ok, Tokens, _} = erl_scan:string(CleanString++"."),
+    {ok, AbsForm} = erl_parse:parse_exprs(Tokens),
+    {value, EnvList, _} = erl_eval:exprs(AbsForm, erl_eval:new_bindings()),
+    V = proplists:get_value(config_environment_test_env,
+                            proplists:get_value(rabbitmq_management, EnvList)),
+    ?assertEqual(config_environment_test_value, V).
+
+
+disabled_qq_replica_opers_test(Config) ->
+    Nodename = rabbit_data_coercion:to_list(rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename)),
+    Body = [{node, Nodename}],
+    http_post(Config, "/queues/quorum/%2F/qq.whatever/replicas/add", Body, ?METHOD_NOT_ALLOWED),
+    http_delete(Config, "/queues/quorum/%2F/qq.whatever/replicas/delete", ?METHOD_NOT_ALLOWED, Body),
+    http_post(Config, "/queues/quorum/replicas/on/" ++ Nodename ++ "/grow", Body, ?METHOD_NOT_ALLOWED),
+    http_delete(Config, "/queues/quorum/replicas/on/" ++ Nodename ++ "/shrink", ?METHOD_NOT_ALLOWED),
+    passed.
+
+list_deprecated_features_test(Config) ->
+    Desc = "This is a deprecated feature",
+    DocUrl = "https://rabbitmq.com/",
+    FeatureFlags = #{?FUNCTION_NAME =>
+                         #{provided_by => ?MODULE,
+                           deprecation_phase => permitted_by_default,
+                           desc => Desc,
+                           doc_url => DocUrl}},
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_feature_flags,
+                                      inject_test_feature_flags,
+                                      [FeatureFlags]),
+    Result = http_get(Config, "/deprecated-features", ?OK),
+    Features = lists:filter(fun(Map) ->
+                                    maps:get(name, Map) == atom_to_binary(?FUNCTION_NAME)
+                            end, Result),
+    ?assertMatch([_], Features),
+    [Feature] = Features,
+    ?assertEqual(<<"permitted_by_default">>, maps:get(deprecation_phase, Feature)),
+    ?assertEqual(atom_to_binary(?MODULE), maps:get(provided_by, Feature)),
+    ?assertEqual(list_to_binary(Desc), maps:get(desc, Feature)),
+    ?assertEqual(list_to_binary(DocUrl), maps:get(doc_url, Feature)).
+
+list_used_deprecated_features_test(Config) ->
+    Desc = "This is a deprecated feature in use",
+    DocUrl = "https://rabbitmq.com/",
+    FeatureFlags = #{?FUNCTION_NAME =>
+                         #{provided_by => ?MODULE,
+                           deprecation_phase => removed,
+                           desc => Desc,
+                           doc_url => DocUrl,
+                           callbacks => #{is_feature_used => {rabbit_mgmt_wm_deprecated_features, feature_is_used}}}},
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_feature_flags,
+                                      inject_test_feature_flags,
+                                      [FeatureFlags]),
+    Result = http_get(Config, "/deprecated-features/used", ?OK),
+    Features = lists:filter(fun(Map) ->
+                                    maps:get(name, Map) == atom_to_binary(?FUNCTION_NAME)
+                            end, Result),
+    ?assertMatch([_], Features),
+    [Feature] = Features,
+    ?assertEqual(<<"removed">>, maps:get(deprecation_phase, Feature)),
+    ?assertEqual(atom_to_binary(?MODULE), maps:get(provided_by, Feature)),
+    ?assertEqual(list_to_binary(Desc), maps:get(desc, Feature)),
+    ?assertEqual(list_to_binary(DocUrl), maps:get(doc_url, Feature)).
 
 %% -------------------------------------------------------------------
 %% Helpers.

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_nodes).
@@ -47,9 +47,9 @@ all_nodes(ReqData) ->
     end.
 
 all_nodes_raw() ->
-    S = rabbit_mnesia:status(),
+    S = rabbit_db_cluster:cli_cluster_status(),
     Nodes = proplists:get_value(nodes, S),
     Types = proplists:get_keys(Nodes),
     Running = proplists:get_value(running_nodes, S),
-    [[{name, Node}, {type, Type}, {running, lists:member(Node, Running)}] ||
+    [[{name, Node}, {type, Type}, {running, lists:member(Node, Running)}, {being_drained, rabbit_maintenance:is_being_drained_local_read(Node)}] ||
         Type <- Types, Node <- proplists:get_value(Type, Nodes)].

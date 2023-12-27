@@ -42,7 +42,7 @@
 -spec get(Service :: string(),
           Path :: path()) -> result().
 %% @doc Perform a HTTP GET request to the AWS API for the specified service. The
-%%      response will automatically be decoded if it is either in JSON or XML
+%%      response will automatically be decoded if it is either in JSON, or XML
 %%      format.
 %% @end
 get(Service, Path) ->
@@ -158,7 +158,7 @@ set_imdsv2_token(Imdsv2Token) ->
   gen_server:call(rabbitmq_aws, {set_imdsv2_token, Imdsv2Token}).
 
 
--spec get_imdsv2_token() -> imdsv2token().
+-spec get_imdsv2_token() -> imdsv2token() | 'undefined'.
 %% @doc return the current Imdsv2Token used to perform instance metadata service requests.
 %% @end
 get_imdsv2_token() ->
@@ -243,7 +243,7 @@ handle_msg(_Request, State) ->
 -spec endpoint(State :: state(), Host :: string(),
                Service :: string(), Path :: string()) -> string().
 %% @doc Return the endpoint URL, either by constructing it with the service
-%%      information passed in or by using the passed in Host value.
+%%      information passed in, or by using the passed in Host value.
 %% @ednd
 endpoint(#state{region = Region}, undefined, Service, Path) ->
   lists:flatten(["https://", endpoint_host(Region, Service), Path]);
@@ -294,11 +294,11 @@ get_content_type(Headers) ->
   end,
   parse_content_type(Value).
 
--spec has_credentials() -> true | false.
+-spec has_credentials() -> boolean().
 has_credentials() ->
   gen_server:call(rabbitmq_aws, has_credentials).
 
--spec has_credentials(state()) -> true | false.
+-spec has_credentials(state()) -> boolean().
 %% @doc check to see if there are credentials made available in the current state
 %%      returning false if not or if they have expired.
 %% @end
@@ -307,7 +307,7 @@ has_credentials(#state{access_key = Key}) when Key /= undefined -> true;
 has_credentials(_) -> false.
 
 
--spec expired_credentials(Expiration :: calendar:datetime()) -> true | false.
+-spec expired_credentials(Expiration :: calendar:datetime()) -> boolean().
 %% @doc Indicates if the date that is passed in has expired.
 %% end
 expired_credentials(undefined) -> false;
@@ -334,7 +334,7 @@ load_credentials(#state{region = Region}) ->
                   security_token = SecurityToken,
                   imdsv2_token = undefined}};
     {error, Reason} ->
-      error_logger:error_msg("Could not load AWS credentials from environment variables, AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE or EC2 metadata endpoint: ~p. Will depend on config settings to be set~n", [Reason]),
+      error_logger:error_msg("Could not load AWS credentials from environment variables, AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE or EC2 metadata endpoint: ~tp. Will depend on config settings to be set~n", [Reason]),
       {error, #state{region = Region,
                      error = Reason,
                      access_key = undefined,
@@ -354,9 +354,8 @@ local_time() ->
 
 
 -spec maybe_decode_body(ContentType :: {nonempty_string(), nonempty_string()}, Body :: body()) -> list() | body().
-%% @doc Attempt to decode the response body based upon the mime type that is
-%%      presented.
-%% @end.
+%% @doc Attempt to decode the response body by its MIME
+%% @end
 maybe_decode_body({"application", "x-amz-json-1.0"}, Body) ->
   rabbitmq_aws_json:decode(Body);
 maybe_decode_body({"application", "json"}, Body) ->
@@ -387,10 +386,10 @@ perform_request(State, Service, Method, Headers, Path, Body, Options, Host) ->
                             Headers, Path, Body, Options, Host).
 
 
--spec perform_request_has_creds(true | false, State :: state(),
-                                Service :: string(), Method :: method(),
-                                Headers :: headers(), Path :: path(), Body :: body(),
-                                Options :: http_options(), Host :: string() | undefined)
+-spec perform_request_has_creds(HasCreds :: boolean(), State :: state(),
+                                Service  :: string(), Method :: method(),
+                                Headers  :: headers(), Path :: path(), Body :: body(),
+                                Options  :: http_options(), Host :: string() | undefined)
     -> {Result :: result(), NewState :: state()}.
 %% @doc Invoked after checking to see if there are credentials. If there are,
 %%      validate they have not or will not expire, performing the request if not,
@@ -403,10 +402,10 @@ perform_request_has_creds(false, State, _, _, _, _, _, _, _) ->
   perform_request_creds_error(State).
 
 
--spec perform_request_creds_expired(true | false, State :: state(),
-                                    Service :: string(), Method :: method(),
-                                    Headers :: headers(), Path :: path(), Body :: body(),
-                                    Options :: http_options(), Host :: string() | undefined)
+-spec perform_request_creds_expired(CredsExp :: boolean(), State :: state(),
+                                    Service  :: string(), Method :: method(),
+                                    Headers  :: headers(), Path :: path(), Body :: body(),
+                                    Options  :: http_options(), Host :: string() | undefined)
   -> {Result :: result(), NewState :: state()}.
 %% @doc Invoked after checking to see if the current credentials have expired.
 %%      If they haven't, perform the request, otherwise try and refresh the
@@ -493,7 +492,7 @@ sign_headers(#state{access_key = AccessKey,
                                   headers = Headers,
                                   body = Body}).
 
--spec expired_imdsv2_token(imdsv2token()) -> boolean().
+-spec expired_imdsv2_token('undefined' | imdsv2token()) -> boolean().
 %% @doc Determine whether or not an Imdsv2Token has expired.
 %% @end
 expired_imdsv2_token(undefined) ->
@@ -505,11 +504,11 @@ expired_imdsv2_token({_, _, undefined}) ->
 expired_imdsv2_token({_, _, Expiration}) ->
   Now = calendar:datetime_to_gregorian_seconds(local_time()),
   HasExpired = Now >= Expiration,
-  rabbit_log:debug("EC2 IMDSv2 token has expired: ~p", [HasExpired]),
+  rabbit_log:debug("EC2 IMDSv2 token has expired: ~tp", [HasExpired]),
   HasExpired.
 
 
--spec ensure_imdsv2_token_valid() -> imdsv2token().
+-spec ensure_imdsv2_token_valid() -> security_token().
 ensure_imdsv2_token_valid() ->
   Imdsv2Token = get_imdsv2_token(),
   case expired_imdsv2_token(Imdsv2Token) of
@@ -538,15 +537,15 @@ ensure_credentials_valid() ->
   end.
 
 
--spec api_get_request(string(), path()) -> result().
+-spec api_get_request(string(), path()) -> {'ok', list()} | {'error', term()}.
 %% @doc Invoke an API call to an AWS service.
 %% @end
 api_get_request(Service, Path) ->
-  rabbit_log:debug("Invoking AWS request {Service: ~p; Path: ~p}...", [Service, Path]),
+  rabbit_log:debug("Invoking AWS request {Service: ~tp; Path: ~tp}...", [Service, Path]),
   api_get_request_with_retries(Service, Path, ?MAX_RETRIES, ?LINEAR_BACK_OFF_MILLIS).
 
 
--spec api_get_request_with_retries(string(), path(), integer(), integer()) -> result().
+-spec api_get_request_with_retries(string(), path(), integer(), integer()) -> {'ok', list()} | {'error', term()}.
 %% @doc Invoke an API call to an AWS service with retries.
 %% @end
 api_get_request_with_retries(_, _, 0, _) ->
@@ -555,12 +554,12 @@ api_get_request_with_retries(_, _, 0, _) ->
 api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
   ensure_credentials_valid(),
   case get(Service, Path) of
-    {ok, {_Headers, Payload}}  -> rabbit_log:debug("AWS request: ~s~nResponse: ~p", [Path, Payload]),
+    {ok, {_Headers, Payload}}  -> rabbit_log:debug("AWS request: ~ts~nResponse: ~tp", [Path, Payload]),
                                   {ok, Payload};
     {error, {credentials, _}}  -> {error, credentials};
-    {error, Message, Response} -> rabbit_log:warning("Error occurred: ~s", [Message]),
+    {error, Message, Response} -> rabbit_log:warning("Error occurred: ~ts", [Message]),
                                   case Response of
-                                      {_, Payload} -> rabbit_log:warning("Failed AWS request: ~s~nResponse: ~p", [Path, Payload]);
+                                      {_, Payload} -> rabbit_log:warning("Failed AWS request: ~ts~nResponse: ~tp", [Path, Payload]);
                                       _            -> ok
                                   end,
                                   rabbit_log:warning("Will retry AWS request, remaining retries: ~b", [Retries]),

@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
   alias RabbitMQ.CLI.Core.DocGuide
@@ -62,18 +62,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
         per_connection_delay: delay,
         limit: limit
       }) do
-        run(args, %{
-              node: node_name,
-              vhost: nil,
-              global: global_opt,
-              per_connection_delay: delay,
-              limit: limit
-            })
+    run(args, %{
+      node: node_name,
+      vhost: nil,
+      global: global_opt,
+      per_connection_delay: delay,
+      limit: limit
+    })
   end
 
   def output({:stream, stream}, _opts) do
     {:stream, Stream.filter(stream, fn x -> x != :ok end)}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def banner([explanation], %{node: node_name, global: true}) do
@@ -108,7 +109,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllConnectionsCommand do
 
   def help_section(), do: :operations
 
-  def description(), do: "Instructs the broker to close all connections for the specified vhost or entire RabbitMQ node"
+  def description(),
+    do:
+      "Instructs the broker to close all connections for the specified vhost or entire RabbitMQ node"
 
   #
   # Implementation

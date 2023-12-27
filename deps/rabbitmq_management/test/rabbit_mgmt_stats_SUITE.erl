@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_stats_SUITE).
@@ -135,7 +135,7 @@ prop_format(SampleSize, Check, Incremental, RangeFun) ->
            Results = rabbit_mgmt_stats:format_range(Range, LastTS, Table, 5000,
                                                     InstantRateFun,
                                                     SamplesFun),
-           ?WHENFAIL(io:format("Got: ~p~nSlide: ~p~nRange: ~p~n", [Results, Slide, Range]),
+           ?WHENFAIL(io:format("Got: ~tp~nSlide: ~tp~nRange: ~tp~n", [Results, Slide, Range]),
                      Check(Results, Total, Samples, Table))
        end).
 

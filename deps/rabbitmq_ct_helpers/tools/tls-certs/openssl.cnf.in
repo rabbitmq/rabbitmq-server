@@ -49,12 +49,11 @@ keyUsage = keyCertSign, cRLSign
 [ client_ca_extensions ]
 basicConstraints = CA:false
 keyUsage         = digitalSignature,keyEncipherment
-extendedKeyUsage = 1.3.6.1.5.5.7.3.2
 
 [ server_ca_extensions ]
 basicConstraints = CA:false
 keyUsage         = digitalSignature,keyEncipherment
-extendedKeyUsage = 1.3.6.1.5.5.7.3.1
+extendedKeyUsage = serverAuth
 subjectAltName   = @server_alt_names
 
 [ server_alt_names ]

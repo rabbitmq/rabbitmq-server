@@ -112,7 +112,7 @@ credit_enq_enq_checkout_settled_credit_test(_) ->
     %% granting credit (3) should deliver the second msg if the receivers
     %% delivery count is (1)
     {State5, CreditEffects} = credit(Cid, 5, 1, 1, false, State4),
-    % ?debugFmt("CreditEffects  ~p ~n~p", [CreditEffects, State4]),
+    % ?debugFmt("CreditEffects  ~tp ~n~tp", [CreditEffects, State4]),
     ?ASSERT_EFF({send_msg, _, {delivery, _, _}, _}, CreditEffects),
     {_State6, FinalEffects} = enq(6, 3, third, State5),
     ?assertEqual(false, lists:any(fun ({send_msg, _, {delivery, _, _}, _}) ->

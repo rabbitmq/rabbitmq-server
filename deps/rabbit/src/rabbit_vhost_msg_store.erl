@@ -2,14 +2,14 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_vhost_msg_store).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([start/4, stop/2, client_init/5, successfully_recovered_state/2]).
+-export([start/4, stop/2, client_init/4, successfully_recovered_state/2]).
 -export([vhost_store_pid/2]).
 
 start(VHost, Type, ClientRefs, StartupFunState) when is_list(ClientRefs);
@@ -43,9 +43,9 @@ stop(VHost, Type) ->
             ok
     end.
 
-client_init(VHost, Type, Ref, MsgOnDiskFun, CloseFDsFun) ->
+client_init(VHost, Type, Ref, MsgOnDiskFun) ->
     with_vhost_store(VHost, Type, fun(StorePid) ->
-        rabbit_msg_store:client_init(StorePid, Ref, MsgOnDiskFun, CloseFDsFun)
+        rabbit_msg_store:client_init(StorePid, Ref, MsgOnDiskFun)
     end).
 
 with_vhost_store(VHost, Type, Fun) ->

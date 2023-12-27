@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(tcp_listener_sup).
@@ -16,32 +16,32 @@
 
 -behaviour(supervisor).
 
--export([start_link/11]).
+-export([start_link/12]).
 -export([init/1]).
 
 -type mfargs() :: {atom(), atom(), [any()]}.
 
 -spec start_link
         (inet:ip_address(), inet:port_number(), module(), [gen_tcp:listen_option()],
-         module(), any(), mfargs(), mfargs(), integer(), integer(), string()) ->
+         module(), any(), mfargs(), mfargs(), integer(), integer(), 'worker' | 'supervisor', string()) ->
                            rabbit_types:ok_pid_or_error().
 
 start_link(IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, OnShutdown,
-           ConcurrentAcceptorCount, ConcurrentConnsSups, Label) ->
+           ConcurrentAcceptorCount, ConcurrentConnsSups, ConnectionType, Label) ->
     supervisor:start_link(
       ?MODULE, {IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, OnShutdown,
-                ConcurrentAcceptorCount, ConcurrentConnsSups, Label}).
+                ConcurrentAcceptorCount, ConcurrentConnsSups, ConnectionType, Label}).
 
 init({IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, OnShutdown,
-      ConcurrentAcceptorCount, ConcurrentConnsSups, Label}) ->
+      ConcurrentAcceptorCount, ConcurrentConnsSups, ConnectionType, Label}) ->
     {ok, AckTimeout} = application:get_env(rabbit, ssl_handshake_timeout),
-    MaxConnections = max_conn(rabbit_misc:get_env(rabbit, connection_max, infinity),
+    MaxConnections = max_conn(rabbit_misc:get_env(rabbit, ranch_connection_max, infinity),
                               ConcurrentConnsSups),
     RanchListenerOpts = #{
       num_acceptors => ConcurrentAcceptorCount,
       max_connections => MaxConnections,
       handshake_timeout => AckTimeout,
-      connection_type => supervisor,
+      connection_type => ConnectionType,
       socket_opts => [{ip, IPAddress},
                       {port, Port} |
                       SocketOpts],

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2010-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2010-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mirror_queue_sync).
@@ -133,7 +133,8 @@ bq_fold(FoldFun, FoldAcc, Args, BQ, BQS) ->
 append_to_acc(Msg, MsgProps, Unacked, {Batch, I, {_, _, 0}, {Curr, Len}, T}) ->
     {[{Msg, MsgProps, Unacked} | Batch], I, {0, 0, 0}, {Curr + 1, Len}, T};
 append_to_acc(Msg, MsgProps, Unacked, {Batch, I, {TotalBytes, LastCheck, SyncThroughput}, {Curr, Len}, T}) ->
-    {[{Msg, MsgProps, Unacked} | Batch], I, {TotalBytes + rabbit_basic:msg_size(Msg), LastCheck, SyncThroughput}, {Curr + 1, Len}, T}.
+    {_, MsgSize} = mc:size(Msg),
+    {[{Msg, MsgProps, Unacked} | Batch], I, {TotalBytes + MsgSize, LastCheck, SyncThroughput}, {Curr + 1, Len}, T}.
 
 master_send_receive(SyncMsg, NewAcc, Syncer, Ref, Parent) ->
     receive
@@ -166,7 +167,7 @@ maybe_pause_sync(TotalBytes, Interval, SyncThroughput) ->
 pause_queue_sync(0) ->
     rabbit_log_mirroring:debug("Sync throughput is ok.");
 pause_queue_sync(Delta) ->
-    rabbit_log_mirroring:debug("Sync throughput exceeds threshold. Pause queue sync for ~p ms", [Delta]),
+    rabbit_log_mirroring:debug("Sync throughput exceeds threshold. Pause queue sync for ~tp ms", [Delta]),
     timer:sleep(Delta).
 
 %% Sync throughput computation:
@@ -177,7 +178,7 @@ pause_queue_sync(Delta) ->
 %% The amount of time to pause queue sync is the different between time needed to broadcast TotalBytes at max throughput
 %% and the elapsed time (Interval).
 get_time_diff(TotalBytes, Interval, SyncThroughput) ->
-    rabbit_log_mirroring:debug("Total ~p bytes has been sent over last ~p ms. Effective sync througput: ~p", [TotalBytes, Interval, round(TotalBytes * 1000 / Interval)]),
+    rabbit_log_mirroring:debug("Total ~tp bytes has been sent over last ~tp ms. Effective sync througput: ~tp", [TotalBytes, Interval, round(TotalBytes * 1000 / Interval)]),
     max(round(TotalBytes/SyncThroughput * 1000 - Interval), 0).
 
 master_done({Syncer, Ref, _Log, _HandleInfo, _EmitStats, Parent}, BQS) ->
@@ -210,7 +211,7 @@ maybe_emit_stats(Last, I, EmitStats, Log) ->
                  erlang:monotonic_time() - Last, native, micro_seconds),
     case Interval > ?SYNC_PROGRESS_INTERVAL of
         true  -> EmitStats({syncing, I}),
-                 Log("~p messages", [I]),
+                 Log("~tp messages", [I]),
                  erlang:monotonic_time();
         false -> Last
     end.
@@ -235,7 +236,7 @@ syncer(Ref, Log, MPid, SPids) ->
     case await_slaves(Ref, SPids) of
         []     -> Log("all mirrors already synced", []);
         SPids1 -> MPid ! {ready, self()},
-                  Log("mirrors ~p to sync", [[node(SPid) || SPid <- SPids1]]),
+                  Log("mirrors ~tp to sync", [[node(SPid) || SPid <- SPids1]]),
                   syncer_check_resources(Ref, MPid, SPids1)
     end.
 
@@ -256,7 +257,7 @@ await_slaves(Ref, SPids) ->
 %% down.
 
 syncer_check_resources(Ref, MPid, SPids) ->
-    rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+    _ = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
     %% Before we ask the master node to send the first batch of messages
     %% over here, we check if one node is already short on memory. If
     %% that's the case, we wait for the alarm to be cleared before
@@ -295,7 +296,7 @@ syncer_loop(Ref, MPid, SPids) ->
                     % Die silently because there are no mirrors left.
                     ok;
                 _  ->
-                    broadcast(SPids1, {sync_msgs, Ref, Msgs}),
+                    _ = broadcast(SPids1, {sync_msgs, Ref, Msgs}),
                     MPid ! {next, Ref},
                     syncer_loop(Ref, MPid, SPids1)
             end;
@@ -314,6 +315,9 @@ broadcast(SPids, Msg) ->
          SPid ! Msg
      end || SPid <- SPids].
 
+-spec conserve_resources(pid(),
+                         rabbit_alarm:resource_alarm_source(),
+                         rabbit_alarm:resource_alert()) -> ok.
 conserve_resources(Pid, Source, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Source, Conserve},
     ok.
@@ -333,8 +337,6 @@ wait_for_credit(SPids) ->
 
 wait_for_resources(Ref, SPids) ->
     erlang:garbage_collect(),
-    % Probably bump_reduce_memory_use messages should be handled here as well,
-    % otherwise the BQ is not pushing messages to disk
     receive
         {conserve_resources, memory, false} ->
             SPids;
@@ -414,11 +416,7 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration, Parent},
         %% If the master throws an exception
         {'$gen_cast', {gm, {delete_and_terminate, Reason}}} ->
             BQ:delete_and_terminate(Reason, BQS),
-            {stop, Reason, {[], TRef, undefined}};
-        bump_reduce_memory_use -> 
-            BQS1 = BQ:handle_info(bump_reduce_memory_use, BQS),
-            BQS2 = BQ:resume(BQS1),
-            slave_sync_loop(Args, {MA, TRef, BQS2})
+            {stop, Reason, {[], TRef, undefined}}
     end.
 
 %% We are partitioning messages by the Unacked element in the tuple.

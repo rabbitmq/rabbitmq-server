@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
   alias RabbitMQ.CLI.InformationUnit, as: IU
@@ -68,7 +68,10 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MemoryBreakdownCommand do
   def usage_additional() do
     [
       ["--unit <bytes | mb | gb>", "byte multiple (bytes, megabytes, gigabytes) to use"],
-      ["--formatter <json | csv | erlang>", "alternative formatter to use, JSON, CSV or Erlang terms"]
+      [
+        "--formatter <json | csv | erlang>",
+        "alternative formatter to use, JSON, CSV or Erlang terms"
+      ]
     ]
   end
 

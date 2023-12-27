@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 %% The purpose of the limiter is to stem the flow of messages from
@@ -133,7 +133,7 @@
 
 -type lstate() :: #lstate{pid              :: pid(),
                           prefetch_limited :: boolean()}.
--type qstate() :: #qstate{pid :: pid(),
+-type qstate() :: #qstate{pid :: pid() | none,
                           state :: 'dormant' | 'active' | 'suspended'}.
 
 -type credit_mode() :: 'manual' | 'drain' | 'auto'.
@@ -441,7 +441,7 @@ notify_queues(State = #lim{ch_pid = ChPid, queues = Queues}) ->
             %% thus ensuring that each queue has an equal chance of
             %% being notified first.
             {L1, L2} = lists:split(rand:uniform(L), QList),
-            [[ok = rabbit_amqqueue:resume(Q, ChPid) || Q <- L3]
+            _ = [[ok = rabbit_amqqueue:resume(Q, ChPid) || Q <- L3]
              || L3 <- [L2, L1]],
             ok
     end,

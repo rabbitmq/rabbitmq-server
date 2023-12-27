@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 %% This gen_server starts a periodic timer on behalf of
@@ -55,7 +55,7 @@ terminate(_Arg, #state{timer_ref = undefined}) ->
     ok;
 
 terminate(_Arg, #state{timer_ref = TRef}) ->
-    timer:cancel(TRef),
+    _ = timer:cancel(TRef),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -88,7 +88,7 @@ set_up_periodic_health_check() ->
             %% notifications
 
             IntervalInMs = Interval * 500, % note this is 1/2
-            rabbit_log:info("Starting Consul health check notifier (effective interval: ~p milliseconds)", [IntervalInMs]),
+            rabbit_log:info("Starting Consul health check notifier (effective interval: ~tp milliseconds)", [IntervalInMs]),
             {ok, TRef} = timer:apply_interval(IntervalInMs, rabbit_peer_discovery_consul,
                                               send_health_check_pass, []),
             {ok, #state{timer_ref = TRef}}

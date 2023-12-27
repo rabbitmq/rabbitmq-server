@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 
 -module(command_SUITE).
@@ -109,7 +109,7 @@ open_amqp10_connection(Config) ->
                 container_id => atom_to_binary(?FUNCTION_NAME, utf8),
                 sasl => {plain, <<"guest">>, <<"guest">>}},
 
-    % ct:pal("opening connectoin with ~p", [OpnConf]),
+    % ct:pal("opening connectoin with ~tp", [OpnConf]),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session(Connection),
     SenderLinkName = <<"test-sender">>,
@@ -149,7 +149,7 @@ open_amqp10_connection(Config) ->
 flush(Prefix) ->
     receive
         Msg ->
-            ct:pal("~s flushed: ~w~n", [Prefix, Msg]),
+            ct:pal("~ts flushed: ~w~n", [Prefix, Msg]),
             flush(Prefix)
     after 1 ->
               ok

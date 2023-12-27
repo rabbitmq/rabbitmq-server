@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(system_SUITE).
@@ -35,7 +35,8 @@ groups() ->
                        test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost,
                        test_successful_connection_with_simple_strings_for_aud_and_scope,
                        test_successful_token_refresh,
-                       test_successful_connection_without_verify_aud
+                       test_successful_connection_without_verify_aud,
+                       mqtt
                       ]},
      {basic_unhappy_path, [], [
                        test_failed_connection_with_expired_token,
@@ -135,7 +136,8 @@ init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection
 
 init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_complex_claim_as_a_map orelse
                                          Testcase =:= test_successful_connection_with_complex_claim_as_a_list orelse
-                                         Testcase =:= test_successful_connection_with_complex_claim_as_a_binary ->
+                                         Testcase =:= test_successful_connection_with_complex_claim_as_a_binary orelse
+                                         Testcase =:= mqtt ->
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
         [rabbitmq_auth_backend_oauth2, extra_scopes_source, ?EXTRA_SCOPES_SOURCE]),
   rabbit_ct_helpers:testcase_started(Config, Testcase),
@@ -381,6 +383,33 @@ test_successful_connection_without_verify_aud(Config) ->
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     close_connection_and_channel(Conn, Ch).
 
+mqtt(Config) ->
+    Topic = <<"test/topic">>,
+    Payload = <<"mqtt-test-message">>,
+    {_Algo, Token} = generate_valid_token_with_extra_fields(
+                       Config,
+                       #{<<"additional_rabbitmq_scopes">> =>
+                         <<"rabbitmq.configure:*/*/* rabbitmq.read:*/*/* rabbitmq.write:*/*/*">>}
+                      ),
+    Opts = [{port, rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt)},
+            {proto_ver, v4},
+            {username, <<"">>},
+            {password, Token}],
+    {ok, Sub} = emqtt:start_link([{clientid, <<"mqtt-subscriber">>} | Opts]),
+    {ok, _} = emqtt:connect(Sub),
+    {ok, _, [1]} = emqtt:subscribe(Sub, Topic, at_least_once),
+    {ok, Pub} = emqtt:start_link([{clientid, <<"mqtt-publisher">>} | Opts]),
+    {ok, _} = emqtt:connect(Pub),
+    {ok, _} = emqtt:publish(Pub, Topic, Payload, at_least_once),
+    receive
+        {publish, #{client_pid := Sub,
+                    topic := Topic,
+                    payload := Payload}} -> ok
+    after 1000 -> ct:fail("no publish received")
+    end,
+    ok = emqtt:disconnect(Sub),
+    ok = emqtt:disconnect(Pub).
+
 test_successful_connection_with_complex_claim_as_a_map(Config) ->
     {_Algo, Token} = generate_valid_token_with_extra_fields(
         Config,
@@ -406,7 +435,7 @@ test_successful_connection_with_complex_claim_as_a_list(Config) ->
 test_successful_connection_with_complex_claim_as_a_binary(Config) ->
     {_Algo, Token} = generate_valid_token_with_extra_fields(
         Config,
-        #{<<"additional_rabbitmq_scopes">> => <<"rabbitmq.configure:*/* rabbitmq.read:*/*" "rabbitmq.write:*/*">>}
+        #{<<"additional_rabbitmq_scopes">> => <<"rabbitmq.configure:*/* rabbitmq.read:*/* rabbitmq.write:*/*">>}
     ),
     Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),

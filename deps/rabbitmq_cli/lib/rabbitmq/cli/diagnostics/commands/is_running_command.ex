@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.IsRunningCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -18,19 +18,28 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.IsRunningCommand do
   end
 
   def output(true, %{node: node_name, formatter: "json"}) do
-    {:ok, %{"result" => true, "message" => "RabbitMQ on node #{node_name} is fully booted and running"}}
+    {:ok,
+     %{"result" => true, "message" => "RabbitMQ on node #{node_name} is fully booted and running"}}
   end
+
   def output(false, %{node: node_name, formatter: "json"}) do
     {:ok,
-     %{"result" => false, "message" => "RabbitMQ on node #{node_name} is not running or has not fully booted yet (check with is_booting)"}}
+     %{
+       "result" => false,
+       "message" =>
+         "RabbitMQ on node #{node_name} is not running or has not fully booted yet (check with is_booting)"
+     }}
   end
+
   def output(true, %{node: node_name}) do
     {:ok, "RabbitMQ on node #{node_name} is fully booted and running"}
   end
+
   def output(false, %{node: node_name}) do
     {:ok,
      "RabbitMQ on node #{node_name} is not running or has not fully booted yet (check with is_booting)"}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def help_section(), do: :observability_and_health_checks

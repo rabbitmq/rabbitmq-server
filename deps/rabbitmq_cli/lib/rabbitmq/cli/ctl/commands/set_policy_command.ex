@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
   alias RabbitMQ.CLI.Core.{Helpers, DocGuide}
@@ -18,12 +18,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
   def validate([], _) do
     {:validation_failure, :not_enough_args}
   end
+
   def validate(args, _) when length(args) < 3 do
     {:validation_failure, :not_enough_args}
   end
+
   def validate(args, _) when length(args) > 3 do
     {:validation_failure, :too_many_args}
   end
+
   def validate(_, _), do: :ok
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
@@ -51,10 +54,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
   def usage_additional() do
     [
       ["<name>", "policy name (identifier)"],
-      ["<pattern>", "regular expression pattern that will be used to match queues, exchanges, etc"],
+      [
+        "<pattern>",
+        "regular expression pattern that will be used to match queues, exchanges, etc"
+      ],
       ["<definition>", "policy definition (arguments). Must be a valid JSON document"],
       ["--priority <priority>", "policy priority"],
-      ["--apply-to <queues | exchanges | all>", "policy should only apply to queues, exchanges, or all entities (both of the above)"]
+      [
+        "--apply-to <queues | exchanges | all>",
+        "policy should only apply to queues, exchanges, or all entities (both of the above)"
+      ]
     ]
   end
 
@@ -69,8 +78,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetPolicyCommand do
   def description(), do: "Sets or updates a policy"
 
   def banner([name, pattern, definition], %{vhost: vhost, priority: priority}) do
-    "Setting policy \"#{name}\" for pattern \"#{pattern}\" to \"#{definition}\" with priority \"#{
-      priority
-    }\" for vhost \"#{vhost}\" ..."
+    "Setting policy \"#{name}\" for pattern \"#{pattern}\" to \"#{definition}\" with priority \"#{priority}\" for vhost \"#{vhost}\" ..."
   end
 end

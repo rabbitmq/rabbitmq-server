@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(dynamic_ha_SUITE).
@@ -27,6 +27,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 -define(QNAME, <<"ha.test">>).
@@ -79,7 +80,12 @@ groups() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config).
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            rabbit_ct_helpers:run_setup_steps(Config);
+        {khepri, _} ->
+            {skip, "Classic queue mirroring not supported by Khepri"}
+    end.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
@@ -106,9 +112,24 @@ init_per_testcase(Testcase, Config) ->
         {rmq_nodename_suffix, Testcase},
         {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
       ]),
-    rabbit_ct_helpers:run_steps(Config1,
+    Config2 = rabbit_ct_helpers:run_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+      rabbit_ct_client_helpers:setup_steps()),
+    case Config2 of
+        {skip, _} ->
+            Config2;
+        _ ->
+            case Testcase of
+                change_cluster ->
+                    %% do not enable message_containers feature flag as it will
+                    %% stop nodes in mixed versions joining later
+                    ok;
+                _ ->
+                    _ = rabbit_ct_broker_helpers:enable_feature_flag(
+                          Config2, message_containers)
+            end,
+            Config2
+    end.
 
 end_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:run_steps(Config,
@@ -833,14 +854,14 @@ assert_followers1(RPCNode, QName, {ExpMNode, ExpSNodes}, PermittedIntermediate, 
                 [] ->
                     case FastFail of
                         fail ->
-                            ct:fail("Expected ~p / ~p, got ~p / ~p~nat ~p~n",
+                            ct:fail("Expected ~tp / ~tp, got ~tp / ~tp~nat ~tp~n",
                                     [ExpMNode, ExpSNodes, ActMNode, ActSNodes,
                                     get_stacktrace()]);
                         nofail ->
                             failed
                     end;
                 State  ->
-                    ct:pal("Waiting to leave state ~p~n Waiting for ~p~n",
+                    ct:pal("Waiting to leave state ~tp~n Waiting for ~tp~n",
                            [State, {ExpMNode, ExpSNodes}]),
                     timer:sleep(200),
                     assert_followers1(RPCNode, QName, {ExpMNode, ExpSNodes},
@@ -984,10 +1005,10 @@ wait_for_last_policy(QueueName, NodeA, TestedPolicies, Tries) ->
                     Policies = rpc:call(Node, rabbit_policy, list, [], 5000),
                     ct:pal(
                       "Last policy not applied:~n"
-                      "  Queue node:          ~s (~p)~n"
-                      "  Queue info:          ~p~n"
-                      "  Configured policies: ~p~n"
-                      "  Tested policies:     ~p",
+                      "  Queue node:          ~ts (~tp)~n"
+                      "  Queue info:          ~tp~n"
+                      "  Configured policies: ~tp~n"
+                      "  Tested policies:     ~tp",
                       [Node, Pid, FinalInfo, Policies, TestedPolicies]),
                     false;
                 false ->
@@ -1018,16 +1039,16 @@ apply_policy(Config, N, undefined) ->
 apply_policy(Config, N, all) ->
     rabbit_ct_broker_helpers:set_ha_policy(
       Config, N, ?POLICY, <<"all">>,
-      [{<<"ha-sync-mode">>, <<"automatic">>}]);
+      [{<<"ha-sync-mode">>, <<"automatic">>}, {<<"queue-mode">>, <<"lazy">>}]);
 apply_policy(Config, N, {nodes, Nodes}) ->
     NNodes = [atom_to_binary(Node) || Node <- Nodes],
     rabbit_ct_broker_helpers:set_ha_policy(
       Config, N, ?POLICY, {<<"nodes">>, NNodes},
-      [{<<"ha-sync-mode">>, <<"automatic">>}]);
+      [{<<"ha-sync-mode">>, <<"automatic">>}, {<<"queue-mode">>, <<"lazy">>}]);
 apply_policy(Config, N, {exactly, Exactly}) ->
     rabbit_ct_broker_helpers:set_ha_policy(
       Config, N, ?POLICY, {<<"exactly">>, Exactly},
-      [{<<"ha-sync-mode">>, <<"automatic">>}]).
+      [{<<"ha-sync-mode">>, <<"automatic">>}, {<<"queue-mode">>, <<"lazy">>}]).
 
 forget_cluster_node(Config, Node, NodeToRemove) ->
     rabbit_ct_broker_helpers:rabbitmqctl(

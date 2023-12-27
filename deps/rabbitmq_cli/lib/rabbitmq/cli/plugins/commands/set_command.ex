@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
@@ -66,9 +66,15 @@ defmodule RabbitMQ.CLI.Plugins.Commands.SetCommand do
 
   def usage_additional() do
     [
-      ["<plugin1> [ <plugin2>]", "names of plugins to enable separated by a space. All other plugins will be disabled."],
+      [
+        "<plugin1> [ <plugin2>]",
+        "names of plugins to enable separated by a space. All other plugins will be disabled."
+      ],
       ["--online", "contact target node to enable the plugins. Changes are applied immediately."],
-      ["--offline", "update enabled plugins file directly without contacting target node. Changes will be delayed until the node is restarted."]
+      [
+        "--offline",
+        "update enabled plugins file directly without contacting target node. Changes will be delayed until the node is restarted."
+      ]
     ]
   end
 

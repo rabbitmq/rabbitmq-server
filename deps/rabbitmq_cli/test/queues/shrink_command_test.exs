@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommandTest do
   use ExUnit.Case, async: false
@@ -17,11 +17,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000,
-        errors_only: false
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000,
+       errors_only: false
+     }}
   end
 
   test "merge_defaults: defaults to reporting complete results" do
@@ -38,9 +39,10 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommandTest do
 
   test "validate: when three or more arguments are provided, returns a failure" do
     assert @command.validate(["quorum-queue-a", "one-extra-arg"], %{}) ==
-      {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
+
     assert @command.validate(["quorum-queue-a", "extra-arg", "another-extra-arg"], %{}) ==
-      {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
   end
 
   test "validate: treats one positional arguments and default switches as a success" do
@@ -49,7 +51,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run(["quorum-queue-a"],
-                                Map.merge(context[:opts], %{node: :jake@thedog, vhost: "/", timeout: 200})))
+    assert match?(
+             {:badrpc, _},
+             @command.run(
+               ["quorum-queue-a"],
+               Map.merge(context[:opts], %{node: :jake@thedog, vhost: "/", timeout: 200})
+             )
+           )
   end
 end

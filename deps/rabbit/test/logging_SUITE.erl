@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(logging_SUITE).
@@ -13,6 +13,7 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/logging.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -export([suite/0,
          all/0,
@@ -146,7 +147,7 @@ init_per_testcase(Testcase, Config) ->
         %% group will run in the context of that RabbitMQ node.
         exchange_output ->
             ExchProps = [{enabled, true},
-                         {level, info}] ,
+                         {level, debug}] ,
             Config1 = rabbit_ct_helpers:set_config(
                         Config,
                         [{rmq_nodes_count, 1},
@@ -154,7 +155,7 @@ init_per_testcase(Testcase, Config) ->
             Config2 = rabbit_ct_helpers:merge_app_env(
                         Config1,
                         {rabbit, [{log, [{exchange, ExchProps},
-                                         {file, [{level, info}]}]}]}),
+                                         {file, [{level, debug}]}]}]}),
             rabbit_ct_helpers:run_steps(
               Config2,
               rabbit_ct_broker_helpers:setup_steps() ++
@@ -208,38 +209,23 @@ logging_with_default_config_works(Config) ->
          module := rabbit_logger_std_h,
          filter_default := log,
          filters := [{progress_reports, {_, stop}},
-                     {rmqlog_filter, {_, #{global := info,
-                                           upgrade := none}}}],
+                     {rmqlog_filter, {_, #{global := info}}}],
          formatter := {rabbit_logger_text_fmt, _},
          config := #{type := file,
                      file := MainFile}},
        MainFileHandler),
 
-    UpgradeFileHandler = get_handler_by_id(Handlers, rmq_1_file_2),
-    UpgradeFile = upgrade_log_file_in_context(Context),
-    ?assertNotEqual(undefined, UpgradeFileHandler),
-    ?assertMatch(
-       #{level := info,
-         module := rabbit_logger_std_h,
-         filter_default := stop,
-         filters := [{rmqlog_filter, {_, #{upgrade := info}}}],
-         formatter := {rabbit_logger_text_fmt, _},
-         config := #{type := file,
-                     file := UpgradeFile}},
-       UpgradeFileHandler),
-
-    ?assert(ping_log(rmq_1_file_1, info)),
-    ?assert(ping_log(rmq_1_file_1, info,
-                     #{domain => ?RMQLOG_DOMAIN_GLOBAL})),
-    ?assert(ping_log(rmq_1_file_1, info,
-                     #{domain => ['3rd_party']})),
-    ?assertNot(ping_log(rmq_1_file_1, info,
-                        #{domain => ?RMQLOG_DOMAIN_UPGRADE})),
-
-    ?assert(ping_log(rmq_1_file_2, info,
-                     #{domain => ?RMQLOG_DOMAIN_UPGRADE})),
-    ?assertNot(ping_log(rmq_1_file_2, info,
-                        #{domain => ?RMQLOG_DOMAIN_GLOBAL})),
+    ContainsLogEntryFun1 = ping_log(rmq_1_file_1, info),
+    rabbit_ct_helpers:await_condition(ContainsLogEntryFun1, 30_000),
+    ContainsLogEntryFun2 = ping_log(rmq_1_file_1, info,
+                                    #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    rabbit_ct_helpers:await_condition(ContainsLogEntryFun2, 30_000),
+    ContainsLogEntry3 = ping_log(rmq_1_file_1, info,
+                                 #{domain => ['3rd_party']}),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry3, 30_000),
+    ContainsLogEntry4 = ping_log(rmq_1_file_1, info,
+                                 #{domain => ?RMQLOG_DOMAIN_UPGRADE}),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry4, 30_000),
     ok.
 
 setting_log_levels_in_env_works(Config) ->
@@ -265,52 +251,48 @@ setting_log_levels_in_env_works(Config) ->
          filter_default := log,
          filters := [{progress_reports, {_, stop}},
                      {rmqlog_filter, {_, #{global := GlobalLevel,
-                                           prelaunch := PrelaunchLevel,
-                                           upgrade := none}}}],
+                                           prelaunch := PrelaunchLevel}}}],
          formatter := {rabbit_logger_text_fmt, _},
          config := #{type := file,
                      file := MainFile}},
        MainFileHandler),
 
-    UpgradeFileHandler = get_handler_by_id(Handlers, rmq_1_file_2),
-    UpgradeFile = upgrade_log_file_in_context(Context),
-    ?assertNotEqual(undefined, UpgradeFileHandler),
-    ?assertMatch(
-       #{level := info,
-         module := rabbit_logger_std_h,
-         filter_default := stop,
-         filters := [{rmqlog_filter, {_, #{upgrade := info}}}],
-         formatter := {rabbit_logger_text_fmt, _},
-         config := #{type := file,
-                     file := UpgradeFile}},
-       UpgradeFileHandler),
+    ContainsLogEntry1 = ping_log(rmq_1_file_1, info),
+    ContainsLogEntry2 = ping_log(rmq_1_file_1, info,
+                                 #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    ContainsLogEntry3 = ping_log(rmq_1_file_1, info,
+                                 #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+    ContainsLogEntry4 = ping_log(rmq_1_file_1, GlobalLevel,
+                                 #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+    ContainsLogEntry5 = ping_log(rmq_1_file_1, info,
+                                 #{domain => ['3rd_party']}),
+    ContainsLogEntry6 = ping_log(rmq_1_file_1, info,
+                                 #{domain => ?RMQLOG_DOMAIN_UPGRADE}),
+    %% This is testing that the log entry is NOT present. Random sleeps
+    %% are not ideal, but in this case we can just wait a reasonable
+    %% amount of time and then check for absence.
+    timer:sleep(10_000),
+    ?assertNot(ContainsLogEntry1()),
+    ?assertNot(ContainsLogEntry2()),
+    ?assertNot(ContainsLogEntry3()),
+    ?assertNot(ContainsLogEntry4()),
+    ?assertNot(ContainsLogEntry5()),
+    ?assertNot(ContainsLogEntry6()),
 
-    ?assertNot(ping_log(rmq_1_file_1, info)),
-    ?assertNot(ping_log(rmq_1_file_1, info,
-                        #{domain => ?RMQLOG_DOMAIN_GLOBAL})),
-    ?assertNot(ping_log(rmq_1_file_1, info,
-                        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})),
-    ?assertNot(ping_log(rmq_1_file_1, GlobalLevel,
-                        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})),
-    ?assertNot(ping_log(rmq_1_file_1, info,
-                        #{domain => ['3rd_party']})),
-    ?assertNot(ping_log(rmq_1_file_1, info,
-                        #{domain => ?RMQLOG_DOMAIN_UPGRADE})),
-
-    ?assert(ping_log(rmq_1_file_1, GlobalLevel)),
-    ?assert(ping_log(rmq_1_file_1, GlobalLevel,
-                     #{domain => ?RMQLOG_DOMAIN_GLOBAL})),
-    ?assert(ping_log(rmq_1_file_1, PrelaunchLevel,
-                     #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})),
-    ?assert(ping_log(rmq_1_file_1, GlobalLevel,
-                     #{domain => ['3rd_party']})),
-    ?assertNot(ping_log(rmq_1_file_1, GlobalLevel,
-                        #{domain => ?RMQLOG_DOMAIN_UPGRADE})),
-
-    ?assert(ping_log(rmq_1_file_2, GlobalLevel,
-                     #{domain => ?RMQLOG_DOMAIN_UPGRADE})),
-    ?assertNot(ping_log(rmq_1_file_2, GlobalLevel,
-                        #{domain => ?RMQLOG_DOMAIN_GLOBAL})),
+    ContainsLogEntry7 = ping_log(rmq_1_file_1, GlobalLevel),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry7, 30_000),
+    ContainsLogEntry8 = ping_log(rmq_1_file_1, GlobalLevel,
+                                 #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry8, 30_000),
+    ContainsLogEntry9 = ping_log(rmq_1_file_1, PrelaunchLevel,
+                                 #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry9, 30_000),
+    ContainsLogEntry10 = ping_log(rmq_1_file_1, GlobalLevel,
+                                  #{domain => ['3rd_party']}),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry10, 30_000),
+    ContainsLogEntry11 = ping_log(rmq_1_file_1, GlobalLevel,
+                                  #{domain => ?RMQLOG_DOMAIN_UPGRADE}),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry11, 30_000),
     ok.
 
 setting_log_levels_in_config_works(Config) ->
@@ -338,52 +320,49 @@ setting_log_levels_in_config_works(Config) ->
          filter_default := log,
          filters := [{progress_reports, {_, stop}},
                      {rmqlog_filter, {_, #{global := GlobalLevel,
-                                           prelaunch := PrelaunchLevel,
-                                           upgrade := none}}}],
+                                           prelaunch := PrelaunchLevel}}}],
          formatter := {rabbit_logger_text_fmt, _},
          config := #{type := file,
                      file := MainFile}},
        MainFileHandler),
 
-    UpgradeFileHandler = get_handler_by_id(Handlers, rmq_1_file_2),
-    UpgradeFile = upgrade_log_file_in_context(Context),
-    ?assertNotEqual(undefined, UpgradeFileHandler),
-    ?assertMatch(
-       #{level := info,
-         module := rabbit_logger_std_h,
-         filter_default := stop,
-         filters := [{rmqlog_filter, {_, #{upgrade := info}}}],
-         formatter := {rabbit_logger_text_fmt, _},
-         config := #{type := file,
-                     file := UpgradeFile}},
-       UpgradeFileHandler),
+    ContainsLogEntry1 = ping_log(rmq_1_file_1, info),
+    ContainsLogEntry2 = ping_log(rmq_1_file_1, info,
+                                 #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    ContainsLogEntry3 = ping_log(rmq_1_file_1, info,
+                                 #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+    ContainsLogEntry4 = ping_log(rmq_1_file_1, GlobalLevel,
+                                 #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+    ContainsLogEntry5 = ping_log(rmq_1_file_1, info,
+                                 #{domain => ['3rd_party']}),
+    ContainsLogEntry6 = ping_log(rmq_1_file_1, info,
+                                 #{domain => ?RMQLOG_DOMAIN_UPGRADE}),
 
-    ?assertNot(ping_log(rmq_1_file_1, info)),
-    ?assertNot(ping_log(rmq_1_file_1, info,
-                        #{domain => ?RMQLOG_DOMAIN_GLOBAL})),
-    ?assertNot(ping_log(rmq_1_file_1, info,
-                        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})),
-    ?assertNot(ping_log(rmq_1_file_1, GlobalLevel,
-                        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})),
-    ?assertNot(ping_log(rmq_1_file_1, info,
-                        #{domain => ['3rd_party']})),
-    ?assertNot(ping_log(rmq_1_file_1, info,
-                        #{domain => ?RMQLOG_DOMAIN_UPGRADE})),
+    %% This is testing that the log entry is NOT present. Random sleeps
+    %% are not ideal, but in this case we can just wait a reasonable
+    %% amount of time and then check for absence.
+    timer:sleep(10_000),
+    ?assertNot(ContainsLogEntry1()),
+    ?assertNot(ContainsLogEntry2()),
+    ?assertNot(ContainsLogEntry3()),
+    ?assertNot(ContainsLogEntry4()),
+    ?assertNot(ContainsLogEntry5()),
+    ?assertNot(ContainsLogEntry6()),
 
-    ?assert(ping_log(rmq_1_file_1, GlobalLevel)),
-    ?assert(ping_log(rmq_1_file_1, GlobalLevel,
-                     #{domain => ?RMQLOG_DOMAIN_GLOBAL})),
-    ?assert(ping_log(rmq_1_file_1, PrelaunchLevel,
-                     #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})),
-    ?assert(ping_log(rmq_1_file_1, GlobalLevel,
-                     #{domain => ['3rd_party']})),
-    ?assertNot(ping_log(rmq_1_file_1, GlobalLevel,
-                        #{domain => ?RMQLOG_DOMAIN_UPGRADE})),
-
-    ?assert(ping_log(rmq_1_file_2, GlobalLevel,
-                     #{domain => ?RMQLOG_DOMAIN_UPGRADE})),
-    ?assertNot(ping_log(rmq_1_file_2, GlobalLevel,
-                        #{domain => ?RMQLOG_DOMAIN_GLOBAL})),
+    ContainsLogEntry7 = ping_log(rmq_1_file_1, GlobalLevel),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry7, 30_000),
+    ContainsLogEntry8 = ping_log(rmq_1_file_1, GlobalLevel,
+                                 #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry8, 30_000),
+    ContainsLogEntry9 = ping_log(rmq_1_file_1, PrelaunchLevel,
+                                 #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry9, 30_000),
+    ContainsLogEntry10 = ping_log(rmq_1_file_1, GlobalLevel,
+                                  #{domain => ['3rd_party']}),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry10, 30_000),
+    ContainsLogEntry11 = ping_log(rmq_1_file_1, GlobalLevel,
+                                  #{domain => ?RMQLOG_DOMAIN_UPGRADE}),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry11, 30_000),
     ok.
 
 setting_log_rotation_in_config_works(Config) ->
@@ -500,32 +479,22 @@ setting_log_levels_in_config_with_output_overridden_in_env_works(Config) ->
          module := rabbit_logger_std_h,
          filter_default := log,
          filters := [{progress_reports, {_, log}},
-                     {rmqlog_filter, {_, #{global := debug,
-                                           upgrade := none}}}],
+                     {rmqlog_filter, {_, #{global := debug}}}],
          formatter := {rabbit_logger_text_fmt, _},
          config := #{type := standard_io}},
        StddevHandler),
 
-    UpgradeFileHandler = get_handler_by_id(Handlers, rmq_1_file_1),
-    UpgradeFile = upgrade_log_file_in_context(Context),
-    ?assertNotEqual(undefined, UpgradeFileHandler),
-    ?assertMatch(
-       #{level := info,
-         module := rabbit_logger_std_h,
-         filter_default := stop,
-         filters := [{rmqlog_filter, {_, #{upgrade := info}}}],
-         formatter := {rabbit_logger_text_fmt, _},
-         config := #{type := file,
-                     file := UpgradeFile}},
-       UpgradeFileHandler),
-
-    ?assert(ping_log(rmq_1_stdout, debug, Config)),
-    ?assert(ping_log(rmq_1_stdout, debug,
-                     #{domain => ?RMQLOG_DOMAIN_GLOBAL}, Config)),
-    ?assert(ping_log(rmq_1_stdout, debug,
-                     #{domain => ['3rd_party']}, Config)),
-    ?assertNot(ping_log(rmq_1_stdout, debug,
-                        #{domain => ?RMQLOG_DOMAIN_UPGRADE}, Config)),
+    ContainsLogEntry1 = ping_log(rmq_1_stdout, debug, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry1, 30_000),
+    ContainsLogEntry2 = ping_log(rmq_1_stdout, debug,
+                                 #{domain => ?RMQLOG_DOMAIN_GLOBAL}, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry2, 30_000),
+    ContainsLogEntry3 = ping_log(rmq_1_stdout, debug,
+                                 #{domain => ['3rd_party']}, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry3, 30_000),
+    ContainsLogEntry4 = ping_log(rmq_1_stdout, debug,
+                                 #{domain => ?RMQLOG_DOMAIN_UPGRADE}, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry4, 30_000),
     ok.
 
 setting_message_format_works(Config) ->
@@ -726,14 +695,15 @@ formatting_as_json_works(_, Context) ->
          module := rabbit_logger_std_h,
          filter_default := log,
          filters := [{progress_reports, {_, stop}},
-                     {rmqlog_filter, {_, #{global := info,
-                                           upgrade := none}}}],
+                     {rmqlog_filter, {_, #{global := info}}}],
          formatter := {rabbit_logger_json_fmt, _},
          config := #{type := file,
                      file := MainFile}},
        MainFileHandler),
 
-    ?assertNot(ping_log(rmq_1_file_1, info)),
+    ContainsLogEntry = ping_log(rmq_1_file_1, info),
+    timer:sleep(10_000),
+    ?assertNot(ContainsLogEntry()),
 
     Metadata = #{atom => rabbit,
                  integer => 1,
@@ -915,37 +885,22 @@ logging_to_stddev_works(Stddev, Id, Config, Context) ->
          module := rabbit_logger_std_h,
          filter_default := log,
          filters := [{progress_reports, {_, stop}},
-                     {rmqlog_filter, {_, #{global := info,
-                                           upgrade := none}}}],
+                     {rmqlog_filter, {_, #{global := info}}}],
          formatter := {rabbit_logger_text_fmt, _},
          config := #{type := Stddev}},
        StddevHandler),
 
-    UpgradeFileHandler = get_handler_by_id(Handlers, rmq_1_file_1),
-    UpgradeFile = upgrade_log_file_in_context(Context),
-    ?assertNotEqual(undefined, UpgradeFileHandler),
-    ?assertMatch(
-       #{level := info,
-         module := rabbit_logger_std_h,
-         filter_default := stop,
-         filters := [{rmqlog_filter, {_, #{upgrade := info}}}],
-         formatter := {rabbit_logger_text_fmt, _},
-         config := #{type := file,
-                     file := UpgradeFile}},
-       UpgradeFileHandler),
-
-    ?assert(ping_log(Id, info, Config)),
-    ?assert(ping_log(Id, info,
-                     #{domain => ?RMQLOG_DOMAIN_GLOBAL}, Config)),
-    ?assert(ping_log(Id, info,
-                     #{domain => ['3rd_party']}, Config)),
-    ?assertNot(ping_log(Id, info,
-                        #{domain => ?RMQLOG_DOMAIN_UPGRADE}, Config)),
-
-    ?assert(ping_log(rmq_1_file_1, info,
-                     #{domain => ?RMQLOG_DOMAIN_UPGRADE})),
-    ?assertNot(ping_log(rmq_1_file_1, info,
-                        #{domain => ?RMQLOG_DOMAIN_GLOBAL})),
+    ContainsLogEntry1 = ping_log(Id, info, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry1, 30_000),
+    ContainsLogEntry2 = ping_log(Id, info,
+                                 #{domain => ?RMQLOG_DOMAIN_GLOBAL}, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry2, 30_000),
+    ContainsLogEntry3 = ping_log(Id, info,
+                                 #{domain => ['3rd_party']}, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry3, 30_000),
+    ContainsLogEntry4 = ping_log(Id, info,
+                                 #{domain => ?RMQLOG_DOMAIN_UPGRADE}, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry4, 30_000),
     ok.
 
 formatting_with_colors_works(Config) ->
@@ -983,20 +938,25 @@ formatting_maybe_with_colors_works(Config, Context, _EscSeqs) ->
     rabbit_prelaunch_logging:clear_config_run_number(),
     rabbit_prelaunch_logging:setup(Context),
 
-    ?assert(ping_log(rmq_1_stdout, debug, Config)),
-    ?assert(ping_log(rmq_1_stdout, info, Config)),
-    ?assert(ping_log(rmq_1_stdout, notice, Config)),
-    ?assert(ping_log(rmq_1_stdout, warning, Config)),
-    ?assert(ping_log(rmq_1_stdout, error, Config)),
-    ?assert(ping_log(rmq_1_stdout, critical, Config)),
-    ?assert(ping_log(rmq_1_stdout, alert, Config)),
-    ?assert(ping_log(rmq_1_stdout, emergency, Config)),
+    ContainsLogEntry1 = ping_log(rmq_1_stdout, debug, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry1, 30_000),
+    ContainsLogEntry2 = ping_log(rmq_1_stdout, info, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry2, 30_000),
+    ContainsLogEntry3 = ping_log(rmq_1_stdout, notice, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry3, 30_000),
+    ContainsLogEntry4 = ping_log(rmq_1_stdout, warning, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry4, 30_000),
+    ContainsLogEntry5 = ping_log(rmq_1_stdout, error, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry5, 30_000),
+    ContainsLogEntry6 = ping_log(rmq_1_stdout, critical, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry6, 30_000),
+    ContainsLogEntry7 = ping_log(rmq_1_stdout, alert, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry7, 30_000),
+    ContainsLogEntry8 = ping_log(rmq_1_stdout, emergency, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry8, 30_000),
     ok.
 
 logging_to_exchange_works(Config) ->
-    Context = rabbit_ct_broker_helpers:rpc(
-                Config, 0,
-                rabbit_prelaunch, get_context, []),
     Handlers = rabbit_ct_broker_helpers:rpc(
                  Config, 0,
                  logger, get_handler_config, []),
@@ -1004,43 +964,22 @@ logging_to_exchange_works(Config) ->
     ExchangeHandler = get_handler_by_id(Handlers, rmq_1_exchange),
     ?assertNotEqual(undefined, ExchangeHandler),
     ?assertMatch(
-       #{level := info,
+       #{level := debug,
          module := rabbit_logger_exchange_h,
          filter_default := log,
-         filters := [{progress_reports, {_, stop}},
-                     {rmqlog_filter, {_, #{global := info,
-                                           upgrade := none}}}],
+         filters := [{progress_reports, {_, log}},
+                     {rmqlog_filter, {_, #{global := debug}}}],
          formatter := {rabbit_logger_text_fmt, _},
          config := #{exchange := _}},
        ExchangeHandler),
     #{config :=
       #{exchange := #resource{name = XName} = Exchange}} = ExchangeHandler,
 
-    UpgradeFileHandler = get_handler_by_id(Handlers, rmq_1_file_2),
-    UpgradeFile = upgrade_log_file_in_context(Context),
-    ?assertNotEqual(undefined, UpgradeFileHandler),
-    ?assertMatch(
-       #{level := info,
-         module := rabbit_logger_std_h,
-         filter_default := stop,
-         filters := [{rmqlog_filter, {_, #{upgrade := info}}}],
-         formatter := {rabbit_logger_text_fmt, _},
-         config := #{type := file,
-                     file := UpgradeFile}},
-       UpgradeFileHandler),
-
     %% Wait for the expected exchange to be automatically declared.
-    lists:any(
-      fun(_) ->
-              Ret = rabbit_ct_broker_helpers:rpc(
-                      Config, 0,
-                      rabbit_exchange, lookup, [Exchange]),
-              case Ret of
-                  {ok, _} -> true;
-                  _       -> timer:sleep(500),
-                             false
-              end
-      end, lists:seq(1, 20)),
+    ?awaitMatch({ok, _}, rabbit_ct_broker_helpers:rpc(
+                           Config, 0,
+                           rabbit_exchange, lookup, [Exchange]),
+                30000),
 
     %% Declare a queue to collect all logged messages.
     {Conn, Chan} = rabbit_ct_client_helpers:open_connection_and_channel(
@@ -1049,7 +988,7 @@ logging_to_exchange_works(Config) ->
     ?assertMatch(
        #'queue.declare_ok'{},
        amqp_channel:call(Chan, #'queue.declare'{queue = QName,
-                                                durable = false})),
+                                                durable = true})),
     ?assertMatch(
        #'queue.bind_ok'{},
        amqp_channel:call(Chan, #'queue.bind'{queue = QName,
@@ -1058,38 +997,43 @@ logging_to_exchange_works(Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config, {test_channel_and_queue, {Chan, QName}}),
 
-    ?assert(ping_log(rmq_1_exchange, info, Config1)),
-    ?assert(ping_log(rmq_1_exchange, info,
-                     #{domain => ?RMQLOG_DOMAIN_GLOBAL}, Config1)),
-    ?assert(ping_log(rmq_1_exchange, info,
-                     #{domain => ['3rd_party']}, Config1)),
-    ?assertNot(ping_log(rmq_1_exchange, info,
-                        #{domain => ?RMQLOG_DOMAIN_UPGRADE}, Config1)),
-
-    ?assert(ping_log(rmq_1_file_2, info,
-                     #{domain => ?RMQLOG_DOMAIN_UPGRADE}, Config)),
-    ?assertNot(ping_log(rmq_1_file_2, info,
-                        #{domain => ?RMQLOG_DOMAIN_GLOBAL}, Config)),
+    ContainsLogEntry1 = ping_log(rmq_1_exchange, info, Config1),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry1, 30_000),
+    ContainsLogEntry2 = ping_log(rmq_1_exchange, info,
+                                 #{domain => ?RMQLOG_DOMAIN_GLOBAL}, Config1),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry2, 30_000),
+    ContainsLogEntry3 = ping_log(rmq_1_exchange, info,
+                                 #{domain => ['3rd_party']}, Config1),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry3, 30_000),
+    ContainsLogEntry4 = ping_log(rmq_1_exchange, info,
+                                 #{domain => ?RMQLOG_DOMAIN_UPGRADE}, Config1),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry4, 30_000),
 
     %% increase log level
     ok = rabbit_ct_broker_helpers:rpc(
            Config, 0,
            rabbit_prelaunch_logging, set_log_level, [debug]),
 
-    ?assert(ping_log(rmq_1_exchange, debug, Config1)),
-    ?assert(ping_log(rmq_1_exchange, debug,
-                     #{domain => ?RMQLOG_DOMAIN_GLOBAL}, Config1)),
+    ContainsLogEntry5 = ping_log(rmq_1_exchange, debug, Config1),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry5, 30_000),
+    ContainsLogEntry6 = ping_log(rmq_1_exchange, debug,
+                                 #{domain => ?RMQLOG_DOMAIN_GLOBAL}, Config1),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry6, 30_000),
 
     %% decrease log level
     ok = rabbit_ct_broker_helpers:rpc(
            Config, 0,
            rabbit_prelaunch_logging, set_log_level, [error]),
 
-    ?assert(ping_log(rmq_1_exchange, error, Config1)),
-    ?assert(ping_log(rmq_1_exchange, error,
-                     #{domain => ?RMQLOG_DOMAIN_GLOBAL}, Config1)),
+    ContainsLogEntry7 = ping_log(rmq_1_exchange, error, Config1),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry7, 30_000),
+    ContainsLogEntry8 = ping_log(rmq_1_exchange, error,
+                                 #{domain => ?RMQLOG_DOMAIN_GLOBAL}, Config1),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry8, 30_000),
 
-    ?assertNot(ping_log(rmq_1_exchange, info, Config1)),
+    ContainsLogEntry9 = ping_log(rmq_1_exchange, info, Config1),
+    timer:sleep(10_000),
+    ?assertNot(ContainsLogEntry9()),
 
     amqp_channel:call(Chan, #'queue.delete'{queue = QName}),
     rabbit_ct_client_helpers:close_connection_and_channel(Conn, Chan),
@@ -1151,37 +1095,22 @@ logging_to_syslog_works(Config) ->
          module := syslog_logger_h,
          filter_default := log,
          filters := [{progress_reports, {_, stop}},
-                     {rmqlog_filter, {_, #{global := info,
-                                           upgrade := none}}}],
+                     {rmqlog_filter, {_, #{global := info}}}],
          formatter := {rabbit_logger_text_fmt, _},
          config := #{}},
        SyslogHandler),
 
-    UpgradeFileHandler = get_handler_by_id(Handlers, rmq_1_file_1),
-    UpgradeFile = upgrade_log_file_in_context(Context),
-    ?assertNotEqual(undefined, UpgradeFileHandler),
-    ?assertMatch(
-       #{level := info,
-         module := rabbit_logger_std_h,
-         filter_default := stop,
-         filters := [{rmqlog_filter, {_, #{upgrade := info}}}],
-         formatter := {rabbit_logger_text_fmt, _},
-         config := #{type := file,
-                     file := UpgradeFile}},
-       UpgradeFileHandler),
-
-    ?assert(ping_log(rmq_1_syslog, info, Config)),
-    ?assert(ping_log(rmq_1_syslog, info,
-                     #{domain => ?RMQLOG_DOMAIN_GLOBAL}, Config)),
-    ?assert(ping_log(rmq_1_syslog, info,
-                     #{domain => ['3rd_party']}, Config)),
-    ?assertNot(ping_log(rmq_1_syslog, info,
-                        #{domain => ?RMQLOG_DOMAIN_UPGRADE}, Config)),
-
-    ?assert(ping_log(rmq_1_file_1, info,
-                     #{domain => ?RMQLOG_DOMAIN_UPGRADE})),
-    ?assertNot(ping_log(rmq_1_file_1, info,
-                        #{domain => ?RMQLOG_DOMAIN_GLOBAL})),
+    ContainsLogEntry1 = ping_log(rmq_1_syslog, info, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry1, 30_000),
+    ContainsLogEntry2 = ping_log(rmq_1_syslog, info,
+                                 #{domain => ?RMQLOG_DOMAIN_GLOBAL}, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry2, 30_000),
+    ContainsLogEntry3 = ping_log(rmq_1_syslog, info,
+                                 #{domain => ['3rd_party']}, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry3, 30_000),
+    ContainsLogEntry4 = ping_log(rmq_1_syslog, info,
+                                 #{domain => ?RMQLOG_DOMAIN_UPGRADE}, Config),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry4, 30_000),
     ok.
 
 %% -------------------------------------------------------------------
@@ -1191,23 +1120,16 @@ logging_to_syslog_works(Config) ->
 default_context(Config) ->
     LogBaseDir = ?config(log_base_dir, Config),
     MainFile = "rabbit.log",
-    UpgradeFile = "rabbit_upgrade.log",
     #{log_base_dir => LogBaseDir,
       main_log_file => MainFile,
-      upgrade_log_file => UpgradeFile,
       log_levels => undefined,
       var_origins => #{log_base_dir => default,
                        main_log_file => default,
-                       upgrade_log_file => default,
                        log_levels => default}}.
 
 main_log_file_in_context(#{log_base_dir := LogBaseDir,
                            main_log_file := MainLogFile}) ->
     filename:join(LogBaseDir, MainLogFile).
-
-upgrade_log_file_in_context(#{log_base_dir := LogBaseDir,
-                              upgrade_log_file := UpgradeLogFile}) ->
-    filename:join(LogBaseDir, UpgradeLogFile).
 
 log_file_in_context(#{log_base_dir := LogBaseDir}, FileName) ->
     filename:join(LogBaseDir, FileName).
@@ -1219,6 +1141,11 @@ get_handler_by_id([_ | Rest], Id) ->
 get_handler_by_id([], _) ->
     undefined.
 
+%% ping_log calls logger:log/3 and then returns a function that checks
+%% the log for the given log entry returning a boolean.
+%% This return function can be used with an await condition function,
+%% to ensure the log entry is eventually added to the log.
+%% Also it can be used to check it's absence.
 ping_log(Id, Level) ->
     ping_log(Id, Level, #{}, []).
 
@@ -1232,7 +1159,7 @@ ping_log(Id, Level, Metadata, Config) ->
                   32,
                   "abcdefghijklmnopqrstuvwxyz"
                   "ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
-    ct:log("Logging \"~ts\" at level ~ts (~p)", [RandomMsg, Level, Metadata]),
+    ct:log("Logging \"~ts\" at level ~ts (~tp)", [RandomMsg, Level, Metadata]),
     case need_rpc(Config) of
         false -> logger:log(Level, RandomMsg, Metadata);
         true  -> rabbit_ct_broker_helpers:rpc(
@@ -1267,9 +1194,11 @@ check_log1(#{id := Id,
                         Config, 0,
                         rabbit_logger_std_h, filesync, [Id])
          end,
-    {ok, Content} = file:read_file(Filename),
-    ReOpts = [{capture, none}, multiline],
-    match =:= re:run(Content, RandomMsg ++ "$", ReOpts);
+    fun() ->
+            {ok, Content} = file:read_file(Filename),
+            ReOpts = [{capture, none}, multiline],
+            match =:= re:run(Content, RandomMsg ++ "$", ReOpts)
+    end;
 check_log1(#{module := Mod,
              config := #{type := Stddev}} = Handler,
            Level,
@@ -1279,57 +1208,40 @@ check_log1(#{module := Mod,
     Filename = html_report_filename(Config),
     {ColorStart, ColorEnd} = get_color_config(Handler, Level),
     ReOpts = [{capture, none}, multiline],
-    lists:any(
-      fun(_) ->
-              {ok, Content} = file:read_file(Filename),
-              Regex =
-              "^" ++ ColorStart ++ ".+" ++ RandomMsg ++ ColorEnd ++ "$",
-              case re:run(Content, Regex, ReOpts) of
-                  match -> true;
-                  _     -> timer:sleep(500),
-                           false
-              end
-      end, lists:seq(1, 10));
+    fun() ->
+            {ok, Content} = file:read_file(Filename),
+            Regex =
+                "^" ++ ColorStart ++ ".+" ++ RandomMsg ++ ColorEnd ++ "$",
+            match =:= re:run(Content, Regex, ReOpts)
+    end;
 check_log1(#{module := rabbit_logger_exchange_h},
            _Level,
            RandomMsg,
            Config) ->
     {Chan, QName} = ?config(test_channel_and_queue, Config),
     ReOpts = [{capture, none}, multiline],
-    lists:any(
-      fun(_) ->
-              Ret = amqp_channel:call(
-                      Chan, #'basic.get'{queue = QName, no_ack = false}),
-              case Ret of
-                  {#'basic.get_ok'{}, #amqp_msg{payload = Content}} ->
-                      case re:run(Content, RandomMsg ++ "$", ReOpts) of
-                          match -> true;
-                          _     -> timer:sleep(500),
-                                   false
-                      end;
-                  #'basic.get_empty'{} ->
-                      timer:sleep(500),
-                      false;
-                  Other ->
-                      io:format(standard_error, "OTHER -> ~p~n", [Other]),
-                      timer:sleep(500),
-                      false
-              end
-      end, lists:seq(1, 10));
+    fun() ->
+            Ret = amqp_channel:call(
+                    Chan, #'basic.get'{queue = QName, no_ack = false}),
+            case Ret of
+                {#'basic.get_ok'{}, #amqp_msg{payload = Content}} ->
+                    match =:= re:run(Content, RandomMsg ++ "$", ReOpts);
+                #'basic.get_empty'{} ->
+                    false;
+                Other ->
+                    io:format(standard_error, "OTHER -> ~tp~n", [Other]),
+                    false
+            end
+    end;
 check_log1(#{module := syslog_logger_h},
            _Level,
            RandomMsg,
            Config) ->
     ReOpts = [{capture, none}, multiline],
-    lists:any(
-      fun(_) ->
-              Buffer = get_syslogd_messages(Config),
-              case re:run(Buffer, RandomMsg ++ "$", ReOpts) of
-                  match -> true;
-                  _     -> timer:sleep(500),
-                           false
-              end
-      end, lists:seq(1, 10)).
+    fun() ->
+            Buffer = get_syslogd_messages(Config),
+            match =:= re:run(Buffer, RandomMsg ++ "$", ReOpts)
+    end.
 
 get_random_string(Length, AllowedChars) ->
     lists:foldl(fun(_, Acc) ->
@@ -1424,7 +1336,7 @@ clear_syslogd_messages(Config) ->
 syslogd_init(Parent) ->
     {ok, TcpPort, LSock} = open_tcp_listening_sock(22000),
     ct:pal(
-      "Fake syslogd ready (~p), listening on TCP port ~p",
+      "Fake syslogd ready (~tp), listening on TCP port ~tp",
       [self(), TcpPort]),
     Parent ! {syslogd_ready, TcpPort},
     syslogd_start_loop(LSock).
@@ -1452,7 +1364,7 @@ syslogd_loop(LSock, Sock, Messages, Buffer) ->
                 syslogd_loop(LSock, Sock, Messages ++ NewMessages, Buffer2);
             {get_messages, From} ->
                 ct:pal(
-                  "Fake syslogd: sending messages to ~p:~n~p",
+                  "Fake syslogd: sending messages to ~tp:~n~tp",
                   [From, Messages]),
                 From ! {syslogd_messages, Messages},
                 syslogd_loop(LSock, Sock, Messages, Buffer);
@@ -1467,12 +1379,12 @@ syslogd_loop(LSock, Sock, Messages, Buffer) ->
                 _ = gen_tcp:close(Sock),
                 _ = gen_tcp:close(LSock);
             Other ->
-                ct:pal("Fake syslogd: unhandled message: ~p", [Other]),
+                ct:pal("Fake syslogd: unhandled message: ~tp", [Other]),
                 syslogd_loop(LSock, Sock, Messages, Buffer)
         end
     catch
         C:R:S ->
-            ct:pal("~p ~p ~p", [C, R, S]),
+            ct:pal("~tp ~tp ~tp", [C, R, S]),
             throw(R)
     end.
 

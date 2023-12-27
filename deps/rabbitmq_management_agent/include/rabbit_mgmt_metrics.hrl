@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -type(event_type() :: queue_stats | queue_exchange_stats | vhost_stats
@@ -35,6 +35,7 @@
                  {exchange_stats_publish_in, set},
                  {consumer_stats, set},
                  {queue_stats, set},
+                 {queue_basic_stats, set},
                  {queue_msg_stats, set},
                  {vhost_msg_stats, set},
                  {queue_process_stats, set},

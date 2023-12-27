@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   alias RabbitMQ.CLI.Core.{Helpers, Validators}
@@ -35,6 +35,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   def validate_execution_environment([], %{pid: _} = opts) do
     Validators.rabbit_is_loaded([], opts)
   end
+
   def validate_execution_environment([_pid_file], opts) do
     Validators.rabbit_is_loaded([], opts)
   end
@@ -102,7 +103,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
 
   def help_section(), do: :node_management
 
-  def description(), do: "Waits for RabbitMQ node startup by monitoring a local PID file. See also 'rabbitmqctl await_online_nodes'"
+  def description(),
+    do:
+      "Waits for RabbitMQ node startup by monitoring a local PID file. See also 'rabbitmqctl await_online_nodes'"
 
   #
   # Implementation
@@ -152,7 +155,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   end
 
   defp wait_for_pid_funs(node_name, app_names, timeout, quiet) do
-    app_names_formatted = :io_lib.format('~p', [app_names])
+    app_names_formatted = :io_lib.format(~c"~p", [app_names])
 
     [
       log_param(
@@ -204,10 +207,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
   end
 
   defp wait_for_application(node_name, :rabbit_and_plugins) do
-    case :rabbit.await_startup(node_name) do
-      {:badrpc, err} -> {:error, {:badrpc, err}}
-      other -> other
-    end
+    :rabbit.await_startup(node_name)
   end
 
   defp wait_for_erlang_distribution(pid, node_name, timeout) do
@@ -253,7 +253,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
               {pid, _} ->
                 case check_distribution(pid, node_name) do
                   :ok -> {:ok, pid}
-                  _   -> {:error, :loop}
+                  _ -> {:error, :loop}
                 end
             end
 

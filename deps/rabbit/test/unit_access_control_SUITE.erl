@@ -1,8 +1,8 @@
-%% This Source Code Form is subject to the terms of the Mozilla Public
+% This Source Code Form is subject to the terms of the Mozilla Public
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(unit_access_control_SUITE).
@@ -31,7 +31,6 @@ groups() ->
           login_of_passwordless_user,
           set_tags_for_passwordless_user,
           change_password,
-          topic_matching,
           auth_backend_internal_expand_topic_permission,
           rabbit_direct_extract_extra_auth_props
       ]}
@@ -153,13 +152,10 @@ login_with_credentials_but_no_password1(_Config) ->
     Password = <<"login_with_credentials_but_no_password-password">>,
     ok = rabbit_auth_backend_internal:add_user(Username, Password, <<"acting-user">>),
 
-    try
+    ?assertMatch(
+       {refused, _Message, [Username]},
         rabbit_auth_backend_internal:user_login_authentication(Username,
-                                                              [{key, <<"value">>}]),
-        ?assert(false)
-    catch exit:{unknown_auth_props, Username, [{key, <<"value">>}]} ->
-            ok
-    end,
+                                                              [{key, <<"value">>}])),
 
     ok = rabbit_auth_backend_internal:delete_user(Username, <<"acting-user">>),
 
@@ -299,147 +295,3 @@ test_unsupported_connection_refusal(H, P, Header) ->
     {ok, <<"AMQP",0,0,9,1>>} = gen_tcp:recv(C, 8, 100),
     ok = gen_tcp:close(C),
     passed.
-
-
-%% -------------------------------------------------------------------
-%% Topic matching.
-%% -------------------------------------------------------------------
-
-topic_matching(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, topic_matching1, [Config]).
-
-topic_matching1(_Config) ->
-    XName = #resource{virtual_host = <<"/">>,
-                      kind = exchange,
-                      name = <<"topic_matching-exchange">>},
-    X0 = #exchange{name = XName, type = topic, durable = false,
-                   auto_delete = false, arguments = []},
-    X = rabbit_exchange_decorator:set(X0),
-    %% create
-    rabbit_exchange_type_topic:validate(X),
-    exchange_op_callback(X, create, []),
-
-    %% add some bindings
-    Bindings = [#binding{source = XName,
-                         key = list_to_binary(Key),
-                         destination = #resource{virtual_host = <<"/">>,
-                                                 kind = queue,
-                                                 name = list_to_binary(Q)},
-                         args = Args} ||
-                   {Key, Q, Args} <- [{"a.b.c",         "t1",  []},
-                                      {"a.*.c",         "t2",  []},
-                                      {"a.#.b",         "t3",  []},
-                                      {"a.b.b.c",       "t4",  []},
-                                      {"#",             "t5",  []},
-                                      {"#.#",           "t6",  []},
-                                      {"#.b",           "t7",  []},
-                                      {"*.*",           "t8",  []},
-                                      {"a.*",           "t9",  []},
-                                      {"*.b.c",         "t10", []},
-                                      {"a.#",           "t11", []},
-                                      {"a.#.#",         "t12", []},
-                                      {"b.b.c",         "t13", []},
-                                      {"a.b.b",         "t14", []},
-                                      {"a.b",           "t15", []},
-                                      {"b.c",           "t16", []},
-                                      {"",              "t17", []},
-                                      {"*.*.*",         "t18", []},
-                                      {"vodka.martini", "t19", []},
-                                      {"a.b.c",         "t20", []},
-                                      {"*.#",           "t21", []},
-                                      {"#.*.#",         "t22", []},
-                                      {"*.#.#",         "t23", []},
-                                      {"#.#.#",         "t24", []},
-                                      {"*",             "t25", []},
-                                      {"#.b.#",         "t26", []},
-                                      {"args-test",     "t27",
-                                       [{<<"foo">>, longstr, <<"bar">>}]},
-                                      {"args-test",     "t27", %% Note aliasing
-                                       [{<<"foo">>, longstr, <<"baz">>}]}]],
-    lists:foreach(fun (B) -> exchange_op_callback(X, add_binding, [B]) end,
-                  Bindings),
-
-    %% test some matches
-    test_topic_expect_match(
-      X, [{"a.b.c",               ["t1", "t2", "t5", "t6", "t10", "t11", "t12",
-                                   "t18", "t20", "t21", "t22", "t23", "t24",
-                                   "t26"]},
-          {"a.b",                 ["t3", "t5", "t6", "t7", "t8", "t9", "t11",
-                                   "t12", "t15", "t21", "t22", "t23", "t24",
-                                   "t26"]},
-          {"a.b.b",               ["t3", "t5", "t6", "t7", "t11", "t12", "t14",
-                                   "t18", "t21", "t22", "t23", "t24", "t26"]},
-          {"",                    ["t5", "t6", "t17", "t24"]},
-          {"b.c.c",               ["t5", "t6", "t18", "t21", "t22", "t23",
-                                   "t24", "t26"]},
-          {"a.a.a.a.a",           ["t5", "t6", "t11", "t12", "t21", "t22",
-                                   "t23", "t24"]},
-          {"vodka.gin",           ["t5", "t6", "t8", "t21", "t22", "t23",
-                                   "t24"]},
-          {"vodka.martini",       ["t5", "t6", "t8", "t19", "t21", "t22", "t23",
-                                   "t24"]},
-          {"b.b.c",               ["t5", "t6", "t10", "t13", "t18", "t21",
-                                   "t22", "t23", "t24", "t26"]},
-          {"nothing.here.at.all", ["t5", "t6", "t21", "t22", "t23", "t24"]},
-          {"oneword",             ["t5", "t6", "t21", "t22", "t23", "t24",
-                                   "t25"]},
-          {"args-test",           ["t5", "t6", "t21", "t22", "t23", "t24",
-                                   "t25", "t27"]}]),
-    %% remove some bindings
-    RemovedBindings = [lists:nth(1, Bindings), lists:nth(5, Bindings),
-                       lists:nth(11, Bindings), lists:nth(19, Bindings),
-                       lists:nth(21, Bindings), lists:nth(28, Bindings)],
-    exchange_op_callback(X, remove_bindings, [RemovedBindings]),
-    RemainingBindings = ordsets:to_list(
-                          ordsets:subtract(ordsets:from_list(Bindings),
-                                           ordsets:from_list(RemovedBindings))),
-
-    %% test some matches
-    test_topic_expect_match(
-      X,
-      [{"a.b.c",               ["t2", "t6", "t10", "t12", "t18", "t20", "t22",
-                                "t23", "t24", "t26"]},
-       {"a.b",                 ["t3", "t6", "t7", "t8", "t9", "t12", "t15",
-                                "t22", "t23", "t24", "t26"]},
-       {"a.b.b",               ["t3", "t6", "t7", "t12", "t14", "t18", "t22",
-                                "t23", "t24", "t26"]},
-       {"",                    ["t6", "t17", "t24"]},
-       {"b.c.c",               ["t6", "t18", "t22", "t23", "t24", "t26"]},
-       {"a.a.a.a.a",           ["t6", "t12", "t22", "t23", "t24"]},
-       {"vodka.gin",           ["t6", "t8", "t22", "t23", "t24"]},
-       {"vodka.martini",       ["t6", "t8", "t22", "t23", "t24"]},
-       {"b.b.c",               ["t6", "t10", "t13", "t18", "t22", "t23",
-                                "t24", "t26"]},
-       {"nothing.here.at.all", ["t6", "t22", "t23", "t24"]},
-       {"oneword",             ["t6", "t22", "t23", "t24", "t25"]},
-       {"args-test",           ["t6", "t22", "t23", "t24", "t25", "t27"]}]),
-
-    %% remove the entire exchange
-    exchange_op_callback(X, delete, [RemainingBindings]),
-    %% none should match now
-    test_topic_expect_match(X, [{"a.b.c", []}, {"b.b.c", []}, {"", []}]),
-    passed.
-
-exchange_op_callback(X, Fun, Args) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun () -> rabbit_exchange:callback(X, Fun, transaction, [X] ++ Args) end),
-    rabbit_exchange:callback(X, Fun, none, [X] ++ Args).
-
-test_topic_expect_match(X, List) ->
-    lists:foreach(
-      fun ({Key, Expected}) ->
-              BinKey = list_to_binary(Key),
-              Message = rabbit_basic:message(X#exchange.name, BinKey,
-                                             #'P_basic'{}, <<>>),
-              Res = rabbit_exchange_type_topic:route(
-                      X, #delivery{mandatory = false,
-                                   sender    = self(),
-                                   message   = Message}),
-              ExpectedRes = lists:map(
-                              fun (Q) -> #resource{virtual_host = <<"/">>,
-                                                   kind = queue,
-                                                   name = list_to_binary(Q)}
-                              end, Expected),
-              true = (lists:usort(ExpectedRes) =:= lists:usort(Res))
-      end, List).

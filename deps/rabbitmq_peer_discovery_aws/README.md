@@ -53,4 +53,4 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) and our [development process overview](
 
 ## Copyright
 
-(c) 2007-2022 VMware, Inc. or its affiliates.
+(c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.

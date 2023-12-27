@@ -1,0 +1,139 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "other_beam",
+    testonly = True,
+    srcs = [
+        "src/meck.erl",
+        "src/meck_args_matcher.erl",
+        "src/meck_code.erl",
+        "src/meck_code_gen.erl",
+        "src/meck_cover.erl",
+        "src/meck_expect.erl",
+        "src/meck_history.erl",
+        "src/meck_matcher.erl",
+        "src/meck_proc.erl",
+        "src/meck_ret_spec.erl",
+        "src/meck_util.erl",
+    ],
+    outs = [
+        "ebin/meck.beam",
+        "ebin/meck_args_matcher.beam",
+        "ebin/meck_code.beam",
+        "ebin/meck_code_gen.beam",
+        "ebin/meck_cover.beam",
+        "ebin/meck_expect.beam",
+        "ebin/meck_history.beam",
+        "ebin/meck_matcher.beam",
+        "ebin/meck_proc.beam",
+        "ebin/meck_ret_spec.beam",
+        "ebin/meck_util.beam",
+    ],
+    hdrs = [
+        "src/meck.hrl",
+    ],
+    app_name = "meck",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    testonly = True,
+    srcs = [":other_beam"],
+)
+
+filegroup(
+    name = "srcs",
+    testonly = True,
+    srcs = [
+        "src/meck.app.src",
+        "src/meck.erl",
+        "src/meck_args_matcher.erl",
+        "src/meck_code.erl",
+        "src/meck_code_gen.erl",
+        "src/meck_cover.erl",
+        "src/meck_expect.erl",
+        "src/meck_history.erl",
+        "src/meck_matcher.erl",
+        "src/meck_proc.erl",
+        "src/meck_ret_spec.erl",
+        "src/meck_util.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    testonly = True,
+    srcs = [
+        "src/meck.hrl",
+    ],
+)
+
+filegroup(
+    name = "public_hdrs",
+    testonly = True,
+)
+
+filegroup(
+    name = "priv",
+    testonly = True,
+)
+
+filegroup(
+    name = "licenses",
+    testonly = True,
+    srcs = [
+        "LICENSE",
+    ],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    testonly = True,
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    testonly = True,
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    testonly = True,
+    srcs = [":all_srcs"],
+    app_name = "meck",
+    beam_files = [":beam_files"],
+    extra_apps = [
+        "compiler",
+        "tools",
+    ],
+)
+
+alias(
+    name = "meck",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)

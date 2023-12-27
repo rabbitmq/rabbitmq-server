@@ -8,7 +8,7 @@
 <table class="list">
  <thead>
   <tr>
-    <%= group_heading('queues', 'Overview', [vhosts_interesting, nodes_interesting, true]) %>
+    <%= group_heading('queues', 'Overview', [display.vhosts, display.nodes, true]) %>
 <% if(disable_stats && enable_queue_totals) { %>
     <%= group_heading('queues', 'Messages', []) %>
 <% } else { %>
@@ -23,11 +23,11 @@
     <th class="plus-minus"><span class="popup-options-link" title="Click to change columns" type="columns" for="queues">+/-</span></th>
   </tr>
   <tr>
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
     <th><%= fmt_sort('Virtual host', 'vhost') %></th>
 <% } %>
     <th><%= fmt_sort('Name',         'name') %></th>
-<% if (nodes_interesting) { %>
+<% if (display.nodes) { %>
     <th><%= fmt_sort('Node',         'node') %></th>
 <% } %>
 <% if (show_column('queues', 'type')) { %>
@@ -116,11 +116,11 @@
     var queue = queues.items[i];
 %>
   <tr<%= alt_rows(i, queue.arguments) %>>
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
    <td><%= fmt_string(queue.vhost) %></td>
 <% } %>
    <td><%= link_queue(queue.vhost, queue.name, queue.arguments) %></td>
-<% if (nodes_interesting) { %>
+<% if (display.nodes) { %>
    <td>
      <% if (queue.node) { %>
       <%= fmt_node(queue.node) %>
@@ -226,12 +226,13 @@
   </div>
 </div>
 
+<% if (ac.canAccessVhosts()) { %>
 <div class="section-hidden">
   <h2>Add a new queue</h2>
   <div class="hider">
     <form action="#/queues" method="put">
       <table class="form">
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
         <tr>
           <th><label>Virtual host:</label></th>
           <td>
@@ -249,7 +250,12 @@
           <th><label>Type:</label></th>
           <td>
             <select name="queuetype" onchange="select_queue_type(queuetype)">
-              <option value="classic">Classic</option>
+              <option value="default">Default for virtual host</option>
+              <% if (queue_type == "classic") { %>
+               <option value="classic" selected>Classic</option>
+              <% } else { %>
+               <option value="classic">Classic</option>
+              <% } %>
               <% if (queue_type == "quorum") { %>
                <option value="quorum" selected>Quorum</option>
               <% } else { %>
@@ -267,7 +273,7 @@
           <th><label>Name:</label></th>
           <td><input type="text" name="name"/><span class="mand">*</span></td>
         </tr>
-<% if (queue_type == "classic") { %>
+<% if (queue_type == "classic" || queue_type == "default") { %>
         <tr>
           <th><label>Durability:</label></th>
           <td>
@@ -279,8 +285,8 @@
         </tr>
 <% } %>
 <%
-  if (nodes_interesting) {
-   var nodes = JSON.parse(sync_get('/nodes'));
+  if (ac.canListNodes()) {
+   var nodes = display.data.nodes
 %>
         <tr>
           <th><label>Node:</label></th>
@@ -324,18 +330,19 @@
                   <span class="argument-link" field="arguments" key="x-max-length-bytes" type="number">Max length bytes</span> <span class="help" id="queue-max-length-bytes"></span><br/>
                 <% if (queue_type == "classic") { %>
                 <span class="argument-link" field="arguments" key="x-max-priority" type="number">Maximum priority</span> <span class="help" id="queue-max-priority"></span>
-                | <span class="argument-link" field="arguments" key="x-queue-mode" type="string" value="lazy">Lazy mode</span> <span class="help" id="queue-lazy"></span>
                 | <span class="argument-link" field="arguments" key="x-queue-version" type="number">Version</span> <span class="help" id="queue-version"></span>
                 | <span class="argument-link" field="arguments" key="x-queue-master-locator" type="string" value="">Master locator</span> <span class="help" id="queue-master-locator"></span>
                 <% } %>
                 <% if (queue_type == "quorum") { %>
                   <span class="argument-link" field="arguments" key="x-delivery-limit" type="number">Delivery limit</span><span class="help" id="delivery-limit"></span>
                   | <span class="argument-link" field="arguments" key="x-quorum-initial-group-size" type="number">Initial cluster size</span><span class="help" id="queue-initial-cluster-size"></span><br/>
-                  <span class="argument-link" field="arguments" key="x-dead-letter-strategy" type="string">Dead letter strategy</span><span class="help" id="queue-dead-letter-strategy"></span>
+                  | <span class="argument-link" field="arguments" key="x-quorum-target-group-size" type="number">Target cluster size</span><span class="help" id="qourum-queue-target-group-size"></span>    
+                    <span class="argument-link" field="arguments" key="x-dead-letter-strategy" type="string">Dead letter strategy</span><span class="help" id="queue-dead-letter-strategy"></span>
                 <% } %>
                 <% if (queue_type == "stream") { %>
                   <span class="argument-link" field="arguments" key="x-max-age" type="string">Max time retention</span><span class="help" id="queue-max-age"></span>
                   | <span class="argument-link" field="arguments" key="x-stream-max-segment-size-bytes" type="number">Max segment size in bytes</span><span class="help" id="queue-stream-max-segment-size-bytes"></span>
+                  | <span class="argument-link" field="arguments" key="x-stream-filter-size-bytes" type="number">Filter size (per chunk) in bytes</span><span class="help" id="queue-stream-filter-size-bytes"></span>
                   | <span class="argument-link" field="arguments" key="x-initial-cluster-size" type="number">Initial cluster size</span><span class="help" id="queue-initial-cluster-size"></span>
                 <% } %>
                 <% if (queue_type != "classic") { %>
@@ -350,4 +357,5 @@
       <input type="submit" value="Add queue"/>
     </form>
   </div>
+  <% } %>
 </div>

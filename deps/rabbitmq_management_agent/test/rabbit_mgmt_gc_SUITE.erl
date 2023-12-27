@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_gc_SUITE).
@@ -23,6 +23,7 @@ groups() ->
     [
      {non_parallel_tests, [],
       [ queue_stats,
+        basic_queue_stats,
         quorum_queue_stats,
         connection_stats,
         channel_stats,
@@ -77,6 +78,13 @@ init_per_group(_, Config) ->
 end_per_group(_, Config) ->
     Config.
 
+init_per_testcase(basic_queue_stats, Config) ->
+    IsEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                  Config, reduced_queues_endpoint),
+    case IsEnabled of
+        true  -> Config;
+        false -> {skip, "The detailed queues endpoint is not available."}
+    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     rabbit_ct_helpers:run_steps(Config,
@@ -170,6 +178,40 @@ queue_stats(Config) ->
                                       [queue_stats_deliver_stats, {Q, 5}]),
     [] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
                                       [queue_exchange_stats_publish, {{Q, X}, 5}]),
+
+    amqp_channel:call(Ch, #'queue.delete'{queue = <<"queue_stats">>}),
+    rabbit_ct_client_helpers:close_channel(Ch),
+
+    ok.
+
+basic_queue_stats(Config) ->
+    A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, A),
+
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_stats">>}),
+    amqp_channel:cast(Ch, #'basic.publish'{routing_key = <<"queue_stats">>},
+                      #amqp_msg{payload = <<"hello">>}),
+    {#'basic.get_ok'{}, _} = amqp_channel:call(Ch, #'basic.get'{queue = <<"queue_stats">>,
+                                                                no_ack = true}),
+    timer:sleep(1150),
+
+    Q = q(<<"myqueue">>),
+
+    rabbit_ct_broker_helpers:rpc(Config, A, ets, insert,
+                                 [queue_basic_stats, {Q, infos}]),
+
+    [_] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
+                                       [queue_basic_stats, Q]),
+
+    %% Trigger gc. When the gen_server:call returns, the gc has already finished.
+    rabbit_ct_broker_helpers:rpc(Config, A, erlang, send, [rabbit_mgmt_gc, start_gc]),
+    rabbit_ct_broker_helpers:rpc(Config, A, gen_server, call, [rabbit_mgmt_gc, test]),
+
+    [_|_] = rabbit_ct_broker_helpers:rpc(Config, A, ets, tab2list,
+                                         [queue_basic_stats]),
+
+    [] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
+                                      [queue_basic_stats, Q]),
 
     amqp_channel:call(Ch, #'queue.delete'{queue = <<"queue_stats">>}),
     rabbit_ct_client_helpers:close_channel(Ch),

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_amqp1_0_session_sup_sup).
@@ -20,7 +20,7 @@
 
 -spec start_link() -> rabbit_types:ok_pid_or_error().
 -spec start_session(pid(), rabbit_amqp1_0_session_sup:start_link_args()) ->
-                              {'ok', pid(), pid()}.
+          supervisor:startchild_ret().
 
 %%----------------------------------------------------------------------------
 

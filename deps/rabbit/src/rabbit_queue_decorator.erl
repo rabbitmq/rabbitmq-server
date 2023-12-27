@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_queue_decorator).
@@ -11,6 +11,7 @@
 -include("amqqueue.hrl").
 
 -export([select/1, set/1, register/2, unregister/1]).
+-export([active/1, list/0]).
 
 -behaviour(rabbit_registry_class).
 
@@ -43,6 +44,9 @@ set(Q) when ?is_amqqueue(Q) ->
     Decorators = [D || D <- list(), D:active_for(Q)],
     amqqueue:set_decorators(Q, Decorators).
 
+active(Q) when ?is_amqqueue(Q) ->
+    [D || D <- list(), D:active_for(Q)].
+
 list() -> [M || {_, M} <- rabbit_registry:lookup_all(queue_decorator)].
 
 register(TypeName, ModuleName) ->
@@ -67,6 +71,6 @@ maybe_recover(Q0) when ?is_amqqueue(Q0) ->
             ok;
         _   ->
             %% TODO LRB JSP 160169569 should startup be passed Q1 here?
-            [M:startup(Q0) || M <- New -- Old],
-            rabbit_amqqueue:update_decorators(Name)
+            _ = [M:startup(Q0) || M <- New -- Old],
+            rabbit_amqqueue:update_decorators(Name, Decs1)
     end.

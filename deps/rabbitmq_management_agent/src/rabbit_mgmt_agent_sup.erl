@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_agent_sup).
@@ -34,8 +34,8 @@ start_link() ->
 
 
 maybe_enable_metrics_collector() ->
-    case application:get_env(rabbitmq_management_agent, disable_metrics_collector, false) of
-        false ->
+    case rabbit_mgmt_agent_config:is_metrics_collector_enabled() of
+        true ->
             ok = pg:join(?MANAGEMENT_PG_SCOPE, ?MANAGEMENT_PG_GROUP, self()),
             ST = {rabbit_mgmt_storage, {rabbit_mgmt_storage, start_link, []},
                   permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_storage]},
@@ -52,6 +52,6 @@ maybe_enable_metrics_collector() ->
             GC = {rabbit_mgmt_gc, {rabbit_mgmt_gc, start_link, []},
           permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_gc]},
             [ST, MD, GC | MC ++ MGC];
-        true ->
+        false ->
             []
     end.

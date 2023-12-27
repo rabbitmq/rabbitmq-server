@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_amqp1_0_session_sup).
@@ -20,15 +20,16 @@
 -export_type([start_link_args/0]).
 
 -type start_link_args() ::
-        {rabbit_types:protocol(), rabbit_net:socket(),
-         rabbit_channel:channel_number(), non_neg_integer(), pid(),
-         rabbit_access_control:username(), rabbit_types:vhost(), pid()}.
+        {'amqp10_framing', rabbit_net:socket(),
+         rabbit_channel:channel_number(), non_neg_integer() | 'unlimited', pid(),
+         #user{}, rabbit_types:vhost(), pid(),
+         {'rabbit_proxy_socket', rabbit_net:socket(), term()} | 'undefined'}.
 
--spec start_link(start_link_args()) -> {'ok', pid(), pid()}.
+-spec start_link(start_link_args()) -> {'ok', pid(), pid()} | {'error', term()}.
 
 %%----------------------------------------------------------------------------
 start_link({amqp10_framing, Sock, Channel, FrameMax, ReaderPid,
-            Username, VHost, Collector, ProxySocket}) ->
+            User, VHost, Collector, ProxySocket}) ->
     {ok, SupPid} = supervisor:start_link(?MODULE, []),
     {ok, WriterPid} =
         supervisor:start_child(
@@ -60,8 +61,8 @@ start_link({amqp10_framing, Sock, Channel, FrameMax, ReaderPid,
                id => channel,
                start =>
                    {rabbit_amqp1_0_session_process, start_link, [
-                       {Channel, ReaderPid, WriterPid, Username, VHost, FrameMax,
-                           adapter_info(SocketForAdapterInfo), Collector}
+                       {Channel, ReaderPid, WriterPid, User, VHost, FrameMax,
+                           adapter_info(User, SocketForAdapterInfo, Channel), Collector}
                    ]},
                restart => transient,
                significant => true,
@@ -85,5 +86,19 @@ init([]) ->
                 auto_shutdown => any_significant},
     {ok, {SupFlags, []}}.
 
-adapter_info(Sock) ->
-    amqp_connection:socket_adapter_info(Sock, {'AMQP', "1.0"}).
+
+%% For each AMQP 1.0 session opened, an internal direct AMQP 0-9-1 connection is opened too.
+%% This direct connection will authenticate the user again. Again because at this point
+%% the SASL handshake has already taken place and this user has already been authenticated.
+%% However, we do not have the credentials the user presented. For that reason, the
+%% #amqp_adapter_info.additional_info carries an extra property called authz_backends
+%% which is initialized from the #user.authz_backends attribute. In other words, we
+%% propagate the outcome from the first authentication attempt to the subsequent attempts.
+
+%% See rabbit_direct.erl to see how `authz_bakends` is propagated from
+% amqp_adapter_info.additional_info to the rabbit_access_control module
+
+adapter_info(User, Sock, UniqueId) ->
+    AdapterInfo = amqp_connection:socket_adapter_info(Sock, {'AMQP', "1.0"}, UniqueId),
+    AdapterInfo#amqp_adapter_info{additional_info =
+        AdapterInfo#amqp_adapter_info.additional_info ++ [{authz_backends, User#user.authz_backends}]}.

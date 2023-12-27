@@ -2,15 +2,15 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_core_metrics_gc_SUITE).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 all() ->
@@ -45,9 +45,14 @@ merge_app_env(Config) ->
 
 init_per_group(cluster_tests, Config) ->
     rabbit_ct_helpers:log_environment(),
-    Conf = [{rmq_nodename_suffix, cluster_tests}, {rmq_nodes_count, 2}],
-    Config1 = rabbit_ct_helpers:set_config(Config, Conf),
-    rabbit_ct_helpers:run_setup_steps(Config1, setup_steps());
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            Conf = [{rmq_nodename_suffix, cluster_tests}, {rmq_nodes_count, 2}],
+            Config1 = rabbit_ct_helpers:set_config(Config, Conf),
+            rabbit_ct_helpers:run_setup_steps(Config1, setup_steps());
+        {khepri, _} ->
+            {skip, "Classic queue mirroring not supported by Khepri"}
+    end;
 init_per_group(non_parallel_tests, Config) ->
     rabbit_ct_helpers:log_environment(),
     Conf = [{rmq_nodename_suffix, non_parallel_tests}],
@@ -127,10 +132,13 @@ connection_metrics(Config) ->
 
     DeadPid = rabbit_ct_broker_helpers:rpc(Config, A, ?MODULE, dead_pid, []),
 
+    Infos = [{info0, foo}, {info1, bar}, {info2, baz},
+             {authz_backends, [rabbit_auth_backend_oauth2,rabbit_auth_backend_http]}],
+
     rabbit_ct_broker_helpers:rpc(Config, A, rabbit_core_metrics,
-                                 connection_created, [DeadPid, infos]),
+                                 connection_created, [DeadPid, Infos]),
     rabbit_ct_broker_helpers:rpc(Config, A, rabbit_core_metrics,
-                                 connection_stats, [DeadPid, infos]),
+                                 connection_stats, [DeadPid, Infos]),
     rabbit_ct_broker_helpers:rpc(Config, A, rabbit_core_metrics,
                                  connection_stats, [DeadPid, 1, 1, 1]),
 

@@ -4,8 +4,18 @@ load(
     "//:rabbitmq.bzl",
     "BROKER_VERSION_REQUIREMENTS_ANY",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "rabbitmq_app",
 )
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
+)
+
+# gazelle:erlang_always_generate_test_beam_files
 
 APP_NAME = "rabbitmq_top"
 
@@ -13,38 +23,60 @@ APP_DESCRIPTION = "RabbitMQ Top"
 
 APP_MODULE = "rabbit_top_app"
 
-BUILD_DEPS = [
-    "//deps/rabbitmq_management_agent:erlang_app",
-]
+all_beam_files(name = "all_beam_files")
 
-DEPS = [
-    "//deps/amqp_client:erlang_app",
-    "//deps/rabbit_common:erlang_app",
-    "//deps/rabbitmq_management:erlang_app",
-]
+all_test_beam_files(name = "all_test_beam_files")
 
-RUNTIME_DEPS = [
-    "//deps/rabbit:erlang_app",
-]
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
+
+# gazelle:erlang_app_dep_exclude rabbit
+# gazelle:erlang_app_dep_exclude rabbitmq_management_agent
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_module = APP_MODULE,
     app_name = APP_NAME,
-    build_deps = BUILD_DEPS,
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/amqp_client:erlang_app",
+        "//deps/rabbit:erlang_app",  # keep
+        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbitmq_management:erlang_app",
+    ],
 )
 
-xref()
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
 
 plt(
-    name = "base_plt",
-    deps = BUILD_DEPS + DEPS,
+    name = "deps_plt",
+    for_target = ":erlang_app",
+    ignore_warnings = True,
+    libs = ["//deps/rabbitmq_cli:elixir"],  # keep
+    plt = "//:base_plt",
 )
 
 dialyze(
+    name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":base_plt",
+    plt = ":deps_plt",
+    target = ":erlang_app",
 )
+
+alias(
+    name = "rabbitmq_top",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+assert_suites()

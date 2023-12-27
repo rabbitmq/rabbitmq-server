@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 -module(rabbit_fifo_dlx_client).
 
@@ -32,7 +32,7 @@ settle(MsgIds, #state{leader = Leader} = State)
     {ok, State}.
 
 -spec checkout(rabbit_amqqueue:name(), ra:server_id(), non_neg_integer()) ->
-    {ok, state()} | {error, ra_command_failed}.
+    {ok, state()} | {error, non_local_leader | ra_command_failed}.
 checkout(QResource, Leader, NumUnsettled) ->
     Cmd = rabbit_fifo_dlx:make_checkout(self(), NumUnsettled),
     State = #state{queue_resource = QResource,
@@ -46,23 +46,24 @@ process_command(Cmd, #state{leader = Leader} = State, Tries) ->
     case ra:process_command(Leader, Cmd, 60_000) of
         {ok, ok, Leader} ->
             {ok, State#state{leader = Leader}};
-        {ok, ok, L} ->
-            rabbit_log:warning("Failed to process command ~p on quorum queue leader ~p because actual leader is ~p.",
-                               [Cmd, Leader, L]),
-            {error, ra_command_failed};
+        {ok, ok, NonLocalLeader} ->
+            rabbit_log:warning("Failed to process command ~tp on quorum queue leader ~tp because actual leader is ~tp.",
+                               [Cmd, Leader, NonLocalLeader]),
+            {error, non_local_leader};
         Err ->
-            rabbit_log:warning("Failed to process command ~p on quorum queue leader ~p: ~p~n"
+            rabbit_log:warning("Failed to process command ~tp on quorum queue leader ~tp: ~tp~n"
                                "Trying ~b more time(s)...",
                                [Cmd, Leader, Err, Tries]),
             process_command(Cmd, State, Tries - 1)
     end.
 
--spec handle_ra_event(ra:server_id(), term(), state()) ->
+-spec handle_ra_event(pid(), term(), state()) ->
     {ok, state(), actions()}.
-handle_ra_event(Leader, {machine, {dlx_delivery, _} = Del}, #state{leader = Leader} = State) ->
+handle_ra_event(Leader, {dlx_delivery, _} = Del,
+                #state{leader = _Leader} = State) when node(Leader) == node() ->
     handle_delivery(Del, State);
 handle_ra_event(From, Evt, State) ->
-    rabbit_log:debug("Ignoring ra event ~p from ~p", [Evt, From]),
+    rabbit_log:debug("Ignoring ra event ~tp from ~tp", [Evt, From]),
     {ok, State, []}.
 
 handle_delivery({dlx_delivery, [{FstId, _} | _] = IdMsgs},

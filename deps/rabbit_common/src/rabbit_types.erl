@@ -2,14 +2,18 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_types).
 
 -include("rabbit.hrl").
 
--export_type([maybe/1, info/0, infos/0, info_key/0, info_keys/0,
+-export_type([
+              %% deprecated
+              maybe/1,
+              option/1,
+              info/0, infos/0, info_key/0, info_keys/0,
               message/0, msg_id/0, basic_message/0,
               delivery/0, content/0, decoded_content/0, undecoded_content/0,
               unencoded_content/0, encoded_content/0, message_properties/0,
@@ -24,12 +28,17 @@
               proc_type_and_name/0, timestamp/0, tracked_connection_id/0,
               tracked_connection/0, tracked_channel_id/0, tracked_channel/0,
               node_type/0, topic_access_context/0,
-              authz_data/0, authz_context/0]).
+              authz_data/0, authz_context/0,
+              permission_atom/0, rabbit_amqqueue_name/0, binding_key/0, channel_number/0,
+              exchange_name/0, exchange_type/0, guid/0, routing_key/0,
+              sup_ref/0, child/0, child_id/0]).
 
+-type(option(T) :: T | 'none' | 'undefined').
+%% Deprecated, 'maybe' is a keyword in modern Erlang
 -type(maybe(T) :: T | 'none').
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 
--type(vhost() :: vhost:name()).
+-type(vhost() :: binary()).
 -type(ctag() :: binary()).
 
 %% TODO: make this more precise by tying specific class_ids to
@@ -47,18 +56,21 @@
 -type(decoded_content() ::
         #content{class_id              :: rabbit_framing:amqp_class_id(),
                  properties            :: rabbit_framing:amqp_property_record(),
-                 properties_bin        :: maybe(binary()),
+                 properties_bin        :: option(binary()),
                  payload_fragments_rev :: [binary()]}).
 -type(encoded_content() ::
         #content{class_id       :: rabbit_framing:amqp_class_id(),
-                 properties     :: maybe(rabbit_framing:amqp_property_record()),
+                 properties     :: option(rabbit_framing:amqp_property_record()),
                  properties_bin        :: binary(),
                  payload_fragments_rev :: [binary()]}).
 -type(content() :: undecoded_content() | decoded_content()).
--type(msg_id() :: rabbit_guid:guid()).
+
+-type(guid() :: binary()).
+-type(msg_id() :: guid()).
+-type(routing_key() :: binary()).
 -type(basic_message() ::
-        #basic_message{exchange_name  :: rabbit_exchange:name(),
-                       routing_keys   :: [rabbit_router:routing_key()],
+        #basic_message{exchange_name  :: exchange_name(),
+                       routing_keys   :: [routing_key()],
                        content        :: content(),
                        id             :: msg_id(),
                        is_persistent  :: boolean()}).
@@ -97,21 +109,28 @@
                   host     :: rabbit_net:hostname(),
                   port     :: rabbit_net:ip_port()}).
 
--type(binding_source() :: rabbit_exchange:name()).
--type(binding_destination() :: rabbit_amqqueue:name() | rabbit_exchange:name()).
+-type rabbit_amqqueue_name() :: rabbit_types:r('queue').
+
+-type(binding_source() :: exchange_name()).
+-type(binding_destination() :: rabbit_amqqueue_name() | exchange_name()).
+
+-type binding_key() :: binary().
 
 -type(binding() ::
-        #binding{source      :: rabbit_exchange:name(),
+        #binding{source      :: exchange_name(),
                  destination :: binding_destination(),
-                 key         :: rabbit_binding:key(),
+                 key         :: binding_key(),
                  args        :: rabbit_framing:amqp_table()}).
 
 -type(exchange() ::
-        #exchange{name        :: rabbit_exchange:name(),
-                  type        :: rabbit_exchange:type(),
+        #exchange{name        :: exchange_name(),
+                  type        :: exchange_type(),
                   durable     :: boolean(),
                   auto_delete :: boolean(),
                   arguments   :: rabbit_framing:amqp_table()}).
+
+-type exchange_name() :: r('exchange').
+-type exchange_type() :: atom().
 
 -type(connection_name() :: binary()).
 
@@ -128,14 +147,16 @@
                             name         :: connection_name(),
                             pid          :: connection(),
                             protocol     :: protocol_name(),
-                            peer_host    :: rabbit_networking:hostname(),
-                            peer_port    :: rabbit_networking:ip_port(),
+                            peer_host    :: rabbit_net:hostname(),
+                            peer_port    :: rabbit_net:ip_port(),
                             username     :: username(),
                             connected_at :: integer()}).
 
 -type(channel_name() :: binary()).
 
 -type(channel() :: pid()).
+
+-type(channel_number() :: non_neg_integer()).
 
 %% used e.g. by rabbit_channel_tracking
 -type(tracked_channel_id() :: {node(), channel_name()}).
@@ -189,8 +210,20 @@
 -type(proc_name() :: term()).
 -type(proc_type_and_name() :: {atom(), proc_name()}).
 
--type(topic_access_context() :: #{routing_key  => rabbit_router:routing_key(),
+-type(topic_access_context() :: #{routing_key  => routing_key(),
                                   variable_map => map(),
                                   _ => _}).
 
 -type(authz_context() :: map()).
+
+-type(permission_atom() :: 'configure' | 'write' | 'read').
+
+%% not exported by OTP supervisor
+-type sup_ref()   :: (Name :: atom())
+                   | {Name :: atom(), Node :: node()}
+                   | {'global', Name :: term()}
+                   | {'via', Module :: module(), Name :: any()}
+                   | pid().
+
+-type child() :: 'undefined' | pid().
+-type child_id() :: term().

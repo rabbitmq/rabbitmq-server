@@ -1,8 +1,14 @@
 PROJECT = rabbitmq_cli
 
 BUILD_DEPS = rabbit_common
-DEPS = observer_cli
-TEST_DEPS = amqp_client rabbit
+DEPS = csv json observer_cli stdout_formatter
+TEST_DEPS = amqp amqp_client temp x509 rabbit
+
+dep_amqp = hex 3.3.0
+dep_csv = hex 3.2.0
+dep_json = hex 1.4.1
+dep_temp = hex 0.4.7
+dep_x509 = hex 0.8.8
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
@@ -34,7 +40,7 @@ LINKED_ESCRIPTS = escript/rabbitmq-plugins \
 		  escript/rabbitmq-diagnostics \
 		  escript/rabbitmq-queues \
 		  escript/rabbitmq-streams \
-			escript/rabbitmq-tanzu \
+			escript/vmware-rabbitmq \
       escript/rabbitmq-upgrade
 ESCRIPTS = $(ACTUAL_ESCRIPTS) $(LINKED_ESCRIPTS)
 
@@ -44,9 +50,9 @@ rabbitmq-plugins = escript/rabbitmqctl
 rabbitmq-diagnostics = escript/rabbitmqctl
 rabbitmq-queues = escript/rabbitmqctl
 rabbitmq-streams = escript/rabbitmqctl
-rabbitmq-tanzu = escript/rabbitmqctl
 rabbitmq-upgrade = escript/rabbitmqctl
-escript/rabbitmq-plugins escript/rabbitmq-diagnostics escript/rabbitmq-queues escript/rabbitmq-streams escript/rabbitmq-tanzu escript/rabbitmq-upgrade: escript/rabbitmqctl
+vmware-rabbitmq = escript/rabbitmqctl
+escript/rabbitmq-plugins escript/rabbitmq-diagnostics escript/rabbitmq-queues escript/rabbitmq-streams escript/rabbitmq-upgrade escript/vmware-rabbitmq: escript/rabbitmqctl
 
 # We use hardlinks or symlinks in the `escript` directory and
 # install's PREFIX when a single escript can have several names (eg.

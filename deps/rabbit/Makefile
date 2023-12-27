@@ -26,7 +26,7 @@ define PROJECT_ENV
 	    {frame_max, 131072},
 	    %% see rabbitmq-server#1593
 	    {channel_max, 2047},
-	    {connection_max, infinity},
+	    {ranch_connection_max, infinity},
 	    {heartbeat, 60},
 	    {msg_store_file_size_limit, 16777216},
 	    {msg_store_shutdown_timeout, 600000},
@@ -65,6 +65,8 @@ define PROJECT_ENV
 	                         ]},
 	    {halt_on_upgrade_failure, true},
 	    {ssl_apps, [asn1, crypto, public_key, ssl]},
+	    %% classic queue storage implementation version
+	    {classic_queue_default_version, 2},
 	    %% see rabbitmq-server#114
 	    {mirroring_flow_control, true},
 	    {mirroring_sync_batch_size, 4096},
@@ -100,7 +102,6 @@ define PROJECT_ENV
 
 	    %% rabbitmq-server#973
 	    {queue_explicit_gc_run_operation_threshold, 1000},
-	    {lazy_queue_explicit_gc_run_operation_threshold, 1000},
 	    {background_gc_enabled, false},
 	    {background_gc_target_interval, 60000},
 	    %% rabbitmq-server#589
@@ -126,31 +127,24 @@ define PROJECT_ENV
 			{credentials_obfuscation_fallback_secret, <<"nocookie">>},
       {dead_letter_worker_consumer_prefetch, 32},
       {dead_letter_worker_publisher_confirm_timeout, 180000},
-
 			%% EOL date for the current release series, if known/announced
 			{release_series_eol_date, none}
 	  ]
 endef
 
-# With Erlang.mk default behavior, the value of `$(APPS_DIR)` is always
-# relative to the top-level executed Makefile. In our case, it could be
-# a plugin for instance. However, the rabbitmq_prelaunch application is
-# in this repository, not the plugin's. That's why we need to override
-# this value here.
-APPS_DIR := $(CURDIR)/apps
-
-LOCAL_DEPS = sasl rabbitmq_prelaunch os_mon inets compiler public_key crypto ssl syntax_tools xmerl
+LOCAL_DEPS = sasl os_mon inets compiler public_key crypto ssl syntax_tools xmerl
 
 BUILD_DEPS = rabbitmq_cli
-DEPS = ranch rabbit_common ra sysmon_handler stdout_formatter recon redbug observer_cli osiris amqp10_common syslog systemd seshat
+DEPS = ranch rabbit_common rabbitmq_prelaunch ra sysmon_handler stdout_formatter recon redbug observer_cli osiris amqp10_common syslog systemd seshat khepri khepri_mnesia_migration
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
 
 PLT_APPS += mnesia
 
 dep_syslog = git https://github.com/schlagert/syslog 4.0.0
-dep_osiris = git https://github.com/rabbitmq/osiris main
+dep_osiris = git https://github.com/rabbitmq/osiris v1.7.2
 dep_systemd = hex 0.6.1
-dep_seshat = hex 0.3.2
+
+dep_seshat = git https://github.com/rabbitmq/seshat v0.6.1
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))
@@ -159,6 +153,7 @@ endef
 DOCS_DIR     = docs
 MANPAGES     = $(wildcard $(DOCS_DIR)/*.[0-9])
 WEB_MANPAGES = $(patsubst %,%.html,$(MANPAGES))
+MD_MANPAGES  = $(patsubst %,%.md,$(MANPAGES))
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
@@ -169,9 +164,6 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
-
-# See above why we mess with `$(APPS_DIR)`.
-unexport APPS_DIR
 
 ifeq ($(strip $(BATS)),)
 BATS := $(ERLANG_MK_TMP)/bats/bin/bats
@@ -205,7 +197,6 @@ SLOW_CT_SUITES := backing_queue \
 		  eager_sync \
 		  feature_flags \
 		  health_check \
-		  lazy_queue \
 		  many_node_ha \
 		  metrics \
 		  msg_store \
@@ -241,7 +232,7 @@ ct-slow: CT_SUITES = $(SLOW_CT_SUITES)
 # --------------------------------------------------------------------
 
 RMQ_ERLC_OPTS += -I $(DEPS_DIR)/rabbit_common/include
-EDOC_OPTS += {preprocess,true}
+EDOC_OPTS += {preprocess,true},{includes,["."]}
 
 ifdef INSTRUMENT_FOR_QC
 RMQ_ERLC_OPTS += -DINSTR_MOD=gm_qc
@@ -281,7 +272,7 @@ docs:: manpages web-manpages
 manpages: $(MANPAGES)
 	@:
 
-web-manpages: $(WEB_MANPAGES)
+web-manpages: $(WEB_MANPAGES) $(MD_MANPAGES)
 	@:
 
 # We use mandoc(1) to convert manpages to HTML plus an awk script which
@@ -309,7 +300,12 @@ web-manpages: $(WEB_MANPAGES)
 	  } } \
 	  ' > "$@"
 
+%.md: %
+	$(gen_verbose) mandoc -T markdown -O 'fragment,man=%N.%S.md' "$<" | \
+	  sed -E -e 's/\{/\&lcub;/g' \
+	> "$@"
+
 distclean:: distclean-manpages
 
 distclean-manpages::
-	$(gen_verbose) rm -f $(WEB_MANPAGES)
+	$(gen_verbose) rm -f $(WEB_MANPAGES) $(MD_MANPAGES)

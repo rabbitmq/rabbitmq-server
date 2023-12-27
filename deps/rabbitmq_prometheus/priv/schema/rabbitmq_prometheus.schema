@@ -26,11 +26,26 @@
 %% {tcp_config, [{port,     15692},
 %%               {ip,       "127.0.0.1"}]}
 
+{mapping, "prometheus.tcp.listener", "rabbitmq_prometheus.tcp_config",
+    [{datatype, [{enum, [none]}, ip]}]}.
 {mapping, "prometheus.tcp.port", "rabbitmq_prometheus.tcp_config.port",
     [{datatype, integer}]}.
 {mapping, "prometheus.tcp.ip", "rabbitmq_prometheus.tcp_config.ip",
     [{datatype, string},
      {validators, ["is_ip"]}]}.
+
+{translation,
+    "rabbitmq_prometheus.tcp_config",
+    fun(Conf) ->
+        Setting = cuttlefish:conf_get("prometheus.tcp.listener", Conf, undefined),
+        case Setting of
+            none      -> [];
+            undefined -> [{port, 15692}];
+            {Ip, Port} when is_list(Ip), is_integer(Port) ->
+                [{ip, Ip}, {port, Port}]
+        end
+    end
+}.
 
 {mapping, "prometheus.tcp.compress", "rabbitmq_prometheus.tcp_config.cowboy_opts.compress",
     [{datatype, {enum, [true, false]}}]}.
@@ -44,7 +59,6 @@
     [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
 {mapping, "prometheus.tcp.max_keepalive", "rabbitmq_prometheus.tcp_config.cowboy_opts.max_keepalive",
     [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
-
 
 %% HTTPS (TLS) listener options ========================================================
 
@@ -128,3 +142,7 @@ end}.
     [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
 
 {mapping, "prometheus.filter_aggregated_queue_metrics_pattern", "rabbitmq_prometheus.filter_aggregated_queue_metrics_pattern", [{datatype, string}]}.
+
+%% Authentication options ========================================================
+{mapping, "prometheus.authentication.enabled", "rabbitmq_prometheus.authentication.enabled",
+    [{datatype, {enum, [true, false]}}]}.

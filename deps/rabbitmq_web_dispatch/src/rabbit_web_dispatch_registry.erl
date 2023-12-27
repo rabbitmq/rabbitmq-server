@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_web_dispatch_registry).
@@ -91,7 +91,7 @@ handle_call({remove, Name}, _From,
             undefined) ->
     case listener_by_name(Name) of
         {error, not_found} ->
-            rabbit_log:warning("HTTP listener registry could not find context ~p",
+            rabbit_log:warning("HTTP listener registry could not find context ~tp",
                                [Name]),
             {reply, ok, undefined};
         {ok, Listener} ->
@@ -116,7 +116,7 @@ handle_call(list_all, _From, undefined) ->
     {reply, list(), undefined};
 
 handle_call(Req, _From, State) ->
-    rabbit_log:error("Unexpected call to ~p: ~p", [?MODULE, Req]),
+    rabbit_log:error("Unexpected call to ~tp: ~tp", [?MODULE, Req]),
     {stop, unknown_request, State}.
 
 handle_cast(_, State) ->
@@ -157,8 +157,17 @@ listener_info(Listener) ->
                        P
                end,
     Port = pget(port, Listener),
-    [{IPAddress, _Port, _Family} | _]
-        = rabbit_networking:tcp_listener_addresses(Port),
+    IPAddress = case rabbit_misc:pget(ip, Listener) of
+                    undefined ->
+                        [{AutoIPAddress, _Port, _Family} | _]
+                            = rabbit_networking:tcp_listener_addresses(Port),
+                        AutoIPAddress;
+                    IP when is_tuple(IP) ->
+                        IP;
+                    IP when is_list(IP) ->
+                        {ok, ParsedIP} = inet_parse:address(IP),
+                        ParsedIP
+                end,
     [{Protocol, IPAddress, Port}].
 
 lookup_dispatch(Lsnr) ->

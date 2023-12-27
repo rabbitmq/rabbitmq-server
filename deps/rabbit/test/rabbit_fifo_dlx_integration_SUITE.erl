@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 -module(rabbit_fifo_dlx_integration_SUITE).
 
@@ -18,13 +18,16 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
--import(quorum_queue_utils, [wait_for_messages_ready/3,
-                             wait_for_min_messages/3,
-                             dirty_query/3,
-                             ra_name/1]).
+-import(queue_utils, [wait_for_messages_ready/3,
+                      wait_for_min_messages/3,
+                      wait_for_messages/2,
+                      dirty_query/3,
+                      ra_name/1]).
 -import(rabbit_ct_helpers, [eventually/1,
                             eventually/3,
                             consistently/1]).
+-import(rabbit_ct_broker_helpers, [rpc/5,
+                                   rpc/6]).
 -import(quorum_queue_SUITE, [publish/2,
                              consume/3]).
 
@@ -55,10 +58,12 @@ groups() ->
                                reject_publish_source_queue_max_length,
                                reject_publish_source_queue_max_length_bytes,
                                reject_publish_target_classic_queue,
-                               reject_publish_target_quorum_queue,
+                               reject_publish_max_length_target_quorum_queue,
                                target_quorum_queue_delete_create
                               ]},
      {cluster_size_3, [], [
+                           reject_publish_max_length_target_quorum_queue,
+                           reject_publish_down_target_quorum_queue,
                            many_target_queues,
                            single_dlx_worker
                           ]}
@@ -92,12 +97,14 @@ init_per_group(Group, Config, NodesCount) ->
     Config2 =  rabbit_ct_helpers:run_steps(Config1,
                                            [fun merge_app_env/1 ] ++
                                            rabbit_ct_broker_helpers:setup_steps()),
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config2, 0, application, set_env,
-           [rabbit, channel_tick_interval, 100]),
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config2, stream_queue) of
-        ok   -> Config2;
-        Skip -> Skip
+    case Config2 of
+        {skip, _Reason} = Skip ->
+            Skip;
+        _ ->
+            _ = rabbit_ct_broker_helpers:enable_feature_flag(Config2, message_containers),
+            ok = rpc(Config2, 0, application, set_env,
+                     [rabbit, channel_tick_interval, 100]),
+            Config2
     end.
 
 end_per_group(_, Config) ->
@@ -111,10 +118,16 @@ merge_app_env(Config) ->
       {ra, [{min_wal_roll_over_interval, 30000}]}).
 
 init_per_testcase(Testcase, Config) ->
-    case {Testcase, rabbit_ct_helpers:is_mixed_versions()} of
-        {single_dlx_worker, true} ->
+    IsKhepriEnabled = lists:any(fun(B) -> B end,
+                                rabbit_ct_broker_helpers:rpc_all(
+                                  Config, rabbit_feature_flags, is_enabled,
+                                  [khepri_db])),
+    case {Testcase, rabbit_ct_helpers:is_mixed_versions(), IsKhepriEnabled} of
+        {single_dlx_worker, true, _} ->
             {skip, "single_dlx_worker is not mixed version compatible because process "
              "rabbit_fifo_dlx_sup does not exist in 3.9"};
+        {many_target_queues, _, true} ->
+            {skip, "Classic queue mirroring not supported by Khepri"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             T = rabbit_data_coercion:to_binary(Testcase),
@@ -145,6 +158,10 @@ end_per_testcase(Testcase, Config) ->
     delete_queue(Ch, ?config(target_queue_5, Config)),
     delete_queue(Ch, ?config(target_queue_6, Config)),
     #'exchange.delete_ok'{} = amqp_channel:call(Ch, #'exchange.delete'{exchange = ?config(dead_letter_exchange, Config)}),
+
+    DlxWorkers = rabbit_ct_broker_helpers:rpc_all(Config, supervisor, which_children, [rabbit_fifo_dlx_sup]),
+    ?assert(lists:all(fun(L) -> L =:= [] end, DlxWorkers)),
+
     Config1 = rabbit_ct_helpers:run_steps(
                 Config,
                 rabbit_ct_client_helpers:teardown_steps()),
@@ -497,7 +514,7 @@ drop_head_falls_back_to_at_most_once(Config) ->
     consistently(
       ?_assertMatch(
          [_, {active, 0}, _, _],
-         rabbit_ct_broker_helpers:rpc(Config, Server, supervisor, count_children, [rabbit_fifo_dlx_sup]))).
+         rpc(Config, Server, supervisor, count_children, [rabbit_fifo_dlx_sup]))).
 
 %% Test that dynamically switching dead-letter-strategy works.
 switch_strategy(Config) ->
@@ -585,7 +602,8 @@ reject_publish(Config, QArg) when is_tuple(QArg) ->
     ok = publish_confirm(Ch, SourceQ),
     RaName = ra_name(SourceQ),
     eventually(?_assertMatch([{2, 2}], %% 2 messages with 1 byte each
-                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
+                             dirty_query([Server], RaName,
+                                         fun rabbit_fifo:query_stat_dlx/1))),
     %% Now, we have 2 expired messages in the source quorum queue's discards queue.
     %% Now that we are over the limit we expect publishes to be rejected.
     ?assertEqual(fail, publish_confirm(Ch, SourceQ)),
@@ -605,8 +623,9 @@ reject_publish(Config, QArg) when is_tuple(QArg) ->
                              amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}))),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, Server, PolicyName).
 
-%% Test that message gets delivered to target quorum queue eventually when it gets rejected initially.
-reject_publish_target_quorum_queue(Config) ->
+%% Test that message gets delivered to target quorum queue eventually when it gets rejected initially
+%% due to target queue's max length being exceeded.
+reject_publish_max_length_target_quorum_queue(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     SourceQ = ?config(source_queue, Config),
@@ -622,23 +641,76 @@ reject_publish_target_quorum_queue(Config) ->
                                 {<<"x-overflow">>, longstr, <<"reject-publish">>},
                                 {<<"x-max-length">>, long, 1}
                                ]),
-    Msg = <<"m">>,
     %% Send 4 messages although target queue has max-length of 1.
-    [ok,ok,ok,ok] = [begin
-                         amqp_channel:cast(Ch, #'basic.publish'{routing_key = SourceQ},
-                                           #amqp_msg{props = #'P_basic'{expiration = integer_to_binary(N)},
-                                                     payload = Msg})
-                     end || N <- lists:seq(1,4)],
+    [begin
+         ok = amqp_channel:cast(Ch, #'basic.publish'{routing_key = SourceQ},
+                                #amqp_msg{props = #'P_basic'{expiration = integer_to_binary(N)},
+                                          payload = integer_to_binary(N)})
+     end || N <- lists:seq(1, 4)],
+
     %% Make space in target queue by consuming messages one by one
     %% allowing for more dead-lettered messages to reach the target queue.
     [begin
-         timer:sleep(2000),
-         {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} = amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})
-     end || _ <- lists:seq(1,4)],
+         Msg = integer_to_binary(N),
+         ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg}},
+                     amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
+                     30000)
+     end || N <- lists:seq(1,4)],
     eventually(?_assertEqual([{0, 0}],
                              dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)), 500, 10),
     ?assertEqual(4, counted(messages_dead_lettered_expired_total, Config)),
     eventually(?_assertEqual(4, counted(messages_dead_lettered_confirmed_total, Config))).
+
+%% Test that message gets delivered to target quorum queue eventually when it gets rejected initially
+%% due to target queue not being available.
+reject_publish_down_target_quorum_queue(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Server2 = rabbit_ct_broker_helpers:get_node_config(Config, 2, nodename),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+    SourceQ = ?config(source_queue, Config),
+    RaName = ra_name(SourceQ),
+    TargetQ = ?config(target_queue_1, Config),
+    declare_queue(Ch, SourceQ, [{<<"x-dead-letter-exchange">>, longstr, <<"">>},
+                                {<<"x-dead-letter-routing-key">>, longstr, TargetQ},
+                                {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                {<<"x-queue-type">>, longstr, <<"quorum">>}
+                               ]),
+    declare_queue(Ch2, TargetQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                 {<<"x-quorum-initial-group-size">>, long, 1}
+                                ]),
+
+    %% Send 20 messages when target queue is down.
+    ok = rabbit_ct_client_helpers:close_channel(Ch2),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
+    [begin
+         ok = amqp_channel:cast(Ch, #'basic.publish'{routing_key = SourceQ},
+                                #amqp_msg{props = #'P_basic'{expiration = integer_to_binary(N)},
+                                          payload = integer_to_binary(N)})
+     end || N <- lists:seq(1, 20)],
+
+    %% Send another 30 messages when target queue is up.
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
+    [begin
+         ok = amqp_channel:cast(Ch, #'basic.publish'{routing_key = SourceQ},
+                                #amqp_msg{props = #'P_basic'{expiration = integer_to_binary(N)},
+                                          payload = integer_to_binary(N)})
+     end || N <- lists:seq(21, 50)],
+
+    %% The target queue should have all 50 messages.
+    wait_for_messages(Config, [[TargetQ, <<"50">>, <<"50">>, <<"0">>]]),
+    Received = lists:foldl(
+                 fun(_N, S) ->
+                         {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} =
+                         amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
+                         sets:add_element(Msg, S)
+                 end, sets:new([{version, 2}]), lists:seq(1, 50)),
+    ?assertEqual(50, sets:size(Received)),
+    eventually(?_assertEqual([{0, 0}],
+                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)), 500, 10),
+    ?assertEqual(50, counted(messages_dead_lettered_expired_total, Config)),
+    eventually(?_assertEqual(50, counted(messages_dead_lettered_confirmed_total, Config))).
 
 %% Test that message gets eventually delivered to target classic queue when it gets rejected initially.
 reject_publish_target_classic_queue(Config) ->
@@ -918,15 +990,15 @@ single_dlx_worker(Config) ->
     assert_active_dlx_workers(0, Config, Follower0),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
     consistently(
-      ?_assertMatch(
-         [_, {active, 0}, _, _],
-         rabbit_ct_broker_helpers:rpc(Config, Server1, supervisor, count_children, [rabbit_fifo_dlx_sup], 1000))),
+      ?_assertEqual(
+         0,
+         length(rpc(Config, Server1, supervisor, which_children, [rabbit_fifo_dlx_sup], 1000)))),
 
-    Pid = rabbit_ct_broker_helpers:rpc(Config, Leader0, erlang, whereis, [RaName]),
-    true = rabbit_ct_broker_helpers:rpc(Config, Leader0, erlang, exit, [Pid, kill]),
+    Pid = rpc(Config, Leader0, erlang, whereis, [RaName]),
+    true = rpc(Config, Leader0, erlang, exit, [Pid, kill]),
     {ok, _, {_, Leader1}} = ?awaitMatch({ok, _, _},
                                         ra:members({RaName, Follower0}),
-                                        1000),
+                                        30000),
     ?assertNotEqual(Leader0, Leader1),
     [Follower1, Follower2] = Servers -- [Leader1],
     assert_active_dlx_workers(0, Config, Follower1),
@@ -934,9 +1006,7 @@ single_dlx_worker(Config) ->
     assert_active_dlx_workers(1, Config, Leader1).
 
 assert_active_dlx_workers(N, Config, Server) ->
-    ?assertMatch(
-       [_, {active, N}, _, _],
-       rabbit_ct_broker_helpers:rpc(Config, Server, supervisor, count_children, [rabbit_fifo_dlx_sup], 1000)).
+    ?assertEqual(N, length(rpc(Config, Server, supervisor, which_children, [rabbit_fifo_dlx_sup], 2000))).
 
 declare_queue(Channel, Queue, Args) ->
     #'queue.declare_ok'{} = amqp_channel:call(Channel, #'queue.declare'{
@@ -957,7 +1027,7 @@ delete_queue(Channel, Queue) ->
     #'queue.delete_ok'{message_count = 0} = amqp_channel:call(Channel, #'queue.delete'{queue = Queue}).
 
 get_global_counters(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_global_counters, overview, []).
+    rpc(Config, 0, rabbit_global_counters, overview, []).
 
 %% Returns the delta of Metric between testcase start and now.
 counted(Metric, Config) ->

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -define(HEADER_ACCEPT_VERSION, "accept-version").
@@ -27,6 +27,8 @@
 -define(HEADER_PERSISTENT, "persistent").
 -define(HEADER_PREFETCH_COUNT, "prefetch-count").
 -define(HEADER_X_STREAM_OFFSET, "x-stream-offset").
+-define(HEADER_X_STREAM_FILTER, "x-stream-filter").
+-define(HEADER_X_STREAM_MATCH_UNFILTERED, "x-stream-match-unfiltered").
 -define(HEADER_PRIORITY, "priority").
 -define(HEADER_RECEIPT, "receipt").
 -define(HEADER_REDELIVERED, "redelivered").
@@ -43,11 +45,14 @@
 -define(HEADER_X_DEAD_LETTER_ROUTING_KEY, "x-dead-letter-routing-key").
 -define(HEADER_X_EXPIRES, "x-expires").
 -define(HEADER_X_MAX_LENGTH, "x-max-length").
+-define(HEADER_X_MAX_AGE, "x-max-age").
 -define(HEADER_X_MAX_LENGTH_BYTES, "x-max-length-bytes").
+-define(HEADER_X_STREAM_MAX_SEGMENT_SIZE_BYTES, "x-stream-max-segment-size-bytes").
 -define(HEADER_X_MAX_PRIORITY, "x-max-priority").
 -define(HEADER_X_MESSAGE_TTL, "x-message-ttl").
 -define(HEADER_X_QUEUE_NAME, "x-queue-name").
 -define(HEADER_X_QUEUE_TYPE, "x-queue-type").
+-define(HEADER_X_STREAM_FILTER_SIZE_BYTES, "x-stream-filter-size-bytes").
 
 -define(MESSAGE_ID_SEPARATOR, "@@").
 
@@ -60,10 +65,13 @@
                            ?HEADER_X_DEAD_LETTER_ROUTING_KEY,
                            ?HEADER_X_EXPIRES,
                            ?HEADER_X_MAX_LENGTH,
+                           ?HEADER_X_MAX_AGE,
+                           ?HEADER_X_STREAM_MAX_SEGMENT_SIZE_BYTES,
                            ?HEADER_X_MAX_LENGTH_BYTES,
                            ?HEADER_X_MAX_PRIORITY,
                            ?HEADER_X_MESSAGE_TTL,
-                           ?HEADER_X_QUEUE_TYPE
+                           ?HEADER_X_QUEUE_TYPE,
+                           ?HEADER_X_STREAM_FILTER_SIZE_BYTES
                           ]).
 
 -define(HEADER_PARAMS, [

@@ -2,8 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
-
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule JSONFormattingTest do
   use ExUnit.Case, async: false
@@ -24,9 +23,12 @@ defmodule JSONFormattingTest do
 
     node = to_string(get_rabbit_hostname())
     command = ["status", "-n", node, "--formatter=json"]
-    output = capture_io(:stdio, fn ->
-      error_check(command, exit_ok())
-    end)
+
+    output =
+      capture_io(:stdio, fn ->
+        error_check(command, exit_ok())
+      end)
+
     {:ok, doc} = JSON.decode(output)
 
     assert Map.has_key?(doc, "memory")
@@ -45,9 +47,12 @@ defmodule JSONFormattingTest do
 
     node = to_string(get_rabbit_hostname())
     command = ["cluster_status", "-n", node, "--formatter=json"]
-    output = capture_io(:stdio, fn ->
-      error_check(command, exit_ok())
-    end)
+
+    output =
+      capture_io(:stdio, fn ->
+        error_check(command, exit_ok())
+      end)
+
     {:ok, doc} = JSON.decode(output)
 
     assert Enum.member?(doc["disk_nodes"], node)

@@ -1,3 +1,4 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
@@ -10,9 +11,18 @@ load(
     "rabbitmq_integration_suite",
     "rabbitmq_suite",
 )
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
+)
 
 APP_ENV = """[
-	    {http_method,   get},
+	    {http_method,   	 get},
+	    {request_timeout,    15000},
+	    {connection_timeout, 15000},
 	    {user_path,     "http://localhost:8000/auth/user"},
 	    {vhost_path,    "http://localhost:8000/auth/vhost"},
 	    {resource_path, "http://localhost:8000/auth/resource"},
@@ -25,74 +35,90 @@ APP_DESCRIPTION = "RabbitMQ HTTP Authentication Backend"
 
 APP_MODULE = "rabbit_auth_backend_http_app"
 
-EXTRA_APPS = [
-    "inets",
-]
+all_beam_files(name = "all_beam_files")
 
-DEPS = [
-    "//deps/rabbit_common:erlang_app",
-]
+all_test_beam_files(name = "all_test_beam_files")
 
-RUNTIME_DEPS = [
-    "//deps/rabbit:erlang_app",
-    "//deps/amqp_client:erlang_app",
-]
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
+
+# gazelle:erlang_app_extra_app inets
+
+# gazelle:erlang_app_dep rabbit
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
     app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_module = APP_MODULE,
     app_name = APP_NAME,
-    extra_apps = EXTRA_APPS,
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    extra_apps = ["inets"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/amqp_client:erlang_app",
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+    ],
 )
 
-xref()
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
 
 plt(
-    name = "base_plt",
-    apps = EXTRA_APPS,
+    name = "deps_plt",
+    for_target = ":erlang_app",
+    ignore_warnings = True,
     plt = "//:base_plt",
-    deps = DEPS,
 )
 
 dialyze(
+    name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":base_plt",
-    warnings_as_errors = False,
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
+
+eunit(
+    name = "eunit",
+    compiled_suites = [":test_auth_http_mock_beam"],
+    target = ":test_erlang_app",
 )
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_auth_backend_http"
+rabbitmq_suite(
+    name = "auth_SUITE",
+    size = "small",
+    additional_beam = [
+        "test/auth_http_mock.beam",
+    ],
+    deps = [
+        "//deps/rabbit_common:erlang_app",
+        "@cowboy//:erlang_app",
+    ],
+)
 
-suites = [
-    rabbitmq_suite(
-        name = "auth_SUITE",
-        size = "small",
-        additional_srcs = [
-            "test/auth_http_mock.erl",
-        ],
-        runtime_deps = [
-            "@cowboy//:erlang_app",
-        ],
-        deps = [
-            "//deps/rabbit_common:erlang_app",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "config_schema_SUITE",
-    ),
-    rabbitmq_suite(
-        name = "unit_SUITE",
-        size = "small",
-    ),
-]
+rabbitmq_integration_suite(
+    name = "config_schema_SUITE",
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+rabbitmq_suite(
+    name = "unit_SUITE",
+    size = "small",
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_auth_backend_http",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

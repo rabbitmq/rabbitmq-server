@@ -1,3 +1,4 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
@@ -9,55 +10,83 @@ load(
     "rabbitmq_app",
     "rabbitmq_integration_suite",
 )
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
+)
 
 APP_NAME = "rabbitmq_sharding"
 
 APP_DESCRIPTION = "RabbitMQ Sharding Plugin"
 
-DEPS = [
-    "//deps/rabbit:erlang_app",
-    "//deps/rabbit_common:erlang_app",
-]
+all_beam_files(name = "all_beam_files")
+
+all_test_beam_files(name = "all_test_beam_files")
+
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_name = APP_NAME,
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+    ],
 )
 
-xref()
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
 
 plt(
-    name = "base_plt",
-    deps = DEPS,
+    name = "deps_plt",
+    for_target = ":erlang_app",
+    ignore_warnings = True,
+    plt = "//:base_plt",
 )
 
 dialyze(
+    name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":base_plt",
-    warnings_as_errors = False,
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
+
+eunit(
+    name = "eunit",
+    target = ":test_erlang_app",
 )
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_sharding"
+rabbitmq_integration_suite(
+    name = "rabbit_hash_exchange_SUITE",
+)
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_hash_exchange_SUITE",
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_sharding_SUITE",
-        deps = [
-            "//deps/rabbit:erlang_app",
-        ],
-    ),
-]
+rabbitmq_integration_suite(
+    name = "rabbit_sharding_SUITE",
+    deps = [
+        "//deps/rabbit:erlang_app",
+    ],
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+assert_suites()
+
+alias(
+    name = "rabbitmq_sharding",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

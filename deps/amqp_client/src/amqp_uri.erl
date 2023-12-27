@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(amqp_uri).
@@ -33,7 +33,7 @@ remove_credentials(URI) ->
                         end
            end,
     rabbit_misc:format(
-      "~s://~s~s~s", [proplists:get_value(scheme, Props), PGet(host, Props),
+      "~ts://~ts~ts~ts", [proplists:get_value(scheme, Props), PGet(host, Props),
                       PortPart,                           PGet(path, Props)]).
 
 %% @spec (Uri) -> {ok, #amqp_params_network{} | #amqp_params_direct{}} |
@@ -204,12 +204,15 @@ broker_add_query(Params, ParsedUri, Fields) ->
                            return({ParamsN, Pos1});
                        Value ->
                            try
-                               ValueParsed = parse_amqp_param(Field, Value),
-                               return(
-                                 {setelement(Pos, ParamsN, ValueParsed), Pos1})
+                               case parse_amqp_param(Field, Value) of
+                                   ignore ->
+                                       return({ParamsN, Pos1});
+                                   ValueParsed ->
+                                       return({setelement(Pos, ParamsN, ValueParsed), Pos1})
+                               end
                            catch throw:Reason ->
-                                   fail({invalid_amqp_params_parameter,
-                                         Field, Value, Query, Reason})
+                                     fail({invalid_amqp_params_parameter,
+                                           Field, Value, Query, Reason})
                            end
                    end
            end || Field <- Fields], {Params, 2}),
@@ -221,8 +224,11 @@ parse_amqp_param(Field, String) when Field =:= channel_max        orelse
                                      Field =:= connection_timeout orelse
                                      Field =:= depth ->
     find_integer_parameter(String);
-parse_amqp_param(Field, String) when Field =:= password ->
-    find_identity_parameter(String);
+parse_amqp_param(Field, _String) when Field =:= password ->
+    %% https://github.com/rabbitmq/rabbitmq-server/issues/8129
+    %% Ignore `password` here since the parameter is used for setting a
+    %% certificate password, NOT an AMQP login password
+    return(ignore);
 parse_amqp_param(Field, String) ->
     fail({parameter_unconfigurable_in_query, Field, String}).
 

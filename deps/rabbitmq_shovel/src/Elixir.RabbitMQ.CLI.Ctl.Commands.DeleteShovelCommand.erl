@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module('Elixir.RabbitMQ.CLI.Ctl.Commands.DeleteShovelCommand').
@@ -58,7 +58,7 @@ merge_defaults(A, Opts) ->
     {A, maps:merge(#{vhost => <<"/">>}, Opts)}.
 
 banner([Name], #{vhost := VHost}) ->
-    erlang:list_to_binary(io_lib:format("Deleting shovel ~s in vhost ~ts",
+    erlang:list_to_binary(io_lib:format("Deleting shovel ~ts in vhost ~ts",
                                         [Name, VHost])).
 
 run([Name], #{node := Node, vhost := VHost}) ->
@@ -69,7 +69,7 @@ run([Name], #{node := Node, vhost := VHost}) ->
             Error;
         Xs when is_list(Xs) ->
             ErrMsg = rabbit_misc:format("Shovel with the given name was not found "
-                                        "on the target node '~s' and / or virtual host '~s'",
+                                        "on the target node '~ts' and / or virtual host '~ts'",
                                         [Node, VHost]),
             case rabbit_shovel_status:find_matching_shovel(VHost, Name, Xs) of
                 undefined ->
@@ -83,7 +83,7 @@ run([Name], #{node := Node, vhost := VHost}) ->
                             Error;
                         {error, not_found} ->
                             ErrMsg = rabbit_misc:format("Shovel with the given name was not found "
-                                                        "on the target node '~s' and / or virtual host '~s'",
+                                                        "on the target node '~ts' and / or virtual host '~ts'",
                                                         [Node, VHost]),
                             {error, rabbit_data_coercion:to_binary(ErrMsg)};
                         ok -> ok

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 %% An HTTP API counterpart of 'rabbitmq-diagnostics check_certificate_expiration'
@@ -156,7 +156,7 @@ cert_validity(Cert) ->
                               pubkey_cert:time_str_2_gregorian_sec(NotAfter)
                       end;
                  ({Type, _, _}) ->
-                      {error, io_lib:format("The certificate file provided contains a ~p entry",
+                      {error, io_lib:format("The certificate file provided contains a ~tp entry",
                                             [Type])}
               end, DsaEntries)
     end.                      

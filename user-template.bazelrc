@@ -1,7 +1,7 @@
 # rabbitmqctl wait shells out to 'ps', which is broken in the bazel macOS
 # sandbox (https://github.com/bazelbuild/bazel/issues/7448)
-# adding "--spawn_strategy=local" to the invocation is a workaround
-build --spawn_strategy=local
+# adding "--strategy=TestRunner=local" to the invocation is a workaround
+build --strategy=TestRunner=local
 
 # --experimental_strict_action_env breaks memory size detection on macOS,
 # so turn it off for local runs
@@ -10,5 +10,8 @@ build:buildbuddy --experimental_strict_action_env
 
 # don't re-run flakes automatically on the local machine
 build --flaky_test_attempts=1
+
+# write common test logs to logs/ dir
+build --@rules_erlang//:ct_logdir=/absolute/expanded/path/to/this/repo/logs
 
 build:buildbuddy --remote_header=x-buildbuddy-api-key=YOUR_API_KEY

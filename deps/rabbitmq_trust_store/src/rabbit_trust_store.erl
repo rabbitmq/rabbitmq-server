@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_trust_store).
@@ -38,7 +38,7 @@
     refresh_interval :: integer()
 }).
 -record(entry, {
-    name :: string(),
+    name :: string() | undefined,
     cert_id :: term(),
     provider :: module(),
     issuer_id :: tuple(),
@@ -72,14 +72,14 @@ list() ->
                 issuer_id = {_, Serial}}) ->
             %% Use the certificate unique identifier as a default for the name.
             Name = case N of
-                undefined -> io_lib:format("~p", [CertId]);
+                undefined -> io_lib:format("~tp", [CertId]);
                 _         -> N
             end,
             Validity = rabbit_ssl:peer_cert_validity(Cert),
             Subject = rabbit_ssl:peer_cert_subject(Cert),
             Issuer = rabbit_ssl:peer_cert_issuer(Cert),
-            Text = io_lib:format("Name: ~s~nSerial: ~p | 0x~.16.0B~n"
-                                 "Subject: ~s~nIssuer: ~s~nValidity: ~p~n",
+            Text = io_lib:format("Name: ~ts~nSerial: ~tp | 0x~.16.0B~n"
+                                 "Subject: ~ts~nIssuer: ~ts~nValidity: ~tp~n",
                                  [Name, Serial, Serial,
                                   Subject, Issuer, Validity]),
             lists:flatten(Text)
@@ -124,16 +124,16 @@ is_whitelisted(#'OTPCertificate'{}=C) ->
 
 init([]) ->
     erlang:process_flag(trap_exit, true),
-    ets:new(table_name(), table_options()),
+    _ = ets:new(table_name(), table_options()),
     Config = application:get_all_env(rabbitmq_trust_store),
     ProvidersState = refresh_certs(Config, []),
     Interval = refresh_interval(Config),
-    if
-        Interval =:= 0 ->
-            ok;
-        Interval  >  0 ->
-            erlang:send_after(Interval, erlang:self(), refresh)
-    end,
+    _ = if
+            Interval =:= 0 ->
+                ok;
+            Interval  >  0 ->
+                erlang:send_after(Interval, erlang:self(), refresh)
+        end,
     State = #state{
         providers_state = ProvidersState,
         refresh_interval = Interval},
@@ -160,7 +160,7 @@ handle_info(refresh, #state{refresh_interval = Interval,
             {noreply, St#state{providers_state = NewProvidersState}}
         catch
             _:Error  ->
-                rabbit_log:error("Failed to refresh certificates: ~p", [Error]),
+                rabbit_log:error("Failed to refresh certificates: ~tp", [Error]),
                 {noreply, St#state{providers_state = ProvidersState}}
         after
             erlang:send_after(Interval, erlang:self(), refresh)
@@ -229,12 +229,12 @@ refresh_provider_certs(Provider, Config, ProviderState) ->
             rabbit_log:debug("Trust store provider reported no certificate changes"),
             ProviderState;
         {ok, CertsList, NewProviderState} ->
-            rabbit_log:debug("Trust store listed certificates: ~p", [CertsList]),
+            rabbit_log:debug("Trust store listed certificates: ~tp", [CertsList]),
             update_certs(CertsList, Provider, Config),
             NewProviderState;
         {error, Reason} ->
-            rabbit_log:error("Unable to load certificate list for provider ~p,"
-                             " reason: ~p",
+            rabbit_log:error("Unable to load certificate list for provider ~tp,"
+                             " reason: ~tp",
                              [Provider, Reason]),
             ProviderState
     end.
@@ -245,7 +245,7 @@ list_certs(Provider, Config, ProviderState) ->
     Provider:list_certs(Config, ProviderState).
 
 update_certs(CertsList, Provider, Config) ->
-    rabbit_log:debug("Updating ~p fetched trust store certificates", [length(CertsList)]),
+    rabbit_log:debug("Updating ~tp fetched trust store certificates", [length(CertsList)]),
     OldCertIds = get_old_cert_ids(Provider),
     {NewCertIds, _} = lists:unzip(CertsList),
 
@@ -257,9 +257,9 @@ update_certs(CertsList, Provider, Config) ->
                 {ok, Cert, IssuerId} ->
                     save_cert(CertId, Provider, IssuerId, Cert, Name);
                 {error, Reason} ->
-                    rabbit_log:error("Unable to load CA certificate ~p"
-                                     " with provider ~p,"
-                                     " reason: ~p",
+                    rabbit_log:error("Unable to load CA certificate ~tp"
+                                     " with provider ~tp,"
+                                     " reason: ~tp",
                                      [CertId, Provider, Reason])
             end
         end,
@@ -275,13 +275,9 @@ load_and_decode_cert(Provider, CertId, Attributes, Config) ->
     try
         case Provider:load_cert(CertId, Attributes, Config) of
             {ok, Cert} ->
-                case public_key:pkix_decode_cert(Cert, otp) of
-                    {error, Reason} ->
-                        {error, Reason};
-                    DecodedCert ->
-                        Id = extract_issuer_id(DecodedCert),
-                        {ok, Cert, Id}
-                end;
+                DecodedCert = public_key:pkix_decode_cert(Cert, otp),
+                Id = extract_issuer_id(DecodedCert),
+                {ok, Cert, Id};
             {error, Reason} -> {error, Reason}
         end
     catch _:Error:Stacktrace ->
@@ -317,7 +313,7 @@ providers(Config) ->
                 {module, Provider} -> true;
                 {error, Error} ->
                     rabbit_log:warning("Unable to load trust store certificates"
-                                       " with provider module ~p. Reason: ~p",
+                                       " with provider module ~tp. Reason: ~tp",
                                        [Provider, Error]),
                     false
             end

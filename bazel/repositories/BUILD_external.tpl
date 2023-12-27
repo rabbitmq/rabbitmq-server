@@ -25,7 +25,8 @@ toolchain(
     exec_compatible_with = [
         "//:elixir_external",
     ],
-    target_compatible_with = [%{TARGET_COMPATIBLE_WITH}
+    target_compatible_with = [
+        "//:elixir_%{ELIXIR_VERSION_ID}",
     ],
     toolchain = ":elixir",
     toolchain_type = "%{RABBITMQ_SERVER_WORKSPACE}//bazel/elixir:toolchain_type",

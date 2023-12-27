@@ -1,7 +1,7 @@
 %% ====================================================================
 %% @author Gavin M. Roy <gavinmroy@gmail.com>
 %% @copyright 2016, Gavin M. Roy
-%% @copyright 2016-2022 VMware, Inc. or its affiliates.
+%% @copyright 2016-2023 VMware, Inc. or its affiliates.
 %% @private
 %% @doc rabbitmq_aws configuration functionality
 %% @end
@@ -162,7 +162,7 @@ region(Profile) ->
   end.
 
 
--spec instance_id() -> string() | error.
+-spec instance_id() -> {'ok', string()} | {'error', 'undefined'}.
 %% @doc Return the instance ID from the EC2 metadata service.
 %% @end
 instance_id() ->
@@ -283,15 +283,15 @@ home_path(Value) -> Value.
 
 
 -spec ini_file_data(Path :: string())
-  -> {ok, list()} | {error, atom()}.
+  -> list() | {error, atom()}.
 %% @doc Return the parsed ini file for the specified path.
 %% @end
 ini_file_data(Path) ->
   ini_file_data(Path, filelib:is_file(Path)).
 
 
--spec ini_file_data(Path :: string(), FileExists :: true | false)
-  -> {ok, list()} | {error, atom()}.
+-spec ini_file_data(Path :: string(), FileExists :: boolean())
+  -> list() | {error, atom()}.
 %% @doc Return the parsed ini file for the specified path.
 %% @end
 ini_file_data(Path, true) ->
@@ -413,7 +413,7 @@ instance_credentials_url(Role) ->
 %% @doc Build the Instance Metadata service URL for the specified path
 %% @end
 instance_metadata_url(Path) ->
-  rabbitmq_aws_urilib:build(#uri{scheme = "http",
+  rabbitmq_aws_urilib:build(#uri{scheme = http,
                                  authority = {undefined, ?INSTANCE_HOST, undefined},
                                  path = Path, query = []}).
 
@@ -538,13 +538,13 @@ lookup_region(Profile, false) ->
 lookup_region(_, Region) -> {ok, Region}.
 
 
--spec lookup_region_from_config(Settings :: list() | {error, enoent})
+-spec lookup_region_from_config(Settings :: list() | {error, atom()})
   -> {ok, string()} | {error, undefined}.
 %% @doc Return the region from the local configuration file. If local config
 %%      settings are not found, try to lookup the region from the EC2 instance
 %%      metadata service.
 %% @end
-lookup_region_from_config({error, enoent}) ->
+lookup_region_from_config({error, _}) ->
   maybe_get_region_from_instance_metadata();
 lookup_region_from_config(Settings) ->
   lookup_region_from_settings(proplists:get_value(region, Settings)).
@@ -580,7 +580,7 @@ maybe_convert_number(Value) ->
 
 -spec maybe_get_credentials_from_instance_metadata({ok, Role :: string()} |
                                                    {error, undefined})
-  ->  security_credentials().
+  ->  {'ok', security_credentials()} | {'error', term()}.
 %% @doc Try to query the EC2 local instance metadata service to get temporary
 %%      authentication credentials.
 %% @end
@@ -654,7 +654,7 @@ parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
 %% @doc Wrap httpc:get/4 to simplify Instance Metadata service v2 requests
 %% @end
 perform_http_get_instance_metadata(URL) ->
-  rabbit_log:debug("Querying instance metadata service: ~p", [URL]),
+  rabbit_log:debug("Querying instance metadata service: ~tp", [URL]),
   httpc:request(get, {URL, instance_metadata_request_headers()},
     [{timeout, ?DEFAULT_HTTP_TIMEOUT}], []).
 
@@ -695,36 +695,15 @@ profile(false) -> ?DEFAULT_PROFILE;
 profile(Value) -> Value.
 
 
--spec read_file(string()) -> list() | {error, Reason :: atom()}.
+-spec read_file(string()) -> {'ok', [binary()]} | {error, Reason :: atom()}.
 %% @doc Read the specified file, returning the contents as a list of strings.
 %% @end
 read_file(Path) ->
-  read_from_file(file:open(Path, [read])).
-
-
--spec read_from_file({ok, file:fd()} | {error, Reason :: atom()})
-  -> list() | {error, Reason :: atom()}.
-%% @doc Read the specified file, returning the contents as a list of strings.
-%% @end
-read_from_file({ok, Fd}) ->
-  read_file(Fd, []);
-read_from_file({error, Reason}) ->
-  {error, Reason}.
-
-
--spec read_file(Fd :: file:io_device(), Lines :: list())
-  -> list() | {error, Reason :: atom()}.
-%% @doc Read from the open file, accumulating the lines in a list.
-%% @end
-read_file(Fd, Lines) ->
-  case file:read_line(Fd) of
-    {ok, Value} ->
-      Line = string:strip(Value, right, $\n),
-      read_file(Fd, lists:append(Lines, [list_to_binary(Line)]));
-    eof -> {ok, Lines};
-    {error, Reason} -> {error, Reason}
-  end.
-
+    case file:read_file(Path) of
+        {ok, Binary} ->
+            {ok, re:split(Binary, <<"\r\n|\n">>, [{return, binary}])};
+        {error, _} = Error -> Error
+    end.
 
 -spec region_from_availability_zone(Value :: string()) -> string().
 %% @doc Strip the availability zone suffix from the region.
@@ -738,7 +717,7 @@ region_from_availability_zone(Value) ->
 %% @end
 load_imdsv2_token() ->
   TokenUrl = imdsv2_token_url(),
-  rabbit_log:info("Attempting to obtain EC2 IMDSv2 token from ~p ...", [TokenUrl]),
+  rabbit_log:info("Attempting to obtain EC2 IMDSv2 token from ~tp ...", [TokenUrl]),
   case httpc:request(put, {TokenUrl, [{?METADATA_TOKEN_TTL_HEADER, integer_to_list(?METADATA_TOKEN_TTL_SECONDS)}]},
     [{timeout, ?DEFAULT_HTTP_TIMEOUT}], []) of
     {ok, {{_, 200, _}, _, Value}} ->
@@ -749,7 +728,7 @@ load_imdsv2_token() ->
       undefined;
     Other ->
       rabbit_log:warning(
-        get_instruction_on_instance_metadata_error("Failed to obtain EC2 IMDSv2 token: ~p. "
+        get_instruction_on_instance_metadata_error("Failed to obtain EC2 IMDSv2 token: ~tp. "
         "Falling back to EC2 IMDSv1 for now. It is recommended to use EC2 IMDSv2."), [Other]),
       undefined
   end.

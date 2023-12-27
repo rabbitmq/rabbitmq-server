@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_external_stats).
@@ -37,9 +37,9 @@
     fd_total,
     fhc_stats,
     node_owners,
-    last_ts,
     interval,
-    error_logged_time
+    error_logged_time,
+    fd_warning_logged
 }).
 
 %%--------------------------------------------------------------------
@@ -51,19 +51,14 @@ start_link() ->
 
 get_used_fd(State0) ->
     try
-        case get_used_fd(os:type(), State0) of
-            {State1, UsedFd} when is_number(UsedFd) ->
-                {State1, UsedFd};
-            {State1, _Other} ->
-                %% Defaults to 0 if data is not available
-                {State1, 0}
-        end
+        get_used_fd(os:type(), State0)
     catch
         _:Error ->
-            State2 = log_fd_error("Could not infer the number of file handles used: ~p", [Error], State0),
+            State2 = log_fd_error("Could not infer the number of file handles used: ~tp", [Error], State0),
             {State2, 0}
     end.
 
+-spec get_used_fd({atom(), atom()}, #state{}) -> {#state{}, non_neg_integer()}.
 get_used_fd({unix, linux}, State0) ->
     case file:list_dir("/proc/" ++ os:getpid() ++ "/fd") of
         {ok, Files} ->
@@ -83,14 +78,14 @@ get_used_fd({unix, BSD}, State0)
         UsedFd = length(lists:filter(F, string:tokens(Output, "\n"))),
         {State0, UsedFd}
     catch _:Error:Stacktrace ->
-              State1 = log_fd_error("Could not parse fstat output:~n~s~n~p",
+              State1 = log_fd_error("Could not parse fstat output:~n~ts~n~tp",
                                     [Output, {Error, Stacktrace}], State0),
               {State1, 0}
     end;
 
 get_used_fd({unix, _}, State0) ->
     Cmd = rabbit_misc:format(
-            "lsof -d \"0-9999999\" -lna -p ~s || echo failed", [os:getpid()]),
+            "lsof -d \"0-9999999\" -lna -p ~ts || echo failed", [os:getpid()]),
     Res = os:cmd(Cmd),
     case string:right(Res, 7) of
         "failed\n" ->
@@ -102,86 +97,46 @@ get_used_fd({unix, _}, State0) ->
     end;
 
 %% handle.exe can be obtained from
-%% https://technet.microsoft.com/en-us/sysinternals/bb896655.aspx
-
-%% Output looks like:
-
-%% Handle v3.42
-%% Copyright (C) 1997-2008 Mark Russinovich
-%% Sysinternals - www.sysinternals.com
-%%
-%% Handle type summary:
-%%   ALPC Port       : 2
-%%   Desktop         : 1
-%%   Directory       : 1
-%%   Event           : 108
-%%   File            : 25
-%%   IoCompletion    : 3
-%%   Key             : 7
-%%   KeyedEvent      : 1
-%%   Mutant          : 1
-%%   Process         : 3
-%%   Process         : 38
-%%   Thread          : 41
-%%   Timer           : 3
-%%   TpWorkerFactory : 2
-%%   WindowStation   : 2
-%% Total handles: 238
-
-%% Nthandle v4.22 - Handle viewer
-%% Copyright (C) 1997-2019 Mark Russinovich
-%% Sysinternals - www.sysinternals.com
-%%
-%% Handle type summary:
-%%   <Unknown type>  : 1
-%%   <Unknown type>  : 166
-%%   ALPC Port       : 11
-%%   Desktop         : 1
-%%   Directory       : 2
-%%   Event           : 226
-%%   File            : 122
-%%   IoCompletion    : 8
-%%   IRTimer         : 6
-%%   Key             : 42
-%%   Mutant          : 7
-%%   Process         : 3
-%%   Section         : 2
-%%   Semaphore       : 43
-%%   Thread          : 36
-%%   TpWorkerFactory : 3
-%%   WaitCompletionPacket: 25
-%%   WindowStation   : 2
-%% Total handles: 706
-
+%% https://learn.microsoft.com/en-us/sysinternals/downloads/handle
 %% Note that the "File" number appears to include network sockets too; I assume
 %% that's the number we care about. Note also that if you omit "-s" you will
 %% see a list of file handles *without* network sockets. If you then add "-a"
 %% you will see a list of handles of various types, including network sockets
 %% shown as file handles to \Device\Afd.
-
 get_used_fd({win32, _}, State0) ->
-    Handle = rabbit_misc:os_cmd(
-               "handle.exe /accepteula -s -p " ++ os:getpid() ++ " 2> nul"),
-    case Handle of
-        [] ->
-            State1 = log_fd_error("Could not find handle.exe, please install from sysinternals", [], State0),
+    MissingHandleMsg = "Could not execute handle.exe, please install from "
+                       "https://learn.microsoft.com/en-us/sysinternals/downloads/handle",
+    Pid = os:getpid(),
+    case os:find_executable("handle.exe") of
+        false ->
+            State1 = log_fd_warning_once(MissingHandleMsg, [], State0),
             {State1, 0};
-        _  ->
-            case find_files_line(string:tokens(Handle, "\r\n")) of
-                unknown ->
-                    State1 = log_fd_error("handle.exe output did not contain "
-                                          "a line beginning with '  File ', unable "
-                                          "to determine used file descriptor "
-                                          "count: ~p", [Handle], State0),
+        HandleExe ->
+            Args = ["/accepteula", "-s", "-p", Pid],
+            {ok, HandleExeOutput} = rabbit_misc:win32_cmd(HandleExe, Args),
+            case HandleExeOutput of
+                [] ->
+                    State1 = log_fd_warning_once(MissingHandleMsg, [], State0),
                     {State1, 0};
-                UsedFd ->
-                    {State0, UsedFd}
+                _  ->
+                    case find_files_line(HandleExeOutput) of
+                        unknown ->
+                            State1 = log_fd_warning_once("handle.exe output did not contain "
+                                                         "a line beginning with 'File': ~tp",
+                                                         [HandleExeOutput], State0),
+                            {State1, 0};
+                        UsedFd ->
+                            {State0, UsedFd}
+                    end
             end
     end.
 
 find_files_line([]) ->
     unknown;
-find_files_line(["  File " ++ Rest | _T]) ->
+% Note:
+% rabbit_misc:win32_cmd trims the output, so there will be no
+% leading/trailing whitespace
+find_files_line(["File " ++ Rest | _T]) ->
     [Files] = string:tokens(Rest, ": "),
     list_to_integer(Files);
 find_files_line([_H | T]) ->
@@ -198,6 +153,13 @@ get_disk_free_limit() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free_limit(),
 
 get_disk_free() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free(),
                               disk_free_monitoring_disabled).
+
+log_fd_warning_once(Fmt, Args, #state{fd_warning_logged = undefined}=State) ->
+    % no warning has been logged, so log it and make a note of when
+    ok = rabbit_log:warning(Fmt, Args),
+    State#state{fd_warning_logged = true};
+log_fd_warning_once(_Fmt, _Args, #state{fd_warning_logged = true}=State) ->
+    State.
 
 log_fd_error(Fmt, Args, #state{error_logged_time = undefined}=State) ->
     % rabbitmq/rabbitmq-management#90
@@ -275,7 +237,7 @@ i(exchange_types, State) ->
 i(log_files, State) ->
     {State, [rabbit_data_coercion:to_utf8_binary(F) || F <- rabbit:log_locations()]};
 i(db_dir, State) ->
-    {State, rabbit_data_coercion:to_utf8_binary(rabbit_mnesia:dir())};
+    {State, rabbit_data_coercion:to_utf8_binary(rabbit:data_dir())};
 i(config_files, State) ->
     {State, [rabbit_data_coercion:to_utf8_binary(F) || F <- rabbit:config_files()]};
 i(net_ticktime, State) ->
@@ -283,7 +245,7 @@ i(net_ticktime, State) ->
 i(persister_stats, State) ->
     {State, persister_stats(State)};
 i(enabled_plugins, State) ->
-    {ok, Dir} = application:get_env(rabbit, enabled_plugins_file),
+    Dir = rabbit_plugins:enabled_plugins_file(),
     {State, rabbit_plugins:read_enabled(Dir)};
 i(auth_mechanisms, State) ->
     {ok, Mechanisms} = application:get_env(rabbit, auth_mechanisms),

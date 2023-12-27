@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule ListenersCommandTest do
   use ExUnit.Case, async: false
@@ -24,10 +24,11 @@ defmodule ListenersCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000
+     }}
   end
 
   test "merge_defaults: nothing to do" do
@@ -44,20 +45,24 @@ defmodule ListenersCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog})))
+    assert match?(
+             {:badrpc, _},
+             @command.run([], Map.merge(context[:opts], %{node: :jake@thedog}))
+           )
   end
 
   test "run: returns a list of node-local listeners", context do
     xs = @command.run([], context[:opts]) |> listener_maps
 
     assert length(xs) >= 3
+
     for p <- [5672, 61613, 25672] do
       assert Enum.any?(xs, fn %{port: port} -> port == p end)
     end
   end
 
   test "output: returns a formatted list of node-local listeners", context do
-    raw        = @command.run([],  context[:opts])
+    raw = @command.run([], context[:opts])
     {:ok, msg} = @command.output(raw, context[:opts])
 
     for p <- [5672, 61613, 25672] do
@@ -66,11 +71,12 @@ defmodule ListenersCommandTest do
   end
 
   test "output: when formatter is JSON, returns an array of listener maps", context do
-    raw        = @command.run([],  context[:opts])
+    raw = @command.run([], context[:opts])
     {:ok, doc} = @command.output(raw, Map.merge(%{formatter: "json"}, context[:opts]))
-    xs         = doc["listeners"]
+    xs = doc["listeners"]
 
     assert length(xs) >= 3
+
     for p <- [5672, 61613, 25672] do
       assert Enum.any?(xs, fn %{port: port} -> port == p end)
     end

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(proxy_protocol_SUITE).
@@ -26,7 +26,8 @@ all() ->
 
 groups() ->
     Tests = [
-        proxy_protocol
+        proxy_protocol_v1,
+        proxy_protocol_v2_local
     ],
     [{https_tests, [], Tests},
      {http_tests, [], Tests}].
@@ -78,7 +79,7 @@ init_per_testcase(Testcase, Config) ->
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
-proxy_protocol(Config) ->
+proxy_protocol_v1(Config) ->
     Port = list_to_integer(rabbit_ws_test_util:get_web_stomp_port_str(Config)),
     PortStr = integer_to_list(Port),
 
@@ -92,6 +93,28 @@ proxy_protocol(Config) ->
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, connection_name, []),
     match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
+    {close, _} = rfc6455_client:close(WS),
+    ok.
+
+proxy_protocol_v2_local(Config) ->
+    ProxyInfo = #{
+        command => local,
+        version => 2
+    },
+
+    Port = list_to_integer(rabbit_ws_test_util:get_web_stomp_port_str(Config)),
+    PortStr = integer_to_list(Port),
+
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self(),
+        undefined, [], ranch_proxy_header:header(ProxyInfo)),
+    {ok, _} = rfc6455_client:open(WS),
+    Frame = stomp:marshal("CONNECT", [{"login","guest"}, {"passcode", "guest"}], <<>>),
+    rfc6455_client:send(WS, Frame),
+    {ok, _P} = rfc6455_client:recv(WS),
+    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
+        ?MODULE, connection_name, []),
+    match = re:run(ConnectionName, <<"^127.0.0.1:\\d+ -> 127.0.0.1:\\d+$">>, [{capture, none}]),
     {close, _} = rfc6455_client:close(WS),
     ok.
 

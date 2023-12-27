@@ -2,12 +2,12 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_msg_file).
 
--export([append/3, read/2, scan/4]).
+-export([scan/4]).
 
 %%----------------------------------------------------------------------------
 
@@ -33,39 +33,6 @@
             A).
 
 %%----------------------------------------------------------------------------
-
--spec append(io_device(), rabbit_types:msg_id(), msg()) ->
-          rabbit_types:ok_or_error2(msg_size(), any()).
-
-append(FileHdl, MsgId, MsgBody)
-  when is_binary(MsgId) andalso size(MsgId) =:= ?MSG_ID_SIZE_BYTES ->
-    MsgBodyBin  = term_to_binary(MsgBody),
-    MsgBodyBinSize = size(MsgBodyBin),
-    Size = MsgBodyBinSize + ?MSG_ID_SIZE_BYTES,
-    case file_handle_cache:append(FileHdl,
-                                  <<Size:?INTEGER_SIZE_BITS,
-                                    MsgId:?MSG_ID_SIZE_BYTES/binary,
-                                    MsgBodyBin:MsgBodyBinSize/binary,
-                                    ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>) of
-        ok -> {ok, Size + ?FILE_PACKING_ADJUSTMENT};
-        KO -> KO
-    end.
-
--spec read(io_device(), msg_size()) ->
-          rabbit_types:ok_or_error2({rabbit_types:msg_id(), msg()},
-                                    any()).
-
-read(FileHdl, TotalSize) ->
-    Size = TotalSize - ?FILE_PACKING_ADJUSTMENT,
-    BodyBinSize = Size - ?MSG_ID_SIZE_BYTES,
-    case file_handle_cache:read(FileHdl, TotalSize) of
-        {ok, <<Size:?INTEGER_SIZE_BITS,
-               MsgId:?MSG_ID_SIZE_BYTES/binary,
-               MsgBodyBin:BodyBinSize/binary,
-               ?WRITE_OK_MARKER:?WRITE_OK_SIZE_BITS>>} ->
-            {ok, {MsgId, binary_to_term(MsgBodyBin)}};
-        KO -> KO
-    end.
 
 -spec scan(io_device(), file_size(), message_accumulator(A), A) ->
           {'ok', A, position()}.

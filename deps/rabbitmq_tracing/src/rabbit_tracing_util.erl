@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_tracing_util).
@@ -22,7 +22,7 @@ apply_on_node(ReqData, Context, Mod, Fun, Args) ->
             Node = binary_to_atom(Node0, utf8),
             case rpc:call(Node, Mod, Fun, Args) of
                 {badrpc, _} = Error ->
-                    Msg = io_lib:format("Node ~p could not be contacted: ~p",
+                    Msg = io_lib:format("Node ~tp could not be contacted: ~tp",
                                         [Node, Error]),
                     rabbit_log:warning(Msg, []),
                     rabbit_mgmt_util:bad_request(list_to_binary(Msg), ReqData, Context);

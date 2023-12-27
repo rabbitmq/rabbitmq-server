@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2016-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ChangeClusterNodeTypeCommand do
   alias RabbitMQ.CLI.Core.DocGuide
@@ -29,16 +29,32 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ChangeClusterNodeTypeCommand do
 
   def run([node_type_arg], %{node: node_name}) do
     normalized_type = normalize_type(String.to_atom(node_type_arg))
-    current_type = :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :node_type, [])
+
+    current_type =
+      case :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :node_type, []) do
+        {:badrpc, {:EXIT, {:undef, _}}} ->
+          :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :node_type, [])
+
+        ret ->
+          ret
+      end
 
     case current_type do
       ^normalized_type ->
         {:ok, "Node type is already #{normalized_type}"}
 
       _ ->
-        :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :change_cluster_node_type, [
-          normalized_type
-        ])
+        case :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :change_node_type, [
+               normalized_type
+             ]) do
+          {:badrpc, {:EXIT, {:undef, _}}} ->
+            :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :change_cluster_node_type, [
+              normalized_type
+            ])
+
+          ret ->
+            ret
+        end
     end
   end
 

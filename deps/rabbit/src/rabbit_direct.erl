@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_direct).
@@ -33,7 +33,7 @@ boot() -> rabbit_sup:start_supervisor_child(
 -spec force_event_refresh(reference()) -> 'ok'.
 
 force_event_refresh(Ref) ->
-    [Pid ! {force_event_refresh, Ref} || Pid <- list()],
+    _ = [Pid ! {force_event_refresh, Ref} || Pid <- list()],
     ok.
 
 -spec list_local() -> [pid()].
@@ -44,7 +44,7 @@ list_local() ->
 -spec list() -> [pid()].
 
 list() ->
-    Nodes = rabbit_nodes:all_running(),
+    Nodes = rabbit_nodes:list_running(),
     rabbit_misc:append_rpc_all_nodes(Nodes, rabbit_direct, list_local, [], ?RPC_TIMEOUT).
 
 %%----------------------------------------------------------------------------
@@ -52,8 +52,8 @@ list() ->
 auth_fun({none, _}, _VHost, _ExtraAuthProps) ->
     fun () -> {ok, rabbit_auth_backend_dummy:user()} end;
 
-auth_fun({Username, none}, _VHost, _ExtraAuthProps) ->
-    fun () -> rabbit_access_control:check_user_login(Username, []) end;
+auth_fun({Username, none}, _VHost, ExtraAuthProps) ->
+    fun () -> rabbit_access_control:check_user_login(Username, [] ++ ExtraAuthProps) end;
 
 auth_fun({Username, Password}, VHost, ExtraAuthProps) ->
     fun () ->
@@ -72,8 +72,19 @@ auth_fun({Username, Password}, VHost, ExtraAuthProps) ->
               'broker_not_found_on_node' |
               {'auth_failure', string()} | 'access_refused').
 
+%% Infos is a PropList which contains the content of the Proplist #amqp_adapter_info.additional_info
+%% among other credentials such as protocol, ssl information, etc.
+%% #amqp_adapter_info.additional_info may carry a credential called `authz_bakends` which has the
+%% content of the #user.authz_backends attribute. This means that we are propagating the outcome
+%% from the first successful authentication for the current user when opening an internal
+%% amqp connection. This is particularly relevant for protocol plugins such as AMQP 1.0 where
+%% users are authenticated in one context and later on an internal amqp connection is opened
+%% on a different context. In other words, we do not have anymore the initial credentials presented
+%% during the first authentication. However, we do have the outcome from such successful authentication.
+
 connect(Creds, VHost, Protocol, Pid, Infos) ->
-    ExtraAuthProps = extract_extra_auth_props(Creds, VHost, Pid, Infos),
+    ExtraAuthProps = append_authz_backends(extract_extra_auth_props(Creds, VHost, Pid, Infos), Infos),
+
     AuthFun = auth_fun(Creds, VHost, ExtraAuthProps),
     case rabbit_boot_state:has_reached_and_is_active(core_started) of
         true  ->
@@ -114,6 +125,13 @@ extract_extra_auth_props(Creds, VHost, Pid, Infos) ->
             maybe_call_connection_info_module(Protocol, Creds, VHost, Pid, Infos)
     end.
 
+
+append_authz_backends(AuthProps, Infos) ->
+    case proplists:get_value(authz_backends, Infos, undefined) of
+        undefined -> AuthProps;
+        AuthzBackends -> AuthProps ++ AuthzBackends
+    end.
+
 extract_protocol(Infos) ->
     case proplists:get_value(protocol, Infos, undefined) of
         {Protocol, _Version} ->
@@ -140,8 +158,8 @@ is_vhost_alive(VHost, {Username, _Password}, Pid) ->
         true  -> true;
         false ->
             rabbit_log_connection:error(
-                "Error on Direct connection ~p~n"
-                "access to vhost '~ts' refused for user '~s': "
+                "Error on Direct connection ~tp~n"
+                "access to vhost '~ts' refused for user '~ts': "
                 "vhost '~ts' is down",
                 [Pid, VHost, PrintedUsername, VHost]),
             false
@@ -156,15 +174,15 @@ is_over_vhost_connection_limit(VHost, {Username, _Password}, Pid) ->
         false         -> false;
         {true, Limit} ->
             rabbit_log_connection:error(
-                "Error on Direct connection ~p~n"
-                "access to vhost '~ts' refused for user '~s': "
-                "vhost connection limit (~p) is reached",
+                "Error on Direct connection ~tp~n"
+                "access to vhost '~ts' refused for user '~ts': "
+                "vhost connection limit (~tp) is reached",
                 [Pid, VHost, PrintedUsername, Limit]),
             true
     catch
         throw:{error, {no_such_vhost, VHost}} ->
             rabbit_log_connection:error(
-                "Error on Direct connection ~p~n"
+                "Error on Direct connection ~tp~n"
                 "vhost ~ts not found", [Pid, VHost]),
             true
     end.
@@ -194,9 +212,9 @@ connect1(User = #user{username = Username}, VHost, Protocol, Pid, Infos) ->
             end;
         {true, Limit} ->
             rabbit_log_connection:error(
-                "Error on Direct connection ~p~n"
-                "access refused for user '~s': "
-                "user connection limit (~p) is reached",
+                "Error on Direct connection ~tp~n"
+                "access refused for user '~ts': "
+                "user connection limit (~tp) is reached",
                 [Pid, Username, Limit]),
             {error, not_allowed}
     end.
@@ -220,8 +238,8 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol,
             {ok, ChannelPid};
         {true, Limit} ->
             rabbit_log_connection:error(
-                "Error on direct connection ~p~n"
-                "number of channels opened for user '~s' has reached the "
+                "Error on direct connection ~tp~n"
+                "number of channels opened for user '~ts' has reached the "
                 "maximum allowed limit of (~w)",
                 [ConnPid, Username, Limit]),
             {error, not_allowed}

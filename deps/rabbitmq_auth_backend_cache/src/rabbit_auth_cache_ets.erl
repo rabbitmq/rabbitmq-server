@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_auth_cache_ets).
@@ -73,7 +73,7 @@ terminate(_Reason, State = #state{}) ->
 do_delete(Key, Table, Timers) ->
     true = ets:delete(Table, Key),
     case ets:lookup(Timers, Key) of
-        [{Key, Tref}] -> timer:cancel(Tref),
+        [{Key, Tref}] -> _ = timer:cancel(Tref),
                          true = ets:delete(Timers, Key);
         []            -> ok
     end.

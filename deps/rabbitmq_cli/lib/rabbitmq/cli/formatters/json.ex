@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 # Basic JSON formatter. Supports 1-level of
 # collection using start/finish_collection.
@@ -16,6 +16,7 @@ defmodule RabbitMQ.CLI.Formatters.Json do
   def format_output(output, opts) when is_bitstring(output) do
     format_output(%{"message" => output}, opts)
   end
+
   def format_output(output, _opts) do
     {:ok, json} = JSON.encode(keys_to_atoms(output))
     json
@@ -29,7 +30,7 @@ defmodule RabbitMQ.CLI.Formatters.Json do
         fn
           [first | _] = element ->
             case FormatterHelpers.proplist?(first) or is_map(first) do
-              true  -> element
+              true -> element
               false -> [element]
             end
 
@@ -54,11 +55,16 @@ defmodule RabbitMQ.CLI.Formatters.Json do
   end
 
   def keys_to_atoms(enum) do
-    Enum.map(enum,
-             fn({k, v}) when is_binary(k) or is_list(k) ->
-                 {String.to_atom(k), v}
-               (other) -> other
-             end)
+    Enum.map(
+      enum,
+      fn
+        {k, v} when is_binary(k) or is_list(k) ->
+          {String.to_atom(k), v}
+
+        other ->
+          other
+      end
+    )
   end
 
   def format_element(val, separator, options) do

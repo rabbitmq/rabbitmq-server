@@ -19,6 +19,7 @@
 -type ra_system_name() :: atom().
 
 -define(COORD_WAL_MAX_SIZE_B, 64_000_000).
+-define(QUORUM_AER_MAX_RPC_SIZE, 16).
 
 -spec setup() -> ok | no_return().
 
@@ -75,13 +76,18 @@ get_config(quorum_queues = RaSystem) ->
     Checksums = application:get_env(rabbit, quorum_compute_checksums, true),
     WalChecksums = application:get_env(rabbit, quorum_wal_compute_checksums, Checksums),
     SegmentChecksums = application:get_env(rabbit, quorum_segment_compute_checksums, Checksums),
-    DefaultConfig#{name => RaSystem, % names => ra_system:derive_names(quorum)
+    AERBatchSize = application:get_env(rabbit, quorum_max_append_entries_rpc_batch_size,
+                                       ?QUORUM_AER_MAX_RPC_SIZE),
+    CompressMemTables = application:get_env(rabbit, quorum_compress_mem_tables, false),
+    DefaultConfig#{name => RaSystem,
+                   default_max_append_entries_rpc_batch_size => AERBatchSize,
                    wal_compute_checksums => WalChecksums,
-                   segment_compute_checksums => SegmentChecksums};
+                   segment_compute_checksums => SegmentChecksums,
+                   compress_mem_tables => CompressMemTables};
 get_config(coordination = RaSystem) ->
     DefaultConfig = get_default_config(),
     CoordDataDir = filename:join(
-                     [rabbit_mnesia:dir(), "coordination", node()]),
+                     [rabbit:data_dir(), "coordination", node()]),
     DefaultConfig#{name => RaSystem,
                    data_dir => CoordDataDir,
                    wal_data_dir => CoordDataDir,

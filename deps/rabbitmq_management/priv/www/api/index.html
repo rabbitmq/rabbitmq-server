@@ -56,6 +56,13 @@
     with the <code>columns</code> parameter. This is a comma-separated
     list of subfields separated by dots. See the example below.</p>
 
+    <p> It is possible to disable the statistics in the GET requests
+      and obtain just the basic information of every object. This reduces
+      considerably the amount of data returned and the memory and resource
+      consumption of each query in the system. For some monitoring and operation
+      purposes, these queries are more appropiate. The query string parameter
+    <code>disable_stats</code> set to <code>true</code> will achieve this.</p>
+
     <p>Most of the GET queries return many fields per
     object. The second part of this guide covers those.</p>
 
@@ -478,7 +485,21 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/queues</td>
-        <td>A list of all queues. Use <a href="#pagination">pagination parameters</a> to filter queues.</td>
+        <td>A list of all queues returning a reduced set of fields. Use <a href="#pagination">pagination parameters</a> to filter queues.
+          The parameter <code>enable_queue_totals=true</code> can be used in combination with the
+          <code>disable_stats=true</code> parameter to return a reduced set of fields and significantly
+          reduce the amount of data returned by this endpoint. That in turn can significantly reduce
+          CPU and bandwidth footprint of such requests.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/queues/detailed</td>
+        <td>A list of all queues containing all available information about the queues. Use <a href="#pagination">pagination parameters</a> to filter queues.
+        </td>
       </tr>
       <tr>
         <td>X</td>
@@ -1155,6 +1176,169 @@ or:
         <td class="path">/api/auth/attempts/<i>node</i>/source</td>
         <td>
           A list of authentication attempts by remote address and username.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/auth/hash_password/<i>plaintext-password</i></td>
+        <td>
+          Hashes <code>plaintext-password</code> according to the currently configured password hashing algorithm.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/stream/connections</td>
+        <td>
+            A list of all open stream connections.
+            Use <a href="#pagination">pagination parameters</a> to filter connections.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/stream/connections/<i>vhost</i></td>
+        <td>
+            A list of all open stream connections in a specific virtual host.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/stream/connections/<i>vhost</i>/<i>name</i></td>
+        <td>
+            An individual stream connection.
+            DELETEing it will close the stream connection.
+            Optionally set the "X-Reason" header when DELETEing to provide a reason.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/stream/connections/<i>vhost</i>/<i>name</i>/publishers</td>
+        <td>
+            The list of publishers of a given stream connection.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/stream/connections/<i>vhost</i>/<i>name</i>/consumers</td>
+        <td>
+            The list of consumers of a given stream connection.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/stream/publishers</td>
+        <td>
+            The list of stream publishers.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/stream/publishers/<i>vhost</i></td>
+        <td>
+            The list of stream publishers in a specific virtual host.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/stream/publishers/<i>vhost</i>/<i>stream</i></td>
+        <td>
+            The list of stream publishers in a specific virtual host for a specific stream.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/stream/consumers</td>
+        <td>
+            The list of stream consumers.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/stream/consumers/<i>vhost</i></td>
+        <td>
+            The list of stream consumers in a specific virtual host.
+            <br />
+            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/feature-flags</td>
+        <td>
+            The list of feature flags.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/deprecated-features</td>
+        <td>
+            The list of deprecated features.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/deprecated-features/used</td>
+        <td>
+            The list of deprecated features currently being used.
         </td>
       </tr>
     </table>
@@ -2025,6 +2209,85 @@ or:
     </table>
 
     <h2>/api/queues</h2>
+
+    When using the query parameters combination of <code>disable_stats</code> and
+    <code>enable_queue_totals</code> this query returns the following fields:
+
+    <table>
+      <tr>
+        <td><code>name</code></td>
+        <td>
+          The name of the queue.
+        </td>
+      </tr>
+      <tr>
+        <td><code>vhost</code></td>
+        <td>
+          The name of the virtual host.
+        </td>
+      </tr>
+      <tr>
+        <td><code>type</code></td>
+        <td>
+          The type of the queue.
+        </td>
+      </tr>
+      <tr>
+        <td><code>node</code></td>
+        <td>
+          Depending on the type of the queue, this is the node which holds the queue or hosts the leader.
+        </td>
+      </tr>
+      <tr>
+        <td><code>state</code></td>
+        <td>
+          The status of the queue.
+        </td>
+      </tr>
+      <tr>
+        <td><code>arguments</code></td>
+        <td>
+          The arguments of the queue.
+        </td>
+      </tr>
+      <tr>
+        <td><code>auto_delete</code></td>
+        <td>
+          The value of the <code>auto_delete</code> argument.
+        </td>
+      </tr>
+      <tr>
+        <td><code>durable</code></td>
+        <td>
+          The value of the <code>durable</code> argument.
+        </td>
+      </tr>
+      <tr>
+        <td><code>exclusive</code></td>
+        <td>
+          The value of the <code>exclusive</code> argument.
+        </td>
+      </tr>
+      <tr>
+        <td><code>messages</code></td>
+        <td>
+          The total number of messages in the queue.
+        </td>
+      </tr>
+      <tr>
+        <td><code>messages_ready</code></td>
+        <td>
+          The number of messages ready to be delivered in the queue.
+        </td>
+      </tr>
+      <tr>
+        <td><code>messages_unacknowledged</code></td>
+        <td>
+          The number of messages waiting for acknowledgement in the queue.
+        </td>
+      </tr>
+    </table>
+
     <h2>/api/queues/(vhost)</h2>
 
     <p>

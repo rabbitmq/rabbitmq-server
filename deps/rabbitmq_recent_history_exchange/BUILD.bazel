@@ -1,3 +1,4 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
@@ -9,52 +10,81 @@ load(
     "rabbitmq_app",
     "rabbitmq_integration_suite",
 )
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
+)
 
 APP_NAME = "rabbitmq_recent_history_exchange"
 
 APP_DESCRIPTION = "RabbitMQ Recent History Exchange"
 
-DEPS = [
-    "//deps/rabbit_common:erlang_app",
-]
+all_beam_files(name = "all_beam_files")
 
-RUNTIME_DEPS = [
-    "//deps/rabbit:erlang_app",
-]
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_name = APP_NAME,
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+        "@khepri//:erlang_app",
+        "@khepri_mnesia_migration//:erlang_app",
+    ],
 )
 
-xref()
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
 
 plt(
-    name = "base_plt",
-    deps = DEPS,
+    name = "deps_plt",
+    apps = [
+        "mnesia",  # keep
+    ],
+    for_target = ":erlang_app",
+    ignore_warnings = True,
+    plt = "//:base_plt",
 )
 
 dialyze(
+    name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":base_plt",
-    warnings_as_errors = False,
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
+
+eunit(
+    name = "eunit",
+    target = ":test_erlang_app",
 )
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_recent_history_exchange"
-
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "system_SUITE",
-    ),
-]
-
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+rabbitmq_integration_suite(
+    name = "system_SUITE",
 )
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_recent_history_exchange",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+all_test_beam_files(name = "all_test_beam_files")

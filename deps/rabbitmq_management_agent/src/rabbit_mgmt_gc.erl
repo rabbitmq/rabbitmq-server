@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 -module(rabbit_mgmt_gc).
 
@@ -80,6 +80,7 @@ gc_queues() ->
     LocalGbSet = gb_sets:from_list(LocalQueues),
     gc_entity(queue_stats_publish, GbSet),
     gc_entity(queue_stats, LocalGbSet),
+    gc_entity(queue_basic_stats, LocalGbSet),
     gc_entity(queue_msg_stats, LocalGbSet),
     gc_entity(queue_process_stats, LocalGbSet),
     gc_entity(queue_msg_rates, LocalGbSet),
@@ -105,7 +106,7 @@ gc_exchanges() ->
     gc_process_and_entity(channel_exchange_stats_fine_stats, GbSet).
 
 gc_nodes() ->
-    Nodes = rabbit_nodes:all(),
+    Nodes = rabbit_nodes:list_members(),
     GbSet = gb_sets:from_list(Nodes),
     gc_entity(node_stats, GbSet),
     gc_entity(node_coarse_stats, GbSet),

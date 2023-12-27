@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_federation_exchange_link).
@@ -49,7 +49,7 @@
 %% and the Erlang client is not running. This then gets invoked when
 %% the federation app is started.
 go() ->
-    rabbit_federation_pg:start_scope(),
+    _ = rabbit_federation_pg:start_scope(),
     cast(go).
 
 add_binding(S, XN, B)      -> cast(XN, {enqueue, S, {add_binding, B}}).
@@ -110,7 +110,7 @@ handle_cast({enqueue, Serial, Cmd},
         {noreply, play_back_commands(State#state{waiting_cmds = Waiting1})}
     catch exit:{{shutdown, {server_initiated_close, 404, Text}}, _} ->
             rabbit_federation_link_util:log_warning(
-              XName, "detected upstream changes, restarting link: ~p", [Text]),
+              XName, "detected upstream changes, restarting link: ~tp", [Text]),
             {stop, {shutdown, restart}, State}
     end;
 
@@ -175,7 +175,7 @@ handle_info(check_internal_exchange, State = #state{internal_exchange = IntXName
                                                     internal_exchange_interval = Interval}) ->
     case check_internal_exchange(IntXNameBin, State) of
         upstream_not_found ->
-            rabbit_log_federation:warning("Federation link could not find upstream exchange '~s' and will restart",
+            rabbit_log_federation:warning("Federation link could not find upstream exchange '~ts' and will restart",
                                           [IntXNameBin]),
             {stop, {shutdown, restart}, State};
         _ ->
@@ -198,17 +198,17 @@ terminate(Reason, #state{downstream_connection = DConn,
                          queue                 = Queue}) when Reason =:= shutdown;
                                                               Reason =:= {shutdown, restart};
                                                               Reason =:= gone ->
-    timer:cancel(TRef),
+    _ = timer:cancel(TRef),
     rabbit_federation_link_util:ensure_connection_closed(DConn),
 
-    rabbit_log:debug("Exchange federation: link is shutting down, resource cleanup mode: ~p", [Upstream#upstream.resource_cleanup_mode]),
+    rabbit_log:debug("Exchange federation: link is shutting down, resource cleanup mode: ~tp", [Upstream#upstream.resource_cleanup_mode]),
     case Upstream#upstream.resource_cleanup_mode of
         never -> ok;
         _     ->
             %% This is a normal shutdown and we are allowed to clean up the internally used queue and exchange
-            rabbit_log:debug("Federated exchange '~s' link will delete its internal queue '~s'", [Upstream#upstream.exchange_name, Queue]),
+            rabbit_log:debug("Federated exchange '~ts' link will delete its internal queue '~ts'", [Upstream#upstream.exchange_name, Queue]),
             delete_upstream_queue(Conn, Queue),
-            rabbit_log:debug("Federated exchange '~s' link will delete its upstream exchange", [Upstream#upstream.exchange_name]),
+            rabbit_log:debug("Federated exchange '~ts' link will delete its upstream exchange", [Upstream#upstream.exchange_name]),
             delete_upstream_exchange(Conn, IntExchange)
     end,
 
@@ -222,7 +222,7 @@ terminate(Reason, #state{downstream_connection = DConn,
                          upstream_params       = UParams,
                          downstream_exchange   = XName,
                          internal_exchange_timer = TRef}) ->
-    timer:cancel(TRef),
+    _ = timer:cancel(TRef),
 
     rabbit_federation_link_util:ensure_connection_closed(DConn),
 
@@ -438,12 +438,8 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
                           {longstr, N} -> N;
                           _            -> unknown
                       end,
-              {Serial, Bindings} =
-                  rabbit_misc:execute_mnesia_transaction(
-                    fun () ->
-                            {rabbit_exchange:peek_serial(DownXName),
-                             rabbit_binding:list_for_source(DownXName)}
-                    end),
+              {Serial, Bindings} = {rabbit_exchange:peek_serial(DownXName),
+                                    rabbit_binding:list_for_source(DownXName)},
               true = is_integer(Serial),
               %% If we are very short lived, Serial can be undefined at
               %% this point (since the deletion of the X could have
@@ -469,25 +465,25 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
                                  unacked               = Unacked,
                                  internal_exchange_interval = Interval}),
                         Bindings),
-              rabbit_log_federation:info("Federation link for ~s (upstream: ~s) will perform internal exchange checks "
+              rabbit_log_federation:info("Federation link for ~ts (upstream: ~ts) will perform internal exchange checks "
                                          "every ~b seconds", [rabbit_misc:rs(DownXName), UName, round(Interval / 1000)]),
               TRef = erlang:send_after(Interval, self(), check_internal_exchange),
               {noreply, State#state{internal_exchange_timer = TRef}}
       end, Upstream, UParams, DownXName, S0).
 
 log_link_startup_attempt(#upstream{name = Name, channel_use_mode = ChMode}, DownXName) ->
-    rabbit_log_federation:debug("Will try to start a federation link for ~s, upstream: '~s', channel use mode: ~s",
+    rabbit_log_federation:debug("Will try to start a federation link for ~ts, upstream: '~ts', channel use mode: ~ts",
                                 [rabbit_misc:rs(DownXName), Name, ChMode]).
 
 %% If channel use mode is 'single', reuse the message transfer channel.
 %% Otherwise open a separate one.
 reuse_command_channel(MainCh, #upstream{name = UName}, DownXName) ->
-    rabbit_log_federation:debug("Will use a single channel for both schema operations and message transfer on links to upstream '~s' for downstream federated ~s",
+    rabbit_log_federation:debug("Will use a single channel for both schema operations and message transfer on links to upstream '~ts' for downstream federated ~ts",
                                 [UName, rabbit_misc:rs(DownXName)]),
     {ok, MainCh}.
 
 open_command_channel(Conn, Upstream = #upstream{name = UName}, UParams, DownXName, S0) ->
-    rabbit_log_federation:debug("Will open a command channel to upstream '~s' for downstream federated ~s",
+    rabbit_log_federation:debug("Will open a command channel to upstream '~ts' for downstream federated ~ts",
                                 [UName, rabbit_misc:rs(DownXName)]),
     case amqp_connection:open_channel(Conn) of
         {ok, CCh} ->
@@ -495,8 +491,8 @@ open_command_channel(Conn, Upstream = #upstream{name = UName}, UParams, DownXNam
             {ok, CCh};
         E ->
             rabbit_federation_link_util:ensure_connection_closed(Conn),
-            rabbit_federation_link_util:connection_error(command_channel, E,
-                                                         Upstream, UParams, DownXName, S0),
+            _ = rabbit_federation_link_util:connection_error(command_channel, E,
+                                                             Upstream, UParams, DownXName, S0),
             E
     end.
 
@@ -581,12 +577,12 @@ ensure_internal_exchange(IntXNameBin,
                                 connection          = Conn,
                                 channel             = Ch,
                                 downstream_exchange = #resource{virtual_host = DVhost}}) ->
-    rabbit_log_federation:debug("Exchange federation will set up exchange '~s' in upstream '~s'",
+    rabbit_log_federation:debug("Exchange federation will set up exchange '~ts' in upstream '~ts'",
                                 [IntXNameBin, UName]),
     #upstream_params{params = Params} = rabbit_federation_util:deobfuscate_upstream_params(UParams),
-    rabbit_log_federation:debug("Will delete upstream exchange '~s'", [IntXNameBin]),
+    rabbit_log_federation:debug("Will delete upstream exchange '~ts'", [IntXNameBin]),
     delete_upstream_exchange(Conn, IntXNameBin),
-    rabbit_log_federation:debug("Will declare an internal upstream exchange '~s'", [IntXNameBin]),
+    rabbit_log_federation:debug("Will declare an internal upstream exchange '~ts'", [IntXNameBin]),
     Base = #'exchange.declare'{exchange    = IntXNameBin,
                                durable     = true,
                                internal    = true,
@@ -611,7 +607,7 @@ check_internal_exchange(IntXNameBin,
                                 downstream_exchange = XName = #resource{virtual_host = DVhost}}) ->
     #upstream_params{params = Params} =
         rabbit_federation_util:deobfuscate_upstream_params(UParams),
-    rabbit_log_federation:debug("Exchange federation will check on exchange '~s' in upstream '~s'",
+    rabbit_log_federation:debug("Exchange federation will check on exchange '~ts' in upstream '~ts'",
                                 [IntXNameBin, UName]),
     Base = #'exchange.declare'{exchange    = IntXNameBin,
                                passive     = true,
@@ -629,11 +625,11 @@ check_internal_exchange(IntXNameBin,
       Params, XFU, fun(404, Text) ->
                            rabbit_federation_link_util:log_warning(
                              XName, "detected internal upstream exchange changes,"
-                             " restarting link: ~p", [Text]),
+                             " restarting link: ~tp", [Text]),
                            upstream_not_found;
                       (Code, Text) ->
                            rabbit_federation_link_util:log_warning(
-                             XName, "internal upstream exchange check failed: ~p ~p",
+                             XName, "internal upstream exchange check failed: ~tp ~tp",
                              [Code, Text]),
                            error
                    end).

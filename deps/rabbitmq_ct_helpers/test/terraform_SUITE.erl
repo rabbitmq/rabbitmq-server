@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(terraform_SUITE).
@@ -121,7 +121,7 @@ run_code_on_one_vm(Config) ->
 
 do_run_code_on_one_vm(CTMaster) ->
     CTPeer = node(),
-    ct:pal("Testcase running on ~s", [CTPeer]),
+    ct:pal("Testcase running on ~ts", [CTPeer]),
     ?assertNotEqual(CTMaster, CTPeer),
     ?assertEqual(pong, net_adm:ping(CTMaster)).
 
@@ -131,7 +131,7 @@ run_code_on_three_vms(Config) ->
 
 do_run_code_on_three_vms(CTMaster) ->
     CTPeer = node(),
-    ct:pal("Testcase running on ~s", [CTPeer]),
+    ct:pal("Testcase running on ~ts", [CTPeer]),
     ?assertNotEqual(CTMaster, CTPeer),
     ?assertEqual(pong, net_adm:ping(CTMaster)).
 
@@ -159,8 +159,8 @@ run_four_rabbitmq_nodes(Config) ->
 
     ?assertEqual([true, true, true, true],
                  rabbit_ct_broker_helpers:rpc_all(
-                   Config, rabbit_mnesia, is_clustered, [])),
+                   Config, rabbit_db_cluster, is_clustered, [])),
     ClusteredNodes = lists:sort(
                        rabbit_ct_broker_helpers:rpc(
-                         Config, 0, rabbit_mnesia, cluster_nodes, [running])),
+                         Config, 0, rabbit_nodes, list_running, [])),
     ?assertEqual(ClusteredNodes, RabbitMQNodes).

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_looking_glass).
@@ -27,12 +27,12 @@ boot() ->
             case application:ensure_all_started(looking_glass) of
                 {ok, _} -> ok;
                 {error, Error} ->
-                    rabbit_log:error("Failed to start Looking Glass, reason: ~p", [Error])
+                    rabbit_log:error("Failed to start Looking Glass, reason: ~tp", [Error])
             end;
         Value ->
             Input = parse_value(Value),
             rabbit_log:info(
-                "Enabling Looking Glass profiler, input value: ~p",
+                "Enabling Looking Glass profiler, input value: ~tp",
                 [Input]
             ),
             {ok, _} = application:ensure_all_started(looking_glass),
@@ -61,7 +61,7 @@ trace(Input) ->
             )).
 
 trace_qq() ->
-    dbg:stop_clear(),
+    dbg:stop(),
     lg:trace([ra_server,
               ra_server_proc,
               rabbit_fifo,
@@ -78,7 +78,7 @@ trace_qq() ->
                             ]
             )),
     timer:sleep(10000),
-    lg:stop(),
+    _ = lg:stop(),
     profile().
 
 profile() ->

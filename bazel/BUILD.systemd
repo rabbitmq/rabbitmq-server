@@ -1,0 +1,121 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+            "+warnings_as_errors",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+            "+warnings_as_errors",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "other_beam",
+    srcs = [
+        "src/systemd.erl",
+        "src/systemd_app.erl",
+        "src/systemd_journal_h.erl",
+        "src/systemd_kmsg_formatter.erl",
+        "src/systemd_protocol.erl",
+        "src/systemd_socket.erl",
+        "src/systemd_sup.erl",
+        "src/systemd_watchdog.erl",
+    ],
+    outs = [
+        "ebin/systemd.beam",
+        "ebin/systemd_app.beam",
+        "ebin/systemd_journal_h.beam",
+        "ebin/systemd_kmsg_formatter.beam",
+        "ebin/systemd_protocol.beam",
+        "ebin/systemd_socket.beam",
+        "ebin/systemd_sup.beam",
+        "ebin/systemd_watchdog.beam",
+    ],
+    hdrs = [
+        "include/systemd.hrl",
+        "src/systemd_internal.hrl",
+    ],
+    app_name = "systemd",
+    beam = [],
+    erlc_opts = "//:erlc_opts",
+    deps = ["@enough//:erlang_app"],
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [":other_beam"],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/systemd.app.src",
+        "src/systemd.erl",
+        "src/systemd_app.erl",
+        "src/systemd_journal_h.erl",
+        "src/systemd_kmsg_formatter.erl",
+        "src/systemd_protocol.erl",
+        "src/systemd_socket.erl",
+        "src/systemd_sup.erl",
+        "src/systemd_watchdog.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = ["src/systemd_internal.hrl"],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = ["include/systemd.hrl"],
+)
+
+filegroup(
+    name = "priv",
+    srcs = [],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = ["LICENSE"],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
+    app_name = "systemd",
+    beam_files = [":beam_files"],
+    deps = ["@enough//:erlang_app"],
+)
+
+alias(
+    name = "systemd",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)

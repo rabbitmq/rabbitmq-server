@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.AutoComplete do
   alias RabbitMQ.CLI.Core.{CommandModules, Parser}
@@ -28,6 +28,7 @@ defmodule RabbitMQ.CLI.AutoComplete do
   def suggest_command(_cmd_name, empty) when empty == %{} do
     nil
   end
+
   def suggest_command(typed, module_map) do
     suggestion =
       module_map
@@ -40,6 +41,7 @@ defmodule RabbitMQ.CLI.AutoComplete do
     case suggestion do
       {cmd, distance} when distance >= @jaro_distance_limit ->
         {:suggest, cmd}
+
       _ ->
         nil
     end

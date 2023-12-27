@@ -1,106 +1,195 @@
-const {By,Key,until,Builder} = require("selenium-webdriver");
+const { By, Key, until, Builder } = require('selenium-webdriver')
+
+const MENU_TABS = By.css('div#menu ul#tabs')
+const USER = By.css('li#logout')
+const LOGOUT_FORM = By.css('li#logout form')
+const SELECT_VHOSTS = By.css('select#show-vhost')
+
+const OVERVIEW_TAB = By.css('div#menu ul#tabs li#overview')
+const CONNECTIONS_TAB = By.css('div#menu ul#tabs li#connections')
+const CHANNELS_TAB = By.css('div#menu ul#tabs li#channels')
+const QUEUES_AND_STREAMS_TAB = By.css('div#menu ul#tabs li#queues-and-streams')
+const EXCHANGES_TAB = By.css('div#menu ul#tabs li#exchanges')
+const ADMIN_TAB = By.css('div#menu ul#tabs li#admin')
+const STREAM_CONNECTIONS_TAB = By.css('div#menu ul#tabs li#stream-connections')
 
 module.exports = class BasePage {
-  driver;
+  driver
+  timeout
+  polling
 
-  constructor(webdriver) {
+  constructor (webdriver) {
     this.driver = webdriver
+    // this is another timeout (--timeout 10000) which is the maximum test execution time
+    this.timeout = parseInt(process.env.TIMEOUT) || 5000 // max time waiting to locate an element. Should be less that test timeout
+    this.polling = parseInt(process.env.POLLING) || 500 // how frequent selenium searches for an element
   }
 
-  async waitForLocated (driver, locator, retries = 3) {
-    try {
-      await driver.wait(until.elementLocated(locator), 7000)
-    } catch (err) {
-      if (retries === 0) {
-        throw new Error(`Still not able to locate element ${locator.toString()} after maximum retries, Error message: ${err.message.toString()}`)
+  async isLoaded () {
+    return this.waitForDisplayed(MENU_TABS)
+  }
+
+  async logout () {
+    await this.submit(LOGOUT_FORM)
+  }
+
+  async getUser () {
+    return this.getText(USER)
+  }
+
+  async waitForOverviewTab() {
+    return this.waitForDisplayed(OVERVIEW_TAB)
+  }
+
+  async clickOnOverviewTab () {
+    return this.click(CONNECTIONS_TAB)
+  }
+
+  async clickOnConnectionsTab () {
+    return this.click(CONNECTIONS_TAB)
+  }
+  async waitForConnectionsTab() {
+    return this.waitForDisplayed(CONNECTIONS_TAB)
+  }
+
+  async clickOnAdminTab () {
+    return this.click(ADMIN_TAB)
+  }
+  async waitForAdminTab() {
+    return this.waitForDisplayed(ADMIN_TAB)
+  }
+
+  async clickOnChannelsTab () {
+    return this.click(CHANNELS_TAB)
+  }
+  async waitForChannelsTab() {
+    return this.waitForDisplayed(CHANNELS_TAB)
+  }
+
+  async clickOnExchangesTab () {
+    return this.click(EXCHANGES_TAB)
+  }
+  async waitForExchangesTab() {
+    return this.waitForDisplayed(EXCHANGES_TAB)
+  }
+
+  async clickOnQueuesTab () {
+    return this.click(QUEUES_AND_STREAMS_TAB)
+  }
+  async waitForQueuesTab() {
+    return this.waitForDisplayed(QUEUES_AND_STREAMS_TAB)
+  }
+
+  async clickOnStreamTab () {
+    return this.click(STREAM_CONNECTIONS_TAB)
+  }
+  async waitForStreamConnectionsTab() {
+    return this.waitForDisplayed(STREAM_CONNECTIONS_TAB)
+  }
+
+  async getSelectableVhosts() {
+    let selectable = await this.waitForDisplayed(SELECT_VHOSTS)
+    let options = await selectable.findElements(By.css('option'))
+    let table_model = []
+    for (let option of options) {
+      table_model.push(await option.getText())
+    }
+    return table_model
+  }
+
+  async getTable(locator, firstNColumns) {
+    let table = await this.waitForDisplayed(locator)
+    let rows = await table.findElements(By.css('tbody tr'))
+    let table_model = []
+    for (let row of rows) {
+      let columns = await row.findElements(By.css('td'))
+      let table_row = []
+      for (let column of columns) {
+        if (table_row.length < firstNColumns) table_row.push(await column.getText())
       }
-      await driver.sleep(250)
-      return this.waitForLocated(driver, locator, retries - 1)
+      table_model.push(table_row)
+    }
+    return table_model
+  }
+
+  async waitForLocated (locator) {
+    try {
+      return this.driver.wait(until.elementLocated(locator), this.timeout,
+        'Timed out after 30 seconds locating ' + locator, this.polling)
+    }catch(error) {
+      console.error("Failed to locate element " + locator)
+      throw error
     }
   }
 
-  async waitForVisible (driver, locator, retries = 3) {
+  async waitForVisible (element) {
     try {
-      const element = await driver.findElement(locator)
-      await driver.wait(until.elementIsVisible(element), 7000)
-    } catch (err) {
-      if (retries === 0) {
-        throw new Error(`Element ${locator.toString()} still not visible after maximum retries, Error message: ${err.message.toString()}`)
-      }
-      await driver.sleep(250)
-      return this.waitForVisible(driver, locator, retries - 1)
+      return this.driver.wait(until.elementIsVisible(element), this.timeout,
+        'Timed out after 30 seconds awaiting till visible ' + element, this.polling)
+    }catch(error) {
+      console.error("Failed to find visible element " + element)
+      throw error
     }
   }
 
-  async waitForDisplayed (locator, retries = 3) {
-    await this.waitForLocated(this.driver, locator, retries)
-    await this.waitForVisible(this.driver, locator, retries)
-    return this.driver.findElement(locator)
+  async waitForDisplayed (locator) {
+    return this.waitForVisible(await this.waitForLocated(locator))
   }
 
-  async hasElement (locator) {
-    let count = await this.driver.findElements(locator).size();
-    throw new Error("there are " + count + " warnings");
-    return count > 0;
+  async getText (locator) {
+    const element = await this.waitForDisplayed(locator)
+    return element.getText()
   }
 
-  async getText (locator, retries = 1) {
+  async getValue (locator) {
+    const element = await this.waitForDisplayed(locator)
+    return element.getAttribute('value')
+  }
+
+  async click (locator) {
+    const element = await this.waitForDisplayed(locator)
     try {
-      let element = await this.driver.findElement(locator);
-      let text = element.getText()
-      return text
-    } catch (err) {
-      if (retries === 0) {
-        throw new Error(`Unable to get ${locator.toString()} text after maximum retries, error : ${err.message}`)
-      }
-      await this.driver.sleep(250)
-      return this.getText(locator, retries - 1)
-    }
-  }
-
-  async click (locator, retries = 1) {
-    try {
-      const element = await this.driver.findElement(locator)
       return element.click()
-    } catch (err) {
-      if (retries === 0) {
-        throw new Error(`Still not able to click ${locator.toString()} after maximum retries, Error message: ${err.message.toString()}`)
-      }
-      await this.driver.sleep(250)
-      return this.click(locator, retries - 1)
+    } catch(error) {
+      console.error("Failed to click on " + locator + " due to " + error);
+      throw error;
     }
   }
-    async submit (locator, retries = 1) {
-      try {
-        const element = await this.driver.findElement(locator)
-        return element.submit()
-      } catch (err) {
-        if (retries === 0) {
-          throw new Error(`Still not able to submit ${locator.toString()} after maximum retries, Error message: ${err.message.toString()}`)
-        }
-        await this.driver.sleep(250)
-        return this.submit(locator, retries - 1)
-      }
-    }
-  async sendKeys (locator, keys, retries = 1) {
-    try {
-      const element = await this.driver.findElement(locator)
-      await element.click()
-      await element.clear()
-      return element.sendKeys(keys)
-    } catch (err) {
-      if (retries === 0) {
-        throw new Error(`Unable to send keys to ${locator.toString()} after maximum retries, error : ${err.message}`)
-      }
-      await this.driver.sleep(250)
-      return this.sendKeys(locator, keys, retries - 1)
-    }
+
+  async submit (locator) {
+    const element = await this.waitForDisplayed(locator)
+    return element.submit()
   }
-  capture() {
+
+  async sendKeys (locator, keys) {
+    const element = await this.waitForDisplayed(locator)
+    await element.click()
+    await element.clear()
+    return element.sendKeys(keys)
+  }
+
+  async chooseFile (locator, file) {
+    const element = await this.waitForDisplayed(locator)
+    var remote = require('selenium-webdriver/remote');
+    driver.setFileDetector(new remote.FileDetector);
+    return element.sendKeys(file)
+  }
+  async acceptAlert () {
+    await this.driver.wait(until.alertIsPresent(), this.timeout);
+    await this.driver.sleep(250)
+    let alert = await this.driver.switchTo().alert();
+    await this.driver.sleep(250)
+    return alert.accept();
+  }
+  log(message) {
+    console.log(new Date() + " " + message)
+  }
+
+  capture () {
     this.driver.takeScreenshot().then(
-        function(image) {
-            require('fs').writeFileSync("/tmp/capture.png", image, "base64");
-        }
-    );
+      function (image) {
+        require('fs').writeFileSync('/tmp/capture.png', image, 'base64')
+      }
+    )
   }
 }

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_web_dispatch_sup).
@@ -30,8 +30,7 @@ ensure_listener(Listener) ->
             {Transport, TransportOpts, ProtoOpts} = preprocess_config(Listener),
             ProtoOptsMap = maps:from_list(ProtoOpts),
             StreamHandlers = stream_handlers_config(ProtoOpts),
-            rabbit_log:debug("Starting HTTP[S] listener with transport ~s, options ~p and protocol options ~p, stream handlers ~p",
-                             [Transport, TransportOpts, ProtoOptsMap, StreamHandlers]),
+            rabbit_log:debug("Starting HTTP[S] listener with transport ~ts", [Transport]),
             CowboyOptsMap =
                 maps:merge(#{env =>
                                 #{rabbit_listener => Listener},
@@ -72,12 +71,9 @@ init([]) ->
 preprocess_config(Options) ->
     case proplists:get_value(ssl, Options) of
         true -> _ = rabbit_networking:ensure_ssl(),
-                case rabbit_networking:poodle_check('HTTP') of
-                    ok     -> case proplists:get_value(ssl_opts, Options) of
-                                  undefined -> auto_ssl(Options);
-                                  _         -> fix_ssl(Options)
-                              end;
-                    danger -> {ranch_tcp, transport_config(Options), protocol_config(Options)}
+                case proplists:get_value(ssl_opts, Options) of
+                    undefined -> auto_ssl(Options);
+                    _         -> fix_ssl(Options)
                 end;
         _    -> {ranch_tcp, transport_config(Options), protocol_config(Options)}
     end.

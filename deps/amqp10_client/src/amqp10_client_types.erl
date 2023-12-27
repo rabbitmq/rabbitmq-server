@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 -module(amqp10_client_types).
 
@@ -30,7 +30,17 @@
 -type source() :: #'v1_0.source'{}.
 -type target() :: #'v1_0.target'{}.
 
--type delivery_state() :: accepted | rejected | modified | received | released.
+-type delivery_state() :: accepted |
+                          rejected |
+                          modified |
+                          %% the "full" modified outcome
+                          {modified,
+                           DeliveryFailed :: boolean(),
+                           UndeliverableHere :: boolean(),
+                           MessageAnnotations :: #{amqp10_msg:annotations_key() => term()}
+                           } |
+                          received |
+                          released.
 
 -type amqp_error() :: internal_error | not_found | unauthorized_access |
                       decode_error | resource_limit_exceeded |

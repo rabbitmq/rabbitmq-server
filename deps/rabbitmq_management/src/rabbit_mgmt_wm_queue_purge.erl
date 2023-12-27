@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_queue_purge).
@@ -36,7 +36,7 @@ delete_resource(ReqData, Context) ->
     rabbit_mgmt_util:direct_request(
       'queue.purge',
       fun rabbit_mgmt_format:format_accept_content/1,
-      [{queue, Name}], "Error purging queue: ~s", ReqData, Context).
+      [{queue, Name}], "Error purging queue: ~ts", ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).

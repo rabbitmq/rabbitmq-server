@@ -2,10 +2,13 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_boot_steps).
+
+-include_lib("kernel/include/logger.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
 
 -export([run_boot_steps/0, run_boot_steps/1, run_cleanup_steps/1]).
 -export([find_steps/0, find_steps/1]).
@@ -15,7 +18,7 @@ run_boot_steps() ->
 
 run_boot_steps(Apps) ->
     [begin
-      rabbit_log:info("Running boot step ~s defined by app ~s", [Step, App]),
+      rabbit_log:info("Running boot step ~ts defined by app ~ts", [Step, App]),
       ok = run_step(Attrs, mfa)
     end || {App, Step, Attrs} <- find_steps(Apps)],
     ok.
@@ -31,16 +34,23 @@ find_steps() ->
     find_steps(loaded_applications()).
 
 find_steps(Apps) ->
-    All = sort_boot_steps(rabbit_misc:all_module_attributes(rabbit_boot_step)),
+    T0 = erlang:timestamp(),
+    AttrsPerApp = rabbit_misc:rabbitmq_related_module_attributes(rabbit_boot_step),
+    T1 = erlang:timestamp(),
+    ?LOG_DEBUG(
+      "Boot steps: time to find boot steps: ~tp us",
+      [timer:now_diff(T1, T0)],
+      #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    All = sort_boot_steps(AttrsPerApp),
     [Step || {App, _, _} = Step <- All, lists:member(App, Apps)].
 
 run_step(Attributes, AttributeName) ->
     [begin
-        rabbit_log:debug("Applying MFA: M = ~s, F = ~s, A = ~p",
+        rabbit_log:debug("Applying MFA: M = ~ts, F = ~ts, A = ~tp",
                         [M, F, A]),
         case apply(M,F,A) of
             ok              ->
-                rabbit_log:debug("Finished MFA: M = ~s, F = ~s, A = ~p",
+                rabbit_log:debug("Finished MFA: M = ~ts, F = ~ts, A = ~tp",
                                  [M, F, A]);
             {error, Reason} -> exit({error, Reason})
         end

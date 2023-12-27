@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_sharding_shard).
@@ -29,7 +29,7 @@
 %% We make sure the sharded queues are created when
 %% RabbitMQ starts.
 maybe_shard_exchanges() ->
-    [maybe_shard_exchanges(V) || V <- rabbit_vhost:list_names()],
+    _ = [maybe_shard_exchanges(V) || V <- rabbit_vhost:list_names()],
     ok.
 
 maybe_shard_exchanges(VHost) ->
@@ -38,12 +38,12 @@ maybe_shard_exchanges(VHost) ->
 
 %% queue needs to be declared on the respective node.
 ensure_sharded_queues(X) ->
-    add_queues(X),
+    _ = add_queues(X),
     bind_queues(X).
 
 maybe_update_shards(OldX, NewX) ->
-    maybe_unbind_queues(routing_key(OldX), routing_key(NewX), OldX),
-    add_queues(NewX),
+    _ = maybe_unbind_queues(routing_key(OldX), routing_key(NewX), OldX),
+    _ = add_queues(NewX),
     bind_queues(NewX).
 
 stop_sharding(OldX) ->
@@ -90,8 +90,8 @@ declare_queue(XName, Durable, N, Node) ->
             ok
     catch
         _Error:Reason ->
-            rabbit_log:error("sharding failed to declare queue for exchange ~p"
-                             " - soft error:~n~p",
+            rabbit_log:error("sharding failed to declare queue for exchange ~tp"
+                             " - soft error:~n~tp",
                              [exchange_bin(XName), Reason]),
             error
     end.
@@ -99,14 +99,14 @@ declare_queue(XName, Durable, N, Node) ->
 bind_queue(XName, RoutingKey, N, Node) ->
     binding_action(fun rabbit_binding:add/3,
                    XName, RoutingKey, N, Node,
-                   "sharding failed to bind queue ~p to exchange ~p"
-                   " - soft error:~n~p~n").
+                   "sharding failed to bind queue ~tp to exchange ~tp"
+                   " - soft error:~n~tp~n").
 
 unbind_queue(XName, RoutingKey, N, Node) ->
     binding_action(fun rabbit_binding:remove/3,
                    XName, RoutingKey, N, Node,
-                   "sharding failed to unbind queue ~p to exchange ~p"
-                   " - soft error:~n~p~n").
+                   "sharding failed to unbind queue ~tp to exchange ~tp"
+                   " - soft error:~n~tp~n").
 
 binding_action(F, XName, RoutingKey, N, Node, ErrMsg) ->
     QBin = make_queue_name(exchange_bin(XName), a2b(Node), N),
@@ -127,7 +127,4 @@ v(#resource{virtual_host = VHost}) ->
     VHost.
 
 foreach_node(F) ->
-    [F(Node) || Node <- running_nodes()].
-
-running_nodes() ->
-    proplists:get_value(running_nodes, rabbit_mnesia:status(), []).
+    [F(Node) || Node <- rabbit_nodes:list_running()].

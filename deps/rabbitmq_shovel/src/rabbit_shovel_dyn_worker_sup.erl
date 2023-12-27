@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_shovel_dyn_worker_sup).
@@ -37,8 +37,8 @@ init([Name, Config0]) ->
     Config  = rabbit_data_coercion:to_proplist(Config0),
     Delay   = pget(<<"reconnect-delay">>, Config, ?DEFAULT_RECONNECT_DELAY),
     case Name of
-      {VHost, ShovelName} -> rabbit_log:debug("Shovel '~s' in virtual host '~s' will use reconnection delay of ~p", [ShovelName, VHost, Delay]);
-      ShovelName          -> rabbit_log:debug("Shovel '~s' will use reconnection delay of ~s", [ShovelName, Delay])
+      {VHost, ShovelName} -> rabbit_log:debug("Shovel '~ts' in virtual host '~ts' will use reconnection delay of ~tp", [ShovelName, VHost, Delay]);
+      ShovelName          -> rabbit_log:debug("Shovel '~ts' will use reconnection delay of ~ts", [ShovelName, Delay])
     end,
     Restart = case Delay of
         N when is_integer(N) andalso N > 0 ->

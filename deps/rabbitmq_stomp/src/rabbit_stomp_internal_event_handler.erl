@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_stomp_internal_event_handler).
@@ -25,7 +25,7 @@ handle_event(_Event, State) ->
   {ok, State}.
 
 handle_call(_Request, State) ->
-  {ok, State}.
+  {ok, ok, State}.
 
 handle_info(_Info, State) ->
   {ok, State}.

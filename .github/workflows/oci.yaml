@@ -28,28 +28,26 @@ jobs:
   # * main-otp-max (image OTP 26)
 
   build-publish-dev-bazel:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
         include:
           - image_tag_suffix: otp-min-bazel
-            otp_version_id: 25_0
+            otp_version_id: 26_1
           - image_tag_suffix: otp-max-bazel
-            otp_version_id: 25_1
+            otp_version_id: 26_1
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Inject RabbitMQ Version
-        run: |
-          sed -i"_orig" -E '/APP_VERSION/ s/3\.[0-9]+\.[0-9]+/${{ github.event.pull_request.head.sha || github.sha }}/' rabbitmq.bzl
+        uses: actions/checkout@v4
 
       - name: Mount Bazel Cache
-        uses: actions/cache@v3.0.8
+        uses: actions/cache@v3.3.2
         with:
           path: "/home/runner/repo-cache/"
-          key: repo-cache
+          key: ${{ runner.os }}-repo-cache-${{ hashFiles('MODULE.bazel','WORKSPACE','bazel/bzlmod/secondary_umbrella.bzl') }}
+          restore-keys: |
+            ${{ runner.os }}-repo-cache-
 
       - name: Configure Bazel
         run: |
@@ -66,58 +64,43 @@ jobs:
             build:buildbuddy --disk_cache=
 
             build:buildbuddy --remote_download_toplevel
-
-            build --@io_bazel_rules_docker//transitions:enable=false
           EOF
 
-      - name: Check OTP/Elixir versions used in RBE
-        id: load-info
+      - name: Configure otp for the OCI image
         run: |
-          bazelisk build :otp_version :elixir_version \
-            --config=rbe-${{ matrix.otp_version_id }}
-          echo "::set-output name=otp::$(cat bazel-bin/otp_version.txt)"
-          echo "::set-output name=elixir::$(cat bazel-bin/elixir_version.txt)"
+          sudo npm install --global --silent @bazel/buildozer
 
-      - name: Configure OTP & Elixir
-        uses: erlef/setup-beam@v1.13
-        with:
-          otp-version: ${{ steps.load-info.outputs.otp }}
-          elixir-version: ${{ steps.load-info.outputs.elixir }}
+          buildozer 'set tars ["@otp_src_${{ matrix.otp_version_id }}//file"]' \
+            //packaging/docker-image:otp_source
 
       - name: Build
         run: |
-          export ERLANG_HOME="$(dirname $(dirname $(which erl)))"
-          export ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
           bazelisk build //packaging/docker-image:rabbitmq \
-            --config=buildbuddy
+            --config=rbe-${{ matrix.otp_version_id }}
 
       - name: Test
         run: |
-          export ERLANG_HOME="$(dirname $(dirname $(which erl)))"
-          export ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
-          OCI_TESTS=$(bazel query 'tests(//packaging/docker-image/...)')
+          OCI_TESTS=$(bazel cquery 'tests(//packaging/docker-image/...)' | awk '{ print $1 }')
           bazelisk test ${OCI_TESTS} \
-            --config=buildbuddy
+            --config=rbe-${{ matrix.otp_version_id }}
 
       - name: Load
         run: |
-          export ERLANG_HOME="$(dirname $(dirname $(which erl)))"
-          export ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
           bazelisk run //packaging/docker-image:rabbitmq \
-            --config=buildbuddy
+            --config=rbe-${{ matrix.otp_version_id }}
 
       - name: Check for Push Credentials
         id: authorized
         run: |
           if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
-            echo "::set-output name=PUSH::true"
+            echo "PUSH=true" >> $GITHUB_OUTPUT
           else
-            echo "::set-output name=PUSH::false"
+            echo "PUSH=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Login to DockerHub
         if: steps.authorized.outputs.PUSH == 'true'
-        uses: docker/login-action@v1
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
@@ -135,3 +118,12 @@ jobs:
 
           docker push pivotalrabbitmq/rabbitmq:${TAG_1}
           docker push pivotalrabbitmq/rabbitmq:${TAG_2}
+
+  summary-oci:
+    needs:
+    - build-publish-dev-bazel
+    runs-on: ubuntu-latest
+    steps:
+    - name: SUMMARY
+      run: |
+        echo "SUCCESS"

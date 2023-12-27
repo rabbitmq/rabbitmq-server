@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 %% region
@@ -92,5 +92,19 @@ fun(Conf) ->
         _ ->
             Settings = cuttlefish_variable:filter_by_prefix("cluster_formation.aws.instance_tags", Conf),
             [ {lists:last(K), V} || {K, V} <- Settings ]
+    end
+end}.
+
+%% hostname_path
+
+{mapping, "cluster_formation.aws.hostname_path", "rabbit.cluster_formation.peer_discovery_aws.aws_hostname_path", [
+    {datatype, string,
+    {default, ["privateDnsName"]}}
+]}.
+{translation, "rabbit.cluster_formation.peer_discovery_aws.aws_hostname_path",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.aws.hostname_path", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> rabbit_peer_discovery_util:as_list(Value)
     end
 end}.

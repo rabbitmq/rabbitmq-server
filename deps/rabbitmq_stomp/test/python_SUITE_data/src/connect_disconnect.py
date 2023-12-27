@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 ##
 
 import unittest
@@ -64,11 +64,11 @@ class TestConnectDisconnect(base.BaseTest):
 
     def test_bad_username(self):
         ''' Test bad username'''
-        self.bad_connect("Access refused for user 'gust'\n", user='gust')
+        self.bad_connect("Access refused for user 'gust'", user='gust')
 
     def test_bad_password(self):
         ''' Test bad password'''
-        self.bad_connect("Access refused for user 'guest'\n", passcode='gust')
+        self.bad_connect("Access refused for user 'guest'", passcode='gust')
 
     def test_bad_vhost(self):
         ''' Test bad virtual host'''

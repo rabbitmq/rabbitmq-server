@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2019-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2019-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_env_SUITE).
@@ -19,7 +19,7 @@
          end_per_group/2,
          init_per_testcase/2,
          end_per_testcase/2,
-         check_data_dir/1,
+         check_home_dir/1,
          check_default_values/1,
          check_values_from_reachable_remote_node/1,
          check_values_from_offline_remote_node/1,
@@ -53,18 +53,18 @@
          check_RABBITMQ_PRODUCT_VERSION/1,
          check_RABBITMQ_QUORUM_DIR/1,
          check_RABBITMQ_STREAM_DIR/1,
-         check_RABBITMQ_UPGRADE_LOG/1,
          check_RABBITMQ_USE_LOGNAME/1,
          check_value_is_yes/1,
          check_log_process_env/1,
          check_log_context/1,
          check_get_used_env_vars/1,
-         check_parse_conf_env_file_output/1
+         check_parse_conf_env_file_output/1,
+         check_parse_conf_env_file_output_win32/1
         ]).
 
 all() ->
     [
-     check_data_dir,
+     check_home_dir,
      check_default_values,
      check_values_from_reachable_remote_node,
      check_values_from_offline_remote_node,
@@ -97,13 +97,13 @@ all() ->
      check_RABBITMQ_PRODUCT_NAME,
      check_RABBITMQ_PRODUCT_VERSION,
      check_RABBITMQ_QUORUM_DIR,
-     check_RABBITMQ_UPGRADE_LOG,
      check_RABBITMQ_USE_LOGNAME,
      check_value_is_yes,
      check_log_process_env,
      check_log_context,
      check_get_used_env_vars,
-     check_parse_conf_env_file_output
+     check_parse_conf_env_file_output,
+     check_parse_conf_env_file_output_win32
     ].
 
 suite() ->
@@ -128,7 +128,7 @@ end_per_group(_, Config) -> Config.
 init_per_testcase(_, Config) -> Config.
 end_per_testcase(_, Config) -> Config.
 
-check_data_dir(_) ->
+check_home_dir(_) ->
     {Variable, ExpValue} = case os:type() of
                                {win32, _} ->
                                    {"RABBITMQ_BASE",
@@ -139,11 +139,11 @@ check_data_dir(_) ->
                            end,
     Value = "value of " ++ Variable,
     os:putenv(Variable, Value),
-    ?assertMatch(#{data_dir := ExpValue}, rabbit_env:get_context()),
+    ?assertMatch(#{home_dir := ExpValue}, rabbit_env:get_context()),
 
     os:unsetenv(Variable),
-    ?assertNotMatch(#{data_dir := ExpValue}, rabbit_env:get_context()),
-    ?assertMatch(#{data_dir := _}, rabbit_env:get_context()),
+    ?assertNotMatch(#{home_dir := ExpValue}, rabbit_env:get_context()),
+    ?assertMatch(#{home_dir := _}, rabbit_env:get_context()),
 
     os:unsetenv(Variable).
 
@@ -191,8 +191,8 @@ check_default_values(_) ->
       log_levels => default,
       main_config_file => default,
       main_log_file => default,
-      mnesia_base_dir => default,
-      mnesia_dir => default,
+      data_base_dir => default,
+      data_dir => default,
       motd_file => default,
       nodename => default,
       nodename_type => default,
@@ -205,8 +205,7 @@ check_default_values(_) ->
       product_version => default,
       quorum_queue_dir => default,
       rabbitmq_home => default,
-      stream_queue_dir => default,
-      upgrade_log_file => default
+      stream_queue_dir => default
      },
 
     ?assertEqual(
@@ -216,7 +215,7 @@ check_default_values(_) ->
          amqp_tcp_port => 5672,
          conf_env_file => "/etc/rabbitmq/rabbitmq-env.conf",
          config_base_dir => "/etc/rabbitmq",
-         data_dir => "/var/lib/rabbitmq",
+         home_dir => "/var/lib/rabbitmq",
          dbg_mods => [],
          dbg_output => stdout,
          default_user => undefined,
@@ -236,8 +235,8 @@ check_default_values(_) ->
          log_levels => undefined,
          main_config_file => "/etc/rabbitmq/rabbitmq",
          main_log_file => "/var/log/rabbitmq/" ++ NodeS ++ ".log",
-         mnesia_base_dir => "/var/lib/rabbitmq/mnesia",
-         mnesia_dir => "/var/lib/rabbitmq/mnesia/" ++ NodeS,
+         data_base_dir => "/var/lib/rabbitmq/mnesia",
+         data_dir => "/var/lib/rabbitmq/mnesia/" ++ NodeS,
          motd_file => "/etc/rabbitmq/motd",
          nodename => Node,
          nodename_type => shortnames,
@@ -256,8 +255,6 @@ check_default_values(_) ->
            "/var/lib/rabbitmq/mnesia/" ++ NodeS ++ "/stream",
          split_nodename => rabbit_nodes_common:parts(Node),
          sys_prefix => "",
-         upgrade_log_file =>
-           "/var/log/rabbitmq/" ++ NodeS ++ "_upgrade.log",
 
          var_origins => Origins#{sys_prefix => default}},
        UnixContext),
@@ -269,7 +266,7 @@ check_default_values(_) ->
          amqp_tcp_port => 5672,
          conf_env_file => "%APPDATA%/RabbitMQ/rabbitmq-env-conf.bat",
          config_base_dir => "%APPDATA%/RabbitMQ",
-         data_dir => "%APPDATA%/RabbitMQ",
+         home_dir => "%APPDATA%/RabbitMQ",
          dbg_mods => [],
          dbg_output => stdout,
          default_user => undefined,
@@ -289,8 +286,8 @@ check_default_values(_) ->
          log_levels => undefined,
          main_config_file => "%APPDATA%/RabbitMQ/rabbitmq",
          main_log_file => "%APPDATA%/RabbitMQ/log/" ++ NodeS ++ ".log",
-         mnesia_base_dir => "%APPDATA%/RabbitMQ/db",
-         mnesia_dir => "%APPDATA%/RabbitMQ/db/" ++ NodeS ++ "-mnesia",
+         data_base_dir => "%APPDATA%/RabbitMQ/db",
+         data_dir => "%APPDATA%/RabbitMQ/db/" ++ NodeS ++ "-mnesia",
          motd_file => "%APPDATA%/RabbitMQ/motd.txt",
          nodename => Node,
          nodename_type => shortnames,
@@ -309,8 +306,6 @@ check_default_values(_) ->
          stream_queue_dir =>
            "%APPDATA%/RabbitMQ/db/" ++ NodeS ++ "-mnesia/stream",
          split_nodename => rabbit_nodes_common:parts(Node),
-         upgrade_log_file =>
-           "%APPDATA%/RabbitMQ/log/" ++ NodeS ++ "_upgrade.log",
 
          var_origins => Origins#{rabbitmq_base => default}},
        Win32Context).
@@ -327,7 +322,7 @@ forced_feature_flags_on_init_expect() ->
 check_values_from_reachable_remote_node(Config) ->
     PrivDir = ?config(priv_dir, Config),
 
-    MnesiaDir = filename:join(PrivDir, "mnesia"),
+    DataDir = filename:join(PrivDir, "mnesia"),
     RabbitAppDir = filename:join(PrivDir, "rabbit"),
     RabbitEbinDir = filename:join(RabbitAppDir, "ebin"),
 
@@ -335,7 +330,7 @@ check_values_from_reachable_remote_node(Config) ->
     PluginsDir = filename:join(PrivDir, "plugins"),
     EnabledPluginsFile = filename:join(PrivDir, "enabled_plugins"),
 
-    ok = file:make_dir(MnesiaDir),
+    ok = file:make_dir(DataDir),
     ok = file:make_dir(RabbitAppDir),
     ok = file:make_dir(RabbitEbinDir),
 
@@ -344,7 +339,7 @@ check_values_from_reachable_remote_node(Config) ->
            rabbit,
            [{vsn, "fake-rabbit"}]},
     AppFile = filename:join(RabbitEbinDir, "rabbit.app"),
-    AppContent = io_lib:format("~p.~n", [App]),
+    AppContent = io_lib:format("~tp.~n", [App]),
     ok = file:write_file(AppFile, AppContent),
 
     %% Start a fake RabbitMQ node.
@@ -359,13 +354,13 @@ check_values_from_reachable_remote_node(Config) ->
             "-pa", filename:dirname(code:which(rabbit)),
             "-pa", RabbitEbinDir,
             "-mnesia", "dir",
-            rabbit_misc:format("~p", [MnesiaDir]),
+            rabbit_misc:format("~tp", [DataDir]),
             "-rabbit", "feature_flags_file",
-            rabbit_misc:format("~p", [FeatureFlagsFile]),
+            rabbit_misc:format("~tp", [FeatureFlagsFile]),
             "-rabbit", "plugins_dir",
-            rabbit_misc:format("~p", [PluginsDir]),
+            rabbit_misc:format("~tp", [PluginsDir]),
             "-rabbit", "enabled_plugins_file",
-            rabbit_misc:format("~p", [EnabledPluginsFile]),
+            rabbit_misc:format("~tp", [EnabledPluginsFile]),
             "-eval",
             "ok = application:load(mnesia),"
             "ok = application:load(rabbit)."],
@@ -377,7 +372,7 @@ check_values_from_reachable_remote_node(Config) ->
                     exit_status,
                     stderr_to_stdout],
     ct:pal(
-      "Starting fake RabbitMQ node with the following settings:~n~p",
+      "Starting fake RabbitMQ node with the following settings:~n~tp",
       [PortSettings]),
     Pid = spawn_link(
             fun() ->
@@ -416,8 +411,8 @@ check_values_from_reachable_remote_node(Config) ->
           log_levels => default,
           main_config_file => default,
           main_log_file => default,
-          mnesia_base_dir => default,
-          mnesia_dir => remote_node,
+          data_base_dir => default,
+          data_dir => remote_node,
           motd_file => default,
           nodename => environment,
           nodename_type => default,
@@ -430,8 +425,7 @@ check_values_from_reachable_remote_node(Config) ->
           product_version => default,
           quorum_queue_dir => default,
           rabbitmq_home => default,
-          stream_queue_dir => default,
-          upgrade_log_file => default
+          stream_queue_dir => default
          },
 
         ?assertEqual(
@@ -441,7 +435,7 @@ check_values_from_reachable_remote_node(Config) ->
              amqp_tcp_port => 5672,
              conf_env_file => "/etc/rabbitmq/rabbitmq-env.conf",
              config_base_dir => "/etc/rabbitmq",
-             data_dir => "/var/lib/rabbitmq",
+             home_dir => "/var/lib/rabbitmq",
              dbg_mods => [],
              dbg_output => stdout,
              default_user => undefined,
@@ -461,8 +455,8 @@ check_values_from_reachable_remote_node(Config) ->
              log_levels => undefined,
              main_config_file => "/etc/rabbitmq/rabbitmq",
              main_log_file => "/var/log/rabbitmq/" ++ NodeS ++ ".log",
-             mnesia_base_dir => undefined,
-             mnesia_dir => MnesiaDir,
+             data_base_dir => undefined,
+             data_dir => DataDir,
              motd_file => undefined,
              nodename => Node,
              nodename_type => shortnames,
@@ -473,13 +467,11 @@ check_values_from_reachable_remote_node(Config) ->
              plugins_path => PluginsDir,
              product_name => undefined,
              product_version => undefined,
-             quorum_queue_dir => MnesiaDir ++ "/quorum",
+             quorum_queue_dir => DataDir ++ "/quorum",
              rabbitmq_home => maps:get(rabbitmq_home, UnixContext),
-             stream_queue_dir => MnesiaDir ++ "/stream",
+             stream_queue_dir => DataDir ++ "/stream",
              split_nodename => rabbit_nodes_common:parts(Node),
              sys_prefix => "",
-             upgrade_log_file =>
-               "/var/log/rabbitmq/" ++ NodeS ++ "_upgrade.log",
 
              var_origins => Origins#{sys_prefix => default}},
            UnixContext)
@@ -494,7 +486,7 @@ consume_stdout(Port, Nodename) ->
         {Port, {exit_status, X}} ->
             ?assertEqual(0, X);
         {Port, {data, Out}} ->
-            ct:pal("stdout: ~p", [Out]),
+            ct:pal("stdout: ~tp", [Out]),
             consume_stdout(Port, Nodename)
     end.
 
@@ -541,8 +533,8 @@ check_values_from_offline_remote_node(_) ->
       log_levels => default,
       main_config_file => default,
       main_log_file => default,
-      mnesia_base_dir => default,
-      mnesia_dir => default,
+      data_base_dir => default,
+      data_dir => default,
       motd_file => default,
       nodename => environment,
       nodename_type => default,
@@ -555,8 +547,7 @@ check_values_from_offline_remote_node(_) ->
       product_version => default,
       quorum_queue_dir => default,
       rabbitmq_home => default,
-      stream_queue_dir => default,
-      upgrade_log_file => default
+      stream_queue_dir => default
      },
 
     ?assertEqual(
@@ -566,7 +557,7 @@ check_values_from_offline_remote_node(_) ->
          amqp_tcp_port => 5672,
          conf_env_file => "/etc/rabbitmq/rabbitmq-env.conf",
          config_base_dir => "/etc/rabbitmq",
-         data_dir => "/var/lib/rabbitmq",
+         home_dir => "/var/lib/rabbitmq",
          dbg_mods => [],
          dbg_output => stdout,
          default_user => undefined,
@@ -586,8 +577,8 @@ check_values_from_offline_remote_node(_) ->
          log_levels => undefined,
          main_config_file => "/etc/rabbitmq/rabbitmq",
          main_log_file => "/var/log/rabbitmq/" ++ NodeS ++ ".log",
-         mnesia_base_dir => undefined,
-         mnesia_dir => undefined,
+         data_base_dir => undefined,
+         data_dir => undefined,
          motd_file => undefined,
          nodename => Node,
          nodename_type => shortnames,
@@ -603,8 +594,6 @@ check_values_from_offline_remote_node(_) ->
          stream_queue_dir => undefined,
          split_nodename => rabbit_nodes_common:parts(Node),
          sys_prefix => "",
-         upgrade_log_file =>
-           "/var/log/rabbitmq/" ++ NodeS ++ "_upgrade.log",
 
          var_origins => Origins#{sys_prefix => default}},
        UnixContext).
@@ -617,7 +606,7 @@ check_context_to_app_env_vars(_) ->
 
     persistent_term:erase({rabbit_env, os_type}),
 
-    Vars = [{mnesia, dir, maps:get(mnesia_dir, UnixContext)},
+    Vars = [{mnesia, dir, maps:get(data_dir, UnixContext)},
             {ra, data_dir, maps:get(quorum_queue_dir, UnixContext)},
             {osiris, data_dir, maps:get(stream_queue_dir, UnixContext)},
             {rabbit, feature_flags_file,
@@ -658,11 +647,11 @@ check_context_to_app_env_vars(_) ->
 check_context_to_code_path(Config) ->
     PrivDir = ?config(priv_dir, Config),
     PluginsDir1 = filename:join(
-                     PrivDir, rabbit_misc:format("~s-1", [?FUNCTION_NAME])),
+                     PrivDir, rabbit_misc:format("~ts-1", [?FUNCTION_NAME])),
     MyPlugin1Dir = filename:join(PluginsDir1, "my_plugin1"),
     MyPlugin1EbinDir = filename:join(MyPlugin1Dir, "ebin"),
     PluginsDir2 = filename:join(
-                     PrivDir, rabbit_misc:format("~s-2", [?FUNCTION_NAME])),
+                     PrivDir, rabbit_misc:format("~ts-2", [?FUNCTION_NAME])),
     MyPlugin2Dir = filename:join(PluginsDir2, "my_plugin2"),
     MyPlugin2EbinDir = filename:join(MyPlugin2Dir, "ebin"),
 
@@ -809,8 +798,8 @@ check_RABBITMQ_ENABLED_PLUGINS(_) ->
     check_prefixed_variable("RABBITMQ_ENABLED_PLUGINS",
                             enabled_plugins,
                             '_',
-                            rabbit_misc:format("~s,~s", Value1), Value1,
-                            rabbit_misc:format("~s,~s", Value2), Value2).
+                            rabbit_misc:format("~ts,~ts", Value1), Value1,
+                            rabbit_misc:format("~ts,~ts", Value2), Value2).
 
 check_RABBITMQ_ENABLED_PLUGINS_FILE(_) ->
     Value1 = random_string(),
@@ -907,20 +896,11 @@ check_RABBITMQ_LOGS(_) ->
                             Value1, Value1,
                             Value2, Value2).
 
-check_RABBITMQ_UPGRADE_LOG(_) ->
-    Value1 = random_string(),
-    Value2 = random_string(),
-    check_prefixed_variable("RABBITMQ_UPGRADE_LOG",
-                            upgrade_log_file,
-                            '_',
-                            Value1, Value1,
-                            Value2, Value2).
-
 check_RABBITMQ_MNESIA_BASE(_) ->
     Value1 = random_string(),
     Value2 = random_string(),
     check_prefixed_variable("RABBITMQ_MNESIA_BASE",
-                            mnesia_base_dir,
+                            data_base_dir,
                             '_',
                             Value1, Value1,
                             Value2, Value2).
@@ -929,7 +909,7 @@ check_RABBITMQ_MNESIA_DIR(_) ->
     Value1 = random_string(),
     Value2 = random_string(),
     check_prefixed_variable("RABBITMQ_MNESIA_DIR",
-                            mnesia_dir,
+                            data_dir,
                             '_',
                             Value1, Value1,
                             Value2, Value2).
@@ -1126,6 +1106,26 @@ get_default_nodename() ->
               "rabbit@\\1",
               [{return, list}]),
     list_to_atom(NodeS).
+
+check_parse_conf_env_file_output_win32(_) ->
+    ?assertEqual(
+       #{},
+       rabbit_env:parse_conf_env_file_output_win32(
+         [],
+         #{}
+        )),
+    ?assertEqual(
+       #{"UNQUOTED" => "a",
+         "UNICODE" => [39, 43, 43, 32, 1550, 32, 39],
+         "DOUBLE_QUOTED" => "c"},
+       rabbit_env:parse_conf_env_file_output_win32(
+         %% a relatively rarely used Unicode character
+         ["++ ؎ ",
+          "UNQUOTED=a",
+          "UNICODE='++ ؎ '",
+          "DOUBLE_QUOTED=\"c\""],
+         #{}
+        )).
 
 check_parse_conf_env_file_output(_) ->
     ?assertEqual(

@@ -30,16 +30,16 @@ def _build_info(ctx):
 
 def erlang_dirs(ctx):
     info = _build_info(ctx)
-    if info.release_dir != None:
+    if info.release_dir_tar != None:
         runfiles = ctx.runfiles([
-            info.release_dir,
+            info.release_dir_tar,
             info.version_file,
         ])
     else:
         runfiles = ctx.runfiles([
             info.version_file,
         ])
-    return (info.erlang_home, info.release_dir, runfiles)
+    return (info.erlang_home, info.release_dir_tar, runfiles)
 
 def elixir_dirs(ctx, short_path = False):
     info = ctx.toolchains[":toolchain_type"].elixirinfo
@@ -51,15 +51,14 @@ def elixir_dirs(ctx, short_path = False):
 
 def maybe_install_erlang(ctx, short_path = False):
     info = _build_info(ctx)
-    release_dir = info.release_dir
-    if release_dir == None:
+    release_dir_tar = info.release_dir_tar
+    if release_dir_tar == None:
         return ""
     else:
-        return """mkdir -p $(dirname "{erlang_home}")
-cp -r {erlang_release_dir} "{erlang_home}"
-ERTS_DIRNAME="$(basename "$(echo "{erlang_home}"/erts-*)")"
-ln -sf ../$ERTS_DIRNAME/bin/epmd "{erlang_home}"/bin/epmd
-""".format(
-            erlang_release_dir = release_dir.short_path if short_path else release_dir.path,
+        return """\
+tar --extract \\
+    --directory / \\
+    --file {release_tar}""".format(
+            release_tar = release_dir_tar.short_path if short_path else release_dir_tar.path,
             erlang_home = info.erlang_home,
         )

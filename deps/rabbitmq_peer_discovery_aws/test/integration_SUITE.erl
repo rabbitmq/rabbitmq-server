@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(integration_SUITE).
@@ -155,16 +155,22 @@ task_json(Config, RabbitmqConf) ->
     RabbitmqImage = ?config(rabbitmq_image, Config),
     RabbitmqErlangCookie = ?config(rabbitmq_erlang_cookie, Config),
     ServiceName = ?config(ecs_service_name, Config),
+    ClusterName = ?config(ecs_cluster_name, Config),
 
     {ok, Binary} = file:read_file(filename:join(DataDir, "task_definition.json")),
     TaskDef = rabbit_json:decode(Binary),
 
     [RabbitContainerDef, SidecarContainerDef] = maps:get(<<"containerDefinitions">>, TaskDef),
+    LogConfiguration = maps:get(<<"logConfiguration">>, RabbitContainerDef),
+    Options = maps:get(<<"options">>, LogConfiguration),
+    Options1 = Options#{<<"awslogs-stream-prefix">> := list_to_binary(ClusterName)},
+    LogConfiguration1 = LogConfiguration#{<<"options">> := Options1},
     RabbitContainerDef1 =
         RabbitContainerDef#{
                             <<"image">> := list_to_binary(RabbitmqImage),
                             <<"environment">> := [#{<<"name">> => <<"RABBITMQ_ERLANG_COOKIE">>,
-                                                    <<"value">> => list_to_binary(RabbitmqErlangCookie)}]
+                                                    <<"value">> => list_to_binary(RabbitmqErlangCookie)}],
+                            <<"logConfiguration">> := LogConfiguration1
                            },
     SidecarContainerDef1 =
         SidecarContainerDef#{<<"environment">> := [#{<<"name">> => <<"DATA">>,

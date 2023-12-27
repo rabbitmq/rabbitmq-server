@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_queue_get).
@@ -64,7 +64,7 @@ do_it(ReqData0, Context) ->
                                 end,
 
                         Reply = basic_gets(Count, Ch, Q, AckMode, Enc, Trunc),
-                        maybe_rejects(Reply, Ch, AckMode),
+                        maybe_return(Reply, Ch, AckMode),
                         rabbit_mgmt_util:reply(remove_delivery_tag(Reply),
 					       ReqData, Context)
                 end)
@@ -96,11 +96,11 @@ parse_ackmode(reject_requeue_true) -> false.
 % the messages must rejects later,
 % because we get always the same message if the
 % messages are requeued inside basic_get/5
-maybe_rejects(R, Ch, AckMode) ->
+maybe_return(R, Ch, AckMode) ->
     lists:foreach(fun(X) ->
-			  maybe_reject(Ch, AckMode,
-				       proplists:get_value(delivery_tag, X))
-		  end, R).
+                          maybe_reject_or_nack(Ch, AckMode,
+                                               proplists:get_value(delivery_tag, X))
+                  end, R).
 
 % removes the delivery_tag from the reply.
 % it is not necessary
@@ -109,12 +109,18 @@ remove_delivery_tag([H|T]) ->
     [proplists:delete(delivery_tag, H) | [X || X <- remove_delivery_tag(T)]].
 
 
-maybe_reject(Ch, AckMode, DeliveryTag) when AckMode == reject_requeue_true;
-					    AckMode == reject_requeue_false ->
+maybe_reject_or_nack(Ch, AckMode, DeliveryTag)
+  when AckMode == reject_requeue_true;
+       AckMode == reject_requeue_false ->
     amqp_channel:call(Ch,
-		      #'basic.reject'{delivery_tag = DeliveryTag,
-				      requeue = ackmode_to_requeue(AckMode)});
-maybe_reject(_Ch, _AckMode, _DeliveryTag) -> ok.
+                      #'basic.reject'{delivery_tag = DeliveryTag,
+                                      requeue = ackmode_to_requeue(AckMode)});
+maybe_reject_or_nack(Ch, ack_requeue_true, DeliveryTag) ->
+    amqp_channel:call(Ch,
+                      #'basic.nack'{delivery_tag = DeliveryTag,
+                                    multiple = false,
+                                    requeue = true});
+maybe_reject_or_nack(_Ch, _AckMode, _DeliveryTag) -> ok.
 
 
 basic_get(Ch, Q, AckMode, Enc, Trunc) ->

@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+
+TEST_PATH=${1:?"First parameter must be the test path"}
+TEMPLATE_FILE_PREFIX=${2:?"Second parameter must be the template file prefix"}
+TEMPLATE_FILE_SUFFIX=${3:-""}
+TEST_PARENT_PATH="$(dirname "$TEST_PATH")"
+
+find_templates_files() {
+  find_template_files_in $TEST_PARENT_PATH
+  find_template_files_in $TEST_PATH
+
+}
+find_template_files_in() {
+
+  for file in $1/${TEMPLATE_FILE_PREFIX}.*${TEMPLATE_FILE_SUFFIX}
+  do
+    if [ ! -f $file ]
+    then
+      continue
+    fi
+    entry="$(basename $file)"
+    prefix=${entry#$TEMPLATE_FILE_PREFIX.*}
+    if [[ $prefix == $TEMPLATE_FILE_SUFFIX ]]
+    then
+      echo "$1/${TEMPLATE_FILE_PREFIX}.${TEMPLATE_FILE_SUFFIX}"
+    else
+      profiles=${prefix%.$TEMPLATE_FILE_SUFFIX}
+      matched_entry=true
+      for p in ${profiles//./ }
+      do
+        if [[ "$PROFILES" != *"$p"* && $matched_entry == true ]]; then
+          matched_entry=false
+        fi
+      done
+      if [[ $matched_entry == true ]]; then
+        echo "$file"
+      fi
+    fi
+
+  done
+}
+
+
+find_templates_files

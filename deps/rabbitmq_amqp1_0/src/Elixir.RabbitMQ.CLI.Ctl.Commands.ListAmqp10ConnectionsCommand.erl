@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 -module('Elixir.RabbitMQ.CLI.Ctl.Commands.ListAmqp10ConnectionsCommand').
 
@@ -29,8 +29,9 @@ switches() -> [{verbose, boolean}].
 aliases() -> [{'V', verbose}].
 
 validate(Args, _) ->
+    ValidKeys = lists:map(fun atom_to_list/1, ?INFO_ITEMS),
     case 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':validate_info_keys(Args,
-                                                               ?INFO_ITEMS) of
+                                                               ValidKeys) of
         {ok, _} -> ok;
         Error   -> Error
     end.

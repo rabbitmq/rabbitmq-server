@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 -module(rabbit_health_check).
 
@@ -59,7 +59,7 @@ node_health_check(rabbit_node_monitor) ->
         [] ->
             ok;
         L when is_list(L), length(L) > 0 ->
-            ErrorMsg = io_lib:format("cluster partition in effect: ~p", [L]),
+            ErrorMsg = io_lib:format("cluster partition in effect: ~tp", [L]),
             {error_string, ErrorMsg}
     end;
 
@@ -72,7 +72,7 @@ node_health_check(alarms) ->
         [] ->
             ok;
         Alarms ->
-            ErrorMsg = io_lib:format("resource alarm(s) in effect:~p", [Alarms]),
+            ErrorMsg = io_lib:format("resource alarm(s) in effect:~tp", [Alarms]),
             {error_string, ErrorMsg}
     end.
 

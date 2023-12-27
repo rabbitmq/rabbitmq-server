@@ -1,10 +1,9 @@
 <h1>Users</h1>
 <div class="section">
-  <h2>All users</h2>
-  <div class="hider">
-<%= filter_ui(users) %>
-  <div class="updatable">
-<% if (users.length > 0) { %>
+    <%= paginate_ui(users, 'users') %>
+</div>
+<div class="updatable">
+    <% if (users.items.length > 0) { %>
 <table class="list">
   <thead>
     <tr>
@@ -16,8 +15,8 @@
   </thead>
   <tbody>
     <%
-       for (var i = 0; i < users.length; i++) {
-         var user = users[i];
+       for (var i = 0; i < users.items.length; i++) {
+         var user = users.items[i];
     %>
        <tr<%= alt_rows(i)%>>
          <td><%= link_user(user.name) %></td>

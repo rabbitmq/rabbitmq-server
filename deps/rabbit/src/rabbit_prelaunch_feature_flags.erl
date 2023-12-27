@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_prelaunch_feature_flags).
@@ -19,6 +19,13 @@ setup(#{feature_flags_file := FFFile}) ->
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     case filelib:ensure_dir(FFFile) of
         ok ->
+            %% On boot, we know that there should be no registry loaded at
+            %% first. There could be a loaded registry around during a
+            %% stop_app/start_app, so reset it here. This ensures that e.g.
+            %% any change to the configuration file w.r.t. deprecated features
+            %% are taken into account.
+            rabbit_feature_flags:reset_registry(),
+
             ?LOG_DEBUG(
                "Initializing feature flags registry", [],
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
@@ -27,7 +34,7 @@ setup(#{feature_flags_file := FFFile}) ->
                     ok;
                 {error, Reason} ->
                     ?LOG_ERROR(
-                      "Failed to initialize feature flags registry: ~p",
+                      "Failed to initialize feature flags registry: ~tp",
                       [Reason],
                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                     throw({error, failed_to_initialize_feature_flags_registry})

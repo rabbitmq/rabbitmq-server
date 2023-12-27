@@ -1,3 +1,4 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
@@ -8,6 +9,14 @@ load(
     "rabbitmq_app",
     "rabbitmq_integration_suite",
     "rabbitmq_suite",
+    "without",
+)
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
 )
 
 APP_NAME = "rabbitmq_peer_discovery_etcd"
@@ -16,59 +25,92 @@ APP_DESCRIPTION = "etcd-based RabbitMQ peer discovery backend"
 
 APP_MODULE = "rabbitmq_peer_discovery_etcd_app"
 
-DEPS = [
-    "//deps/rabbit_common:erlang_app",
-    "//deps/rabbitmq_peer_discovery_common:erlang_app",
-]
+all_beam_files(name = "all_beam_files")
 
-RUNTIME_DEPS = [
-    "//deps/rabbit:erlang_app",
-    "@eetcd//:erlang_app",
-    "@gun//:erlang_app",
-]
+all_test_beam_files(name = "all_test_beam_files")
+
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
+
+# gazelle:erlang_app_dep rabbit
+# gazelle:erlang_app_dep gun
+# gazelle:erlang_app_dep_exclude credentials_obfuscation
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_module = APP_MODULE,
     app_name = APP_NAME,
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbitmq_peer_discovery_common:erlang_app",
+        "@eetcd//:erlang_app",
+        "@gun//:erlang_app",
+    ],
 )
 
-xref()
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
 
 plt(
-    name = "base_plt",
-    deps = DEPS,
+    name = "deps_plt",
+    # rather that setting for_target, which will include @gun
+    # (via @eetcd) and fail, we produce the equivalent plt
+    # without it
+    for_target = None,  # keep
+    ignore_warnings = True,
+    plt = "//:base_plt",
+    deps = [
+        "//deps/rabbit:erlang_app",  # keep
+        "//deps/rabbit_common:erlang_app",  # keep
+        "//deps/rabbitmq_peer_discovery_common:erlang_app",  # keep
+    ],
 )
 
 dialyze(
-    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":base_plt",
-    warnings_as_errors = False,
+    name = "dialyze",
+    dialyzer_opts = without(
+        "-Wunknown",  # also because of `eetcd'
+        RABBITMQ_DIALYZER_OPTS,
+    ),
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
+
+eunit(
+    name = "eunit",
+    target = ":test_erlang_app",
 )
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_peer_discovery_etcd"
+rabbitmq_integration_suite(
+    name = "config_schema_SUITE",
+)
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "config_schema_SUITE",
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "system_SUITE",
-        size = "medium",
-    ),
-    rabbitmq_suite(
-        name = "unit_SUITE",
-        size = "small",
-    ),
-]
+rabbitmq_integration_suite(
+    name = "system_SUITE",
+    size = "medium",
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+rabbitmq_suite(
+    name = "unit_SUITE",
+    size = "small",
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_peer_discovery_etcd",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

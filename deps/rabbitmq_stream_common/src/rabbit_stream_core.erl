@@ -30,7 +30,7 @@
 -define(STRING(Str), (byte_size(Str)):16, Str / binary).
 -define(DATASTR(Str), (byte_size(Str)):32, Str / binary).
 
--export_type([state/0]).
+-export_type([state/0, command_version/0]).
 
 -type command_version() :: 0..65535.
 -type correlation_id() :: non_neg_integer().
@@ -58,7 +58,9 @@
     ?RESPONSE_CODE_ACCESS_REFUSED |
     ?RESPONSE_CODE_PRECONDITION_FAILED |
     ?RESPONSE_CODE_PUBLISHER_DOES_NOT_EXIST |
-    ?RESPONSE_CODE_NO_OFFSET.
+    ?RESPONSE_CODE_NO_OFFSET |
+    ?RESPONSE_SASL_CANNOT_CHANGE_MECHANISM |
+    ?RESPONSE_SASL_CANNOT_CHANGE_USERNAME .
 -type error_code() :: response_code().
 -type sequence() :: non_neg_integer().
 -type credit() :: non_neg_integer().
@@ -67,6 +69,10 @@
 -type active() :: boolean().
 -type command() ::
     {publish,
+     publisher_id(),
+     MessageCount :: non_neg_integer(),
+     Payload :: binary() | iolist()} |
+    {publish_v2,
      publisher_id(),
      MessageCount :: non_neg_integer(),
      Payload :: binary() | iolist()} |
@@ -109,7 +115,9 @@
      {exchange_command_versions,
       [{Command :: atom(), MinVersion :: command_version(),
         MaxVersion :: command_version()}]} |
-     {stream_stats, Stream :: binary()}} |
+     {stream_stats, Stream :: binary()} |
+     {create_super_stream, stream_name(), Partitions :: [binary()], BindingKeys :: [binary()], Args :: #{binary() => binary()}} |
+     {delete_super_stream, stream_name()}} |
     {response, correlation_id(),
      {declare_publisher |
       delete_publisher |
@@ -118,7 +126,9 @@
       create_stream |
       delete_stream |
       close |
-      sasl_authenticate,
+      sasl_authenticate |
+      create_super_stream |
+      delete_super_stream,
       response_code()} |
      {query_publisher_sequence, response_code(), sequence()} |
      {open, response_code(), #{binary() => binary()}} |
@@ -134,7 +144,7 @@
      {tune, FrameMax :: non_neg_integer(),
       HeartBeat :: non_neg_integer()} |
      {credit, response_code(), subscription_id()} |
-     {route, response_code(), stream_name()} |
+     {route, response_code(), [stream_name()]} |
      {partitions, response_code(), [stream_name()]} |
      {consumer_update, response_code(), none | offset_spec()} |
      {exchange_command_versions, response_code(),
@@ -236,6 +246,13 @@ frame({publish, PublisherId, MessageCount, Payload}) ->
     wrap_in_frame([<<?REQUEST:1,
                      ?COMMAND_PUBLISH:15,
                      ?VERSION_1:16,
+                     PublisherId:8,
+                     MessageCount:32>>,
+                   Payload]);
+frame({publish_v2, PublisherId, MessageCount, Payload}) ->
+    wrap_in_frame([<<?REQUEST:1,
+                     ?COMMAND_PUBLISH:15,
+                     ?VERSION_2:16,
                      PublisherId:8,
                      MessageCount:32>>,
                    Payload]);
@@ -442,8 +459,9 @@ response_body({metadata = Tag, Endpoints, Metadata}) ->
 
     NumStreams = map_size(Metadata),
     {command_id(Tag), [EndpointsBin, <<NumStreams:32>>, MetadataBin]};
-response_body({route = Tag, Code, Stream}) ->
-    {command_id(Tag), <<Code:16, ?STRING(Stream)>>};
+response_body({route = Tag, Code, Streams}) ->
+    StreamsBin = [<<?STRING(Stream)>> || Stream <- Streams],
+    {command_id(Tag), [<<Code:16, (length(Streams)):32>>, StreamsBin]};
 response_body({partitions = Tag, Code, Streams}) ->
     StreamsBin = [<<?STRING(Stream)>> || Stream <- Streams],
     {command_id(Tag), [<<Code:16, (length(Streams)):32>>, StreamsBin]};
@@ -547,9 +565,7 @@ request_body({create_stream = Tag, Stream, Args}) ->
 request_body({delete_stream = Tag, Stream}) ->
     {Tag, <<?STRING(Stream)>>};
 request_body({metadata = Tag, Streams}) ->
-    StreamsBin =
-        lists:foldr(fun(Stream, Acc) -> [<<?STRING(Stream)>> | Acc] end, [],
-                    Streams),
+    StreamsBin = generate_list(Streams),
     {Tag, [<<(length(Streams)):32>>, StreamsBin]};
 request_body({peer_properties = Tag, Props}) ->
     PropsBin = generate_map(Props),
@@ -591,7 +607,16 @@ request_body({exchange_command_versions = Tag, CommandVersions}) ->
     CommandVersionsLength = length(CommandVersions),
     {Tag, [<<CommandVersionsLength:32>>, CommandVersionsBin]};
 request_body({stream_stats = Tag, Stream}) ->
-    {Tag, <<?STRING(Stream)>>}.
+    {Tag, <<?STRING(Stream)>>};
+request_body({create_super_stream = Tag, SuperStream, Partitions, BindingKeys, Args}) ->
+    PartitionsBin = generate_list(Partitions),
+    BindingKeysBin = generate_list(BindingKeys),
+    ArgsBin = generate_map(Args),
+    {Tag, [<<?STRING(SuperStream), (length(Partitions)):32>>, PartitionsBin,
+           <<(length(BindingKeys)):32>>, BindingKeysBin,
+           <<(map_size(Args)):32>>, ArgsBin]};
+request_body({delete_super_stream = Tag, SuperStream}) ->
+    {Tag, <<?STRING(SuperStream)>>}.
 
 append_data(Prev, Data) when is_binary(Prev) ->
     [Prev, Data];
@@ -620,6 +645,13 @@ parse_request(<<?REQUEST:1,
                 MessageCount:32,
                 Messages/binary>>) ->
     {publish, PublisherId, MessageCount, Messages};
+parse_request(<<?REQUEST:1,
+                ?COMMAND_PUBLISH:15,
+                ?VERSION_2:16,
+                PublisherId:8/unsigned,
+                MessageCount:32,
+                Messages/binary>>) ->
+    {publish_v2, PublisherId, MessageCount, Messages};
 parse_request(<<?REQUEST:1,
                 ?COMMAND_PUBLISH_CONFIRM:15,
                 ?VERSION_1:16,
@@ -864,6 +896,23 @@ parse_request(<<?REQUEST:1,
                 CorrelationId:32,
                 ?STRING(StreamSize, Stream)>>) ->
     request(CorrelationId, {stream_stats, Stream});
+parse_request(<<?REQUEST:1,
+                ?COMMAND_CREATE_SUPER_STREAM:15,
+                ?VERSION_1:16,
+                CorrelationId:32,
+                ?STRING(StreamSize, Stream),
+                PartitionsCount:32,
+                Rest0/binary>>) ->
+    {Partitions, <<BindingKeysCount:32, Rest1/binary>>} = list_of_strings(PartitionsCount, Rest0),
+    {BindingKeys, <<_ArgumentsCount:32, Rest2/binary>>} = list_of_strings(BindingKeysCount, Rest1),
+    Args = parse_map(Rest2, #{}),
+    request(CorrelationId, {create_super_stream, Stream, Partitions, BindingKeys, Args});
+parse_request(<<?REQUEST:1,
+                ?COMMAND_DELETE_SUPER_STREAM:15,
+                ?VERSION_1:16,
+                CorrelationId:32,
+                ?STRING(SuperStreamSize, SuperStream)>>) ->
+    request(CorrelationId, {delete_super_stream, SuperStream});
 parse_request(Bin) ->
     {unknown, Bin}.
 
@@ -934,8 +983,9 @@ parse_response_body(?COMMAND_SASL_AUTHENTICATE,
         end,
     {sasl_authenticate, ResponseCode, Challenge};
 parse_response_body(?COMMAND_ROUTE,
-                    <<ResponseCode:16, ?STRING(StreamSize, Stream)>>) ->
-    {route, ResponseCode, Stream};
+                    <<ResponseCode:16, _Count:32, StreamsBin/binary>>) ->
+    Streams = list_of_strings(StreamsBin),
+    {route, ResponseCode, Streams};
 parse_response_body(?COMMAND_PARTITIONS,
                     <<ResponseCode:16, _Count:32, PartitionsBin/binary>>) ->
     Partitions = list_of_strings(PartitionsBin),
@@ -1030,9 +1080,23 @@ parse_int_map(<<>>, Acc) ->
 parse_int_map(<<?STRING(KeySize, Key), Value:64, Rem/binary>>, Acc) ->
     parse_int_map(Rem, Acc#{Key => Value}).
 
+generate_list(List) ->
+    lists:foldr(fun(E, Acc) -> [<<?STRING(E)>> | Acc] end, [],
+                List).
+
 generate_map(Map) ->
     maps:fold(fun(K, V, Acc) -> [<<?STRING(K), ?STRING(V)>> | Acc] end,
               [], Map).
+
+list_of_strings(Count, Bin) ->
+    list_of_strings(Count, [], Bin).
+
+list_of_strings(_, Acc, <<>>) ->
+    {lists:reverse(Acc), <<>>};
+list_of_strings(0, Acc, Rest) ->
+    {lists:reverse(Acc), Rest};
+list_of_strings(Count, Acc, <<?STRING(Size, String), Rem/binary>>) ->
+    list_of_strings(Count - 1, [String | Acc], Rem).
 
 list_of_strings(<<>>) ->
     [];
@@ -1057,6 +1121,8 @@ list_of_longcodes(<<I:64, C:16, Rem/binary>>) ->
 command_id(declare_publisher) ->
     ?COMMAND_DECLARE_PUBLISHER;
 command_id(publish) ->
+    ?COMMAND_PUBLISH;
+command_id(publish_v2) ->
     ?COMMAND_PUBLISH;
 command_id(publish_confirm) ->
     ?COMMAND_PUBLISH_CONFIRM;
@@ -1111,7 +1177,11 @@ command_id(consumer_update) ->
 command_id(exchange_command_versions) ->
     ?COMMAND_EXCHANGE_COMMAND_VERSIONS;
 command_id(stream_stats) ->
-    ?COMMAND_STREAM_STATS.
+    ?COMMAND_STREAM_STATS;
+command_id(create_super_stream) ->
+    ?COMMAND_CREATE_SUPER_STREAM;
+command_id(delete_super_stream) ->
+    ?COMMAND_DELETE_SUPER_STREAM.
 
 parse_command_id(?COMMAND_DECLARE_PUBLISHER) ->
     declare_publisher;
@@ -1168,7 +1238,11 @@ parse_command_id(?COMMAND_CONSUMER_UPDATE) ->
 parse_command_id(?COMMAND_EXCHANGE_COMMAND_VERSIONS) ->
     exchange_command_versions;
 parse_command_id(?COMMAND_STREAM_STATS) ->
-    stream_stats.
+    stream_stats;
+parse_command_id(?COMMAND_CREATE_SUPER_STREAM) ->
+    create_super_stream;
+parse_command_id(?COMMAND_DELETE_SUPER_STREAM) ->
+    delete_super_stream.
 
 element_index(Element, List) ->
     element_index(Element, List, 0).

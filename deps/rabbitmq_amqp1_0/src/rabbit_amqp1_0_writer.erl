@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_amqp1_0_writer).
@@ -14,7 +14,7 @@
 -export([send_command/2, send_command/3,
          send_command_sync/2, send_command_sync/3,
          send_command_and_notify/4, send_command_and_notify/5]).
--export([internal_send_command/4, internal_send_command/6]).
+-export([internal_send_command/4]).
 
 %% internal
 -export([mainloop/1, mainloop1/1]).
@@ -22,7 +22,7 @@
 -record(wstate, {sock, channel, frame_max, protocol, reader,
                  stats_timer, pending}).
 
--define(HIBERNATE_AFTER, 5000).
+-define(HIBERNATE_AFTER, 6_000).
 -define(AMQP_SASL_FRAME_TYPE, 1).
 
 %%---------------------------------------------------------------------------
@@ -62,12 +62,7 @@
         -> 'ok'.
 -spec internal_send_command
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         rabbit_framing:amqp_method_record(), rabbit_types:protocol())
-        -> 'ok'.
--spec internal_send_command
-        (rabbit_net:socket(), rabbit_channel:channel_number(),
-         rabbit_framing:amqp_method_record(), rabbit_types:content(),
-         non_neg_integer(), rabbit_types:protocol())
+         rabbit_framing:amqp_method_record(), 'amqp10_framing' | 'rabbit_amqp1_0_sasl')
         -> 'ok'.
 
 %%---------------------------------------------------------------------------
@@ -147,10 +142,6 @@ handle_message({send_command_and_notify, QPid, ChPid, MethodRecord, Content},
 handle_message({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     rabbit_amqqueue:notify_sent_queue_down(QPid),
     State;
-handle_message({inet_reply, _, ok}, State) ->
-    rabbit_event:ensure_stats_timer(State, #wstate.stats_timer, emit_stats);
-handle_message({inet_reply, _, Status}, _State) ->
-    exit({writer, send_failed, Status});
 handle_message(emit_stats, State = #wstate{reader = ReaderPid}) ->
     ReaderPid ! ensure_stats,
     rabbit_event:reset_stats_timer(State, #wstate.stats_timer);
@@ -192,13 +183,13 @@ call(Pid, Msg) ->
 %% Begin 1-0
 
 assemble_frame(Channel, Performative, amqp10_framing) ->
-    ?DEBUG("Channel ~p <-~n~p",
+    ?DEBUG("Channel ~tp <-~n~tp",
            [Channel, amqp10_framing:pprint(Performative)]),
     PerfBin = amqp10_framing:encode_bin(Performative),
     amqp10_binary_generator:build_frame(Channel, PerfBin);
 
 assemble_frame(Channel, Performative, rabbit_amqp1_0_sasl) ->
-    ?DEBUG("Channel ~p <-~n~p",
+    ?DEBUG("Channel ~tp <-~n~tp",
            [Channel, amqp10_framing:pprint(Performative)]),
     PerfBin = amqp10_framing:encode_bin(Performative),
     amqp10_binary_generator:build_frame(Channel,
@@ -211,7 +202,7 @@ assemble_frame(Channel, Performative, rabbit_amqp1_0_sasl) ->
 
 assemble_frames(Channel, Performative, Content, _FrameMax,
                 amqp10_framing) ->
-    ?DEBUG("Channel ~p <-~n~p~n  followed by ~p bytes of content",
+    ?DEBUG("Channel ~tp <-~n~tp~n  followed by ~tp bytes of content",
            [Channel, amqp10_framing:pprint(Performative),
             iolist_size(Content)]),
     PerfBin = amqp10_framing:encode_bin(Performative),
@@ -225,13 +216,6 @@ tcp_send(Sock, Data) ->
 
 internal_send_command(Sock, Channel, MethodRecord, Protocol) ->
     ok = tcp_send(Sock, assemble_frame(Channel, MethodRecord, Protocol)).
-
-internal_send_command(Sock, Channel, MethodRecord, Content, FrameMax,
-                      Protocol) ->
-    ok = lists:foldl(fun (Frame,     ok) -> tcp_send(Sock, Frame);
-                         (_Frame, Other) -> Other
-                     end, ok, assemble_frames(Channel, MethodRecord,
-                                              Content, FrameMax, Protocol)).
 
 internal_send_command_async(MethodRecord,
                             State = #wstate{channel   = Channel,
@@ -263,30 +247,12 @@ maybe_flush(State = #wstate{pending = Pending}) ->
 
 flush(State = #wstate{pending = []}) ->
     State;
-flush(State = #wstate{sock = Sock, pending = Pending}) ->
-    ok = port_cmd(Sock, lists:reverse(Pending)),
-    State#wstate{pending = []}.
-
-%% gen_tcp:send/2 does a selective receive of {inet_reply, Sock,
-%% Status} to obtain the result. That is bad when it is called from
-%% the writer since it requires scanning of the writers possibly quite
-%% large message queue.
-%%
-%% So instead we lift the code from prim_inet:send/2, which is what
-%% gen_tcp:send/2 calls, do the first half here and then just process
-%% the result code in handle_message/2 as and when it arrives.
-%%
-%% This means we may end up happily sending data down a closed/broken
-%% socket, but that's ok since a) data in the buffers will be lost in
-%% any case (so qualitatively we are no worse off than if we used
-%% gen_tcp:send/2), and b) we do detect the changed socket status
-%% eventually, i.e. when we get round to handling the result code.
-%%
-%% Also note that the port has bounded buffers and port_command blocks
-%% when these are full. So the fact that we process the result
-%% asynchronously does not impact flow control.
-port_cmd(Sock, Data) ->
-    true = try rabbit_net:port_command(Sock, Data)
-           catch error:Error -> exit({writer, send_failed, Error})
-           end,
-    ok.
+flush(State0 = #wstate{sock = Sock, pending = Pending}) ->
+    case rabbit_net:send(Sock, lists:reverse(Pending)) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            exit({writer, send_failed, Reason})
+    end,
+    State = State0#wstate{pending = []},
+    rabbit_event:ensure_stats_timer(State, #wstate.stats_timer, emit_stats).

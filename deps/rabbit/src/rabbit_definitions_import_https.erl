@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 %% This module is responsible for loading definition from an HTTPS endpoint.
@@ -50,7 +50,7 @@ is_enabled() ->
 load(Proplist) ->
     URL = pget(url, Proplist),
     rabbit_log:info("Applying definitions from a remote URL"),
-    rabbit_log:debug("HTTPS URL: ~s", [URL]),
+    rabbit_log:debug("HTTPS URL: ~ts", [URL]),
     TLSOptions = tls_options_or_default(Proplist),
     HTTPOptions = http_options(TLSOptions),
     load_from_url(URL, HTTPOptions).
@@ -59,7 +59,7 @@ load(Proplist) ->
 load_with_hashing(Proplist, PreviousHash, Algo) ->
     URL = pget(url, Proplist),
     rabbit_log:info("Applying definitions from a remote URL"),
-    rabbit_log:debug("Loading definitions with content hashing enabled, HTTPS URL: ~s, previous hash value: ~s",
+    rabbit_log:debug("Loading definitions with content hashing enabled, HTTPS URL: ~ts, previous hash value: ~ts",
                      [URL, rabbit_misc:hexify(PreviousHash)]),
 
     TLSOptions = tls_options_or_default(Proplist),
@@ -68,20 +68,20 @@ load_with_hashing(Proplist, PreviousHash, Algo) ->
     case httpc_get(URL, HTTPOptions) of
         %% 2XX
         {ok, {{_, Code, _}, _Headers, Body}} when Code div 100 == 2 ->
-            rabbit_log:debug("Requested definitions from remote URL '~s', response code: ~b", [URL, Code]),
-            rabbit_log:debug("Requested definitions from remote URL '~s', body: ~p", [URL, Body]),
+            rabbit_log:debug("Requested definitions from remote URL '~ts', response code: ~b", [URL, Code]),
+            rabbit_log:debug("Requested definitions from remote URL '~ts', body: ~tp", [URL, Body]),
             case rabbit_definitions_hashing:hash(Algo, Body) of
                 PreviousHash -> PreviousHash;
                 Other        ->
-                    rabbit_log:debug("New hash: ~s", [rabbit_misc:hexify(Other)]),
-                    import_raw(Body),
+                    rabbit_log:debug("New hash: ~ts", [rabbit_misc:hexify(Other)]),
+                    _ = import_raw(Body),
                     Other
             end;
         {ok, {{_, Code, _}, _Headers, _Body}} when Code >= 400 ->
-            rabbit_log:debug("Requested definitions from remote URL '~s', response code: ~b", [URL, Code]),
+            rabbit_log:debug("Requested definitions from remote URL '~ts', response code: ~b", [URL, Code]),
             {error, {could_not_read_defs, {URL, rabbit_misc:format("URL request failed with response code ~b", [Code])}}};
         {error, Reason} ->
-            rabbit_log:error("Requested definitions from remote URL '~s', error: ~p", [URL, Reason]),
+            rabbit_log:error("Requested definitions from remote URL '~ts', error: ~tp", [URL, Reason]),
             {error, {could_not_read_defs, {URL, Reason}}}
     end.
 
@@ -94,19 +94,19 @@ load_from_url(URL, HTTPOptions0) ->
     case httpc_get(URL, HTTPOptions0) of
         %% 2XX
         {ok, {{_, Code, _}, _Headers, Body}} when Code div 100 == 2 ->
-            rabbit_log:debug("Requested definitions from remote URL '~s', response code: ~b", [URL, Code]),
-            rabbit_log:debug("Requested definitions from remote URL '~s', body: ~p", [URL, Body]),
+            rabbit_log:debug("Requested definitions from remote URL '~ts', response code: ~b", [URL, Code]),
+            rabbit_log:debug("Requested definitions from remote URL '~ts', body: ~tp", [URL, Body]),
             import_raw(Body);
         {ok, {{_, Code, _}, _Headers, _Body}} when Code >= 400 ->
-            rabbit_log:debug("Requested definitions from remote URL '~s', response code: ~b", [URL, Code]),
+            rabbit_log:debug("Requested definitions from remote URL '~ts', response code: ~b", [URL, Code]),
             {error, {could_not_read_defs, {URL, rabbit_misc:format("URL request failed with response code ~b", [Code])}}};
         {error, Reason} ->
-            rabbit_log:error("Requested definitions from remote URL '~s', error: ~p", [URL, Reason]),
+            rabbit_log:error("Requested definitions from remote URL '~ts', error: ~tp", [URL, Reason]),
             {error, {could_not_read_defs, {URL, Reason}}}
     end.
 
 httpc_get(URL, HTTPOptions0) ->
-    inets:start(),
+    _ = inets:start(),
     Options = [
         {body_format, binary}
     ],

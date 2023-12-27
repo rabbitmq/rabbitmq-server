@@ -139,9 +139,17 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '.hg*'				\
 	       --exclude '.travis.yml*'			\
 	       --exclude '.*.plt'			\
+	       --exclude '*.bzl'			\
+	       --exclude '*.bazel'			\
+	       --exclude '*.bazelrc'			\
+	       --exclude 'moduleindex.yaml'		\
+	       --exclude 'BUILD.*'			\
+	       --exclude 'erlang_ls.config'		\
 	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
 	       --exclude '_build/'			\
 	       --exclude '__pycache__/'			\
+	       --exclude 'bazel*/'			\
+	       --exclude 'tools/'			\
 	       --exclude 'ci/'				\
 	       --exclude 'cover/'			\
 	       --exclude 'deps/'			\
@@ -433,7 +441,7 @@ SCRIPTS = rabbitmq-defaults \
 	  rabbitmq-queues \
 	  rabbitmq-upgrade \
 	  rabbitmq-streams \
-		rabbitmq-tanzu
+	  vmware-rabbitmq
 
 AUTOCOMPLETE_SCRIPTS = bash_autocomplete.sh zsh_autocomplete.sh
 
@@ -447,7 +455,7 @@ WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
 		  rabbitmq-service.bat \
 		  rabbitmq-upgrade.bat \
 		  rabbitmq-streams.bat \
-			rabbitmq-tanzu.bat \
+		  vmware-rabbitmq.bat \
 		  rabbitmqctl.bat
 
 UNIX_TO_DOS ?= todos

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(connections_SUITE).
@@ -22,7 +22,9 @@ all() ->
         stats_are_not_leaked,
         stats,
         heartbeat,
-        login_timeout
+        login_timeout,
+        frame_size,
+        frame_size_huge
     ].
 
 merge_app_env(Config) ->
@@ -174,3 +176,36 @@ login_timeout(Config) ->
           Config, 0,
           application, unset_env, [rabbitmq_stomp, login_timeout])
     end.
+
+frame_size(Config) ->
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0,
+      application, set_env, [rabbitmq_stomp, max_frame_size, 80]),
+    StompPort = get_stomp_port(Config),
+    {ok, Client} = rabbit_stomp_client:connect("1.2", "guest", "guest", StompPort,
+                                               [{"heart-beat", "5000,7000"}]),
+    ok = rabbit_stomp_client:send(
+      Client, "SEND", [{"destination", "qwe"}],
+      ["Lorem ipsum dolor sit amet viverra fusce. "
+       "Lorem ipsum dolor sit amet viverra fusce. "
+       "Lorem ipsum dolor sit amet viverra fusce."
+       "Lorem ipsum dolor sit amet viverra fusce."
+       "Lorem ipsum dolor sit amet viverra fusce."]),
+    {S, _} = Client,
+    {error, closed} = gen_tcp:recv(S, 0, 500),
+    ok.
+
+
+frame_size_huge(Config) ->
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0,
+      application, set_env, [rabbitmq_stomp, max_frame_size, 700]),
+    StompPort = get_stomp_port(Config),
+    {ok, Client} = rabbit_stomp_client:connect("1.2", "guest", "guest", StompPort,
+                                               [{"heart-beat", "5000,7000"}]),
+    rabbit_stomp_client:send(
+      Client, "SEND", [{"destination", "qwe"}],
+      [base64:encode(crypto:strong_rand_bytes(100000000))]),
+    {S, _} = Client,
+    {error, closed} = gen_tcp:recv(S, 0, 500),
+    ok.

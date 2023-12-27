@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_vhost_limit).
@@ -152,6 +152,8 @@ parse_set(VHost, Defn, ActingUser) ->
                 rabbit_misc:format("Could not parse JSON document: ~tp", [Reason])}
     end.
 
+-spec set(vhost:name(), [{binary(), binary()}], rabbit_types:user() | rabbit_types:username()) ->
+    rabbit_runtime_parameters:ok_or_error_string().
 set(VHost, Defn, ActingUser) ->
     rabbit_runtime_parameters:set_any(VHost, <<"vhost-limits">>,
                                       <<"limits">>, Defn, ActingUser).
@@ -181,13 +183,9 @@ vhost_limit_validation() ->
      {<<"max-queues">>,      fun rabbit_parameter_validation:integer/2, optional}].
 
 update_vhost(VHostName, Limits) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun() ->
-              rabbit_vhost:update(VHostName,
-                                  fun(VHost) ->
-                                          rabbit_vhost:set_limits(VHost, Limits)
-                                  end)
-      end),
+    _ = rabbit_db_vhost:update(
+          VHostName,
+          fun(VHost) -> rabbit_vhost:set_limits(VHost, Limits) end),
     ok.
 
 get_limit(VirtualHost, Limit) ->

@@ -1,0 +1,173 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+            "+warn_export_vars",
+            "+warn_missing_spec",
+            "+warn_obsolete_guard",
+            "+warn_shadow_vars",
+            "+warn_untyped_record",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+            "+warn_export_vars",
+            "+warn_missing_spec",
+            "+warn_obsolete_guard",
+            "+warn_shadow_vars",
+            "+warn_untyped_record",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "behaviours",
+    srcs = [
+        "src/cowboy_middleware.erl",
+        "src/cowboy_stream.erl",
+        "src/cowboy_sub_protocol.erl",
+    ],
+    hdrs = [":public_and_private_hdrs"],
+    app_name = "cowboy",
+    dest = "ebin",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "other_beam",
+    srcs = [
+        "src/cowboy.erl",
+        "src/cowboy_app.erl",
+        "src/cowboy_bstr.erl",
+        "src/cowboy_children.erl",
+        "src/cowboy_clear.erl",
+        "src/cowboy_clock.erl",
+        "src/cowboy_compress_h.erl",
+        "src/cowboy_constraints.erl",
+        "src/cowboy_handler.erl",
+        "src/cowboy_http.erl",
+        "src/cowboy_http2.erl",
+        "src/cowboy_loop.erl",
+        "src/cowboy_metrics_h.erl",
+        "src/cowboy_req.erl",
+        "src/cowboy_rest.erl",
+        "src/cowboy_router.erl",
+        "src/cowboy_static.erl",
+        "src/cowboy_stream_h.erl",
+        "src/cowboy_sup.erl",
+        "src/cowboy_tls.erl",
+        "src/cowboy_tracer_h.erl",
+        "src/cowboy_websocket.erl",
+    ],
+    hdrs = [":public_and_private_hdrs"],
+    app_name = "cowboy",
+    beam = [":behaviours"],
+    dest = "ebin",
+    erlc_opts = "//:erlc_opts",
+    deps = [
+        "@cowlib//:erlang_app",
+        "@ranch//:erlang_app",
+    ],
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        ":behaviours",
+        ":other_beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/cowboy.erl",
+        "src/cowboy_app.erl",
+        "src/cowboy_bstr.erl",
+        "src/cowboy_children.erl",
+        "src/cowboy_clear.erl",
+        "src/cowboy_clock.erl",
+        "src/cowboy_compress_h.erl",
+        "src/cowboy_constraints.erl",
+        "src/cowboy_handler.erl",
+        "src/cowboy_http.erl",
+        "src/cowboy_http2.erl",
+        "src/cowboy_loop.erl",
+        "src/cowboy_metrics_h.erl",
+        "src/cowboy_middleware.erl",
+        "src/cowboy_req.erl",
+        "src/cowboy_rest.erl",
+        "src/cowboy_router.erl",
+        "src/cowboy_static.erl",
+        "src/cowboy_stream.erl",
+        "src/cowboy_stream_h.erl",
+        "src/cowboy_sub_protocol.erl",
+        "src/cowboy_sup.erl",
+        "src/cowboy_tls.erl",
+        "src/cowboy_tracer_h.erl",
+        "src/cowboy_websocket.erl",
+    ],
+)
+
+filegroup(name = "private_hdrs")
+
+filegroup(name = "public_hdrs")
+
+filegroup(name = "priv")
+
+filegroup(
+    name = "licenses",
+    srcs = ["LICENSE"],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
+    app_name = "cowboy",
+    app_description = "Small, fast, modern HTTP server.",
+    app_version = "2.10.0",
+    app_registered = ["cowboy_clock"],
+    beam_files = [":beam_files"],
+    extra_apps = ["crypto"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "@cowlib//:erlang_app",
+        "@ranch//:erlang_app",
+    ],
+)
+
+alias(
+    name = "cowboy",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "license_files",
+    srcs = [
+        "LICENSE",
+    ],
+)

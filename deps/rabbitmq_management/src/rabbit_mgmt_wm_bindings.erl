@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_bindings).
@@ -84,14 +84,14 @@ accept_content(ReqData0, {_Mode, Context}) ->
             {source, Source},
             {routing_key, Key},
             {arguments, Args}],
-           "Binding error: ~s", ReqData, Context) of
+           "Binding error: ~ts", ReqData, Context) of
         {stop, _, _} = Res ->
             Res;
         {true, ReqData, Context2} ->
             From = binary_to_list(cowboy_req:path(ReqData)),
             Prefix = rabbit_mgmt_util:get_path_prefix(),
             BindingProps = rabbit_mgmt_format:pack_binding_props(Key, Args),
-            UrlWithBindings = rabbit_mgmt_format:url("/api/bindings/~s/e/~s/~s/~s/~s",
+            UrlWithBindings = rabbit_mgmt_format:url("/api/bindings/~ts/e/~ts/~ts/~ts/~ts",
                                                      [VHost, Source, DestType,
                                                       Dest, BindingProps]),
             To = Prefix ++ binary_to_list(UrlWithBindings),

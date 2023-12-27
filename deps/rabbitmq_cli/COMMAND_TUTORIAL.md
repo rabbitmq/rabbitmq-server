@@ -117,7 +117,7 @@ the command should do.
 ### Command Banner
 
 We start with the `banner/2` function, that tells a user what the command is going to do.
-If you call the command with with `--dry-run` argument, it would only print the banner,
+If you call the command with `--dry-run` argument, it would only print the banner,
 without executing the actual command:
 
 ```

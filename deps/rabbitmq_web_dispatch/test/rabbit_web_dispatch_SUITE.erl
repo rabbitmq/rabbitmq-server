@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_web_dispatch_SUITE).
@@ -72,7 +72,7 @@ query_static_resource_test1(Host, Port) ->
                                                 "rabbit_web_dispatch_test",
                                                 ?MODULE, "test/priv/www", "Test"),
     {ok, {_Status, _Headers, Body}} =
-        httpc:request(format("http://~s:~w/rabbit_web_dispatch_test/index.html", [Host, Port])),
+        httpc:request(format("http://~ts:~w/rabbit_web_dispatch_test/index.html", [Host, Port])),
     ?assertMatch(I when I > 0, string:str(Body, "RabbitMQ HTTP Server Test Page")).
 
 add_idempotence_test(Config) ->

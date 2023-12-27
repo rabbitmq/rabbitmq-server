@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 alias RabbitMQ.CLI.Formatters.FormatterHelpers
 
@@ -93,6 +93,10 @@ defmodule RabbitMQ.CLI.Formatters.Csv do
     other
   end
 end
+
+# Elixir 1.15 compiler optimizations require that we explicitly
+# add the csv code path
+true = Code.append_path(Path.join(["_build", Atom.to_string(Mix.env()), "lib", "csv", "ebin"]))
 
 defimpl CSV.Encode, for: PID do
   def encode(pid, env \\ []) do

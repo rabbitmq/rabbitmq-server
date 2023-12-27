@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2019-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2019-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.LogTailCommand do
   @moduledoc """
@@ -13,20 +13,21 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.LogTailCommand do
   alias RabbitMQ.CLI.Core.LogFiles
 
   def switches, do: [number: :integer, timeout: :integer]
-  def aliases, do: ['N': :number, t: :timeout]
+  def aliases, do: [N: :number, t: :timeout]
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{number: 50}, opts)}
   end
+
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name, timeout: timeout, number: n}) do
     case LogFiles.get_default_log_location(node_name, timeout) do
       {:ok, file} ->
-        :rabbit_misc.rpc_call(node_name,
-                              :rabbit_log_tail, :tail_n_lines, [file, n],
-                              timeout)
-      error -> error
+        :rabbit_misc.rpc_call(node_name, :rabbit_log_tail, :tail_n_lines, [file, n], timeout)
+
+      error ->
+        error
     end
   end
 

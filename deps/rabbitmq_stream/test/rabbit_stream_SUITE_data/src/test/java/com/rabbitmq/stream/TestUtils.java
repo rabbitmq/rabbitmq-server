@@ -11,7 +11,7 @@
 // The Original Code is RabbitMQ.
 //
 // The Initial Developer of the Original Code is Pivotal Software, Inc.
-// Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
+// Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 //
 
 package com.rabbitmq.stream;
@@ -44,7 +44,7 @@ public class TestUtils {
   }
 
   static int streamPortNode2() {
-    String port = System.getProperty("node2.stream.port", "5552");
+    String port = System.getProperty("node2.stream.port", "5553");
     return Integer.valueOf(port);
   }
 
@@ -217,5 +217,12 @@ public class TestUtils {
           "response code %d",
           expectedResponse);
     }
+  }
+
+  static Client.ChunkListener credit() {
+    return (client, subscriptionId, offset, messageCount, dataSize) -> {
+      client.credit(subscriptionId, 1);
+      return null;
+    };
   }
 }

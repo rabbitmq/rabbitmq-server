@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% @copyright 2018-2022 VMware, Inc. or its affiliates.
+%% @copyright 2018-2023 VMware, Inc. or its affiliates.
 %%
 %% @doc
 %% This module provides extra functions unused by the feature flags
@@ -176,7 +176,7 @@ info(FeatureFlags, Options) ->
                                         false -> {"unsupported", Red}
                                     end,
                                     #paragraph{content =
-                                               [rabbit_misc:format("  ~s: ",
+                                               [rabbit_misc:format("  ~ts: ",
                                                                    [Node]),
                                                 #paragraph{content = Label,
                                                            props = LabelColor}]}
@@ -242,4 +242,4 @@ state_legend(Options) ->
 %% @returns the formatted error reason.
 
 format_error(Reason) ->
-    rabbit_misc:format("~p", [Reason]).
+    rabbit_misc:format("~tp", [Reason]).

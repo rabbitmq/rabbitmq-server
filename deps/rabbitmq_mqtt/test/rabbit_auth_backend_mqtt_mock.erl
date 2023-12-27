@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2019-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2019-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 %% A mock authn/authz that records information during calls. For testing purposes only.
@@ -27,7 +27,7 @@ setup(CallerPid) ->
     end.
 
 
-user_login_authentication(_, AuthProps) ->
+user_login_authentication(_Username, AuthProps) ->
     ets:insert(?MODULE, {authentication, AuthProps}),
     {ok, #auth_user{username = <<"dummy">>,
                     tags     = [],

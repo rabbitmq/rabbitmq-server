@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_db).
@@ -33,8 +33,6 @@
 
 -import(rabbit_misc, [pget/3]).
 
--type maybe_slide() :: exometer_slide:slide() | not_found.
--type slide_data() :: #{atom() => {maybe_slide(), maybe_slide()}}.
 -type maybe_range() :: rabbit_mgmt_stats:maybe_range().
 -type ranges() :: {maybe_range(), maybe_range(), maybe_range(), maybe_range()}.
 -type mfargs() :: {module(), atom(), [any()]}.
@@ -147,13 +145,20 @@ augment_exchanges(Xs, Ranges, _)    ->
 
 %% we can only cache if no ranges are requested.
 %% The mgmt ui doesn't use ranges for queue listings
--spec augment_queues([proplists:proplist()], ranges(), basic | full) -> any().
-augment_queues(Qs, ?NO_RANGES = Ranges, basic)    ->
+-spec augment_queues([proplists:proplist()], ranges(), basic | detailed | full) -> any().
+augment_queues(Qs, ?NO_RANGES = Ranges, basic) ->
+   submit_cached(queues,
+                 fun(Interval, Queues) ->
+                         list_basic_queue_stats(Ranges, Queues, Interval)
+                 end, Qs, max(60000, length(Qs) * 2));
+augment_queues(Qs, ?NO_RANGES = Ranges, detailed) ->
    submit_cached(queues,
                  fun(Interval, Queues) ->
                          list_queue_stats(Ranges, Queues, Interval)
                  end, Qs, max(60000, length(Qs) * 2));
-augment_queues(Qs, Ranges, basic)    ->
+augment_queues(Qs, Ranges, basic) ->
+   submit(fun(Interval) -> list_basic_queue_stats(Ranges, Qs, Interval) end);
+augment_queues(Qs, Ranges, detailed) ->
    submit(fun(Interval) -> list_queue_stats(Ranges, Qs, Interval) end);
 augment_queues(Qs, Ranges, _)    ->
    submit(fun(Interval) -> detail_queue_stats(Ranges, Qs, Interval) end).
@@ -253,7 +258,7 @@ handle_pre_hibernate(State) ->
     %% rabbit_mgmt_db is hibernating the odds are rabbit_event is
     %% quiescing in some way too).
     _ = rpc:multicall(
-      rabbit_nodes:all_running(), rabbit_mgmt_db_handler, gc, []),
+      rabbit_nodes:list_running(), rabbit_mgmt_db_handler, gc, []),
     {hibernate, State}.
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
@@ -273,10 +278,7 @@ pget(Key, List) -> pget(Key, List, unknown).
 %% passed a queue proplist that will already have been formatted -
 %% i.e. it will have name and vhost keys.
 id_name(node_stats)       -> name;
-id_name(node_node_stats)  -> route;
 id_name(vhost_stats)      -> name;
-id_name(queue_stats)      -> name;
-id_name(exchange_stats)   -> name;
 id_name(channel_stats)    -> pid;
 id_name(connection_stats) -> pid.
 
@@ -354,8 +356,16 @@ consumers_stats(VHost) ->
 -spec list_queue_stats(ranges(), [proplists:proplist()], integer()) ->
     [proplists:proplist()].
 list_queue_stats(Ranges, Objs, Interval) ->
+    list_queue_stats(Ranges, Objs, Interval, all_list_queue_data).
+
+-spec list_basic_queue_stats(ranges(), [proplists:proplist()], integer()) ->
+    [proplists:proplist()].
+list_basic_queue_stats(Ranges, Objs, Interval) ->
+    list_queue_stats(Ranges, Objs, Interval, all_list_basic_queue_data).
+
+list_queue_stats(Ranges, Objs, Interval, Fun) ->
     Ids = [id_lookup(queue_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_list_queue_data, [Ids, Ranges]}),
+    DataLookup = get_data_from_nodes({rabbit_mgmt_data, Fun, [Ids, Ranges]}),
     adjust_hibernated_memory_use(
       [begin
        Id = id_lookup(queue_stats, Obj),
@@ -443,8 +453,11 @@ channel_stats(ChannelData, Ranges, Interval) ->
    format_range(ChannelData, channel_process_stats,
                 pick_range(process_stats, Ranges), Interval).
 
--spec format_range(slide_data(), lookup_key(), maybe_range(), non_neg_integer()) ->
-    proplists:proplist().
+-type maybe_slide() :: 'not_found' | exometer_slide:slide() | ['not_found' | exometer_slide:slide() ].
+-type slide_data() :: #{lookup_key() => {maybe_slide(), maybe_slide()}}.
+
+%% The map in the spec should be also slide_data(), but dialyzer doesn't agree
+-spec format_range(#{lookup_key() => any()}, lookup_key(), maybe_range(), non_neg_integer()) -> proplists:proplist().
 format_range(Data, Key, Range0, Interval) ->
    Table = case Key of
                {T, _} -> T;
@@ -457,6 +470,7 @@ format_range(Data, Key, Range0, Interval) ->
                                   SamplesFun).
 
 %% basic.get-empty metric
+-spec fetch_slides(non_neg_integer(), lookup_key(), slide_data()) -> [rabbit_mgmt_stats:maybe_slide()].
 fetch_slides(Ele, Key, Data)
   when Key =:= channel_queue_stats_deliver_stats orelse
        Key =:= channel_stats_deliver_stats orelse
@@ -561,6 +575,7 @@ detail_exchange_stats(Ranges, Objs, Interval) ->
      Obj ++ StatsD ++ Stats
      end || Obj <- Objs].
 
+-spec connection_stats(term(), term(), term()) -> [term()].
 connection_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(connection_stats, Obj) || Obj <- Objs],
     DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_connection_data, [Ids, Ranges]}),
@@ -587,6 +602,7 @@ list_channel_stats(Ranges, Objs, Interval) ->
          end || Obj <- Objs],
     ChannelStats.
 
+-spec detail_channel_stats(ranges(), [term()], term()) -> [term()].
 detail_channel_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(channel_stats, Obj) || Obj <- Objs],
     DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_detail_channel_data,
@@ -651,9 +667,12 @@ node_stats(Ranges, Objs, Interval) ->
 combine(New, Old) ->
     case pget(state, Old) of
         unknown -> New ++ Old;
-        live    -> New ++ lists:keydelete(state, 1, Old);
+        live    -> New ++ delete_keys([state, online], Old);
         _       -> lists:keydelete(state, 1, New) ++ Old
     end.
+
+delete_keys(Keys, List) ->
+    [I || I <- List, not lists:member(element(1, I), Keys)].
 
 revert({'_', _}, {Id, _}) ->
     Id;
@@ -695,7 +714,7 @@ merge_data(_, D1, D2) -> % we assume if we get here both values a maps
        maps_merge(fun merge_data/3, D1, D2)
    catch
        error:Err ->
-           rabbit_log:debug("merge_data err ~p got: ~p ~p", [Err, D1, D2]),
+           rabbit_log:debug("merge_data err ~tp got: ~tp ~tp", [Err, D1, D2]),
            case is_map(D1) of
                true -> D1;
                false -> D2
@@ -718,7 +737,7 @@ adjust_hibernated_memory_use(Qs) ->
          {ok, Memory} -> [Memory | proplists:delete(memory, Q)]
      end || {Pid, Q} <- Qs].
 
--spec created_stats_delegated(any(), fun((any()) -> any()) | atom()) -> not_found | any().
+-spec created_stats_delegated(Key :: binary(), Type :: atom()) -> [{atom(), term()}] | 'not_found'.
 created_stats_delegated(Key, Type) ->
     Data = delegate_invoke({rabbit_mgmt_data, augmented_created_stats, [Key, Type]}),
     case [X || X <- Data, X =/= not_found] of
@@ -726,6 +745,7 @@ created_stats_delegated(Key, Type) ->
         [X] -> X
     end.
 
+-spec created_stats_delegated(Type :: atom()) -> [[{atom(), term()}]].
 created_stats_delegated(Type) ->
     lists:append(
       delegate_invoke({rabbit_mgmt_data, augmented_created_stats, [Type]})).
@@ -736,7 +756,7 @@ delegate_invoke(FunOrMFA) ->
     {Results, Errors} = delegate:invoke(MemberPids, ?DELEGATE_PREFIX, FunOrMFA),
     case Errors of
         [] -> ok;
-        _ -> rabbit_log:warning("Management delegate query returned errors:~n~p", [Errors])
+        _ -> rabbit_log:warning("Management delegate query returned errors:~n~tp", [Errors])
     end,
     [R || {_, R} <- Results].
 

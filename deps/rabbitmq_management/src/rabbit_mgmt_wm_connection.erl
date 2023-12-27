@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_connection).
@@ -90,11 +90,14 @@ force_close_connection(ReqData, Conn, Pid) ->
                  undefined -> "Closed via management plugin";
                  V         -> binary_to_list(V)
              end,
-            case proplists:get_value(type, Conn) of
-                direct  -> amqp_direct_connection:server_close(Pid, 320, Reason);
-                network -> rabbit_networking:close_connection(Pid, Reason);
-                _       ->
-                    % best effort, this will work for connections to the stream plugin
-                    gen_server:call(Pid, {shutdown, Reason}, infinity)
-            end,
-    ok.
+    case proplists:get_value(type, Conn) of
+        direct ->
+            amqp_direct_connection:server_close(Pid, 320, Reason);
+        network ->
+            rabbit_networking:close_connection(Pid, Reason);
+        _ ->
+            %% Best effort will work for following plugins:
+            %% rabbitmq_stream, rabbitmq_mqtt, rabbitmq_web_mqtt
+            _ = Pid ! {shutdown, Reason},
+            ok
+    end.

@@ -4,7 +4,7 @@
 %%
 %% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2015-2016 AWeber Communications
-%% Copyright (c) 2016-2022 VMware, Inc. or its affiliates. All rights reserved.
+%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates. All rights reserved.
 %%
 
 -module(rabbit_peer_discovery_consul).
@@ -45,7 +45,7 @@ init() ->
     ok = application:ensure_started(inets),
     %% we cannot start this plugin yet since it depends on the rabbit app,
     %% which is in the process of being started by the time this function is called
-    application:load(rabbitmq_peer_discovery_common),
+    _ = application:load(rabbitmq_peer_discovery_common),
     rabbit_peer_discovery_httpc:maybe_configure_proxy(),
     rabbit_peer_discovery_httpc:maybe_configure_inet6().
 
@@ -55,7 +55,7 @@ list_nodes() ->
     Fun0 = fun() -> {ok, {[], disc}} end,
     Fun1 = fun() ->
                    ?LOG_WARNING(
-                      "Peer discovery backend is set to ~s but final "
+                      "Peer discovery backend is set to ~ts but final "
                       "config does not contain "
                       "rabbit.cluster_formation.peer_discovery_consul. "
                       "Cannot discover any nodes because Consul cluster "
@@ -99,7 +99,7 @@ register() ->
   case registration_body() of
     {ok, Body} ->
       ?LOG_DEBUG(
-         "Consul registration body: ~s", [Body],
+         "Consul registration body: ~ts", [Body],
          #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
       Path = rabbit_peer_discovery_httpc:build_path([v1, agent, service, register]),
       Headers = maybe_add_acl([]),
@@ -124,7 +124,7 @@ unregister() ->
   M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
   ID = service_id(),
   ?LOG_DEBUG(
-     "Unregistering with Consul using service ID '~s'", [ID],
+     "Unregistering with Consul using service ID '~ts'", [ID],
      #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   Path = rabbit_peer_discovery_httpc:build_path([v1, agent, service, deregister, ID]),
   Headers = maybe_add_acl([]),
@@ -139,13 +139,13 @@ unregister() ->
                                        []) of
     {ok, Response} ->
           ?LOG_INFO(
-             "Consul's response to the unregistration attempt: ~p",
+             "Consul's response to the unregistration attempt: ~tp",
              [Response],
              #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
           ok;
     Error   ->
           ?LOG_INFO(
-             "Failed to unregister service with ID '~s` with Consul: ~p",
+             "Failed to unregister service with ID '~ts` with Consul: ~tp",
              [ID, Error],
              #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
           Error
@@ -160,13 +160,15 @@ post_registration() ->
     send_health_check_pass(),
     ok.
 
--spec lock(Node :: atom()) -> {ok, Data :: term()} | {error, Reason :: string()}.
+-spec lock(Nodes :: [node()]) ->
+    {ok, Data :: term()} | {error, Reason :: string()}.
 
-lock(Node) ->
+lock(_Nodes) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     ?LOG_DEBUG(
-       "Effective Consul peer discovery configuration: ~p", [M],
+       "Effective Consul peer discovery configuration: ~tp", [M],
        #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+    Node = node(),
     case create_session(Node, get_config_key(consul_svc_ttl, M)) of
         {ok, SessionId} ->
             TRef = start_session_ttl_updater(SessionId),
@@ -174,14 +176,14 @@ lock(Node) ->
             EndTime = Now + get_config_key(lock_wait_time, M),
             lock(TRef, SessionId, Now, EndTime);
         {error, Reason} ->
-            {error, lists:flatten(io_lib:format("Error while creating a session, reason: ~s",
+            {error, lists:flatten(io_lib:format("Error while creating a session, reason: ~ts",
                                                 [Reason]))}
     end.
 
 -spec unlock({SessionId :: string(), TRef :: timer:tref()}) -> ok.
 
 unlock({SessionId, TRef}) ->
-    timer:cancel(TRef),
+    _ = timer:cancel(TRef),
     ?LOG_DEBUG(
        "Stopped session renewal",
        #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
@@ -189,7 +191,7 @@ unlock({SessionId, TRef}) ->
         {ok, true} ->
             ok;
         {ok, false} ->
-            {error, lists:flatten(io_lib:format("Error while releasing the lock, session ~s may have been invalidated", [SessionId]))};
+            {error, lists:flatten(io_lib:format("Error while releasing the lock, session ~ts may have been invalidated", [SessionId]))};
         {error, _} = Err ->
             Err
     end.
@@ -235,7 +237,7 @@ http_options(HttpOpts0, M) ->
   HttpOpts1 = [TLSOpts | HttpOpts0],
   HttpOpts1.
 
--spec filter_nodes(ConsulResult :: list(), AllowWarning :: atom()) -> list().
+-spec filter_nodes(ConsulResult :: [#{term() => term()}], AllowWarning :: boolean()) -> [#{term() => term()}].
 filter_nodes(Nodes, Warn) ->
   case Warn of
     true ->
@@ -251,10 +253,10 @@ filter_nodes(Nodes, Warn) ->
     false -> Nodes
   end.
 
--spec extract_nodes(ConsulResult :: list()) -> list().
+-spec extract_nodes(ConsulResult :: [#{binary() => term()}]) -> list().
 extract_nodes(Data) -> extract_nodes(Data, []).
 
--spec extract_nodes(ConsulResult :: list(), Nodes :: list())
+-spec extract_nodes(ConsulResult :: [#{binary() => term()}], Nodes :: list())
     -> list().
 extract_nodes([], Nodes)    -> Nodes;
 extract_nodes([H | T], Nodes) ->
@@ -311,7 +313,7 @@ registration_body({ok, Body}) ->
   {ok, rabbit_data_coercion:to_binary(Body)};
 registration_body({error, Reason}) ->
   ?LOG_ERROR(
-     "Error serializing the request body: ~p",
+     "Error serializing the request body: ~tp",
      [Reason],
      #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   {error, Reason}.
@@ -497,13 +499,13 @@ service_ttl(Value) ->
 -spec maybe_add_domain(Domain :: atom()) -> atom().
 maybe_add_domain(Value) ->
   M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-  case get_config_key(consul_use_longname, M) of
-      true ->
+  case rabbit_nodes:name_type() of
+      longnames ->
           rabbit_data_coercion:to_atom(string:join([atom_to_list(Value),
                                     "node",
                                     get_config_key(consul_domain, M)],
                                    "."));
-      false -> Value
+      shortnames -> Value
   end.
 
 %%--------------------------------------------------------------------
@@ -556,7 +558,7 @@ send_health_check_pass() ->
           ok;
     {error, Reason} ->
           ?LOG_ERROR(
-             "Error running Consul health check: ~p",
+             "Error running Consul health check: ~tp",
              [Reason],
              #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
       ok
@@ -565,12 +567,10 @@ send_health_check_pass() ->
 maybe_re_register({error, Reason}) ->
     ?LOG_ERROR(
        "Internal error in Consul while updating health check. "
-       "Cannot obtain list of nodes registered in Consul either: ~p",
+       "Cannot obtain list of nodes registered in Consul either: ~tp",
        [Reason],
        #{domain => ?RMQLOG_DOMAIN_PEER_DIS});
 maybe_re_register({ok, {Members, _NodeType}}) ->
-    maybe_re_register(Members);
-maybe_re_register({ok, Members}) ->
     maybe_re_register(Members);
 maybe_re_register(Members) ->
     case lists:member(node(), Members) of
@@ -589,13 +589,14 @@ maybe_re_register(Members) ->
 wait_for_list_nodes() ->
     wait_for_list_nodes(60).
 
+-spec wait_for_list_nodes(non_neg_integer()) -> {'ok', term()} | {'error', term()}.
+wait_for_list_nodes(0) ->
+    list_nodes();
 wait_for_list_nodes(N) ->
-    case {list_nodes(), N} of
-        {Reply, 0} ->
+    case list_nodes() of
+        {ok, _} = Reply ->
             Reply;
-        {{ok, _} = Reply, _} ->
-            Reply;
-        {{error, _}, _} ->
+        _ ->
             timer:sleep(1000),
             wait_for_list_nodes(N - 1)
     end.
@@ -606,7 +607,7 @@ wait_for_list_nodes(N) ->
 %% Create a session to be acquired for a common key
 %% @end
 %%--------------------------------------------------------------------
--spec create_session(string(), pos_integer()) -> {ok, string()} | {error, Reason::string()}.
+-spec create_session(atom(), pos_integer()) -> {ok, string()} | {error, Reason::string()}.
 create_session(Name, TTL) ->
     case consul_session_create([], maybe_add_acl([]),
                                [{'Name', Name},
@@ -623,10 +624,10 @@ create_session(Name, TTL) ->
 %% Create session
 %% @end
 %%--------------------------------------------------------------------
--spec consul_session_create(Query, Headers, Body) -> {ok, string()} | {error, any()} when
+-spec consul_session_create(Query, Headers, Body) -> {ok, term()} | {error, any()} when
       Query :: list(),
       Headers :: [{string(), string()}],
-      Body :: term().
+      Body :: thoas:input_term().
 consul_session_create(Query, Headers, Body) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     case serialize_json_body(Body) of
@@ -652,7 +653,7 @@ consul_session_create(Query, Headers, Body) ->
 %% the JSON serialization library.
 %% @end
 %%--------------------------------------------------------------------
--spec serialize_json_body(term()) -> {ok, Payload :: binary()} | {error, atom()}.
+-spec serialize_json_body(thoas:input_term()) -> {ok, Payload :: binary()} | {error, atom()}.
 serialize_json_body([]) -> {ok, []};
 serialize_json_body(Payload) ->
     case rabbit_json:try_encode(Payload) of
@@ -666,7 +667,7 @@ serialize_json_body(Payload) ->
 %% Extract session ID from Consul response
 %% @end
 %%--------------------------------------------------------------------
--spec get_session_id(term()) -> string().
+-spec get_session_id(#{binary() => term()}) -> string().
 get_session_id(#{<<"ID">> := ID}) -> binary:bin_to_list(ID).
 
 %%--------------------------------------------------------------------
@@ -675,7 +676,7 @@ get_session_id(#{<<"ID">> := ID}) -> binary:bin_to_list(ID).
 %% Start periodically renewing an existing session ttl
 %% @end
 %%--------------------------------------------------------------------
--spec start_session_ttl_updater(string()) -> ok.
+-spec start_session_ttl_updater(string()) -> timer:tref().
 start_session_ttl_updater(SessionId) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     Interval = get_config_key(consul_svc_ttl, M),
@@ -693,7 +694,7 @@ start_session_ttl_updater(SessionId) ->
 %% @end
 -spec lock(timer:tref(), string(), pos_integer(), pos_integer()) -> {ok, string()} | {error, string()}.
 lock(TRef, _, Now, EndTime) when EndTime < Now ->
-    timer:cancel(TRef),
+    _ = timer:cancel(TRef),
     {error, "Acquiring lock taking too long, bailing out"};
 lock(TRef, SessionId, _, EndTime) ->
     case acquire_lock(SessionId) of
@@ -707,16 +708,16 @@ lock(TRef, SessionId, _, EndTime) ->
                         ok ->
                             lock(TRef, SessionId, erlang:system_time(seconds), EndTime);
                         {error, Reason} ->
-                            timer:cancel(TRef),
-                            {error, lists:flatten(io_lib:format("Error waiting for lock release, reason: ~s",[Reason]))}
+                            _ = timer:cancel(TRef),
+                            {error, lists:flatten(io_lib:format("Error waiting for lock release, reason: ~ts",[Reason]))}
                     end;
                 {error, Reason} ->
-                    timer:cancel(TRef),
-                    {error, lists:flatten(io_lib:format("Error obtaining lock status, reason: ~s", [Reason]))}
+                    _ = timer:cancel(TRef),
+                    {error, lists:flatten(io_lib:format("Error obtaining lock status, reason: ~ts", [Reason]))}
             end;
         {error, Reason} ->
-            timer:cancel(TRef),
-            {error, lists:flatten(io_lib:format("Error while acquiring lock, reason: ~s", [Reason]))}
+            _ = timer:cancel(TRef),
+            {error, lists:flatten(io_lib:format("Error while acquiring lock, reason: ~ts", [Reason]))}
     end.
 
 %%--------------------------------------------------------------------
@@ -747,7 +748,7 @@ release_lock(SessionId) ->
 %%--------------------------------------------------------------------
 -spec consul_kv_write(Path, Query, Headers, Body) -> {ok, any()} | {error, string()} when
       Path :: string(),
-      Query :: [{string(), string()}],
+      Query :: [{string() | atom(), string()}],
       Headers :: [{string(), string()}],
       Body :: term().
 consul_kv_write(Path, Query, Headers, Body) ->
@@ -839,7 +840,7 @@ base_path() ->
 wait_for_lock_release(false, _, _) -> ok;
 wait_for_lock_release(_, Index, Wait) ->
     case consul_kv_read(startup_lock_path(),
-                        [{index, Index}, {wait, service_ttl(Wait)}],
+                        [{"index", Index}, {"wait", service_ttl(Wait)}],
                         maybe_add_acl([])) of
         {ok, _}          -> ok;
         {error, _} = Err -> Err

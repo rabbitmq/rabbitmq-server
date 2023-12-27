@@ -2,10 +2,10 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.CommandModules do
-  alias RabbitMQ.CLI.Core.{Config, DataCoercion}
+  alias RabbitMQ.CLI.Core.{Config, DataCoercion, Helpers}
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginsHelpers
   alias RabbitMQ.CLI.CommandBehaviour
 
@@ -45,7 +45,13 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
   end
 
   def load_commands(scope, opts) do
-    make_module_map(plugin_modules(opts) ++ ctl_modules(), scope)
+    nopts =
+      case Helpers.normalise_node_option(opts) do
+        {:error, _} -> opts
+        {:ok, options} -> options
+      end
+
+    make_module_map(plugin_modules(nopts) ++ ctl_modules(), scope)
   end
 
   def ctl_modules() do
@@ -53,7 +59,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
   end
 
   def plugin_modules(opts) do
-    require_rabbit(opts)
+    _ = require_rabbit(opts)
 
     enabled_plugins =
       try do
@@ -74,8 +80,31 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
           []
       end
 
+    all_plugins = PluginsHelpers.list(opts)
+    enabled_with_dep = :rabbit_plugins.dependencies(false, enabled_plugins, all_plugins)
+
+    all_enabled_plugins =
+      Enum.flat_map(
+        all_plugins,
+        fn plugin ->
+          name = PluginsHelpers.plugin_name(plugin)
+
+          strictly_member =
+            :rabbit_plugins.is_strictly_plugin(plugin) and
+              Enum.member?(enabled_with_dep, name)
+
+          case strictly_member do
+            true ->
+              [name]
+
+            false ->
+              []
+          end
+        end
+      )
+
     partitioned =
-      Enum.group_by(enabled_plugins, fn app ->
+      Enum.group_by(all_enabled_plugins, fn app ->
         case Application.load(app) do
           :ok -> :loaded
           {:error, {:already_loaded, ^app}} -> :loaded
@@ -189,6 +218,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
         |> to_snake_case
         |> String.to_atom()
         |> List.wrap()
+
       scopes ->
         scopes
     end

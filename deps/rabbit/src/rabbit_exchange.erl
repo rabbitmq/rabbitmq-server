@@ -2,65 +2,67 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_exchange).
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -export([recover/1, policy_changed/2, callback/4, declare/7,
          assert_equivalence/6, assert_args_equivalence/2, check_type/1, exists/1,
          lookup/1, lookup_many/1, lookup_or_die/1, list/0, list/1, lookup_scratch/2,
-         update_scratch/3, update_decorators/1, immutable/1,
+         update_scratch/3, update_decorators/2, immutable/1,
          info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4,
-         route/2, delete/3, validate_binding/2, count/0]).
+         route/2, route/3, delete/3, validate_binding/2, count/0]).
 -export([list_names/0]).
-%% these must be run inside a mnesia tx
--export([maybe_auto_delete/2, serial/1, peek_serial/1, update/2]).
+-export([serialise_events/1]).
+-export([serial/1, peek_serial/1]).
 
 %%----------------------------------------------------------------------------
 
--export_type([name/0, type/0]).
+-deprecated([{route, 2, "Use route/3 instead"}]).
 
--type name() :: rabbit_types:r('exchange').
--type type() :: atom().
--type fun_name() :: atom().
+-export_type([name/0, type/0, route_opts/0, route_infos/0, route_return/0]).
+-type name() :: rabbit_types:exchange_name().
+-type type() :: rabbit_types:exchange_type().
+-type route_opts() :: #{return_binding_keys => boolean()}.
+-type route_infos() :: #{binding_keys => #{rabbit_types:binding_key() => true}}.
+-type route_return() :: list(rabbit_amqqueue:name() |
+                             {rabbit_amqqueue:name(), route_infos()} |
+                             {virtual_reply_queue, binary()}).
 
 %%----------------------------------------------------------------------------
 
 -define(INFO_KEYS, [name, type, durable, auto_delete, internal, arguments,
                     policy, user_who_performed_action]).
+-define(DEFAULT_EXCHANGE_NAME, <<>>).
 
 -spec recover(rabbit_types:vhost()) -> [name()].
 
 recover(VHost) ->
-    Xs = rabbit_misc:table_filter(
-           fun (#exchange{name = XName}) ->
-                XName#resource.virtual_host =:= VHost andalso
-                mnesia:read({rabbit_exchange, XName}) =:= []
-           end,
-           fun (X, Tx) ->
-                   X1 = case Tx of
-                            true  -> store_ram(X);
-                            false -> rabbit_exchange_decorator:set(X)
-                        end,
-                   callback(X1, create, map_create_tx(Tx), [X1])
-           end,
-           rabbit_durable_exchange),
+    Xs = rabbit_db_exchange:recover(VHost),
     [XName || #exchange{name = XName} <- Xs].
 
 -spec callback
-        (rabbit_types:exchange(), fun_name(),
-         fun((boolean()) -> non_neg_integer()) | atom(), [any()]) -> 'ok'.
+        (rabbit_types:exchange(), FunName :: atom(), atom(), [any()]) -> 'ok'.
 
-callback(X = #exchange{type       = XType,
-                       decorators = Decorators}, Fun, Serial0, Args) ->
-    Serial = if is_function(Serial0) -> Serial0;
-                is_atom(Serial0)     -> fun (_Bool) -> Serial0 end
+callback(X = #exchange{decorators = Decorators, name = XName}, Fun, Serial, Args) ->
+    case Fun of
+        delete -> rabbit_db_exchange:delete_serial(XName);
+        _ -> ok
+    end,
+    Modules = rabbit_exchange_decorator:select(all, Decorators),
+    callback0(X, Fun, Serial, Modules, Args),
+    ok.
+
+callback0(#exchange{type = XType}, Fun, Serial, Modules0, Args) when is_atom(Serial) ->
+    Modules = Modules0 ++ [type_to_module(XType)],
+    [ok = apply(M, Fun, [Serial | Args]) || M <- Modules];
+callback0(#exchange{type = XType} = X, Fun, Serial0, Modules, Args) ->
+    Serial = fun(true) -> Serial0;
+                (false) -> none
              end,
-    [ok = apply(M, Fun, [Serial(M:serialise_events(X)) | Args]) ||
-        M <- rabbit_exchange_decorator:select(all, Decorators)],
+    [ok = apply(M, Fun, [Serial(M:serialise_events(X)) | Args]) || M <- Modules],
     Module = type_to_module(XType),
     apply(Module, Fun, [Serial(Module:serialise_events()) | Args]).
 
@@ -81,16 +83,12 @@ serialise_events(X = #exchange{type = Type, decorators = Decorators}) ->
               rabbit_exchange_decorator:select(all, Decorators))
         orelse (type_to_module(Type)):serialise_events().
 
--spec serial(rabbit_types:exchange()) ->
-                       fun((boolean()) -> 'none' | pos_integer()).
+-spec serial(rabbit_types:exchange()) -> 'none' | pos_integer().
 
-serial(#exchange{name = XName} = X) ->
-    Serial = case serialise_events(X) of
-                 true  -> next_serial(XName);
-                 false -> none
-             end,
-    fun (true)  -> Serial;
-        (false) -> none
+serial(X) ->
+    case serialise_events(X) of
+        false -> 'none';
+        true -> rabbit_db_exchange:next_serial(X#exchange.name)
     end.
 
 -spec declare
@@ -118,45 +116,22 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args, Username) ->
                                           ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
                                           XName#resource.name) of
         not_found ->
-            rabbit_misc:execute_mnesia_transaction(
-              fun () ->
-                      case mnesia:wread({rabbit_exchange, XName}) of
-                          [] ->
-                              {new, store(X)};
-                          [ExistingX] ->
-                              {existing, ExistingX}
-                      end
-              end,
-              fun ({new, Exchange}, Tx) ->
-                      ok = callback(X, create, map_create_tx(Tx), [Exchange]),
-                      rabbit_event:notify_if(not Tx, exchange_created, info(Exchange)),
-                      Exchange;
-                  ({existing, Exchange}, _Tx) ->
-                      Exchange;
-                  (Err, _Tx) ->
-                      Err
-              end);
+            case rabbit_db_exchange:create_or_get(X) of
+                {new, Exchange} ->
+                    Serial = serial(Exchange),
+                    ok = callback(X, create, Serial, [Exchange]),
+                    rabbit_event:notify(exchange_created, info(Exchange)),
+                    Exchange;
+                {existing, Exchange} ->
+                    Exchange;
+                Err ->
+                    Err
+            end;
         _ ->
-            rabbit_log:warning("ignoring exchange.declare for exchange ~p,
+            rabbit_log:warning("ignoring exchange.declare for exchange ~tp,
                                 exchange.delete in progress~n.", [XName]),
             X
     end.
-
-map_create_tx(true)  -> transaction;
-map_create_tx(false) -> none.
-
-
-store(X = #exchange{durable = true}) ->
-    mnesia:write(rabbit_durable_exchange, X#exchange{decorators = undefined},
-                 write),
-    store_ram(X);
-store(X = #exchange{durable = false}) ->
-    store_ram(X).
-
-store_ram(X) ->
-    X1 = rabbit_exchange_decorator:set(X),
-    ok = mnesia:write(rabbit_exchange, X1, write),
-    X1.
 
 %% Used with binaries sent over the wire; the type may not exist.
 
@@ -167,12 +142,12 @@ check_type(TypeBin) ->
     case rabbit_registry:binary_to_type(rabbit_data_coercion:to_binary(TypeBin)) of
         {error, not_found} ->
             rabbit_misc:protocol_error(
-              command_invalid, "unknown exchange type '~s'", [TypeBin]);
+              command_invalid, "unknown exchange type '~ts'", [TypeBin]);
         T ->
             case rabbit_registry:lookup_module(exchange, T) of
                 {error, not_found} -> rabbit_misc:protocol_error(
                                         command_invalid,
-                                        "invalid exchange type '~s'", [T]);
+                                        "invalid exchange type '~ts'", [T]);
                 {ok, _Module}      -> T
             end
     end.
@@ -209,25 +184,21 @@ assert_args_equivalence(#exchange{ name = Name, arguments = Args },
 
 -spec exists(name()) -> boolean().
 exists(Name) ->
-    ets:member(rabbit_exchange, Name).
+    rabbit_db_exchange:exists(Name).
 
 -spec lookup
         (name()) -> rabbit_types:ok(rabbit_types:exchange()) |
                     rabbit_types:error('not_found').
 
 lookup(Name) ->
-    rabbit_misc:dirty_read({rabbit_exchange, Name}).
-
+    rabbit_db_exchange:get(Name).
 
 -spec lookup_many([name()]) -> [rabbit_types:exchange()].
 
-lookup_many([])     -> [];
-lookup_many([Name]) -> ets:lookup(rabbit_exchange, Name);
-lookup_many(Names) when is_list(Names) ->
-    %% Normally we'd call mnesia:dirty_read/1 here, but that is quite
-    %% expensive for reasons explained in rabbit_misc:dirty_read/1.
-    lists:append([ets:lookup(rabbit_exchange, Name) || Name <- Names]).
-
+lookup_many([]) ->
+    [];
+lookup_many(Names) ->
+    rabbit_db_exchange:get_many(Names).
 
 -spec lookup_or_die
         (name()) -> rabbit_types:exchange() |
@@ -241,30 +212,23 @@ lookup_or_die(Name) ->
 
 -spec list() -> [rabbit_types:exchange()].
 
-list() -> mnesia:dirty_match_object(rabbit_exchange, #exchange{_ = '_'}).
+list() ->
+    rabbit_db_exchange:get_all().
 
 -spec count() -> non_neg_integer().
 
 count() ->
-    mnesia:table_info(rabbit_exchange, size).
+    rabbit_db_exchange:count().
 
 -spec list_names() -> [rabbit_exchange:name()].
 
-list_names() -> mnesia:dirty_all_keys(rabbit_exchange).
-
-%% Not dirty_match_object since that would not be transactional when used in a
-%% tx context
+list_names() ->
+    rabbit_db_exchange:list().
 
 -spec list(rabbit_types:vhost()) -> [rabbit_types:exchange()].
 
 list(VHostPath) ->
-    mnesia:async_dirty(
-      fun () ->
-              mnesia:match_object(
-                rabbit_exchange,
-                #exchange{name = rabbit_misc:r(VHostPath, exchange), _ = '_'},
-                read)
-      end).
+    rabbit_db_exchange:get_all(VHostPath).
 
 -spec lookup_scratch(name(), atom()) ->
                                rabbit_types:ok(term()) |
@@ -286,48 +250,32 @@ lookup_scratch(Name, App) ->
 -spec update_scratch(name(), atom(), fun((any()) -> any())) -> 'ok'.
 
 update_scratch(Name, App, Fun) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun() ->
-              update(Name,
-                     fun(X = #exchange{scratches = Scratches0}) ->
-                             Scratches1 = case Scratches0 of
-                                              undefined -> orddict:new();
-                                              _         -> Scratches0
-                                          end,
-                             Scratch = case orddict:find(App, Scratches1) of
-                                           {ok, S} -> S;
-                                           error   -> undefined
-                                       end,
-                             Scratches2 = orddict:store(
-                                            App, Fun(Scratch), Scratches1),
-                             X#exchange{scratches = Scratches2}
-                     end),
-              ok
-      end).
+    Decorators = case rabbit_db_exchange:get(Name) of
+                     {ok, X} -> rabbit_exchange_decorator:active(X);
+                     {error, not_found} -> []
+                 end,
+    ok = rabbit_db_exchange:update(Name, update_scratch_fun(App, Fun, Decorators)).
 
--spec update_decorators(name()) -> 'ok'.
-
-update_decorators(Name) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun() ->
-              case mnesia:wread({rabbit_exchange, Name}) of
-                  [X] -> store_ram(X),
-                         ok;
-                  []  -> ok
-              end
-      end).
-
--spec update
-        (name(),
-         fun((rabbit_types:exchange()) -> rabbit_types:exchange()))
-         -> not_found | rabbit_types:exchange().
-
-update(Name, Fun) ->
-    case mnesia:wread({rabbit_exchange, Name}) of
-        [X] -> X1 = Fun(X),
-               store(X1);
-        []  -> not_found
+update_scratch_fun(App, Fun, Decorators) ->
+    fun(X = #exchange{scratches = Scratches0}) ->
+            Scratches1 = case Scratches0 of
+                             undefined -> orddict:new();
+                             _         -> Scratches0
+                         end,
+            Scratch = case orddict:find(App, Scratches1) of
+                          {ok, S} -> S;
+                          error   -> undefined
+                      end,
+            Scratches2 = orddict:store(App, Fun(Scratch), Scratches1),
+            X#exchange{scratches = Scratches2,
+                       decorators = Decorators}
     end.
+
+-spec update_decorators(name(), {[Decorator], [Decorator]}) -> 'ok' when
+      Decorator :: atom().
+update_decorators(Name, Decorators) ->
+    Fun = fun(X) -> X#exchange{decorators = Decorators} end,
+    ok = rabbit_db_exchange:update(Name, Fun).
 
 -spec immutable(rabbit_types:exchange()) -> rabbit_types:exchange().
 
@@ -393,37 +341,58 @@ info_all(VHostPath, Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
       AggregatorPid, Ref, fun(X) -> info(X, Items) end, list(VHostPath)).
 
--spec route(rabbit_types:exchange(), rabbit_types:delivery())
-                 -> [rabbit_amqqueue:name()].
+-spec route(rabbit_types:exchange(), mc:state()) ->
+    [rabbit_amqqueue:name() | {virtual_reply_queue, binary()}].
+route(Exchange, Message) ->
+    route(Exchange, Message, #{}).
 
-route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,
-                decorators = Decorators} = X,
-      #delivery{message = #basic_message{routing_keys = RKs}} = Delivery) ->
-    case RName of
-        <<>> ->
-            RKsSorted = lists:usort(RKs),
-            [rabbit_channel:deliver_reply(RK, Delivery) ||
-             RK <- RKsSorted, virtual_reply_queue(RK)],
-            [rabbit_misc:r(VHost, queue, RK) || RK <- RKsSorted,
-                                                not virtual_reply_queue(RK)];
+-spec route(rabbit_types:exchange(), mc:state(), route_opts()) ->
+    route_return().
+route(#exchange{name = #resource{name = ?DEFAULT_EXCHANGE_NAME,
+                                 virtual_host = VHost}},
+      Message, _Opts) ->
+    RKs0 = mc:get_annotation(routing_keys, Message),
+    RKs = lists:usort(RKs0),
+    [begin
+         case virtual_reply_queue(RK) of
+             false ->
+                 rabbit_misc:r(VHost, queue, RK);
+             true ->
+                 {virtual_reply_queue, RK}
+         end
+     end
+     || RK <- RKs];
+route(X = #exchange{name = XName,
+                    decorators = Decorators},
+      Message, Opts) ->
+    Decs = rabbit_exchange_decorator:select(route, Decorators),
+    QNamesToBKeys = route1(Message, Decs, Opts, {[X], XName, #{}}),
+    case Opts of
+        #{return_binding_keys := true} ->
+            maps:fold(fun(QName, BindingKeys, L) ->
+                              [{QName, #{binding_keys => BindingKeys}} | L]
+                      end, [], QNamesToBKeys);
         _ ->
-            Decs = rabbit_exchange_decorator:select(route, Decorators),
-            lists:usort(route1(Delivery, Decs, {[X], XName, []}))
+            maps:keys(QNamesToBKeys)
     end.
 
 virtual_reply_queue(<<"amq.rabbitmq.reply-to.", _/binary>>) -> true;
 virtual_reply_queue(_)                                      -> false.
 
-route1(_, _, {[], _, QNames}) ->
+route1(_, _, _, {[], _, QNames}) ->
     QNames;
-route1(Delivery, Decorators,
+route1(Message, Decorators, Opts,
        {[X = #exchange{type = Type} | WorkList], SeenXs, QNames}) ->
-    ExchangeDests  = (type_to_module(Type)):route(X, Delivery),
-    DecorateDests  = process_decorators(X, Decorators, Delivery),
+    {Route, Arity} = type_to_route_fun(Type),
+    ExchangeDests = case Arity of
+                        2 -> Route(X, Message);
+                        3 -> Route(X, Message, Opts)
+                    end,
+    DecorateDests  = process_decorators(X, Decorators, Message),
     AlternateDests = process_alternate(X, ExchangeDests),
-    route1(Delivery, Decorators,
+    route1(Message, Decorators, Opts,
            lists:foldl(fun process_route/2, {WorkList, SeenXs, QNames},
-                       AlternateDests ++ DecorateDests  ++ ExchangeDests)).
+                       AlternateDests ++ DecorateDests ++ ExchangeDests)).
 
 process_alternate(X = #exchange{name = XName}, []) ->
     case rabbit_policy:get_arg(
@@ -436,8 +405,8 @@ process_alternate(_X, _Results) ->
 
 process_decorators(_, [], _) -> %% optimisation
     [];
-process_decorators(X, Decorators, Delivery) ->
-    lists:append([Decorator:route(X, Delivery) || Decorator <- Decorators]).
+process_decorators(X, Decorators, Message) ->
+    lists:append([Decorator:route(X, Message) || Decorator <- Decorators]).
 
 process_route(#resource{kind = exchange} = XName,
               {_WorkList, XName, _QNames} = Acc) ->
@@ -454,22 +423,26 @@ process_route(#resource{kind = exchange} = XName,
                   gb_sets:add_element(XName, SeenXs), QNames}
     end;
 process_route(#resource{kind = queue} = QName,
-              {WorkList, SeenXs, QNames}) ->
-    {WorkList, SeenXs, [QName | QNames]}.
+              {WorkList, SeenXs, QNames0}) ->
+    QNames = case QNames0 of
+                 #{QName := _} -> QNames0;
+                 #{} -> QNames0#{QName => #{}}
+             end,
+    {WorkList, SeenXs, QNames};
+process_route({#resource{kind = queue} = QName, BindingKey},
+              {WorkList, SeenXs, QNames0})
+  when is_binary(BindingKey) ->
+    QNames = maps:update_with(QName,
+                              fun(BKeys) -> BKeys#{BindingKey => true} end,
+                              #{BindingKey => true},
+                              QNames0),
+    {WorkList, SeenXs, QNames}.
 
 cons_if_present(XName, L) ->
     case lookup(XName) of
         {ok, X}            -> [X | L];
         {error, not_found} -> L
     end.
-
-call_with_exchange(XName, Fun) ->
-    rabbit_misc:execute_mnesia_tx_with_tail(
-      fun () -> case mnesia:read({rabbit_exchange, XName}) of
-                    []  -> rabbit_misc:const({error, not_found});
-                    [X] -> Fun(X)
-                end
-      end).
 
 -spec delete
         (name(),  'true', rabbit_types:username()) ->
@@ -478,35 +451,34 @@ call_with_exchange(XName, Fun) ->
                     'ok' | rabbit_types:error('not_found').
 
 delete(XName, IfUnused, Username) ->
-    Fun = case IfUnused of
-              true  -> fun conditional_delete/2;
-              false -> fun unconditional_delete/2
-          end,
     try
         %% guard exchange.declare operations from failing when there's
         %% a race condition between it and an exchange.delete.
         %%
         %% see rabbitmq/rabbitmq-federation#7
-        rabbit_runtime_parameters:set(XName#resource.virtual_host,
+        _ = rabbit_runtime_parameters:set(XName#resource.virtual_host,
                                       ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
                                       XName#resource.name, true, Username),
-        call_with_exchange(
-          XName,
-          fun (X) ->
-                  case Fun(X, false) of
-                      {deleted, X, Bs, Deletions} ->
-                          rabbit_binding:process_deletions(
-                            rabbit_binding:add_deletion(
-                              XName, {X, deleted, Bs}, Deletions), Username);
-                      {error, _InUseOrNotFound} = E ->
-                          rabbit_misc:const(E)
-                  end
-          end)
+        Deletions = process_deletions(rabbit_db_exchange:delete(XName, IfUnused)),
+        case Deletions of
+            {error, _} ->
+                Deletions;
+            _ ->
+                rabbit_binding:notify_deletions(Deletions, Username),
+                ok
+        end
     after
         rabbit_runtime_parameters:clear(XName#resource.virtual_host,
                                         ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
                                         XName#resource.name, Username)
     end.
+
+process_deletions({error, _} = E) ->
+    E;
+process_deletions({deleted, #exchange{name = XName} = X, Bs, Deletions}) ->
+    rabbit_binding:process_deletions(
+      rabbit_binding:add_deletion(
+        XName, {X, deleted, Bs}, Deletions)).
 
 -spec validate_binding
         (rabbit_types:exchange(), rabbit_types:binding())
@@ -516,56 +488,13 @@ validate_binding(X = #exchange{type = XType}, Binding) ->
     Module = type_to_module(XType),
     Module:validate_binding(X, Binding).
 
--spec maybe_auto_delete
-        (rabbit_types:exchange(), boolean())
-        -> 'not_deleted' | {'deleted', rabbit_binding:deletions()}.
-
-maybe_auto_delete(#exchange{auto_delete = false}, _OnlyDurable) ->
-    not_deleted;
-maybe_auto_delete(#exchange{auto_delete = true} = X, OnlyDurable) ->
-    case conditional_delete(X, OnlyDurable) of
-        {error, in_use}             -> not_deleted;
-        {deleted, X, [], Deletions} -> {deleted, Deletions}
-    end.
-
-conditional_delete(X = #exchange{name = XName}, OnlyDurable) ->
-    case rabbit_binding:has_for_source(XName) of
-        false  -> internal_delete(X, OnlyDurable, false);
-        true   -> {error, in_use}
-    end.
-
-unconditional_delete(X, OnlyDurable) ->
-    internal_delete(X, OnlyDurable, true).
-
-internal_delete(X = #exchange{name = XName}, OnlyDurable, RemoveBindingsForSource) ->
-    ok = mnesia:delete({rabbit_exchange, XName}),
-    ok = mnesia:delete({rabbit_exchange_serial, XName}),
-    mnesia:delete({rabbit_durable_exchange, XName}),
-    Bindings = case RemoveBindingsForSource of
-        true  -> rabbit_binding:remove_for_source(X);
-        false -> []
-    end,
-    {deleted, X, Bindings, rabbit_binding:remove_for_destination(
-                             XName, OnlyDurable)}.
-
-next_serial(XName) ->
-    Serial = peek_serial(XName, write),
-    ok = mnesia:write(rabbit_exchange_serial,
-                      #exchange_serial{name = XName, next = Serial + 1}, write),
-    Serial.
-
 -spec peek_serial(name()) -> pos_integer() | 'undefined'.
 
-peek_serial(XName) -> peek_serial(XName, read).
-
-peek_serial(XName, LockType) ->
-    case mnesia:read(rabbit_exchange_serial, XName, LockType) of
-        [#exchange_serial{next = Serial}]  -> Serial;
-        _                                  -> 1
-    end.
+peek_serial(XName) ->
+    rabbit_db_exchange:peek_serial(XName).
 
 invalid_module(T) ->
-    rabbit_log:warning("Could not find exchange type ~s.", [T]),
+    rabbit_log:warning("Could not find exchange type ~ts.", [T]),
     put({xtype_to_module, T}, rabbit_exchange_type_invalid),
     rabbit_exchange_type_invalid.
 
@@ -580,4 +509,18 @@ type_to_module(T) ->
             end;
         Module ->
             Module
+    end.
+
+type_to_route_fun(T) ->
+    case persistent_term:get(T, undefined) of
+        undefined ->
+            XMod = type_to_module(T),
+            FunArity = case erlang:function_exported(XMod, route, 3) of
+                           true -> {fun XMod:route/3, 3};
+                           false -> {fun XMod:route/2, 2}
+                       end,
+            persistent_term:put(T, FunArity),
+            FunArity;
+        FunArity ->
+            FunArity
     end.

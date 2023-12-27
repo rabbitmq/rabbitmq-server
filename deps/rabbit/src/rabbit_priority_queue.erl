@@ -2,13 +2,12 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%%  Copyright (c) 2015-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%%  Copyright (c) 2015-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_priority_queue).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("amqqueue.hrl").
 
 -behaviour(rabbit_backing_queue).
@@ -35,7 +34,7 @@
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
          set_queue_version/2,
-         zip_msgs_and_acks/4, handle_info/2]).
+         zip_msgs_and_acks/4]).
 
 -record(state, {bq, bqss, max_priority}).
 -record(passthrough, {bq, bqs}).
@@ -68,7 +67,7 @@ enable() ->
     {ok, RealBQ} = application:get_env(rabbit, backing_queue_module),
     case RealBQ of
         ?MODULE -> ok;
-        _       -> rabbit_log:info("Priority queues enabled, real BQ is ~s",
+        _       -> rabbit_log:info("Priority queues enabled, real BQ is ~ts",
                                    [RealBQ]),
                    application:set_env(
                      rabbitmq_priority_queue, backing_queue_module, RealBQ),
@@ -106,11 +105,11 @@ mutate_name_bin(P, NameBin) ->
     <<NameBin/binary, 0, P:8>>.
 
 expand_queues(QNames) ->
-    lists:unzip(
-      lists:append([expand_queue(QName) || QName <- QNames])).
+    Qs = rabbit_db_queue:get_many_durable(QNames),
+    lists:unzip(lists:append([expand_queue(Q) || Q <- Qs])).
 
-expand_queue(QName = #resource{name = QNameBin}) ->
-    {ok, Q} = rabbit_misc:dirty_read({rabbit_durable_queue, QName}),
+expand_queue(Q) ->
+    #resource{name = QNameBin} = QName = amqqueue:get_name(Q),
     case priorities(Q) of
         none -> [{QName, QName}];
         Ps   -> [{QName, QName#resource{name = mutate_name_bin(P, QNameBin)}}
@@ -395,11 +394,6 @@ handle_pre_hibernate(State = #state{bq = BQ}) ->
 handle_pre_hibernate(State = #passthrough{bq = BQ, bqs = BQS}) ->
     ?passthrough1(handle_pre_hibernate(BQS)).
 
-handle_info(Msg, State = #state{bq = BQ}) ->
-    foreach1(fun (_P, BQSN) -> BQ:handle_info(Msg, BQSN) end, State);
-handle_info(Msg, State = #passthrough{bq = BQ, bqs = BQS}) ->
-    ?passthrough1(handle_info(Msg, BQS)).
-
 resume(State = #state{bq = BQ}) ->
     foreach1(fun (_P, BQSN) -> BQ:resume(BQSN) end, State);
 resume(State = #passthrough{bq = BQ, bqs = BQS}) ->
@@ -633,11 +627,8 @@ priority(Priority, MaxP) when is_integer(Priority), Priority =< MaxP ->
     Priority;
 priority(Priority, MaxP) when is_integer(Priority), Priority > MaxP ->
     MaxP;
-priority(#basic_message{content = Content}, MaxP) ->
-    priority(rabbit_binary_parser:ensure_content_decoded(Content), MaxP);
-priority(#content{properties = Props}, MaxP) ->
-    #'P_basic'{priority = Priority0} = Props,
-    priority(Priority0, MaxP).
+priority(Msg, MaxP) ->
+    priority(mc:priority(Msg), MaxP).
 
 add_maybe_infinity(infinity, _) -> infinity;
 add_maybe_infinity(_, infinity) -> infinity;
@@ -661,7 +652,13 @@ priority_on_acktags(P, AckTags) ->
 combine_status(P, New, nothing) ->
     [{priority_lengths, [{P, proplists:get_value(len, New)}]} | New];
 combine_status(P, New, Old) ->
-    Combined = [{K, cse(V, proplists:get_value(K, Old))} || {K, V} <- New],
+    Combined = [case K of
+                    version ->
+                        {K, proplists:get_value(version, Old)};
+                    _ ->
+                        {K, cse(V, proplists:get_value(K, Old))}
+                end
+                || {K, V} <- New],
     Lens = [{P, proplists:get_value(len, New)} |
             proplists:get_value(priority_lengths, Old)],
     [{priority_lengths, Lens} | Combined].
@@ -694,6 +691,7 @@ find_head_message_timestamp(_, [], Timestamp) ->
 
 zip_msgs_and_acks(Pubs, AckTags) ->
     lists:zipwith(
-      fun ({#basic_message{ id = Id }, _Props}, AckTag) ->
-                  {Id, AckTag}
+      fun ({Msg, _Props}, AckTag) ->
+              Id = mc:get_annotation(id, Msg),
+              {Id, AckTag}
       end, Pubs, AckTags).

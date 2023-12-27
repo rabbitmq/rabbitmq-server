@@ -4,7 +4,7 @@
 %%
 %% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2015-2016 AWeber Communications
-%% Copyright (c) 2016-2022 VMware, Inc. or its affiliates. All rights reserved.
+%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates. All rights reserved.
 %%
 
 -module(rabbit_peer_discovery_config).
@@ -26,7 +26,7 @@ get(Key, Mapping, Config) ->
     case maps:is_key(Key, Mapping) of
         false ->
             ?LOG_ERROR(
-               "Key ~s is not found in peer discovery config mapping ~p!",
+               "Key ~ts is not found in peer discovery config mapping ~tp!",
                [Key, Mapping],
                #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             throw({badkey, Key});
@@ -42,7 +42,7 @@ get_integer(Key, Mapping, Config) ->
     case maps:is_key(Key, Mapping) of
         false ->
             ?LOG_ERROR(
-               "Key ~s is not found in peer discovery config mapping ~p!",
+               "Key ~ts is not found in peer discovery config mapping ~tp!",
                [Key, Mapping],
                #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             throw({badkey, Key});
@@ -119,15 +119,15 @@ get_integer_from_env_variable_or_map(Map, OSKey, AppKey, Default) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec normalize(Type  :: atom(),
-                Value :: atom() | boolean() | integer() | string() | list()) ->
-  atom() | integer() | string().
+                Value :: term()) ->
+  peer_discovery_config_value().
 %% TODO: switch these to use delegate to rabbit_data_coercion:*
 normalize(Type, Value) when Type =:= port ->
   rabbit_peer_discovery_util:parse_port(Value);
 normalize(Type, Value) when Type =:= atom ->
   rabbit_peer_discovery_util:as_atom(Value);
 normalize(Type, Value) when Type =:= list ->
-  rabbit_data_coercion:to_list(Value);
+  rabbit_peer_discovery_util:as_list(Value);
 normalize(Type, Value) when Type =:= integer ->
   rabbit_peer_discovery_util:as_integer(Value);
 normalize(Type, Value) when Type =:= string ->

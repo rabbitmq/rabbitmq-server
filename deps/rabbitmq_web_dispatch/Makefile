@@ -7,10 +7,8 @@ define PROJECT_APP_EXTRA_KEYS
 endef
 
 LOCAL_DEPS = inets
-DEPS = rabbit_common rabbit cowboy
+DEPS = amqp_client rabbit_common rabbit cowboy
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
-
-dep_cowboy = hex 2.0.0
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk

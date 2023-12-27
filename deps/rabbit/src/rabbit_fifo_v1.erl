@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_fifo_v1).
@@ -861,7 +861,7 @@ eval_gc(Log, #?STATE{cfg = #cfg{resource = QR}} = MacState,
                Mem > ?GC_MEM_LIMIT_B ->
             garbage_collect(),
             {memory, MemAfter} = erlang:process_info(self(), memory),
-            rabbit_log:debug("~s: full GC sweep complete. "
+            rabbit_log:debug("~ts: full GC sweep complete. "
                             "Process memory changed from ~.2fMB to ~.2fMB.",
                             [rabbit_misc:rs(QR), Mem/?MB, MemAfter/?MB]),
             AuxState#aux{gc = Gc#aux_gc{last_raft_idx = Idx}};
@@ -877,7 +877,7 @@ force_eval_gc(Log, #?STATE{cfg = #cfg{resource = QR}},
         true ->
             garbage_collect(),
             {memory, MemAfter} = erlang:process_info(self(), memory),
-            rabbit_log:debug("~s: full GC sweep complete. "
+            rabbit_log:debug("~ts: full GC sweep complete. "
                             "Process memory changed from ~.2fMB to ~.2fMB.",
                              [rabbit_misc:rs(QR), Mem/?MB, MemAfter/?MB]),
             AuxState#aux{gc = Gc#aux_gc{last_raft_idx = Idx}};

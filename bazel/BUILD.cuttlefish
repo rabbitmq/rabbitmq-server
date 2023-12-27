@@ -1,0 +1,163 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+            "+warn_untyped_record",
+            "+warnings_as_errors",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+            "+warn_untyped_record",
+            "+warnings_as_errors",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "other_beam",
+    srcs = [
+        "src/conf_parse.erl",
+        "src/cuttlefish.erl",
+        "src/cuttlefish_advanced.erl",
+        "src/cuttlefish_bytesize.erl",
+        "src/cuttlefish_conf.erl",
+        "src/cuttlefish_datatypes.erl",
+        "src/cuttlefish_duration.erl",
+        "src/cuttlefish_duration_parse.erl",
+        "src/cuttlefish_effective.erl",
+        "src/cuttlefish_enum.erl",
+        "src/cuttlefish_error.erl",
+        "src/cuttlefish_escript.erl",
+        "src/cuttlefish_flag.erl",
+        "src/cuttlefish_generator.erl",
+        "src/cuttlefish_mapping.erl",
+        "src/cuttlefish_rebar_plugin.erl",
+        "src/cuttlefish_schema.erl",
+        "src/cuttlefish_translation.erl",
+        "src/cuttlefish_unit.erl",
+        "src/cuttlefish_util.erl",
+        "src/cuttlefish_validator.erl",
+        "src/cuttlefish_variable.erl",
+        "src/cuttlefish_vmargs.erl",
+    ],
+    outs = [
+        "ebin/conf_parse.beam",
+        "ebin/cuttlefish.beam",
+        "ebin/cuttlefish_advanced.beam",
+        "ebin/cuttlefish_bytesize.beam",
+        "ebin/cuttlefish_conf.beam",
+        "ebin/cuttlefish_datatypes.beam",
+        "ebin/cuttlefish_duration.beam",
+        "ebin/cuttlefish_duration_parse.beam",
+        "ebin/cuttlefish_effective.beam",
+        "ebin/cuttlefish_enum.beam",
+        "ebin/cuttlefish_error.beam",
+        "ebin/cuttlefish_escript.beam",
+        "ebin/cuttlefish_flag.beam",
+        "ebin/cuttlefish_generator.beam",
+        "ebin/cuttlefish_mapping.beam",
+        "ebin/cuttlefish_rebar_plugin.beam",
+        "ebin/cuttlefish_schema.beam",
+        "ebin/cuttlefish_translation.beam",
+        "ebin/cuttlefish_unit.beam",
+        "ebin/cuttlefish_util.beam",
+        "ebin/cuttlefish_validator.beam",
+        "ebin/cuttlefish_variable.beam",
+        "ebin/cuttlefish_vmargs.beam",
+    ],
+    hdrs = ["src/cuttlefish_duration.hrl"],
+    app_name = "cuttlefish",
+    beam = [],
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [":other_beam"],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/conf_parse.erl",
+        "src/cuttlefish.app.src",
+        "src/cuttlefish.erl",
+        "src/cuttlefish_advanced.erl",
+        "src/cuttlefish_bytesize.erl",
+        "src/cuttlefish_conf.erl",
+        "src/cuttlefish_datatypes.erl",
+        "src/cuttlefish_duration.erl",
+        "src/cuttlefish_duration_parse.erl",
+        "src/cuttlefish_effective.erl",
+        "src/cuttlefish_enum.erl",
+        "src/cuttlefish_error.erl",
+        "src/cuttlefish_escript.erl",
+        "src/cuttlefish_flag.erl",
+        "src/cuttlefish_generator.erl",
+        "src/cuttlefish_mapping.erl",
+        "src/cuttlefish_rebar_plugin.erl",
+        "src/cuttlefish_schema.erl",
+        "src/cuttlefish_translation.erl",
+        "src/cuttlefish_unit.erl",
+        "src/cuttlefish_util.erl",
+        "src/cuttlefish_validator.erl",
+        "src/cuttlefish_variable.erl",
+        "src/cuttlefish_vmargs.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = ["src/cuttlefish_duration.hrl"],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = [],
+)
+
+filegroup(
+    name = "priv",
+    srcs = ["priv/erlang_vm.schema"],
+)
+
+filegroup(
+    name = "licenses",
+    srcs = ["LICENSE"],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    app_name = "cuttlefish",
+    beam_files = [":beam_files"],
+    deps = ["@getopt//:erlang_app"],
+)
+
+alias(
+    name = "cuttlefish",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)

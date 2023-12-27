@@ -1,3 +1,6 @@
+% vim:ft=erlang:
+%
+
 [{internal_auth_backend,
   "auth_backends.1 = internal",
   [{rabbit,[{auth_backends,[rabbit_auth_backend_internal]}]}],
@@ -5,6 +8,14 @@
  {ldap_auth_backend,
   "auth_backends.1 = ldap",
   [{rabbit,[{auth_backends,[rabbit_auth_backend_ldap]}]}],
+  []},
+ {http_auth_backend,
+  "auth_backends.1 = http",
+  [{rabbit,[{auth_backends,[rabbit_auth_backend_http]}]}],
+  []},
+ {oauth2_auth_backend,
+  "auth_backends.1 = oauth2",
+  [{rabbit,[{auth_backends,[rabbit_auth_backend_oauth2]}]}],
   []},
  {multiple_auth_backends,
  "auth_backends.1 = ldap
@@ -100,6 +111,69 @@ ssl_options.fail_if_no_peer_cert = true",
  {socket_writer_gc_threshold_off,
   "socket_writer.gc_threshold = off", [{rabbit, [{writer_gc_threshold, undefined}]}],[]},
 
+ {disk_free_limit_absolute_priority,
+  "disk_free_limit.relative = 1.0
+   disk_free_limit.absolute = 50000",
+   [{rabbit, [{disk_free_limit, 50000}]}],[]},
+
+ {disk_free_limit_absolute_priority_regardless_of_order,
+  "disk_free_limit.absolute = 50000
+    disk_free_limit.relative = 1.0",
+   [{rabbit, [{disk_free_limit, 50000}]}],[]},
+
+ {disk_free_limit_only_relative,
+  "disk_free_limit.relative = 1.0",
+   [{rabbit, [{disk_free_limit, {mem_relative, 1.0}}]}],[]},
+
+ {disk_free_limit_only_absolute,
+  "disk_free_limit.absolute = 50000",
+   [{rabbit, [{disk_free_limit, 50000}]}],[]},
+
+ {default_users,
+ "
+  default_users.a.vhost_pattern = banana
+  default_users.a.tags = administrator,operator
+  default_users.a.password = SECRET
+  default_users.a.read = .*
+ ",
+  [{rabbit, [{default_users, [
+      {<<"a">>, [{<<"vhost_pattern">>, "banana"},
+                 {<<"tags">>, [administrator, operator]},
+                 {<<"password">>, "SECRET"},
+                 {<<"read">>, ".*"}]}]}]}],
+  []},
+
+ {default_policies_operator,
+ "
+  default_policies.operator.a.expires = 1h
+  default_policies.operator.a.queue_pattern = apple
+  default_policies.operator.a.vhost_pattern = banana
+  default_policies.operator.a.classic_queues.ha_mode = exactly
+  default_policies.operator.a.classic_queues.ha_params = 2
+  default_policies.operator.a.classic_queues.ha_sync_mode = automatic
+  default_policies.operator.a.classic_queues.queue_version = 2
+
+ ",
+  [{rabbit, [{default_policies, [{operator, [
+      {<<"a">>, [{<<"expires">>, 3600000},
+                 {<<"ha_mode">>, <<"exactly">>},
+                 {<<"ha_params">>, 2},
+                 {<<"ha_sync_mode">>, <<"automatic">>},
+                 {<<"queue_pattern">>, <<"apple">>},
+                 {<<"queue_version">>, 2},
+                 {<<"vhost_pattern">>, "banana"}]}]}]}]}],
+  []},
+
+ {default_vhost_limits,
+ "
+  default_limits.vhosts.a.pattern = banana
+  default_limits.vhosts.a.max_queues = 10
+ ",
+  [{rabbit, [{default_limits, [{vhosts, [
+      {<<"a">>, [{<<"pattern">>, "banana"},
+                 {<<"max_queues">>, 10}]}]}]}]}],
+  []},
+
  {default_user_settings,
   "default_user = guest
 default_pass = guest
@@ -186,6 +260,11 @@ tcp_listen_options.exit_on_close = false",
   "vm_memory_high_watermark.absolute = 1024MB",
   [{rabbit,[{vm_memory_high_watermark,{absolute,"1024MB"}}]}],
   []},
+ {vm_memory_watermark_absolute_priority,
+  "vm_memory_high_watermark.absolute = 1073741824
+   vm_memory_high_watermark.relative = 0.4",
+  [{rabbit,[{vm_memory_high_watermark,{absolute,1073741824}}]}],
+  []},
  {vm_memory_watermark_paging_ratio,
   "vm_memory_high_watermark_paging_ratio = 0.75
    vm_memory_high_watermark.relative = 0.4",
@@ -221,13 +300,13 @@ tcp_listen_options.exit_on_close = false",
   "total_memory_available_override_value = 1024MB",
   [{rabbit,[{total_memory_available_override_value, "1024MB"}]}],
   []},
- {connection_max,
-  "connection_max = 999",
-  [{rabbit,[{connection_max, 999}]}],
+ {ranch_connection_max,
+  "ranch_connection_max = 999",
+  [{rabbit,[{ranch_connection_max, 999}]}],
   []},
- {connection_max,
-  "connection_max = infinity",
-  [{rabbit,[{connection_max, infinity}]}],
+ {ranch_connection_max,
+  "ranch_connection_max = infinity",
+  [{rabbit,[{ranch_connection_max, infinity}]}],
   []},
  {channel_max,
   "channel_max = 16",
@@ -772,9 +851,9 @@ credential_validator.regexp = ^abc\\d+",
    []},
 
   {raft_segment_max_entries,
-   "raft.segment_max_entries = 65536",
+   "raft.segment_max_entries = 32768",
    [{ra, [
-      {segment_max_entries, 65536}
+      {segment_max_entries, 32768}
      ]}],
    []},
 
@@ -796,6 +875,13 @@ credential_validator.regexp = ^abc\\d+",
    "raft.snapshot_chunk_size = 1000000",
    [{ra, [
       {snapshot_chunk_size, 1000000}
+     ]}],
+   []},
+
+   {raft_adaptive_failure_detector_poll_interval,
+   "raft.adaptive_failure_detector.poll_interval = 10000",
+   [{aten, [
+      {poll_interval, 10000}
      ]}],
    []},
 
@@ -823,5 +909,54 @@ credential_validator.regexp = ^abc\\d+",
    [{rabbit, [
       {quorum_compute_checksums, true}
      ]}],
+   []},
+
+  %%
+  %% Runtime parameters
+  %%
+
+  {runtime_parameters_limits,
+  "
+   runtime_parameters.limits.federation = 2
+   runtime_parameters.limits.shovel = 1
+  ",
+   [{rabbit, [{runtime_parameters, [{limits, [
+       {<<"shovel">>, 1},
+       {<<"federation">>, 2}
+     ]}]}]}],
+   []},
+
+  %%
+  %% Deprecated features
+  %%
+
+  {deprecated_features_cmq,
+   "deprecated_features.permit.classic_queue_mirroring = false",
+   [{rabbit, [
+      {permit_deprecated_features, #{classic_queue_mirroring => false}}
+     ]}],
+   []},
+
+  %%
+  %% Message interceptors
+  %%
+
+  {message_interceptors,
+   "message_interceptors.incoming.set_header_timestamp.overwrite = true",
+   [{rabbit, [
+      {incoming_message_interceptors, [{set_header_timestamp, true}]}
+     ]}],
+   []},
+
+  {message_interceptors,
+  "
+   message_interceptors.incoming.set_header_routing_node.overwrite = false
+   message_interceptors.incoming.set_header_timestamp.overwrite = false
+  ",
+   [{rabbit, [
+      {incoming_message_interceptors, [{set_header_routing_node, false},
+                                       {set_header_timestamp, false}]}
+     ]}],
    []}
+
 ].

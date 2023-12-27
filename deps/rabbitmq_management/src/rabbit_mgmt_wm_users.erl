@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_users).
@@ -17,6 +17,15 @@
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+
+-define(BASIC_COLUMNS, ["hashing_algorithm",
+			"rabbit_password_hashing_sha256",
+			"limits",
+			"name",
+			"password_hash",
+			"tags"]).
+
+-define(DEFAULT_SORT, ["name"]).
 
 %%--------------------------------------------------------------------
 
@@ -33,7 +42,17 @@ allowed_methods(ReqData, Context) ->
     {[<<"HEAD">>, <<"GET">>, <<"OPTIONS">>], ReqData, Context}.
 
 to_json(ReqData, {Mode, Context}) ->
-    rabbit_mgmt_util:reply_list(users(Mode), ReqData, Context).
+    try
+        Basic = users(Mode),
+        Data = rabbit_mgmt_util:augment_resources(Basic, ?DEFAULT_SORT,
+                                                  ?BASIC_COLUMNS, ReqData,
+                                                  Context, fun augment/2),
+        rabbit_mgmt_util:reply(Data, ReqData, Context)
+    catch
+        {error, invalid_range_parameters, Reason} ->
+            rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData,
+                                         Context)
+    end.
 
 is_authorized(ReqData, {Mode, Context}) ->
     {Res, Req2, Context2} = rabbit_mgmt_util:is_authorized_admin(ReqData, Context),
@@ -57,3 +76,6 @@ users(without_permissions) ->
                                 Acc
                         end
                 end, [], rabbit_auth_backend_internal:list_users()).
+
+augment(Basic, _ReqData) ->
+    Basic.

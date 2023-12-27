@@ -3,25 +3,25 @@ on:
   schedule:
   - cron: '0 2 * * *'
   workflow_dispatch:
-  push:
-    paths:
-    - .github/workflows/test-windows.yaml
 jobs:
   test:
-    name: Test Windows
+    name: Test Windows OTP26
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-        - erlang_version: "25.1"
-          elixir_version: 1.14.0
+        - erlang_version: "26.1"
+          elixir_version: "1.15.2"
+        metadata_store:
+          - mnesia
+          - khepri
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: CONFIGURE ERLANG
-      uses: erlef/setup-beam@v1.13
+      uses: erlef/setup-beam@v1.16
       with:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: ${{ matrix.elixir_version }}
@@ -34,12 +34,15 @@ jobs:
       id: configure
       shell: bash
       run: |
+        if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
+        EOF
+        fi
         cat << EOF >> user.bazelrc
           startup --output_user_root=C:/tmp
           startup --windows_enable_symlinks
           build --enable_runfiles
-
-          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
 
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
@@ -57,7 +60,15 @@ jobs:
       run: |
         bazelisk test //... ^
           --config=buildbuddy ^
-          --noexperimental_enable_bzlmod ^
-          --test_tag_filters=-aws,-docker,-bats,-starts-background-broker ^
+          --test_env RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }} ^
+          --test_tag_filters=-aws,-docker,-bats,-starts-background-broker,-dialyze ^
           --build_tests_only ^
           --verbose_failures
+  summary-windows:
+    needs:
+    - test
+    runs-on: ubuntu-latest
+    steps:
+    - name: SUMMARY
+      run: |
+        echo "SUCCESS"

@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.ObserverCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -15,16 +15,16 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ObserverCommand do
     {args, Map.merge(%{interval: 5}, opts)}
   end
 
-
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
+  @dialyzer {:nowarn_function, run: 2}
   def run([], %{node: node_name, interval: interval}) do
     case :observer_cli.start(node_name, [{:interval, interval * 1000}]) do
       # See zhongwencool/observer_cli#54
-      {:badrpc, _} = err   -> err
-      {:error, _} = err    -> err
+      {:badrpc, _} = err -> err
+      {:error, _} = err -> err
       {:error, _, _} = err -> err
-      :ok   -> {:ok, "Disconnected from #{node_name}."}
+      :ok -> {:ok, "Disconnected from #{node_name}."}
       :quit -> {:ok, "Disconnected from #{node_name}."}
       other -> other
     end

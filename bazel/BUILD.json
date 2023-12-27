@@ -1,0 +1,10 @@
+filegroup(
+    name = "sources",
+    srcs = [
+        "mix.exs",
+    ] + glob([
+        "LICENSE*",
+        "lib/**/*",
+    ]),
+    visibility = ["//visibility:public"],
+)

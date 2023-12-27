@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(unit_config_value_encryption_SUITE).
@@ -15,6 +15,7 @@
 %% This cipher is listed as supported, but doesn't actually work.
 %% OTP bug: https://bugs.erlang.org/browse/ERL-1478
 -define(SKIPPED_CIPHERS, [aes_ige256]).
+-define(SKIPPED_HASHES, [shake128, shake256]).
 
 all() ->
     [
@@ -33,12 +34,17 @@ groups() ->
         ]}
     ].
 
-init_per_testcase(TC, Config) when TC =:= decrypt_start_app;
-                                   TC =:= decrypt_start_app_file;
-                                   TC =:= decrypt_start_app_undefined;
-                                   TC =:= decrypt_start_app_wrong_passphrase ->
+init_per_suite(Config) ->
     application:set_env(rabbit, feature_flags_file, "", [{persistent, true}]),
-    Config;
+    ThisNode = node(),
+    ok = rabbit_feature_flags:override_nodes([ThisNode]),
+    ok = rabbit_feature_flags:override_running_nodes([ThisNode]),
+    {ok, _Pid} = rabbit_ff_controller:start(),
+    Config.
+
+end_per_suite(_Config) ->
+    ok.
+
 init_per_testcase(_Testcase, Config) ->
     Config.
 
@@ -51,7 +57,7 @@ end_per_testcase(_TC, _Config) ->
 
 decrypt_config(_Config) ->
     %% Take all available block ciphers.
-    Hashes = rabbit_pbe:supported_hashes(),
+    Hashes = rabbit_pbe:supported_hashes() -- ?SKIPPED_HASHES,
     Ciphers = rabbit_pbe:supported_ciphers() -- ?SKIPPED_CIPHERS,
     Iterations = [1, 10, 100, 1000],
     %% Loop through all hashes, ciphers and iterations.
@@ -123,7 +129,7 @@ do_decrypt_start_app(Config, Passphrase) ->
     try
         rabbit:start_apps([rabbit_shovel_test], #{rabbit => temporary})
     catch _:Err:Stacktrace ->
-              ct:pal("start_apps failed with ~p~n~p", [Err, Stacktrace]),
+              ct:pal("start_apps failed with ~tp~n~tp", [Err, Stacktrace]),
               ok
     end,
     %% Check if the values have been decrypted.
@@ -218,21 +224,21 @@ rabbitmqctl_encode_encrypt_decrypt(Secret) ->
 
     {ok, Result} = rabbit_control_pbe:decode(
         rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(), rabbit_pbe:default_iterations(),
-        [lists:flatten(io_lib:format("~p", [Encrypted])), PassPhrase]
+        [lists:flatten(io_lib:format("~tp", [Encrypted])), PassPhrase]
     ),
     Secret = lists:flatten(Result),
     % decrypt with {encrypted, ...} form as input
     {ok, Result} = rabbit_control_pbe:decode(
         rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(), rabbit_pbe:default_iterations(),
-        [lists:flatten(io_lib:format("~p", [{encrypted, Encrypted}])), PassPhrase]
+        [lists:flatten(io_lib:format("~tp", [{encrypted, Encrypted}])), PassPhrase]
     ),
 
     % wrong passphrase
     {error, _} = rabbit_control_pbe:decode(
         rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(), rabbit_pbe:default_iterations(),
-        [lists:flatten(io_lib:format("~p", [Encrypted])), PassPhrase ++ " "]
+        [lists:flatten(io_lib:format("~tp", [Encrypted])), PassPhrase ++ " "]
     ),
     {error, _} = rabbit_control_pbe:decode(
         rabbit_pbe:default_cipher(), rabbit_pbe:default_hash(), rabbit_pbe:default_iterations(),
-        [lists:flatten(io_lib:format("~p", [{encrypted, Encrypted}])), PassPhrase ++ " "]
+        [lists:flatten(io_lib:format("~tp", [{encrypted, Encrypted}])), PassPhrase ++ " "]
     ).

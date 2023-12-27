@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_test_unit_SUITE).
@@ -22,6 +22,7 @@ groups() ->
      {parallel_tests, [parallel], [
                                    tokenise_test,
                                    pack_binding_test,
+                                   default_restrictions,
                                    path_prefix_test
                                   ]}
     ].
@@ -76,6 +77,9 @@ path_prefix_test(_Config) ->
     application:set_env(rabbitmq_management, path_prefix, Pfx2),
     Got3 = rabbit_mgmt_util:get_path_prefix(),
     ?assertEqual(Pfx0, Got3).
+
+default_restrictions(_) ->
+    ?assertEqual(false, rabbit_mgmt_features:is_op_policy_updating_disabled()).
 
 %%--------------------------------------------------------------------
 

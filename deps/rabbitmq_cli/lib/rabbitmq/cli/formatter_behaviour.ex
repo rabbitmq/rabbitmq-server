@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 # Formats returned values e.g. to human-readable text or JSON.
 defmodule RabbitMQ.CLI.FormatterBehaviour do
@@ -28,14 +28,16 @@ defmodule RabbitMQ.CLI.FormatterBehaviour do
   def module_name(nil) do
     nil
   end
+
   def module_name(formatter) do
-    mod = formatter |> String.downcase |> Macro.camelize
+    mod = formatter |> String.downcase() |> Macro.camelize()
     Module.safe_concat("RabbitMQ.CLI.Formatters", mod)
   end
 
   def machine_readable?(nil) do
     false
   end
+
   def machine_readable?(formatter) do
     Helpers.apply_if_exported(module_name(formatter), :machine_readable?, [], false)
   end

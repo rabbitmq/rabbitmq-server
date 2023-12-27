@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2017-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2017-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbitmqctl_shutdown_SUITE).
@@ -105,6 +105,6 @@ shutdown_ok(Node) ->
     {stream, Stream} = rabbit_ct_broker_helpers:control_action(shutdown, Node, []),
     %% Execute command steps. Each step will output a binary string
     Lines = 'Elixir.Enum':to_list(Stream),
-    ct:pal("Command output ~p ~n", [Lines]),
+    ct:pal("Command output ~tp ~n", [Lines]),
     [true = is_binary(Line) || Line <- Lines],
     ok.

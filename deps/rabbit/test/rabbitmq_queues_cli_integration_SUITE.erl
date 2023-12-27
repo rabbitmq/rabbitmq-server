@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2017-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2017-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 -module(rabbitmq_queues_cli_integration_SUITE).
 
@@ -120,8 +120,8 @@ grow_invalid_node_filtered(Config) ->
     #'queue.declare_ok'{} = declare_qq(Ch, QName, Args),
     DummyNode = not_really_a_node@nothing,
     publish_confirm(Ch, QName),
-    {ok, Out1} = rabbitmq_queues(Config, 0, ["grow", DummyNode, "all"]),
-    ?assertNotMatch(#{{"/", "grow-err"} := _}, parse_result(Out1)),
+    %% validated as of rabbitmq-server#8007
+    {error, _ExitCode, _} = rabbitmq_queues(Config, 0, ["grow", DummyNode, "all"]),
     ok.
 
 parse_result(S) ->
@@ -153,13 +153,13 @@ publish_confirm(Ch, QName) ->
                            #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
                                      payload = <<"msg">>}),
     amqp_channel:register_confirm_handler(Ch, self()),
-    ct:pal("waiting for confirms from ~s", [QName]),
+    ct:pal("waiting for confirms from ~ts", [QName]),
     receive
         #'basic.ack'{} ->
-            ct:pal("CONFIRMED! ~s", [QName]),
+            ct:pal("CONFIRMED! ~ts", [QName]),
             ok;
         #'basic.nack'{} ->
-            ct:pal("NOT CONFIRMED! ~s", [QName]),
+            ct:pal("NOT CONFIRMED! ~ts", [QName]),
             fail
     after 10000 ->
             exit(confirm_timeout)

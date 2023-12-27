@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_federation_util).
@@ -43,8 +43,8 @@ find_upstreams(Name, Upstreams) ->
 validate_arg(Name, Type, Args) ->
     case rabbit_misc:table_lookup(Args, Name) of
         {Type, _} -> ok;
-        undefined -> fail("Argument ~s missing", [Name]);
-        _         -> fail("Argument ~s must be of type ~s", [Name, Type])
+        undefined -> fail("Argument ~ts missing", [Name]);
+        _         -> fail("Argument ~ts must be of type ~ts", [Name, Type])
     end.
 
 -spec fail(io:format(), [term()]) -> no_return().

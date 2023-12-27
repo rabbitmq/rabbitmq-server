@@ -1,7 +1,19 @@
-load("@rules_erlang//:eunit.bzl", "eunit")
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
-load("//:rabbitmq.bzl", "RABBITMQ_TEST_ERLC_OPTS", "rabbitmq_app")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
+    "rabbitmq_app",
+)
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
+)
 
 APP_NAME = "rabbitmq_aws"
 
@@ -13,51 +25,95 @@ APP_REGISTERED = [
     "rabbitmq_aws",
 ]
 
-EXTRA_APPS = [
-    "crypto",
-    "inets",
-    "ssl",
-    "xmerl",
-]
+all_beam_files(name = "all_beam_files")
 
-BUILD_DEPS = [
-    "//deps/rabbit_common:erlang_app",
-]
+all_test_beam_files(name = "all_test_beam_files")
+
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
+
+# gazelle:erlang_app_extra_app crypto
+# gazelle:erlang_app_extra_app inets
+# gazelle:erlang_app_extra_app public_key
+# gazelle:erlang_app_extra_app ssl
+# gazelle:erlang_app_extra_app xmerl
+# gazelle:erlang_app_dep_exclude rabbit_common
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_module = APP_MODULE,
     app_name = APP_NAME,
     app_registered = APP_REGISTERED,
-    build_deps = BUILD_DEPS,
-    extra_apps = EXTRA_APPS,
+    beam_files = [":beam_files"],
+    extra_apps = [
+        "crypto",
+        "inets",
+        "ssl",
+        "xmerl",
+        "public_key",
+    ],
+    license_files = [":license_files"],
+    priv = [":priv"],
 )
 
 xref(
+    name = "xref",
     additional_libs = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common:erlang_app",  # keep
     ],
+    target = ":erlang_app",
 )
 
 plt(
-    name = "base_plt",
-    apps = EXTRA_APPS,
+    name = "deps_plt",
+    for_target = ":erlang_app",
+    ignore_warnings = True,
     plt = "//:base_plt",
+    deps = [
+        "//deps/rabbit_common:erlang_app",  # keep
+    ],
 )
 
 dialyze(
-    plt = ":base_plt",
-    warnings_as_errors = False,
+    name = "dialyze",
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = ":deps_plt",
+    target = ":erlang_app",
 )
 
 eunit(
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS + [
-        "-I",
-        "deps/rabbitmq_aws",
-        "+nowarn_export_all",
+    name = "eunit",
+    compiled_suites = [
+        ":test_rabbitmq_aws_all_tests_beam",
+        ":test_rabbitmq_aws_app_tests_beam",
+        ":test_rabbitmq_aws_config_tests_beam",
+        ":test_rabbitmq_aws_json_tests_beam",
+        ":test_rabbitmq_aws_sign_tests_beam",
+        ":test_rabbitmq_aws_sup_tests_beam",
+        ":test_rabbitmq_aws_tests_beam",
+        ":test_rabbitmq_aws_urilib_tests_beam",
+        ":test_rabbitmq_aws_xml_tests_beam",
     ],
-    runtime_deps = [
-        "//deps/rabbit_common:erlang_app",
-        "@meck//:erlang_app",
+    data = [
+        "test/test_aws_config.ini",
+        "test/test_aws_credentials.ini",
     ],
+    target = ":test_erlang_app",
+    deps = [
+        "//deps/rabbit_common:erlang_app",  # keep
+        "@meck//:erlang_app",  # keep
+        "@thoas//:erlang_app",  # keep
+    ],
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_aws",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

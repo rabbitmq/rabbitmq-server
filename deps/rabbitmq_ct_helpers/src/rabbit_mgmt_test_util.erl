@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%%   Copyright (c) 2010-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%%   Copyright (c) 2010-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_test_util).
@@ -48,6 +48,12 @@ http_get_no_auth(Config, Path, CodeExp) ->
         req(Config, 0, get, Path, []),
     assert_code(CodeExp, CodeAct, "GET", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
+
+http_get_no_decode(Config, Path, User, Pass, CodeExp) ->
+    {ok, {{_HTTP, CodeAct, _}, _Headers, ResBody}} =
+        req(Config, 0, get, Path, [auth_header(User, Pass)]),
+    assert_code(CodeExp, CodeAct, "GET", Path, ResBody),
+    ResBody.
 
 http_put(Config, Path, List, CodeExp) ->
     http_put_raw(Config, Path, format_for_upload(List), CodeExp).
@@ -100,7 +106,7 @@ uri_base_from(Config, Node) ->
 uri_base_from(Config, Node, Base) ->
     Port = mgmt_port(Config, Node),
     Prefix = get_uri_prefix(Config),
-    Uri = rabbit_mgmt_format:print("http://localhost:~w~s/~s", [Port, Prefix, Base]),
+    Uri = rabbit_mgmt_format:print("http://localhost:~w~ts/~ts", [Port, Prefix, Base]),
     binary_to_list(Uri).
 
 get_uri_prefix(Config) ->
@@ -159,7 +165,7 @@ http_delete(Config, Path, CodeExp, Body) ->
 
 http_delete(Config, Path, User, Pass, CodeExp, Body) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
-        req(Config, 0, delete, Path, [auth_header(User, Pass)], Body),
+        req(Config, 0, delete, Path, [auth_header(User, Pass)], format_for_upload(Body)),
     assert_code(CodeExp, CodeAct, "DELETE", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 

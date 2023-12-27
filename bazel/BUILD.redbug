@@ -1,0 +1,101 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+        ],
+    }),  # keep
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "other_beam",
+    srcs = [
+        "src/redbug.erl",
+        "src/redbug_compiler.erl",
+        "src/redbug_dtop.erl",
+        "src/redbug_lexer.erl",
+        "src/redbug_parser.erl",
+        "src/redbug_targ.erl",
+    ],
+    hdrs = [":public_and_private_hdrs"],
+    app_name = "redbug",
+    dest = "ebin",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [":other_beam"],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/redbug.app.src",
+        "src/redbug.erl",
+        "src/redbug_compiler.erl",
+        "src/redbug_dtop.erl",
+        "src/redbug_lexer.erl",
+        "src/redbug_parser.erl",
+        "src/redbug_targ.erl",
+    ],
+)
+
+filegroup(name = "private_hdrs")
+
+filegroup(name = "public_hdrs")
+
+filegroup(name = "priv")
+
+filegroup(
+    name = "licenses",
+    srcs = ["LICENSE"],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
+    app_name = "redbug",
+    beam_files = [":beam_files"],
+    extra_apps = ["runtime_tools"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+)
+
+alias(
+    name = "redbug",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "license_files",
+    srcs = [
+        "LICENSE",
+    ],
+)

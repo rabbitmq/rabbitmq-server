@@ -3,9 +3,9 @@
 .\" License, v. 2.0. If a copy of the MPL was not distributed with this
 .\" file, You can obtain one at https://mozilla.org/MPL/2.0/.
 .\"
-.\" Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+.\" Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 .\"
-.Dd June 19, 2021
+.Dd June 22, 2023
 .Dt RABBITMQ-QUEUES 8
 .Os "RabbitMQ Server"
 .Sh NAME
@@ -127,6 +127,8 @@ All queue types
 Only quorum queues
 .It Dv Sy classic
 Only classic queues
+.It Dv Sy stream
+Only streams
 .El
 .Pp
 Example:
@@ -172,6 +174,14 @@ Displays quorum status of a quorum queue.
 Example:
 .Sp
 .Dl rabbitmq-queues quorum_status --vhost Qo a-vhost Qc Qo a-queue Qc
+.It Cm peek Ar queue Ar position Fl -vhost Ar virtual-host Fl -timeout
+.Pp
+Displays the details of a message at the given position in the queue.
+This command is currently only supported by quorum queues.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-queues peek --vhost Qo a-vhost Qc Qo a-queue Qc Qo 1 Qc
 .It Cm check_if_node_is_mirror_sync_critical
 .Pp
 Health check that exits with a non-zero code if there are classic mirrored queues without online synchronised mirrors (queues that would potentially lose data if the target node is shut down).
@@ -200,4 +210,4 @@ Example:
 .\" ------------------------------------------------------------------
 .Sh AUTHOR
 .\" ------------------------------------------------------------------
-.An The RabbitMQ Team Aq Mt info@rabbitmq.com
+.An The RabbitMQ Team Aq Mt rabbitmq-core@groups.vmware.com

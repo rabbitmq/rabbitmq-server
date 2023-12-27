@@ -4,7 +4,14 @@ load(
     "//:rabbitmq.bzl",
     "BROKER_VERSION_REQUIREMENTS_ANY",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "rabbitmq_app",
+)
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
 )
 
 APP_NAME = "rabbitmq_auth_mechanism_ssl"
@@ -17,32 +24,56 @@ APP_ENV = """[
 	    {name_from, distinguished_name}
 	  ]"""
 
-DEPS = [
-    "//deps/rabbit_common:erlang_app",
-]
+all_beam_files(name = "all_beam_files")
 
-RUNTIME_DEPS = [
-    "//deps/rabbit:erlang_app",
-]
+all_test_beam_files()
+
+all_srcs(name = "all_srcs")
+
+# gazelle:erlang_app_extra_app public_key
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
     app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_module = APP_MODULE,
     app_name = APP_NAME,
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    extra_apps = ["public_key"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+    ],
 )
 
-xref()
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
 
 plt(
-    name = "base_plt",
-    deps = DEPS,
+    name = "deps_plt",
+    for_target = ":erlang_app",
+    ignore_warnings = True,
+    plt = "//:base_plt",
 )
 
 dialyze(
+    name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":base_plt",
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_auth_mechanism_ssl",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

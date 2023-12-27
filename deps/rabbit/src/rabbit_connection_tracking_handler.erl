@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_connection_tracking_handler).
@@ -29,7 +29,7 @@
                                    [rabbit_event, ?MODULE, []]}},
                     {cleanup,     {gen_event, delete_handler,
                                    [rabbit_event, ?MODULE, []]}},
-                    {requires,    [connection_tracking]},
+                    {requires,    [tracking_metadata_store]},
                     {enables,     recovery}]}).
 
 %%
@@ -56,10 +56,6 @@ handle_event(#event{type = vhost_down, props = Details}, State) ->
     {ok, State};
 handle_event(#event{type = user_deleted, props = Details}, State) ->
     ok = rabbit_connection_tracking:update_tracked({user_deleted, Details}),
-    {ok, State};
-%% A node had been deleted from the cluster.
-handle_event(#event{type = node_deleted, props = Details}, State) ->
-    ok = rabbit_connection_tracking:update_tracked({node_deleted, Details}),
     {ok, State};
 handle_event(_Event, State) ->
     {ok, State}.

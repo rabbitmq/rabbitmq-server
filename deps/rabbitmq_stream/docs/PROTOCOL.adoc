@@ -1,7 +1,6 @@
 = RabbitMQ Streams Protocol Reference
 
-This is the reference of the RabbitMQ Streams protocol. Note the protocol
-is still under development and is subject to change.
+This is the reference of the RabbitMQ Streams protocol.
 
 The https://github.com/rabbitmq/rabbitmq-stream-java-client[RabbitMQ Stream Java client]
 is currently the reference implementation.
@@ -231,6 +230,16 @@ used to make the difference between a request (0) and a response (1). Example fo
 |0x001c
 |Yes
 
+|<<createsuperstream>>
+|Client
+|0x001d
+|Yes
+
+|<<deletesuperstream>>
+|Client
+|0x001e
+|Yes
+
 |===
 
 === DeclarePublisher
@@ -253,6 +262,8 @@ DeclarePublisherResponse => Key Version CorrelationId ResponseCode
 
 === Publish
 
+Version 1
+
 ```
 Publish => Key Version PublisherId PublishedMessages
   Key => uint16 // 0x0002
@@ -261,6 +272,20 @@ Publish => Key Version PublisherId PublishedMessages
   PublishedMessages => [PublishedMessage]
   PublishedMessage => PublishingId Message
   PublishingId => uint64
+  Message => bytes
+```
+
+Version 2
+
+```
+Publish => Key Version PublisherId PublishedMessages
+  Key => uint16 // 0x0002
+  Version => uint16
+  PublisherId => uint8
+  PublishedMessages => [PublishedMessage]
+  PublishedMessage => PublishingId Message
+  PublishingId => uint64
+  FilterValue => string
   Message => bytes
 ```
 
@@ -341,6 +366,13 @@ Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification
 
 NB: Timestamp is https://www.erlang.org/doc/apps/erts/time_correction.html#Erlang_System_Time[Erlang system time],
 milliseconds from epoch
+
+Supported properties:
+
+* `single-active-consumer`: set to `true` to enable https://blog.rabbitmq.com/posts/2022/07/rabbitmq-3-11-feature-preview-single-active-consumer-for-streams/[single active consumer] for this subscription.
+* `super-stream`: set to the name of the super stream the subscribed is a partition of.
+* `filter.` (e.g. `filter.0`, `filter.1`, etc): prefix to use to define filter values for the subscription.
+* `match-unfiltered`: whether to return messages without any filter value or not.
 
 === Deliver
 
@@ -452,6 +484,12 @@ Unsubscribe => Key Version CorrelationId SubscriptionId
   Version => uint16
   CorrelationId => uint32
   SubscriptionId => uint8
+  
+UnsubscribeResponse => Key Version CorrelationId ResponseCode
+  Key => uint16 // 0x800c
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
 ```
 
 === Create
@@ -543,7 +581,6 @@ SaslHandshakeRequest => Key Version CorrelationId Mechanism
   Key => uint16 // 0x0012
   Version => uint16
   CorrelationId => uint32
-  Mechanism => string
 
 SaslHandshakeResponse => Key Version CorrelationId ResponseCode [Mechanisms]
   Key => uint16 // 0x8012
@@ -727,6 +764,31 @@ StreamStatsResponse => Key Version CorrelationId ResponseCode Stats
   Value => int64
 ```
 
+=== CreateSuperStream
+
+```
+CreateSuperStream => Key Version CorrelationId Name [Partition] [BindingKey] Arguments
+  Key => uint16 // 0x001d
+  Version => uint16
+  CorrelationId => uint32
+  Name => string
+  Partition => string
+  BindingKey => string
+  Arguments => [Argument]
+  Argument => Key Value
+  Key => string
+  Value => string
+```
+
+=== DeleteSuperStream
+
+```
+Delete => Key Version CorrelationId Name
+  Key => uint16 // 0x001e
+  Version => uint16
+  CorrelationId => uint32
+  Name => string
+```
 
 == Authentication
 

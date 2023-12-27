@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 -module(rabbit_auth_backend_cache_SUITE).
 
@@ -64,6 +64,7 @@ authentication_response(Config) ->
 authorization_response(Config) ->
     AuthProps = [{password, <<"guest">>}],
     {ok, #auth_user{impl = Impl, tags = Tags}} = rpc(Config,rabbit_auth_backend_internal, user_login_authentication, [<<"guest">>, AuthProps]),
+    true = is_function(Impl),
     {ok, Impl, Tags} = rpc(Config,rabbit_auth_backend_internal, user_login_authorization, [<<"guest">>, AuthProps]),
     {ok, Impl, Tags} = rpc(Config,rabbit_auth_backend_cache, user_login_authorization, [<<"guest">>, AuthProps]),
     {refused, FailErr, FailArgs} = rpc(Config,rabbit_auth_backend_internal, user_login_authorization, [<<"nonguest">>, AuthProps]),
@@ -163,7 +164,3 @@ cache_expiration_topic(Config) ->
 
 rpc(Config, M, F, A) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A).
-
-
-
-

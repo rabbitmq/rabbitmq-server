@@ -2,41 +2,61 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 -module(cluster_SUITE).
--compile([export_all]).
+-compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-import(util, [expect_publishes/3,
+               connect/3,
+               connect/4,
+               await_exit/1]).
+
+-import(rabbit_ct_broker_helpers,
+        [setup_steps/0,
+         teardown_steps/0,
+         get_node_config/3,
+         rabbitmqctl/3,
+         rpc/4, rpc/5,
+         stop_node/2
+        ]).
+
+-import(rabbit_ct_helpers,
+        [eventually/3]).
+
+-define(OPTS, [{connect_timeout, 1},
+               {ack_timeout, 1}]).
 
 all() ->
     [
-      {group, non_parallel_tests}
+     {group, v4},
+     {group, v5}
     ].
 
 groups() ->
     [
-      {non_parallel_tests, [], [
-                                connection_id_tracking,
-                                connection_id_tracking_on_nodedown,
-                                connection_id_tracking_with_decommissioned_node
-                               ]}
+     {v4, [], cluster_size_5()},
+     {v5, [], cluster_size_5()}
     ].
-
-suite() ->
-    [{timetrap, {minutes, 5}}].
+cluster_size_5() ->
+    [
+     connection_id_tracking,
+     connection_id_tracking_on_nodedown
+    ].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
 merge_app_env(Config) ->
-    rabbit_ct_helpers:merge_app_env(Config,
-                                    {rabbit, [
-                                              {collect_statistics, basic},
-                                              {collect_statistics_interval, 100}
-                                             ]}).
+    rabbit_ct_helpers:merge_app_env(
+      Config,
+      {rabbit, [
+                {collect_statistics, basic},
+                {collect_statistics_interval, 100}
+               ]}).
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -45,8 +65,10 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(_, Config) ->
-    Config.
+init_per_group(Group, Config) ->
+    rabbit_ct_helpers:set_config(
+      Config, [{rmq_nodes_count, 5},
+               {mqtt_version, Group}]).
 
 end_per_group(_, Config) ->
     Config.
@@ -56,20 +78,18 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Testcase},
-        {rmq_extra_tcp_ports, [tcp_port_mqtt_extra,
-                               tcp_port_mqtt_tls_extra]},
-        {rmq_nodes_clustered, true},
-        {rmq_nodes_count, 5}
+        {rmq_nodes_clustered, true}
       ]),
-    rabbit_ct_helpers:run_setup_steps(Config1,
+    Config2 = rabbit_ct_helpers:run_setup_steps(Config1,
       [ fun merge_app_env/1 ] ++
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+      setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()),
+    util:maybe_skip_v5(Config2).
 
 end_per_testcase(Testcase, Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config,
+    rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
-      rabbit_ct_broker_helpers:teardown_steps()),
+      teardown_steps()),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
@@ -90,102 +110,51 @@ end_per_testcase(Testcase, Config) ->
 %% nodes, the minimum to use Ra in proper conditions.
 
 connection_id_tracking(Config) ->
-    ID = <<"duplicate-id">>,
-    {ok, MRef1, C1} = connect_to_node(Config, 0, ID),
+    Id = <<"duplicate-id">>,
+    C1 = connect(Id, Config, 0, ?OPTS),
     {ok, _, _} = emqtt:subscribe(C1, <<"TopicA">>, qos0),
     ok = emqtt:publish(C1, <<"TopicA">>, <<"Payload">>),
-    expect_publishes(<<"TopicA">>, [<<"Payload">>]),
+    ok = expect_publishes(C1, <<"TopicA">>, [<<"Payload">>]),
 
     %% there's one connection
-    assert_connection_count(Config, 10, 2, 1),
+    assert_connection_count(Config, 4, 1),
 
     %% connect to the same node (A or 0)
-    {ok, MRef2, _C2} = connect_to_node(Config, 0, ID),
-
-    %% C1 is disconnected
-    await_disconnection(MRef1),
+    process_flag(trap_exit, true),
+    C2 = connect(Id, Config, 0, ?OPTS),
+    await_exit(C1),
+    assert_connection_count(Config, 4, 1),
 
     %% connect to a different node (C or 2)
-    {ok, _, C3} = connect_to_node(Config, 2, ID),
-    assert_connection_count(Config, 10, 2, 1),
-
-    %% C2 is disconnected
-    await_disconnection(MRef2),
+    C3 = connect(Id, Config, 2, ?OPTS),
+    await_exit(C2),
+    assert_connection_count(Config, 4, 1),
     ok = emqtt:disconnect(C3).
 
 connection_id_tracking_on_nodedown(Config) ->
-    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    {ok, MRef, C} = connect_to_node(Config, 0, <<"simpleClient">>),
+    C = connect(<<"simpleClient">>, Config, ?OPTS),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
     ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
-    expect_publishes(<<"TopicA">>, [<<"Payload">>]),
-    assert_connection_count(Config, 10, 2, 1),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Server),
-    await_disconnection(MRef),
-    assert_connection_count(Config, 10, 2, 0),
-    ok.
-
-connection_id_tracking_with_decommissioned_node(Config) ->
-    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    {ok, MRef, C} = connect_to_node(Config, 0, <<"simpleClient">>),
-    {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
-    ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
-    expect_publishes(<<"TopicA">>, [<<"Payload">>]),
-
-    assert_connection_count(Config, 10, 2, 1),
-    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["decommission_mqtt_node", Server]),
-    await_disconnection(MRef),
-    assert_connection_count(Config, 10, 2, 0),
-    ok.
+    ok = expect_publishes(C, <<"TopicA">>, [<<"Payload">>]),
+    assert_connection_count(Config, 4, 1),
+    process_flag(trap_exit, true),
+    ok = stop_node(Config, 0),
+    await_exit(C),
+    ok = eventually(?_assertEqual([], util:all_connection_pids(1, Config)), 500, 4).
 
 %%
 %% Helpers
 %%
 
-assert_connection_count(_Config, 0,  _, _) ->
-    ct:fail("failed to complete rabbit_mqtt_collector:list/0");
-assert_connection_count(Config, Retries, NodeId, NumElements) ->
-    List = rabbit_ct_broker_helpers:rpc(Config, NodeId, rabbit_mqtt_collector, list, []),
-    case length(List) == NumElements of
-        true ->
+assert_connection_count(_Config, 0, NumElements) ->
+    ct:fail("failed to match connection count ~b", [NumElements]);
+assert_connection_count(Config, Retries, NumElements) ->
+    case util:all_connection_pids(Config) of
+        Pids when length(Pids) =:= NumElements ->
             ok;
-        false ->
-            timer:sleep(200),
-            assert_connection_count(Config, Retries-1, NodeId, NumElements)
-    end.
-
-
-
-connect_to_node(Config, Node, ClientID) ->
-  Port = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_mqtt),
-  {ok, C} = connect(Port, ClientID),
-  MRef = erlang:monitor(process, C),
-  {ok, MRef, C}.
-
-connect(Port, ClientID) ->
-    {ok, C} = emqtt:start_link([{host, "localhost"},
-                                {port, Port},
-                                {clientid, ClientID},
-                                {proto_ver, v4},
-                                {connect_timeout, 1},
-                                {ack_timeout, 1}]),
-    {ok, _Properties} = emqtt:connect(C),
-    unlink(C),
-    {ok, C}.
-
-await_disconnection(Ref) ->
-    receive
-        {'DOWN', Ref, _, _, _} -> ok
-    after
-        30000 -> exit(missing_down_message)
-    end.
-
-expect_publishes(_Topic, []) -> ok;
-expect_publishes(Topic, [Payload|Rest]) ->
-    receive
-        {publish, #{topic := Topic,
-                    payload := Payload}} ->
-            expect_publishes(Topic, Rest)
-    after 5000 ->
-              throw({publish_not_delivered, Payload})
+        Pids ->
+            ct:pal("Waiting for ~b connections, got following connections: ~p",
+                   [NumElements, Pids]),
+            timer:sleep(500),
+            assert_connection_count(Config, Retries-1, NumElements)
     end.

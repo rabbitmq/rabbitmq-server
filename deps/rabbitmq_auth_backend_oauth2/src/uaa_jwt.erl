@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 -module(uaa_jwt).
 
@@ -58,6 +58,7 @@ update_jwks_signing_keys() ->
         undefined ->
             {error, no_jwks_url};
         JwksUrl ->
+            rabbit_log:debug("Retrieving signing keys from ~ts", [JwksUrl]),
             case uaa_jwks:get(JwksUrl) of
                 {ok, {_, _, JwksBody}} ->
                     KeyList = maps:get(<<"keys">>, jose:decode(erlang:iolist_to_binary(JwksBody)), []),

@@ -1,9 +1,6 @@
 -module(queue_type_SUITE).
 
--compile(export_all).
-
--export([
-         ]).
+-compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -16,7 +13,8 @@
 all() ->
     [
      {group, classic},
-     {group, quorum}
+     {group, quorum},
+     {group, stream}
     ].
 
 
@@ -29,7 +27,11 @@ all_tests() ->
 groups() ->
     [
      {classic, [], all_tests()},
-     {quorum, [], all_tests()}
+     {quorum, [], all_tests()},
+     {stream, [],
+      [
+       stream
+      ]}
     ].
 
 init_per_suite(Config0) ->
@@ -42,7 +44,24 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config),
     ok.
 
+init_per_group(classic = Group, Config0) ->
+    ct:pal("init per group ~p", [Group]),
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config0) of
+        mnesia ->
+            Config = init_per_group0(classic, Config0),
+            rabbit_ct_broker_helpers:set_policy(
+              Config, 0,
+              <<"ha-policy">>, <<".*">>, <<"queues">>,
+              [{<<"ha-mode">>, <<"all">>}]),
+            Config;
+        {khepri, _} ->
+            {skip, "Classic queue mirroring not supported by Khepri"}
+    end;
 init_per_group(Group, Config) ->
+    ct:pal("init per group ~p", [Group]),
+    init_per_group0(Group, Config).
+
+init_per_group0(Group, Config) ->
     ClusterSize = 3,
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [{rmq_nodes_count, ClusterSize},
@@ -54,24 +73,28 @@ init_per_group(Group, Config) ->
     Config2 = rabbit_ct_helpers:run_steps(Config1b,
                                           [fun merge_app_env/1 ] ++
                                           rabbit_ct_broker_helpers:setup_steps()),
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config2, 0, application, set_env,
-           [rabbit, channel_tick_interval, 100]),
-    %% HACK: the larger cluster sizes benefit for a bit more time
-    %% after clustering before running the tests.
-    Config3 = case Group of
-                  cluster_size_5 ->
-                      timer:sleep(5000),
-                      Config2;
-                  _ ->
-                      Config2
-              end,
-
-    rabbit_ct_broker_helpers:set_policy(
-      Config3, 0,
-      <<"ha-policy">>, <<".*">>, <<"queues">>,
-      [{<<"ha-mode">>, <<"all">>}]),
-    Config3.
+    case Config2 of
+        {skip, _Reason} = Skip ->
+            %% To support mixed-version clusters,
+            %% Khepri feature flag is unsupported
+            Skip;
+        _ ->
+            ok = rabbit_ct_broker_helpers:rpc(
+                   Config2, 0, application, set_env,
+                   [rabbit, channel_tick_interval, 100]),
+            %% HACK: the larger cluster sizes benefit for a bit more time
+            %% after clustering before running the tests.
+            case Group of
+                cluster_size_5 ->
+                    timer:sleep(5000);
+                _ ->
+                    ok
+            end,
+            EnableFF = rabbit_ct_broker_helpers:enable_feature_flag(Config2,
+                                                                    message_containers),
+            ct:pal("message_containers ff ~p", [EnableFF]),
+            Config2
+    end.
 
 merge_app_env(Config) ->
     rabbit_ct_helpers:merge_app_env(
@@ -157,7 +180,7 @@ smoke(Config) ->
     %% get and ack
     basic_ack(Ch, basic_get(Ch, QName)),
     %% global counters
-    publish_and_confirm(Ch, <<"non-existent_queue">>, <<"msg4">>),
+    ok = publish_and_confirm(Ch, <<"non-existent_queue">>, <<"msg4">>),
     ConsumerTag3 = <<"ctag3">>,
     ok = subscribe(Ch, QName, ConsumerTag3),
     ProtocolCounters = maps:get([{protocol, amqp091}], get_global_counters(Config)),
@@ -187,6 +210,15 @@ smoke(Config) ->
                    messages_get_empty_total => 2,
                    messages_redelivered_total => 1
                   }, ProtocolQueueTypeCounters),
+
+
+    ok = rabbit_ct_client_helpers:close_channel(Ch),
+
+    ?assertMatch(
+       #{consumers := 0,
+         publishers := 0},
+       maps:get([{protocol, amqp091}], get_global_counters(Config))),
+
     ok.
 
 ack_after_queue_delete(Config) ->
@@ -215,8 +247,45 @@ ack_after_queue_delete(Config) ->
     flush(),
     ok.
 
+stream(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QName = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+                 declare(Ch, QName, [{<<"x-queue-type">>, longstr,
+                                      ?config(queue_type, Config)}])),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+    publish_and_confirm(Ch, QName, <<"msg1">>),
+    Args = [{<<"x-stream-offset">>, longstr, <<"last">>}],
+
+    SubCh = rabbit_ct_client_helpers:open_channel(Config, 2),
+    qos(SubCh, 10, false),
+    try
+        amqp_channel:subscribe(
+          SubCh, #'basic.consume'{queue = QName,
+                                  consumer_tag = <<"ctag">>,
+                                  arguments = Args},
+          self()),
+        receive
+            {#'basic.deliver'{delivery_tag = T,
+                              redelivered  = false},
+             #amqp_msg{}} ->
+                basic_ack(SubCh, T)
+        after 5000 ->
+                  exit(basic_deliver_timeout)
+        end
+    catch
+        _:Err ->
+            ct:pal("basic.consume error ~p", [Err]),
+            exit(Err)
+    end,
+
+
+    ok.
+
 %% Utility
-%%
+
 delete_queues() ->
     [rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
      || Q <- rabbit_amqqueue:list()].
@@ -238,7 +307,7 @@ publish(Ch, Queue, Msg) ->
 
 publish_and_confirm(Ch, Queue, Msg) ->
     publish(Ch, Queue, Msg),
-    ct:pal("waiting for ~s message confirmation from ~s", [Msg, Queue]),
+    ct:pal("xwaiting for ~ts message confirmation from ~ts", [Msg, Queue]),
     ok = receive
              #'basic.ack'{}  -> ok;
              #'basic.nack'{} -> fail
@@ -286,7 +355,7 @@ basic_nack(Ch, DTag) ->
 flush() ->
     receive
         Any ->
-            ct:pal("flush ~p", [Any]),
+            ct:pal("flush ~tp", [Any]),
             flush()
     after 0 ->
               ok
@@ -294,3 +363,8 @@ flush() ->
 
 get_global_counters(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_global_counters, overview, []).
+
+qos(Ch, Prefetch, Global) ->
+    ?assertMatch(#'basic.qos_ok'{},
+                 amqp_channel:call(Ch, #'basic.qos'{global = Global,
+                                                    prefetch_count = Prefetch})).

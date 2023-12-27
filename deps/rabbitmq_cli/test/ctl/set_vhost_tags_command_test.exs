@@ -2,8 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
-
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule SetVhostTagsCommandTest do
   use ExUnit.Case, async: false
@@ -11,7 +10,7 @@ defmodule SetVhostTagsCommandTest do
 
   @command RabbitMQ.CLI.Ctl.Commands.SetVhostTagsCommand
 
-  @vhost    "vhost99-tests"
+  @vhost "vhost99-tests"
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -43,15 +42,16 @@ defmodule SetVhostTagsCommandTest do
   end
 
   @tag vhost: @vhost
-  test "run: with a single optional argument, adds a single tag", context  do
+  test "run: with a single optional argument, adds a single tag", context do
     @command.run([context[:vhost], :qa], context[:opts])
 
-    result = Enum.find(
-      list_vhosts(),
-      fn(record) -> record[:vhost] == context[:vhost] end
-    )
+    result =
+      Enum.find(
+        list_vhosts(),
+        fn record -> record[:name] == context[:vhost] end
+      )
 
-    assert result[:tags] == context[:tags]
+    assert result[:tags] == [:qa]
   end
 
   @tag vhost: "non/ex1st3nT"
@@ -59,81 +59,84 @@ defmodule SetVhostTagsCommandTest do
     delete_vhost(context[:vhost])
 
     assert @command.run(
-      [context[:vhost]],
-      context[:opts]
-    ) == {:error, {:no_such_vhost, context[:vhost]}}
+             [context[:vhost]],
+             context[:opts]
+           ) == {:error, {:no_such_vhost, context[:vhost]}}
   end
 
-  @tag user: @vhost, tags: [:qa, :limited]
-  test "run: with multiple optional arguments, adds multiple tags", context  do
+  @tag vhost: @vhost, tags: [:qa, :limited]
+  test "run: with multiple optional arguments, adds multiple tags", context do
     @command.run(
       [context[:vhost] | context[:tags]],
       context[:opts]
     )
 
-    result = Enum.find(
-      list_vhosts(),
-      fn(record) -> record[:vhost] == context[:vhost] end
-    )
+    result =
+      Enum.find(
+        list_vhosts(),
+        fn record -> record[:name] == context[:vhost] end
+      )
 
-    assert result[:tags] == context[:tags]
+    assert Enum.sort(result[:tags]) == Enum.sort(context[:tags])
   end
 
-  @tag user: @vhost, tags: [:qa]
-  test "run: with no optional arguments, clears virtual host tags", context  do
+  @tag vhost: @vhost, tags: [:qa]
+  test "run: with no optional arguments, clears virtual host tags", context do
     set_vhost_tags(context[:vhost], context[:tags])
 
     @command.run([context[:vhost]], context[:opts])
 
-    result = Enum.find(
-      list_vhosts(),
-      fn(record) -> record[:vhost] == context[:vhost] end
-    )
+    result =
+      Enum.find(
+        list_vhosts(),
+        fn record -> record[:name] == context[:vhost] end
+      )
 
     assert result[:tags] == []
   end
 
-  @tag user: @vhost, tags: [:qa]
-  test "run: identical calls are idempotent", context  do
+  @tag vhost: @vhost, tags: [:qa]
+  test "run: identical calls are idempotent", context do
     set_vhost_tags(context[:vhost], context[:tags])
 
     assert @command.run(
-      [context[:vhost] | context[:tags]],
-      context[:opts]
-    ) == :ok
+             [context[:vhost] | context[:tags]],
+             context[:opts]
+           ) == :ok
 
-    result = Enum.find(
-      list_vhosts(),
-      fn(record) -> record[:vhost] == context[:vhost] end
-    )
+    result =
+      Enum.find(
+        list_vhosts(),
+        fn record -> record[:name] == context[:vhost] end
+      )
 
     assert result[:tags] == context[:tags]
   end
 
-  @tag user: @vhost, old_tags: [:qa], new_tags: [:limited]
-  test "run: overwrites existing tags them", context  do
+  @tag vhost: @vhost, old_tags: [:qa], new_tags: [:limited]
+  test "run: overwrites existing tags them", context do
     set_vhost_tags(context[:vhost], context[:old_tags])
 
     assert @command.run(
-      [context[:vhost] | context[:new_tags]],
-      context[:opts]
-    ) == :ok
+             [context[:vhost] | context[:new_tags]],
+             context[:opts]
+           ) == :ok
 
-    result = Enum.find(
-      list_vhosts(),
-      fn(record) -> record[:vhost] == context[:vhost] end
-    )
+    result =
+      Enum.find(
+        list_vhosts(),
+        fn record -> record[:name] == context[:vhost] end
+      )
 
     assert result[:tags] == context[:new_tags]
   end
 
-  @tag user: @vhost, tags: ["abc"]
-  test "banner", context  do
+  @tag vhost: @vhost, tags: ["abc"]
+  test "banner", context do
     assert @command.banner(
-        [context[:vhost] | context[:tags]],
-        context[:opts]
-      )
-      =~ ~r/Setting tags for virtual host \"#{context[:vhost]}\" to \[#{context[:tags]}\] \.\.\./
+             [context[:vhost] | context[:tags]],
+             context[:opts]
+           ) =~
+             ~r/Setting tags for virtual host \"#{context[:vhost]}\" to \[#{context[:tags]}\] \.\.\./
   end
-
 end

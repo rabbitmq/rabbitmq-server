@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_pbe).
@@ -41,12 +41,17 @@ decrypt_term(Cipher, Hash, Iterations, PassPhrase, {encrypted, _Base64Binary}=En
 
 -type encryption_result() :: {'encrypted', binary()} | {'plaintext', binary()}.
 
--spec encrypt(crypto:block_cipher(), crypto:hash_algorithms(),
+%% crypto:cipher() and crypto:hash_algorithm() are not public
+-type crypto_cipher() :: atom().
+-type crypto_hash_algorithm() :: atom().
+
+-spec encrypt(crypto_cipher(), crypto_hash_algorithm(),
     pos_integer(), iodata() | '$pending-secret', binary()) -> encryption_result().
 encrypt(Cipher, Hash, Iterations, PassPhrase, ClearText) ->
     credentials_obfuscation_pbe:encrypt(Cipher, Hash, Iterations, PassPhrase, ClearText).
 
--spec decrypt(crypto:block_cipher(), crypto:hash_algorithms(),
+
+-spec decrypt(crypto_cipher(), crypto_hash_algorithm(),
     pos_integer(), iodata(), encryption_result()) -> any().
 decrypt(_Cipher, _Hash, _Iterations, _PassPhrase, {plaintext, Term}) ->
     Term;

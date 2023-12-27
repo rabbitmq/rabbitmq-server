@@ -20,6 +20,23 @@
 {mapping, "management.http_log_dir", "rabbitmq_management.http_log_dir",
     [{datatype, string}]}.
 
+%% Max HTTP body limit
+
+{mapping, "management.http.max_body_size", "rabbitmq_management.max_http_body_size",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
+{translation, "rabbitmq_management.max_http_body_size",
+fun(Conf) ->
+    case cuttlefish:conf_get("management.http.max_body_size", Conf, undefined) of
+        %% 10 MiB allows for about 100K queues with short names across a small (single digit) number of virtual hosts with
+        %% an equally small number of users. MK.
+        undefined                -> 10000000;
+        Val when is_integer(Val) -> Val;
+        Other                    -> cuttlefish:invalid("management.http.max_body_size must be set to a positive integer")
+    end
+end}.
+
+
 %% HTTP (TCP) listener options ========================================================
 
 %% HTTP listener consistent with Web STOMP and Web MQTT.
@@ -432,20 +449,6 @@ end}.
 %% ===========================================================================
 %% Authorization
 
-%% Configure OAuth2 in the management ui to work with old versions of UAA (which versions?)
-{mapping, "management.enable_uaa", "rabbitmq_management.enable_uaa",
-    [{datatype, {enum, [true, false]}}]}.
-
-%% Your client application's identifier as registered with the OIDC/OAuth2. Deprecated, switch to oauth_client_id
-{mapping, "management.uaa_client_id", "rabbitmq_management.uaa_client_id",
-      [{datatype, string}]}.
-{mapping, "management.uaa_client_secret", "rabbitmq_management.uaa_client_secret",
-      [{datatype, string}]}.
-
-%% The URL of the OIDC/OAuth2 provider
-{mapping, "management.uaa_location", "rabbitmq_management.uaa_location",
-      [{datatype, string}]}.
-
 %% Enable OAuth2 in the management ui
 {mapping, "management.oauth_enabled", "rabbitmq_management.oauth_enabled",
     [{datatype, {enum, [true, false]}}]}.
@@ -474,6 +477,11 @@ end}.
 {mapping, "management.oauth_metadata_url", "rabbitmq_management.oauth_metadata_url",
       [{datatype, string}]}.
 
+%% Configure the OAuth 2 type allowed for the end users to logon to the management UI
+%% Default type is sp_initiated meaning the standard OAuth 2.0 mode where users come without any token
+%% Other type is idp_initiated meaning users must come with a token
+{mapping, "management.oauth_initiated_logon_type", "rabbitmq_management.oauth_initiated_logon_type",
+    [{datatype, {enum, [sp_initiated, idp_initiated]}}]}.
 
 %% ===========================================================================
 
@@ -523,3 +531,17 @@ fun(File) ->
     ReadFile = file:list_dir(File),
     element(1, ReadFile) == ok
 end}.
+
+%% Disables setting operator policies over API.
+
+{mapping, "management.restrictions.operator_policy_changes.disabled", "rabbitmq_management.restrictions.operator_policy_changes.disabled", [
+    {datatype, {enum, [true, false]}},
+    {include_default, false}
+]}.
+
+%% Disables add/remove/grow/shrink over API.
+
+{mapping, "management.restrictions.quorum_queue_replica_operations.disabled", "rabbitmq_management.restrictions.quorum_queue_replica_operations.disabled", [
+    {datatype, {enum, [true, false]}},
+    {include_default, false}
+]}.

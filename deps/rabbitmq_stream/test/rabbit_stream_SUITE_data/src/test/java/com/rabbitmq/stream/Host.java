@@ -11,7 +11,7 @@
 // The Original Code is RabbitMQ.
 //
 // The Initial Developer of the Original Code is Pivotal Software, Inc.
-// Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
+// Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 //
 
 package com.rabbitmq.stream;
@@ -99,6 +99,21 @@ public class Host {
 
   public static String node2name() {
     return System.getProperty("node2.name", "rabbit-2@" + hostname());
+  }
+
+  public static Process killStreamLocalMemberProcess(String stream, String nodename) throws IOException {
+    return rabbitmqctl(
+        "eval 'case rabbit_stream_manager:lookup_local_member(<<\"/\">>, <<\""
+            + stream
+            + "\">>) of {ok, Pid} -> exit(Pid, kill); Pid -> exit(Pid, kill) end.'",
+        nodename);
+  }
+
+  public static Process killStreamLeaderProcess(String stream) throws IOException {
+    return rabbitmqctl(
+        "eval 'case rabbit_stream_manager:lookup_leader(<<\"/\">>, <<\""
+            + stream
+            + "\">>) of {ok, Pid} -> exit(Pid, kill); Pid -> exit(Pid, kill) end.'");
   }
 
   public static String hostname() {

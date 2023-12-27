@@ -80,8 +80,9 @@ To generate these:
 Metrics `rabbitmq_global_messages_dead_lettered_*` have labels `queue_type` and `dead_letter_strategy`.
 
 Label `queue_type` denotes the type of queue messages were discarded from. It can have value
-* `rabbit_classic_queue`, or
-* `rabbit_quorum_queue`
+* `rabbit_classic_queue`,
+* `rabbit_quorum_queue`, or
+* `rabbit_mqtt_qos0_queue`
 
 (Queue type `rabbit_stream_queue` does not dead letter messages.)
 

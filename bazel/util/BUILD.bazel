@@ -1,0 +1,177 @@
+load(":ct_logdir_vars.bzl", "ct_logdir_vars")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+ct_logdir_vars(
+    name = "ct_logdir_vars",
+)
+
+genrule(
+    name = "test-logs",
+    outs = ["open-test-logs.sh"],
+    cmd = """set -euo pipefail
+cat << 'EOF' > $@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ -n "$(CT_LOGDIR)" ]; then
+    open "$(CT_LOGDIR)/index.html"
+    exit 0
+fi
+
+if [ $$# -eq 0 ]; then
+    echo "Usage: bazel run test-logs TEST_LABEL [shard_index]"
+    exit 1
+fi
+
+RELATIVE=$${1#//}
+PACKAGE=$${RELATIVE%%:*}
+SUITE=$${RELATIVE##*:}
+OUTPUT_DIR=test.outputs
+
+if [ $$# -gt 1 ]; then
+    OUTPUT_DIR=shard_$$2_of_*/test.outputs
+fi
+
+if [ ! -d "bazel-testlogs/$$PACKAGE/$$SUITE/"$$OUTPUT_DIR ]; then
+    echo "Test output dir not found, perhaps shard_index needed?"
+    echo "Usage: bazel run test-logs TEST_LABEL [shard_index]"
+    exit 1
+fi
+
+cd "bazel-testlogs/$$PACKAGE/$$SUITE/"$$OUTPUT_DIR
+if [ -f outputs.zip ]; then
+    unzip -u outputs.zip
+fi
+set +e
+open index.html
+rc=$$?
+set -e
+if [[ $$rc -eq 3 ]]; then
+  # For xdg-open exit code 3 means "A required tool could not be found." That is, there is no browser.
+  echo "Open your browser at http://$$(hostname -s):8000/index.html"
+  python -m http.server 8000
+fi
+EOF
+""",
+    executable = True,
+    toolchains = [":ct_logdir_vars"],
+)
+
+genrule(
+    name = "remote-test-logs",
+    outs = ["open-remote-test-logs.sh"],
+    cmd = """set -euo pipefail
+cat << 'EOF' > $@
+#!/usr/bin/env bash
+set -euo pipefail
+if [ $$# -eq 0 ]; then
+    echo "Usage: bazel run remote-test-logs TEST_LABEL [shard_index]"
+    exit 1
+fi
+
+RELATIVE=$${1#//}
+PACKAGE=$${RELATIVE%%:*}
+SUITE=$${RELATIVE##*:}
+OUTPUT_DIR=test.outputs
+if [ $$# -gt 1 ]; then
+    OUTPUT_DIR=shard_$$2_of_*/test.outputs
+fi
+
+TESTLOGS=$$(echo $$(bazel info output_path)/k8-*/testlogs)
+
+if [ ! -d "$$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR" ]; then
+    echo "Test output dir not found, perhaps shard_index needed?"
+    echo "Usage: bazel run remote-test-logs TEST_LABEL [shard_index]"
+    exit 1
+fi
+
+cd "$$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR" && unzip -u outputs.zip
+open index.html
+EOF
+""",
+    executable = True,
+)
+
+genrule(
+    name = "test-node-data",
+    outs = ["open-test-node-data.sh"],
+    cmd = """set -euo pipefail
+cat << 'EOF' > $@
+set -euo pipefail
+
+if [ -n "$(CT_LOGDIR)" ]; then
+    open "$(CT_LOGDIR)/index.html"
+    exit 0
+fi
+
+if [ $$# -eq 0 ]; then
+    echo "Usage: bazel run test-node-data TEST_LABEL [shard_index]"
+    exit 1
+fi
+
+RELATIVE=$${1#//}
+PACKAGE=$${RELATIVE%%:*}
+SUITE=$${RELATIVE##*:}
+OUTPUT_DIR=test.outputs
+if [ $$# -gt 1 ]; then
+    OUTPUT_DIR=shard_$$2_of_*/test.outputs
+fi
+
+if [ ! -d "bazel-testlogs/$$PACKAGE/$$SUITE/"$$OUTPUT_DIR ]; then
+    echo "Test output dir not found, perhaps shard_index needed?"
+    echo "Usage: bazel run test-node-data TEST_LABEL [shard_index]"
+    exit 1
+fi
+
+cd bazel-testlogs/$$PACKAGE/$$SUITE/$$OUTPUT_DIR
+if [ -f outputs.zip ]; then
+    unzip -u outputs.zip
+fi
+open index.html
+open ct_run.*/deps.*/run.*/log_private
+EOF
+""",
+    executable = True,
+    toolchains = [":ct_logdir_vars"],
+)
+
+# NOTE: this rule may not work properly if --remote_download_minimal has been used,
+#       which is currently the default for remote runs
+genrule(
+    name = "remote-test-node-data",
+    outs = ["open-remote-test-node-data.sh"],
+    cmd = """set -euo pipefail
+cat << 'EOF' > $@
+set -euo pipefail
+if [ $$# -eq 0 ]; then
+    echo "Usage: bazel run remote-test-node-data TEST_LABEL [shard_index]"
+    exit 1
+fi
+
+RELATIVE=$${1#//}
+PACKAGE=$${RELATIVE%%:*}
+SUITE=$${RELATIVE##*:}
+OUTPUT_DIR=test.outputs
+
+if [ $$# -gt 1 ]; then
+    OUTPUT_DIR=shard_$$2_of_*/test.outputs
+fi
+
+TESTLOGS=$$(echo $$(bazel info output_path)/k8-*/testlogs)
+
+if [ ! -d $$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR ]; then
+    echo "Test output dir not found, perhaps shard_index needed?"
+    echo "Usage: bazel run remote-test-node-data TEST_LABEL [shard_index]"
+    exit 1
+fi
+
+cd $$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR && unzip -u outputs.zip
+open index.html
+open ct_run.*/deps.*/run.*/log_private
+EOF
+""",
+    executable = True,
+)

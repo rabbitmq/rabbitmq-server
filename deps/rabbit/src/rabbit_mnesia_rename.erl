@@ -2,14 +2,14 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mnesia_rename).
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([rename/2]).
--export([maybe_finish/1]).
+-export([maybe_finish/0, maybe_finish/1]).
 
 -define(CONVERT_TABLES, [schema, rabbit_durable_queue]).
 
@@ -60,10 +60,10 @@ rename(Node, NodeMapList) ->
         %% And make the actual changes
         become(FromNode),
         take_backup(before_backup_name()),
-        convert_backup(NodeMap, before_backup_name(), after_backup_name()),
+        _ = convert_backup(NodeMap, before_backup_name(), after_backup_name()),
         ok = rabbit_file:write_term_file(rename_config_name(),
                                          [{FromNode, ToNode}]),
-        convert_config_files(NodeMap),
+        _ = convert_config_files(NodeMap),
         become(ToNode),
         restore_backup(after_backup_name()),
         ok
@@ -100,7 +100,7 @@ prepare(Node, NodeMapList) ->
 
     %% Check that we are in the cluster, all old nodes are in the
     %% cluster, and no new nodes are.
-    Nodes = rabbit_nodes:all(),
+    Nodes = rabbit_nodes:list_members(),
     case {FromNodes -- Nodes, ToNodes -- (ToNodes -- Nodes),
           lists:member(Node, Nodes ++ ToNodes)} of
         {[], [], true}  -> ok;
@@ -127,6 +127,12 @@ restore_backup(Backup) ->
     stop_mnesia(),
     rabbit_mnesia:force_load_next_boot().
 
+-spec maybe_finish() -> ok.
+
+maybe_finish() ->
+    AllNodes = rabbit_nodes:list_members(),
+    maybe_finish(AllNodes).
+
 -spec maybe_finish([node()]) -> 'ok'.
 
 maybe_finish(AllNodes) ->
@@ -138,15 +144,15 @@ maybe_finish(AllNodes) ->
 finish(FromNode, ToNode, AllNodes) ->
     case node() of
         ToNode ->
-            case rabbit_upgrade:nodes_running(AllNodes) of
+            case rabbit_nodes:filter_running(AllNodes) of
                 [] -> finish_primary(FromNode, ToNode);
                 _  -> finish_secondary(FromNode, ToNode, AllNodes)
             end;
         FromNode ->
             rabbit_log:info(
-              "Abandoning rename from ~s to ~s since we are still ~s",
+              "Abandoning rename from ~ts to ~ts since we are still ~ts",
               [FromNode, ToNode, FromNode]),
-            [{ok, _} = file:copy(backup_of_conf(F), F) || F <- config_files()],
+            _ = [{ok, _} = file:copy(backup_of_conf(F), F) || F <- config_files()],
             ok = rabbit_file:recursive_delete([rabbit_mnesia:dir()]),
             ok = rabbit_file:recursive_copy(
                    mnesia_copy_dir(), rabbit_mnesia:dir()),
@@ -155,23 +161,42 @@ finish(FromNode, ToNode, AllNodes) ->
             %% Boot will almost certainly fail but we might as
             %% well just log this
             rabbit_log:info(
-              "Rename attempted from ~s to ~s but we are ~s - ignoring.",
+              "Rename attempted from ~ts to ~ts but we are ~ts - ignoring.",
               [FromNode, ToNode, node()])
     end.
 
 finish_primary(FromNode, ToNode) ->
-    rabbit_log:info("Restarting as primary after rename from ~s to ~s",
+    rabbit_log:info("Restarting as primary after rename from ~ts to ~ts",
                     [FromNode, ToNode]),
     delete_rename_files(),
     ok.
 
 finish_secondary(FromNode, ToNode, AllNodes) ->
-    rabbit_log:info("Restarting as secondary after rename from ~s to ~s",
+    rabbit_log:info("Restarting as secondary after rename from ~ts to ~ts",
                     [FromNode, ToNode]),
-    rabbit_upgrade:secondary_upgrade(AllNodes),
+    %% Renaming a node was partially handled by `rabbit_upgrade', the old
+    %% upgrade mechanism used before we introduced feature flags. The
+    %% following lines until `init_db_unchecked()' included were part of
+    %% `rabbit_upgrade:secondary_upgrade(AllNodes)'.
+    NodeType = node_type_legacy(),
+    rabbit_misc:ensure_ok(mnesia:delete_schema([node()]),
+                          cannot_delete_schema),
+    rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
+    ok = rabbit_mnesia:init_db_unchecked(AllNodes, NodeType),
     rename_in_running_mnesia(FromNode, ToNode),
     delete_rename_files(),
     ok.
+
+node_type_legacy() ->
+    %% This is pretty ugly but we can't start Mnesia and ask it (will
+    %% hang), we can't look at the config file (may not include us
+    %% even if we're a disc node).  We also can't use
+    %% rabbit_mnesia:node_type/0 because that will give false
+    %% positives on Rabbit up to 2.5.1.
+    case filelib:is_regular(filename:join(rabbit_mnesia:dir(), "rabbit_durable_exchange.DCD")) of
+        true  -> disc;
+        false -> ram
+    end.
 
 dir()                -> rabbit_mnesia:dir() ++ "-rename".
 before_backup_name() -> dir() ++ "/backup-before".
@@ -232,8 +257,8 @@ update_term(_NodeMap, Term) ->
     Term.
 
 rename_in_running_mnesia(FromNode, ToNode) ->
-    All = rabbit_nodes:all(),
-    Running = rabbit_nodes:all_running(),
+    All = rabbit_nodes:list_members(),
+    Running = rabbit_mnesia:cluster_nodes(running),
     case {lists:member(FromNode, Running), lists:member(ToNode, All)} of
         {false, true}  -> ok;
         {true,  _}     -> exit({old_node_running,        FromNode});
@@ -247,7 +272,7 @@ rename_in_running_mnesia(FromNode, ToNode) ->
 transform_table(Table, Map) ->
     mnesia:sync_transaction(
       fun () ->
-              mnesia:lock({table, Table}, write),
+              _ = mnesia:lock({table, Table}, write),
               transform_table(Table, Map, mnesia:first(Table))
       end).
 
@@ -263,11 +288,11 @@ become(BecomeNode) ->
     case net_adm:ping(BecomeNode) of
         pong -> exit({node_running, BecomeNode});
         pang -> ok = net_kernel:stop(),
-                io:format("  * Impersonating node: ~s...", [BecomeNode]),
+                io:format("  * Impersonating node: ~ts...", [BecomeNode]),
                 {ok, _} = start_distribution(BecomeNode),
                 io:format(" done~n", []),
                 Dir = mnesia:system_info(directory),
-                io:format("  * Mnesia directory  : ~s~n", [Dir])
+                io:format("  * Mnesia directory  : ~ts~n", [Dir])
     end.
 
 start_distribution(Name) ->

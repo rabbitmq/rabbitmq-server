@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_stream_publishers_mgmt).
@@ -21,14 +21,9 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 dispatcher() ->
-    case rabbit_stream_management_utils:is_feature_flag_enabled() of
-        true ->
-            [{"/stream/publishers", ?MODULE, []},
-             {"/stream/publishers/:vhost", ?MODULE, []},
-             {"/stream/publishers/:vhost/:queue", ?MODULE, []}];
-        false ->
-            []
-    end.
+    [{"/stream/publishers", ?MODULE, []},
+     {"/stream/publishers/:vhost", ?MODULE, []},
+     {"/stream/publishers/:vhost/:queue", ?MODULE, []}].
 
 web_ui() ->
     [].
@@ -91,8 +86,9 @@ to_json(ReqData, Context = #context{user = User}) ->
                                         ReqData,
                                         Context);
         true ->
-            rabbit_mgmt_util:bad_request(<<"Stats in management UI are disabled on this node">>,
-                                         ReqData, Context)
+            %% if we don't return a 200 it is not possible to view the queue page
+            %% for a queue if the stream mgmt is enabled
+            rabbit_mgmt_util:reply_list([], [], ReqData, Context)
     end.
 
 is_authorized(ReqData, Context) ->

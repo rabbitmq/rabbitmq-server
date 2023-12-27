@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 ##
 
 defmodule SuspendListenersCommandTest do
@@ -16,6 +16,7 @@ defmodule SuspendListenersCommandTest do
     resume_all_client_listeners()
 
     node_name = get_rabbit_hostname()
+
     on_exit(fn ->
       resume_all_client_listeners()
       close_all_connections(node_name)
@@ -38,7 +39,7 @@ defmodule SuspendListenersCommandTest do
 
   test "validate: with extra arguments returns an arg count error", context do
     assert @command.validate(["extra"], context[:opts]) ==
-      {:validation_failure, :too_many_args}
+             {:validation_failure, :too_many_args}
   end
 
   test "run: request to a non-existent node returns a badrpc" do

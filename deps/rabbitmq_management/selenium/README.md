@@ -1,132 +1,157 @@
 # Automated End-to-End testing of the management ui with Selenium
 
-We are using Selenium webdriver to simulate running the management ui in a browser.
-And Mocha as the testing framework for Javascript.
+Selenium webdriver is used to drive web browser's interactions on the management ui.
+And Mocha is used as the testing framework for Javascript.
 
-To run the tests we need:
+The following must be installed to run the tests:
 - make
 - docker
-- Ruby (needed to install `uaac` via `gem`)
+- curl
 
-# How tests are organized
+# Organization of test cases
 
-All tests are hanging from the `test` folder. We can use subfolders to better organize them.
-For instance, all OAuth2 related tests are under `test/oauth`. And under this folder
-we have another subfolder, `tests/oauth/with-uaa` to group all the tests cases which run against UAA as OAuth2 server.
+`test` folder contains the test cases written in Javascript using Selenium webdriver. Test cases are grouped into folders based on the area of functionality.
+For instance, `test/basic-auth` contains test cases that validates basic authentication. Another example, a bit
+more complex, is `test/oauth` where the test cases are stored in subfolders. For instance, `test/oauth/with-sp-initiated` which validate OAuth 2 authorization where users come to RabbitMQ without any token and RabbitMQ initiates the authorization process.  
 
-At the moment, there are no smart around discovering all the tests under subfolders. That will come later.
+The `test` folder also contains the necessary configuration files. For instance, `test/basic-auth` contains `rabbitmq.conf` file which is also shared by other test cases such as `test/definitions` or `test/limits`.
 
-The idea is that every folder is a suite of test cases which have in common a runtime environment. For instance,
-the test suite `test/oauth/with-uaa` has a `setup.sh` script which deploys RabbitMQ and a UAA server.
-Whereas the test suite `test/oath/with-uaa-down` has a `setup.sh` script which only deploys RabbitMQ.
+`suites` folder contains one bash script per test suite. A test suite executes all the test cases under
+a folder with certain configuration. More on configuration on the next section.
 
-# How run the tests
+`bin` folder contains as it is expected utility scripts used to run the test suites.
 
-But regardless how we run the tests, we are going to compile RabbitMQ server and build its docker image first.
-```
-make package-generic-unix
-make docker-image
-```
-From the output of the `make docker-image` we copy the image's tag and run the following
-command, e.g.
-```
-export RABBITMQ_IMAGE_TAG=3.8.10-1696.g171734f.dirty
-```
+
+# How to run the tests
 
 There are two ways to run the tests.
 
-**The interactive mode** - If we are writing code in any of RabbitMQ plugins or
-libraries, we most likely want to run tests interactively, i.e. against our local installed Chrome browser, so that we
-can see the simulated user interactions in the browser. In this mode, we are also running RabbitMQ directly
-from source to speed things up. Otherwise, we would have to build a docker image for every change we wanted to test.
+**Headless mode** - This is the mode used by the CI. But you can also run it locally. In this mode, you do
+not see any browser interaction, everything happens in the background, i.e. rabbitmq, tests, the browser, and any component the test depends on such as UAA.
 
-**Headless mode** - If we are not making any code changes to RabbitMQ and instead
-we are only writing tests or simply we want to run them, then we want to run the tests in headless mode.
+**The interactive mode** - This mode is convenient when we are still working on RabbitMQ source code and/or in the selenium tests. In this mode, you run RabbitMQ and tests directly from source to speed things up. The components, such as, UAA or keycloak, run in docker.
 
 
 ## Run tests in headless-mode
 
-In this mode, we are running the following containers within the same
-docker network in our local machine:
- - RabbitMQ
- - UAA
- - the browser  
- - and the test runner
-
-First, we launch **Selenium Hub** which is where the headless chrome browser runs:
+To run just one suite, you proceed as follows:
 ```
-cd selenium
-make start-chrome
+suites/oauth-with-uaa.sh
 ```
 
-Then we run the setup.sh script which deploys the runtime requirement for the suite test we are going to run:
+And to is run all suites, like the CI does, you run:
 ```
-make setup SUITE=test/oauth/with-uaa
-```
-
-And now we run the tests
-```
-make run-test SUITE=test/oauth/with-uaa
-```
-> By default, if we do not specify any SUITE, it uses `test/oauth/with-uaa`
-
-And to tear down the runtime for the test suite we run:
-```
-make teardown SUITE=test/oauth/with-uaa
+./run-suites.sh
 ```
 
-At the moment there are only 2 suites of tests. The first one is `test/oauth/with-uaa` that we just discussed above.
-The second one is `test/oauth/with-uaa-down` which runs a test case with UAA down.
-To run this suite, we would proceed as follows:
-
+If you want to test your local changes, you can still build an image with these 2 commands from the
+root folder of the `rabbitmq-server` repo:
 ```
-make setup SUITE=test/oauth/with-uaa-down
-make run-test SUITE=test/oauth/with-uaa-down
-make teardown SUITE=test/oauth/with-uaa-down
+cd ../../../../
+make package-generic-unix
+make docker-image
 ```
 
-**Note**: If at any stage, the tests take a long time to run, try restarting the selenium-hub by running. Sometimes it becomes unresponsive.
+The last command prints something like this:
 ```
-make start-chrome
+ => => naming to docker.io/pivotalrabbitmq/rabbitmq:3.11.0-rc.2.51.g4f3e539.dirty                                                                            0.0s
 ```
 
+To run a suite with a particular docker image you do it like this:
+```
+cd deps/rabbitmq_management/selenium
+RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:3.11.0-rc.2.51.g4f3e539.dirty suites/oauth-with-uaa-with-mgt-prefix.sh
+```
 
 ## Run tests interactively using your local chrome browser
 
-In this mode when we are actively developing and hence we need full control of the
-runtime environment for the tests.
-For this reason, every test suite should have its own Makefile to help developer bootstrap
-the required runtime.
-
-Let's say we want to run the test suite `test/oauth/with-uaa`. We proceed as follows:
-
-Get node.js dependencies ready. Selenium tests are ultimately written in Javascript and
-requires node.js runtime to run them:
+First you make sure that you have Node.js ready to run the test cases.
 ```
 cd selenium
 npm install
 ```
 
-Access the test suite folder:
+Before you can run a single test case or all the test cases for a suite, you need to
+run RabbitMQ from source and all the components the test cases depends on, if any.
+
+For instance, say you want to run the test cases for the suite `suites/oauth-with-uaa.sh`.
+
+First, open a terminal and launch RabbitMQ in the foreground:
 ```
-cd test/oauth/with-uaa
+suites/oauth-with-uaa.sh start-rabbitmq
 ```
 
-Start UAA:
+Then, launch all the components, the suite depends on, in the background:
 ```
-make start-uaa
-```
-
-Start RabbitMQ from source (it runs `make run-broker`):
-```
-make start-rabbitmq
+suites/oauth-with-uaa.sh start-others
 ```
 
-To run all tests under the suite:
+And finally, run all the test cases for the suite:
 ```
-make run-test
+suites/oauth-with-uaa.sh test
 ```
-Or to run a single tests under the suite:
+
+Or just one test case:
 ```
-make run-test TEST=landing.js
+suites/oauth-with-uaa.sh test happy-login.js
+```
+
+**NOTE**: Nowadays, it is not possible to run all test in interactive mode. It is doable but it has not
+been implemented yet.
+
+
+## Test case configuration
+
+RabbitMQ and other components such as UAA, or Keycloak, require configuration files which varies
+depending on the test case scenario. These configuration files must be dynamically generated using these two other files:
+- one or many configuration files
+- and one or many **.env** file which declare environment variables used to template the former configuration file in order to generate a final configuration file
+
+Configuration files may contain reference to environment variables. And configuration files
+may should follow this naming convention: `<prefix>[.<profile>]*<suffix>`. For instance:
+- `basic-auth/rabbitmq.conf` It is a configuration file whose **prefix** is `rabbitmq`, the **suffix** is `.conf` and it has no profile associated to it. Inside, it has no reference to environment variables hence the final
+configuration file is the raw configuration file.
+- `oauth/rabbitmq.conf` Same as `basic-auth/rabbitmq.conf` but this file does have reference to environment variables so the final file will have those variable replaced with their final values
+- `oauth/rabbitmq.mgt-prefix.conf` It is a configuration file with the profile `mgt-prefix`
+
+The .env files should follow the naming convention: `.env.<profile>[.<profile>]*`. For instance:
+- `.env.docker` It is an .env file which is  used when the profile `docker` is activated
+- `oauth/.env.docker.uaa` It is a .env file used when using `oauth` as test folder and the profiles `docker` and `uaa` are both activated
+
+To generate a `rabbitmq.conf` file the process is as follows:
+1. Merge any applicable .env file from the test case's configuration folder and from the parent folder, i.e. under `/test` folder and generate a `/tmp/rabbitmq/.env` file
+2. Merge any applicable rabbitmq.conf file from the test case's configuration and resolve all the environment variable using `/tmp/rabbitmq/.env` file to produce `/tmp/selenium/<test-suite-name>/rabbitmq/rabbitmq.conf`
+
+## Profiles
+
+The most common profiles are:
+- `docker` profile used to indicate that RabbitMQ, the tests and selenium+browser run in docker. This profile is automatically activated when running in headless mode
+- `local` profile used to indicate that RabbitMQ and the tests and the browser run locally. This profile is
+automatically activated when running in interactive mode
+
+The rest of the components the test cases depends on will typically run in docker such as uaa, keycloak, and the rest.
+
+Besides these two profiles, mutually exclusive, you can have as many profiles as needed. It is just a matter of naming the appropriate file (.env, or rabbitmq.conf, etc) with the profile and activating the profile in the test suite script. For instance `suites/oauth-with-uaa.sh` activates two profiles by declaring them in `PROFILES` environment variable as shown below:
+```
+PROFILES="uaa uaa-oauth-provider"
+```
+
+## Chrome vs Chrome driver version mismatch
+
+If you find the following error when you first attempt to run one of the selenium tests
+```
+SessionNotCreatedError: session not created: This version of ChromeDriver only supports Chrome version 108
+Current browser version is 110.0.5481.100 with binary path /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+```
+It is because your current Chrome version is newer than the `chromedriver` configured in package.json.
+```
+  ....
+  "dependencies": {
+    "chromedriver": "^110.0.0",
+  ...
+```
+To fix the problem, bump the version in your package.json to match your local chrome version and run again the
+following command:
+```
+  npm install
 ```

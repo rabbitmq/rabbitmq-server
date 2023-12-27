@@ -2,18 +2,22 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_shovel_mgmt_util).
 
 -export([status/2]).
 
+-ifdef(TEST).
+-export([status/1]).
+-endif.
+
 -import(rabbit_misc, [pget/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
--include_lib("rabbit_shovel_mgmt.hrl").
+-include("rabbit_shovel_mgmt.hrl").
 
 %% Allow users to see things in the vhosts they are authorised. But
 %% static shovels do not have a vhost, so only allow admins (not
@@ -53,11 +57,12 @@ format_info(starting) ->
     [{state, starting}];
 
 format_info({running, Props}) ->
-    [{state, running}] ++ Props;
+    BlockedStatus = proplists:get_value(blocked_status, Props, running),
+    [{state, BlockedStatus}] ++ Props;
 
 format_info({terminated, Reason}) ->
     [{state,  terminated},
-        {reason, print("~p", [Reason])}].
+        {reason, print("~tp", [Reason])}].
 
 format_ts({{Y, M, D}, {H, Min, S}}) ->
     print("~w-~2.2.0w-~2.2.0w ~w:~2.2.0w:~2.2.0w", [Y, M, D, H, Min, S]).

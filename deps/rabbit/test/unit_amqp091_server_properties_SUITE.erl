@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(unit_amqp091_server_properties_SUITE).
@@ -75,7 +75,7 @@ end_per_group(Group, Config) ->
 
 init_per_testcase(Testcase, Config) ->
     Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
-    Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~p", [Group, Testcase])),
+    Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~tp", [Group, Testcase])),
     Config1 = rabbit_ct_helpers:set_config(Config, [{queue_name, Q}]),
     rabbit_ct_helpers:testcase_started(Config1, Testcase).
 

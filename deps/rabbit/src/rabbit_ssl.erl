@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_ssl).
@@ -14,6 +14,7 @@
 -export([cipher_suites_erlang/2, cipher_suites_erlang/1,
          cipher_suites_openssl/2, cipher_suites_openssl/1,
          cipher_suites/1]).
+-export([info/2, cert_info/2]).
 
 %%--------------------------------------------------------------------------
 
@@ -131,7 +132,7 @@ peer_cert_auth_name(subject_alternative_name, Cert) ->
             %% lists:nth/2 is 1-based
             Index  = application:get_env(rabbit, ssl_cert_login_san_index, 0) + 1,
             OfType = peer_cert_subject_alternative_names(Cert, otp_san_type(Type)),
-            rabbit_log:debug("Peer certificate SANs of type ~s: ~p, index to use with lists:nth/2: ~b", [Type, OfType, Index]),
+            rabbit_log:debug("Peer certificate SANs of type ~ts: ~tp, index to use with lists:nth/2: ~b", [Type, OfType, Index]),
             case length(OfType) of
                 0                 -> not_found;
                 N when N < Index  -> not_found;
@@ -169,7 +170,7 @@ auth_config_sane() ->
     case proplists:get_value(verify, Opts) of
         verify_peer -> true;
         V           -> rabbit_log:warning("TLS peer verification (authentication) is "
-                                          "disabled, ssl_options.verify value used: ~p. "
+                                          "disabled, ssl_options.verify value used: ~tp. "
                                           "See https://www.rabbitmq.com/ssl.html#peer-verification to learn more.", [V]),
                        false
     end.
@@ -181,3 +182,34 @@ otp_san_type(uri)        -> uniformResourceIdentifier;
 otp_san_type(other_name) -> otherName;
 otp_san_type(Other)      -> Other.
 
+info(ssl_protocol,     Socks) -> info0(fun ({P,         _}) -> P end, Socks);
+info(ssl_key_exchange, Socks) -> info0(fun ({_, {K, _, _}}) -> K end, Socks);
+info(ssl_cipher,       Socks) -> info0(fun ({_, {_, C, _}}) -> C end, Socks);
+info(ssl_hash,         Socks) -> info0(fun ({_, {_, _, H}}) -> H end, Socks);
+info(ssl, {Sock, ProxySock})  -> rabbit_net:proxy_ssl_info(Sock, ProxySock) /= nossl.
+
+info0(F, {Sock, ProxySock}) ->
+    case rabbit_net:proxy_ssl_info(Sock, ProxySock) of
+        nossl       -> '';
+        {error, _}  -> '';
+        {ok, Items} ->
+            P = proplists:get_value(protocol, Items),
+            #{cipher := C,
+              key_exchange := K,
+              mac := H} = proplists:get_value(selected_cipher_suite, Items),
+            F({P, {K, C, H}})
+    end.
+
+cert_info(peer_cert_issuer, Sock) ->
+    cert_info0(fun peer_cert_issuer/1, Sock);
+cert_info(peer_cert_subject, Sock) ->
+    cert_info0(fun peer_cert_subject/1, Sock);
+cert_info(peer_cert_validity, Sock) ->
+    cert_info0(fun peer_cert_validity/1, Sock).
+
+cert_info0(F, Sock) ->
+    case rabbit_net:peercert(Sock) of
+        nossl      -> '';
+        {error, _} -> '';
+        {ok, Cert} -> list_to_binary(F(Cert))
+    end.

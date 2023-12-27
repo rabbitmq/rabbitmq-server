@@ -52,6 +52,3 @@ rabbitmqadmin --version
 # rabbitmq_prometheus
 rabbitmq-plugins enable --offline rabbitmq_prometheus && \
     rabbitmq-plugins is_enabled rabbitmq_prometheus --offline
-
-# enable all plugins for dev
-rabbitmq-plugins enable --all

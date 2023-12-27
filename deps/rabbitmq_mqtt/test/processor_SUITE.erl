@@ -2,11 +2,11 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 
 -module(processor_SUITE).
--compile([export_all]).
+-compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -23,9 +23,7 @@ groups() ->
                                 ignores_colons_in_username_if_option_set,
                                 interprets_colons_in_username_if_option_not_set,
                                 get_vhosts_from_global_runtime_parameter,
-                                get_vhost,
-                                add_client_id_to_adapter_info,
-                                quorum_configuration
+                                get_vhost
                                ]}
     ].
 
@@ -45,9 +43,17 @@ init_per_testcase(get_vhost, Config) ->
     mnesia:create_table(rabbit_runtime_parameters, [
         {attributes, record_info(fields, runtime_parameters)},
         {record_name, runtime_parameters}]),
+    meck:new(rabbit_feature_flags, [passthrough, no_link]),
+    meck:expect(
+      rabbit_feature_flags, is_enabled,
+      fun
+          (khepri_db, _) -> false;
+          (FeatureNames, _)           -> meck:passthrough([FeatureNames])
+      end),
     Config;
 init_per_testcase(_, Config) -> Config.
 end_per_testcase(get_vhost, Config) ->
+    meck:unload(rabbit_feature_flags),
     mnesia:stop(),
     Config;
 end_per_testcase(_, Config) -> Config.
@@ -186,17 +192,6 @@ get_vhost(_Config) ->
     clear_vhost_global_parameters(),
     ok.
 
-add_client_id_to_adapter_info(_Config) ->
-    TestFun = fun(AdapterInfo) ->
-                Info0 = rabbit_mqtt_processor:add_client_id_to_adapter_info(<<"my-client-id">>, AdapterInfo),
-                AdditionalInfo0 = Info0#amqp_adapter_info.additional_info,
-                ?assertEqual(#{<<"client_id">> => <<"my-client-id">>}, proplists:get_value(variable_map, AdditionalInfo0)),
-                ClientProperties = proplists:get_value(client_properties, AdditionalInfo0),
-                ?assertEqual([{client_id,longstr,<<"my-client-id">>}], ClientProperties)
-              end,
-    lists:foreach(TestFun, [#amqp_adapter_info{}, #amqp_adapter_info{additional_info = [{client_properties, []}]}]),
-    ok.
-
 set_global_parameter(Key, Term) ->
     InsertParameterFun = fun () ->
         mnesia:write(rabbit_runtime_parameters, #runtime_parameters{key = Key, value = Term}, write)
@@ -210,22 +205,3 @@ clear_vhost_global_parameters() ->
         ok = mnesia:delete(rabbit_runtime_parameters, mqtt_port_to_vhost_mapping, write)
                          end,
     {atomic, ok} = mnesia:transaction(DeleteParameterFun).
-
-quorum_configuration(_Config) ->
-    MyArgs = [],
-%%  default setting with CleanSession = true of false
-    QMustBeClassic = rabbit_mqtt_processor:maybe_quorum(MyArgs, true, <<"">>),
-    ?assertEqual(QMustBeClassic, []),
-%%  default setting with CleanSession = true of false
-    QMustBeClassicEvenFalse = rabbit_mqtt_processor:maybe_quorum(MyArgs, false, <<"">>),
-    ?assertEqual(QMustBeClassicEvenFalse, []),
-    application:set_env(rabbitmq_mqtt, durable_queue_type, quorum),
-%%  quorum setting with CleanSession  == false must me quorum
-    QMustBeQuorum = rabbit_mqtt_processor:maybe_quorum(MyArgs, false, <<"">>),
-    ?assertEqual(QMustBeQuorum, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
-
-    %%  quorum setting with CleanSession  == true must me classic since
-    %% quorum does not support auto-delete
-    QEvenQuorumMustBeClassic = rabbit_mqtt_processor:maybe_quorum(MyArgs, true, <<"">>),
-    ?assertEqual(QEvenQuorumMustBeClassic, []),
-    ok.

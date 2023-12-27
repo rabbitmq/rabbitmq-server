@@ -1,3 +1,4 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
@@ -10,7 +11,13 @@ load(
     "rabbitmq_app",
     "rabbitmq_integration_suite",
     "rabbitmq_suite",
-    "rabbitmq_test_helper",
+)
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
 )
 
 APP_NAME = "rabbitmq_management"
@@ -18,14 +25,6 @@ APP_NAME = "rabbitmq_management"
 APP_DESCRIPTION = "RabbitMQ Management Console"
 
 APP_MODULE = "rabbit_mgmt_app"
-
-EXTRA_APPS = [
-    "mnesia",
-    "ranch",
-    "ssl",
-    "crypto",
-    "public_key",
-]
 
 APP_ENV = """[
 	    {http_log_dir,      none},
@@ -36,21 +35,9 @@ APP_ENV = """[
 
 	    {cors_allow_origins, []},
 	    {cors_max_age, 1800},
-	    {content_security_policy, "script-src 'self' 'unsafe-eval' 'unsafe-inline'; object-src 'self'"}
+	    {content_security_policy, "script-src 'self' 'unsafe-eval' 'unsafe-inline'; object-src 'self'"},
+	    {max_http_body_size, 10000000}
 	  ]"""
-
-DEPS = [
-    "//deps/amqp_client:erlang_app",
-    "//deps/rabbit_common:erlang_app",
-    "//deps/rabbit:erlang_app",
-    "//deps/rabbitmq_management_agent:erlang_app",
-]
-
-RUNTIME_DEPS = [
-    "//deps/rabbitmq_web_dispatch:erlang_app",
-    "@cowboy//:erlang_app",
-    "@cowlib//:erlang_app",
-]
 
 genrule(
     name = "rabbitmqadmin",
@@ -62,142 +49,178 @@ sed 's/%%VSN%%/{}/' $< > $@
 """.format(APP_VERSION),
 )
 
+all_beam_files(name = "all_beam_files")
+
+all_test_beam_files(name = "all_test_beam_files")
+
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
+
+# gazelle:erlang_app_extra_app ssl
+# gazelle:erlang_app_extra_app crypto
+# gazelle:erlang_app_extra_app public_key
+
+# gazelle:erlang_app_dep ranch
+
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
     app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_module = APP_MODULE,
     app_name = APP_NAME,
-    extra_apps = EXTRA_APPS,
-    extra_priv = [":rabbitmqadmin"],
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    extra_apps = [
+        "crypto",
+        "public_key",
+        "ssl",
+    ],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/amqp_client:erlang_app",
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbitmq_management_agent:erlang_app",
+        "//deps/rabbitmq_web_dispatch:erlang_app",
+        "@cowboy//:erlang_app",
+        "@cowlib//:erlang_app",
+        "@ranch//:erlang_app",
+    ],
 )
 
-xref()
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
 
 plt(
-    name = "base_plt",
-    deps = DEPS,
+    name = "deps_plt",
+    for_target = ":erlang_app",
+    ignore_warnings = True,
+    libs = ["//deps/rabbitmq_cli:elixir"],  # keep
+    plt = "//:base_plt",
 )
 
 dialyze(
+    name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":base_plt",
-    warnings_as_errors = False,
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
+
+eunit(
+    name = "eunit",
+    compiled_suites = [":test_rabbit_mgmt_runtime_parameters_util_beam"],
+    target = ":test_erlang_app",
 )
 
 broker_for_integration_suites()
 
-rabbitmq_test_helper(
-    name = "rabbit_mgmt_runtime_parameters_util",
-    srcs = [
-        "test/rabbit_mgmt_runtime_parameters_util.erl",
-    ],
+rabbitmq_suite(
+    name = "cache_SUITE",
+    size = "small",
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbitmq_ct_helpers:erlang_app",
+        "@proper//:erlang_app",
     ],
 )
 
-PACKAGE = "deps/rabbitmq_management"
+rabbitmq_integration_suite(
+    name = "clustering_prop_SUITE",
+    size = "large",
+    deps = [
+        "//deps/rabbitmq_management_agent:erlang_app",
+        "@proper//:erlang_app",
+    ],
+)
 
-suites = [
-    rabbitmq_suite(
-        name = "cache_SUITE",
-        size = "small",
-        runtime_deps = [
-            "//deps/rabbitmq_ct_helpers:erlang_app",
-        ],
-        deps = [
-            "@proper//:erlang_app",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "clustering_prop_SUITE",
-        size = "large",
-        deps = [
-            "//deps/rabbitmq_management_agent:erlang_app",
-            "@proper//:erlang_app",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "clustering_SUITE",
-        flaky = True,
-        deps = [
-            "//deps/rabbitmq_management_agent:erlang_app",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "config_schema_SUITE",
-        size = "medium",
-    ),
-    rabbitmq_suite(
-        name = "listener_config_SUITE",
-        size = "small",
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_mgmt_http_health_checks_SUITE",
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_mgmt_http_SUITE",
-        size = "large",
-        additional_beam = [
-            ":rabbit_mgmt_runtime_parameters_util",
-        ],
-        shard_count = 2,
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_mgmt_only_http_SUITE",
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_mgmt_rabbitmqadmin_SUITE",
-        additional_beam = [
-            ":rabbit_mgmt_runtime_parameters_util",
-        ],
-        data = [
-            ":bin/rabbitmqadmin",
-        ],
-    ),
-    rabbitmq_suite(
-        name = "rabbit_mgmt_stats_SUITE",
-        size = "small",
-        runtime_deps = [
-            "//deps/rabbitmq_ct_helpers:erlang_app",
-        ],
-        deps = [
-            "//deps/rabbitmq_management_agent:erlang_app",
-            "@proper//:erlang_app",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_mgmt_test_db_SUITE",
-        deps = [
-            "//deps/rabbitmq_management_agent:erlang_app",
-        ],
-    ),
-    rabbitmq_suite(
-        name = "rabbit_mgmt_test_unit_SUITE",
-        size = "small",
-    ),
-    rabbitmq_suite(
-        name = "stats_SUITE",
-        size = "small",
-        deps = [
-            "//deps/rabbitmq_management_agent:erlang_app",
-            "@proper//:erlang_app",
-        ],
-    ),
-]
+rabbitmq_integration_suite(
+    name = "clustering_SUITE",
+    flaky = True,
+    deps = [
+        "//deps/rabbitmq_management_agent:erlang_app",
+    ],
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+rabbitmq_integration_suite(
+    name = "config_schema_SUITE",
+    size = "medium",
+)
+
+rabbitmq_suite(
+    name = "listener_config_SUITE",
+    size = "small",
+)
+
+rabbitmq_integration_suite(
+    name = "rabbit_mgmt_http_health_checks_SUITE",
+)
+
+rabbitmq_integration_suite(
+    name = "rabbit_mgmt_http_SUITE",
+    size = "large",
+    additional_beam = [
+        "test/rabbit_mgmt_runtime_parameters_util.beam",
+    ],
+    shard_count = 2,
+)
+
+rabbitmq_integration_suite(
+    name = "rabbit_mgmt_only_http_SUITE",
+)
+
+rabbitmq_integration_suite(
+    name = "rabbit_mgmt_rabbitmqadmin_SUITE",
+    additional_beam = [
+        "test/rabbit_mgmt_runtime_parameters_util.beam",
+    ],
+    data = [
+        ":bin/rabbitmqadmin",
+    ],
+)
+
+rabbitmq_suite(
+    name = "rabbit_mgmt_stats_SUITE",
+    size = "small",
+    deps = [
+        "//deps/rabbitmq_ct_helpers:erlang_app",
+        "//deps/rabbitmq_management_agent:erlang_app",
+        "//deps/rabbitmq_web_dispatch:erlang_app",
+        "@proper//:erlang_app",
+    ],
+)
+
+rabbitmq_integration_suite(
+    name = "rabbit_mgmt_test_db_SUITE",
+    deps = [
+        "//deps/rabbitmq_management_agent:erlang_app",
+        "//deps/rabbitmq_web_dispatch:erlang_app",
+    ],
+)
+
+rabbitmq_suite(
+    name = "rabbit_mgmt_test_unit_SUITE",
+    size = "small",
+)
+
+rabbitmq_suite(
+    name = "stats_SUITE",
+    size = "small",
+    deps = [
+        "//deps/rabbitmq_management_agent:erlang_app",
+        "//deps/rabbitmq_web_dispatch:erlang_app",
+        "@proper//:erlang_app",
+    ],
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_management",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

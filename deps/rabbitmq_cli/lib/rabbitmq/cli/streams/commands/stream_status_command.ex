@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Streams.Commands.StreamStatusCommand do
   alias RabbitMQ.CLI.Core.DocGuide
@@ -17,7 +17,7 @@ defmodule RabbitMQ.CLI.Streams.Commands.StreamStatusCommand do
   use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([name] = _args, %{node: node_name, vhost: vhost, tracking: :false}) do
+  def run([name] = _args, %{node: node_name, vhost: vhost, tracking: false}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_stream_queue, :status, [vhost, name]) do
       {:error, :classic_queue_not_supported} ->
         {:error, "Cannot get stream status of a classic queue"}
@@ -29,7 +29,8 @@ defmodule RabbitMQ.CLI.Streams.Commands.StreamStatusCommand do
         other
     end
   end
-  def run([name] = _args, %{node: node_name, vhost: vhost, tracking: :true}) do
+
+  def run([name] = _args, %{node: node_name, vhost: vhost, tracking: true}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_stream_queue, :tracking_status, [vhost, name]) do
       {:error, :classic_queue_not_supported} ->
         {:error, "Cannot get stream status of a classic queue"}

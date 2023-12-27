@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_binary_generator).
@@ -22,11 +22,11 @@
 -type frame() :: [binary()].
 
 -spec build_simple_method_frame
-        (rabbit_channel:channel_number(), rabbit_framing:amqp_method_record(),
+        (rabbit_types:channel_number(), rabbit_framing:amqp_method_record(),
          rabbit_types:protocol()) ->
             frame().
 -spec build_simple_content_frames
-        (rabbit_channel:channel_number(), rabbit_types:content(),
+        (rabbit_types:channel_number(), rabbit_types:content(),
          non_neg_integer(), rabbit_types:protocol()) ->
             [frame()].
 -spec build_heartbeat_frame() -> frame().
@@ -39,9 +39,9 @@
         (rabbit_types:content()) ->
             rabbit_types:unencoded_content().
 -spec map_exception
-        (rabbit_channel:channel_number(), rabbit_types:amqp_error() | any(),
+        (rabbit_types:channel_number(), rabbit_types:amqp_error() | any(),
          rabbit_types:protocol()) ->
-            {rabbit_channel:channel_number(),
+            {rabbit_types:channel_number(),
              rabbit_framing:amqp_method_record()}.
 
 %%----------------------------------------------------------------------------
@@ -223,7 +223,7 @@ lookup_amqp_exception(#amqp_error{name        = Name,
     ExplBin = amqp_exception_explanation(Text, Expl),
     {ShouldClose, Code, ExplBin, Method};
 lookup_amqp_exception(Other, Protocol) ->
-    rabbit_log:warning("Non-AMQP exit reason '~p'", [Other]),
+    rabbit_log:warning("Non-AMQP exit reason '~tp'", [Other]),
     {ShouldClose, Code, Text} = Protocol:lookup_amqp_exception(internal_error),
     {ShouldClose, Code, Text, none}.
 

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 %% This module is responsible for loading definition from a local filesystem
@@ -35,7 +35,7 @@
 
 -import(rabbit_misc, [pget/2, pget/3]).
 -import(rabbit_data_coercion, [to_binary/1]).
--import(rabbit_definitions, [import_raw/1]).
+-import(rabbit_definitions, [import_raw/1, decode/1, validate_definitions/1]).
 
 %%
 %% API
@@ -50,21 +50,13 @@ load(Proplist) when is_list(Proplist) ->
     case pget(local_path, Proplist, undefined) of
         undefined -> {error, "local definition file path is not configured: local_path is not set"};
         Path      ->
-            rabbit_log:debug("Asked to import definitions from a local file or directory at '~s'", [Path]),
-            case file:read_file_info(Path, [raw]) of
-                {ok, FileInfo} ->
-                    %% same check is used by Cuttlefish validation, this is to be extra defensive
-                    IsReadable = (element(4, FileInfo) == read) or (element(4, FileInfo) == read_write),
-                    case IsReadable of
-                        true ->
-                            load_from_single_file(Path);
-                        false ->
-                            Msg = rabbit_misc:format("local definition file '~s' does not exist or cannot be read by the node", [Path]),
-                            {error, Msg}
-                    end;
-                _ ->
-                    Msg = rabbit_misc:format("local definition file '~s' does not exist or cannot be read by the node", [Path]),
-                    {error, {could_not_read_defs, Msg}}
+            rabbit_log:debug("Asked to import definitions from a local file or directory at '~ts'", [Path]),
+            IsDir = filelib:is_dir(Path),
+            case IsDir of
+                true ->
+                    load_from_local_path(true, Path);
+                false ->
+                    load_from_single_file(Path)
             end
     end;
 load(Map) when is_map(Map) ->
@@ -85,19 +77,27 @@ load_with_hashing(Proplist, PreviousHash, Algo) ->
 
 -spec load_with_hashing(IsDir :: boolean(), Path :: file:name_all(), PreviousHash :: binary() | 'undefined', Algo :: crypto:sha1() | crypto:sha2()) -> binary() | 'undefined'.
 load_with_hashing(IsDir, Path, PreviousHash, Algo) when is_boolean(IsDir) ->
-    rabbit_log:debug("Loading definitions with content hashing enabled, path: ~s, is directory?: ~p, previous hash value: ~s",
+    rabbit_log:debug("Loading definitions with content hashing enabled, path: ~ts, is directory?: ~tp, previous hash value: ~ts",
                      [Path, IsDir, rabbit_misc:hexify(PreviousHash)]),
     case compiled_definitions_from_local_path(IsDir, Path) of
         %% the directory is empty or no files could be read
         [] ->
             rabbit_definitions_hashing:hash(Algo, undefined);
         Defs ->
-            case rabbit_definitions_hashing:hash(Algo, Defs) of
-                PreviousHash -> PreviousHash;
-                Other        ->
-                    rabbit_log:debug("New hash: ~s", [rabbit_misc:hexify(Other)]),
-                    load_from_local_path(IsDir, Path),
-                    Other
+            case validate_definitions(Defs) of
+                true ->
+                    case rabbit_definitions_hashing:hash(Algo, Defs) of
+                        PreviousHash -> PreviousHash;
+                        Other        ->
+                            rabbit_log:debug("New hash: ~ts", [rabbit_misc:hexify(Other)]),
+                            _ = load_from_local_path(IsDir, Path),
+                            Other
+                    end;
+                false ->
+                    rabbit_log:error("Definitions file at path ~p failed validation. The file must be a valid JSON document "
+                                     "and all virtual host-scoped resources must have a virtual host field to be set. "
+                                     "Definition files exported for a single virtual host CANNOT be imported at boot time", [Path]),
+                    {error, not_json}
             end
     end.
 
@@ -109,9 +109,10 @@ location() ->
 
 -spec load_from_local_path(IsDir :: boolean(), Path :: file:name_all()) -> ok | {error, term()}.
 load_from_local_path(true, Dir) ->
-    rabbit_log:info("Applying definitions from directory ~s", [Dir]),
+    rabbit_log:info("Applying definitions from directory ~ts", [Dir]),
     load_from_files(file:list_dir(Dir), Dir);
 load_from_local_path(false, File) ->
+    rabbit_log:info("Applying definitions from regular file at ~ts", [File]),
     load_from_single_file(File).
 
 %%
@@ -170,7 +171,7 @@ compiled_definitions_from_local_path(true = _IsDir, Dir) ->
                 end, ReadResults),
             [Body || {ok, Body} <- Successes];
         {error, E} ->
-            rabbit_log:error("Could not list files in '~s', error: ~p", [Dir, E]),
+            rabbit_log:error("Could not list files in '~ts', error: ~tp", [Dir, E]),
             {error, {could_not_read_defs, {Dir, E}}}
     end;
 compiled_definitions_from_local_path(false = _IsDir, Path) ->
@@ -185,7 +186,7 @@ read_file_contents(Path) ->
         {ok, Body} ->
             Body;
         {error, E} ->
-            rabbit_log:error("Could not read definitions from file at '~s', error: ~p", [Path, E]),
+            rabbit_log:error("Could not read definitions from file at '~ts', error: ~tp", [Path, E]),
             {error, {could_not_read_defs, {Path, E}}}
     end.
 
@@ -194,7 +195,7 @@ load_from_files({ok, Filenames0}, Dir) ->
     Filenames2 = [filename:join(Dir, F) || F <- Filenames1],
     load_from_multiple_files(Filenames2);
 load_from_files({error, E}, Dir) ->
-    rabbit_log:error("Could not read definitions from directory ~s, Error: ~p", [Dir, E]),
+    rabbit_log:error("Could not read definitions from directory ~ts, Error: ~tp", [Dir, E]),
     {error, {could_not_read_defs, E}}.
 
 load_from_multiple_files([]) ->
@@ -206,12 +207,27 @@ load_from_multiple_files([File|Rest]) ->
     end.
 
 load_from_single_file(Path) ->
-    rabbit_log:debug("Will try to load definitions from a local file or directory at '~s'", [Path]),
-    case rabbit_misc:raw_read_file(Path) of
-        {ok, Body} ->
-            rabbit_log:info("Applying definitions from file at '~s'", [Path]),
-            import_raw(Body);
-        {error, E} ->
-            rabbit_log:error("Could not read definitions from file at '~s', error: ~p", [Path, E]),
-            {error, {could_not_read_defs, {Path, E}}}
+    rabbit_log:debug("Will try to load definitions from a local file or directory at '~ts'", [Path]),
+
+    case file:read_file_info(Path, [raw]) of
+        {ok, FileInfo} ->
+            %% same check is used by Cuttlefish validation, this is to be extra defensive
+            IsReadable = (element(4, FileInfo) == read) or (element(4, FileInfo) == read_write),
+            case IsReadable of
+                true ->
+                    case rabbit_misc:raw_read_file(Path) of
+                        {ok, Body} ->
+                            rabbit_log:info("Applying definitions from file at '~ts'", [Path]),
+                            import_raw(Body);
+                        {error, E} ->
+                            rabbit_log:error("Could not read definitions from file at '~ts', error: ~tp", [Path, E]),
+                            {error, {could_not_read_defs, {Path, E}}}
+                    end;
+                false ->
+                    Msg = rabbit_misc:format("local definition file '~ts' does not exist or cannot be read by the node", [Path]),
+                    {error, Msg}
+            end;
+        _ ->
+            Msg = rabbit_misc:format("local definition file '~ts' does not exist or cannot be read by the node", [Path]),
+            {error, {could_not_read_defs, Msg}}
     end.

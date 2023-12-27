@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2016-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
   require Integer
@@ -26,7 +26,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
       [
         &validate_args_count_even/2,
         &Validators.node_is_not_running/2,
-        &Validators.mnesia_dir_is_set/2,
+        &Validators.data_dir_is_set/2,
         &Validators.feature_flags_file_is_set/2,
         &Validators.rabbit_is_loaded/2
       ],
@@ -38,10 +38,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
     node_pairs = make_node_pairs(nodes)
 
     try do
-      :rabbit_mnesia_rename.rename(node_name, node_pairs)
+      :rabbit_db_cluster.rename(node_name, node_pairs)
     catch
-      _, reason ->
-        {:rename_failed, reason}
+      :error, :undef ->
+        try do
+          :rabbit_mnesia_rename.rename(node_name, node_pairs)
+        catch
+          _, reason ->
+            {:rename_failed, reason}
+        end
     end
   end
 

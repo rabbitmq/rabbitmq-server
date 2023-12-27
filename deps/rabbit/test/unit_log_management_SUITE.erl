@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(unit_log_management_SUITE).
@@ -12,6 +12,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("kernel/include/file.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -71,7 +72,7 @@ app_management(Config) ->
       ?MODULE, app_management1, [Config]).
 
 app_management1(_Config) ->
-    wait_for_application(rabbit),
+    ?awaitMatch(true, lists:keymember(rabbit, 1, application:which_applications()), 30000),
     %% Starting, stopping and diagnostics.  Note that we don't try
     %% 'report' when the rabbit app is stopped and that we enable
     %% tracing for the duration of this function.
@@ -91,22 +92,6 @@ no_exceptions(Mod, Fun, Args) ->
     try erlang:apply(Mod, Fun, Args) of _ -> ok
     catch Type:Ex -> {Type, Ex}
     end.
-
-wait_for_application(Application) ->
-    wait_for_application(Application, 5000).
-
-wait_for_application(_, Time) when Time =< 0 ->
-    {error, timeout};
-wait_for_application(Application, Time) ->
-    Interval = 100,
-    case lists:keyfind(Application, 1, application:which_applications()) of
-        false ->
-            timer:sleep(Interval),
-            wait_for_application(Application, Time - Interval);
-        _ -> ok
-    end.
-
-
 
 %% -------------------------------------------------------------------
 %% Log management.
@@ -128,11 +113,11 @@ log_file_initialised_during_startup1(_Config) ->
 
     %% start application with logging to non-existing directory
     NonExistent = rabbit_misc:format(
-                    "/tmp/non-existent/~s.log", [?FUNCTION_NAME]),
+                    "/tmp/non-existent/~ts.log", [?FUNCTION_NAME]),
     delete_file(NonExistent),
     delete_file(filename:dirname(NonExistent)),
     ok = rabbit:stop(),
-    io:format("Setting log file to \"~s\"~n", [NonExistent]),
+    io:format("Setting log file to \"~ts\"~n", [NonExistent]),
     os:putenv("RABBITMQ_LOGS", NonExistent),
     ok = rabbit:start(),
 
@@ -170,7 +155,7 @@ log_file_fails_to_initialise_during_startup(Config) ->
 log_file_fails_to_initialise_during_startup1(_Config, NonWritableDir) ->
     [LogFile|_] = rabbit:log_locations(),
     delete_file(LogFile),
-    Fn = rabbit_misc:format("~s.log", [?FUNCTION_NAME]),
+    Fn = rabbit_misc:format("~ts.log", [?FUNCTION_NAME]),
 
     %% start application with logging to directory with no
     %% write permissions
@@ -179,7 +164,7 @@ log_file_fails_to_initialise_during_startup1(_Config, NonWritableDir) ->
     delete_file(filename:dirname(NoPermission1)),
 
     ok = rabbit:stop(),
-    io:format("Setting log file to \"~s\"~n", [NoPermission1]),
+    io:format("Setting log file to \"~ts\"~n", [NoPermission1]),
     os:putenv("RABBITMQ_LOGS", NoPermission1),
     ?assertThrow(
        {error, {rabbit, {{cannot_log_to_file, _, _}, _}}},
@@ -193,7 +178,7 @@ log_file_fails_to_initialise_during_startup1(_Config, NonWritableDir) ->
     delete_file(NoPermission2),
     delete_file(filename:dirname(NoPermission2)),
 
-    io:format("Setting log file to \"~s\"~n", [NoPermission2]),
+    io:format("Setting log file to \"~ts\"~n", [NoPermission2]),
     os:putenv("RABBITMQ_LOGS", NoPermission2),
     ?assertThrow(
        {error, {rabbit, {{cannot_log_to_file, _, _}, _}}},
@@ -245,8 +230,9 @@ non_empty_files(Files) ->
 test_logs_working(LogFiles) ->
     ok = rabbit_log:error("Log a test message"),
     %% give the error loggers some time to catch up
-    timer:sleep(1000),
-    lists:all(fun(LogFile) -> [true] =:= non_empty_files([LogFile]) end, LogFiles),
+    ?awaitMatch(true,
+                lists:all(fun(LogFile) -> [true] =:= non_empty_files([LogFile]) end, LogFiles),
+               30000),
     ok.
 
 set_permissions(Path, Mode) ->

@@ -189,3 +189,12 @@ end}.
 
 {mapping, "web_stomp.proxy_protocol", "rabbitmq_web_stomp.proxy_protocol",
     [{datatype, {enum, [true, false]}}]}.
+
+%%
+%% File Handle Cache
+%%
+
+{mapping, "web_stomp.use_file_handle_cache", "rabbitmq_web_stomp.use_file_handle_cache",
+    [
+        {datatype, {enum, [true, false]}}
+    ]}.

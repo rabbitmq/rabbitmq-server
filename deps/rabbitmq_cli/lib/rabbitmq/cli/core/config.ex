@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2016-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.Config do
   alias RabbitMQ.CLI.{
@@ -44,7 +44,7 @@ defmodule RabbitMQ.CLI.Core.Config do
 
   def normalise(:longnames, true), do: :longnames
   def normalise(:longnames, "true"), do: :longnames
-  def normalise(:longnames, 'true'), do: :longnames
+  def normalise(:longnames, ~c"true"), do: :longnames
   def normalise(:longnames, "\"true\""), do: :longnames
   def normalise(:longnames, _val), do: :shortnames
   def normalise(_, value), do: value
@@ -102,7 +102,7 @@ defmodule RabbitMQ.CLI.Core.Config do
       cond do
         remote_node != nil and
           val0 == :undefined and
-            (name == :mnesia_dir or name == :feature_flags_file or name == :plugins_dir or
+            (name == :data_dir or name == :feature_flags_file or name == :plugins_dir or
                name == :enabled_plugins_file) ->
           context1 = get_env_context(nil, true)
           get_val_from_env_context(context1, name)
@@ -133,7 +133,7 @@ defmodule RabbitMQ.CLI.Core.Config do
       :node -> context[:nodename]
       :longnames -> context[:nodename_type] == :longnames
       :rabbitmq_home -> context[:rabbitmq_home]
-      :mnesia_dir -> context[:mnesia_dir]
+      :data_dir -> context[:data_dir]
       :plugins_dir -> context[:plugins_path]
       :plugins_expand_dir -> context[:plugins_expand_dir]
       :feature_flags_file -> context[:feature_flags_file]

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_app).
@@ -26,11 +26,18 @@
                    [{description, "Imports definition file at management.load_definitions"},
                     {mfa,         {rabbit_mgmt_load_definitions, boot, []}}]}).
 
+-rabbit_feature_flag(
+   {detailed_queues_endpoint,
+    #{desc          => "Add a detailed queues HTTP API endpoint. Reduce number of metrics in the default endpoint.",
+      stability     => stable,
+      depends_on    => [feature_flags_v2]
+     }}).
+
 start(_Type, _StartArgs) ->
-    case application:get_env(rabbitmq_management_agent, disable_metrics_collector, false) of
-        false ->
-            start();
+    case rabbit_mgmt_agent_config:is_metrics_collector_enabled() of
         true ->
+            start();
+        false ->
             rabbit_log:warning("Metrics collection disabled in management agent, "
                                "management only interface started", []),
             start()
@@ -90,12 +97,10 @@ get_listeners_config() ->
     maybe_disable_sendfile(Listeners).
 
 maybe_disable_sendfile(Listeners) ->
-    DisableSendfile = #{sendfile => false},
+    DisableSendfile = [{sendfile, false}],
     F = fun(L0) ->
                 CowboyOptsL0 = proplists:get_value(cowboy_opts, L0, []),
-                CowboyOptsM0 = maps:from_list(CowboyOptsL0),
-                CowboyOptsM1 = maps:merge(DisableSendfile, CowboyOptsM0),
-                CowboyOptsL1 = maps:to_list(CowboyOptsM1),
+                CowboyOptsL1 = rabbit_misc:plmerge(DisableSendfile, CowboyOptsL0),
                 L1 = lists:keydelete(cowboy_opts, 1, L0),
                 [{cowboy_opts, CowboyOptsL1}|L1]
         end,
@@ -177,9 +182,7 @@ ensure_port(tcp, Listener) ->
 do_ensure_port(Port, Listener) ->
     %% include default port if it's not provided in the config
     %% as Cowboy won't start if the port is missing
-    M0 = maps:from_list(Listener),
-    M1 = maps:merge(#{port => Port}, M0),
-    {ok, maps:to_list(M1)}.
+    {ok, rabbit_misc:plmerge([{port, Port}], Listener)}.
 
 log_startup(tcp, Listener) ->
     rabbit_log:info("Management plugin: HTTP (non-TLS) listener started on port ~w", [port(Listener)]);

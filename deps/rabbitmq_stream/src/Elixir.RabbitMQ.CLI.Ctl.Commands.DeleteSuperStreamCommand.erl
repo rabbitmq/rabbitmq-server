@@ -54,8 +54,8 @@ usage() ->
     <<"delete_super_stream <name> [--vhost <vhost>]">>.
 
 usage_additional() ->
-    [["<name>", "The name of the super stream to delete."],
-     ["--vhost <vhost>", "The virtual host of the super stream."]].
+    [[<<"<name>">>, <<"The name of the super stream to delete.">>],
+     [<<"--vhost <vhost>">>, <<"The virtual host of the super stream.">>]].
 
 usage_doc_guides() ->
     [?STREAM_GUIDE_URL].
@@ -75,7 +75,7 @@ delete_super_stream(NodeName, Timeout, VHost, SuperStream) ->
     of
         ok ->
             {ok,
-             rabbit_misc:format("Super stream ~s has been deleted",
+             rabbit_misc:format("Super stream ~ts has been deleted",
                                 [SuperStream])};
         Error ->
             Error

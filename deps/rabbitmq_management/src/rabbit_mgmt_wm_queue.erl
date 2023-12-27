@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_queue).
@@ -66,7 +66,7 @@ accept_content(ReqData, Context) ->
             rabbit_mgmt_util:direct_request(
             'queue.declare',
             fun rabbit_mgmt_format:format_accept_content/1,
-            [{queue, Name}], "Declare queue error: ~s", ReqData, Context);
+            [{queue, Name}], "Declare queue error: ~ts", ReqData, Context);
         {error, F, A} ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(io_lib:format(F ++ "~n", A)), ReqData, Context)
     end.
@@ -82,7 +82,7 @@ delete_resource(ReqData, Context) ->
       fun rabbit_mgmt_format:format_accept_content/1,
       [{queue, Name},
        {if_unused, IfUnused},
-       {if_empty, IfEmpty}], "Delete queue error: ~s", ReqData, Context).
+       {if_empty, IfEmpty}], "Delete queue error: ~ts", ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).

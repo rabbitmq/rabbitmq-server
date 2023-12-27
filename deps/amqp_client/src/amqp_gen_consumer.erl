@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 %% @doc A behaviour module for implementing consumers for
@@ -23,12 +23,68 @@
 -behaviour(gen_server2).
 
 -export([start_link/3, call_consumer/2, call_consumer/3, call_consumer/4]).
--export([behaviour_info/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, prioritise_info/3]).
 
 -record(state, {module,
                 module_state}).
+
+
+-type ok_error() :: {ok, State :: term()} | {error, Reason:: term(), State :: term()}.
+
+%% This callback is invoked by the channel, when it starts
+%% up. Use it to initialize the state of the consumer. In case of
+-callback init(Args :: term()) -> {ok, State :: term()} | {stop, Reason :: term()} | ignore.
+
+%% This callback is invoked by the channel before a basic.consume
+-callback handle_consume(#'basic.consume'{}, Sender :: pid(), State :: term()) -> ok_error().
+
+%% This callback is invoked by the channel every time a
+%% basic.consume_ok is received from the server. Consume is the original
+%% method sent out to the server - it can be used to associate the
+%% call with the response.
+-callback handle_consume_ok(#'basic.consume_ok'{}, #'basic.consume'{}, State :: term()) -> ok_error().
+
+%% This callback is invoked by the channel every time a basic.cancel
+%% is sent to the server.
+-callback handle_cancel(#'basic.cancel'{}, State :: term()) -> ok_error().
+
+%% This callback is invoked by the channel every time a basic.cancel_ok
+%% is received from the server.
+-callback handle_cancel_ok(CancelOk :: #'basic.cancel_ok'{}, #'basic.cancel'{}, State :: term()) -> ok_error().
+
+%% This callback is invoked by the channel every time a basic.cancel
+%% is received from the server.
+-callback handle_server_cancel(#'basic.cancel'{}, State :: term()) -> ok_error().
+
+%% This callback is invoked by the channel every time a basic.deliver
+%% is received from the server.
+-callback handle_deliver(#'basic.deliver'{}, #amqp_msg{}, State :: term()) -> ok_error().
+
+%% This callback is invoked by the channel every time a basic.deliver
+%% is received from the server. Only relevant for channels that use
+%% direct client connection and manual flow control.
+-callback handle_deliver(#'basic.deliver'{}, #amqp_msg{}, DeliveryCtx :: {pid(), pid(), pid()}, State :: term()) -> ok_error().
+
+%% This callback is invoked the consumer process receives a
+%% message.
+-callback handle_info(Info :: term(), State :: term()) -> ok_error().
+
+%% This callback is invoked by the channel when calling
+%% amqp_channel:call_consumer/2. Reply is the term that
+%% amqp_channel:call_consumer/2 will return. If the callback
+%% returns {noreply, _}, then the caller to
+%% amqp_channel:call_consumer/2 and the channel remain blocked
+%% until gen_server2:reply/2 is used with the provided From as
+%% the first argument.
+-callback handle_call(Msg :: term(), From :: term(), State :: term()) ->
+    {reply, Reply :: term(), NewState :: term()} |
+    {noreply, NewState :: term()} |
+    {error, Reason :: term(), NewState :: term()}.
+
+%% This callback is invoked by the channel after it has shut down and
+%% just before its process exits.
+-callback terminate(Reason :: term(), State :: term()) -> any().
 
 %%---------------------------------------------------------------------------
 %% Interface
@@ -64,137 +120,6 @@ call_consumer(Pid, Method, Args) ->
 
 call_consumer(Pid, Method, Args, DeliveryCtx) ->
     gen_server2:call(Pid, {consumer_call, Method, Args, DeliveryCtx}, amqp_util:call_timeout()).
-
-%%---------------------------------------------------------------------------
-%% Behaviour
-%%---------------------------------------------------------------------------
-
-%% @private
-behaviour_info(callbacks) ->
-    [
-     %% init(Args) -> {ok, InitialState} | {stop, Reason} | ignore
-     %% where
-     %%      Args = [any()]
-     %%      InitialState = state()
-     %%      Reason = term()
-     %%
-     %% This callback is invoked by the channel, when it starts
-     %% up. Use it to initialize the state of the consumer. In case of
-     %% an error, return {stop, Reason} or ignore.
-     {init, 1},
-
-     %% handle_consume(Consume, Sender, State) -> ok_error()
-     %% where
-     %%      Consume = #'basic.consume'{}
-     %%      Sender = pid()
-     %%      State = state()
-     %%
-     %% This callback is invoked by the channel before a basic.consume
-     %% is sent to the server.
-     {handle_consume, 3},
-
-     %% handle_consume_ok(ConsumeOk, Consume, State) -> ok_error()
-     %% where
-     %%      ConsumeOk = #'basic.consume_ok'{}
-     %%      Consume = #'basic.consume'{}
-     %%      State = state()
-     %%
-     %% This callback is invoked by the channel every time a
-     %% basic.consume_ok is received from the server. Consume is the original
-     %% method sent out to the server - it can be used to associate the
-     %% call with the response.
-     {handle_consume_ok, 3},
-
-     %% handle_cancel(Cancel, State) -> ok_error()
-     %% where
-     %%      Cancel = #'basic.cancel'{}
-     %%      State = state()
-     %%
-     %% This callback is invoked by the channel every time a basic.cancel
-     %% is sent to the server.
-     {handle_cancel, 2},
-
-     %% handle_cancel_ok(CancelOk, Cancel, State) -> ok_error()
-     %% where
-     %%      CancelOk = #'basic.cancel_ok'{}
-     %%      Cancel = #'basic.cancel'{}
-     %%      State = state()
-     %%
-     %% This callback is invoked by the channel every time a basic.cancel_ok
-     %% is received from the server.
-     {handle_cancel_ok, 3},
-
-     %% handle_server_cancel(Cancel, State) -> ok_error()
-     %% where
-     %%      Cancel = #'basic.cancel'{}
-     %%      State = state()
-     %%
-     %% This callback is invoked by the channel every time a basic.cancel
-     %% is received from the server.
-     {handle_server_cancel, 2},
-
-     %% handle_deliver(Deliver, Message, State) -> ok_error()
-     %% where
-     %%      Deliver = #'basic.deliver'{}
-     %%      Message = #amqp_msg{}
-     %%      State = state()
-     %%
-     %% This callback is invoked by the channel every time a basic.deliver
-     %% is received from the server.
-     {handle_deliver, 3},
-
-     %% handle_deliver(Deliver, Message,
-     %%                DeliveryCtx, State) -> ok_error()
-     %% where
-     %%      Deliver = #'basic.deliver'{}
-     %%      Message = #amqp_msg{}
-     %%      DeliveryCtx = {pid(), pid(), pid()}
-     %%      State = state()
-     %%
-     %% This callback is invoked by the channel every time a basic.deliver
-     %% is received from the server. Only relevant for channels that use
-     %% direct client connection and manual flow control.
-     {handle_deliver, 4},
-
-     %% handle_info(Info, State) -> ok_error()
-     %% where
-     %%      Info = any()
-     %%      State = state()
-     %%
-     %% This callback is invoked the consumer process receives a
-     %% message.
-     {handle_info, 2},
-
-     %% handle_call(Msg, From, State) -> {reply, Reply, NewState} |
-     %%                                  {noreply, NewState} |
-     %%                                  {error, Reason, NewState}
-     %% where
-     %%      Msg = any()
-     %%      From = any()
-     %%      Reply = any()
-     %%      State = state()
-     %%      NewState = state()
-     %%
-     %% This callback is invoked by the channel when calling
-     %% amqp_channel:call_consumer/2. Reply is the term that
-     %% amqp_channel:call_consumer/2 will return. If the callback
-     %% returns {noreply, _}, then the caller to
-     %% amqp_channel:call_consumer/2 and the channel remain blocked
-     %% until gen_server2:reply/2 is used with the provided From as
-     %% the first argument.
-     {handle_call, 3},
-
-     %% terminate(Reason, State) -> any()
-     %% where
-     %%      Reason = any()
-     %%      State = state()
-     %%
-     %% This callback is invoked by the channel after it has shut down and
-     %% just before its process exits.
-     {terminate, 2}
-    ];
-behaviour_info(_Other) ->
-    undefined.
 
 %%---------------------------------------------------------------------------
 %% gen_server2 callbacks

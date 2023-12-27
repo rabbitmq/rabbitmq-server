@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_exchange_parameters).
@@ -24,7 +24,7 @@ register() ->
     rabbit_registry:register(runtime_parameter,
                              ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT, ?MODULE),
     %% ensure there are no leftovers from before node restart/crash
-    rabbit_runtime_parameters:clear_component(
+    _ = rabbit_runtime_parameters:clear_component(
       ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
       ?INTERNAL_USER),
     ok.

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 -module(rabbit_mgmt_metrics_gc).
 
@@ -108,6 +108,7 @@ remove_exchange(Name, BIntervals) ->
 
 remove_queue(Name, BIntervals) ->
     ets:delete(queue_stats, Name),
+    ets:delete(queue_basic_stats, Name),
     delete_samples(queue_stats_publish, Name, BIntervals),
     delete_samples(queue_stats_deliver_stats, Name, BIntervals),
     delete_samples(queue_process_stats, Name, BIntervals),
@@ -136,6 +137,18 @@ delete_samples(Table, Id, Intervals) ->
     [ets:delete(Table, {Id, I}) || I <- Intervals],
     ok.
 
+index_delete(consumer_stats = Table, channel = Type, Id) ->
+    IndexTable = rabbit_mgmt_metrics_collector:index_table(Table, Type),
+    MatchPattern = {'_', Id, '_'},
+    %% Delete consumer_stats_queue_index
+    ets:match_delete(consumer_stats_queue_index,
+                     {'_', MatchPattern}),
+    %% Delete consumer_stats
+    ets:match_delete(consumer_stats,
+                     {MatchPattern,'_'}),
+    %% Delete consumer_stats_channel_index
+    ets:delete(IndexTable, Id),
+    ok;
 index_delete(Table, Type, Id) ->
     IndexTable = rabbit_mgmt_metrics_collector:index_table(Table, Type),
     Keys = ets:lookup(IndexTable, Id),

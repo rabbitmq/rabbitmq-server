@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_event_exchange_decorator).
@@ -14,15 +14,14 @@
                    [{description, "event exchange decorator"},
                     {mfa, {rabbit_registry, register,
                            [exchange_decorator, <<"event">>, ?MODULE]}},
-                    {requires, rabbit_registry},
                     {cleanup, {rabbit_registry, unregister,
                                [exchange_decorator, <<"event">>]}},
-                    {enables, recovery}]}).
+                    {requires, [rabbit_registry, recovery]}]}).
 
 -behaviour(rabbit_exchange_decorator).
 
 -export([description/0, serialise_events/1]).
--export([create/2, delete/3, policy_changed/2,
+-export([create/2, delete/2, policy_changed/2,
          add_binding/3, remove_bindings/3, route/2, active_for/1]).
 
 description() ->
@@ -33,13 +32,13 @@ serialise_events(_) -> false.
 create(_, _) ->
     ok.
 
-delete(_, _, _) ->
+delete(_, _) ->
     ok.
 
 policy_changed(_, _) ->
     ok.
 
-add_binding(transaction, #exchange{name = #resource{name = ?EXCH_NAME} = Name},
+add_binding(none, #exchange{name = #resource{name = ?EXCH_NAME} = Name},
             _Bs) ->
     case rabbit_binding:list_for_source(Name) of
         [_] ->
@@ -48,10 +47,10 @@ add_binding(transaction, #exchange{name = #resource{name = ?EXCH_NAME} = Name},
         _ ->
             ok
     end;
-add_binding(_, _X, _Bs) ->
+add_binding(_, _, _) ->
     ok.
 
-remove_bindings(transaction, #exchange{name = #resource{name = ?EXCH_NAME} = Name},
+remove_bindings(none, #exchange{name = #resource{name = ?EXCH_NAME} = Name},
                 _Bs) ->
     case rabbit_binding:list_for_source(Name) of
         [] ->
@@ -60,7 +59,7 @@ remove_bindings(transaction, #exchange{name = #resource{name = ?EXCH_NAME} = Nam
         _ ->
             ok
     end;
-remove_bindings(_, _X, _Bs) ->
+remove_bindings(_, _, _) ->
     ok.
 
 route(_, _) -> [].

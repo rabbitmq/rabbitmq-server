@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(system_SUITE).
@@ -172,7 +172,7 @@ init_slapd(Config) ->
                                     [{capture, all_but_first, list},
                                      multiline]),
             ct:pal(?LOW_IMPORTANCE,
-                   "slapd(8) PID: ~s~nslapd(8) listening on: ~b",
+                   "slapd(8) PID: ~ts~nslapd(8) listening on: ~b",
                    [SlapdPid, TcpPort]),
             rabbit_ct_helpers:set_config(Config,
                                          [{slapd_pid, SlapdPid},
@@ -457,10 +457,10 @@ topic_authorisation_consumption(Config) ->
 topic_authorisation_consumption1(Config) ->
     %% we can't use the LDAP backend record here, falling back to simple tuples
     Alice = {auth_user,<<"Alice">>, [monitor],
-             {impl,"cn=Alice,ou=People,dc=rabbitmq,dc=com",<<"password">>}
+             fun() -> {impl,"cn=Alice,ou=People,dc=rabbitmq,dc=com",<<"password">>} end
     },
     Bob = {auth_user,<<"Bob">>, [monitor],
-           {impl,"cn=Bob,ou=People,dc=rabbitmq,dc=com",<<"password">>}
+           fun() -> {impl,"cn=Bob,ou=People,dc=rabbitmq,dc=com",<<"password">>} end
     },
     Resource = #resource{virtual_host = <<"/">>, name = <<"amq.topic">>, kind = topic},
     Context = #{routing_key  => <<"a.b">>,
@@ -946,4 +946,3 @@ expand_options(As, Bs) ->
                             false -> [A | R]
                         end
                 end, Bs, As).
-

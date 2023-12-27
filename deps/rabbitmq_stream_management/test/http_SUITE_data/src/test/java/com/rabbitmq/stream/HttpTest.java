@@ -140,11 +140,6 @@ public class HttpTest {
         .collect(Collectors.toList());
   }
 
-  static List<Map<String, Object>> entities(
-      List<Map<String, Object>> entities, Predicate<Map<String, Object>> filter) {
-    return entities.stream().filter(filter).collect(Collectors.toList());
-  }
-
   static Map<String, Object> entity(
       List<Map<String, Object>> entities, Predicate<Map<String, Object>> filter) {
     return entities.stream().filter(filter).findFirst().orElse(Collections.emptyMap());
@@ -558,9 +553,7 @@ public class HttpTest {
         cf.get(
             new ClientParameters()
                 .clientProperty("connection_name", connectionProvidedName)
-                .chunkListener(
-                    (client1, subscriptionId, offset, messageCount, dataSize) ->
-                        client1.credit(subscriptionId, 1))
+                .chunkListener(TestUtils.credit())
                 .shutdownListener(shutdownContext -> closed.set(true)));
 
     client.subscribe((byte) 0, stream, OffsetSpecification.first(), 10, subscriptionProperties);
@@ -791,7 +784,9 @@ public class HttpTest {
         "/stream/consumers/foo-virtual-host",
         "/stream/publishers/foo-virtual-host",
         "/stream/publishers/foo-virtual-host",
-        "/stream/publishers/%2F/foo-stream"
+        "/stream/publishers/%2F/foo-stream",
+        "/stream/%2F/foo-stream/tracking",
+        "/stream/foo-virtual-host/foo-stream/tracking",
       })
   void shouldReturnNotFound(String endpoint) {
     assertThatThrownBy(() -> get(endpoint)).hasMessageContaining("404");
@@ -872,6 +867,112 @@ public class HttpTest {
     } finally {
       client.delete(s);
     }
+  }
+
+  @Test
+  void trackingInfo() throws Exception {
+    String endpoint = "/stream/%2F/" + stream + "/tracking";
+    Callable<Map<String, Object>> getTracking = () -> toMap(get(endpoint));
+    Map<String, Object> tracking = getTracking.call();
+    assertThat(tracking).hasSize(2).containsKeys("offsets", "writers");
+    assertThat(trackingOffsets(tracking)).isEmpty();
+    assertThat(trackingWriters(tracking)).isEmpty();
+
+    String consumerReference1 = "foo";
+    String consumerReference2 = "bar";
+
+    Client client = cf.get();
+    client.storeOffset(consumerReference1, stream, 42);
+    waitUntil(() -> client.queryOffset(consumerReference1, stream).getOffset() == 42);
+    tracking = getTracking.call();
+    assertThat(trackingOffsets(tracking)).hasSize(1).containsEntry(consumerReference1, d(42));
+    assertThat(trackingWriters(tracking)).isEmpty();
+
+    client.storeOffset(consumerReference1, stream, 55);
+    waitUntil(() -> client.queryOffset(consumerReference1, stream).getOffset() == 55);
+    tracking = getTracking.call();
+    assertThat(trackingOffsets(tracking)).hasSize(1).containsEntry(consumerReference1, d(55));
+    assertThat(trackingWriters(tracking)).isEmpty();
+
+    client.storeOffset(consumerReference2, stream, 12);
+    waitUntil(() -> client.queryOffset(consumerReference2, stream).getOffset() == 12);
+    tracking = getTracking.call();
+    assertThat(trackingOffsets(tracking))
+        .hasSize(2)
+        .containsEntry(consumerReference1, d(55))
+        .containsEntry(consumerReference2, d(12));
+    assertThat(trackingWriters(tracking)).isEmpty();
+
+    tracking = toMap(get(endpoint + "?type=offset"));
+    assertThat(tracking).hasSize(1).containsKey("offsets");
+
+    String publisherReference1 = "foobar1";
+    String publisherReference2 = "foobar2";
+    byte pub1 = 0;
+    byte pub2 = 1;
+    assertThat(client.declarePublisher(pub1, publisherReference1, stream).isOk()).isTrue();
+    assertThat(client.declarePublisher(pub2, publisherReference2, stream).isOk()).isTrue();
+
+    client.publish(pub1, message(client), o -> 25);
+    waitUntil(() -> client.queryPublisherSequence(publisherReference1, stream) == 25);
+
+    tracking = getTracking.call();
+    assertThat(trackingOffsets(tracking))
+        .hasSize(2)
+        .containsEntry(consumerReference1, d(55))
+        .containsEntry(consumerReference2, d(12));
+    assertThat(trackingWriters(tracking)).hasSize(1).containsEntry(publisherReference1, d(25));
+
+    client.publish(pub1, message(client), o -> 36);
+    waitUntil(() -> client.queryPublisherSequence(publisherReference1, stream) == 36);
+
+    tracking = getTracking.call();
+    assertThat(trackingOffsets(tracking))
+        .hasSize(2)
+        .containsEntry(consumerReference1, d(55))
+        .containsEntry(consumerReference2, d(12));
+    assertThat(trackingWriters(tracking)).hasSize(1).containsEntry(publisherReference1, d(36));
+
+    client.publish(pub2, message(client), o -> 45);
+    waitUntil(() -> client.queryPublisherSequence(publisherReference2, stream) == 45);
+
+    tracking = getTracking.call();
+    assertThat(trackingOffsets(tracking))
+        .hasSize(2)
+        .containsEntry(consumerReference1, d(55))
+        .containsEntry(consumerReference2, d(12));
+    assertThat(trackingWriters(tracking))
+        .hasSize(2)
+        .containsEntry(publisherReference1, d(36))
+        .containsEntry(publisherReference2, d(45));
+
+    tracking = toMap(get(endpoint + "?type=writer"));
+    assertThat(tracking).hasSize(1).containsKey("writers");
+
+    tracking = toMap(get(endpoint + "?type=all"));
+    assertThat(tracking).hasSize(2).containsKeys("offsets", "writers");
+
+    tracking = toMap(get(endpoint + "?type=unknown-means-all"));
+    assertThat(tracking).hasSize(2).containsKeys("offsets", "writers");
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Number> trackingOffsets(Map<String, Object> tracking) {
+    return (Map<String, Number>) tracking.get("offsets");
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Number> trackingWriters(Map<String, Object> tracking) {
+    return (Map<String, Number>) tracking.get("writers");
+  }
+
+  private static Double d(int value) {
+    return (double) value;
+  }
+
+  private static List<Message> message(Client client) {
+    return Collections.singletonList(
+        client.messageBuilder().addData("hello".getBytes(StandardCharsets.UTF_8)).build());
   }
 
   static class PermissionsTestConfiguration {

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_plugins).
@@ -51,18 +51,18 @@ ensure1(FileJustChanged0) ->
             %% The app_utils module stops the apps in reverse order, so we should
             %% pass them here in dependency order.
             rabbit:stop_apps(lists:reverse(Stop)),
-            clean_plugins(Stop),
+            _ = clean_plugins(Stop),
             case {Start, Stop} of
                 {[], []} ->
                     ok;
                 {[], _} ->
-                    rabbit_log:info("Plugins changed; disabled ~p",
+                    rabbit_log:info("Plugins changed; disabled ~tp",
                                     [Stop]);
                 {_, []} ->
-                    rabbit_log:info("Plugins changed; enabled ~p",
+                    rabbit_log:info("Plugins changed; enabled ~tp",
                                     [Start]);
                 {_, _} ->
-                    rabbit_log:info("Plugins changed; enabled ~p, disabled ~p",
+                    rabbit_log:info("Plugins changed; enabled ~tp, disabled ~tp",
                                     [Start, Stop])
             end,
             {ok, Start, Stop};
@@ -76,7 +76,7 @@ plugins_expand_dir() ->
         {ok, ExpandDir} ->
             ExpandDir;
         _ ->
-            filename:join([rabbit_mnesia:dir(), "plugins_expand_dir"])
+            filename:join([rabbit:data_dir(), "plugins_expand_dir"])
     end.
 
 -spec plugins_dir() -> file:filename().
@@ -85,7 +85,7 @@ plugins_dir() ->
         {ok, PluginsDistDir} ->
             PluginsDistDir;
         _ ->
-            filename:join([rabbit_mnesia:dir(), "plugins_dir_stub"])
+            filename:join([rabbit:data_dir(), "plugins_dir_stub"])
     end.
 
 -spec enabled_plugins_file() -> file:filename().
@@ -94,7 +94,7 @@ enabled_plugins_file() ->
         {ok, Val} ->
             Val;
         _ ->
-            filename:join([rabbit_mnesia:dir(), "enabled_plugins"])
+            filename:join([rabbit:data_dir(), "enabled_plugins"])
     end.
 
 -spec enabled_plugins() -> [atom()].
@@ -240,7 +240,7 @@ ensure_dependencies(Plugins) ->
 is_loadable(App) ->
     case application:load(App) of
         {error, {already_loaded, _}} -> true;
-        ok                           -> application:unload(App),
+        ok                           -> _ = application:unload(App),
                                         true;
         _                            -> false
     end.
@@ -282,36 +282,36 @@ format_invalid_plugins(InvalidPlugins) ->
                       || Plugin <- InvalidPlugins]]).
 
 format_invalid_plugin({Name, Errors}) ->
-    [io_lib:format("    ~p:~n", [Name])
+    [io_lib:format("    ~tp:~n", [Name])
      | [format_invalid_plugin_error(Err) || Err <- Errors]].
 
 format_invalid_plugin_error({missing_dependency, Dep}) ->
-    io_lib:format("        Dependency is missing or invalid: ~p~n", [Dep]);
+    io_lib:format("        Dependency is missing or invalid: ~tp~n", [Dep]);
 %% a plugin doesn't support the effective broker version
 format_invalid_plugin_error({broker_version_mismatch, Version, Required}) ->
     io_lib:format("        Plugin doesn't support current server version."
-                  " Actual broker version: ~p, supported by the plugin: ~p~n",
+                  " Actual broker version: ~tp, supported by the plugin: ~tp~n",
                   [Version, format_required_versions(Required)]);
 %% one of dependencies of a plugin doesn't match its version requirements
 format_invalid_plugin_error({{dependency_version_mismatch, Version, Required}, Name}) ->
-    io_lib:format("        Version '~p' of dependency '~p' is unsupported."
-                  " Version ranges supported by the plugin: ~p~n",
+    io_lib:format("        Version '~tp' of dependency '~tp' is unsupported."
+                  " Version ranges supported by the plugin: ~tp~n",
                   [Version, Name, Required]);
 format_invalid_plugin_error(Err) ->
-    io_lib:format("        Unknown error ~p~n", [Err]).
+    io_lib:format("        Unknown error ~tp~n", [Err]).
 
 format_required_versions(Versions) ->
     lists:map(fun(V) ->
                       case re:run(V, "^[0-9]*\.[0-9]*\.", [{capture, all, list}]) of
                           {match, [Sub]} ->
-                              lists:flatten(io_lib:format("~s-~sx", [V, Sub]));
+                              lists:flatten(io_lib:format("~ts-~sx", [V, Sub]));
                           _ ->
                               V
                       end
               end, Versions).
 
 validate_plugins(Plugins) ->
-    application:load(rabbit),
+    _ = application:load(rabbit),
     RabbitVersion = RabbitVersion = case application:get_key(rabbit, vsn) of
                                         undefined -> "0.0.0";
                                         {ok, Val} -> Val
@@ -319,32 +319,34 @@ validate_plugins(Plugins) ->
     validate_plugins(Plugins, RabbitVersion).
 
 validate_plugins(Plugins, BrokerVersion) ->
-    lists:foldl(
-        fun(#plugin{name = Name,
-                    broker_version_requirements = BrokerVersionReqs,
-                    dependency_version_requirements = DepsVersions} = Plugin,
-            {Plugins0, Errors}) ->
-            case is_version_supported(BrokerVersion, BrokerVersionReqs) of
-                true  ->
-                    case BrokerVersion of
-                        "0.0.0" ->
-                            rabbit_log:warning(
-                                "Running development version of the broker."
-                                " Requirement ~p for plugin ~p is ignored.",
-                                [BrokerVersionReqs, Name]);
-                        _ -> ok
-                    end,
-                    case check_plugins_versions(Name, Plugins0, DepsVersions) of
-                        ok           -> {[Plugin | Plugins0], Errors};
-                        {error, Err} -> {Plugins0, [{Name, Err} | Errors]}
-                    end;
-                false ->
-                    Error = [{broker_version_mismatch, BrokerVersion, BrokerVersionReqs}],
-                    {Plugins0, [{Name, Error} | Errors]}
-            end
-        end,
-        {[],[]},
-        Plugins).
+    {ValidPlugins, Problems} =
+        lists:foldl(
+          fun(#plugin{name = Name,
+                      broker_version_requirements = BrokerVersionReqs,
+                      dependency_version_requirements = DepsVersions} = Plugin,
+              {Plugins0, Errors}) ->
+                  case is_version_supported(BrokerVersion, BrokerVersionReqs) of
+                      true  ->
+                          case BrokerVersion of
+                              "0.0.0" ->
+                                  rabbit_log:warning(
+                                    "Running development version of the broker."
+                                    " Requirement ~tp for plugin ~tp is ignored.",
+                                    [BrokerVersionReqs, Name]);
+                              _ -> ok
+                          end,
+                          case check_plugins_versions(Name, Plugins0, DepsVersions) of
+                              ok           -> {[Plugin | Plugins0], Errors};
+                              {error, Err} -> {Plugins0, [{Name, Err} | Errors]}
+                          end;
+                      false ->
+                          Error = [{broker_version_mismatch, BrokerVersion, BrokerVersionReqs}],
+                          {Plugins0, [{Name, Error} | Errors]}
+                  end
+          end,
+          {[],[]},
+          Plugins),
+    {lists:reverse(ValidPlugins), Problems}.
 
 check_plugins_versions(PluginName, AllPlugins, RequiredVersions) ->
     ExistingVersions = [{Name, Vsn}
@@ -359,8 +361,8 @@ check_plugins_versions(PluginName, AllPlugins, RequiredVersions) ->
                             case Version of
                                 "" ->
                                     rabbit_log:warning(
-                                        "~p plugin version is not defined."
-                                        " Requirement ~p for plugin ~p is ignored",
+                                        "~tp plugin version is not defined."
+                                        " Requirement ~tp for plugin ~tp is ignored",
                                         [Versions, PluginName]);
                                 _  -> ok
                             end,
@@ -405,18 +407,18 @@ clean_plugins(Plugins) ->
 
 clean_plugin(Plugin, ExpandDir) ->
     {ok, Mods} = application:get_key(Plugin, modules),
-    application:unload(Plugin),
+    _ = application:unload(Plugin),
     [begin
          code:soft_purge(Mod),
          code:delete(Mod),
          false = code:is_loaded(Mod)
      end || Mod <- Mods],
-    delete_recursively(rabbit_misc:format("~s/~s", [ExpandDir, Plugin])).
+    delete_recursively(rabbit_misc:format("~ts/~ts", [ExpandDir, Plugin])).
 
 prepare_dir_plugin(PluginAppDescPath) ->
     PluginEbinDir = filename:dirname(PluginAppDescPath),
     Plugin = filename:basename(PluginAppDescPath, ".app"),
-    code:add_patha(PluginEbinDir),
+    _ = code:add_patha(PluginEbinDir),
     case filelib:wildcard(PluginEbinDir++ "/*.beam") of
         [] ->
             ok;
@@ -426,7 +428,7 @@ prepare_dir_plugin(PluginAppDescPath) ->
                 {module, _} ->
                     ok;
                 {error, badfile} ->
-                    rabbit_log:error("Failed to enable plugin \"~s\": "
+                    rabbit_log:error("Failed to enable plugin \"~ts\": "
                                      "it may have been built with an "
                                      "incompatible (more recent?) "
                                      "version of Erlang", [Plugin]),
@@ -459,11 +461,11 @@ prepare_plugin(#plugin{type = ez, name = Name, location = Location}, ExpandDir) 
                 [PluginAppDescPath|_] ->
                     prepare_dir_plugin(PluginAppDescPath);
                 _ ->
-                    rabbit_log:error("Plugin archive '~s' doesn't contain an .app file", [Location]),
+                    rabbit_log:error("Plugin archive '~ts' doesn't contain an .app file", [Location]),
                     throw({app_file_missing, Name, Location})
             end;
         {error, Reason} ->
-            rabbit_log:error("Could not unzip plugin archive '~s': ~p", [Location, Reason]),
+            rabbit_log:error("Could not unzip plugin archive '~ts': ~tp", [Location, Reason]),
             throw({failed_to_unzip_plugin, Name, Location, Reason})
     end;
 prepare_plugin(#plugin{type = dir, location = Location, name = Name},
@@ -472,7 +474,7 @@ prepare_plugin(#plugin{type = dir, location = Location, name = Name},
         [PluginAppDescPath|_] ->
             prepare_dir_plugin(PluginAppDescPath);
         _ ->
-            rabbit_log:error("Plugin directory '~s' doesn't contain an .app file", [Location]),
+            rabbit_log:error("Plugin directory '~ts' doesn't contain an .app file", [Location]),
             throw({app_file_missing, Name, Location})
     end.
 
@@ -628,7 +630,7 @@ list_all_deps(Applications) ->
 list_all_deps([Application | Applications], Deps) ->
     %% We load the application to be sure we can get the "applications" key.
     %% This is required for rabbitmq-plugins for instance.
-    application:load(Application),
+    _ = application:load(Application),
     NewDeps = [Application | Deps],
     case application:get_key(Application, applications) of
         {ok, ApplicationDeps} ->
@@ -670,12 +672,12 @@ remove_plugins(Plugins) ->
                   IsOTPApp ->
                       rabbit_log:debug(
                         "Plugins discovery: "
-                        "ignoring ~s, Erlang/OTP application",
+                        "ignoring ~ts, Erlang/OTP application",
                         [Name]);
                   not IsAPlugin ->
                       rabbit_log:debug(
                         "Plugins discovery: "
-                        "ignoring ~s, not a RabbitMQ plugin",
+                        "ignoring ~ts, not a RabbitMQ plugin",
                         [Name]);
                   true ->
                       ok
@@ -695,5 +697,5 @@ maybe_report_plugin_loading_problems([]) ->
     ok;
 maybe_report_plugin_loading_problems(Problems) ->
     io:format(standard_error,
-              "Problem reading some plugins: ~p~n",
+              "Problem reading some plugins: ~tp~n",
               [Problems]).

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(queue_SUITE).
@@ -32,39 +32,28 @@ all() ->
     ].
 
 groups() ->
-    ClusterSize1 = [simple,
-                    multiple_upstreams_pattern,
-                    multiple_downstreams,
-                    message_flow,
-                    dynamic_reconfiguration,
-                    federate_unfederate,
-                    dynamic_plugin_stop_start
-                   ],
-    ClusterSize2 = [restart_upstream],
-    [{classic_queue, [], [
-                          {without_disambiguate, [], [
-                                                      {cluster_size_1, [], ClusterSize1}
-                                                     ]},
-                          {with_disambiguate, [], [
-                                                   {cluster_size_2, [], ClusterSize2}
-                                                  ]}
-                         ]},
-     {quorum_queue, [], [
-                         {without_disambiguate, [], [
-                                                     {cluster_size_1, [], ClusterSize1}
-                                                    ]},
-                         {with_disambiguate, [], [
-                                                  {cluster_size_2, [], ClusterSize2}
-                                                  ]}
-                        ]},
-     {mixed, [], [
-                  {without_disambiguate, [], [
-                                              {cluster_size_1, [], ClusterSize1}
-                                             ]},
-                  {with_disambiguate, [], [
-                                           {cluster_size_2, [], ClusterSize2}
-                                          ]}
-                 ]}
+    [
+     {classic_queue, [], all_tests()},
+     {quorum_queue, [], all_tests()},
+     {mixed, [], all_tests()}
+    ].
+
+all_tests() ->
+    [
+     {without_disambiguate, [], [
+                                 {cluster_size_1, [], [
+                                                       simple,
+                                                       multiple_upstreams_pattern,
+                                                       multiple_downstreams,
+                                                       message_flow,
+                                                       dynamic_reconfiguration,
+                                                       federate_unfederate,
+                                                       dynamic_plugin_stop_start
+                                                      ]}
+                                ]},
+     {with_disambiguate, [], [
+                              {cluster_size_2, [], [restart_upstream]}
+                             ]}
     ].
 
 %% -------------------------------------------------------------------

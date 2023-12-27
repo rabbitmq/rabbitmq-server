@@ -9,5 +9,4 @@ Sammy      - https://code.quirkey.com/sammy/           - MIT license, see LICENS
 cowboy     - https://github.com/ninenines/cowboy       - ISC license
 base64.js  - https://code.google.com/p/stringencoders/ - BSD license, see LICENSE-BSD-base64js
 
-If you have any questions regarding licensing, please contact us at
-info@rabbitmq.com.
+If you have any questions regarding licensing, please contact us at rabbitmq-core@groups.vmware.com.

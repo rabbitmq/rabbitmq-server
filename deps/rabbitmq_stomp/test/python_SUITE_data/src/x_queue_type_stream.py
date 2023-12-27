@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 ##
 
 import pika
@@ -10,7 +10,7 @@ import base
 import time
 import os
 import re
-
+import urllib.request, json
 
 class TestUserGeneratedQueueName(base.BaseTest):
 
@@ -25,6 +25,10 @@ class TestUserGeneratedQueueName(base.BaseTest):
                 headers={
                     'x-queue-name': queueName,
                     'x-queue-type': 'stream',
+                    'x-max-age' : '10h',
+                    'x-stream-max-segment-size-bytes' : 1048576,
+                    'x-stream-filter-size-bytes' : 32,
+                    'x-stream-match-unfiltered' : True,
                     'durable': True,
                     'auto-delete': False,
                     'id': 1234,
@@ -46,20 +50,10 @@ class TestUserGeneratedQueueName(base.BaseTest):
                 routing_key=queueName,
                 body='Hello World!')
 
-        # could we declare a stream queue?
-        stream_queue_supported = True
-        if len(self.listener.errors) > 0:
-            pattern = re.compile(r"feature flag is disabled", re.MULTILINE)
-            for error in self.listener.errors:
-                if pattern.search(error['message']) != None:
-                    stream_queue_supported = False
-                    break
-
-        if stream_queue_supported:
-            # check if we receive the message from the STOMP subscription
-            self.assertTrue(self.listener.wait(5), "initial message not received")
-            self.assertEqual(1, len(self.listener.messages))
-            self.conn.disconnect()
+        # check if we receive the message from the STOMP subscription
+        self.assertTrue(self.listener.wait(5), "initial message not received")
+        self.assertEqual(1, len(self.listener.messages))
+        self.conn.disconnect()
 
         connection.close()
 

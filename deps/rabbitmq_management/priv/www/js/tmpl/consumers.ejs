@@ -14,6 +14,7 @@
           <th>Prefetch count</th>
           <th>Active <span class="help" id="consumer-active"></span></th>
           <th>Activity status</th>
+          <th>Consumer Timeout</th>
           <th>Arguments</th>
         </tr>
       </thead>
@@ -34,6 +35,7 @@
         <td class="c"><%= consumer.prefetch_count %></td>
         <td class="c"><%= fmt_boolean(consumer.active) %></td>
         <td class="c"><%= fmt_activity_status(consumer.activity_status) %></td>
+        <td class="c"><%= consumer.consumer_timeout %></td>
         <td class="c"><%= fmt_table_short(consumer.arguments) %></td>
       </tr>
 <% } %>

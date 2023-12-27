@@ -1,0 +1,23 @@
+<h1> FakePortal </h1>
+
+<p>This is a portal used to test <b>Identity-Provider-based authentication</b>.
+This means users comes to RabbitMQ with a token already obtained without involving RabbitMQ
+management ui.
+</p>
+
+<p>There are two ways to access RabbitMQ management ui when using `idp-initiated` mode. These are: </p>
+
+<h2>Inject access_token into the HTTP Authorization header as Bearer token</h2>
+This mechanism is used by proxies. Before the request is forwarded to the proxied RabbitMQ URL, the
+access token is injected into the Authorization header.
+</p>
+<a href="<%= proxied_url %>">RabbitMQ Management ui</a>
+
+<h2>POST access_token to /login endpoint</h2>
+This mechanism is available for those portals which cannot inject the access token into the Authorization <b>header</b>.
+Instead they submit the access token via the form field <b>access_token</b> to the RabbitMQ <b>/login</> endpoint.
+</p>
+<form action="<%= url %>" id="login_form" method="POST">
+  <input type="hidden" name="access_token" value="<%= access_token %>">
+  <input type="submit" value="<%= name %>">
+</form>

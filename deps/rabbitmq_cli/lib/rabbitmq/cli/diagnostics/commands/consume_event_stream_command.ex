@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2019-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2019-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.ConsumeEventStreamCommand do
   @moduledoc """
@@ -22,24 +22,37 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ConsumeEventStreamCommand do
   def run([], %{node: node_name, timeout: timeout, duration: duration, pattern: pattern}) do
     pid = self()
     ref = make_ref()
-    subscribed = :rabbit_misc.rpc_call(
-      node_name,
-      :rabbit_event_consumer, :register,
-      [pid, ref, duration, pattern],
-      timeout)
+
+    subscribed =
+      :rabbit_misc.rpc_call(
+        node_name,
+        :rabbit_event_consumer,
+        :register,
+        [pid, ref, duration, pattern],
+        timeout
+      )
+
     case subscribed do
       {:ok, ^ref} ->
-        Stream.unfold(:confinue,
-          fn(:finished) -> nil
-            (:confinue) ->
+        Stream.unfold(
+          :confinue,
+          fn
+            :finished ->
+              nil
+
+            :confinue ->
               receive do
-              {^ref, data, :finished} ->
-                {data, :finished};
-              {^ref, data, :confinue} ->
-                {data, :confinue}
-            end
-          end)
-      error -> error
+                {^ref, data, :finished} ->
+                  {data, :finished}
+
+                {^ref, data, :confinue} ->
+                  {data, :confinue}
+              end
+          end
+        )
+
+      error ->
+        error
     end
   end
 
@@ -65,6 +78,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ConsumeEventStreamCommand do
   def banner([], %{node: node_name, duration: :infinity}) do
     "Streaming logs from node #{node_name} ..."
   end
+
   def banner([], %{node: node_name, duration: duration}) do
     "Streaming logs from node #{node_name} for #{duration} seconds ..."
   end

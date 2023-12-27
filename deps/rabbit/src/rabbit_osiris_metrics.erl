@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_osiris_metrics).
@@ -55,7 +55,7 @@ handle_cast(_Request, State) ->
 
 handle_info(tick, #state{timeout = Timeout} = State) ->
     Data = osiris_counters:overview(),
-    maps:map(
+    _ = maps:map(
       fun ({osiris_writer, QName}, #{offset := Offs,
                                      first_offset := FstOffs}) ->
               COffs = Offs + 1 - FstOffs,

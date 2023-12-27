@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 %% @type close_reason(Type) = {shutdown, amqp_reason(Type)}.
@@ -65,7 +65,8 @@
 -export([error_atom/1]).
 -export([info/2, info_keys/1, info_keys/0]).
 -export([connection_name/1, update_secret/3]).
--export([socket_adapter_info/2]).
+-export([socket_adapter_info/2,
+         socket_adapter_info/3]).
 
 -define(DEFAULT_CONSUMER, {amqp_selective_consumer, []}).
 
@@ -196,7 +197,8 @@ set_connection_name(ConnName,
 %% application which is making this call.
 ensure_started() ->
     [ensure_started(App) || App <- [syntax_tools, compiler, xmerl,
-                                    rabbit_common, amqp_client, credentials_obfuscation]].
+                                    rabbit_common, amqp_client, credentials_obfuscation]],
+    ok.
 
 ensure_started(App) ->
     case is_pid(application_controller:get_master(App)) andalso amqp_sup:is_ready() of
@@ -378,7 +380,12 @@ info_keys() ->
 %% @doc Takes a socket and a protocol, returns an #amqp_adapter_info{}
 %% based on the socket for the protocol given.
 socket_adapter_info(Sock, Protocol) ->
-    amqp_direct_connection:socket_adapter_info(Sock, Protocol).
+    socket_adapter_info(Sock, Protocol, undefined).
+
+%% @doc Takes a socket and a protocol, returns an #amqp_adapter_info{}
+%% based on the socket for the protocol given.
+socket_adapter_info(Sock, Protocol, UniqueId) ->
+    amqp_direct_connection:socket_adapter_info(Sock, Protocol, UniqueId).
 
 %% @spec (ConnectionPid) -> ConnectionName
 %% where
@@ -414,8 +421,8 @@ maybe_update_call_timeout(BaseTimeout, CallTimeout)
     ok;
 maybe_update_call_timeout(BaseTimeout, CallTimeout) ->
     EffectiveSafeCallTimeout = amqp_util:safe_call_timeout(BaseTimeout),
-    ?LOG_WARN("AMQP 0-9-1 client call timeout was ~p ms, is updated to a safe effective "
-              "value of ~p ms", [CallTimeout, EffectiveSafeCallTimeout]),
+    ?LOG_WARN("AMQP 0-9-1 client call timeout was ~tp ms, is updated to a safe effective "
+              "value of ~tp ms", [CallTimeout, EffectiveSafeCallTimeout]),
     amqp_util:update_call_timeout(EffectiveSafeCallTimeout),
     ok.
 

@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.CertificatesCommand do
   alias RabbitMQ.CLI.Core.DocGuide
@@ -49,7 +49,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CertificatesCommand do
 
   def help_section(), do: :configuration
 
-  def description(), do: "Displays certificates (public keys) for every listener on target node that is configured to use TLS"
+  def description(),
+    do:
+      "Displays certificates (public keys) for every listener on target node that is configured to use TLS"
 
   def banner(_, %{node: node_name}), do: "Certificates of node #{node_name} ..."
 end

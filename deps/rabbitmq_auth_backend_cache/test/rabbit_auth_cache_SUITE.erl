@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 -module(rabbit_auth_cache_SUITE).
 
@@ -155,11 +155,11 @@ get_deleted(Config) ->
 
 
 random_timing(Config) ->
-    random_timing(Config, 30000, 1000).
+    random_timing(Config, 15000, 1000).
 
 random_timing(Config, MaxTTL, Parallel) ->
     AuthCacheModule = ?config(auth_cache_module, Config),
-    RandomTTls = [{N, rabbit_misc:random(MaxTTL) + 1000} || N <- lists:seq(1, Parallel)],
+    RandomTTls = [{N, rabbit_misc:random(MaxTTL-1000) + 1000} || N <- lists:seq(1, Parallel)],
     Pid = self(),
     Ref = make_ref(),
     Pids = lists:map(
@@ -188,7 +188,7 @@ random_timing(Config, MaxTTL, Parallel) ->
                             end
                     end,
                     % expiry error
-                    timer:sleep(TTL + 200),
+                    timer:sleep(TTL + 500),
                     {error, not_found} = AuthCacheModule:get(Key),
                     Pid ! {ok, self(), Ref}
                 end)

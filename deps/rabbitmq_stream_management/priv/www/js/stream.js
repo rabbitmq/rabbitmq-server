@@ -32,7 +32,7 @@ dispatcher_add(function(sammy) {
     });
 });
 
-NAVIGATION['Stream'] = ['#/stream/connections', "monitoring"];
+NAVIGATION['Stream Connections'] = ['#/stream/connections', "monitoring"];
 
 var ALL_STREAM_CONNECTION_COLUMNS =
      {'Overview': [['user',   'User name', true],

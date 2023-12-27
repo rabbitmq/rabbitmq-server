@@ -2,8 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
-
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule AutocompleteCommandTest do
   use ExUnit.Case, async: true
@@ -11,10 +10,11 @@ defmodule AutocompleteCommandTest do
 
   @command RabbitMQ.CLI.Ctl.Commands.AutocompleteCommand
   setup do
-    {:ok, opts: %{
-      script_name: "rabbitmqctl",
-      node: get_rabbit_hostname()
-    }}
+    {:ok,
+     opts: %{
+       script_name: "rabbitmqctl",
+       node: get_rabbit_hostname()
+     }}
   end
 
   test "shows up in help" do

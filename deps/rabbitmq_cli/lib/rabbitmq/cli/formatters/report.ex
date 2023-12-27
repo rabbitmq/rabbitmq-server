@@ -2,13 +2,14 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2017-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2017-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Formatters.Report do
   alias RabbitMQ.CLI.Formatters.FormatterHelpers
   alias RabbitMQ.CLI.Core.{Output, Config}
 
   @behaviour RabbitMQ.CLI.FormatterBehaviour
+  @dialyzer {:nowarn_function, format_output: 2}
   def format_output(_, _) do
     raise "format_output is not implemented for report formatter"
   end

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 -module(scope_SUITE).
 
@@ -14,11 +14,85 @@
 
 all() ->
     [
+        variable_expansion,
         permission_all,
         permission_vhost,
         permission_resource,
         permission_topic
     ].
+
+variable_expansion(_Config) ->
+    Scenarios = [
+      { "Emtpy Scopes",
+        #{
+           <<"client_id">> => <<"some_client">>,
+           <<"scope">> => []
+         }, <<"default">>, []
+      },
+      { "No Scopes",
+        #{
+           <<"client_id">> => <<"some_client">>
+         }, <<"default">>, []
+      },
+      { "Expand token's var and vhost",
+        #{
+           <<"client_id">> => <<"some_client">>,
+           <<"scope">> => [<<"read:{vhost}/{client_id}-*">>]
+         }, <<"default">>, [<<"read:default/some_client-*">>]
+      },
+      { "Expand token's var and vhost on several scopes",
+        #{
+           <<"client_id">> => <<"some_client">>,
+           <<"username">> => <<"some_user">>,
+           <<"scope">> => [<<"read:{vhost}/{client_id}-*">>, <<"write:{vhost}/{client_id}/{username}">>]
+         },  <<"default">>, [<<"read:default/some_client-*">>, <<"write:default/some_client/some_user">>]
+      },
+      { "Expand token's var",
+        #{
+           <<"client_id">> => <<"some_client">>,
+           <<"username">> => <<"some_user">>,
+           <<"scope">> => [<<"read:{client_id}/*/{username}">>]
+         }, <<"other">>, [<<"read:some_client/*/some_user">>]
+      },
+      { "No Expansion required",
+        #{
+           <<"client_id">> => <<"some_client">>,
+           <<"scope">> => [<<"read:client_id/vhost-*">>]
+         },  <<"default">>, [<<"read:client_id/vhost-*">>]
+      },
+      { "Missing var",
+        #{
+           <<"scope">> => [<<"read:{client_id}/*">>]
+         },  <<"default">>, [<<"read:client_id/*">>]
+      },
+      { "Var with other than single binary value",
+        #{
+           <<"foo">> => [<<"bar">>],
+           <<"scope">> => [<<"read:{foo}/*">>]
+         },  <<"default">>, [<<"read:foo/*">>]
+      },
+      { "Empty var",
+        #{
+           <<"scope">> => [<<"read:{}/*">>]
+         }, <<"default">>, [<<"read:/*">>]
+      },
+      { "Missing closing variable character",
+        #{
+           <<"scope">> => [<<"read:{/*">>]
+         }, <<"default">>, [<<"">>]
+      },
+      { "Unexpected closing variable character",
+        #{
+           <<"scope">> => [<<"read:var}/*">>]
+         }, <<"default">>, [<<"read:var}/*">>]
+      }
+
+    ],
+    lists:foreach(fun({ Comment, Token, Vhost, ExpectedScopes}) ->
+        ?assertEqual(ExpectedScopes,
+          rabbit_auth_backend_oauth2:get_expanded_scopes(Token, #resource{virtual_host = Vhost}), Comment)
+        end
+      , Scenarios).
 
 permission_all(_Config) ->
     WildcardScopeWrite = <<"write:*/*">>,

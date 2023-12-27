@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -include("resource.hrl").
@@ -121,7 +121,7 @@
         {mandatory,  %% Whether the message was published as mandatory
          confirm,    %% Whether the message needs confirming
          sender,     %% The pid of the process that created the delivery
-         message,    %% The #basic_message record
+         message,    %% The message container
          msg_seq_no, %% Msg Sequence Number from the channel publish_seqno field
          flow}).     %% Should flow control be used for this delivery
 
@@ -210,7 +210,7 @@
         }).
 %%----------------------------------------------------------------------------
 
--define(COPYRIGHT_MESSAGE, "Copyright (c) 2007-2022 VMware, Inc. or its affiliates.").
+-define(COPYRIGHT_MESSAGE, "Copyright (c) 2007-2023 Broadcom Inc and/or its subsidiaries").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL 2.0. Website: https://rabbitmq.com").
 
 %% EMPTY_FRAME_SIZE, 8 = 1 + 2 + 4 + 1
@@ -226,11 +226,11 @@
 -define(SUPERVISOR_WAIT,
         rabbit_misc:get_env(rabbit, supervisor_shutdown_timeout, infinity)).
 -define(WORKER_WAIT,
-        rabbit_misc:get_env(rabbit, worker_shutdown_timeout, 300000)).
+        rabbit_misc:get_env(rabbit, worker_shutdown_timeout, 300_000)).
 -define(MSG_STORE_WORKER_WAIT,
-        rabbit_misc:get_env(rabbit, msg_store_shutdown_timeout, 600000)).
+        rabbit_misc:get_env(rabbit, msg_store_shutdown_timeout, 600_000)).
 -define(CLASSIC_QUEUE_WORKER_WAIT,
-        rabbit_misc:get_env(rabbit, classic_queue_shutdown_timeout, 600000)).
+        rabbit_misc:get_env(rabbit, classic_queue_shutdown_timeout, 600_000)).
 
 -define(HIBERNATE_AFTER_MIN,        1000).
 -define(DESIRED_HIBERNATE,         10000).

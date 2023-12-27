@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 %% We use a gen_server simply so that during the terminate/2 call
@@ -18,24 +18,16 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([upgrade_recovery_terms/0, persistent_bytes/0]).
--export([open_global_table/0, close_global_table/0,
-         read_global/1, delete_global_table/0]).
--export([open_table/1, close_table/1]).
-
--rabbit_upgrade({upgrade_recovery_terms, local, []}).
--rabbit_upgrade({persistent_bytes, local, [upgrade_recovery_terms]}).
-
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%----------------------------------------------------------------------------
 
--spec start(rabbit_types:vhost()) -> rabbit_types:ok_or_error(term()).
+-spec start(rabbit_types:vhost()) -> rabbit_types:ok_or_error2(pid(), {no_such_vhost, rabbit_types:vhost()}).
 
 start(VHost) ->
     case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
       {ok, VHostSup} ->
-            {ok, _} = supervisor:start_child(
+            supervisor:start_child(
                         VHostSup,
                         {?MODULE,
                          {?MODULE, start_link, [VHost]},
@@ -45,9 +37,9 @@ start(VHost) ->
         %% e.g. some integration tests do it
         {error, {no_such_vhost, VHost}} ->
             rabbit_log:error("Failed to start a recovery terms manager for vhost ~ts: vhost no longer exists!",
-                             [VHost])
-    end,
-    ok.
+                             [VHost]),
+            {error, {no_such_vhost, VHost}}
+    end.
 
 -spec stop(rabbit_types:vhost()) -> rabbit_types:ok_or_error(term()).
 
@@ -83,7 +75,10 @@ read(VHost, DirBaseName) ->
 
 clear(VHost) ->
     try
-        dets:delete_all_objects(VHost)
+        _ = dets:delete_all_objects(VHost),
+        VHostRecoveryTermsOwner = rabbit_vhost_sup_sup:lookup_vhost_recovery_terms(VHost),
+        ok = gen_server:call(VHostRecoveryTermsOwner, {reopen_for_writes, VHost}),
+        ok
     %% see start/1
     catch _:badarg ->
             rabbit_log:error("Failed to clear recovery terms for vhost ~ts: table no longer exists!",
@@ -97,79 +92,15 @@ start_link(VHost) ->
 
 %%----------------------------------------------------------------------------
 
-upgrade_recovery_terms() ->
-    open_global_table(),
-    try
-        QueuesDir = filename:join(rabbit_mnesia:dir(), "queues"),
-        Dirs = case rabbit_file:list_dir(QueuesDir) of
-                   {ok, Entries} -> Entries;
-                   {error, _}    -> []
-               end,
-        [begin
-             File = filename:join([QueuesDir, Dir, "clean.dot"]),
-             case rabbit_file:read_term_file(File) of
-                 {ok, Terms} -> ok  = store_global_table(Dir, Terms);
-                 {error, _}  -> ok
-             end,
-             file:delete(File)
-         end || Dir <- Dirs],
-        ok
-    after
-        close_global_table()
-    end.
-
-persistent_bytes()      -> dets_upgrade(fun persistent_bytes/1).
-persistent_bytes(Props) -> Props ++ [{persistent_bytes, 0}].
-
-dets_upgrade(Fun)->
-    open_global_table(),
-    try
-        ok = dets:foldl(fun ({DirBaseName, Terms}, Acc) ->
-                                store_global_table(DirBaseName, Fun(Terms)),
-                                Acc
-                        end, ok, ?MODULE),
-        ok
-    after
-        close_global_table()
-    end.
-
-open_global_table() ->
-    File = filename:join(rabbit_mnesia:dir(), "recovery.dets"),
-    {ok, _} = dets:open_file(?MODULE, [{file,      File},
-                                       {ram_file,  true},
-                                       {auto_save, infinity}]),
-    ok.
-
-close_global_table() ->
-    try
-        dets:sync(?MODULE),
-        dets:close(?MODULE)
-    %% see clear/1
-    catch _:badarg ->
-            rabbit_log:error("Failed to clear global recovery terms: table no longer exists!",
-                             []),
-            ok
-    end.
-
-store_global_table(DirBaseName, Terms) ->
-    dets:insert(?MODULE, {DirBaseName, Terms}).
-
-read_global(DirBaseName) ->
-    case dets:lookup(?MODULE, DirBaseName) of
-        [{_, Terms}] -> {ok, Terms};
-        _            -> {error, not_found}
-    end.
-
-delete_global_table() ->
-    file:delete(filename:join(rabbit_mnesia:dir(), "recovery.dets")).
-
-%%----------------------------------------------------------------------------
-
 init([VHost]) ->
     process_flag(trap_exit, true),
-    open_table(VHost),
+    ok = open_table(VHost, true),
     {ok, VHost}.
 
+handle_call({reopen_for_writes, VHost}, _, State) ->
+    close_table(VHost),
+    ok = open_table(VHost, false),
+    {reply, ok, State};
 handle_call(Msg, _, State) -> {stop, {unexpected_call, Msg}, State}.
 
 handle_cast(Msg, State) -> {stop, {unexpected_cast, Msg}, State}.
@@ -184,18 +115,18 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
--spec open_table(vhost:name()) -> rabbit_types:ok_or_error(any()).
+-spec open_table(vhost:name(), boolean()) -> rabbit_types:ok_or_error(any()).
 
-open_table(VHost) ->
-    open_table(VHost, 10).
+open_table(VHost, RamFile) ->
+    open_table(VHost, RamFile, 10).
 
--spec open_table(vhost:name(), non_neg_integer()) -> rabbit_types:ok_or_error(any()).
+-spec open_table(vhost:name(), boolean(), non_neg_integer()) -> rabbit_types:ok_or_error(any()).
 
-open_table(VHost, RetriesLeft) ->
+open_table(VHost, RamFile, RetriesLeft) ->
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     File = filename:join(VHostDir, "recovery.dets"),
     Opts = [{file,      File},
-            {ram_file,  true},
+            {ram_file,  RamFile},
             {auto_save, infinity}],
     case dets:open_file(VHost, Opts) of
         {ok, _}        -> ok;
@@ -207,10 +138,10 @@ open_table(VHost, RetriesLeft) ->
                     _ = file:delete(File),
                     %% Wait before retrying
                     DelayInMs = 1000,
-                    rabbit_log:warning("Failed to open a recovery terms DETS file at ~p. Will delete it and retry in ~p ms (~p retries left)",
+                    rabbit_log:warning("Failed to open a recovery terms DETS file at ~tp. Will delete it and retry in ~tp ms (~tp retries left)",
                                        [File, DelayInMs, RetriesLeft]),
                     timer:sleep(DelayInMs),
-                    open_table(VHost, RetriesLeft - 1)
+                    open_table(VHost, RamFile, RetriesLeft - 1)
           end
     end.
 

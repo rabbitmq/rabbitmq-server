@@ -1,0 +1,105 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
+load("@rules_erlang//:xref2.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
+load(
+    "//:rabbitmq.bzl",
+    "APP_VERSION",
+    "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
+    "rabbitmq_app",
+    "rabbitmq_suite",
+)
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
+)
+
+APP_NAME = "rabbitmq_prelaunch"
+
+APP_DESCRIPTION = "RabbitMQ prelaunch setup"
+
+APP_MODULE = "rabbit_prelaunch_app"
+
+all_beam_files(name = "all_beam_files")
+
+all_test_beam_files(name = "all_test_beam_files")
+
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
+
+# gazelle:erlang_app_dep thoas
+
+rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
+    app_description = APP_DESCRIPTION,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    app_version = APP_VERSION,
+    beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/rabbit_common:erlang_app",
+        "@cuttlefish//:erlang_app",
+        "@thoas//:erlang_app",
+    ],
+)
+
+xref(
+    name = "xref",
+    additional_libs = [
+        "@systemd//:erlang_app",  # keep
+        "@osiris//:erlang_app",  # keep
+    ],
+    target = ":erlang_app",
+)
+
+plt(
+    name = "deps_plt",
+    apps = [
+        "runtime_tools",  # keep
+        "eunit",  # keep
+    ],
+    for_target = ":erlang_app",
+    ignore_warnings = True,
+    plt = "//:base_plt",
+    deps = [
+        "@osiris//:erlang_app",  # keep
+        "@systemd//:erlang_app",  # keep
+    ],
+)
+
+dialyze(
+    name = "dialyze",
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
+
+eunit(
+    name = "eunit",
+    target = ":test_erlang_app",
+)
+
+rabbitmq_suite(
+    name = "rabbit_logger_std_h_SUITE",
+)
+
+rabbitmq_suite(
+    name = "rabbit_prelaunch_file_SUITE",
+    size = "small",
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_prelaunch",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)

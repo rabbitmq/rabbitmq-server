@@ -1,0 +1,26 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlc_opts")
+
+filegroup(
+    name = "sources",
+    srcs = [
+        "mix.exs",
+    ] + glob([
+        "LICENSE*",
+        "lib/**/*",
+    ]),
+    visibility = ["//visibility:public"],
+)
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)

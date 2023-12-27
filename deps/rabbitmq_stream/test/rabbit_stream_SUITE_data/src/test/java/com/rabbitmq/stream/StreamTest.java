@@ -11,11 +11,12 @@
 // The Original Code is RabbitMQ.
 //
 // The Initial Developer of the Original Code is Pivotal Software, Inc.
-// Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
+// Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 //
 
 package com.rabbitmq.stream;
 
+import static com.rabbitmq.stream.TestUtils.credit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.rabbitmq.stream.impl.Client;
@@ -115,11 +116,14 @@ public class StreamTest {
         cf.get(
             new Client.ClientParameters()
                 .port(consumerBroker.apply(streamMetadata).getPort())
-                .chunkListener(
-                    (client1, subscriptionId, offset, messageCount1, dataSize) ->
-                        client1.credit(subscriptionId, 10))
+                .chunkListener(credit())
                 .messageListener(
-                    (subscriptionId, offset, chunkTimestamp, committedChunkId, message) -> {
+                    (subscriptionId,
+                        offset,
+                        chunkTimestamp,
+                        committedChunkId,
+                        context,
+                        message) -> {
                       bodies.add(new String(message.getBodyAsBinary(), StandardCharsets.UTF_8));
                       consumingLatch.countDown();
                     }));
@@ -128,7 +132,8 @@ public class StreamTest {
 
     assertThat(consumingLatch.await(10, TimeUnit.SECONDS)).isTrue();
     assertThat(bodies).hasSize(messageCount);
-    IntStream.range(0, messageCount).forEach(i -> assertThat(bodies.contains("hello " + i)));
+    IntStream.range(0, messageCount)
+        .forEach(i -> assertThat(bodies.contains("hello " + i)).isTrue());
   }
 
   @Test

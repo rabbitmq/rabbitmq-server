@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 %% macros for memory optimised tuple structures
 %% [A|B] saves 1 byte compared to {A,B}
@@ -17,7 +17,7 @@
         is_list(H) orelse
         (is_map(H) andalso is_map_key(size, H))).
 
--type tuple(A, B) :: nonempty_improper_list(A, B).
+-type optimised_tuple(A, B) :: nonempty_improper_list(A, B).
 
 -type option(T) :: undefined | T.
 
@@ -35,7 +35,7 @@
 %% same process
 
 -type msg_header() :: msg_size() |
-                      tuple(msg_size(), Expiry :: milliseconds()) |
+                      optimised_tuple(msg_size(), Expiry :: milliseconds()) |
                       #{size := msg_size(),
                         delivery_count => non_neg_integer(),
                         expiry => milliseconds()}.
@@ -51,7 +51,7 @@
 -type msg_size() :: non_neg_integer().
 %% the size in bytes of the msg payload
 
--type msg() :: tuple(option(ra:index()), msg_header()).
+-type msg() :: optimised_tuple(option(ra:index()), msg_header()).
 
 -type delivery_msg() :: {msg_id(), {msg_header(), raw_msg()}}.
 %% A tuple consisting of the message id, and the headered message.
@@ -96,6 +96,7 @@
 
 -define(MB, 1_048_576).
 -define(LOW_LIMIT, 0.8).
+-define(DELIVERY_CHUNK_LIMIT_B, 128_000).
 
 -record(consumer_cfg,
         {meta = #{} :: consumer_meta(),

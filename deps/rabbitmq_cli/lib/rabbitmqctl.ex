@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQCtl do
   alias RabbitMQ.CLI.Core.{
@@ -14,6 +14,7 @@ defmodule RabbitMQCtl do
     Output,
     Parser
   }
+
   alias RabbitMQ.CLI.{CommandBehaviour, FormatterBehaviour}
   alias RabbitMQ.CLI.Ctl.Commands.HelpCommand
 
@@ -23,11 +24,20 @@ defmodule RabbitMQCtl do
   @type options() :: map()
   @type command_result() :: {:error, ExitCodes.exit_code(), term()} | term()
 
+  @spec main(list()) :: no_return()
   def main(["--auto-complete" | []]) do
+    # silence Erlang/OTP's standard library warnings, it's acceptable for CLI tools,
+    # see rabbitmq/rabbitmq-server#8912
+    _ = :logger.set_primary_config(:level, :error)
+
     handle_shutdown(:ok)
   end
 
   def main(unparsed_command) do
+    # silence Erlang/OTP's standard library warnings, it's acceptable for CLI tools,
+    # see rabbitmq/rabbitmq-server#8912
+    _ = :logger.set_primary_config(:level, :error)
+
     exec_command(unparsed_command, &process_output/3)
     |> handle_shutdown
   end
@@ -37,23 +47,27 @@ defmodule RabbitMQCtl do
 
     # this invocation is considered to be invalid. curl and grep do the
     # same thing.
-    {:error, ExitCodes.exit_usage(), Enum.join(HelpCommand.all_usage(parsed_options), "")};
+    {:error, ExitCodes.exit_usage(), Enum.join(HelpCommand.all_usage(parsed_options), "")}
   end
+
   def exec_command(["--help"] = unparsed_command, _) do
     {_args, parsed_options, _} = Parser.parse_global(unparsed_command)
 
     # the user asked for --help and we are displaying it to her,
     # reporting a success
-    {:ok, ExitCodes.exit_ok(), Enum.join(HelpCommand.all_usage(parsed_options), "")};
+    {:ok, ExitCodes.exit_ok(), Enum.join(HelpCommand.all_usage(parsed_options), "")}
   end
-  def exec_command(["--version"] = _unparsed_command, opts) do
+
+  def exec_command(["--version"] = _unparsed_command, output_fun) do
     # rewrite `--version` as `version`
-    exec_command(["version"], opts)
+    exec_command(["version"], output_fun)
   end
-  def exec_command(["--auto-complete" | args], opts) do
+
+  def exec_command(["--auto-complete" | args], output_fun) do
     # rewrite `--auto-complete` as `autocomplete`
-    exec_command(["autocomplete" | args], opts)
+    exec_command(["autocomplete" | args], output_fun)
   end
+
   def exec_command(unparsed_command, output_fun) do
     {command, command_name, arguments, parsed_options, invalid} = Parser.parse(unparsed_command)
 
@@ -91,9 +105,10 @@ defmodule RabbitMQCtl do
 
         try do
           do_exec_parsed_command(unparsed_command, output_fun, arguments, command, options)
-        catch error_type, error ->
-          maybe_print_stacktrace(error_type, error, __STACKTRACE__, options)
-          format_error(error, options, command)
+        catch
+          error_type, error ->
+            maybe_print_stacktrace(error_type, error, __STACKTRACE__, options)
+            format_error(error, options, command)
         end
     end
   end
@@ -101,7 +116,8 @@ defmodule RabbitMQCtl do
   def do_exec_parsed_command(unparsed_command, output_fun, arguments, command, options) do
     case options[:help] do
       true ->
-        {:ok, ExitCodes.exit_ok(), HelpCommand.command_usage(command, options)};
+        {:ok, ExitCodes.exit_ok(), HelpCommand.command_usage(command, options)}
+
       _ ->
         {arguments, options} = command.merge_defaults(arguments, options)
 
@@ -110,13 +126,18 @@ defmodule RabbitMQCtl do
           case Helpers.normalise_node_option(options) do
             {:error, _} = err ->
               format_error(err, options, command)
+
             {:ok, options} ->
               # The code below implements a tiny decision tree that has
               # to do with CLI argument and environment state validation.
               case command.validate(arguments, options) do
                 :ok ->
                   # then optionally validate execution environment
-                  case CommandBehaviour.validate_execution_environment(command, arguments, options) do
+                  case CommandBehaviour.validate_execution_environment(
+                         command,
+                         arguments,
+                         options
+                       ) do
                     :ok ->
                       result = proceed_to_execution(command, arguments, options)
                       handle_command_output(result, command, options, output_fun)
@@ -140,7 +161,7 @@ defmodule RabbitMQCtl do
   end
 
   defp proceed_to_execution(command, arguments, options) do
-    maybe_print_banner(command, arguments, options)
+    _ = maybe_print_banner(command, arguments, options)
     maybe_run_command(command, arguments, options)
   end
 
@@ -151,7 +172,8 @@ defmodule RabbitMQCtl do
   defp maybe_run_command(command, arguments, options) do
     try do
       command.run(arguments, options) |> command.output(options)
-    catch error_type, error ->
+    catch
+      error_type, error ->
         maybe_print_stacktrace(error_type, error, __STACKTRACE__, options)
         format_error(error, options, command)
     end
@@ -160,21 +182,27 @@ defmodule RabbitMQCtl do
   def maybe_print_stacktrace(error_type, :undef = error, stacktrace, _opts) do
     do_print_stacktrace(error_type, error, stacktrace)
   end
+
   def maybe_print_stacktrace(error_type, :function_clause = error, stacktrace, _opts) do
     do_print_stacktrace(error_type, error, stacktrace)
   end
+
   def maybe_print_stacktrace(error_type, :badarg = error, stacktrace, _opts) do
     do_print_stacktrace(error_type, error, stacktrace)
   end
+
   def maybe_print_stacktrace(error_type, {:case_clause, _val} = error, stacktrace, _opts) do
     do_print_stacktrace(error_type, error, stacktrace)
   end
+
   def maybe_print_stacktrace(error_type, error, stacktrace, %{print_stacktrace: true}) do
     do_print_stacktrace(error_type, error, stacktrace)
   end
+
   def maybe_print_stacktrace(_error_type, _error, _stacktrace, %{print_stacktrace: false}) do
     nil
   end
+
   def maybe_print_stacktrace(_error_type, _error, _stacktrace, _opts) do
     nil
   end
@@ -217,6 +245,7 @@ defmodule RabbitMQCtl do
     end
   end
 
+  @spec handle_shutdown({:error, integer(), nil} | atom()) :: no_return()
   defp handle_shutdown({:error, exit_code, nil}) do
     exit_program(exit_code)
   end
@@ -224,9 +253,9 @@ defmodule RabbitMQCtl do
   defp handle_shutdown({_, exit_code, output}) do
     device = output_device(exit_code)
 
-    for line <- List.flatten([output]) do
+    Enum.each(List.flatten([output]), fn line ->
       IO.puts(device, Helpers.string_or_inspect(line))
-    end
+    end)
 
     exit_program(exit_code)
   end
@@ -244,11 +273,13 @@ defmodule RabbitMQCtl do
 
   defp merge_defaults_node(%{} = opts) do
     longnames_opt = Config.get_option(:longnames, opts)
+
     try do
       default_rabbit_nodename = Helpers.get_rabbit_hostname(longnames_opt)
       Map.merge(%{node: default_rabbit_nodename}, opts)
-    catch _error_type, _err ->
-      opts
+    catch
+      _error_type, _err ->
+        opts
     end
   end
 
@@ -282,8 +313,11 @@ defmodule RabbitMQCtl do
   defp maybe_print_banner(command, args, opts) do
     # Suppress banner if a machine-readable formatter is used
     formatter = Map.get(opts, :formatter)
+
     case FormatterBehaviour.machine_readable?(formatter) do
-      true  -> nil
+      true ->
+        nil
+
       false ->
         case command.banner(args, opts) do
           nil ->
@@ -305,9 +339,7 @@ defmodule RabbitMQCtl do
     err = format_validation_error(err_detail)
 
     base_error =
-      "Error (argument validation): #{err}\nArguments given:\n\t#{
-        unparsed_command |> Enum.join(" ")
-      }"
+      "Error (argument validation): #{err}\nArguments given:\n\t#{unparsed_command |> Enum.join(" ")}"
 
     validation_error_output(err_detail, base_error, command, options)
   end
@@ -369,26 +401,33 @@ defmodule RabbitMQCtl do
   defp format_validation_error(:unsupported_formatter),
     do: "the requested formatter is not supported by this command"
 
+  defp format_validation_error({:not_a_cluster_member, potential_member}),
+    do: "node #{potential_member} is not a member of the cluster"
+
   defp format_validation_error(err), do: inspect(err)
 
+  @spec exit_program(integer()) :: no_return()
   defp exit_program(code) do
-    :net_kernel.stop()
+    _ = :net_kernel.stop()
     exit({:shutdown, code})
   end
 
   defp format_error({:error, {:node_name, :hostname_not_allowed}}, _, _) do
     {:error, ExitCodes.exit_dataerr(),
-      "Unsupported node name: hostname is invalid (possibly contains unsupported characters).\nIf using FQDN node names, use the -l / --longnames argument."}
+     "Unsupported node name: hostname is invalid (possibly contains unsupported characters).\nIf using FQDN node names, use the -l / --longnames argument."}
   end
+
   defp format_error({:error, {:node_name, :invalid_node_name_head}}, _, _) do
     {:error, ExitCodes.exit_dataerr(),
-      "Unsupported node name: node name head (the part before the @) is invalid. Only alphanumerics, _ and - characters are allowed.\nIf using FQDN node names, use the -l / --longnames argument"}
+     "Unsupported node name: node name head (the part before the @) is invalid. Only alphanumerics, _ and - characters are allowed.\nIf using FQDN node names, use the -l / --longnames argument"}
   end
+
   defp format_error({:error, {:node_name, err_reason} = result}, opts, module) do
     op = CommandModules.module_to_command(module)
     node = opts[:node] || "(failed to parse or compute default value)"
+
     {:error, ExitCodes.exit_code_for(result),
-      "Error: operation #{op} failed due to invalid node name (node: #{node}, reason: #{err_reason}).\nIf using FQDN node names, use the -l / --longnames argument"}
+     "Error: operation #{op} failed due to invalid node name (node: #{node}, reason: #{err_reason}).\nIf using FQDN node names, use the -l / --longnames argument"}
   end
 
   defp format_error({:error, {:badrpc_multi, :nodedown, [node | _]} = result}, opts, _) do
@@ -416,9 +455,7 @@ defmodule RabbitMQCtl do
     op = CommandModules.module_to_command(module)
 
     {:error, ExitCodes.exit_code_for(result),
-     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout value used: #{
-       opts[:timeout]
-     }"}
+     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout value used: #{opts[:timeout]}"}
   end
 
   defp format_error({:error, {:badrpc, {:timeout, to}} = result}, opts, module) do
@@ -432,17 +469,35 @@ defmodule RabbitMQCtl do
     op = CommandModules.module_to_command(module)
 
     {:error, ExitCodes.exit_code_for({:timeout, to}),
-     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout value used: #{to}. #{
-       warning
-     }"}
+     "Error: operation #{op} on node #{opts[:node]} timed out. Timeout value used: #{to}. #{warning}"}
   end
 
   defp format_error({:error, {:no_such_vhost, vhost} = result}, _opts, _) do
     {:error, ExitCodes.exit_code_for(result), "Virtual host '#{vhost}' does not exist"}
   end
 
-  defp format_error({:error, {:incompatible_version, local_version, remote_version} = result}, _opts, _) do
-    {:error, ExitCodes.exit_code_for(result), "Detected potential version incompatibility. CLI tool version: #{local_version}, server: #{remote_version}"}
+  defp format_error({:error, {:not_found, vhost, name} = result}, _opts, _) do
+    {:error, ExitCodes.exit_code_for(result),
+     "Object (queue, stream, exchange, etc) '#{name}' was not found in virtual host '#{vhost}'"}
+  end
+
+  defp format_error({:error, {:not_found, object_type, vhost, name} = result}, _opts, _) do
+    {:error, ExitCodes.exit_code_for(result),
+     "#{object_type} '#{name}' was not found in virtual host '#{vhost}'"}
+  end
+
+  defp format_error({:error, :not_found = result}, _opts, _) do
+    {:error, ExitCodes.exit_code_for(result),
+     "Object (queue, stream, exchange, etc) was not found"}
+  end
+
+  defp format_error(
+         {:error, {:incompatible_version, local_version, remote_version} = result},
+         _opts,
+         _
+       ) do
+    {:error, ExitCodes.exit_code_for(result),
+     "Detected potential version incompatibility. CLI tool version: #{local_version}, server: #{remote_version}"}
   end
 
   defp format_error({:error, {:timeout, to} = result}, opts, module) do
@@ -469,9 +524,7 @@ defmodule RabbitMQCtl do
   # Plugins
   defp format_error({:error, {:enabled_plugins_mismatch, cli_path, node_path}}, opts, _module) do
     {:error, ExitCodes.exit_dataerr(),
-     "Could not update enabled plugins file at #{cli_path}: target node #{opts[:node]} uses a different path (#{
-       node_path
-     })"}
+     "Could not update enabled plugins file at #{cli_path}: target node #{opts[:node]} uses a different path (#{node_path})"}
   end
 
   defp format_error({:error, {:cannot_read_enabled_plugins_file, path, :eacces}}, _opts, _module) do
@@ -499,16 +552,20 @@ defmodule RabbitMQCtl do
   defp format_error({:error, :check_failed}, %{formatter: "json"}, _) do
     {:error, ExitCodes.exit_unavailable(), nil}
   end
+
   defp format_error({:error, :check_failed}, _, _) do
     {:error, ExitCodes.exit_unavailable(), nil}
   end
+
   defp format_error({:error, :check_failed, err}, %{formatter: "json"}, _) when is_map(err) do
     {:ok, res} = JSON.encode(err)
     {:error, ExitCodes.exit_unavailable(), res}
   end
+
   defp format_error({:error, :check_failed, err}, %{formatter: "json"}, _) do
     {:error, ExitCodes.exit_unavailable(), err}
   end
+
   defp format_error({:error, :check_failed, err}, _, _) do
     {:error, ExitCodes.exit_unavailable(), err}
   end
@@ -524,6 +581,7 @@ defmodule RabbitMQCtl do
     {:ok, res} = JSON.encode(err)
     {:error, ExitCodes.exit_unavailable(), res}
   end
+
   defp format_error({:error, exit_code, err}, %{formatter: "json"}, _) when is_map(err) do
     {:ok, res} = JSON.encode(err)
     {:error, exit_code, res}
@@ -578,13 +636,14 @@ defmodule RabbitMQCtl do
   ## {:fun, fun} - run a custom function to enable distribution.
   ## custom mode is usefult for commands which should have specific node name.
   ## Runs code if distribution is successful, or not needed.
-  @spec maybe_with_distribution(module(), options(), (() -> command_result())) :: command_result()
+  @spec maybe_with_distribution(module(), options(), (-> command_result())) :: command_result()
   defp maybe_with_distribution(command, options, code) do
     try do
       maybe_with_distribution_without_catch(command, options, code)
-    catch error_type, error ->
-      maybe_print_stacktrace(error_type, error, __STACKTRACE__, options)
-      format_error(error, options, command)
+    catch
+      error_type, error ->
+        maybe_print_stacktrace(error_type, error, __STACKTRACE__, options)
+        format_error(error, options, command)
     end
   end
 

@@ -50,6 +50,7 @@ end_per_testcase(_TestCase, _Config) ->
 
 roundtrip(_Config) ->
     test_roundtrip({publish, 42, 1, <<"payload">>}),
+    test_roundtrip({publish_v2, 42, 1, <<"payload">>}),
     test_roundtrip({publish_confirm, 42, [1, 2, 3]}),
 
     test_roundtrip({publish_error,
@@ -109,6 +110,15 @@ roundtrip(_Config) ->
                     {exchange_command_versions,
                      [{deliver, ?VERSION_1, ?VERSION_1}]}}),
     test_roundtrip({request, 99, {stream_stats, <<"stream_name">>}}),
+    test_roundtrip({request, 99,
+                    {create_super_stream, <<"hello">>,
+                     [<<"stream1">>, <<"stream2">>, <<"stream3">>], [<<"bk1">>, <<"bk2">>, <<"bk3">>],
+                     Args}}),
+    test_roundtrip({request, 99,
+                    {create_super_stream, <<"super_stream_name">>,
+                     [<<"stream1">>, <<"stream2">>, <<"stream3">>], [<<"bk1">>, <<"bk2">>, <<"bk3">>],
+                     #{}}}),
+    test_roundtrip({request, 99, {delete_super_stream, <<"super_stream_name">>}}),
 
     %% RESPONSES
     [test_roundtrip({response, 99, {Tag, 53}})
@@ -119,6 +129,8 @@ roundtrip(_Config) ->
                 unsubscribe,
                 create_stream,
                 delete_stream,
+                create_super_stream,
+                delete_super_stream,
                 open,
                 close]],
 
@@ -135,7 +147,8 @@ roundtrip(_Config) ->
     test_roundtrip({response, 0, {tune, 10000, 12345}}),
     %  %% NB: does not write correlation id
     test_roundtrip({response, 0, {credit, 98, 200}}),
-    test_roundtrip({response, 99, {route, 1, <<"stream_name">>}}),
+    test_roundtrip({response, 99,
+                    {route, 1, [<<"stream1">>, <<"stream2">>]}}),
     test_roundtrip({response, 99,
                     {partitions, 1, [<<"stream1">>, <<"stream2">>]}}),
     test_roundtrip({response, 99, {consumer_update, 1, none}}),

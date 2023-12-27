@@ -2,8 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
-
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule TraceOnCommandTest do
   use ExUnit.Case, async: false
@@ -73,7 +72,7 @@ defmodule TraceOnCommandTest do
 
   @tag vhost: @default_vhost
   test "banner", context do
-    assert @command.banner([], context[:opts])
-      =~ ~r/Starting tracing for vhost "#{context[:vhost]}" .../
+    assert @command.banner([], context[:opts]) =~
+             ~r/Starting tracing for vhost "#{context[:vhost]}" .../
   end
 end

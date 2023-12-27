@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(queue_length_limits_SUITE).
@@ -22,28 +22,37 @@
 
 all() ->
     [
-      {group, parallel_tests}
+      {group, mnesia_parallel_tests},
+      {group, khepri_parallel_tests}
     ].
 
 groups() ->
-    MaxLengthTests = [max_length_default,
-                      max_length_bytes_default,
-                      max_length_drop_head,
-                      max_length_bytes_drop_head,
-                      max_length_reject_confirm,
-                      max_length_bytes_reject_confirm,
-                      max_length_drop_publish,
-                      max_length_drop_publish_requeue,
-                      max_length_bytes_drop_publish],
     [
-      {parallel_tests, [parallel], [
-          {max_length_classic, [], MaxLengthTests},
-          {max_length_quorum, [], [max_length_default,
-                                   max_length_bytes_default]
-          },
-          {max_length_mirrored, [], MaxLengthTests}
+     {mnesia_parallel_tests, [parallel], [
+          {max_length_classic, [], max_length_tests()},
+          {max_length_quorum, [], max_length_quorum_tests()},
+          {max_length_mirrored, [], max_length_tests()}
+       ]},
+     {khepri_parallel_tests, [parallel], [
+          {max_length_classic, [], max_length_tests()},
+          {max_length_quorum, [], max_length_quorum_tests()}
        ]}
     ].
+
+max_length_tests() ->
+    [max_length_default,
+     max_length_bytes_default,
+     max_length_drop_head,
+     max_length_bytes_drop_head,
+     max_length_reject_confirm,
+     max_length_bytes_reject_confirm,
+     max_length_drop_publish,
+     max_length_drop_publish_requeue,
+     max_length_bytes_drop_publish].
+
+max_length_quorum_tests() ->
+    [max_length_default,
+     max_length_bytes_default].
 
 suite() ->
     [
@@ -79,7 +88,14 @@ init_per_group(max_length_mirrored, Config) ->
                          {queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
                          {queue_durable, false}]),
     rabbit_ct_helpers:run_steps(Config1, []);
-init_per_group(Group, Config) ->
+init_per_group(mnesia_parallel_tests = Group, Config0) ->
+    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
+    init_per_group0(Group, Config);
+init_per_group(khepri_parallel_tests = Group, Config0) ->
+    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, khepri}]),
+    init_per_group0(Group, Config).
+
+init_per_group0(Group, Config) ->
     case lists:member({group, Group}, all()) of
         true ->
             ClusterSize = 3,
@@ -88,8 +104,8 @@ init_per_group(Group, Config) ->
                 {rmq_nodes_count, ClusterSize}
               ]),
             rabbit_ct_helpers:run_steps(Config1,
-              rabbit_ct_broker_helpers:setup_steps() ++
-              rabbit_ct_client_helpers:setup_steps());
+                                        rabbit_ct_broker_helpers:setup_steps() ++
+                                            rabbit_ct_client_helpers:setup_steps());
         false ->
             rabbit_ct_helpers:run_steps(Config, [])
     end.
@@ -112,7 +128,7 @@ end_per_group(Group, Config) ->
 
 init_per_testcase(Testcase, Config) ->
     Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
-    Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~p", [Group, Testcase])),
+    Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~tp", [Group, Testcase])),
     Config1 = rabbit_ct_helpers:set_config(Config, [{queue_name, Q}]),
     rabbit_ct_helpers:testcase_started(Config1, Testcase).
 

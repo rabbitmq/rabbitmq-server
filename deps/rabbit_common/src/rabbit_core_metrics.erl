@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_core_metrics).
@@ -59,9 +59,9 @@
 %%----------------------------------------------------------------------------
 -type(channel_stats_id() :: pid() |
 			    {pid(),
-			     {rabbit_amqqueue:name(), rabbit_exchange:name()}} |
-			    {pid(), rabbit_amqqueue:name()} |
-			    {pid(), rabbit_exchange:name()}).
+			     {rabbit_types:rabbit_amqqueue_name(), rabbit_types:exchange_name()}} |
+			    {pid(), rabbit_types:rabbit_amqqueue_name()} |
+			    {pid(), rabbit_types:exchange_name()}).
 
 -type(channel_stats_type() :: queue_exchange_stats | queue_stats |
 			      exchange_stats | reductions).
@@ -80,17 +80,17 @@
 -spec channel_stats(pid(), rabbit_types:infos()) -> ok.
 -spec channel_stats(channel_stats_type(), channel_stats_id(),
                     rabbit_types:infos() | integer()) -> ok.
--spec channel_queue_down({pid(), rabbit_amqqueue:name()}) -> ok.
--spec channel_queue_exchange_down({pid(), {rabbit_amqqueue:name(),
-                                   rabbit_exchange:name()}}) -> ok.
--spec channel_exchange_down({pid(), rabbit_exchange:name()}) -> ok.
+-spec channel_queue_down({pid(), rabbit_types:rabbit_amqqueue_name()}) -> ok.
+-spec channel_queue_exchange_down({pid(), {rabbit_types:rabbit_amqqueue_name(),
+                                   rabbit_types:exchange_name()}}) -> ok.
+-spec channel_exchange_down({pid(), rabbit_types:exchange_name()}) -> ok.
 -spec consumer_created(pid(), binary(), boolean(), boolean(),
-                       rabbit_amqqueue:name(), integer(), boolean(), activity_status(), list()) -> ok.
+                       rabbit_types:rabbit_amqqueue_name(), integer(), boolean(), activity_status(), list()) -> ok.
 -spec consumer_updated(pid(), binary(), boolean(), boolean(),
-                       rabbit_amqqueue:name(), integer(), boolean(), activity_status(), list()) -> ok.
--spec consumer_deleted(pid(), binary(), rabbit_amqqueue:name()) -> ok.
--spec queue_stats(rabbit_amqqueue:name(), rabbit_types:infos()) -> ok.
--spec queue_stats(rabbit_amqqueue:name(), integer(), integer(), integer(),
+                       rabbit_types:rabbit_amqqueue_name(), integer(), boolean(), activity_status(), list()) -> ok.
+-spec consumer_deleted(pid(), binary(), rabbit_types:rabbit_amqqueue_name()) -> ok.
+-spec queue_stats(rabbit_types:rabbit_amqqueue_name(), rabbit_types:infos()) -> ok.
+-spec queue_stats(rabbit_types:rabbit_amqqueue_name(), integer(), integer(), integer(),
                   integer()) -> ok.
 -spec node_stats(atom(), rabbit_types:infos()) -> ok.
 -spec node_node_stats({node(), node()}, rabbit_types:infos()) -> ok.
@@ -120,8 +120,9 @@ terminate() ->
      || {Table, _Type} <- ?CORE_TABLES ++ ?CORE_EXTRA_TABLES],
     ok.
 
-connection_created(Pid, Infos) ->
-    ets:insert(connection_created, {Pid, Infos}),
+connection_created(Pid, Infos0) ->
+    Infos1 = maybe_cleanup_infos(Infos0),
+    ets:insert(connection_created, {Pid, Infos1}),
     ets:update_counter(connection_churn_metrics, node(), {2, 1},
                        ?CONNECTION_CHURN_METRICS),
     ok.
@@ -390,7 +391,7 @@ gen_server2_deleted(Pid) ->
 
 get_gen_server2_stats(Pid) ->
     case ets:lookup(gen_server2_metrics, Pid) of
-        [{Pid, BufferLength}] ->
+        [{_, BufferLength}] ->
             BufferLength;
         [] ->
             not_found
@@ -407,13 +408,19 @@ auth_attempt_failed(RemoteAddress, Username, Protocol) ->
 update_auth_attempt(RemoteAddress, Username, Protocol, Incr) ->
     %% It should default to false as per ip/user metrics could keep growing indefinitely
     %% It's up to the operator to enable them, and reset it required
-    case application:get_env(rabbit, track_auth_attempt_source) of
+    _ = case application:get_env(rabbit, track_auth_attempt_source) of
         {ok, true} ->
-            case {RemoteAddress, Username} of
+            Addr = case inet:is_ip_address(RemoteAddress) of
+                       true ->
+                           list_to_binary(inet:ntoa(RemoteAddress));
+                       false ->
+                           rabbit_data_coercion:to_binary(RemoteAddress)
+                   end,
+            case {Addr, Username} of
                 {<<>>, <<>>} ->
                     ok;
                 _ ->
-                    Key = {RemoteAddress, Username, Protocol},
+                    Key = {Addr, Username, Protocol},
                     _ = ets:update_counter(auth_attempt_detailed_metrics, Key, Incr, {Key, 0, 0, 0})
             end;
         {ok, false} ->
@@ -440,3 +447,14 @@ format_auth_attempt({{RemoteAddress, Username, Protocol}, Total, Succeeded, Fail
 format_auth_attempt({Protocol, Total, Succeeded, Failed}) ->
     [{protocol, atom_to_binary(Protocol, utf8)}, {auth_attempts, Total},
      {auth_attempts_failed, Failed}, {auth_attempts_succeeded, Succeeded}].
+
+maybe_cleanup_infos(Infos0) when is_list(Infos0) ->
+    %% Note: authz_backends is added in rabbit_amqp1_0_session_sup:adapter_info/3
+    %% We delete it here, if present, because it should not be stored in the
+    %% connection_created table.
+    %%
+    %% TODO @ansd this will no longer be necessary once this PR is merged:
+    %% https://github.com/rabbitmq/rabbitmq-server/pull/9022
+    proplists:delete(authz_backends, Infos0);
+maybe_cleanup_infos(Infos) ->
+    Infos.

@@ -1,3 +1,4 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
@@ -9,7 +10,13 @@ load(
     "rabbitmq_app",
     "rabbitmq_integration_suite",
     "rabbitmq_suite",
-    "rabbitmq_test_helper",
+)
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
 )
 
 APP_NAME = "rabbitmq_federation"
@@ -23,118 +30,123 @@ APP_ENV = """[
 	    {internal_exchange_check_interval, 90000}
 	  ]"""
 
-BUILD_DEPS = [
-    "//deps/rabbitmq_cli:rabbitmqctl",
-]
+all_beam_files(name = "all_beam_files")
 
-DEPS = [
-    "//deps/amqp_client:erlang_app",
-    "//deps/rabbit_common:erlang_app",
-    "//deps/rabbit:erlang_app",
-]
+all_test_beam_files(name = "all_test_beam_files")
+
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
     app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_module = APP_MODULE,
     app_name = APP_NAME,
-    build_deps = BUILD_DEPS,
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/amqp_client:erlang_app",
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+    ],
 )
 
 xref(
-    additional_libs = BUILD_DEPS,
+    name = "xref",
+    additional_libs = [
+        "//deps/rabbitmq_cli:erlang_app",  # keep
+    ],
+    target = ":erlang_app",
 )
 
 plt(
-    name = "base_plt",
-    deps = DEPS,
+    name = "deps_plt",
+    for_target = ":erlang_app",
+    ignore_warnings = True,
+    libs = ["//deps/rabbitmq_cli:elixir"],  # keep
+    plt = "//:base_plt",
+    deps = ["//deps/rabbitmq_cli:erlang_app"],  # keep
 )
 
 dialyze(
-    dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_undefined_callbacks"],
-    plt = ":base_plt",
-    warnings_as_errors = False,
+    name = "dialyze",
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
+
+eunit(
+    name = "eunit",
+    compiled_suites = [":test_rabbit_federation_test_util_beam"],
+    target = ":test_erlang_app",
 )
 
 broker_for_integration_suites()
 
-rabbitmq_test_helper(
-    name = "rabbit_federation_test_util",
-    srcs = [
-        "test/rabbit_federation_test_util.erl",
+rabbitmq_integration_suite(
+    name = "exchange_SUITE",
+    size = "large",
+    additional_beam = [
+        "test/rabbit_federation_test_util.beam",
     ],
-    hdrs = glob([
-        "include/**/*.hrl",
-        "src/**/*.hrl",
-    ]),
+    flaky = True,
+    shard_count = 2,
+)
+
+rabbitmq_integration_suite(
+    name = "federation_status_command_SUITE",
+    additional_beam = [
+        "test/rabbit_federation_test_util.beam",
+    ],
+)
+
+rabbitmq_integration_suite(
+    name = "queue_SUITE",
+    additional_beam = [
+        "test/rabbit_federation_test_util.beam",
+    ],
+    flaky = True,
+    shard_count = 6,
+)
+
+rabbitmq_integration_suite(
+    name = "rabbit_federation_status_SUITE",
+    additional_beam = [
+        "test/rabbit_federation_test_util.beam",
+        ":exchange_SUITE_beam_files",
+        ":queue_SUITE_beam_files",
+    ],
+)
+
+rabbitmq_integration_suite(
+    name = "restart_federation_link_command_SUITE",
+    additional_beam = [
+        "test/rabbit_federation_test_util.beam",
+    ],
+)
+
+rabbitmq_integration_suite(
+    name = "unit_inbroker_SUITE",
+)
+
+rabbitmq_suite(
+    name = "unit_SUITE",
     deps = [
-        ":test_erlang_app",
         "//deps/amqp_client:erlang_app",
         "//deps/rabbit_common:erlang_app",
     ],
 )
 
-PACKAGE = "deps/rabbitmq_federation"
+assert_suites()
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "exchange_SUITE",
-        size = "large",
-        additional_beam = [
-            ":rabbit_federation_test_util",
-        ],
-        flaky = True,
-        shard_count = 2,
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "federation_status_command_SUITE",
-        additional_beam = [
-            ":rabbit_federation_test_util",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "queue_SUITE",
-        additional_beam = [
-            ":rabbit_federation_test_util",
-        ],
-        flaky = True,
-        shard_count = 6,
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_federation_status_SUITE",
-        additional_beam = [
-            ":rabbit_federation_test_util",
-            ":exchange_SUITE_beam_files",
-            ":queue_SUITE_beam_files",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "restart_federation_link_command_SUITE",
-        additional_beam = [
-            ":rabbit_federation_test_util",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "unit_inbroker_SUITE",
-    ),
-    rabbitmq_suite(
-        name = "unit_SUITE",
-        deps = [
-            "//deps/amqp_client:erlang_app",
-            "//deps/rabbit_common:erlang_app",
-        ],
-    ),
-]
-
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+alias(
+    name = "rabbitmq_federation",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

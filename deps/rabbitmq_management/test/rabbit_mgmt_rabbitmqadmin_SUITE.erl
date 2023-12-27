@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_rabbitmqadmin_SUITE).
@@ -136,7 +136,7 @@ config_file(Config) ->
     ?assertMatch({error, _, _}, run(Config, ["--config", TestConf, "show", "overview"])),
 
     %% overrides hostname and port using --base-uri
-    BaseURI = rabbit_misc:format("http://localhost:~s", [MgmtPort]),
+    BaseURI = rabbit_misc:format("http://localhost:~ts", [MgmtPort]),
     ?assertMatch({ok, _}, run(Config, ["--config", TestConf, "--base-uri", BaseURI, "show", "overview"])),
 
     %% overrides --host and --port on the command line
@@ -297,12 +297,12 @@ bindings(Config) ->
     {ok, _} = run(Config, ["delete", "queue", "name=foo"]).
 
 policies(Config) ->
-    {ok, _} = run(Config, ["declare", "policy", "name=ha",
-                           "pattern=.*", "definition={\"ha-mode\":\"all\"}"]),
-    {ok, [["ha", "/", ".*", "{\"ha-mode\": \"all\"}"]]} =
+    {ok, _} = run(Config, ["declare", "policy", "name=max-length-bytes",
+                           "pattern=.*", "definition={\"max-length-bytes\":10000}"]),
+    {ok, [["max-length-bytes", "/", ".*", "{\"max-length-bytes\": 10000}"]]} =
         run_table(Config, ["list", "policies", "name",
                                  "vhost", "pattern", "definition"]),
-    {ok, _} = run(Config, ["delete", "policy", "name=ha"]).
+    {ok, _} = run(Config, ["delete", "policy", "name=max-length-bytes"]).
 
 operator_policies(Config) ->
     {ok, _} = run(Config, ["declare", "operator_policy", "name=len",

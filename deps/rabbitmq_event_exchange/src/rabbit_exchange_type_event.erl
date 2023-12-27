@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_exchange_type_event).
@@ -38,12 +38,12 @@ info(_X) -> [].
 info(_X, _) -> [].
 
 register() ->
-    rabbit_exchange:declare(exchange(), topic, true, false, true, [],
-                            ?INTERNAL_USER),
+    _ = rabbit_exchange:declare(exchange(), topic, true, false, true, [],
+                                ?INTERNAL_USER),
     gen_event:add_handler(rabbit_event, ?MODULE, []).
 
 unregister() ->
-    rabbit_exchange:delete(exchange(), false, ?INTERNAL_USER),
+    _ = rabbit_exchange:delete(exchange(), false, ?INTERNAL_USER),
     gen_event:delete_handler(rabbit_event, ?MODULE, []).
 
 exchange() ->
@@ -51,7 +51,7 @@ exchange() ->
 
 exchange(VHost) ->
     _ = ensure_vhost_exists(VHost),
-    rabbit_misc:r(VHost, exchange, ?EXCH_NAME).
+   rabbit_misc:r(VHost, exchange, ?EXCH_NAME).
 
 %%----------------------------------------------------------------------------
 
@@ -73,22 +73,23 @@ handle_event(#event{type      = Type,
                     props     = Props,
                     timestamp = TS,
                     reference = none}, #state{vhost = VHost} = State) ->
-    case key(Type) of
-        ignore -> ok;
-        Key    ->
-                  Props2 = [{<<"timestamp_in_ms">>, TS} | Props],
-                  PBasic = #'P_basic'{delivery_mode = 2,
-                                      headers = fmt_proplist(Props2),
-                                      %% 0-9-1 says the timestamp is a
-                                      %% "64 bit POSIX
-                                      %% timestamp". That's second
-                                      %% resolution, not millisecond.
-                                      timestamp = erlang:convert_time_unit(
-                                                    TS, milli_seconds, seconds)},
-            Msg = rabbit_basic:message(exchange(VHost), Key, PBasic, <<>>),
-                  rabbit_basic:publish(
-                    rabbit_basic:delivery(false, false, Msg, undefined))
-    end,
+    _ = case key(Type) of
+            ignore -> ok;
+            Key    ->
+                Props2 = [{<<"timestamp_in_ms">>, TS} | Props],
+                PBasic = #'P_basic'{delivery_mode = 2,
+                                    headers = fmt_proplist(Props2),
+                                    %% 0-9-1 says the timestamp is a
+                                    %% "64 bit POSIX
+                                    %% timestamp". That's second
+                                    %% resolution, not millisecond.
+                                    timestamp = erlang:convert_time_unit(
+                                                  TS, milli_seconds, seconds)},
+                Content = rabbit_basic:build_content(PBasic, <<>>),
+                XName = exchange(VHost),
+                {ok, Msg} = mc_amqpl:message(XName, Key, Content),
+                rabbit_queue_type:publish_at_most_once(XName, Msg)
+        end,
     {ok, State};
 handle_event(_Event, State) ->
     {ok, State}.

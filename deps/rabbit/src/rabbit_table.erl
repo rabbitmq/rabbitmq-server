@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_table).
@@ -11,16 +11,19 @@
     create/0, create/2, ensure_local_copies/1, ensure_table_copy/3,
     wait_for_replicated/1, wait/1, wait/2,
     force_load/0, is_present/0, is_empty/0, needs_default_data/0,
-    check_schema_integrity/1, clear_ram_only_tables/0, retry_timeout/0,
-    wait_for_replicated/0, exists/1]).
-
--export([rabbit_index_route_definition/0]).
+    check_schema_integrity/1,
+    clear_ram_only_tables/0, maybe_clear_ram_only_tables/0,
+    retry_timeout/0, wait_for_replicated/0]).
 
 %% for testing purposes
 -export([definitions/0]).
 
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+
+-ifdef(TEST).
+-export([pre_khepri_definitions/0]).
+-endif.
 
 %%----------------------------------------------------------------------------
 
@@ -35,15 +38,15 @@
 create() ->
     lists:foreach(
         fun ({Table, Def}) -> create(Table, Def) end,
-        definitions()),
+        mandatory_definitions()),
     ensure_secondary_indexes(),
     ok.
 
--spec create(mnesia:table(), list()) -> rabbit_types:ok_or_error(any()).
+-spec create(atom(), list()) -> rabbit_types:ok_or_error(any()).
 
 create(TableName, TableDefinition) ->
     TableDefinition1 = proplists:delete(match, TableDefinition),
-    rabbit_log:debug("Will create a schema database table '~s'", [TableName]),
+    rabbit_log:debug("Will create a schema database table '~ts'", [TableName]),
     case mnesia:create_table(TableName, TableDefinition1) of
         {atomic, ok}                              -> ok;
         {aborted,{already_exists, TableName}}     -> ok;
@@ -52,20 +55,15 @@ create(TableName, TableDefinition) ->
             throw({error, {table_creation_failed, TableName, TableDefinition1, Reason}})
     end.
 
--spec exists(mnesia:table()) -> boolean().
-exists(Table) ->
-    case mnesia:is_transaction() of
-        true ->
-            mnesia_schema:get_tid_ts_and_lock(schema, read);
-        false ->
-            ok
-    end,
-    lists:member(Table, mnesia:system_info(tables)).
-
 %% Sets up secondary indexes in a blank node database.
 ensure_secondary_indexes() ->
-  ensure_secondary_index(rabbit_queue, vhost),
-  ok.
+    case rabbit_khepri:is_enabled() of
+        true ->
+            ok;
+        false ->
+            ensure_secondary_index(rabbit_queue, vhost),
+            ok
+    end.
 
 ensure_secondary_index(Table, Field) ->
   case mnesia:add_table_index(Table, Field) of
@@ -73,10 +71,14 @@ ensure_secondary_index(Table, Field) ->
     {aborted, {already_exists, Table, _}} -> ok
   end.
 
--spec ensure_table_copy(mnesia:table(), node(), ram_copies | disc_copies) ->
+%% mnesia:table() and mnesia:storage_type() are not exported
+-type mnesia_table() :: atom().
+-type mnesia_storage_type() :: 'ram_copies' | 'disc_copies' | 'disc_only_copies'.
+
+-spec ensure_table_copy(mnesia_table(), node(), mnesia_storage_type()) ->
     ok | {error, any()}.
 ensure_table_copy(TableName, Node, StorageType) ->
-    rabbit_log:debug("Will add a local schema database copy for table '~s'", [TableName]),
+    rabbit_log:debug("Will add a local schema database copy for table '~ts'", [TableName]),
     case mnesia:add_table_copy(TableName, Node, StorageType) of
         {atomic, ok}                              -> ok;
         {aborted,{already_exists, TableName}}     -> ok;
@@ -108,18 +110,26 @@ wait(TableNames, Retry) ->
     wait(TableNames, Timeout, Retries).
 
 wait(TableNames, Timeout, Retries) ->
+    %% Wait for tables must only wait for tables that have already been declared.
+    %% Otherwise, node boot returns a timeout when the Khepri ff is enabled from the start
+    ExistingTables = mnesia:system_info(tables),
+    MissingTables = TableNames -- ExistingTables,
+    TablesToMigrate = TableNames -- MissingTables,
+    wait1(TablesToMigrate, Timeout, Retries).
+
+wait1(TableNames, Timeout, Retries) ->
     %% We might be in ctl here for offline ops, in which case we can't
     %% get_env() for the rabbit app.
-    rabbit_log:info("Waiting for Mnesia tables for ~p ms, ~p retries left",
+    rabbit_log:info("Waiting for Mnesia tables for ~tp ms, ~tp retries left",
                     [Timeout, Retries - 1]),
     Result = case mnesia:wait_for_tables(TableNames, Timeout) of
                  ok ->
                      ok;
                  {timeout, BadTabs} ->
-                     AllNodes = rabbit_nodes:all(),
+                     AllNodes = rabbit_nodes:list_members(),
                      {error, {timeout_waiting_for_tables, AllNodes, BadTabs}};
                  {error, Reason} ->
-                     AllNodes = rabbit_nodes:all(),
+                     AllNodes = rabbit_nodes:list_members(),
                      {error, {failed_waiting_for_tables, AllNodes, Reason}}
              end,
     case {Retries, Result} of
@@ -129,8 +139,8 @@ wait(TableNames, Timeout, Retries) ->
         {1, {error, _} = Error} ->
             throw(Error);
         {_, {error, Error}} ->
-            rabbit_log:warning("Error while waiting for Mnesia tables: ~p", [Error]),
-            wait(TableNames, Timeout, Retries - 1)
+            rabbit_log:warning("Error while waiting for Mnesia tables: ~tp", [Error]),
+            wait1(TableNames, Timeout, Retries - 1)
     end.
 
 retry_timeout(_Retry = false) ->
@@ -152,7 +162,7 @@ retry_timeout() ->
 
 -spec force_load() -> 'ok'.
 
-force_load() -> [mnesia:force_load_table(T) || T <- names()], ok.
+force_load() -> _ = [mnesia:force_load_table(T) || T <- names()], ok.
 
 -spec is_present() -> boolean().
 
@@ -164,8 +174,28 @@ is_empty()           -> is_empty(names()).
 
 -spec needs_default_data() -> boolean().
 
-needs_default_data() -> is_empty([rabbit_user, rabbit_user_permission,
-                                  rabbit_vhost]).
+needs_default_data() ->
+    case rabbit_khepri:is_enabled() of
+        true ->
+            needs_default_data_in_khepri();
+        false ->
+            needs_default_data_in_mnesia()
+    end.
+
+needs_default_data_in_khepri() ->
+    Paths = [rabbit_db_vhost:khepri_vhosts_path(),
+             rabbit_db_user:khepri_users_path()],
+    lists:all(
+      fun(Path) ->
+              case rabbit_khepri:list(Path) of
+                  {ok, List} when is_map(List) andalso List =:= #{} -> true;
+                  _                                                 -> false
+              end
+      end, Paths).
+
+needs_default_data_in_mnesia() ->
+    is_empty([rabbit_user, rabbit_user_permission,
+              rabbit_vhost]).
 
 is_empty(Names) ->
     lists:all(fun (Tab) -> mnesia:dirty_first(Tab) == '$end_of_table' end,
@@ -198,6 +228,23 @@ clear_ram_only_tables() ->
               end
       end, names()),
     ok.
+
+-spec maybe_clear_ram_only_tables() -> ok.
+
+maybe_clear_ram_only_tables() ->
+    %% We use `rabbit_khepri:get_feature_state/0' because we don't want to
+    %% block here. Indeed, this function is executed as part of
+    %% `rabbit:stop/1'.
+    case rabbit_khepri:get_feature_state() of
+        enabled ->
+            ok;
+        _ ->
+            _ = case rabbit_mnesia:members() of
+                    [N] when N=:= node() -> clear_ram_only_tables();
+                    _                    -> ok
+                end,
+            ok
+    end.
 
 %% The sequence in which we delete the schema and then the other
 %% tables is important: if we delete the schema first when moving to
@@ -238,6 +285,7 @@ create_local_copies(Type) ->
       end, definitions(Type)),
     ok.
 
+-spec create_local_copy(mnesia_table(), mnesia_storage_type()) -> ok.
 create_local_copy(Tab, Type) ->
     StorageType = mnesia:table_info(Tab, storage_type),
     {atomic, ok} =
@@ -303,7 +351,19 @@ definitions(ram) ->
         {Tab, TabDef} <- definitions()].
 
 definitions() ->
-    Definitions =
+    %% Checks for feature flags enabled during node boot must be non_blocking
+    case rabbit_khepri:get_feature_state() of
+        enabled -> [];
+        _       -> mandatory_definitions()
+    end.
+
+mandatory_definitions() ->
+    pre_khepri_definitions()
+        ++ gm:table_definitions()
+        ++ mirrored_supervisor:table_definitions()
+        ++ rabbit_maintenance:table_definitions().
+
+pre_khepri_definitions() ->
     [{rabbit_user,
       [{record_name, internal_user},
        {attributes, internal_user:fields()},
@@ -316,6 +376,11 @@ definitions() ->
        {match, #user_permission{user_vhost = #user_vhost{_='_'},
                                 permission = #permission{_='_'},
                                 _='_'}}]},
+     {rabbit_runtime_parameters,
+      [{record_name, runtime_parameters},
+       {attributes, record_info(fields, runtime_parameters)},
+       {disc_copies, [node()]},
+       {match, #runtime_parameters{_='_'}}]},
      {rabbit_topic_permission,
       [{record_name, topic_permission},
        {attributes, record_info(fields, topic_permission)},
@@ -329,6 +394,28 @@ definitions() ->
        {attributes, vhost:fields()},
        {disc_copies, [node()]},
        {match, vhost:pattern_match_all()}]},
+     {rabbit_durable_queue,
+      [{record_name, amqqueue},
+       {attributes, amqqueue:fields()},
+       {disc_copies, [node()]},
+       {match, amqqueue:pattern_match_on_name(queue_name_match())}]},
+     {rabbit_queue,
+      [{record_name, amqqueue},
+       {attributes, amqqueue:fields()},
+       {match, amqqueue:pattern_match_on_name(queue_name_match())}]},
+     {rabbit_durable_exchange,
+      [{record_name, exchange},
+       {attributes, record_info(fields, exchange)},
+       {disc_copies, [node()]},
+       {match, #exchange{name = exchange_name_match(), _='_'}}]},
+     {rabbit_exchange,
+      [{record_name, exchange},
+       {attributes, record_info(fields, exchange)},
+       {match, #exchange{name = exchange_name_match(), _='_'}}]},
+     {rabbit_exchange_serial,
+      [{record_name, exchange_serial},
+       {attributes, record_info(fields, exchange_serial)},
+       {match, #exchange_serial{name = exchange_name_match(), _='_'}}]},
      {rabbit_durable_route,
       [{record_name, route},
        {attributes, record_info(fields, route)},
@@ -350,6 +437,14 @@ definitions() ->
        {type, ordered_set},
        {match, #reverse_route{reverse_binding = reverse_binding_match(),
                               _='_'}}]},
+     {rabbit_index_route,
+      [{record_name, index_route},
+       {attributes, record_info(fields, index_route)},
+       {type, bag},
+       {storage_properties, [{ets, [{read_concurrency, true}]}]},
+       {match, #index_route{source_key = {exchange_name_match(), '_'},
+                            destination = binding_destination_match(),
+                            _='_'}}]},
      {rabbit_topic_trie_node,
       [{record_name, topic_trie_node},
        {attributes, record_info(fields, topic_trie_node)},
@@ -365,67 +460,8 @@ definitions() ->
        {attributes, record_info(fields, topic_trie_binding)},
        {type, ordered_set},
        {match, #topic_trie_binding{trie_binding = trie_binding_match(),
-                                   _='_'}}]},
-     {rabbit_durable_exchange,
-      [{record_name, exchange},
-       {attributes, record_info(fields, exchange)},
-       {disc_copies, [node()]},
-       {match, #exchange{name = exchange_name_match(), _='_'}}]},
-     {rabbit_exchange,
-      [{record_name, exchange},
-       {attributes, record_info(fields, exchange)},
-       {match, #exchange{name = exchange_name_match(), _='_'}}]},
-     {rabbit_exchange_serial,
-      [{record_name, exchange_serial},
-       {attributes, record_info(fields, exchange_serial)},
-       {match, #exchange_serial{name = exchange_name_match(), _='_'}}]},
-     {rabbit_runtime_parameters,
-      [{record_name, runtime_parameters},
-       {attributes, record_info(fields, runtime_parameters)},
-       {disc_copies, [node()]},
-       {match, #runtime_parameters{_='_'}}]},
-     {rabbit_durable_queue,
-      [{record_name, amqqueue},
-       {attributes, amqqueue:fields()},
-       {disc_copies, [node()]},
-       {match, amqqueue:pattern_match_on_name(queue_name_match())}]},
-     {rabbit_queue,
-      [{record_name, amqqueue},
-       {attributes, amqqueue:fields()},
-       {match, amqqueue:pattern_match_on_name(queue_name_match())}]}
-    ]
-        ++ gm:table_definitions()
-        ++ mirrored_supervisor:table_definitions(),
-
-    MaybeRouting = case rabbit_feature_flags:is_enabled(direct_exchange_routing_v2) of
-                       true ->
-                           [{rabbit_index_route, rabbit_index_route_definition()}];
-                       false ->
-                           []
-                   end,
-    MaybeListener = case rabbit_feature_flags:is_enabled(listener_records_in_ets) of
-                        false ->
-                            [{rabbit_listener, rabbit_listener_definition()}];
-                        true ->
-                            []
-                    end,
-    Definitions ++ MaybeRouting ++ MaybeListener.
-
--spec rabbit_index_route_definition() -> list(tuple()).
-rabbit_index_route_definition() ->
-    [{record_name, index_route},
-     {attributes, record_info(fields, index_route)},
-     {type, bag},
-     {storage_properties, [{ets, [{read_concurrency, true}]}]},
-     {match, #index_route{source_key = {exchange_name_match(), '_'},
-                          destination = binding_destination_match(),
-                          _='_'}}].
-
-rabbit_listener_definition() ->
-    [{record_name, listener},
-     {attributes, record_info(fields, listener)},
-     {type, bag},
-     {match, #listener{_='_'}}].
+                                   _='_'}}]}
+    ].
 
 binding_match() ->
     #binding{source = exchange_name_match(),

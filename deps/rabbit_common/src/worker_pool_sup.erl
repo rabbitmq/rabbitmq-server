@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(worker_pool_sup).
@@ -29,11 +29,11 @@ start_link() ->
     start_link(Size).
 
 start_link(PoolSize) ->
-    rabbit_log:info("Will use ~p processes for default worker pool", [PoolSize]),
+    rabbit_log:info("Will use ~tp processes for default worker pool", [PoolSize]),
     start_link(PoolSize, worker_pool:default_pool()).
 
 start_link(PoolSize, PoolName) ->
-    rabbit_log:info("Starting worker pool '~p' with ~p processes in it", [PoolName, PoolSize]),
+    rabbit_log:info("Starting worker pool '~tp' with ~tp processes in it", [PoolName, PoolSize]),
     SupName = list_to_atom(atom_to_list(PoolName) ++ "_sup"),
     supervisor:start_link({local, SupName}, ?MODULE, [PoolSize, PoolName]).
 

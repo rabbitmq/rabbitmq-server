@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_operator_policy).
@@ -72,7 +72,12 @@ delete_resource(ReqData, Context = #context{user = #user{username = Username}}) 
     {true, ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
+    case rabbit_mgmt_features:is_op_policy_updating_disabled() of
+        true ->
+            rabbit_mgmt_util:method_not_allowed(<<"Broker settings disallow editing of operator policies.">>, ReqData, Context);
+        false ->
+            rabbit_mgmt_util:is_authorized_admin(ReqData, Context)
+    end.
 
 %%--------------------------------------------------------------------
 

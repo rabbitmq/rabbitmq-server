@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_tracing_consumer).
@@ -75,8 +75,8 @@ init(Args0) ->
                 {ok, F} ->
                     rabbit_tracing_traces:announce(VHost, Name, self()),
                     Format = list_to_atom(binary_to_list(pget(format, Args))),
-                    rabbit_log:info("Tracer opened log file ~p with "
-                                    "format ~p", [Filename, Format]),
+                    rabbit_log:info("Tracer opened log file ~tp with "
+                                    "format ~tp", [Filename, Format]),
                     {ok, #state{conn = Conn, ch = Ch, vhost = VHost, queue = Q,
                                 file = F, filename = Filename,
                                 format = Format, buf = [], buf_cnt = 0,
@@ -115,11 +115,11 @@ handle_info(_I, State) ->
 
 terminate(shutdown, State = #state{conn = Conn, ch = Ch,
                                    file = F, filename = Filename}) ->
-    flush(State),
+    _ = flush(State),
     catch amqp_channel:close(Ch),
     catch amqp_connection:close(Conn),
     catch prim_file:close(F),
-    rabbit_log:info("Tracer closed log file ~p", [Filename]),
+    rabbit_log:info("Tracer closed log file ~tp", [Filename]),
     ok;
 
 terminate(_Reason, _State) ->
@@ -163,20 +163,20 @@ delivery_to_log_record({#'basic.deliver'{routing_key = Key},
 
 log(text, Record, State) ->
     Fmt = "~n========================================"
-        "========================================~n~s: Message ~s~n~n"
-        "Node:         ~s~nConnection:   ~s~n"
-        "Virtual host: ~s~nUser:         ~s~n"
-        "Channel:      ~p~nExchange:     ~s~n"
-        "Routing keys: ~p~n" ++
+        "========================================~n~ts: Message ~ts~n~n"
+        "Node:         ~ts~nConnection:   ~ts~n"
+        "Virtual host: ~ts~nUser:         ~ts~n"
+        "Channel:      ~tp~nExchange:     ~ts~n"
+        "Routing keys: ~tp~n" ++
         case Record#log_record.queue of
             none -> "";
-            _    -> "Queue:        ~s~n"
+            _    -> "Queue:        ~ts~n"
         end ++
         case Record#log_record.routed_queues of
             none -> "";
-            _    -> "Routed queues: ~p~n"
+            _    -> "Routed queues: ~tp~n"
         end ++
-        "Properties:   ~p~nPayload: ~n~s~n",
+        "Properties:   ~tp~nPayload: ~n~ts~n",
     Args =
         [Record#log_record.timestamp,
          Record#log_record.type,
@@ -196,7 +196,7 @@ log(text, Record, State) ->
     print_log(io_lib:format(Fmt, Args), State);
 
 log(json, Record, State) ->
-    print_log([rabbit_json:encode(
+    _ = print_log([rabbit_json:encode(
                 #{timestamp     => Record#log_record.timestamp,
                   type          => Record#log_record.type,
                   node          => Record#log_record.node,
@@ -223,7 +223,7 @@ maybe_flush(State) ->
     State.
 
 flush(State = #state{file = F, buf = Buf}) ->
-    prim_file:write(F, lists:reverse(Buf)),
+    _ = prim_file:write(F, lists:reverse(Buf)),
     State#state{buf = [], buf_cnt = 0}.
 
 truncate(Payload, #state{max_payload = Max}) ->

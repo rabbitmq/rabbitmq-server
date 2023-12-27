@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(cowboy_websocket_SUITE).
@@ -25,6 +25,7 @@ groups() ->
             connection_fails,
             pubsub,
             pubsub_binary,
+            sub_non_existent,
             disconnect,
             http_auth
       ]},
@@ -85,7 +86,7 @@ connection_fails(Config) ->
     WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS),
     ok = raw_send(WS, "CONNECT", [{"login", "uncorrect_$55"}, {"passcode", "uncorrect_$88"}]),
-    {<<"ERROR">>, _, <<"Access refused for user 'uncorrect_$55'\n">>} = raw_recv(WS),
+    {<<"ERROR">>, _, <<"Access refused for user 'uncorrect_$55'">>} = raw_recv(WS),
     {close, _} = rfc6455_client:close(WS),
     ok.
 
@@ -171,6 +172,24 @@ pubsub(Config) ->
     CustHdr3 = {CustHdr3K, binary_to_list(proplists:get_value(list_to_binary(CustHdr3K), H))},
 
     {close, _} = rfc6455_client:close(WS),
+    ok.
+
+%% Issue #6737
+sub_non_existent(Config) ->
+    PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
+    {ok, _} = rfc6455_client:open(WS),
+    ok = raw_send(WS, "CONNECT", [{"login", "guest"}, {"passcode", "guest"}]),
+
+    {<<"CONNECTED">>, _, <<>>} = raw_recv(WS),
+
+    ok = raw_send(WS, "SUBSCRIBE", [{"destination", "/exchange/doesnotexist"},
+                                    {"id", "s0"}]),
+
+    {<<"ERROR">>, [{<<"message">>,<<"not_found">>} | _Tail ], <<"NOT_FOUND - no exchange 'doesnotexist' in vhost '/'">>} = raw_recv(WS),
+
+    {close, _} = raw_recv(WS),
     ok.
 
 

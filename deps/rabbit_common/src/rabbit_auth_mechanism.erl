@@ -2,8 +2,21 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
+
+%% This module defines the interface for SASL mechanisms.
+%%
+%% The central idea behind SASL is to decouple application protocols
+%% from authentication mechanisms.
+%%
+%% Protocols AMQP 0.9.1, AMQP 1.0, Stream, and MQTT 5.0 support SASL.
+%%
+%% Therefore, their respective protocol readers call a rabbit_auth_mechanism_* module.
+%% The SASL mechanism knows how to extract credentials (e.g. username and password, or just
+%% a username from a client certificate) and asks rabbit_access_control to
+%% authenticate the client. rabbit_access_control in turn delegates authentication
+%% (and authorization) to a rabbit_auth_backend_* module.
 
 -module(rabbit_auth_mechanism).
 

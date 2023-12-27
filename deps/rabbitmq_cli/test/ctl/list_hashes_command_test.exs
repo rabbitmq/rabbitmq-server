@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule ListHashesCommandTest do
   use ExUnit.Case
@@ -22,8 +22,8 @@ defmodule ListHashesCommandTest do
 
   test "run: lists hashes", _context do
     assert match?(
-      {:ok, _},
-      @command.run([], %{})
-    )
+             {:ok, _},
+             @command.run([], %{})
+           )
   end
 end

@@ -270,13 +270,13 @@ trycatch(F, Args) ->
 trycatch(M, F, Args) ->
     try apply(M, F, Args) of
         V ->
-            ct:fail("expected error, got ~p", [V])
+            ct:fail("expected error, got ~tp", [V])
     catch
         C:R -> {C,R}
     end.
 
 do_error(F, IQ) ->
-    io:format("Illegal Queue: ~p~n", [IQ]),
+    io:format("Illegal Queue: ~tp~n", [IQ]),
     {error,badarg} = trycatch(in, [1, IQ]),
     {error,badarg} = trycatch(out, [IQ]),
     {error,badarg} = trycatch(drop, [IQ]),
@@ -305,7 +305,7 @@ oops(Config) when is_list(Config) ->
     Optab = optab(),
     Seed0 = rand:seed(exsplus, {1,2,4}),
     {Is,Seed} = random_list(N, tuple_size(Optab), Seed0, []),
-    io:format("~p ", [Is]),
+    io:format("~tp ", [Is]),
     QA = lqueue:new(),
     QB = {[]},
     emul([QA], [QB], Seed, [element(I, Optab) || I <- Is]).
@@ -360,8 +360,8 @@ emul(_, _, _, []) ->
 emul(QsA0, QsB0, Seed0, [{Op,Ts,S,Fun}|Ops]) ->
     {AsA,Seed} = args(Ts, QsA0, Seed0, []),
     {AsB,Seed} = args(Ts, QsB0, Seed0, []),
-    io:format("~n% ~w % ~p ", [Op,AsA]),
-    io:format("% ~p :", [AsB]),
+    io:format("~n% ~w % ~tp ", [Op,AsA]),
+    io:format("% ~tp :", [AsB]),
     XX = call({lqueue,Op}, AsA),
     YY = call(Fun, AsB),
     case {XX,YY} of
@@ -369,13 +369,13 @@ emul(QsA0, QsB0, Seed0, [{Op,Ts,S,Fun}|Ops]) ->
             {[Qa|_]=QsA,[{Lb}|_]=QsB} = chk(QsA0, QsB0, S, X, Y),
             case lqueue:to_list(Qa) of
                 Lb ->
-                    io:format("|~p| ", [Lb]),
+                    io:format("|~tp| ", [Lb]),
                     emul(QsA, QsB, Seed, Ops);
                 La ->
                     throw({to_list,[XX,YY,Op,AsA,AsB,La,Lb]})
             end;
         {Exception,Exception} ->
-            io:format("!~p! ", [Exception]),
+            io:format("!~tp! ", [Exception]),
             emul(QsA0, QsB0, Seed, Ops);
         _ ->
             throw({diff,[XX,YY,Op,AsA,AsB]})
@@ -415,14 +415,14 @@ call(Func, As) ->
     end.
 
 chk(QsA, QsB, v, X, X) ->
-    io:format("<~p> ", [X]),
+    io:format("<~tp> ", [X]),
     {QsA,QsB};
 chk(_, _, v, X, Y) ->
     throw({diff,v,[X,Y]});
 chk(QsA, QsB, q, Qa, {Lb}=Qb) ->
     case lqueue:to_list(Qa) of
         Lb ->
-            io:format("|~p| ", [Lb]),
+            io:format("|~tp| ", [Lb]),
             {[Qa|QsA],[Qb|QsB]};
         La ->
             throw({diff,q,[Qa,La,Lb]})

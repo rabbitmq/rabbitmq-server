@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_queue_consumers).
@@ -120,7 +120,7 @@ count() -> lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
 unacknowledged_message_count() ->
     lists:sum([?QUEUE:len(C#cr.acktags) || C <- all_ch_record()]).
 
--spec add(amqqueue:name(), ch(), rabbit_types:ctag(), boolean(), pid(), boolean(),
+-spec add(rabbit_amqqueue:name(), ch(), rabbit_types:ctag(), boolean(), pid() | none, boolean(),
           non_neg_integer(), rabbit_framing:amqp_table(), boolean(),
           rabbit_types:username(), state())
          -> state().
@@ -192,10 +192,10 @@ erase_ch(ChPid, State = #state{consumers = Consumers}) ->
              State#state{consumers = remove_consumers(ChPid, Consumers)}}
     end.
 
--spec send_drained(amqqueue:name()) -> 'ok'.
-
-send_drained(QName) -> [update_ch_record(send_drained(QName, C)) || C <- all_ch_record()],
-                  ok.
+-spec send_drained(rabbit_amqqueue:name()) -> 'ok'.
+send_drained(QName) ->
+    [update_ch_record(send_drained(QName, C)) || C <- all_ch_record()],
+    ok.
 
 -spec deliver(fun ((boolean()) -> {fetch_result(), T}),
               rabbit_amqqueue:name(), state(), boolean(),
@@ -395,7 +395,7 @@ deactivate_limit_fun() ->
             C#cr{limiter = rabbit_limiter:deactivate(Limiter)}
     end.
 
--spec credit(amqqueue:name(), boolean(), integer(), boolean(), ch(),
+-spec credit(rabbit_amqqueue:name(), boolean(), integer(), boolean(), ch(),
              rabbit_types:ctag(),
              state()) -> 'unchanged' | {'unblocked', state()}.
 
@@ -505,7 +505,7 @@ update_ch_record(C = #cr{consumer_count       = ConsumerCount,
         {true, 0, 0} -> ok = erase_ch_record(C);
         _            -> ok = store_ch_record(C)
     end,
-    C.
+    ok.
 
 store_ch_record(C = #cr{ch_pid = ChPid}) ->
     put({ch, ChPid}, C),
@@ -528,7 +528,7 @@ send_drained(QName, C = #cr{ch_pid = ChPid, limiter = Limiter}) ->
     case rabbit_limiter:drained(Limiter) of
         {[],         Limiter}  -> C;
         {CTagCredits, Limiter2} ->
-            rabbit_classic_queue:send_drained(ChPid, QName, CTagCredits),
+            ok = rabbit_classic_queue:send_drained(ChPid, QName, CTagCredits),
             C#cr{limiter = Limiter2}
     end.
 
@@ -536,7 +536,7 @@ credit_and_drain(QName, C = #cr{ch_pid = ChPid, limiter = Limiter},
                  CTag, Credit, Mode, IsEmpty) ->
     case rabbit_limiter:credit(Limiter, CTag, Credit, Mode, IsEmpty) of
         {true,  Limiter1} ->
-            rabbit_classic_queue:send_drained(ChPid, QName, [{CTag, Credit}]),
+            ok = rabbit_classic_queue:send_drained(ChPid, QName, [{CTag, Credit}]),
             C#cr{limiter = Limiter1};
         {false, Limiter1} -> C#cr{limiter = Limiter1}
     end.

@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2016-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.AutocompleteCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -26,11 +26,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AutocompleteCommand do
   def run(args, %{script_name: script_name}) do
     {:stream, RabbitMQ.CLI.AutoComplete.complete(script_name, args)}
   end
+
   def run(args, opts) do
     script_name = Config.get_system_option(:script_name, opts)
 
     {:stream, RabbitMQ.CLI.AutoComplete.complete(script_name, args)}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage() do

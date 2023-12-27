@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(system_SUITE).
@@ -10,6 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 all() ->
@@ -24,6 +25,7 @@ groups() ->
           roundtrip,
           roundtrip_to_amqp_091,
           default_outcome,
+          no_routes_is_released,
           outcomes,
           fragmentation,
           message_annotations,
@@ -42,10 +44,6 @@ groups() ->
         ]},
       {java, [], [
           roundtrip
-        ]},
-      {streams, [
-                 streams
-                ], [
         ]}
     ].
 
@@ -140,9 +138,10 @@ roundtrip(Config) ->
 
 streams(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
-    amqp_channel:call(Ch, #'queue.declare'{queue = <<"stream_q">>,
-                                           durable = true,
-                                           arguments = [{<<"x-queue-type">>, longstr, "stream"}]}),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Ch, #'queue.declare'{queue = <<"stream_q2">>,
+                                               durable = true,
+                                               arguments = [{<<"x-queue-type">>, longstr, "stream"}]}),
     run(Config, [
         {dotnet, "streams"}
       ]).
@@ -155,6 +154,14 @@ roundtrip_to_amqp_091(Config) ->
 default_outcome(Config) ->
     run(Config, [
         {dotnet, "default_outcome"}
+      ]).
+
+no_routes_is_released(Config) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    amqp_channel:call(Ch, #'exchange.declare'{exchange = <<"no_routes_is_released">>,
+                                              durable = true}),
+    run(Config, [
+        {dotnet, "no_routes_is_released"}
       ]).
 
 outcomes(Config) ->
@@ -193,18 +200,6 @@ redelivery(Config) ->
       ]).
 
 routing(Config) ->
-
-    StreamQT =
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, stream_queue) of
-        ok ->
-            <<"stream">>;
-        _ ->
-            %% if the feature flag could not be enabled we run the stream
-            %% routing test using a classc quue instead
-            ct:pal("stream feature flag could not be enabled"
-                   "running stream tests against classic"),
-            <<"classic">>
-    end,
     Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
     amqp_channel:call(Ch, #'queue.declare'{queue = <<"transient_q">>,
                                            durable = false}),
@@ -215,10 +210,7 @@ routing(Config) ->
                                            arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]}),
     amqp_channel:call(Ch, #'queue.declare'{queue = <<"stream_q">>,
                                            durable = true,
-                                           arguments = [{<<"x-queue-type">>, longstr, StreamQT}]}),
-    amqp_channel:call(Ch, #'queue.declare'{queue = <<"stream_q2">>,
-                                           durable = true,
-                                           arguments = [{<<"x-queue-type">>, longstr, StreamQT}]}),
+                                           arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}),
     amqp_channel:call(Ch, #'queue.declare'{queue = <<"autodel_q">>,
                                            auto_delete = true}),
     run(Config, [
@@ -283,7 +275,7 @@ run(Config, Flavors) ->
 
 run_dotnet_test(Config, Method) ->
     TestProjectDir = ?config(dotnet_test_project_dir, Config),
-    Uri = rabbit_ct_broker_helpers:node_uri(Config, 0),
+    Uri = rabbit_ct_broker_helpers:node_uri(Config, 0, [{use_ipaddr, true}]),
     Ret = rabbit_ct_helpers:exec(["dotnet", "run", "--", Method, Uri ],
       [
         {cd, TestProjectDir}
@@ -295,8 +287,8 @@ run_java_test(Config, Class) ->
     Ret = rabbit_ct_helpers:exec([
         TestProjectDir ++ "/mvnw",
         "test",
-        {"-Dtest=~s", [Class]},
-        {"-Drmq_broker_uri=~s", [rabbit_ct_broker_helpers:node_uri(Config, 0)]}
+        {"-Dtest=~ts", [Class]},
+        {"-Drmq_broker_uri=~ts", [rabbit_ct_broker_helpers:node_uri(Config, 0)]}
       ],
       [{cd, TestProjectDir}]),
     {ok, _} = Ret.

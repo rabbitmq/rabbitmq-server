@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.Paths do
   alias RabbitMQ.CLI.Core.Config
@@ -27,12 +27,23 @@ defmodule RabbitMQ.CLI.Core.Paths do
     end
   end
 
-  def require_mnesia_dir(opts) do
-    case Application.get_env(:mnesia, :dir) do
+  def require_data_dir(opts) do
+    case Application.get_env(:rabbit, :data_dir) do
       nil ->
-        case Config.get_option(:mnesia_dir, opts) do
-          nil -> {:error, :mnesia_dir_not_found}
-          val -> Application.put_env(:mnesia, :dir, to_charlist(val))
+        case Application.get_env(:mnesia, :dir) do
+          nil ->
+            case Config.get_option(:data_dir, opts) do
+              nil ->
+                {:error, :data_dir_not_found}
+
+              val ->
+                Application.put_env(:rabbit, :data_dir, to_charlist(val))
+                Application.put_env(:mnesia, :dir, to_charlist(val))
+            end
+
+          val ->
+            Application.put_env(:rabbit_, :data_dir, to_charlist(val))
+            :ok
         end
 
       _ ->

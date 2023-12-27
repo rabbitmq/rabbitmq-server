@@ -1,15 +1,73 @@
-load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
+load("@rules_erlang//:xref2.bzl", "xref")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
+    "rabbitmq_app",
+)
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
+)
 
-erlang_app(
+# gazelle:erlang_always_generate_test_beam_files
+
+all_beam_files(name = "all_beam_files")
+
+all_srcs(name = "all_srcs")
+
+all_test_beam_files(name = "all_test_beam_files")
+
+test_suite_beam_files(name = "test_suite_beam_files")
+
+# gazelle:erlang_app_extra_app ssl
+
+rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = "Trust store HTTP server",
     app_module = "trust_store_http_app",
     app_name = "trust_store_http",
     app_version = "1.0.0",
-    extra_apps = [
-        "ssl",
-    ],
+    beam_files = [":beam_files"],
+    extra_apps = ["ssl"],
+    license_files = [":license_files"],
+    priv = [":priv"],
     deps = [
         "@cowboy//:erlang_app",
         "@thoas//:erlang_app",
     ],
 )
+
+alias(
+    name = "trust_store_http",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
+
+plt(
+    name = "deps_plt",
+    for_target = ":erlang_app",
+    ignore_warnings = True,
+    plt = "//:base_plt",
+)
+
+dialyze(
+    name = "dialyze",
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = ":deps_plt",
+    target = ":erlang_app",
+    warnings_as_errors = False,
+)
+
+assert_suites()

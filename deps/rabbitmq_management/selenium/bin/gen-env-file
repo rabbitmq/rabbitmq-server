@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+ENV_FILE="/tmp/rabbitmq/.env"
+FIND_PATH=$1
+ENV_FILE=$2
+FIND_PARENT_PATH="$(dirname "$FIND_PATH")"
+
+generate_env_file() {
+  parentdir="$(dirname "$ENV_FILE")"
+  mkdir -p $parentdir
+  echo "" > $ENV_FILE
+
+  for f in $($SCRIPT/find-template-files $FIND_PATH ".env")
+  do
+    cat $f >> $ENV_FILE
+  done
+}
+
+generate_env_file

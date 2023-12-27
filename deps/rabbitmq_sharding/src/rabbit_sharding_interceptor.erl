@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_sharding_interceptor).
@@ -41,7 +41,7 @@ intercept(#'basic.consume'{queue = QName} = Method, Content, VHost) ->
         {ok, QName2} ->
             {Method#'basic.consume'{queue = QName2}, Content};
         {error, QName} ->
-            precondition_failed("Error finding sharded queue for: ~p", [QName])
+            precondition_failed("Error finding sharded queue for: ~tp", [QName])
     end;
 
 intercept(#'basic.get'{queue = QName} = Method, Content, VHost) ->
@@ -49,13 +49,13 @@ intercept(#'basic.get'{queue = QName} = Method, Content, VHost) ->
         {ok, QName2} ->
             {Method#'basic.get'{queue = QName2}, Content};
         {error, QName} ->
-            precondition_failed("Error finding sharded queue for: ~p", [QName])
+            precondition_failed("Error finding sharded queue for: ~tp", [QName])
     end;
 
 intercept(#'queue.delete'{queue = QName} = Method, Content, VHost) ->
     case is_sharded(VHost, QName) of
         true ->
-            precondition_failed("Can't delete sharded queue: ~p", [QName]);
+            precondition_failed("Can't delete sharded queue: ~tp", [QName]);
         _    ->
             {Method, Content}
     end;
@@ -78,7 +78,7 @@ intercept(#'queue.declare'{queue = QName} = Method, Content, VHost) ->
 intercept(#'queue.bind'{queue = QName} = Method, Content, VHost) ->
     case is_sharded(VHost, QName) of
         true ->
-            precondition_failed("Can't bind sharded queue: ~p", [QName]);
+            precondition_failed("Can't bind sharded queue: ~tp", [QName]);
         _    ->
             {Method, Content}
     end;
@@ -86,7 +86,7 @@ intercept(#'queue.bind'{queue = QName} = Method, Content, VHost) ->
 intercept(#'queue.unbind'{queue = QName} = Method, Content, VHost) ->
     case is_sharded(VHost, QName) of
         true ->
-            precondition_failed("Can't unbind sharded queue: ~p", [QName]);
+            precondition_failed("Can't unbind sharded queue: ~tp", [QName]);
         _    ->
             {Method, Content}
     end;
@@ -94,7 +94,7 @@ intercept(#'queue.unbind'{queue = QName} = Method, Content, VHost) ->
 intercept(#'queue.purge'{queue = QName} = Method, Content, VHost) ->
     case is_sharded(VHost, QName) of
         true ->
-            precondition_failed("Can't purge sharded queue: ~p", [QName]);
+            precondition_failed("Can't purge sharded queue: ~tp", [QName]);
         _    ->
             {Method, Content}
     end;
@@ -166,5 +166,6 @@ consumer_count(QName) ->
               rabbit_amqqueue:info(Q, [consumers])
       end).
 
-precondition_failed(Format, QName) ->
-    protocol_error(precondition_failed, Format, QName).
+-spec precondition_failed(io:format(), [any()]) -> no_return().
+precondition_failed(Format, Args) ->
+    protocol_error(precondition_failed, Format, Args).

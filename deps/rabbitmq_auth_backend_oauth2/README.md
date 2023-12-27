@@ -10,7 +10,6 @@ The plugin supports several identity providers, sometimes with vendor-specific c
  * [Keycloak](https://github.com/rabbitmq/rabbitmq-oauth2-tutorial/blob/rich_auth_request/use-cases/keycloak.md)
  * [Microsoft AD on Azure](https://github.com/rabbitmq/rabbitmq-oauth2-tutorial/blob/rich_auth_request/use-cases/azure.md)
  * [Auth0](https://github.com/rabbitmq/rabbitmq-oauth2-tutorial/blob/rich_auth_request/use-cases/oauth0.md)
- * [IdentityServer 4](https://github.com/rabbitmq/rabbitmq-oauth2-tutorial/blob/rich_auth_request/use-cases/identityServer4.md)
 
 An OAuth 2.0 primer is available [elsewhere on the Web](https://auth0.com/blog/oauth2-the-complete-guide/).
 
@@ -66,7 +65,7 @@ go over the contentes below and also an example for your service provider:
  * [Keycloak](https://github.com/rabbitmq/rabbitmq-oauth2-tutorial/blob/rich_auth_request/use-cases/keycloak.md)
  * [Microsoft AD on Azure](https://github.com/rabbitmq/rabbitmq-oauth2-tutorial/blob/rich_auth_request/use-cases/azure.md)
  * [Auth0](https://github.com/rabbitmq/rabbitmq-oauth2-tutorial/blob/rich_auth_request/use-cases/oauth0.md)
- * [IdentityServer 4](https://github.com/rabbitmq/rabbitmq-oauth2-tutorial/blob/rich_auth_request/use-cases/identityServer4.md)
+
 
 ### UAA
 
@@ -160,7 +159,7 @@ Note: if both are configured, `jwks_url` takes precedence over `signing_keys`.
 
 ### Variables Configurable in rabbitmq.conf
 
-| Key                                      | Documentation     
+| Key                                      | Documentation
 |------------------------------------------|---------------------------------------------------------------------------
 | `auth_oauth2.resource_server_id`         | [The Resource Server ID](#resource-server-id-and-scope-prefixes)
 | `auth_oauth2.resource_server_type`       | [The Resource Server Type](#rich-authorization-request)
@@ -175,6 +174,7 @@ Note: if both are configured, `jwks_url` takes precedence over `signing_keys`.
 | `auth_oauth2.https.hostname_verification`| Enable wildcard-aware hostname verification for key server. Available values: `wildcard`, `none`. Default is `none`.
 | `auth_oauth2.algorithms`                 | Restrict [the usable algorithms](https://github.com/potatosalad/erlang-jose#algorithm-support).
 | `auth_oauth2.verify_aud`                 | [Verify token's `aud`](#token-validation).
+| `auth_oauth2.preferred_username_claims`  | [Determine user identity](#determine-user-identity).
 
 Two examples below demonstrate a set of key files and a JWKS key server.
 
@@ -211,6 +211,34 @@ client has been granted. The scopes are free form strings.
 
 `resource_server_id` is a prefix used for scopes in UAA to avoid scope collisions (or unintended overlap).
 It is an empty string by default.
+
+## Determine user identity
+
+Although OAuth 2.0 is all about authorization there are two situations where we need to determine the
+user's identity. One is when we display the user's name in the management ui. And the second one is
+when we have to capture the user identity in some logging statement.
+
+By default, RabbitMQ first looks up the JWT claim `sub`. And if it is not present, it uses `client_id`.
+Else it uses `unknown`. In other words, RabbitMQ could not figure out the user's identity from the token.
+
+It is quite often that Identity Providers reserve the `sub` claim for the user's internal GUID and it uses instead
+a different claim for the actual username such as `username`, `user_name` or `emailaddress` and similar.
+
+For the latter case, RabbitMQ exposes a new configuration setting which can be either a single string or
+an array of strings. Given the configuration below, RabbitMQ uses the following claims in the same order to
+resolve the user's identity: `username`, `user_name`, `email`, `sub`, `client_id`.
+
+```erlang
+[
+  {rabbitmq_auth_backend_oauth2, [
+    {resource_server_id, <<"my_rabbit_server">>},
+    {preferred_username_claims, [ <<"username">>, <<"user_name">>, <<"email">> ]}
+    {key_config, [
+      {jwks_url, <<"https://jwt-issuer.my-domain.local/jwks.json">>}
+    ]}
+  ]},
+].
+```
 
 ## Token Verification
 
@@ -333,7 +361,7 @@ RabbitMQ supports JWT tokens compliant with the extension. Below is a sample exa
 {
   "authorization_details": [
     {
-      "type" : "rabbitmq",  
+      "type" : "rabbitmq",
       "locations": ["cluster:finance/vhost:production-*"],
       "actions": [ "read", "write", "configure"  ]
     },
@@ -386,7 +414,7 @@ The supported location attributed are:
 
 For more information about wildcard patterns, check the section [Scope-to-Permission Translation](#scope-to-permission-translation).
 
-### Actions Field  
+### Actions Field
 
 The `actions` field can be either a string containing a single action or a JSON array containing one or more actions.
 
@@ -432,7 +460,7 @@ In the following RAR example
 {
   "authorization_details": [
     {
-      "type" : "rabbitmq",  
+      "type" : "rabbitmq",
       "locations": ["cluster:finance/vhost:primary-*"],
       "actions": [ "read", "write", "configure"  ]
     },
@@ -522,6 +550,6 @@ field will be ignored as long as the token provides a client ID.
 
 ## License and Copyright
 
-(c) 2016-2022 VMware, Inc. or its affiliates.
+(c) 2016-2023 VMware, Inc. or its affiliates.
 
 Released under the Mozilla Public License 2.0, same as RabbitMQ.

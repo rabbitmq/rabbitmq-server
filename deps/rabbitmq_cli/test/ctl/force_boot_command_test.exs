@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule ForceBootCommandTest do
   use ExUnit.Case, async: false
@@ -40,9 +40,9 @@ defmodule ForceBootCommandTest do
     stop_rabbitmq_app()
     on_exit(fn -> start_rabbitmq_app() end)
     assert @command.run([], context[:opts]) == :ok
-    mnesia_dir = :rpc.call(get_rabbit_hostname(), :rabbit_mnesia, :dir, [])
+    data_dir = :rpc.call(get_rabbit_hostname(), :rabbit, :data_dir, [])
 
-    path = Path.join(mnesia_dir, "force_load")
+    path = Path.join(data_dir, "force_load")
     assert File.exists?(path)
     File.rm(path)
   end

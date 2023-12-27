@@ -51,10 +51,14 @@ log(LogEvent, Config) ->
 
 do_log(LogEvent, #{config := #{exchange := Exchange}} = Config) ->
     RoutingKey = make_routing_key(LogEvent, Config),
-    AmqpMsg = log_event_to_amqp_msg(LogEvent, Config),
+    PBasic = log_event_to_amqp_msg(LogEvent, Config),
     Body = try_format_body(LogEvent, Config),
-    case rabbit_basic:publish(Exchange, RoutingKey, AmqpMsg, Body) of
-        ok                 -> ok;
+    Content = rabbit_basic:build_content(PBasic, Body),
+    Anns = #{exchange => Exchange#resource.name,
+             routing_keys => [RoutingKey]},
+    Msg = mc:init(mc_amqpl, Content, Anns),
+    case rabbit_queue_type:publish_at_most_once(Exchange, Msg) of
+        ok -> ok;
         {error, not_found} -> ok
     end.
 
@@ -106,7 +110,7 @@ try_format_body(LogEvent, Formatter, FormatterConfig) ->
                 {Formatter, FormatterConfig} ->
                     "DEFAULT FORMATTER CRASHED\n";
                 {DefaultFormatter, DefaultFormatterConfig} ->
-                    Msg = {"FORMATTER CRASH: ~tp -- ~p:~p:~p",
+                    Msg = {"FORMATTER CRASH: ~tp -- ~tp:~tp:~tp",
                            [maps:get(msg, LogEvent), C, R, S]},
                     LogEvent1 = LogEvent#{msg => Msg},
                     try_format_body(
@@ -120,10 +124,26 @@ start_setup_proc(#{config := InternalConfig} = Config) ->
     {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
     Exchange = rabbit_misc:r(DefaultVHost, exchange, ?LOG_EXCH_NAME),
     InternalConfig1 = InternalConfig#{exchange => Exchange},
-
-    Pid = spawn(fun() -> setup_proc(Config#{config => InternalConfig1}) end),
+    Pid = spawn(fun() ->
+                        wait_for_initial_pass(60),
+                        setup_proc(Config#{config => InternalConfig1})
+                end),
     InternalConfig2 = InternalConfig1#{setup_proc => Pid},
     Config#{config => InternalConfig2}.
+
+%% Declaring an exchange requires the metadata store to be ready
+%% which happens on a boot step after the second phase of the prelaunch.
+%% This function waits for the store initialisation.
+wait_for_initial_pass(0) ->
+    ok;
+wait_for_initial_pass(N) ->
+    case rabbit_db:is_init_finished() of
+        false ->
+            timer:sleep(1000),
+            wait_for_initial_pass(N - 1);
+        true ->
+            ok
+    end.
 
 setup_proc(
   #{config := #{exchange := #resource{name = Name,
@@ -131,11 +151,11 @@ setup_proc(
     case declare_exchange(Config) of
         ok ->
             ?LOG_INFO(
-               "Logging to exchange '~s' in vhost '~ts' ready", [Name, VHost],
+               "Logging to exchange '~ts' in vhost '~ts' ready", [Name, VHost],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL});
         error ->
             ?LOG_DEBUG(
-               "Logging to exchange '~s' in vhost '~ts' not ready, "
+               "Logging to exchange '~ts' in vhost '~ts' not ready, "
                "trying again in ~b second(s)",
                [Name, VHost, ?DECL_EXCHANGE_INTERVAL_SECS],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
@@ -155,14 +175,14 @@ declare_exchange(
                         Exchange, topic, true, false, true, [],
                         ?INTERNAL_USER),
         ?LOG_DEBUG(
-           "Declared exchange '~s' in vhost '~ts'",
+           "Declared exchange '~ts' in vhost '~ts'",
            [Name, VHost],
            #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
         ok
     catch
         Class:Reason ->
             ?LOG_DEBUG(
-               "Could not declare exchange '~s' in vhost '~ts', "
+               "Could not declare exchange '~ts' in vhost '~ts', "
                "reason: ~0p:~0p",
                [Name, VHost, Class, Reason],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
@@ -174,8 +194,8 @@ unconfigure_exchange(
                                       virtual_host = VHost} = Exchange,
                 setup_proc := Pid}}) ->
     Pid ! stop,
-    rabbit_exchange:delete(Exchange, false, ?INTERNAL_USER),
+    _ = rabbit_exchange:delete(Exchange, false, ?INTERNAL_USER),
     ?LOG_INFO(
-       "Logging to exchange '~s' in vhost '~ts' disabled",
+       "Logging to exchange '~ts' in vhost '~ts' disabled",
        [Name, VHost],
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}).

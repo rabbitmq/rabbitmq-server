@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 ##
 
 import unittest
@@ -23,19 +23,17 @@ ssl_ca_certs = os.path.join(os.getenv('SSL_CERTS_PATH'), 'testca', 'cacert.pem')
 class TestTLSConnection(unittest.TestCase):
 
     def __ssl_connect(self):
-        conn = stomp.Connection(host_and_ports = [ ('localhost', int(os.environ["STOMP_PORT_TLS"])) ],
-                                use_ssl = True, ssl_key_file = ssl_key_file,
-                                ssl_cert_file = ssl_cert_file,
-                                ssl_ca_certs = ssl_ca_certs)
+        conn = stomp.Connection(host_and_ports = [ ('localhost', int(os.environ["STOMP_PORT_TLS"])) ])
+        conn.set_ssl([ ('localhost', int(os.environ["STOMP_PORT_TLS"])) ], key_file = ssl_key_file,
+                     cert_file = ssl_cert_file, ca_certs = ssl_ca_certs)
         print("FILE: ".format(ssl_cert_file))
         conn.connect("guest", "guest")
         return conn
 
     def __ssl_auth_connect(self):
-        conn = stomp.Connection(host_and_ports = [ ('localhost', int(os.environ["STOMP_PORT_TLS"])) ],
-                                use_ssl = True, ssl_key_file = ssl_key_file,
-                                ssl_cert_file = ssl_cert_file,
-                                ssl_ca_certs = ssl_ca_certs)
+        conn = stomp.Connection(host_and_ports = [ ('localhost', int(os.environ["STOMP_PORT_TLS"])) ])
+        conn.set_ssl([ ('localhost', int(os.environ["STOMP_PORT_TLS"])) ], key_file = ssl_key_file,
+                     cert_file = ssl_cert_file, ca_certs = ssl_ca_certs)
         conn.connect()
         return conn
 

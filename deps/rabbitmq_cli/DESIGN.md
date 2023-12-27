@@ -47,7 +47,7 @@ CLI core consists of several modules implementing command execution process:
 
 #### Arguments parsing
 
-Command line arguments are parsed with [OptionParser](https://elixir-lang.org/docs/stable/elixir/OptionParser.html)
+Command line arguments are parsed with [OptionParser](https://hexdocs.pm/elixir/OptionParser.html)
 Parser returns a list of unnamed arguments and a map of options (named arguments)
 First unnamed argument is a command name.
 Named arguments can be global or command specific.
@@ -412,7 +412,7 @@ and returns a list of strings, that should be printed.
     format_stream(output_stream :: Enumerable.t, options :: Map.t) :: Enumerable.t
 
 Format a stream of return values. This function uses elixir
-Stream [https://elixir-lang.org/docs/stable/elixir/Stream.html] abstraction
+Stream [https://hexdocs.pm/elixir/Stream.html] abstraction
 to define processing of continuous data, so the CLI can output data in realtime.
 
 Used in `list_*` commands, that emit data asynchronously.

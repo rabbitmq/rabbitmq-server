@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 -module('Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamGroupConsumersCommand').
 
@@ -54,8 +54,9 @@ help_section() ->
     {plugin, stream}.
 
 validate(Args, #{stream := _, reference := _}) ->
+    ValidKeys = lists:map(fun atom_to_list/1, ?GROUP_CONSUMER_INFO_ITEMS),
     case 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':validate_info_keys(Args,
-                                                               ?GROUP_CONSUMER_INFO_ITEMS)
+                                                               ValidKeys)
     of
         {ok, _} ->
             ok;

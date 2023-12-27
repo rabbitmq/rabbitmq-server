@@ -2,8 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
-
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule AwaitOnlineSynchronizedMirrorsCommandTest do
   use ExUnit.Case, async: false
@@ -18,10 +17,11 @@ defmodule AwaitOnlineSynchronizedMirrorsCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 5000
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 5000
+     }}
   end
 
   test "merge_defaults: overrides a timeout" do
@@ -41,5 +41,4 @@ defmodule AwaitOnlineSynchronizedMirrorsCommandTest do
     opts = %{node: :jake@thedog, timeout: 200}
     assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], opts)))
   end
-
 end

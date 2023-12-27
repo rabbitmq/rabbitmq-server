@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_vm).
@@ -36,7 +36,15 @@ memory() ->
                        error:badarg ->
                            0
                    end,
+    MetadataStoreProc = try
+                            [{_, MS}] = process_info(whereis(rabbit_khepri:get_ra_cluster_name()), [memory]),
+                            MS
+                        catch
+                            error:badarg ->
+                                0
+                        end,
     MgmtDbETS           = ets_memory([rabbit_mgmt_storage]),
+    MetadataStoreETS    = ets_memory([rabbitmq_metadata]),
     [{total,     ErlangTotal},
      {processes, Processes},
      {ets,       ETS},
@@ -56,8 +64,7 @@ memory() ->
     OtherProc = Processes
         - ConnsReader - ConnsWriter - ConnsChannel - ConnsOther
         - Qs - QsSlave - Qqs - DlxWorkers - Ssqs - Srqs - SCoor - MsgIndexProc - Plugins
-        - MgmtDbProc - MetricsProc,
-
+        - MgmtDbProc - MetricsProc - MetadataStoreProc,
     [
      %% Connections
      {connection_readers,   ConnsReader},
@@ -76,6 +83,7 @@ memory() ->
 
      %% Processes
      {plugins,              Plugins},
+     {metadata_store,       MetadataStoreProc},
      {other_proc,           lists:max([0, OtherProc])}, %% [1]
 
      %% Metrics
@@ -85,7 +93,8 @@ memory() ->
      %% ETS
      {mnesia,               MnesiaETS},
      {quorum_ets,           QuorumETS},
-     {other_ets,            ETS - MnesiaETS - MetricsETS - MgmtDbETS - MsgIndexETS - QuorumETS},
+     {metadata_store_ets,   MetadataStoreETS},
+     {other_ets,            ETS - MnesiaETS - MetricsETS - MgmtDbETS - MsgIndexETS - QuorumETS - MetadataStoreETS},
 
      %% Messages (mostly, some binaries are not messages)
      {binary,               Bin},
@@ -123,6 +132,15 @@ binary() ->
      ConnsChannel, ConnsOther, MsgIndexProc, MgmtDbProc, Plugins] =
         [aggregate(Names, [{other, Rest} | Sums], binary, fun sum_binary/1)
          || Names <- [[other] | distinguished_interesting_sups()]],
+    MetadataStoreProc = try
+                            [{_, B}] = process_info(whereis(rabbit_khepri:get_ra_cluster_name()), [binary]),
+                            lists:foldl(fun({_, Sz, _}, Acc) ->
+                                                Sz + Acc
+                                        end, 0, B)
+                        catch
+                            error:badarg ->
+                                0
+                        end,
     [{connection_readers,  ConnsReader},
      {connection_writers,  ConnsWriter},
      {connection_channels, ConnsChannel},
@@ -134,10 +152,11 @@ binary() ->
      {stream_queue_procs,  Ssqs},
      {stream_queue_replica_reader_procs, Srqs},
      {stream_queue_coordinator_procs, Scoor},
+     {metadata_store,      MetadataStoreProc},
      {plugins,             Plugins},
      {mgmt_db,             MgmtDbProc},
      {msg_index,           MsgIndexProc},
-     {other,               Other}].
+     {other,               Other - MetadataStoreProc}].
 
 %%----------------------------------------------------------------------------
 
@@ -177,26 +196,19 @@ bytes(Words) ->  try
                  end.
 
 interesting_sups() ->
-    [queue_sups(), quorum_sups(), dlx_sups(), stream_server_sups(), stream_reader_sups(),
+    [queue_sups(), quorum_sups(), dlx_sups(),
+     stream_server_sups(), stream_reader_sups(), stream_coordinator(),
      conn_sups() | interesting_sups0()].
 
 queue_sups() ->
     all_vhosts_children(rabbit_amqqueue_sup_sup).
 
-quorum_sups() ->
-    %% TODO: in the future not all ra servers may be queues and we needs
-    %% some way to filter this
-    case whereis(ra_server_sup_sup) of
-        undefined ->
-            [];
-        _ ->
-            [Pid || {_, Pid, _, _} <-
-                    supervisor:which_children(ra_server_sup_sup)]
-    end.
+quorum_sups() -> [ra_server_sup_sup].
 
 dlx_sups() -> [rabbit_fifo_dlx_sup].
 stream_server_sups() -> [osiris_server_sup].
 stream_reader_sups() -> [osiris_replica_reader_sup].
+stream_coordinator() -> [rabbit_stream_coordinator].
 
 msg_stores() ->
     all_vhosts_children(msg_store_transient)
@@ -243,18 +255,17 @@ ranch_server_sups() ->
 with(Sups, With) -> [{Sup, With} || Sup <- Sups].
 
 distinguishers() -> with(queue_sups(), fun queue_type/1) ++
-                    with(conn_sups(), fun conn_type/1) ++
-                    with(quorum_sups(), fun ra_type/1).
+                    with(conn_sups(), fun conn_type/1).
 
 distinguished_interesting_sups() ->
     [
      with(queue_sups(), master),
      with(queue_sups(), slave),
-     with(quorum_sups(), quorum),
+     quorum_sups(),
      dlx_sups(),
      stream_server_sups(),
      stream_reader_sups(),
-     with(quorum_sups(), stream),
+     stream_coordinator(),
      with(conn_sups(), reader),
      with(conn_sups(), writer),
      with(conn_sups(), channel),
@@ -309,12 +320,6 @@ conn_type(PDict) ->
         {value, {rabbit_writer,  _}} -> writer;
         {value, {rabbit_channel, _}} -> channel;
         _                            -> other
-    end.
-
-ra_type(PDict) ->
-    case keyfind('$rabbit_vm_category', PDict) of
-        {value, rabbit_stream_coordinator} -> stream;
-        _                                  -> quorum
     end.
 
 %%----------------------------------------------------------------------------

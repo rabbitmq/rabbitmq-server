@@ -58,9 +58,9 @@ node_tmpdir = $(TEST_TMPDIR)/$(1)
 node_pid_file = $(call node_tmpdir,$(1))/$(1).pid
 node_log_base = $(call node_tmpdir,$(1))/log
 node_mnesia_base = $(call node_tmpdir,$(1))/mnesia
-node_mnesia_dir = $(call node_mnesia_base,$(1))/$(1)
-node_quorum_dir = $(call node_mnesia_dir,$(1))/quorum
-node_stream_dir = $(call node_mnesia_dir,$(1))/stream
+node_data_dir = $(call node_mnesia_base,$(1))/$(1)
+node_quorum_dir = $(call node_data_dir,$(1))/quorum
+node_stream_dir = $(call node_data_dir,$(1))/stream
 node_plugins_expand_dir = $(call node_tmpdir,$(1))/plugins
 node_feature_flags_file = $(call node_tmpdir,$(1))/feature_flags
 node_enabled_plugins_file = $(call node_tmpdir,$(1))/enabled_plugins
@@ -84,7 +84,7 @@ RABBITMQ_BASE ?= $(NODE_TMPDIR)
 RABBITMQ_PID_FILE ?= $(call node_pid_file,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_LOG_BASE ?= $(call node_log_base,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_MNESIA_BASE ?= $(call node_mnesia_base,$(RABBITMQ_NODENAME_FOR_PATHS))
-RABBITMQ_MNESIA_DIR ?= $(call node_mnesia_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
+RABBITMQ_MNESIA_DIR ?= $(call node_data_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_QUORUM_DIR ?= $(call node_quorum_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_STREAM_DIR ?= $(call node_stream_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
 RABBITMQ_PLUGINS_EXPAND_DIR ?= $(call node_plugins_expand_dir,$(RABBITMQ_NODENAME_FOR_PATHS))
@@ -120,7 +120,7 @@ RABBITMQ_BASE="$(call node_tmpdir,$(2))" \
 RABBITMQ_PID_FILE="$(call node_pid_file,$(2))" \
 RABBITMQ_LOG_BASE="$(call node_log_base,$(2))" \
 RABBITMQ_MNESIA_BASE="$(call node_mnesia_base,$(2))" \
-RABBITMQ_MNESIA_DIR="$(call node_mnesia_dir,$(2))" \
+RABBITMQ_MNESIA_DIR="$(call node_data_dir,$(2))" \
 RABBITMQ_QUORUM_DIR="$(call node_quorum_dir,$(2))" \
 RABBITMQ_STREAM_DIR="$(call node_stream_dir,$(2))" \
 RABBITMQ_FEATURE_FLAGS_FILE="$(call node_feature_flags_file,$(2))" \
@@ -369,7 +369,18 @@ stop-node:
 NODES ?= 3
 
 start-brokers start-cluster: $(DIST_TARGET)
-	@for n in $$(seq $(NODES)); do \
+	@if test '$@' = 'start-cluster'; then \
+		for n in $$(seq $(NODES)); do \
+			nodename="rabbit-$$n@$(HOSTNAME)"; \
+			if test "$$nodeslist"; then \
+				nodeslist="$$nodeslist,'$$nodename'"; \
+			else \
+				nodeslist="'$$nodename'"; \
+			fi; \
+		done; \
+		cluster_nodes_arg="-rabbit cluster_nodes [$$nodeslist]"; \
+	fi; \
+	for n in $$(seq $(NODES)); do \
 		nodename="rabbit-$$n@$(HOSTNAME)"; \
 		$(MAKE) start-background-broker \
 		  NOBUILD=1 \
@@ -386,25 +397,18 @@ start-brokers start-cluster: $(DIST_TARGET)
 		  -rabbitmq_web_stomp_examples listener [{port,$$((61633 + $$n - 1))}] \
 		  -rabbitmq_prometheus tcp_config [{port,$$((15692 + $$n - 1))}] \
 		  -rabbitmq_stream tcp_listeners [$$((5552 + $$n - 1))] \
-		  "; \
-		if test '$@' = 'start-cluster' && test "$$nodename1"; then \
-			ERL_LIBS="$(DIST_ERL_LIBS)" \
-			  $(RABBITMQCTL) -n "$$nodename" stop_app; \
-			ERL_LIBS="$(DIST_ERL_LIBS)" \
-			  $(RABBITMQCTL) -n "$$nodename" join_cluster "$$nodename1"; \
-			ERL_LIBS="$(DIST_ERL_LIBS)" \
-			  $(RABBITMQCTL) -n "$$nodename" start_app; \
-		else \
-			nodename1=$$nodename; \
-		fi; \
-	done
+		  $$cluster_nodes_arg \
+		  " & \
+	done; \
+	wait
 
 stop-brokers stop-cluster:
 	@for n in $$(seq $(NODES) -1 1); do \
 		nodename="rabbit-$$n@$(HOSTNAME)"; \
 		$(MAKE) stop-node \
-		  RABBITMQ_NODENAME="$$nodename"; \
-	done
+		  RABBITMQ_NODENAME="$$nodename" & \
+	done; \
+	wait
 
 # --------------------------------------------------------------------
 # Used by testsuites.

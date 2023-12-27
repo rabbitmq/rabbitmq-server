@@ -2,8 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
-
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule EvalCommandTest do
   use ExUnit.Case, async: false
@@ -28,12 +27,17 @@ defmodule EvalCommandTest do
 
   test "validate: empty expression to eval fails validation" do
     assert @command.validate([""], %{}) == {:validation_failure, "Expression must not be blank"}
-    assert @command.validate(["", "foo"], %{}) == {:validation_failure, "Expression must not be blank"}
+
+    assert @command.validate(["", "foo"], %{}) ==
+             {:validation_failure, "Expression must not be blank"}
   end
 
   test "validate: syntax error in expression to eval fails validation" do
-    assert @command.validate(["foo bar"], %{}) == {:validation_failure, "syntax error before: bar"}
-    assert @command.validate(["foo bar", "foo"], %{}) == {:validation_failure, "syntax error before: bar"}
+    assert @command.validate(["foo bar"], %{}) ==
+             {:validation_failure, "syntax error before: bar"}
+
+    assert @command.validate(["foo bar", "foo"], %{}) ==
+             {:validation_failure, "syntax error before: bar"}
   end
 
   test "run: request to a non-existent node returns a badrpc", _context do
@@ -58,8 +62,8 @@ defmodule EvalCommandTest do
 
   test "run: returns stdout output", context do
     assert capture_io(fn ->
-      assert @command.run(["io:format(\"output\")."], context[:opts]) == {:ok, :ok}
-    end) == "output"
+             assert @command.run(["io:format(\"output\")."], context[:opts]) == {:ok, :ok}
+           end) == "output"
   end
 
   test "run: passes parameters to the expression as positional/numerical variables", context do
@@ -69,6 +73,6 @@ defmodule EvalCommandTest do
 
   test "run: passes globally recognised options as named variables", context do
     assert @command.run(["{_vhost, _node}."], Map.put(context[:opts], :vhost, "a-node")) ==
-      {:ok, {"a-node", context[:opts][:node]}}
+             {:ok, {"a-node", context[:opts][:node]}}
   end
 end

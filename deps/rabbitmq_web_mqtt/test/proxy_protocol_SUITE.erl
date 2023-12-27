@@ -2,17 +2,16 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(proxy_protocol_SUITE).
 
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include("src/emqttc_packet.hrl").
 
 suite() ->
     [
@@ -21,14 +20,15 @@ suite() ->
     ].
 
 all() ->
-    [{group, http_tests}].%,
-%     {group, https_tests}].
+    [{group, http_tests},
+     {group, https_tests}].
 
 groups() ->
     Tests = [
-        proxy_protocol
+        proxy_protocol_v1,
+        proxy_protocol_v2_local
     ],
-    [%{https_tests, [], Tests},
+    [{https_tests, [], Tests},
      {http_tests, [], Tests}].
 
 init_per_suite(Config) ->
@@ -78,23 +78,38 @@ init_per_testcase(Testcase, Config) ->
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
-proxy_protocol(Config) ->
+proxy_protocol_v1(Config) ->
     PortStr = rabbit_ws_test_util:get_web_mqtt_port_str(Config),
 
     Protocol = ?config(protocol, Config),
     WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self(),
-        undefined, [], "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
+        undefined, ["mqtt"], "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
     {ok, _} = rfc6455_client:open(WS),
-    Frame = emqttc_serialiser:serialise(
-        ?CONNECT_PACKET(#mqtt_packet_connect{
-            client_id = <<"web-mqtt-tests-proxy-protocol">>,
-            username  = <<"guest">>,
-            password  = <<"guest">>})),
-    rfc6455_client:send_binary(WS, Frame),
+    rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_packet()),
     {binary, _P} = rfc6455_client:recv(WS),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, connection_name, []),
     match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
+    {close, _} = rfc6455_client:close(WS),
+    ok.
+
+proxy_protocol_v2_local(Config) ->
+    ProxyInfo = #{
+        command => local,
+        version => 2
+    },
+
+    PortStr = rabbit_ws_test_util:get_web_mqtt_port_str(Config),
+
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self(),
+        undefined, ["mqtt"], ranch_proxy_header:header(ProxyInfo)),
+    {ok, _} = rfc6455_client:open(WS),
+    rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_packet()),
+    {binary, _P} = rfc6455_client:recv(WS),
+    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
+        ?MODULE, connection_name, []),
+    match = re:run(ConnectionName, <<"^127.0.0.1:\\d+ -> 127.0.0.1:\\d+$">>, [{capture, none}]),
     {close, _} = rfc6455_client:close(WS),
     ok.
 

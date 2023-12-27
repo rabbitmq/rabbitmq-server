@@ -2,21 +2,20 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 %% For the full spec see: https://www.rabbitmq.com/dlx.html
 %%
 -module(dead_lettering_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
--include_lib("kernel/include/file.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile([export_all, nowarn_export_all]).
 
--import(quorum_queue_utils, [wait_for_messages/2]).
+-import(queue_utils, [wait_for_messages/2]).
 
 all() ->
     [
@@ -35,6 +34,8 @@ groups() ->
                        dead_letter_reject_requeue_reject_norequeue,
                        dead_letter_missing_exchange,
                        dead_letter_routing_key,
+                       dead_letter_headers_should_be_appended_for_each_event,
+                       dead_letter_headers_should_not_be_appended_for_republish,
                        dead_letter_routing_key_header_CC,
                        dead_letter_routing_key_header_BCC,
                        dead_letter_routing_key_cycle_max_length,
@@ -105,13 +106,18 @@ init_per_group(classic_queue, Config) ->
       [{queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
        {queue_durable, false}]);
 init_per_group(mirrored_queue, Config) ->
-    rabbit_ct_broker_helpers:set_ha_policy(Config, 0, <<"^max_length.*queue">>,
-        <<"all">>, [{<<"ha-sync-mode">>, <<"automatic">>}]),
-    Config1 = rabbit_ct_helpers:set_config(
-                Config, [{is_mirrored, true},
-                         {queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
-                         {queue_durable, false}]),
-    rabbit_ct_helpers:run_steps(Config1, []);
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            rabbit_ct_broker_helpers:set_ha_policy(Config, 0, <<"^max_length.*queue">>,
+                                                   <<"all">>, [{<<"ha-sync-mode">>, <<"automatic">>}]),
+            Config1 = rabbit_ct_helpers:set_config(
+                        Config, [{is_mirrored, true},
+                                 {queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
+                                 {queue_durable, false}]),
+            rabbit_ct_helpers:run_steps(Config1, []);
+        _ ->
+            {skip, "Classic mirroring not supported by Khepri"}
+    end;
 init_per_group(quorum_queue, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
@@ -141,13 +147,7 @@ init_per_group(at_least_once, Config) ->
                                        1,
                                        QueueArgs1,
                                        {<<"x-overflow">>, longstr, <<"reject-publish">>}),
-            Config1 = rabbit_ct_helpers:set_config(Config, {queue_args, QueueArgs}),
-            case rabbit_ct_broker_helpers:enable_feature_flag(Config1, stream_queue) of
-                ok ->
-                    Config1;
-                Skip ->
-                    Skip
-            end;
+            rabbit_ct_helpers:set_config(Config, {queue_args, QueueArgs});
         _ ->
             Config
     end;
@@ -159,9 +159,18 @@ init_per_group(Group, Config) ->
                 {rmq_nodename_suffix, Group},
                 {rmq_nodes_count, ClusterSize}
               ]),
-            rabbit_ct_helpers:run_steps(Config1,
-              rabbit_ct_broker_helpers:setup_steps() ++
-              rabbit_ct_client_helpers:setup_steps());
+            Config2 = rabbit_ct_helpers:run_steps(
+                        Config1,
+                        rabbit_ct_broker_helpers:setup_steps() ++
+                        rabbit_ct_client_helpers:setup_steps()),
+            case Config2 of
+                {skip, _} ->
+                    Config2;
+                _ ->
+                    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config2,
+                                                                     message_containers),
+                    Config2
+            end;
         false ->
             rabbit_ct_helpers:run_steps(Config, [])
     end.
@@ -177,30 +186,37 @@ end_per_group(Group, Config) ->
     end.
 
 init_per_testcase(Testcase, Config) ->
-    Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
-    Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~p", [Group, Testcase])),
-    Q2 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_2", [Group, Testcase])),
-    Q3 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_3", [Group, Testcase])),
-    Policy = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_policy", [Group, Testcase])),
-    DLXExchange = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_dlx_exchange",
-                                                               [Group, Testcase])),
-    Counters = get_global_counters(Config),
-    Config1 = rabbit_ct_helpers:set_config(Config, [{dlx_exchange, DLXExchange},
-                                                    {queue_name, Q},
-                                                    {queue_name_dlx, Q2},
-                                                    {queue_name_dlx_2, Q3},
-                                                    {policy, Policy},
-                                                    {counters, Counters}]),
-    rabbit_ct_helpers:testcase_started(Config1, Testcase).
+    IsMixed = rabbit_ct_helpers:is_mixed_versions(),
+    case Testcase of
+        dead_letter_headers_should_not_be_appended_for_republish when IsMixed ->
+            {skip, "dead_letter_headers_should_not_be_appended_for_republish isn't mixed versions compatible"};
+        _ ->
+            Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
+            Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~tp", [Group, Testcase])),
+            Q2 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_2", [Group, Testcase])),
+            Q3 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_3", [Group, Testcase])),
+            Policy = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_policy", [Group, Testcase])),
+            DLXExchange = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_dlx_exchange",
+                                                                       [Group, Testcase])),
+            Counters = get_global_counters(Config),
+            Config1 = rabbit_ct_helpers:set_config(Config, [{dlx_exchange, DLXExchange},
+                                                            {queue_name, Q},
+                                                            {queue_name_dlx, Q2},
+                                                            {queue_name_dlx_2, Q3},
+                                                            {policy, Policy},
+                                                            {counters, Counters}]),
+            rabbit_ct_helpers:testcase_started(Config1, Testcase)
+    end.
 
 end_per_testcase(Testcase, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
-    amqp_channel:call(Ch, #'queue.delete'{queue = ?config(queue_name, Config)}),
-    amqp_channel:call(Ch, #'queue.delete'{queue = ?config(queue_name_dlx, Config)}),
-    amqp_channel:call(Ch, #'queue.delete'{queue = ?config(queue_name_dlx_2, Config)}),
     amqp_channel:call(Ch, #'exchange.delete'{exchange = ?config(dlx_exchange, Config)}),
     _ = rabbit_ct_broker_helpers:clear_policy(Config, 0, ?config(policy, Config)),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+delete_queues() ->
+    [rabbit_amqqueue:delete(Q, false, false, <<"tests">>) || Q <- rabbit_amqqueue:list()].
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Dead letter exchanges
@@ -856,7 +872,15 @@ dead_letter_policy(Config) ->
                                              <<"queues">>,
                                              [{<<"dead-letter-exchange">>, DLXExchange},
                                               {<<"dead-letter-routing-key">>, DLXQName}]),
-    timer:sleep(1000),
+    ?awaitMatch([_ | _],
+                begin
+                    {ok, Q0} = rabbit_ct_broker_helpers:rpc(
+                                 Config, 0,
+                                 rabbit_amqqueue, lookup,
+                                 [rabbit_misc:r(<<"/">>, queue, QName)], infinity),
+                    amqqueue:get_policy(Q0)
+                end,
+                30000),
     %% Nack the second message
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag2,
                                         multiple     = false,
@@ -1032,24 +1056,29 @@ dead_letter_headers_cycle(Config) ->
     QName = ?config(queue_name, Config),
 
     DeadLetterArgs = [{<<"x-dead-letter-exchange">>, longstr, <<>>}],
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = Durable}),
-
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Ch, #'queue.declare'{queue = QName,
+                                               arguments = DeadLetterArgs ++ Args,
+                                               durable = Durable}),
     P = <<"msg1">>,
 
     %% Publish message
     publish(Ch, QName, [P]),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
     [DTag] = consume(Ch, QName, [P]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"0">>, <<"1">>]]),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag,
                                         multiple     = false,
                                         requeue      = false}),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
-    {#'basic.get_ok'{delivery_tag = DTag1}, #amqp_msg{payload = P,
-                                                      props = #'P_basic'{headers = Headers1}}} =
+    {#'basic.get_ok'{delivery_tag = DTag1},
+     #amqp_msg{payload = P,
+               props = #'P_basic'{headers = Headers1}}} =
         amqp_channel:call(Ch, #'basic.get'{queue = QName}),
     {array, [{table, Death1}]} = rabbit_misc:table_lookup(Headers1, <<"x-death">>),
     ?assertEqual({long, 1}, rabbit_misc:table_lookup(Death1, <<"count">>)),
 
+    wait_for_messages(Config, [[QName, <<"1">>, <<"0">>, <<"1">>]]),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag1,
                                         multiple     = false,
                                         requeue      = false}),
@@ -1060,6 +1089,101 @@ dead_letter_headers_cycle(Config) ->
         amqp_channel:call(Ch, #'basic.get'{queue = QName}),
     {array, [{table, Death2}]} = rabbit_misc:table_lookup(Headers2, <<"x-death">>),
     ?assertEqual({long, 2}, rabbit_misc:table_lookup(Death2, <<"count">>)).
+
+dead_letter_headers_should_be_appended_for_each_event(Config) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Args = ?config(queue_args, Config),
+    Durable = ?config(queue_durable, Config),
+    QName = ?config(queue_name, Config),
+    Dlx1Name = ?config(queue_name_dlx, Config),
+    Dlx2Name = ?config(queue_name_dlx_2, Config),
+
+    DeadLetterArgs = [{<<"x-dead-letter-exchange">>, longstr, <<>>},
+                      {<<"x-dead-letter-routing-key">>, longstr, Dlx1Name}],
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = Durable}),
+    DeadLetterArgsDlx = [{<<"x-dead-letter-exchange">>, longstr, <<>>},
+                         {<<"x-dead-letter-routing-key">>, longstr, Dlx2Name}],
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Dlx1Name, arguments = DeadLetterArgsDlx ++ Args, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Dlx2Name, arguments = Args, durable = Durable}),
+
+    P = <<"msg1">>,
+
+    %% Publish message
+    publish(Ch, QName, [P]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    [DTag] = consume(Ch, QName, [P]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"0">>, <<"1">>]]),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag,
+                                        multiple     = false,
+                                        requeue      = false}),
+    wait_for_messages(Config, [[Dlx1Name, <<"1">>, <<"1">>, <<"0">>]]),
+    {#'basic.get_ok'{delivery_tag = DTag1}, #amqp_msg{payload = P,
+                                                      props = #'P_basic'{headers = Headers1}}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = Dlx1Name}),
+    {array, [{table, Death1}]} = rabbit_misc:table_lookup(Headers1, <<"x-death">>),
+    ?assertEqual({longstr, QName}, rabbit_misc:table_lookup(Death1, <<"queue">>)),
+
+    wait_for_messages(Config, [[Dlx1Name, <<"1">>, <<"0">>, <<"1">>]]),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag1,
+                                        multiple     = false,
+                                        requeue      = false}),
+    %% Message is being republished
+    wait_for_messages(Config, [[Dlx2Name, <<"1">>, <<"1">>, <<"0">>]]),
+    {#'basic.get_ok'{}, #amqp_msg{payload = P,
+                                  props = #'P_basic'{headers = Headers2}}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = Dlx2Name}),
+    {array, [{table, DeathDlx}, {table, _DeathQ}]} = rabbit_misc:table_lookup(Headers2, <<"x-death">>),
+    ?assertEqual({longstr, Dlx1Name}, rabbit_misc:table_lookup(DeathDlx, <<"queue">>)),
+    ok = rabbit_ct_client_helpers:close_connection(Conn).
+
+dead_letter_headers_should_not_be_appended_for_republish(Config) ->
+    %% here we (re-)publish a message with the DL headers already set
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Args = ?config(queue_args, Config),
+    Durable = ?config(queue_durable, Config),
+    QName = ?config(queue_name, Config),
+    DlxName = ?config(queue_name_dlx, Config),
+
+    DeadLetterArgs = [{<<"x-dead-letter-exchange">>, longstr, <<>>},
+                      {<<"x-dead-letter-routing-key">>, longstr, DlxName}],
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DlxName, arguments = Args, durable = Durable}),
+
+    P = <<"msg1">>,
+
+    %% Publish message
+    publish(Ch, QName, [P]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    [DTag] = consume(Ch, QName, [P]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"0">>, <<"1">>]]),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag,
+                                        multiple     = false,
+                                        requeue      = false}),
+    wait_for_messages(Config, [[DlxName, <<"1">>, <<"1">>, <<"0">>]]),
+    {#'basic.get_ok'{delivery_tag = DTag1}, #amqp_msg{payload = P,
+                                                      props = #'P_basic'{headers = Headers1}}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = DlxName}),
+    {array, [{table, Death1}]} = rabbit_misc:table_lookup(Headers1, <<"x-death">>),
+    ?assertEqual({longstr, <<"rejected">>}, rabbit_misc:table_lookup(Death1, <<"reason">>)),
+
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag1}),
+
+    wait_for_messages(Config, [[DlxName, <<"0">>, <<"0">>, <<"0">>]]),
+
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
+    DeadLetterArgs1 = DeadLetterArgs ++ [{<<"x-message-ttl">>, long, 1}],
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs1 ++ Args, durable = Durable}),
+
+    publish(Ch, QName, [P], Headers1),
+
+    wait_for_messages(Config, [[DlxName, <<"1">>, <<"1">>, <<"0">>]]),
+    {#'basic.get_ok'{}, #amqp_msg{payload = P,
+                                  props = #'P_basic'{headers = Headers2}}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = DlxName}),
+
+    {array, [{table, Death2}]} = rabbit_misc:table_lookup(Headers2, <<"x-death">>),
+    ?assertEqual({longstr, <<"expired">>}, rabbit_misc:table_lookup(Death2, <<"reason">>)),
+    ok = rabbit_ct_client_helpers:close_connection(Conn).
 
 %% Dead-lettering a message modifies its headers:
 %% the exchange name is replaced with that of the latest dead-letter exchange,
@@ -1106,12 +1230,15 @@ dead_letter_headers_CC(Config) ->
                                         multiple     = false,
                                         requeue      = false}),
     wait_for_messages(Config, [[DLXQName, <<"2">>, <<"1">>, <<"1">>]]),
-    {#'basic.get_ok'{}, #amqp_msg{payload = P1,
-                                  props = #'P_basic'{headers = Headers3}}} =
+    {#'basic.get_ok'{delivery_tag = DTag2}, #amqp_msg{payload = P1,
+                                                      props = #'P_basic'{headers = Headers3}}} =
         amqp_channel:call(Ch, #'basic.get'{queue = DLXQName}),
     consume_empty(Ch, QName),
     ?assertEqual({array, [{longstr, DLXQName}]}, rabbit_misc:table_lookup(Headers3, <<"CC">>)),
-    ?assertMatch({array, _}, rabbit_misc:table_lookup(Headers3, <<"x-death">>)).
+    ?assertMatch({array, _}, rabbit_misc:table_lookup(Headers3, <<"x-death">>)),
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag2,
+                                       multiple     = true}),
+    wait_for_messages(Config, [[DLXQName, <<"0">>, <<"0">>, <<"0">>]]).
 
 %% 15) CC header is removed when routing key is specified
 dead_letter_headers_CC_with_routing_key(Config) ->
@@ -1122,14 +1249,15 @@ dead_letter_headers_CC_with_routing_key(Config) ->
     Durable = ?config(queue_durable, Config),
     DLXExchange = ?config(dlx_exchange, Config),
 
-    %% Do not use a specific key for dead lettering, the CC header is passed
     DeadLetterArgs = [{<<"x-dead-letter-routing-key">>, longstr, DLXQName},
                       {<<"x-dead-letter-exchange">>, longstr, DLXExchange}],
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLXExchange}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = Durable}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName, durable = Durable}),
-    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue       = DLXQName,
-                                                             exchange    = DLXExchange,
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName,
+                                                                   arguments = DeadLetterArgs ++ Args, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName,
+                                                                   durable = Durable}),
+    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue = DLXQName,
+                                                             exchange = DLXExchange,
                                                              routing_key = DLXQName}),
 
     P1 = <<"msg1">>,
@@ -1157,7 +1285,9 @@ dead_letter_headers_CC_with_routing_key(Config) ->
                                   props = #'P_basic'{headers = Headers3}}} =
         amqp_channel:call(Ch, #'basic.get'{queue = DLXQName}),
     consume_empty(Ch, QName),
-    ?assertEqual(undefined, rabbit_misc:table_lookup(Headers3, <<"CC">>)),
+    %% we keep the CC header as of RabbitMQ 3.13 (with message containers)
+    %% to avoid mutating the message
+    ?assertMatch({array, _}, rabbit_misc:table_lookup(Headers3, <<"CC">>)),
     ?assertMatch({array, _}, rabbit_misc:table_lookup(Headers3, <<"x-death">>)).
 
 %% 16) the BCC header will always be removed
@@ -1191,8 +1321,8 @@ dead_letter_headers_BCC(Config) ->
                                   props = #'P_basic'{headers = Headers2}}} =
         amqp_channel:call(Ch, #'basic.get'{queue = DLXQName}),
     %% We check the headers to ensure no dead lettering has happened
-    ?assertEqual(undefined, rabbit_misc:table_lookup(Headers1, <<"x-death">>)),
-    ?assertEqual(undefined, rabbit_misc:table_lookup(Headers2, <<"x-death">>)),
+    ?assertEqual(undefined, header_lookup(Headers1, <<"x-death">>)),
+    ?assertEqual(undefined, header_lookup(Headers2, <<"x-death">>)),
 
     %% Nack the message so it now gets dead lettered
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag1,
@@ -1325,7 +1455,12 @@ dead_letter_headers_first_death_route(Config) ->
     %% Send and reject the 3rd message.
     P3 = <<"msg3">>,
     publish(Ch, QName2, [P3]),
-    timer:sleep(1000),
+    case group_name(Config) of
+        at_most_once ->
+            wait_for_messages(Config, [[QName2, <<"1">>, <<"1">>, <<"0">>]]);
+        at_least_once ->
+            wait_for_messages(Config, [[QName2, <<"2">>, <<"1">>, <<"0">>]])
+    end,
     [DTag] = consume(Ch, QName2, [P3]),
     amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag,
                                           requeue      = false}),
@@ -1346,7 +1481,7 @@ dead_letter_extra_bcc(Config) ->
     declare_dead_letter_queues(Ch, Config, SourceQ, TargetQ, [{<<"x-message-ttl">>, long, 0}]),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = ExtraBCCQ,
                                                                    durable = Durable}),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, set_queue_options,
+    rabbit_ct_broker_helpers:rpc(Config, ?MODULE, set_queue_options,
                                  [TargetQ, #{extra_bcc => ExtraBCCQ}]),
     %% Publish message
     P = <<"msg">>,
@@ -1359,13 +1494,10 @@ dead_letter_extra_bcc(Config) ->
     ok.
 
 set_queue_options(QName, Options) ->
-    rabbit_misc:execute_mnesia_transaction(
-      fun() ->
-              rabbit_amqqueue:update(rabbit_misc:r(<<"/">>, queue, QName),
-                                     fun(Q) ->
-                                             amqqueue:set_options(Q, Options)
-                                     end)
-      end).
+    rabbit_amqqueue:update(rabbit_misc:r(<<"/">>, queue, QName),
+                           fun(Q) ->
+                                   amqqueue:set_options(Q, Options)
+                           end).
 
 metric_maxlen(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
@@ -1462,7 +1594,8 @@ declare_dead_letter_queues(Ch, Config, QName, DLXQName, ExtraArgs) ->
                                                              routing_key = DLXQName}).
 
 publish(Ch, QName, Payloads) ->
-    [amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload})
+    [amqp_channel:call(Ch, #'basic.publish'{routing_key = QName},
+                       #amqp_msg{payload = Payload})
      || Payload <- Payloads].
 
 publish(Ch, QName, Payloads, Headers) ->
@@ -1474,7 +1607,7 @@ publish(Ch, QName, Payloads, Headers) ->
 consume(Ch, QName, Payloads) ->
     [begin
          {#'basic.get_ok'{delivery_tag = DTag}, #amqp_msg{payload = Payload}} =
-         amqp_channel:call(Ch, #'basic.get'{queue = QName}),
+             amqp_channel:call(Ch, #'basic.get'{queue = QName}),
          DTag
      end || Payload <- Payloads].
 
@@ -1489,7 +1622,7 @@ sync_mirrors(QName, Config) ->
     end.
 
 get_global_counters(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_global_counters, overview, []).
+    rabbit_ct_broker_helpers:rpc(Config, rabbit_global_counters, overview, []).
 
 %% Returns the delta of Metric between testcase start and now.
 counted(Metric, Config) ->
@@ -1497,8 +1630,9 @@ counted(Metric, Config) ->
     Strategy = group_name(Config),
     OldCounters = ?config(counters, Config),
     Counters = get_global_counters(Config),
+    ct:pal("Counters ~p", [Counters]),
     metric(QueueType, Strategy, Metric, Counters) -
-    metric(QueueType, Strategy, Metric, OldCounters).
+        metric(QueueType, Strategy, Metric, OldCounters).
 
 metric(QueueType, Strategy, Metric, Counters) ->
     Metrics = maps:get([{queue_type, QueueType}, {dead_letter_strategy, Strategy}], Counters),
@@ -1515,3 +1649,8 @@ queue_type(quorum_queue) ->
     rabbit_quorum_queue;
 queue_type(_) ->
     rabbit_classic_queue.
+
+header_lookup(undefined, _Key) ->
+    undefined;
+header_lookup(Headers, Key) ->
+    rabbit_misc:table_lookup(Headers, Key).

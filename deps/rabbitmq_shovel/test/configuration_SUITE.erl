@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(configuration_SUITE).
@@ -290,7 +290,7 @@ setup_legacy_shovels1(Config) ->
       shovels,
       [{test_shovel,
         [{sources,
-          [{broker, rabbit_misc:format("amqp://~s:~b/%2f?heartbeat=5",
+          [{broker, rabbit_misc:format("amqp://~ts:~b/%2f?heartbeat=5",
                                        [Hostname, TcpPort])},
            {declarations,
             [{'queue.declare',    [exclusive, auto_delete]},
@@ -299,7 +299,7 @@ setup_legacy_shovels1(Config) ->
                                    {routing_key, ?TO_SHOVEL}]}
             ]}]},
          {destinations,
-          [{broker, rabbit_misc:format("amqp://~s:~b/%2f",
+          [{broker, rabbit_misc:format("amqp://~ts:~b/%2f",
                                        [Hostname, TcpPort])}]},
          {queue, <<>>},
          {ack_mode, on_confirm},
@@ -326,7 +326,7 @@ setup_shovels1(Config) ->
       shovels,
       [{test_shovel,
         [{source,
-          [{uris, [rabbit_misc:format("amqp://~s:~b/%2f?heartbeat=5",
+          [{uris, [rabbit_misc:format("amqp://~ts:~b/%2f?heartbeat=5",
                                       [Hostname, TcpPort])]},
            {declarations,
             [{'queue.declare',    [exclusive, auto_delete]},
@@ -335,7 +335,7 @@ setup_shovels1(Config) ->
                                    {routing_key, ?TO_SHOVEL}]}]},
            {queue, <<>>}]},
          {destination,
-          [{uris, [rabbit_misc:format("amqp://~s:~b/%2f",
+          [{uris, [rabbit_misc:format("amqp://~ts:~b/%2f",
                                       [Hostname, TcpPort])]},
            {publish_fields, [{exchange, ?EXCHANGE}, {routing_key, ?FROM_SHOVEL}]},
            {publish_properties, [{delivery_mode, 2},

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_stream_manager_SUITE).
@@ -99,14 +99,14 @@ lookup_member(Config) ->
     ?assertEqual({ok, deleted}, delete_stream(Config, Stream)).
 
 manage_super_stream(Config) ->
-    % create super stream
+    %% create super stream
     ?assertEqual(ok,
                  create_super_stream(Config,
                                      <<"invoices">>,
                                      [<<"invoices-0">>, <<"invoices-1">>,
                                       <<"invoices-2">>],
                                      [<<"0">>, <<"1">>, <<"2">>])),
-    % get the correct partitions
+    %% get the correct partitions
     ?assertEqual({ok,
                   [<<"invoices-0">>, <<"invoices-1">>, <<"invoices-2">>]},
                  partitions(Config, <<"invoices">>)),
@@ -117,7 +117,7 @@ manage_super_stream(Config) ->
             <- [{<<"invoices-0">>, <<"0">>}, {<<"invoices-1">>, <<"1">>},
                 {<<"invoices-2">>, <<"2">>}]],
 
-    % get an error if trying to re-create it
+    %% get an error if trying to re-create it
     ?assertMatch({error, _},
                  create_super_stream(Config,
                                      <<"invoices">>,
@@ -125,13 +125,13 @@ manage_super_stream(Config) ->
                                       <<"invoices-2">>],
                                      [<<"0">>, <<"1">>, <<"2">>])),
 
-    % can delete it
+    %% can delete it
     ?assertEqual(ok, delete_super_stream(Config, <<"invoices">>)),
 
-    % create a stream with the same name as a potential partition
+    %% create a stream with the same name as a potential partition
     ?assertMatch({ok, _}, create_stream(Config, <<"invoices-1">>)),
 
-    % cannot create the super stream because a partition already exists
+    %% cannot create the super stream because a partition already exists
     ?assertMatch({error, _},
                  create_super_stream(Config,
                                      <<"invoices">>,
@@ -140,6 +140,14 @@ manage_super_stream(Config) ->
                                      [<<"0">>, <<"1">>, <<"2">>])),
 
     ?assertMatch({ok, _}, delete_stream(Config, <<"invoices-1">>)),
+
+    %% not the same number of partitions and binding keys
+    ?assertMatch({error, {validation_failed, _}},
+                 create_super_stream(Config,
+                                     <<"invoices">>,
+                                     [<<"invoices-0">>, <<"invoices-1">>],
+                                     [<<"0">>])),
+
     ok.
 
 partition_index(Config) ->

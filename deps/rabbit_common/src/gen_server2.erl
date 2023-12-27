@@ -93,7 +93,7 @@
 %%
 %% 11) Internal buffer length is emitted as a core [RabbitMQ] metric.
 
-%% All modifications are (C) 2009-2022 VMware, Inc. or its affiliates.
+%% All modifications are (C) 2009-2023 VMware, Inc. or its affiliates.
 
 %% ``The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -805,18 +805,7 @@ in(Input, Priority, GS2State = #gs2_state { queue = Queue }) ->
 
 process_msg({system, From, Req},
             GS2State = #gs2_state { parent = Parent, debug  = Debug }) ->
-    case Req of
-        %% This clause will match only in R16B03.
-        %% Since 17.0 replace_state is not a system message.
-        {replace_state, StateFun} ->
-            GS2State1 = StateFun(GS2State),
-            _ = gen:reply(From, GS2State1),
-            system_continue(Parent, Debug, GS2State1);
-        _ ->
-            %% gen_server puts Hib on the end as the 7th arg, but that version
-            %% of the fun seems not to be documented so leaving out for now.
-            sys:handle_system_msg(Req, From, Parent, ?MODULE, Debug, GS2State)
-    end;
+    sys:handle_system_msg(Req, From, Parent, ?MODULE, Debug, GS2State);
 process_msg({'$with_state', From, Fun},
            GS2State = #gs2_state{state = State}) ->
     reply(From, catch Fun(State)),
@@ -1124,7 +1113,7 @@ system_code_change(GS2State = #gs2_state { mod   = Mod,
         {ok, NewState} ->
             NewGS2State = find_prioritisers(
                             GS2State #gs2_state { state = NewState }),
-            {ok, [NewGS2State]};
+            {ok, NewGS2State};
         Else ->
             Else
     end.
@@ -1136,21 +1125,21 @@ system_code_change(GS2State = #gs2_state { mod   = Mod,
 print_event(Dev, {in, Msg}, Name) ->
     case Msg of
         {'$gen_call', {From, _Tag}, Call} ->
-            io:format(Dev, "*DBG* ~p got call ~p from ~w~n",
+            io:format(Dev, "*DBG* ~tp got call ~tp from ~w~n",
                       [Name, Call, From]);
         {'$gen_cast', Cast} ->
-            io:format(Dev, "*DBG* ~p got cast ~p~n",
+            io:format(Dev, "*DBG* ~tp got cast ~tp~n",
                       [Name, Cast]);
         _ ->
-            io:format(Dev, "*DBG* ~p got ~p~n", [Name, Msg])
+            io:format(Dev, "*DBG* ~tp got ~tp~n", [Name, Msg])
     end;
 print_event(Dev, {out, Msg, To, State}, Name) ->
-    io:format(Dev, "*DBG* ~p sent ~p to ~w, new state ~w~n",
+    io:format(Dev, "*DBG* ~tp sent ~tp to ~w, new state ~w~n",
               [Name, Msg, To, State]);
 print_event(Dev, {noreply, State}, Name) ->
-    io:format(Dev, "*DBG* ~p new state ~w~n", [Name, State]);
+    io:format(Dev, "*DBG* ~tp new state ~w~n", [Name, State]);
 print_event(Dev, Event, Name) ->
-    io:format(Dev, "*DBG* ~p dbg  ~p~n", [Name, Event]).
+    io:format(Dev, "*DBG* ~tp dbg  ~tp~n", [Name, Event]).
 
 
 %%% ---------------------------------------------------
@@ -1192,14 +1181,14 @@ error_info(_Reason, _RootCause, application_controller, _Msg, _State, _Debug) ->
 error_info(Reason, RootCause, Name, Msg, State, Debug) ->
     Reason1 = error_reason(Reason),
     Fmt =
-        "** Generic server ~p terminating~n"
-        "** Last message in was ~p~n"
-        "** When Server state == ~p~n"
-        "** Reason for termination == ~n** ~p~n",
+        "** Generic server ~tp terminating~n"
+        "** Last message in was ~tp~n"
+        "** When Server state == ~tp~n"
+        "** Reason for termination == ~n** ~tp~n",
     case RootCause of
         undefined -> format(Fmt, [Name, Msg, State, Reason1]);
         _         -> format(Fmt ++ "** In 'terminate' callback "
-                            "with reason ==~n** ~p~n",
+                            "with reason ==~n** ~tp~n",
                             [Name, Msg, State, Reason1,
                              error_reason(RootCause)])
     end,
@@ -1249,7 +1238,7 @@ dbg_options(Name, Opts) ->
 dbg_opts(Name, Opts) ->
     case catch sys:debug_options(Opts) of
         {'EXIT',_} ->
-            format("~p: ignoring erroneous debug options - ~p~n",
+            format("~tp: ignoring erroneous debug options - ~tp~n",
                    [Name, Opts]),
             [];
         Dbg ->
@@ -1326,10 +1315,8 @@ find_prioritisers(GS2State = #gs2_state { mod = Mod }) ->
 function_exported_or_default(Mod, Fun, Arity, Default) ->
     case erlang:function_exported(Mod, Fun, Arity) of
         true -> case Arity of
-                    3 -> fun (Msg, GS2State = #gs2_state { queue = Queue,
-                                                           state = State }) ->
-                                 Length = priority_queue:len(Queue),
-                                 case catch Mod:Fun(Msg, Length, State) of
+                    3 -> fun (Msg, GS2State = #gs2_state { state = State }) ->
+                                 case catch Mod:Fun(Msg, 0, State) of
                                      drop ->
                                          drop;
                                      Res when is_integer(Res) ->
@@ -1338,10 +1325,8 @@ function_exported_or_default(Mod, Fun, Arity, Default) ->
                                          handle_common_termination(Err, Msg, GS2State)
                                  end
                          end;
-                    4 -> fun (Msg, From, GS2State = #gs2_state { queue = Queue,
-                                                                 state = State }) ->
-                                 Length = priority_queue:len(Queue),
-                                 case catch Mod:Fun(Msg, From, Length, State) of
+                    4 -> fun (Msg, From, GS2State = #gs2_state { state = State }) ->
+                                 case catch Mod:Fun(Msg, From, 0, State) of
                                      Res when is_integer(Res) ->
                                          Res;
                                      Err ->

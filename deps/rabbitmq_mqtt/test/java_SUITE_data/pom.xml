@@ -12,39 +12,70 @@
   <description>Fetches test dependencies only.</description>
   <url>https://www.rabbitmq.com</url>
 
+  <properties>
+    <paho.v5.version>[1.2.5,)</paho.v5.version>
+    <paho.v3.version>[1.2.5,)</paho.v3.version>
+    <amqp-client.version>5.20.0</amqp-client.version>
+    <junit.version>5.10.1</junit.version>
+    <assertj.version>3.24.2</assertj.version>
+    <logback.version>1.2.13</logback.version>
+    <maven-surefire-plugin.version>3.2.3</maven-surefire-plugin.version>
+    <groovy-maven-plugin.version>2.1.1</groovy-maven-plugin.version>
+    <groovy.version>2.4.21</groovy.version>
+    <maven-compiler-plugin.version>3.12.1</maven-compiler-plugin.version>
+    <spotless.version>2.41.1</spotless.version>
+    <google-java-format.version>1.17.0</google-java-format.version>
+    <test-keystore.ca>${project.build.directory}/ca.keystore</test-keystore.ca>
+    <test-keystore.password>bunnychow</test-keystore.password>
+    <groovy-scripts.dir>${basedir}/src/test/scripts</groovy-scripts.dir>
+  </properties>
+
   <dependencies>
     <dependency>
       <groupId>org.eclipse.paho</groupId>
+      <artifactId>org.eclipse.paho.mqttv5.client</artifactId>
+      <version>${paho.v5.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.paho</groupId>
       <artifactId>org.eclipse.paho.client.mqttv3</artifactId>
-      <version>[1.2.1,)</version>
+      <version>${paho.v3.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.rabbitmq</groupId>
       <artifactId>amqp-client</artifactId>
-      <version>5.7.3</version>
+      <version>${amqp-client.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
-      <version>5.5.2</version>
+      <version>${junit.version}</version>
       <scope>test</scope>
     </dependency>
-  </dependencies>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <version>${assertj.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <version>${logback.version}</version>
+      <scope>test</scope>
+    </dependency>
 
-  <properties>
-    <test-keystore.ca>${project.build.directory}/ca.keystore</test-keystore.ca>
-    <test-keystore.password>bunnychow</test-keystore.password>
-    <groovy-scripts.dir>${basedir}/src/test/scripts</groovy-scripts.dir>
-  </properties>
+  </dependencies>
 
   <build>
       <plugins>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>2.22.2</version>
+          <version>${maven-surefire-plugin.version}</version>
           <configuration>
             <environmentVariables>
               <DEPS_DIR>${deps.dir}</DEPS_DIR>
@@ -73,12 +104,12 @@
         <plugin>
           <groupId>org.codehaus.gmaven</groupId>
           <artifactId>groovy-maven-plugin</artifactId>
-          <version>2.1.1</version>
+          <version>${groovy-maven-plugin.version}</version>
           <dependencies>
             <dependency>
               <groupId>org.codehaus.groovy</groupId>
               <artifactId>groovy-all</artifactId>
-              <version>2.4.17</version>
+              <version>${groovy.version}</version>
             </dependency>
           </dependencies>
           <executions>
@@ -100,7 +131,7 @@
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>keytool-maven-plugin</artifactId>
-          <version>1.5</version>
+          <version>1.7</version>
           <executions>
             <execution>
               <id>generate-test-ca-keystore</id>
@@ -121,7 +152,7 @@
 
         <plugin>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.8.1</version>
+          <version>${maven-compiler-plugin.version}</version>
           <configuration>
             <source>1.8</source>
             <target>1.8</target>
@@ -129,6 +160,30 @@
               <arg>-Xlint:deprecation</arg>
               <arg>-Xlint:unchecked</arg>
             </compilerArgs>
+          </configuration>
+        </plugin>
+
+        <plugin>
+          <groupId>com.diffplug.spotless</groupId>
+          <artifactId>spotless-maven-plugin</artifactId>
+          <version>${spotless.version}</version>
+          <configuration>
+            <java>
+              <googleJavaFormat>
+                <version>${google-java-format.version}</version>
+                <style>GOOGLE</style>
+              </googleJavaFormat>
+            </java>
+<!--                      <ratchetFrom>origin/main</ratchetFrom>-->
+            <licenseHeader> <!-- specify either content or file, but not both -->
+              <content>// This Source Code Form is subject to the terms of the Mozilla Public
+                // License, v. 2.0. If a copy of the MPL was not distributed with this
+                // file, You can obtain one at https://mozilla.org/MPL/2.0/.
+                //
+                //  Copyright (c) $YEAR VMware, Inc. or its affiliates.  All rights reserved.
+                //
+              </content>
+            </licenseHeader>
           </configuration>
         </plugin>
 

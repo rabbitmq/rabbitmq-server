@@ -1,6 +1,7 @@
 .sw?
 .*.sw?
 *.beam
+*.coverdata
 .idea/*
 /.erlang.mk/
 /cover/
@@ -15,6 +16,7 @@
 /plugins.lock
 /sbin/
 /sbin.lock
+/test/ct.cover.spec
 /xrefr
 debug/*
 *.plt

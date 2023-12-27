@@ -1,3 +1,4 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
@@ -9,6 +10,13 @@ load(
     "rabbitmq_app",
     "rabbitmq_integration_suite",
 )
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
+)
 
 APP_NAME = "rabbitmq_stream_management"
 
@@ -16,37 +24,60 @@ APP_DESCRIPTION = "RabbitMQ Stream Management"
 
 APP_MODULE = "rabbit_stream_management"
 
-BUILD_DEPS = [
-    "//deps/amqp_client:erlang_app",
-    "//deps/rabbit_common:erlang_app",
-    "//deps/rabbitmq_management_agent:erlang_app",
-]
+all_beam_files(name = "all_beam_files")
 
-DEPS = [
-    "//deps/rabbitmq_management:erlang_app",
-    "//deps/rabbitmq_stream:erlang_app",
-    "//deps/rabbit:erlang_app",
-]
+all_test_beam_files(name = "all_test_beam_files")
+
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
+
+# gazelle:erlang_app_dep_exclude amqp_client
+# gazelle:erlang_app_dep_exclude rabbit_common
+# gazelle:erlang_app_dep_exclude rabbitmq_management_agent
+# gazelle:erlang_app_dep_exclude cowboy
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_module = APP_MODULE,
     app_name = APP_NAME,
-    build_deps = BUILD_DEPS,
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbitmq_management:erlang_app",
+        "//deps/rabbitmq_stream:erlang_app",
+        "@osiris//:erlang_app",
+    ],
 )
 
-xref()
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
 
 plt(
-    name = "base_plt",
-    deps = BUILD_DEPS + DEPS,
+    name = "deps_plt",
+    for_target = ":erlang_app",
+    ignore_warnings = True,
+    libs = ["//deps/rabbitmq_cli:elixir"],  # keep
+    plt = "//:base_plt",
 )
 
 dialyze(
+    name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":base_plt",
-    warnings_as_errors = False,
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
+
+eunit(
+    name = "eunit",
+    target = ":test_erlang_app",
 )
 
 rabbitmq_home(
@@ -63,16 +94,14 @@ rabbitmq_run(
     home = ":broker-for-tests-home",
 )
 
-PACKAGE = "deps/rabbitmq_stream_management"
+rabbitmq_integration_suite(
+    name = "http_SUITE",
+)
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "http_SUITE",
-    ),
-]
+assert_suites()
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+alias(
+    name = "rabbitmq_stream_management",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

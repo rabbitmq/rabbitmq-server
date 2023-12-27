@@ -1,10 +1,19 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
-load("@rules_erlang//:dialyze.bzl", "dialyze")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "rabbitmq_app",
     "rabbitmq_suite",
+)
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
 )
 
 py_binary(
@@ -45,7 +54,7 @@ APP_EXTRA_KEYS = """%% Hex.pm package informations.
     {licenses, ["MPL-2.0"]},
     {links, [
         {"Website", "https://www.rabbitmq.com/"},
-        {"GitHub", "https://github.com/rabbitmq/rabbitmq-server/deps/amqp10_common"}
+        {"GitHub", "https://github.com/rabbitmq/rabbitmq-server/tree/main/deps/amqp10_common"}
     ]},
     {build_tools, ["make", "rebar3"]},
     {files, [
@@ -57,34 +66,65 @@ APP_EXTRA_KEYS = """%% Hex.pm package informations.
         "rabbitmq-components.mk",
         "README",
         "README.md",
-        "mk"
+        "src"
     ]}
 """
 
+all_beam_files(name = "all_beam_files")
+
+all_test_beam_files(name = "all_test_beam_files")
+
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
+
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = "Modules shared by rabbitmq-amqp1.0 and rabbitmq-amqp1.0-client",
     app_extra_keys = APP_EXTRA_KEYS,
     app_name = "amqp10_common",
-    extra_hdrs = ["include/amqp10_framing.hrl"],
-    extra_srcs = ["src/amqp10_framing0.erl"],
+    beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
 )
 
-xref()
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
 
-dialyze(
+plt(
+    name = "deps_plt",
+    for_target = ":erlang_app",
     plt = "//:base_plt",
 )
 
-suites = [
-    rabbitmq_suite(
-        name = "binary_generator_SUITE",
-    ),
-    rabbitmq_suite(
-        name = "binary_parser_SUITE",
-    ),
-]
+dialyze(
+    name = "dialyze",
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+rabbitmq_suite(
+    name = "binary_generator_SUITE",
+)
+
+rabbitmq_suite(
+    name = "binary_parser_SUITE",
+)
+
+assert_suites()
+
+alias(
+    name = "amqp10_common",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+eunit(
+    name = "eunit",
+    target = ":test_erlang_app",
 )

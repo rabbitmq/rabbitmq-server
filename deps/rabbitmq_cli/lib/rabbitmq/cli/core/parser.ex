@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.Parser do
   alias RabbitMQ.CLI.{CommandBehaviour, FormatterBehaviour}
@@ -24,7 +24,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
       file: :string,
       script_name: :string,
       rabbitmq_home: :string,
-      mnesia_dir: :string,
+      data_dir: :string,
       plugins_dir: :string,
       enabled_plugins_file: :string,
       aliases_file: :string,
@@ -46,6 +46,8 @@ defmodule RabbitMQ.CLI.Core.Parser do
       # for backwards compatibility,
       # not all commands support timeouts
       t: :timeout,
+      # For backwards compatibility, `mnesia_dir` was renamed to `data_dir`.
+      mnesia_dir: :data_dir,
       "?": :help
     ]
   end
@@ -70,19 +72,22 @@ defmodule RabbitMQ.CLI.Core.Parser do
         {[_alias_command_name | cmd_arguments], cmd_options, cmd_invalid} =
           parse_alias(input, command_name, alias_module, alias_content, options)
 
-        {alias_module, command_name, cmd_arguments, Helpers.atomize_values(cmd_options, @atomized_options), cmd_invalid}
+        {alias_module, command_name, cmd_arguments,
+         Helpers.atomize_values(cmd_options, @atomized_options), cmd_invalid}
 
       command_module when is_atom(command_module) ->
         {[^command_name | cmd_arguments], cmd_options, cmd_invalid} =
           parse_command_specific(input, command_module, options)
 
-        {command_module, command_name, cmd_arguments, Helpers.atomize_values(cmd_options, @atomized_options), cmd_invalid}
+        {command_module, command_name, cmd_arguments,
+         Helpers.atomize_values(cmd_options, @atomized_options), cmd_invalid}
     end
   end
 
   def command_suggestion(_cmd_name, empty) when empty == %{} do
     nil
   end
+
   def command_suggestion(typed, module_map) do
     RabbitMQ.CLI.AutoComplete.suggest_command(typed, module_map)
   end
@@ -93,13 +98,13 @@ defmodule RabbitMQ.CLI.Core.Parser do
         ## This is an optimisation for pluggable command discovery.
         ## Most of the time a command will be from rabbitmqctl application
         ## so there is not point in scanning plugins for potential commands
-        CommandModules.load_core(options)
+        _ = CommandModules.load_core(options)
         core_commands = CommandModules.module_map_core()
 
         command =
           case core_commands[cmd_name] do
             nil ->
-              CommandModules.load(options)
+              _ = CommandModules.load(options)
               module_map = CommandModules.module_map()
 
               module_map[cmd_name] ||
@@ -237,11 +242,12 @@ defmodule RabbitMQ.CLI.Core.Parser do
   end
 
   defp assert_no_conflict(command, command_fields, formatter_fields, err) do
-    merge_if_different(
-      formatter_fields,
-      command_fields,
-      {:command_invalid, {command, {err, formatter_fields, command_fields}}}
-    )
+    _ =
+      merge_if_different(
+        formatter_fields,
+        command_fields,
+        {:command_invalid, {command, {err, formatter_fields, command_fields}}}
+      )
 
     :ok
   end

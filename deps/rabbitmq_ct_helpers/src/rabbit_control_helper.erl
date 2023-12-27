@@ -2,12 +2,13 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_control_helper).
 
 -export([command/2, command/3, command/4, command_with_output/4, format_command/4]).
+-export([async_command/4, wait_for_async_command/1]).
 
 command(Command, Node, Args) ->
     command(Command, Node, Args, []).
@@ -22,11 +23,26 @@ command(Command, Node, Args, Opts) ->
         Error   -> Error
     end.
 
+async_command(Command, Node, Args, Opts) ->
+    Self = self(),
+    spawn(fun() ->
+                  Reply = (catch command(Command, Node, Args, Opts)),
+                  Self ! {async_command, Node, Reply}
+          end).
+
+wait_for_async_command(Node) ->
+    receive
+        {async_command, N, Reply} when N == Node ->
+            Reply
+    after 600000 ->
+            timeout
+    end.
+
 command_with_output(Command, Node, Args, Opts) ->
     Formatted = format_command(Command, Node, Args, Opts),
     CommandResult = 'Elixir.RabbitMQCtl':exec_command(
         Formatted, fun(Output,_,_) -> Output end),
-    ct:pal("Executed command ~p against node ~p~nResult: ~p~n", [Formatted, Node, CommandResult]),
+    ct:pal("Executed command ~tp against node ~tp~nResult: ~tp~n", [Formatted, Node, CommandResult]),
     CommandResult.
 
 format_command(Command, Node, Args, Opts) ->
@@ -41,6 +57,6 @@ format_args(Args) ->
 
 format_options(Opts) ->
     EffectiveOpts = [{"--script-name", "rabbitmqctl"} | Opts],
-    iolist_to_binary([io_lib:format("~s=~tp ", [Key, Value])
+    iolist_to_binary([io_lib:format("~ts=~tp ", [Key, Value])
                       || {Key, Value} <- EffectiveOpts ]).
 

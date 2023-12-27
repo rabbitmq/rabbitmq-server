@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(unit_collections_SUITE).
@@ -37,8 +37,8 @@ pmerge(_Config) ->
     passed.
 
 plmerge(_Config) ->
-    P1 = [{a, 1}, {b, 2}, {c, 3}],
-    P2 = [{a, 2}, {d, 4}],
+    P1 = [{a, 2}, {d, 4}],
+    P2 = [{a, 1}, {b, 2}, {c, 3}],
     [{a, 1}, {b, 2}, {c, 3}, {d, 4}] = rabbit_misc:plmerge(P1, P2),
     passed.
 

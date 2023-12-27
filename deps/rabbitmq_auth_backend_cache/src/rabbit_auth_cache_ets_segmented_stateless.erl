@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_auth_cache_ets_segmented_stateless).
@@ -43,8 +43,9 @@ put(Key, Value, TTL) ->
     ok.
 
 delete(Key) ->
-    [ets:delete(Table, Key)
-     || Table <- get_all_segment_tables()].
+    _ = [ets:delete(Table, Key)
+         || Table <- get_all_segment_tables()],
+    ok.
 
 gc() ->
     case whereis(?MODULE) of
@@ -53,7 +54,7 @@ gc() ->
     end.
 
 init([SegmentSize]) ->
-    ets:new(?SEGMENT_TABLE, [ordered_set, named_table, public]),
+    _ = ets:new(?SEGMENT_TABLE, [ordered_set, named_table, public]),
     ets:insert(?SEGMENT_TABLE, {segment_size, SegmentSize}),
 
     InitSegment = segment(rabbit_auth_cache:expiration(SegmentSize), SegmentSize),
@@ -83,7 +84,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 terminate(_Reason, State = #state{gc_timer = Timer}) ->
-    timer:cancel(Timer),
+    _ = timer:cancel(Timer),
     State.
 
 segment(Expiration, SegmentSize) ->

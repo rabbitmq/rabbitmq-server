@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_amqp1_0_reader).
@@ -31,7 +31,8 @@
 
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, queue_collector, heartbeater, helper_sup,
-             channel_sup_sup_pid, buf, buf_len, throttle, proxy_socket}).
+             channel_sup_sup_pid, buf, buf_len, throttle, proxy_socket,
+             tracked_channels}).
 
 -record(v1_connection, {user, timeout_sec, frame_max, auth_mechanism, auth_state,
                         hostname}).
@@ -66,7 +67,8 @@ unpack_from_0_9_1({Parent, Sock,RecvLen, PendingRecv,
                                     frame_max      = ?FRAME_MIN_SIZE,
                                     auth_mechanism = none,
                                     auth_state     = none},
-        proxy_socket = ProxySocket}.
+        proxy_socket        = ProxySocket,
+        tracked_channels    = maps:new()}.
 
 shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
@@ -74,12 +76,16 @@ shutdown(Pid, Explanation) ->
 system_continue(Parent, Deb, State) ->
     ?MODULE:mainloop(Deb, State#v1{parent = Parent}).
 
+-spec system_terminate(term(), term(), term(), term()) -> no_return().
 system_terminate(Reason, _Parent, _Deb, _State) ->
     exit(Reason).
 
 system_code_change(Misc, _Module, _OldVsn, _Extra) ->
     {ok, Misc}.
 
+-spec conserve_resources(pid(),
+                         rabbit_alarm:resource_alarm_source(),
+                         rabbit_alarm:resource_alert()) -> ok.
 conserve_resources(Pid, Source, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Source, Conserve},
     ok.
@@ -147,8 +153,8 @@ handle_other({conserve_resources, Source, Conserve},
     Throttle1 = Throttle#throttle{alarmed_by = CR1},
     control_throttle(State#v1{throttle = Throttle1});
 handle_other({'EXIT', Parent, Reason}, State = #v1{parent = Parent}) ->
-    terminate(io_lib:format("broker forced connection closure "
-                            "with reason '~w'", [Reason]), State),
+    _ = terminate(io_lib:format("broker forced connection closure "
+                                "with reason '~w'", [Reason]), State),
     %% this is what we are expected to do according to
     %% http://www.erlang.org/doc/man/sys.html
     %%
@@ -203,8 +209,8 @@ switch_callback(State, Callback, Length) ->
 
 terminate(Reason, State) when ?IS_RUNNING(State) ->
     {normal, handle_exception(State, 0,
-                              {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                               "Connection forced: ~p", [Reason]})};
+                              error_frame(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                                          "Connection forced: ~tp", [Reason]))};
 terminate(_Reason, State) ->
     {force, State}.
 
@@ -232,22 +238,23 @@ update_last_blocked_by(Throttle) ->
 
 close_connection(State = #v1{connection = #v1_connection{
                                              timeout_sec = TimeoutSec}}) ->
+    Pid = self(),
     erlang:send_after((if TimeoutSec > 0 andalso
                           TimeoutSec < ?CLOSING_TIMEOUT -> TimeoutSec;
                           true                          -> ?CLOSING_TIMEOUT
-                       end) * 1000, self(), terminate_connection),
+                       end) * 1000, Pid, terminate_connection),
+    rabbit_amqp1_0:unregister_connection(Pid),
     State#v1{connection_state = closed}.
 
 handle_dependent_exit(ChPid, Reason, State) ->
+    credit_flow:peer_down(ChPid),
+
     case {ChPid, termination_kind(Reason)} of
-        {undefined, uncontrolled} ->
-            exit({abnormal_dependent_exit, ChPid, Reason});
         {_Channel, controlled} ->
             maybe_close(control_throttle(State));
         {Channel, uncontrolled} ->
             {RealReason, Trace} = Reason,
-            R = {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                 "Session error: ~p~n~p", [RealReason, Trace]},
+            R = error_frame(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, "Session error: ~tp~n~tp", [RealReason, Trace]),
             maybe_close(handle_exception(control_throttle(State), Channel, R))
     end.
 
@@ -262,8 +269,8 @@ maybe_close(State = #v1{connection_state = closing,
     % process it's internal message buffer before the supervision tree
     % shuts everything down and in flight messages such as dispositions
     % could be lost
-    [ _ = rabbit_amqp1_0_session:get_info(SessionPid)
-      || {{channel, _}, {ch_fr_pid, SessionPid}} <- get()],
+    _ = [ _ = rabbit_amqp1_0_session:get_info(SessionPid)
+          || {{channel, _}, {ch_fr_pid, SessionPid}} <- get()],
     NewState;
 maybe_close(State) ->
     State.
@@ -275,13 +282,13 @@ error_frame(Condition, Fmt, Args) ->
 
 handle_exception(State = #v1{connection_state = closed}, Channel,
                  #'v1_0.error'{description = {utf8, Desc}}) ->
-    rabbit_log_connection:error("Error on AMQP 1.0 connection ~p (~p), channel ~p:~n~p",
+    rabbit_log_connection:error("Error on AMQP 1.0 connection ~tp (~tp), channel ~tp:~n~tp",
         [self(), closed, Channel, Desc]),
     State;
 handle_exception(State = #v1{connection_state = CS}, Channel,
                  ErrorFrame = #'v1_0.error'{description = {utf8, Desc}})
   when ?IS_RUNNING(State) orelse CS =:= closing ->
-    rabbit_log_connection:error("Error on AMQP 1.0 connection ~p (~p), channel ~p:~n~p",
+    rabbit_log_connection:error("Error on AMQP 1.0 connection ~tp (~tp), channel ~tp:~n~tp",
         [self(), CS, Channel, Desc]),
     %% TODO: session errors shouldn't force the connection to close
     State1 = close_connection(State),
@@ -317,11 +324,11 @@ handle_1_0_frame(Mode, Channel, Payload, State) ->
             %% section 2.8.15 in http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-complete-v1.0-os.pdf
             handle_exception(State, 0, error_frame(
                                          ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
-                                         "Access for user '~s' was refused: insufficient permissions", [Username]));
+                                         "Access for user '~ts' was refused: insufficient permissions", [Username]));
         _:Reason:Trace ->
             handle_exception(State, 0, error_frame(
                                          ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                         "Reader error: ~p~n~p",
+                                         "Reader error: ~tp~n~tp",
                                          [Reason, Trace]))
     end.
 
@@ -346,12 +353,12 @@ handle_1_0_frame0(Mode, Channel, Payload, State) ->
 parse_1_0_frame(Payload, _Channel) ->
     {PerfDesc, Rest} = amqp10_binary_parser:parse(Payload),
     Perf = amqp10_framing:decode(PerfDesc),
-    ?DEBUG("Channel ~p ->~n~p~n~s",
+    ?DEBUG("Channel ~tp ->~n~tp~n~ts",
            [_Channel, amqp10_framing:pprint(Perf),
             case Rest of
                 <<>> -> <<>>;
                 _    -> rabbit_misc:format(
-                          "  followed by ~p bytes of content", [size(Rest)])
+                          "  followed by ~tp bytes of content", [size(Rest)])
             end]),
     case Rest of
         <<>> -> Perf;
@@ -415,9 +422,10 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
         end,
     HostnameVal = case Hostname of
                     undefined -> undefined;
+                    null -> undefined;
                     {utf8, Val} -> Val
                   end,
-    rabbit_log:debug("AMQP 1.0 connection.open frame: hostname = ~s, extracted vhost = ~s, idle_timeout = ~p" ,
+    rabbit_log:debug("AMQP 1.0 connection.open frame: hostname = ~ts, extracted vhost = ~ts, idle_timeout = ~tp" ,
                     [HostnameVal, vhost(Hostname), HeartbeatSec * 1000]),
     %% TODO enforce channel_max
     ok = send_on_channel0(
@@ -428,6 +436,7 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                         container_id   = {utf8, rabbit_nodes:cluster_name()},
                         properties     = server_properties()}),
     Conserve = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+    rabbit_amqp1_0:register_connection(self()),
     control_throttle(
       State1#v1{throttle = Throttle#throttle{alarmed_by = Conserve}});
 
@@ -435,14 +444,22 @@ handle_1_0_connection_frame(_Frame, State) ->
     maybe_close(State#v1{connection_state = closing}).
 
 handle_1_0_session_frame(Channel, Frame, State) ->
-    case get({channel, Channel}) of
-        {ch_fr_pid, SessionPid} ->
+    case maps:get(Channel, State#v1.tracked_channels, undefined) of
+        undefined ->
+            case ?IS_RUNNING(State) of
+                true ->
+                    send_to_new_1_0_session(Channel, Frame, State);
+                false ->
+                    throw({channel_frame_while_starting,
+                           Channel, State#v1.connection_state,
+                           Frame})
+            end;
+        SessionPid ->
             ok = rabbit_amqp1_0_session:process_frame(SessionPid, Frame),
             case Frame of
                 #'v1_0.end'{} ->
-                    erase({channel, Channel}),
-                    State;
-                #'v1_0.transfer'{} ->
+                    untrack_channel(Channel, State);
+                {#'v1_0.transfer'{}, _MsgPart} ->
                     case (State#v1.connection_state =:= blocking) of
                         true ->
                             ok = rabbit_heartbeat:pause_monitor(
@@ -453,24 +470,6 @@ handle_1_0_session_frame(Channel, Frame, State) ->
                     end;
                 _ ->
                     State
-            end;
-        closing ->
-            case Frame of
-                #'v1_0.end'{} ->
-                    erase({channel, Channel});
-                _Else ->
-                    ok
-            end,
-            State;
-        undefined ->
-            case ?IS_RUNNING(State) of
-                true ->
-                    ok = send_to_new_1_0_session(Channel, Frame, State),
-                    State;
-                false ->
-                    throw({channel_frame_while_starting,
-                           Channel, State#v1.connection_state,
-                           Frame})
             end
     end.
 
@@ -627,7 +626,7 @@ auth_mechanism_to_module(TypeBin, Sock) ->
     case rabbit_registry:binary_to_type(TypeBin) of
         {error, not_found} ->
             protocol_error(?V_1_0_AMQP_ERROR_NOT_FOUND,
-                           "unknown authentication mechanism '~s'", [TypeBin]);
+                           "unknown authentication mechanism '~ts'", [TypeBin]);
         T ->
             case {lists:member(T, auth_mechanisms(Sock)),
                   rabbit_registry:lookup_module(auth_mechanism, T)} of
@@ -635,7 +634,7 @@ auth_mechanism_to_module(TypeBin, Sock) ->
                     Module;
                 _ ->
                     protocol_error(?V_1_0_AMQP_ERROR_NOT_FOUND,
-                                   "invalid authentication mechanism '~s'", [T])
+                                   "invalid authentication mechanism '~ts'", [T])
             end
     end.
 
@@ -661,7 +660,7 @@ auth_phase_1_0(Response,
             Outcome = #'v1_0.sasl_outcome'{code = {ubyte, 1}},
             ok = send_on_channel0(Sock, Outcome, rabbit_amqp1_0_sasl),
             protocol_error(
-              ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, "~s login refused: ~s",
+              ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, "~ts login refused: ~ts",
               [Name, io_lib:format(Msg, Args)]);
         {protocol_error, Msg, Args} ->
             rabbit_core_metrics:auth_attempt_failed(<<>>, <<>>, amqp10),
@@ -670,13 +669,12 @@ auth_phase_1_0(Response,
             rabbit_core_metrics:auth_attempt_succeeded(<<>>, <<>>, amqp10),
             Secure = #'v1_0.sasl_challenge'{challenge = {binary, Challenge}},
             ok = send_on_channel0(Sock, Secure, rabbit_amqp1_0_sasl),
-            State#v1{connection = Connection =
-                         #v1_connection{auth_state = AuthState1}};
+            State#v1{connection = Connection#v1_connection{auth_state = AuthState1}};
         {ok, User = #user{username = Username}} ->
             case rabbit_access_control:check_user_loopback(Username, Sock) of
                 ok ->
                     rabbit_log_connection:info(
-                        "AMQP 1.0 connection ~p: user '~s' authenticated",
+                        "AMQP 1.0 connection ~tp: user '~ts' authenticated",
                         [self(), Username]),
                     rabbit_core_metrics:auth_attempt_succeeded(<<>>, Username, amqp10),
                     ok;
@@ -684,7 +682,7 @@ auth_phase_1_0(Response,
                     rabbit_core_metrics:auth_attempt_failed(<<>>, Username, amqp10),
                     protocol_error(
                       ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
-                      "user '~s' can only connect via localhost",
+                      "user '~ts' can only connect via localhost",
                       [Username])
             end,
             Outcome = #'v1_0.sasl_outcome'{code = {ubyte, 0}},
@@ -695,6 +693,18 @@ auth_phase_1_0(Response,
               handshake, 8)
     end.
 
+track_channel(Channel, ChFrPid, State) ->
+    rabbit_log:debug("AMQP 1.0 opened channel = ~tp " , [{Channel, ChFrPid}]),
+    State#v1{tracked_channels = maps:put(Channel, ChFrPid, State#v1.tracked_channels)}.
+
+untrack_channel(Channel, State) ->
+    case maps:take(Channel, State#v1.tracked_channels) of
+        {Value, NewMap} ->
+            rabbit_log:debug("AMQP 1.0 closed channel = ~tp ", [{Channel, Value}]),
+            State#v1{tracked_channels = NewMap};
+        error -> State
+    end.
+
 send_to_new_1_0_session(Channel, Frame, State) ->
     #v1{sock = Sock, queue_collector = Collector,
         channel_sup_sup_pid = ChanSupSup,
@@ -703,6 +713,7 @@ send_to_new_1_0_session(Channel, Frame, State) ->
                                     user      = User},
         proxy_socket = ProxySocket} = State,
     %% Note: the equivalent, start_channel is in channel_sup_sup
+
     case rabbit_amqp1_0_session_sup_sup:start_session(
            %% NB subtract fixed frame header size
            ChanSupSup, {amqp10_framing, Sock, Channel,
@@ -711,18 +722,17 @@ send_to_new_1_0_session(Channel, Frame, State) ->
                             _         -> FrameMax - 8
                         end,
                         self(), User, vhost(Hostname), Collector, ProxySocket}) of
-        {ok, ChSupPid, ChFrPid} ->
+        {ok, _ChSupPid, ChFrPid} ->
             erlang:monitor(process, ChFrPid),
-            put({channel, Channel}, {ch_fr_pid, ChFrPid}),
-            put({ch_sup_pid, ChSupPid}, {{channel, Channel}, {ch_fr_pid, ChFrPid}}),
-            put({ch_fr_pid, ChFrPid}, {channel, Channel}),
+            ModifiedState = track_channel(Channel, ChFrPid, State),
             rabbit_log_connection:info(
-                        "AMQP 1.0 connection ~p: "
-                        "user '~s' authenticated and granted access to vhost '~ts'",
+                        "AMQP 1.0 connection ~tp: "
+                        "user '~ts' authenticated and granted access to vhost '~ts'",
                         [self(), User#user.username, vhost(Hostname)]),
-            ok = rabbit_amqp1_0_session:process_frame(ChFrPid, Frame);
+            ok = rabbit_amqp1_0_session:process_frame(ChFrPid, Frame),
+            ModifiedState;
         {error, {not_allowed, _}} ->
-            rabbit_log:error("AMQP 1.0: user '~s' is not allowed to access virtual host '~s'",
+            rabbit_log:error("AMQP 1.0: user '~ts' is not allowed to access virtual host '~ts'",
                 [User#user.username, vhost(Hostname)]),
             %% Let's skip the supervisor trace, this is an expected error
             throw({error, {not_allowed, User#user.username}});
@@ -785,39 +795,21 @@ info_internal(SockStat, S) when SockStat =:= recv_oct;
     socket_info(fun (Sock) -> rabbit_net:getstat(Sock, [SockStat]) end,
                 fun ([{_, I}]) -> I end, S);
 info_internal(ssl, #v1{sock = Sock}) -> rabbit_net:is_ssl(Sock);
-info_internal(ssl_protocol, S) -> ssl_info(fun ({P, _}) -> P end, S);
-info_internal(ssl_key_exchange, S) -> ssl_info(fun ({_, {K, _, _}}) -> K end, S);
-info_internal(ssl_cipher, S) -> ssl_info(fun ({_, {_, C, _}}) -> C end, S);
-info_internal(ssl_hash, S) -> ssl_info(fun ({_, {_, _, H}}) -> H end, S);
-info_internal(peer_cert_issuer, S) ->
-    cert_info(fun rabbit_ssl:peer_cert_issuer/1, S);
-info_internal(peer_cert_subject, S) ->
-    cert_info(fun rabbit_ssl:peer_cert_subject/1, S);
-info_internal(peer_cert_validity, S) ->
-    cert_info(fun rabbit_ssl:peer_cert_validity/1, S).
+info_internal(SSL, #v1{sock = Sock, proxy_socket = ProxySock})
+  when SSL =:= ssl_protocol;
+       SSL =:= ssl_key_exchange;
+       SSL =:= ssl_cipher;
+       SSL =:= ssl_hash ->
+    rabbit_ssl:info(SSL, {Sock, ProxySock});
+info_internal(Cert, #v1{sock = Sock})
+  when Cert =:= peer_cert_issuer;
+       Cert =:= peer_cert_subject;
+       Cert =:= peer_cert_validity ->
+    rabbit_ssl:cert_info(Cert, Sock).
 
 %% From rabbit_reader
 socket_info(Get, Select, #v1{sock = Sock}) ->
     case Get(Sock) of
         {ok,    T} -> Select(T);
         {error, _} -> ''
-    end.
-
-ssl_info(F, #v1{sock = Sock, proxy_socket = ProxySock}) ->
-    case rabbit_net:proxy_ssl_info(Sock, ProxySock) of
-        nossl       -> '';
-        {error, _}  -> '';
-        {ok, Items} ->
-            P = proplists:get_value(protocol, Items),
-            #{cipher := C,
-              key_exchange := K,
-              mac := H} = proplists:get_value(selected_cipher_suite, Items),
-            F({P, {K, C, H}})
-    end.
-
-cert_info(F, #v1{sock = Sock}) ->
-    case rabbit_net:peercert(Sock) of
-        nossl      -> '';
-        {error, _} -> '';
-        {ok, Cert} -> list_to_binary(F(Cert))
     end.

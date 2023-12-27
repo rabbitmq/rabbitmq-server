@@ -1,0 +1,61 @@
+<h1>Deprecated Features</h1>
+  <%
+  var used_deprecated_features_names = [];
+  for (var i = 0; i < used_deprecated_features.length; i++) {
+      used_deprecated_features_names.push(used_deprecated_features[i].name);
+  var needs_deprecate = false;
+  if (used_deprecated_features.length > 0) {
+      needs_deprecate = true;
+  }
+  }
+  if (needs_deprecate) { %>
+     <p class="warning">
+        Deprecated features are being used. While using deprecated features, upgrading to future minor or major versions of RabbitMQ may not be possible. <a href="https://www.rabbitmq.com/feature-flags.html">[Learn more]</a>
+     </p>
+  <% } %>
+<div class="section">
+  <h2>All Deprecated Features</h2>
+  <div class="hider">
+<%= filter_ui(deprecated_features) %>
+  <div class="updatable">
+<% if (deprecated_features.length > 0) { %>
+<table class="list">
+  <thead>
+    <tr>
+      <th><%= fmt_sort('Name', 'name') %></th>
+      <th><%= fmt_sort('Deprecation phase', 'deprecation_phase') %></th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <%
+       for (var i = 0; i < deprecated_features.length; i++) {
+         var deprecated_feature = deprecated_features[i];
+         var in_use = used_deprecated_features_names.includes(deprecated_feature.name);
+         if (in_use) {
+            state_color = "red";
+         }
+    %>
+       <tr<%= alt_rows(i)%>>
+         <td><%= fmt_string(deprecated_feature.name) %></td>
+         <td>
+         <% if (in_use) { %>
+         <abbr class="status-<%= fmt_string(state_color) %>">In use</abbr>
+         <% } %>
+         <%= fmt_deprecation_phase(deprecated_feature.deprecation_phase, DEPRECATION_PHASES) %></td>
+         <td>
+         <p><%= fmt_string(deprecated_feature.desc) %></p>
+         <% if (deprecated_feature.doc_url) { %>
+         <p><a href="<%= fmt_string(deprecated_feature.doc_url) %>">[Learn more]</a></p>
+         <% } %>
+         </td>
+       </tr>
+    <% } %>
+  </tbody>
+</table>
+<% } else { %>
+    <p>... no deprecated features ...</p>
+<% } %>
+  </div>
+  </div>
+</div>

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 -module(mock_server).
 
@@ -16,7 +16,7 @@
          recv_amqp_header_step/1
         ]).
 
--include_lib("src/amqp10_client.hrl").
+-include("src/amqp10_client.hrl").
 
 start(Port) ->
     {ok, LSock} = gen_tcp:listen(Port, [binary, {packet, 0}, {active, false}]),
@@ -59,16 +59,16 @@ recv(Sock) ->
 amqp_step(Fun) ->
     fun (Sock) ->
             Recv = recv(Sock),
-            ct:pal("AMQP Step receieved ~p~n", [Recv]),
+            ct:pal("AMQP Step receieved ~tp~n", [Recv]),
             case Fun(Recv) of
                 {_Ch, []} -> ok;
                 {Ch, {multi, Records}} ->
                     [begin
-                         ct:pal("AMQP multi Step send ~p~n", [R]),
+                         ct:pal("AMQP multi Step send ~tp~n", [R]),
                          send(Sock, Ch, R)
                      end || R <- Records];
                 {Ch, Records} ->
-                    ct:pal("AMQP Step send ~p~n", [Records]),
+                    ct:pal("AMQP Step send ~tp~n", [Records]),
                     send(Sock, Ch, Records)
             end
     end.
@@ -81,4 +81,4 @@ send_amqp_header_step(Sock) ->
 recv_amqp_header_step(Sock) ->
     ct:pal("Receiving AMQP protocol header"),
     {ok, R} = gen_tcp:recv(Sock, 8),
-    ct:pal("handshake Step receieved ~p~n", [R]).
+    ct:pal("handshake Step receieved ~tp~n", [R]).

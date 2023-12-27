@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -include_lib("rabbit_common/include/logging.hrl").
@@ -16,7 +16,14 @@
 % by `httpc`
 -define(DEFAULT_HTTP_TIMEOUT, 2250).
 
--type peer_discovery_config_value() :: atom() | integer() | string() | list() | map() | any() | undefined.
+-type peer_discovery_config_value() :: port()
+                                     | atom()
+                                     | integer()
+                                     | string()
+                                     | proplists:proplist()
+                                     | map()
+                                     | list()
+                                     | undefined.
 
 -record(peer_discovery_config_entry_meta,
         {env_variable  :: string(),

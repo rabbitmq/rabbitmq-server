@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_prometheus_http_SUITE).
@@ -18,19 +18,23 @@ all() ->
     [
         {group, default_config},
         {group, config_path},
+        {group, global_labels},
         {group, aggregated_metrics},
         {group, per_object_metrics},
         {group, per_object_endpoint_metrics},
         {group, commercial},
-        {group, detailed_metrics}
+        {group, detailed_metrics},
+        {group, special_chars},
+        {group, authentication}
     ].
 
 groups() ->
     [
         {default_config, [], generic_tests()},
         {config_path, [], generic_tests()},
+        {global_labels, [], generic_tests()},
         {aggregated_metrics, [], [
-            aggregated_metrics_test,
+                                  aggregated_metrics_test,
             specific_erlang_metrics_present_test,
             global_metrics_present_test,
             global_metrics_single_metric_family_test
@@ -58,12 +62,14 @@ groups() ->
                                      vhost_status_metric,
                                      exchange_bindings_metric,
                                      exchange_names_metric
-        ]}
+        ]},
+       {special_chars, [], [core_metrics_special_chars]},
+       {authentication, [], [basic_auth]}
     ].
 
 generic_tests() ->
     [
-        get_test,
+     get_test,
         content_type_test,
         encoding_test,
         gzip_encoding_test,
@@ -80,6 +86,10 @@ init_per_group(config_path, Config0) ->
     PathConfig = {rabbitmq_prometheus, [{path, "/bunnieshop"}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
     init_per_group(config_path, Config1, [{prometheus_path, "/bunnieshop"}]);
+init_per_group(global_labels, Config0) ->
+    GlobalLabelsConfig = {prometheus, [{global_labels, [{"foo", "bar"}]}]},
+    Config1 = rabbit_ct_helpers:merge_app_env(Config0, GlobalLabelsConfig),
+    init_per_group(aggregated_metrics, Config1);
 init_per_group(per_object_metrics, Config0) ->
     PathConfig = {rabbitmq_prometheus, [{return_per_object_metrics, true}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
@@ -196,7 +206,47 @@ init_per_group(aggregated_metrics, Config0) ->
 init_per_group(commercial, Config0) ->
     ProductConfig = {rabbit, [{product_name, "WolfMQ"}, {product_version, "2020"}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, ProductConfig),
-    init_per_group(commercial, Config1, []).
+    init_per_group(commercial, Config1, []);
+
+init_per_group(special_chars, Config0) ->
+    StatsEnv = {rabbit, [{collect_statistics, fine}, {collect_statistics_interval, 100}]},
+    Config1 = init_per_group(special_chars, rabbit_ct_helpers:merge_app_env(Config0, StatsEnv), []),
+
+    VHost = <<"vhost\"\n\\">>,
+    rabbit_ct_broker_helpers:add_vhost(Config1, 0, VHost, <<"guest">>),
+    rabbit_ct_broker_helpers:set_full_permissions(Config1, VHost),
+    VHostConn = rabbit_ct_client_helpers:open_unmanaged_connection(Config1, 0, VHost),
+    {ok, VHostCh} = amqp_connection:open_channel(VHostConn),
+
+    %% new line characters (\r and \n) are removed from queue and
+    %% exchange names during creation (unlike for vhosts)
+    QName = <<"queue\"\\">>,
+    #'queue.declare_ok'{} = amqp_channel:call(VHostCh,
+                                              #'queue.declare'{queue = QName,
+                                                               durable = true
+                                                              }),
+    Exchange = <<"exchange\"\\">>,
+    #'exchange.declare_ok'{} = amqp_channel:call(VHostCh, #'exchange.declare'{exchange = Exchange}),
+    #'queue.bind_ok'{} = amqp_channel:call(VHostCh, #'queue.bind'{queue = QName, exchange = Exchange, routing_key = QName}),
+
+    amqp_channel:call(VHostCh,
+                      #'basic.publish'{exchange = Exchange, routing_key = QName},
+                      #amqp_msg{payload = <<"msg">>}),
+
+    Config2 = [{vhost_name, VHost},
+               {queue_name, QName},
+               {exchange_name, Exchange},
+               {connection, VHostConn},
+               {channel, VHostCh}
+               |Config1],
+    init_per_group(special_chars, Config2, []);
+
+init_per_group(authentication, Config) ->
+    Config1 = rabbit_ct_helpers:merge_app_env(
+                Config, {rabbitmq_prometheus, [{authentication, [{enabled, true}]}]}),
+    init_per_group(authentication, Config1, []).
+
+
 
 init_per_group(Group, Config0, Extra) ->
     rabbit_ct_helpers:log_environment(),
@@ -236,7 +286,15 @@ end_per_group(detailed_metrics, Config) ->
 
     %% Delete queues?
     end_per_group_(Config);
-
+end_per_group(special_chars, Config) ->
+    amqp_channel:close(?config(channel, Config)),
+    amqp_connection:close(?config(connection, Config)),
+    %% Delete queues?
+    end_per_group_(Config);
+end_per_group(authentication, Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                      [rabbitmq_prometheus, authentication]),
+    end_per_group_(Config);
 end_per_group(_, Config) ->
     end_per_group_(Config).
 
@@ -274,7 +332,7 @@ get_test(Config) ->
     %% Check that the body looks like a valid response
     ?assertEqual(match, re:run(Body, "TYPE", [{capture, none}])),
     Port = rabbit_mgmt_test_util:config_port(Config, tcp_port_prometheus),
-    URI = lists:flatten(io_lib:format("http://localhost:~p/metricsooops", [Port])),
+    URI = lists:flatten(io_lib:format("http://localhost:~tp/metricsooops", [Port])),
     {ok, {{_, CodeAct, _}, _, _}} = httpc:request(get, {URI, []}, ?HTTPC_OPTS, []),
     ?assertMatch(404, CodeAct).
 
@@ -467,11 +525,11 @@ queue_coarse_metrics_per_object_test(Config) ->
 
 queue_metrics_per_object_test(Config) ->
     Expected1 =  #{#{queue => "vhost-1-queue-with-consumer", vhost => "vhost-1"} => [7],
-                   #{queue => "vhost-1-queue-with-messages", vhost => "vhost-1"} => [7]},
+                   #{queue => "vhost-1-queue-with-messages", vhost => "vhost-1"} => [1]},
     Expected2 =  #{#{queue => "vhost-2-queue-with-consumer", vhost => "vhost-2"} => [11],
-                   #{queue => "vhost-2-queue-with-messages", vhost => "vhost-2"} => [11]},
+                   #{queue => "vhost-2-queue-with-messages", vhost => "vhost-2"} => [1]},
     ExpectedD =  #{#{queue => "default-queue-with-consumer", vhost => "/"} => [3],
-                   #{queue => "default-queue-with-messages", vhost => "/"} => [3]},
+                   #{queue => "default-queue-with-messages", vhost => "/"} => [1]},
     {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?vhost=vhost-1&family=queue_metrics", [], 200),
     ?assertEqual(Expected1,
                  map_get(rabbitmq_detailed_queue_messages_ram, parse_response(Body1))),
@@ -542,6 +600,51 @@ exchange_names_metric(Config) ->
                   }, Names),
     ok.
 
+core_metrics_special_chars(Config) ->
+    {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?family=queue_coarse_metrics", [], 200),
+    ?assertMatch(#{rabbitmq_detailed_queue_messages :=
+                       #{#{vhost => "vhost\\\"\\n\\\\",
+                           queue => "queue\\\"\\\\"} := [I]}}
+                 when I == 0; I == 1,
+                      parse_response(Body1)),
+
+    {_, Body2} = http_get_with_pal(Config, "/metrics/detailed?family=channel_exchange_metrics", [], 200),
+    #{rabbitmq_detailed_channel_messages_published_total := LabelValue2} = parse_response(Body2),
+    ?assertMatch([{#{channel := _,
+                     vhost := "vhost\\\"\\n\\\\",
+                     exchange := "exchange\\\"\\\\"}, [I]}]
+                 when I == 0; I == 1,
+                      maps:to_list(LabelValue2)),
+
+    {_, Body3} = http_get_with_pal(Config, "/metrics/detailed?family=channel_queue_exchange_metrics", [], 200),
+    #{rabbitmq_detailed_queue_messages_published_total := LabelValue3} = parse_response(Body3),
+    ?assertMatch([{#{channel := _,
+                     queue_vhost := "vhost\\\"\\n\\\\",
+                     queue := "queue\\\"\\\\",
+                     exchange_vhost := "vhost\\\"\\n\\\\",
+                     exchange := "exchange\\\"\\\\"}, [I]}]
+                 when I == 0; I == 1,
+                      maps:to_list(LabelValue3)),
+    ok.
+
+basic_auth(Config) ->
+    http_get(Config, [{"accept-encoding", "deflate"}], 401),
+    AuthHeader = rabbit_mgmt_test_util:auth_header("guest", "guest"),
+    http_get(Config, [{"accept-encoding", "deflate"}, AuthHeader], 200),
+
+    rabbit_ct_broker_helpers:add_user(Config, <<"monitor">>),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, <<"monitor">>, [monitoring]),
+    MonAuthHeader = rabbit_mgmt_test_util:auth_header("monitor", "monitor"),
+    http_get(Config, [{"accept-encoding", "deflate"}, MonAuthHeader], 200),
+
+    rabbit_ct_broker_helpers:add_user(Config, <<"management">>),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, <<"management">>, [management]),
+    MgmtAuthHeader = rabbit_mgmt_test_util:auth_header("management", "management"),
+    http_get(Config, [{"accept-encoding", "deflate"}, MgmtAuthHeader], 401),
+
+    rabbit_ct_broker_helpers:delete_user(Config, <<"monitor">>),
+    rabbit_ct_broker_helpers:delete_user(Config, <<"management">>).
+
 
 http_get(Config, ReqHeaders, CodeExp) ->
     Path = proplists:get_value(prometheus_path, Config, "/metrics"),
@@ -549,7 +652,7 @@ http_get(Config, ReqHeaders, CodeExp) ->
 
 http_get(Config, Path, ReqHeaders, CodeExp) ->
     Port = rabbit_mgmt_test_util:config_port(Config, tcp_port_prometheus),
-    URI = lists:flatten(io_lib:format("http://localhost:~p~s", [Port, Path])),
+    URI = lists:flatten(io_lib:format("http://localhost:~tp~ts", [Port, Path])),
     {ok, {{_HTTP, CodeAct, _}, Headers, Body}} =
         httpc:request(get, {URI, ReqHeaders}, ?HTTPC_OPTS, []),
     ?assertMatch(CodeExp, CodeAct),

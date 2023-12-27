@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(feature_flags_with_unpriveleged_user_SUITE).
@@ -53,10 +53,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     feature_flags_SUITE:end_per_suite(Config).
 
-init_per_group(enabling_in_cluster, Config) ->
-    rabbit_ct_helpers:set_config(
-      Config,
-      [{rmq_nodes_count, 3}]);
 init_per_group(Group, Config) ->
     feature_flags_SUITE:init_per_group(Group, Config).
 

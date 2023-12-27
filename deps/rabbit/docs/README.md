@@ -21,7 +21,7 @@ with an `advanced.config` to complement it as needed.
 
 ### Source Files
 
-This directory contains man pages that are are converted to HTML using `mandoc`:
+This directory contains man pages that are converted to HTML using `mandoc`:
 
     gmake web-manpages
 

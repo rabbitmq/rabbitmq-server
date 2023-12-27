@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_limit).
@@ -51,9 +51,13 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
     end.
 
 delete_resource(ReqData, Context = #context{user = #user{username = Username}}) ->
-    ok = rabbit_vhost_limit:clear_limit(rabbit_mgmt_util:vhost(ReqData),
-                                        name(ReqData), Username),
-    {true, ReqData, Context}.
+  case rabbit_mgmt_util:vhost(ReqData) of
+    not_found ->
+      rabbit_mgmt_util:not_found(vhost_not_found, ReqData, Context);
+    VHost ->
+      ok = rabbit_vhost_limit:clear_limit(VHost, limit_name(ReqData), Username),
+      {true, ReqData, Context}
+  end.
 
 
 is_authorized(ReqData, Context) ->
@@ -61,4 +65,4 @@ is_authorized(ReqData, Context) ->
 
 %%--------------------------------------------------------------------
 
-name(ReqData) -> rabbit_mgmt_util:id(name, ReqData).
+limit_name(ReqData) -> rabbit_mgmt_util:id(name, ReqData).

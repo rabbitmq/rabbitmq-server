@@ -2,13 +2,16 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(feature_flags_SUITE).
 
+-include_lib("kernel/include/logger.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+
+-include_lib("rabbit_common/include/logging.hrl").
 
 -export([suite/0,
          all/0,
@@ -22,12 +25,18 @@
 
          registry_general_usage/1,
          registry_concurrent_reloads/1,
+         try_to_deadlock_in_registry_reload_1/1,
+         try_to_deadlock_in_registry_reload_2/1,
+         registry_reset/1,
          enable_feature_flag_in_a_healthy_situation/1,
          enable_unsupported_feature_flag_in_a_healthy_situation/1,
          enable_feature_flag_when_ff_file_is_unwritable/1,
          enable_feature_flag_with_a_network_partition/1,
          mark_feature_flag_as_enabled_with_a_network_partition/1,
          required_feature_flag_enabled_by_default/1,
+         required_plugin_feature_flag_enabled_by_default/1,
+         required_plugin_feature_flag_enabled_after_activation/1,
+         plugin_stable_ff_enabled_on_initial_node_start/1,
 
          clustering_ok_with_ff_disabled_everywhere/1,
          clustering_ok_with_ff_enabled_on_some_nodes/1,
@@ -47,7 +56,6 @@ suite() ->
 all() ->
     [
      {group, registry},
-     {group, feature_flags_v1},
      {group, feature_flags_v2}
     ].
 
@@ -58,7 +66,10 @@ groups() ->
       [
        enable_feature_flag_in_a_healthy_situation,
        enable_unsupported_feature_flag_in_a_healthy_situation,
-       required_feature_flag_enabled_by_default
+       required_feature_flag_enabled_by_default,
+       required_plugin_feature_flag_enabled_by_default,
+       required_plugin_feature_flag_enabled_after_activation,
+       plugin_stable_ff_enabled_on_initial_node_start
       ]},
      {enabling_in_cluster, [],
       [
@@ -66,7 +77,9 @@ groups() ->
        enable_unsupported_feature_flag_in_a_healthy_situation,
        enable_feature_flag_with_a_network_partition,
        mark_feature_flag_as_enabled_with_a_network_partition,
-       required_feature_flag_enabled_by_default
+       required_feature_flag_enabled_by_default,
+       required_plugin_feature_flag_enabled_by_default,
+       required_plugin_feature_flag_enabled_after_activation
       ]},
      {clustering, [],
       [
@@ -90,9 +103,11 @@ groups() ->
      {registry, [],
       [
        registry_general_usage,
-       registry_concurrent_reloads
+       registry_concurrent_reloads,
+       try_to_deadlock_in_registry_reload_1,
+       try_to_deadlock_in_registry_reload_2,
+       registry_reset
       ]},
-     {feature_flags_v1, [], Groups},
      {feature_flags_v2, [], Groups}
     ].
 
@@ -109,21 +124,22 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(feature_flags_v1, Config) ->
-    rabbit_ct_helpers:set_config(Config, {enable_feature_flags_v2, false});
+init_per_group(registry, Config) ->
+    logger:set_primary_config(level, debug),
+    rabbit_ct_helpers:run_steps(
+      Config,
+      [fun rabbit_ct_helpers:redirect_logger_to_ct_logs/1]);
 init_per_group(feature_flags_v2, Config) ->
-    %% The feature_flags_v2 group only exists on branches where it is
-    %% supported, so if this is not a mixed version test, it is assumed
-    %% to be supported.
+    %% `feature_flags_v2' is now required and won't work in mixed-version
+    %% clusters if the other version doesn't support it.
     case rabbit_ct_helpers:is_mixed_versions() of
         false ->
             rabbit_ct_helpers:set_config(
               Config, {enable_feature_flags_v2, true});
         true ->
-            %% Before we run `feature_flags_v2'-related tests, we must ensure that
-            %% both umbrellas support them. Otherwise there is no point in running
-            %% them. The `feature_flags_v1' group already covers testing in that
-            %% case.
+            %% Before we run `feature_flags_v2'-related tests, we must ensure
+            %% that both umbrellas support them. Otherwise there is no point
+            %% in running them.
             %% To determine that `feature_flags_v2' are supported, we can't
             %% query RabbitMQ which is not started. Therefore, we check if the
             %% source or bytecode of `rabbit_ff_controller' is present.
@@ -164,13 +180,15 @@ init_per_group(feature_flags_v2, Config) ->
             end
     end;
 init_per_group(enabling_on_single_node, Config) ->
-    rabbit_ct_helpers:set_config(
-      Config,
-      [{rmq_nodes_count, 1}]);
+    Config1 = rabbit_ct_helpers:set_config(
+                Config,
+                [{rmq_nodes_count, 1}]),
+    rabbit_ct_helpers:run_setup_steps(Config1, [fun prepare_my_plugin/1]);
 init_per_group(enabling_in_cluster, Config) ->
-    rabbit_ct_helpers:set_config(
-      Config,
-      [{rmq_nodes_count, 5}]);
+    Config1 = rabbit_ct_helpers:set_config(
+                Config,
+                [{rmq_nodes_count, 5}]),
+    rabbit_ct_helpers:run_setup_steps(Config1, [fun prepare_my_plugin/1]);
 init_per_group(clustering, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config,
@@ -184,7 +202,7 @@ init_per_group(activating_plugin, Config) ->
                 [{rmq_nodes_count, 2},
                  {rmq_nodes_clustered, true},
                  {start_rmq_with_plugins_disabled, true}]),
-    rabbit_ct_helpers:run_setup_steps(Config1,[fun prepare_my_plugin/1]);
+    rabbit_ct_helpers:run_setup_steps(Config1, [fun prepare_my_plugin/1]);
 init_per_group(_, Config) ->
     Config.
 
@@ -194,93 +212,90 @@ end_per_group(_, Config) ->
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
-    UsingFFv2 = rabbit_ct_helpers:get_config(
-                  Config, enable_feature_flags_v2, false),
-    ForcedFFs = case UsingFFv2 of
-                    true  -> [feature_flags_v2];
-                    false -> []
-                end,
-    Suffix = case UsingFFv2 of
-                 false -> rabbit_misc:format("~s-v1", [Testcase]);
-                 true  -> rabbit_misc:format("~s-v2", [Testcase])
-             end,
-    case ?config(tc_group_properties, Config) of
+    Config1 = case Testcase of
+                  required_plugin_feature_flag_enabled_after_activation ->
+                      rabbit_ct_helpers:set_config(
+                        Config,
+                        [{start_rmq_with_plugins_disabled, true}]);
+                  _ ->
+                      Config
+              end,
+    case ?config(tc_group_properties, Config1) of
         [{name, registry} | _] ->
-            logger:set_primary_config(level, debug),
-            FeatureFlagsFile = filename:join(?config(priv_dir, Config),
+            rabbit_feature_flags:clear_injected_test_feature_flags(),
+            rabbit_feature_flags:reset_registry(),
+            FeatureFlagsFile = filename:join(?config(priv_dir, Config1),
                                              rabbit_misc:format(
-                                               "feature_flags-~s",
+                                               "feature_flags-~ts",
                                                [Testcase])),
             application:set_env(rabbit, feature_flags_file, FeatureFlagsFile),
             rabbit_ct_helpers:set_config(
-              Config, {feature_flags_file, FeatureFlagsFile});
+              Config1, {feature_flags_file, FeatureFlagsFile});
         [{name, Name} | _]
           when Name =:= enabling_on_single_node orelse
                Name =:= clustering orelse
                Name =:= activating_plugin ->
-            ClusterSize = ?config(rmq_nodes_count, Config),
-            Config1 = rabbit_ct_helpers:set_config(
-                        Config,
-                        [{rmq_nodename_suffix, Suffix},
+            ClusterSize = ?config(rmq_nodes_count, Config1),
+            Config2 = rabbit_ct_helpers:set_config(
+                        Config1,
+                        [{rmq_nodename_suffix, Testcase},
                          {tcp_ports_base, {skip_n_nodes,
                                            TestNumber * ClusterSize}}
                         ]),
-            Config2 = rabbit_ct_helpers:merge_app_env(
-                        Config1,
-                        {rabbit,
-                         [{forced_feature_flags_on_init, ForcedFFs},
-                          {log, [{file, [{level, debug}]}]}]}),
-            Config3 = rabbit_ct_helpers:run_steps(
+            Config3 = rabbit_ct_helpers:merge_app_env(
                         Config2,
+                        {rabbit,
+                         [{log, [{file, [{level, debug}]}]}]}),
+            Config4 = rabbit_ct_helpers:run_steps(
+                        Config3,
                         rabbit_ct_broker_helpers:setup_steps() ++
                         rabbit_ct_client_helpers:setup_steps()),
-            case Config3 of
+            case Config4 of
                 {skip, _} ->
-                    Config3;
+                    Config4;
                 _ ->
-                    case is_feature_flag_subsystem_available(Config3) of
+                    case is_feature_flag_subsystem_available(Config4) of
                         true ->
                             %% We can declare a new feature flag at
                             %% runtime. All of them are supported but
                             %% still disabled.
-                            declare_arbitrary_feature_flag(Config3),
-                            Config3;
+                            declare_arbitrary_feature_flag(Config4),
+                            Config4;
                         false ->
-                            end_per_testcase(Testcase, Config3),
+                            end_per_testcase(Testcase, Config4),
                             {skip, "Feature flags subsystem unavailable"}
                     end
             end;
         [{name, enabling_in_cluster} | _] ->
-            ClusterSize = ?config(rmq_nodes_count, Config),
-            Config1 = rabbit_ct_helpers:set_config(
-                        Config,
-                        [{rmq_nodename_suffix, Suffix},
+            ClusterSize = ?config(rmq_nodes_count, Config1),
+            Config2 = rabbit_ct_helpers:set_config(
+                        Config1,
+                        [{rmq_nodename_suffix, Testcase},
                          {tcp_ports_base, {skip_n_nodes,
                                            TestNumber * ClusterSize}},
                          {net_ticktime, 5}
                         ]),
-            Config2 = rabbit_ct_helpers:merge_app_env(
-                        Config1,
-                        {rabbit,
-                         [{forced_feature_flags_on_init, ForcedFFs},
-                          {log, [{file, [{level, debug}]}]}]}),
-            Config3 = rabbit_ct_helpers:run_steps(
+            Config3 = rabbit_ct_helpers:merge_app_env(
                         Config2,
+                        {rabbit,
+                         [{log, [{file, [{level, debug}]}]}]}),
+            Config4 = rabbit_ct_helpers:run_steps(
+                        Config3,
                         rabbit_ct_broker_helpers:setup_steps() ++
                         rabbit_ct_client_helpers:setup_steps()),
-            case Config3 of
+            case Config4 of
                 {skip, _} ->
-                    Config3;
+                    Config4;
                 _ ->
-                    case is_feature_flag_subsystem_available(Config3) of
+                    case is_feature_flag_subsystem_available(Config4) of
                         true ->
                             %% We can declare a new feature flag at
                             %% runtime. All of them are supported but
                             %% still disabled.
-                            declare_arbitrary_feature_flag(Config3),
-                            Config3;
+                            declare_arbitrary_feature_flag(Config4),
+                            Config4;
                         false ->
-                            end_per_testcase(Testcase, Config3),
+                            end_per_testcase(Testcase, Config4),
                             {skip, "Feature flags subsystem unavailable"}
                     end
             end
@@ -303,7 +318,7 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 -define(list_ff(Which),
-        lists:sort(maps:keys(rabbit_ff_registry:list(Which)))).
+        lists:sort(maps:keys(rabbit_ff_registry_wrapper:list(Which)))).
 
 registry_general_usage(_Config) ->
     %% At first, the registry must be uninitialized.
@@ -325,20 +340,20 @@ registry_general_usage(_Config) ->
     ?assert(rabbit_ff_registry:is_registry_initialized()),
     ?assertMatch([ff_a, ff_b], ?list_ff(all)),
 
-    ?assert(rabbit_ff_registry:is_supported(ff_a)),
-    ?assert(rabbit_ff_registry:is_supported(ff_b)),
-    ?assertNot(rabbit_ff_registry:is_supported(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_supported(ff_d)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_a)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_b)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_supported(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_supported(ff_d)),
 
     ?assertEqual(#{ff_a => false,
-                   ff_b => false}, rabbit_ff_registry:states()),
+                   ff_b => false}, rabbit_ff_registry_wrapper:states()),
     ?assertMatch([], ?list_ff(enabled)),
     ?assertMatch([], ?list_ff(state_changing)),
     ?assertMatch([ff_a, ff_b], ?list_ff(disabled)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_a)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_b)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_d)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_a)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_b)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_d)),
 
     %% We can declare a new feature flag at runtime. All of them are
     %% supported but still disabled.
@@ -349,23 +364,23 @@ registry_general_usage(_Config) ->
     rabbit_feature_flags:inject_test_feature_flags(NewFeatureFlags),
     rabbit_ff_registry_factory:initialize_registry(),
     ?assertMatch([ff_a, ff_b, ff_c],
-                 lists:sort(maps:keys(rabbit_ff_registry:list(all)))),
+                 lists:sort(maps:keys(rabbit_ff_registry_wrapper:list(all)))),
 
-    ?assert(rabbit_ff_registry:is_supported(ff_a)),
-    ?assert(rabbit_ff_registry:is_supported(ff_b)),
-    ?assert(rabbit_ff_registry:is_supported(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_supported(ff_d)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_a)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_b)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_supported(ff_d)),
 
     ?assertEqual(#{ff_a => false,
                    ff_b => false,
-                   ff_c => false}, rabbit_ff_registry:states()),
+                   ff_c => false}, rabbit_ff_registry_wrapper:states()),
     ?assertMatch([], ?list_ff(enabled)),
     ?assertMatch([], ?list_ff(state_changing)),
     ?assertMatch([ff_a, ff_b, ff_c], ?list_ff(disabled)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_a)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_b)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_d)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_a)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_b)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_d)),
 
     %% After enabling `ff_a`, it is actually the case. Others are
     %% supported but remain disabled.
@@ -373,23 +388,23 @@ registry_general_usage(_Config) ->
                                                    #{ff_a => true},
                                                    true),
     ?assertMatch([ff_a, ff_b, ff_c],
-                 lists:sort(maps:keys(rabbit_ff_registry:list(all)))),
+                 lists:sort(maps:keys(rabbit_ff_registry_wrapper:list(all)))),
 
-    ?assert(rabbit_ff_registry:is_supported(ff_a)),
-    ?assert(rabbit_ff_registry:is_supported(ff_b)),
-    ?assert(rabbit_ff_registry:is_supported(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_supported(ff_d)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_a)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_b)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_supported(ff_d)),
 
     ?assertEqual(#{ff_a => true,
                    ff_b => false,
-                   ff_c => false}, rabbit_ff_registry:states()),
+                   ff_c => false}, rabbit_ff_registry_wrapper:states()),
     ?assertMatch([ff_a], ?list_ff(enabled)),
     ?assertMatch([], ?list_ff(state_changing)),
     ?assertMatch([ff_b, ff_c], ?list_ff(disabled)),
-    ?assert(rabbit_ff_registry:is_enabled(ff_a)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_b)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_d)),
+    ?assert(rabbit_ff_registry_wrapper:is_enabled(ff_a)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_b)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_d)),
 
     %% This time, we mark the state of `ff_c` as `state_changing`. We
     %% expect all other feature flag states to remain unchanged.
@@ -398,23 +413,25 @@ registry_general_usage(_Config) ->
                                                      ff_c => state_changing},
                                                    true),
     ?assertMatch([ff_a, ff_b, ff_c],
-                 lists:sort(maps:keys(rabbit_ff_registry:list(all)))),
+                 lists:sort(maps:keys(rabbit_ff_registry_wrapper:list(all)))),
 
-    ?assert(rabbit_ff_registry:is_supported(ff_a)),
-    ?assert(rabbit_ff_registry:is_supported(ff_b)),
-    ?assert(rabbit_ff_registry:is_supported(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_supported(ff_d)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_a)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_b)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_supported(ff_d)),
 
-    ?assertEqual(#{ff_a => false,
-                   ff_b => false,
-                   ff_c => state_changing}, rabbit_ff_registry:states()),
+    ?assertEqual(
+       #{ff_a => false,
+         ff_b => false,
+         ff_c => state_changing},
+       rabbit_ff_registry_wrapper:states()),
     ?assertMatch([], ?list_ff(enabled)),
     ?assertMatch([ff_c], ?list_ff(state_changing)),
     ?assertMatch([ff_a, ff_b], ?list_ff(disabled)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_a)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_b)),
-    ?assertMatch(state_changing, rabbit_ff_registry:is_enabled(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_d)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_a)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_b)),
+    ?assertMatch(state_changing, rabbit_ff_registry_wrapper:is_enabled(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_d)),
 
     %% Finally, we disable `ff_c`. All of them are supported but
     %% disabled.
@@ -423,23 +440,23 @@ registry_general_usage(_Config) ->
                                                      ff_c => false},
                                                    true),
     ?assertMatch([ff_a, ff_b, ff_c],
-                 lists:sort(maps:keys(rabbit_ff_registry:list(all)))),
+                 lists:sort(maps:keys(rabbit_ff_registry_wrapper:list(all)))),
 
-    ?assert(rabbit_ff_registry:is_supported(ff_a)),
-    ?assert(rabbit_ff_registry:is_supported(ff_b)),
-    ?assert(rabbit_ff_registry:is_supported(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_supported(ff_d)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_a)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_b)),
+    ?assert(rabbit_ff_registry_wrapper:is_supported(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_supported(ff_d)),
 
     ?assertEqual(#{ff_a => false,
                    ff_b => false,
-                   ff_c => false}, rabbit_ff_registry:states()),
+                   ff_c => false}, rabbit_ff_registry_wrapper:states()),
     ?assertMatch([], ?list_ff(enabled)),
     ?assertMatch([], ?list_ff(state_changing)),
     ?assertMatch([ff_a, ff_b, ff_c], ?list_ff(disabled)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_a)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_b)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_c)),
-    ?assertNot(rabbit_ff_registry:is_enabled(ff_d)).
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_a)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_b)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_c)),
+    ?assertNot(rabbit_ff_registry_wrapper:is_enabled(ff_d)).
 
 registry_concurrent_reloads(_Config) ->
     case rabbit_ff_registry:is_registry_initialized() of
@@ -487,16 +504,18 @@ registry_concurrent_reloads(_Config) ->
                     maps:keys(FeatureFlags) ++
                     [MakeName(I) || I <- ProcIs]),
     Spammer = spawn_link(fun() -> registry_spammer([], FinalFFList) end),
-    rabbit_log_feature_flags:info(
-      ?MODULE_STRING ": Started registry spammer (~p)",
-      [self()]),
+    ?LOG_INFO(
+      ?MODULE_STRING ": Started registry spammer (~tp)",
+      [self()],
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
 
     %% We acquire the lock from the main process to synchronize the test
     %% processes we are about to spawn.
     Lock = rabbit_ff_registry_factory:registry_loading_lock(),
     ThisNode = [node()],
-    rabbit_log_feature_flags:info(
-      ?MODULE_STRING ": Acquiring registry load lock"),
+    ?LOG_INFO(
+      ?MODULE_STRING ": Acquiring registry load lock",
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     global:set_lock(Lock, ThisNode),
 
     Pids = [begin
@@ -511,12 +530,14 @@ registry_concurrent_reloads(_Config) ->
     %% we don't have a way to verify this fact, but it must be enough,
     %% right?
     timer:sleep(1000),
-    rabbit_log_feature_flags:info(
-      ?MODULE_STRING ": Releasing registry load lock"),
+    ?LOG_INFO(
+      ?MODULE_STRING ": Releasing registry load lock",
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     global:del_lock(Lock, ThisNode),
 
-    rabbit_log_feature_flags:info(
-      ?MODULE_STRING ": Wait for test processes to finish"),
+    ?LOG_INFO(
+      ?MODULE_STRING ": Wait for test processes to finish",
+      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     lists:foreach(
       fun(Pid) ->
               receive {'DOWN', _, process, Pid, normal} -> ok end
@@ -536,9 +557,10 @@ registry_spammer(CurrentFeatureNames, FinalFeatureNames) ->
         CurrentFeatureNames ->
             registry_spammer(CurrentFeatureNames, FinalFeatureNames);
         FinalFeatureNames ->
-            rabbit_log_feature_flags:info(
+            ?LOG_INFO(
               ?MODULE_STRING ": Registry spammer: all feature flags "
-              "appeared"),
+              "appeared",
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             registry_spammer1(FinalFeatureNames);
         NewFeatureNames
           when length(NewFeatureNames) > length(CurrentFeatureNames) ->
@@ -548,6 +570,249 @@ registry_spammer(CurrentFeatureNames, FinalFeatureNames) ->
 registry_spammer1(FeatureNames) ->
     ?assertEqual(FeatureNames, ?list_ff(all)),
     registry_spammer1(FeatureNames).
+
+try_to_deadlock_in_registry_reload_1(_Config) ->
+    rabbit_ff_registry_factory:purge_old_registry(rabbit_ff_registry),
+    _ = code:delete(rabbit_ff_registry),
+    ?assertEqual(false, code:is_loaded(rabbit_ff_registry)),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureProps = #{provided_by => rabbit,
+                     stability => stable},
+
+    Parent = self(),
+
+    %% Deadlock steps:
+    %% * Process A acquires the lock first.
+    %% * Process B loads the registry stub and waits for the lock.
+    %% * Process A deletes the registry stub and loads the initialized
+    %%   registry.
+    %% * Process B wants to purge the deleted registry stub by sending a
+    %%   request to the Code server.
+    %%
+    %% => Process B waits forever the return from the Code server because the
+    %% Code server waits for process B to be runnable again to handle the
+    %% signal.
+
+    ProcessA = spawn_link(
+                 fun() ->
+                         %% Process A acquires the lock manually first to
+                         %% ensure the ordering of events. It can be acquired
+                         %% recursively, so the feature flag injection can
+                         %% "acquire" it again and proceed.
+                         ct:pal("Process A: Acquire registry loading lock"),
+                         Lock =
+                         rabbit_ff_registry_factory:registry_loading_lock(),
+                         global:set_lock(Lock, [node()]),
+                         receive proceed -> ok end,
+
+                         ct:pal(
+                           "Process A: "
+                           "Inject arbitrary feature flag to reload "
+                           "registry"),
+                         rabbit_feature_flags:inject_test_feature_flags(
+                           #{FeatureName => FeatureProps}),
+
+                         ct:pal("Process A: Release registry loading lock"),
+                         global:del_lock(Lock, [node()]),
+
+                         ct:pal("Process A: Exiting..."),
+                         erlang:unlink(Parent)
+                 end),
+    timer:sleep(500),
+
+    ProcessB = spawn_link(
+                 fun() ->
+                         %% Process B is the one loading the registry stub and
+                         %% wants to initialize the real registry.
+                         ct:pal(
+                           "Process B: "
+                           "Trigger automatic initial registry load"),
+                         FF = rabbit_ff_registry_wrapper:get(FeatureName),
+
+                         ct:pal("Process B: Exiting..."),
+                         erlang:unlink(Parent),
+                         Parent ! {self(), FF}
+                 end),
+    timer:sleep(500),
+
+    begin
+        {_, StacktraceA} = erlang:process_info(ProcessA, current_stacktrace),
+        {_, StacktraceB} = erlang:process_info(ProcessB, current_stacktrace),
+        ct:pal(
+          "Process stacktraces:~n"
+          "  Process A: ~p~n"
+          "  Process B: ~p",
+          [StacktraceA, StacktraceB])
+    end,
+
+    %% Process A is resumed. Without a proper check, process B would try to
+    %% purge the copy of the registry it is currently using itself, causing a
+    %% deadlock because the Code server wants process A to handle a signal, but
+    %% process A is not runnable.
+    ProcessA ! proceed,
+
+    ct:pal("Waiting for process B to exit"),
+    receive
+        {ProcessB, FF} ->
+            ?assertEqual(FeatureProps#{name => FeatureName}, FF),
+            ok
+    after 10000 ->
+              {_, StacktraceB} = erlang:process_info(
+                                   ProcessB, current_stacktrace),
+              ct:pal("Process B stuck; stacktrace: ~p", [StacktraceB]),
+              error(registry_reload_deadlock)
+    end.
+
+try_to_deadlock_in_registry_reload_2(_Config) ->
+    rabbit_ff_registry_factory:purge_old_registry(rabbit_ff_registry),
+    _ = code:delete(rabbit_ff_registry),
+    ?assertEqual(false, code:is_loaded(rabbit_ff_registry)),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureProps = #{provided_by => rabbit,
+                     stability => stable},
+
+    ct:pal("Inject arbitrary feature flag to reload registry"),
+    rabbit_feature_flags:inject_test_feature_flags(
+      #{FeatureName => FeatureProps},
+      false),
+
+    _ = erlang:process_flag(trap_exit, true),
+
+    ct:pal("Parent ~p: Acquire registry loading lock", [self()]),
+    Lock = rabbit_ff_registry_factory:registry_loading_lock(),
+    global:set_lock(Lock, [node()]),
+
+    Parent = self(),
+
+    %% Deadlock steps:
+    %% * Processes A, B1 and B2 wait for the lock. The registry stub is loaded.
+    %% * Process B1 acquires the lock.
+    %% * Process B1 deletes the registry stub and loads the initialized
+    %%   registry.
+    %% * Process A acquires the lock.
+    %% * Process A wants to purge the deleted registry stub by sending a
+    %%   request to the Code server.
+    %%
+    %% => Process A waits forever the return from the Code server because the
+    %% Code server waits for process B2 to stop lingering on the deleted
+    %% registry stub, but process B2 waits for the lock.
+
+    ProcessA = spawn_link(
+                 fun() ->
+                         %% Process A acquires the lock automatically as part
+                         %% of requesting an explicit initialization of the
+                         %% registry. Process A doesn't linger on the registry
+                         %% stub.
+                         ct:pal(
+                           "Process A ~p: "
+                           "Trigger manual initial registry load",
+                           [self()]),
+                         rabbit_ff_registry_factory:initialize_registry(),
+
+                         ct:pal("Process A ~p: Exiting...", [self()]),
+                         erlang:unlink(Parent),
+                         Parent ! {self(), done}
+                 end),
+
+    FunB = fun() ->
+                   %% Processes B1 and B2 acquire the lock automatically as
+                   %% part of trying to load the registry as part of they
+                   %% querying a feature flag.
+                   ct:pal(
+                     "Process B ~p: "
+                     "Trigger automatic initial registry load",
+                     [self()]),
+                   _ = rabbit_ff_registry_wrapper:get(FeatureName),
+
+                   ct:pal(
+                     "Process B ~p: Exiting...",
+                     [self()]),
+                   erlang:unlink(Parent),
+                   Parent ! {self(), done}
+           end,
+    ProcessB1 = spawn_link(FunB),
+    ProcessB2 = spawn_link(FunB),
+    timer:sleep(500),
+
+    %% We use `erlang:suspend_process/1' and `erlang:resume_process/1' to
+    %% ensure the order in which processes acquire the lock.
+    erlang:suspend_process(ProcessA),
+    erlang:suspend_process(ProcessB1),
+    erlang:suspend_process(ProcessB2),
+    timer:sleep(500),
+
+    ct:pal("Parent ~p: Release registry loading lock", [self()]),
+    global:del_lock(Lock, [node()]),
+
+    erlang:resume_process(ProcessB1),
+    timer:sleep(500),
+    erlang:resume_process(ProcessA),
+    timer:sleep(500),
+    erlang:resume_process(ProcessB2),
+
+    ct:pal("Waiting for processes to exit"),
+    Procs = [ProcessA, ProcessB1, ProcessB2],
+    lists:foreach(
+      fun(Pid) ->
+              receive
+                  {Pid, done} ->
+                      ok;
+                  {'EXIT', Pid, Reason} ->
+                      ct:pal("Process ~p exited; reason: ~p", [Pid, Reason]),
+                      error(test_process_killed)
+              after 10000 ->
+                        lists:foreach(
+                          fun(Pid1) ->
+                                  PI = erlang:process_info(
+                                         Pid1, current_stacktrace),
+                                  case PI of
+                                      undefined ->
+                                          ok;
+                                      {_, Stacktrace} ->
+                                          ct:pal(
+                                            "Process ~p stuck; "
+                                            "stacktrace: ~p",
+                                            [Pid1, Stacktrace])
+                                  end
+                          end, Procs),
+                        error(registry_reload_deadlock)
+              end
+      end, Procs),
+
+    ok.
+
+registry_reset(_Config) ->
+    %% At first, the registry must be uninitialized.
+    ?assertNot(rabbit_ff_registry:is_registry_initialized()),
+
+    FeatureFlags = #{ff_a =>
+                     #{desc        => "Feature flag A",
+                       provided_by => ?MODULE,
+                       stability   => stable},
+                     ff_b =>
+                     #{desc        => "Feature flag B",
+                       provided_by => ?MODULE,
+                       stability   => stable}},
+    rabbit_feature_flags:inject_test_feature_flags(FeatureFlags),
+
+    %% After initialization, it must know about the feature flags
+    %% declared in this testsuite. They must be disabled however.
+    rabbit_ff_registry_factory:initialize_registry(),
+    ?assert(rabbit_ff_registry:is_registry_initialized()),
+    ?assertMatch([ff_a, ff_b], ?list_ff(all)),
+
+    ?assertEqual(ok, rabbit_feature_flags:reset_registry()),
+
+    %% After a reset, the registry is uninitialized.
+    ?assertNot(rabbit_ff_registry:is_registry_initialized()),
+
+    %% But after another initialization, it still knows about the injected
+    %% feature flags.
+    rabbit_ff_registry_factory:initialize_registry(),
+    ?assert(rabbit_ff_registry:is_registry_initialized()),
+    ?assertMatch([ff_a, ff_b], ?list_ff(all)).
 
 enable_feature_flag_in_a_healthy_situation(Config) ->
     FeatureName = ff_from_testsuite,
@@ -604,14 +869,14 @@ enable_unsupported_feature_flag_in_a_healthy_situation(Config) ->
 
 enable_feature_flag_when_ff_file_is_unwritable(Config) ->
     Supported = rabbit_ct_broker_helpers:is_feature_flag_supported(
-                  Config, stream_queue),
+                  Config, ff_from_testsuite),
     case Supported of
         true  -> do_enable_feature_flag_when_ff_file_is_unwritable(Config);
-        false -> {skip, "Stream queues are unsupported"}
+        false -> {skip, "Test feature flag is unsupported"}
     end.
 
 do_enable_feature_flag_when_ff_file_is_unwritable(Config) ->
-    FeatureName = stream_queue,
+    FeatureName = ff_from_testsuite,
     ClusterSize = ?config(rmq_nodes_count, Config),
     Node = ClusterSize - 1,
     True = lists:duplicate(ClusterSize, true),
@@ -659,7 +924,9 @@ do_enable_feature_flag_when_ff_file_is_unwritable(Config) ->
     %% the `rabbit_ff_controller' process because it was pretty fragile.
     %% That's why the rest of the testcase is commentted out now. We should
     %% revisit this at some point.
-    [?assertEqual(ok, rabbit_ct_broker_helpers:start_node(Config, N))
+    [?assertEqual(ok, rabbit_ct_broker_helpers:async_start_node(Config, N))
+     || N <- lists:reverse(Nodes)],
+    [?assertEqual(ok, rabbit_ct_broker_helpers:wait_for_async_start_node(N))
      || N <- lists:reverse(Nodes)].
 
     % XXX ?assertEqual(
@@ -672,8 +939,8 @@ do_enable_feature_flag_when_ff_file_is_unwritable(Config) ->
 enable_feature_flag_with_a_network_partition(Config) ->
     FeatureName = ff_from_testsuite,
     ClusterSize = ?config(rmq_nodes_count, Config),
-    [A, B, C, D, E] = rabbit_ct_broker_helpers:get_node_configs(
-                        Config, nodename),
+    [A, B, C, D, E] = All = rabbit_ct_broker_helpers:get_node_configs(
+                              Config, nodename),
     True = lists:duplicate(ClusterSize, true),
     False = lists:duplicate(ClusterSize, false),
 
@@ -693,32 +960,26 @@ enable_feature_flag_with_a_network_partition(Config) ->
                  {E, C},
                  {E, D}],
     block(NodePairs),
-    timer:sleep(1000),
+
+    %% Wait for the network partition to happen
+    clustering_utils:assert_cluster_status({All, [A, C, D]}, [A, C, D]),
 
     %% Enabling the feature flag should fail in the specific case of
-    %% `ff_from_testsuite`, if the network is broken.
-    UsingFFv1 = not ?config(enable_feature_flags_v2, Config),
-    case UsingFFv1 of
-        true ->
-            ?assertEqual(
-               {error, unsupported},
-               enable_feature_flag_on(Config, B, FeatureName));
-        false ->
-            ?assertEqual(
-               {error, missing_clustered_nodes},
-               enable_feature_flag_on(Config, B, FeatureName))
-    end,
+    %% `ff_from_testsuite', if the network is broken.
+    ?assertEqual(
+       {error, missing_clustered_nodes},
+       enable_feature_flag_on(Config, B, FeatureName)),
     ?assertEqual(
        False,
        is_feature_flag_enabled(Config, FeatureName)),
 
     %% Repair the network and try again to enable the feature flag.
     unblock(NodePairs),
-    timer:sleep(10000),
     [?assertEqual(ok, rabbit_ct_broker_helpers:stop_node(Config, N))
      || N <- [A, C, D]],
     [?assertEqual(ok, rabbit_ct_broker_helpers:start_node(Config, N))
      || N <- [A, C, D]],
+    clustering_utils:assert_cluster_status({All, All}, All),
     declare_arbitrary_feature_flag(Config),
 
     %% Enabling the feature flag works.
@@ -732,8 +993,8 @@ enable_feature_flag_with_a_network_partition(Config) ->
 mark_feature_flag_as_enabled_with_a_network_partition(Config) ->
     FeatureName = ff_from_testsuite,
     ClusterSize = ?config(rmq_nodes_count, Config),
-    [A, B, C, D, E] = rabbit_ct_broker_helpers:get_node_configs(
-                        Config, nodename),
+    AllNodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [A, B, C, D, E] = AllNodes,
     True = lists:duplicate(ClusterSize, true),
     False = lists:duplicate(ClusterSize, false),
 
@@ -745,48 +1006,40 @@ mark_feature_flag_as_enabled_with_a_network_partition(Config) ->
        False,
        is_feature_flag_enabled(Config, FeatureName)),
 
+    {ok, Inventory} = rabbit_ff_controller:collect_inventory_on_nodes(
+                        AllNodes),
+
     %% Isolate node B from the rest of the cluster.
     NodePairs = [{B, A},
                  {B, C},
                  {B, D},
                  {B, E}],
     block(NodePairs),
-    timer:sleep(1000),
+    clustering_utils:assert_cluster_status(
+      {AllNodes, [A, C, D, E]}, [A, C, D, E]),
 
     %% Mark the feature flag as enabled on all nodes from node B. This
     %% is expected to timeout.
-    RemoteNodes = [A, C, D, E],
     ?assertEqual(
-       {failed_to_mark_feature_flag_as_enabled_on_remote_nodes,
-        FeatureName,
-        true,
-        RemoteNodes},
-       catch rabbit_ct_broker_helpers:rpc(
-               Config, B,
-               rabbit_feature_flags, mark_as_enabled_remotely,
-               [RemoteNodes, FeatureName, true, 20000])),
+       {error, {erpc, noconnection}},
+       rabbit_ct_broker_helpers:rpc(
+         Config, B,
+         rabbit_ff_controller, mark_as_enabled_on_nodes,
+         [AllNodes, Inventory, FeatureName, true])),
 
-    RepairFun = fun() ->
-                        %% Wait a few seconds before we repair the network.
-                        timer:sleep(5000),
-
-                        %% Repair the network and try again to enable
-                        %% the feature flag.
-                        unblock(NodePairs),
-                        timer:sleep(1000)
-                end,
-    spawn(RepairFun),
+    %% Repair the network and try again to enable the feature flag.
+    unblock(NodePairs),
 
     %% Mark the feature flag as enabled on all nodes from node B. This
     %% is expected to work this time.
     ct:pal(?LOW_IMPORTANCE,
            "Marking the feature flag as enabled on remote nodes...", []),
-    ?assertEqual(
-       ok,
+    ?assertMatch(
+       {ok, _},
        rabbit_ct_broker_helpers:rpc(
          Config, B,
-         rabbit_feature_flags, mark_as_enabled_remotely,
-         [RemoteNodes, FeatureName, true, 120000])).
+         rabbit_ff_controller, mark_as_enabled_on_nodes,
+         [AllNodes, Inventory, FeatureName, true])).
 
 %% FIXME: Finish the testcase above ^
 
@@ -1002,15 +1255,8 @@ clustering_ok_with_new_ff_enabled_from_plugin_on_some_nodes(Config) ->
     ?assertEqual(Config, rabbit_ct_broker_helpers:cluster_nodes(Config)),
 
     log_feature_flags_of_all_nodes(Config),
-    UsingFFv2 = ?config(enable_feature_flags_v2, Config),
-    UsingFFv1 = not UsingFFv2,
     case FFSubsysOk of
-        true when UsingFFv1 ->
-            ?assertEqual([true, true],
-                         is_feature_flag_supported(Config, plugin_ff)),
-            ?assertEqual([true, true],
-                         is_feature_flag_enabled(Config, plugin_ff));
-        true when UsingFFv2 ->
+        true ->
             ?assertEqual([true, true],
                          is_feature_flag_supported(Config, plugin_ff)),
             ?assertEqual([true, false],
@@ -1027,14 +1273,6 @@ required_feature_flag_enabled_by_default(Config) ->
     True = lists:duplicate(ClusterSize, true),
     False = lists:duplicate(ClusterSize, false),
 
-    %% Restart the first node to make sure it evaluates again the list of
-    %% required flags. Indeed, the testsuite injects its required feature
-    %% flag after the nodes booted and we don't want to verify a
-    %% testsuite-specific handling.
-    %[Node | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    %?assertEqual(ok, rabbit_ct_broker_helpers:stop_node(Config, Node)),
-    %?assertEqual(ok, rabbit_ct_broker_helpers:start_node(Config, Node)),
-
     %% The stable feature flag is supported but disabled.
     ?assertEqual(
        True,
@@ -1050,6 +1288,96 @@ required_feature_flag_enabled_by_default(Config) ->
     ?assertEqual(
        True,
        is_feature_flag_enabled(Config, RequiredFName)).
+
+required_plugin_feature_flag_enabled_by_default(Config) ->
+    StableFName = plugin_ff,
+    RequiredFName = required_plugin_ff,
+    ClusterSize = ?config(rmq_nodes_count, Config),
+    True = lists:duplicate(ClusterSize, true),
+
+    %% The stable feature flag is supported and enabled because the plugin is
+    %% enabled during startup.
+    ?assertEqual(
+       True,
+       is_feature_flag_supported(Config, StableFName)),
+    ?assertEqual(
+       True,
+       is_feature_flag_enabled(Config, StableFName)),
+
+    %% Likewise for the required feature flag.
+    ?assertEqual(
+       True,
+       is_feature_flag_supported(Config, RequiredFName)),
+    ?assertEqual(
+       True,
+       is_feature_flag_enabled(Config, RequiredFName)).
+
+required_plugin_feature_flag_enabled_after_activation(Config) ->
+    StableFName = plugin_ff,
+    RequiredFName = required_plugin_ff,
+    ClusterSize = ?config(rmq_nodes_count, Config),
+    True = lists:duplicate(ClusterSize, true),
+    False = lists:duplicate(ClusterSize, false),
+
+    ?assertEqual(true, ?config(start_rmq_with_plugins_disabled, Config)),
+
+    %% The stable feature flag is unsupported.
+    ?assertEqual(
+       False,
+       is_feature_flag_supported(Config, StableFName)),
+    ?assertEqual(
+       False,
+       is_feature_flag_enabled(Config, StableFName)),
+
+    %% The required feature flag is unsupported.
+    ?assertEqual(
+       False,
+       is_feature_flag_supported(Config, RequiredFName)),
+    ?assertEqual(
+       False,
+       is_feature_flag_enabled(Config, RequiredFName)),
+
+    rabbit_ct_broker_helpers:enable_plugin(Config, 0, "my_plugin"),
+
+    LastI = ClusterSize - 1,
+    rabbit_ct_broker_helpers:enable_plugin(Config, LastI, "my_plugin"),
+    TrueWhereEnabled = lists:map(
+                         fun
+                             (I) when I =:= 0 orelse I =:= LastI -> true;
+                             (_)                                 -> false
+                         end, lists:seq(0, LastI)),
+
+    %% The stable feature flag is supported but disabled.
+    ?assertEqual(
+       True,
+       is_feature_flag_supported(Config, StableFName)),
+    ?assertEqual(
+       False,
+       is_feature_flag_enabled(Config, StableFName)),
+
+    %% The required feature flag is supported and enabled.
+    ?assertEqual(
+       True,
+       is_feature_flag_supported(Config, RequiredFName)),
+    ?assertEqual(
+       TrueWhereEnabled,
+       is_feature_flag_enabled(Config, RequiredFName)).
+
+plugin_stable_ff_enabled_on_initial_node_start(Config) ->
+    ?assertEqual([true], is_feature_flag_supported(Config, plugin_ff)),
+    ?assertEqual([true], is_feature_flag_enabled(Config, plugin_ff)),
+
+    ?assertEqual(ok, enable_feature_flag_on(Config, 0, plugin_ff)),
+
+    ?assertEqual([true], is_feature_flag_supported(Config, plugin_ff)),
+    ?assertEqual([true], is_feature_flag_enabled(Config, plugin_ff)),
+
+    ?assertEqual(ok, rabbit_ct_broker_helpers:restart_node(Config, 0)),
+
+    ?assertEqual([true], is_feature_flag_supported(Config, plugin_ff)),
+    ?assertEqual([true], is_feature_flag_enabled(Config, plugin_ff)),
+
+    ok.
 
 clustering_ok_with_supported_required_ff(Config) ->
     %% All feature flags are disabled. Clustering the two nodes should be
@@ -1130,15 +1458,8 @@ activating_plugin_with_new_ff_enabled(Config) ->
     enable_feature_flag_on(Config, 0, plugin_ff),
 
     log_feature_flags_of_all_nodes(Config),
-    UsingFFv2 = ?config(enable_feature_flags_v2, Config),
-    UsingFFv1 = not UsingFFv2,
     case FFSubsysOk of
-        true when UsingFFv1 ->
-            ?assertEqual([true, true],
-                         is_feature_flag_supported(Config, plugin_ff)),
-            ?assertEqual([true, true],
-                         is_feature_flag_enabled(Config, plugin_ff));
-        true when UsingFFv2 ->
+        true ->
             ?assertEqual([true, true],
                          is_feature_flag_supported(Config, plugin_ff)),
             ?assertEqual([true, false],
@@ -1157,14 +1478,19 @@ prepare_my_plugin(Config) ->
         false ->
             build_my_plugin(Config);
         _ ->
-            MyPluginDir = filename:dirname(filename:dirname(code:where_is_file("my_plugin.app"))),
+            MyPluginDir = filename:dirname(
+                            filename:dirname(
+                              code:where_is_file("my_plugin.app"))),
             PluginsDir = filename:dirname(MyPluginDir),
-            rabbit_ct_helpers:set_config(Config,
-                                         [{rmq_plugins_dir, PluginsDir}])
+            rabbit_ct_helpers:set_config(
+              Config, [{rmq_plugins_dir, PluginsDir}])
     end.
 
 build_my_plugin(Config) ->
-    PluginSrcDir = filename:join(?config(data_dir, Config), "my_plugin"),
+    DataDir = filename:join(
+                filename:dirname(filename:dirname(?config(data_dir, Config))),
+                ?MODULE_STRING ++ "_data"),
+    PluginSrcDir = filename:join(DataDir, "my_plugin"),
     PluginsDir = filename:join(PluginSrcDir, "plugins"),
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [{rmq_plugins_dir, PluginsDir}]),
@@ -1173,7 +1499,7 @@ build_my_plugin(Config) ->
         [] ->
             DepsDir = ?config(erlang_mk_depsdir, Config),
             Args = ["test-dist",
-                    {"DEPS_DIR=~s", [DepsDir]},
+                    {"DEPS_DIR=~ts", [DepsDir]},
                     %% We clear ALL_DEPS_DIRS to make sure they are
                     %% not recompiled when the plugin is built. `rabbit`
                     %% was previously compiled with -DTEST and if it is
@@ -1207,7 +1533,7 @@ update_cli_path(Config, PluginSrcDir) ->
     case filelib:is_regular(Rabbitmqctl) of
         true ->
             ct:pal(?LOW_IMPORTANCE,
-                   "Switching to CLI in e.g. ~s", [Rabbitmqctl]),
+                   "Switching to CLI in e.g. ~ts", [Rabbitmqctl]),
             rabbit_ct_helpers:set_config(
               Config,
               [{rabbitmqctl_cmd, Rabbitmqctl},
@@ -1275,33 +1601,14 @@ inject_ff_on_nodes(Config, FeatureFlags) ->
 
 inject_ff_on_nodes(Config, Nodes, FeatureFlags)
   when is_list(Nodes) andalso is_map(FeatureFlags) ->
-    UseFFv2_0 = rabbit_ct_broker_helpers:rpc(
-                Config, Nodes,
-                rabbit_feature_flags, is_supported_locally,
-                [feature_flags_v2]),
-    UseFFv2 = lists:zip(Nodes, UseFFv2_0),
     lists:map(
-      fun
-          ({Node, true}) ->
+      fun(Node) ->
               rabbit_ct_broker_helpers:rpc(
                 Config, Node,
                 rabbit_feature_flags,
                 inject_test_feature_flags,
-                [FeatureFlags]);
-          ({Node, false}) ->
-              Attributes = feature_flags_to_app_attrs(FeatureFlags),
-              rabbit_ct_broker_helpers:rpc(
-                Config, Node,
-                rabbit_feature_flags,
-                inject_test_feature_flags,
-                [Attributes])
-      end, UseFFv2).
-
-%% Convert to the format expected on RabbitMQ up-to 3.10.x.
-feature_flags_to_app_attrs(FeatureFlags) when is_map(FeatureFlags) ->
-    [{?MODULE, % Application
-      ?MODULE, % Module
-      maps:to_list(FeatureFlags)}].
+                [FeatureFlags])
+      end, Nodes).
 
 block(Pairs)   -> [block(X, Y) || {X, Y} <- Pairs].
 unblock(Pairs) -> [allow(X, Y) || {X, Y} <- Pairs].

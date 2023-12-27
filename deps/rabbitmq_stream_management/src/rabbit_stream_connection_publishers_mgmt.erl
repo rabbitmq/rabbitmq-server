@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_stream_connection_publishers_mgmt).
@@ -22,13 +22,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 dispatcher() ->
-    case rabbit_stream_management_utils:is_feature_flag_enabled() of
-        true ->
-            [{"/stream/connections/:vhost/:connection/publishers", ?MODULE,
-              []}];
-        false ->
-            []
-    end.
+    [{"/stream/connections/:vhost/:connection/publishers", ?MODULE, []}].
 
 web_ui() ->
     [].

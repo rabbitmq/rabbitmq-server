@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 -module(rabbit_fifo_dlx).
 
@@ -114,11 +114,20 @@ apply(_, {dlx, #checkout{consumer = Pid,
 apply(_, {dlx, #checkout{consumer = ConsumerPid,
                          prefetch = Prefetch}},
       at_least_once,
-      #?MODULE{consumer = #dlx_consumer{checked_out = CheckedOutOldConsumer},
+      #?MODULE{consumer = #dlx_consumer{pid = OldConsumerPid,
+                                        checked_out = CheckedOutOldConsumer},
                discards = Discards0,
                msg_bytes = Bytes,
                msg_bytes_checkout = BytesCheckout} = State0) ->
     %% Since we allow only a single consumer, the new consumer replaces the old consumer.
+    case ConsumerPid of
+        OldConsumerPid ->
+            ok;
+        _ ->
+            rabbit_log:debug("Terminating ~p since ~p becomes active rabbit_fifo_dlx_worker",
+                             [OldConsumerPid, ConsumerPid]),
+            ensure_worker_terminated(State0)
+    end,
     %% All checked out messages to the old consumer need to be returned to the discards queue
     %% such that these messages will be re-delivered to the new consumer.
     %% When inserting back into the discards queue, we respect the original order in which messages
@@ -136,7 +145,7 @@ apply(_, {dlx, #checkout{consumer = ConsumerPid,
                            msg_bytes_checkout = BytesCheckout - BytesMoved},
     {State, []};
 apply(_, Cmd, DLH, State) ->
-    rabbit_log:debug("Ignoring command ~p for dead_letter_handler ~p", [Cmd, DLH]),
+    rabbit_log:debug("Ignoring command ~tp for dead_letter_handler ~tp", [Cmd, DLH]),
     {State, []}.
 
 -spec discard([msg()], rabbit_dead_letter:reason(), dead_letter_handler(), state()) ->
@@ -227,7 +236,7 @@ delivery_effects(CPid, Msgs0) ->
               Msgs = lists:zipwith(fun (Cmd, {Reason, MsgId}) ->
                                            {MsgId, {Reason, rabbit_fifo:get_msg(Cmd)}}
                                    end, Log, RsnIds),
-              [{send_msg, CPid, {dlx_delivery, Msgs}, [ra_event]}]
+              [{send_msg, CPid, {dlx_event, self(), {dlx_delivery, Msgs}}, [cast]}]
       end}].
 
 -spec state_enter(ra_server:ra_state() | eol, rabbit_types:r('queue'), dead_letter_handler(), state()) ->
@@ -246,7 +255,7 @@ ensure_worker_started(QRef, #?MODULE{consumer = undefined}) ->
 ensure_worker_started(QRef, #?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
     case is_local_and_alive(Pid) of
         true ->
-            rabbit_log:debug("rabbit_fifo_dlx_worker ~p already started for ~s",
+            rabbit_log:debug("rabbit_fifo_dlx_worker ~tp already started for ~ts",
                              [Pid, rabbit_misc:rs(QRef)]);
         false ->
             start_worker(QRef)
@@ -258,7 +267,7 @@ ensure_worker_started(QRef, #?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
 %% Ra server process crash in which case another Ra node will become leader.
 start_worker(QRef) ->
     {ok, Pid} = supervisor:start_child(rabbit_fifo_dlx_sup, [QRef]),
-    rabbit_log:debug("started rabbit_fifo_dlx_worker ~p for ~s",
+    rabbit_log:debug("started rabbit_fifo_dlx_worker ~tp for ~ts",
                      [Pid, rabbit_misc:rs(QRef)]).
 
 ensure_worker_terminated(#?MODULE{consumer = undefined}) ->
@@ -269,7 +278,7 @@ ensure_worker_terminated(#?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
             %% Note that we can't return a mod_call effect here
             %% because mod_call is executed on the leader only.
             ok = supervisor:terminate_child(rabbit_fifo_dlx_sup, Pid),
-            rabbit_log:debug("terminated rabbit_fifo_dlx_worker ~p", [Pid]);
+            rabbit_log:debug("terminated rabbit_fifo_dlx_worker ~tp", [Pid]);
         false ->
             ok
     end.
@@ -299,13 +308,13 @@ update_config(at_least_once, at_least_once, _, State) ->
             {State, []};
         Pid ->
             %% Notify rabbit_fifo_dlx_worker about potentially updated policies.
-            {State, [{send_msg, Pid, lookup_topology, ra_event}]}
+            {State, [{send_msg, Pid, {dlx_event, self(), lookup_topology}, cast}]}
     end;
 update_config(SameDLH, SameDLH, _, State) ->
     {State, []};
 update_config(OldDLH, NewDLH, QRes, State0) ->
     LogOnLeader = {mod_call, rabbit_log, debug,
-                   ["Switching dead_letter_handler from ~p to ~p for ~s",
+                   ["Switching dead_letter_handler from ~tp to ~tp for ~ts",
                     [OldDLH, NewDLH, rabbit_misc:rs(QRes)]]},
     {State1, Effects0} = switch_from(OldDLH, QRes, State0),
     {State, Effects} = switch_to(NewDLH, State1, Effects0),
@@ -319,7 +328,7 @@ switch_from(at_least_once, QRes, State) ->
     {Num, Bytes} = stat(State),
     %% Log only on leader.
     {init(), [{mod_call, rabbit_log, info,
-               ["Deleted ~b dead-lettered messages (with total messages size of ~b bytes) in ~s",
+               ["Deleted ~b dead-lettered messages (with total messages size of ~b bytes) in ~ts",
                 [Num, Bytes, rabbit_misc:rs(QRes)]]}]};
 switch_from(_, _, State) ->
     {State, []}.

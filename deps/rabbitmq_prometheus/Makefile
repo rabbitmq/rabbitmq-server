@@ -1,12 +1,15 @@
 define PROJECT_ENV
 [
+	{tcp_config, [{port, 15692}]},
+	{ssl_config, []},
 	{return_per_object_metrics, false}
 ]
 endef
 
 PROJECT := rabbitmq_prometheus
+PROJECT_DESCRIPTION = Prometheus metrics for RabbitMQ
 PROJECT_MOD := rabbit_prometheus_app
-DEPS = accept rabbit rabbitmq_management_agent prometheus rabbitmq_web_dispatch
+DEPS = accept cowboy rabbit rabbitmq_management_agent prometheus rabbitmq_web_dispatch
 BUILD_DEPS = amqp_client rabbit_common rabbitmq_management
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers eunit_formatters
 

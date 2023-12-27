@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_stream).
@@ -39,24 +39,12 @@
 -include("rabbit_stream_metrics.hrl").
 
 start(_Type, _Args) ->
-    case rabbit_feature_flags:is_enabled(stream_queue) of
-        true ->
-            rabbit_stream_metrics:init(),
-            rabbit_global_counters:init([{protocol, stream}],
-                                        ?PROTOCOL_COUNTERS),
-            rabbit_global_counters:init([{protocol, stream},
-                                         {queue_type, ?STREAM_QUEUE_TYPE}]),
-            rabbit_stream_sup:start_link();
-        false ->
-            rabbit_log:warning("Unable to start the stream plugin. The stream_queue "
-                               "feature flag is disabled. "
-                               ++ "Enable stream_queue feature flag then disable "
-                                  "and re-enable the rabbitmq_stream plugin. ",
-                               "See https://www.rabbitmq.com/feature-flags.html "
-                               "to learn more",
-                               []),
-            {ok, self()}
-    end.
+    rabbit_stream_metrics:init(),
+    rabbit_global_counters:init([{protocol, stream}],
+                                ?PROTOCOL_COUNTERS),
+    rabbit_global_counters:init([{protocol, stream},
+                                 {queue_type, ?STREAM_QUEUE_TYPE}]),
+    rabbit_stream_sup:start_link().
 
 tls_host() ->
     case application:get_env(rabbitmq_stream, advertised_tls_host,
@@ -207,8 +195,7 @@ emit_publisher_info_local(VHost, Items, Ref, AggregatorPid) ->
 
 list(VHost) ->
     [Client
-     || {_, ListSup, _, _}
-            <- supervisor:which_children(rabbit_stream_sup),
+     || {_, ListSup, _, _} <- supervisor:which_children(rabbit_stream_sup),
         {_, RanchEmbeddedSup, supervisor, _}
             <- supervisor:which_children(ListSup),
         {{ranch_listener_sup, _}, RanchListSup, _, _}

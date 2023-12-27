@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_runtime_parameters_util).
@@ -40,10 +40,14 @@ notify_clear(_, _, _, _) -> ok.
 %----------------------------------------------------------------------------
 
 register_policy_validator() ->
+    rabbit_registry:register(operator_policy_validator, <<"testeven">>, ?MODULE),
+    rabbit_registry:register(operator_policy_validator, <<"testpos">>,  ?MODULE),
     rabbit_registry:register(policy_validator, <<"testeven">>, ?MODULE),
     rabbit_registry:register(policy_validator, <<"testpos">>,  ?MODULE).
 
 unregister_policy_validator() ->
+    rabbit_registry:unregister(operator_policy_validator, <<"testeven">>),
+    rabbit_registry:unregister(operator_policy_validator, <<"testpos">>),
     rabbit_registry:unregister(policy_validator, <<"testeven">>),
     rabbit_registry:unregister(policy_validator, <<"testpos">>).
 

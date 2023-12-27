@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Queues.Commands.ReclaimQuorumMemoryCommand do
   alias RabbitMQ.CLI.Core.DocGuide
@@ -31,6 +31,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.ReclaimQuorumMemoryCommand do
        "message" => "Target queue was not found in virtual host '#{vhost}'"
      }}
   end
+
   def output({:error, error}, %{formatter: "json"}) do
     {:error,
      %{
@@ -38,9 +39,11 @@ defmodule RabbitMQ.CLI.Queues.Commands.ReclaimQuorumMemoryCommand do
        "message" => "Failed to perform the operation: #{error}"
      }}
   end
+
   def output({:error, :not_found}, %{vhost: vhost}) do
     {:error, "Target queue was not found in virtual host '#{vhost}'"}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage() do
@@ -62,7 +65,9 @@ defmodule RabbitMQ.CLI.Queues.Commands.ReclaimQuorumMemoryCommand do
 
   def help_section(), do: :operations
 
-  def description(), do: "Flushes quorum queue processes WAL, performs a full sweep GC on all of its local Erlang processes"
+  def description(),
+    do:
+      "Flushes quorum queue processes WAL, performs a full sweep GC on all of its local Erlang processes"
 
   def banner([name], %{}),
     do: "Will flush Raft WAL of quorum queue #{name} ..."

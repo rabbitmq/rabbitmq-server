@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_test_db_SUITE).
@@ -81,7 +81,7 @@ trace_fun(Config, MFs) ->
     Nodename1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     dbg:tracer(process, {fun(A,_) ->
                                  ct:pal(?LOW_IMPORTANCE,
-                                        "TRACE: ~p", [A])
+                                        "TRACE: ~tp", [A])
                          end, ok}),
     dbg:n(Nodename1),
     dbg:p(all,c),

@@ -3,36 +3,69 @@ load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "rabbitmq_app",
 )
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
+)
+
+# gazelle:erlang_always_generate_test_beam_files
 
 APP_NAME = "rabbitmq_random_exchange"
 
 APP_DESCRIPTION = "RabbitMQ Random Exchange"
 
-DEPS = [
-    "//deps/rabbit_common:erlang_app",
-]
+all_beam_files(name = "all_beam_files")
 
-RUNTIME_DEPS = [
-    "//deps/rabbit:erlang_app",
-]
+all_test_beam_files(name = "all_test_beam_files")
+
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_name = APP_NAME,
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+    ],
 )
 
-xref()
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
 
 plt(
-    name = "base_plt",
-    deps = DEPS,
+    name = "deps_plt",
+    for_target = ":erlang_app",
+    ignore_warnings = True,
+    plt = "//:base_plt",
 )
 
 dialyze(
+    name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":base_plt",
+    plt = ":deps_plt",
+    target = ":erlang_app",
 )
+
+alias(
+    name = "rabbitmq_random_exchange",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+assert_suites()

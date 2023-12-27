@@ -1,3 +1,4 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
@@ -9,87 +10,110 @@ load(
     "rabbitmq_integration_suite",
     "rabbitmq_suite",
 )
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
+)
 
 APP_NAME = "rabbitmq_peer_discovery_aws"
 
 APP_DESCRIPTION = "AWS-based RabbitMQ peer discovery backend"
 
-EXTRA_APPS = [
-    "inets",
-]
+all_beam_files(name = "all_beam_files")
 
-DEPS = [
-    "//deps/rabbit_common:erlang_app",
-    "//deps/rabbitmq_peer_discovery_common:erlang_app",
-]
+all_test_beam_files(name = "all_test_beam_files")
 
-RUNTIME_DEPS = [
-    "//deps/rabbitmq_aws:erlang_app",
-    "//deps/rabbit:erlang_app",
-]
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
+
+# gazelle:erlang_app_extra_app inets
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_name = APP_NAME,
-    extra_apps = EXTRA_APPS,
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
+    beam_files = [":beam_files"],
+    extra_apps = ["inets"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbitmq_aws:erlang_app",
+        "//deps/rabbitmq_peer_discovery_common:erlang_app",
+    ],
 )
 
-xref()
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
 
 plt(
-    name = "base_plt",
-    apps = EXTRA_APPS,
+    name = "deps_plt",
+    for_target = ":erlang_app",
+    ignore_warnings = True,
     plt = "//:base_plt",
-    deps = DEPS,
 )
 
 dialyze(
+    name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = ":base_plt",
-    warnings_as_errors = False,
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
+
+eunit(
+    name = "eunit",
+    compiled_suites = [":test_aws_ecs_util_beam"],
+    target = ":test_erlang_app",
 )
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_peer_discovery_aws"
+rabbitmq_integration_suite(
+    name = "config_schema_SUITE",
+    size = "medium",
+)
 
-suites = [
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "config_schema_SUITE",
-        size = "medium",
-    ),
-    # NOTE: integration_SUITE requires aws credentials and a docker image.
-    # They can be supplied with:
-    # --test_env AWS_ACCESS_KEY_ID=... --test_env AWS_SECRET_ACCESS_KEY=...
-    # --test_env RABBITMQ_IMAGE=...
-    # bazel args
-    rabbitmq_suite(
-        name = "integration_SUITE",
-        size = "large",
-        additional_srcs = [
-            "test/aws_ecs_util.erl",
-        ],
-        tags = [
-            "aws",
-            "external",
-        ],
-        deps = [
-            "//deps/rabbitmq_ct_helpers:erlang_app",
-        ],
-    ),
-    rabbitmq_suite(
-        name = "unit_SUITE",
-        size = "small",
-        runtime_deps = [
-            "@meck//:erlang_app",
-        ],
-    ),
-]
+# NOTE: integration_SUITE requires aws credentials and a docker image.
+# They can be supplied with:
+# --test_env AWS_ACCESS_KEY_ID=... --test_env AWS_SECRET_ACCESS_KEY=...
+# --test_env RABBITMQ_IMAGE=...
+# bazel args
+rabbitmq_suite(
+    name = "integration_SUITE",
+    size = "large",
+    additional_beam = [
+        "test/aws_ecs_util.beam",
+    ],
+    tags = [
+        "aws",
+        "external",
+    ],
+    deps = [
+        "//deps/rabbitmq_ct_helpers:erlang_app",
+    ],
+)
 
-assert_suites(
-    suites,
-    glob(["test/**/*_SUITE.erl"]),
+rabbitmq_suite(
+    name = "unit_SUITE",
+    size = "small",
+    deps = [
+        "@meck//:erlang_app",
+    ],
+)
+
+assert_suites()
+
+alias(
+    name = "rabbitmq_peer_discovery_aws",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 -module(amqp10_client_session).
 
@@ -372,7 +372,7 @@ mapped(cast, {#'v1_0.transfer'{handle = {uint, InHandle},
             ok = notify_link(Link, credit_exhausted),
             {next_state, mapped, State};
         {transfer_limit_exceeded, State} ->
-            logger:warning("transfer_limit_exceeded for link ~p", [Link]),
+            logger:warning("transfer_limit_exceeded for link ~tp", [Link]),
             Link1 = detach_with_error_cond(Link, State,
                                            ?V_1_0_LINK_ERROR_TRANSFER_LIMIT_EXCEEDED),
             {next_state, mapped, update_link(Link1, State)}
@@ -381,8 +381,11 @@ mapped(cast, {#'v1_0.transfer'{handle = {uint, InHandle},
 
 % role=true indicates the disposition is from a `receiver`. i.e. from the
 % clients point of view these are dispositions relating to `sender`links
-mapped(cast, #'v1_0.disposition'{role = true, settled = true, first = {uint, First},
-                           last = Last0, state = DeliveryState},
+mapped(cast, #'v1_0.disposition'{role = true,
+                                 settled = true,
+                                 first = {uint, First},
+                                 last = Last0,
+                                 state = DeliveryState},
        #state{unsettled = Unsettled0} = State) ->
     Last = case Last0 of
                undefined -> First;
@@ -393,6 +396,10 @@ mapped(cast, #'v1_0.disposition'{role = true, settled = true, first = {uint, Fir
         lists:foldl(fun(Id, Acc) ->
                             case Acc of
                                 #{Id := {DeliveryTag, Receiver}} ->
+                                    %% TODO: currently all modified delivery states
+                                    %% will be translated to the old, `modified` atom.
+                                    %% At some point we should translate into the
+                                    %% full {modified, bool, bool, map) tuple.
                                     S = translate_delivery_state(DeliveryState),
                                     ok = notify_disposition(Receiver,
                                                             {S, DeliveryTag}),
@@ -403,7 +410,7 @@ mapped(cast, #'v1_0.disposition'{role = true, settled = true, first = {uint, Fir
 
     {next_state, mapped, State#state{unsettled = Unsettled}};
 mapped(cast, Frame, State) ->
-    logger:warning("Unhandled session frame ~p in state ~p",
+    logger:warning("Unhandled session frame ~tp in state ~tp",
                              [Frame, State]),
     {next_state, mapped, State};
 mapped({call, From},
@@ -641,41 +648,51 @@ translate_terminus_durability(none) -> 0;
 translate_terminus_durability(configuration) -> 1;
 translate_terminus_durability(unsettled_state) -> 2.
 
-translate_filters(Filters) when is_map(Filters) andalso map_size(Filters) =< 0 -> undefined;
-translate_filters(Filters) when is_map(Filters) -> {
-    map,
-    maps:fold(
-        fun(<<"apache.org:legacy-amqp-direct-binding:string">> = K, V, Acc) when is_binary(V) ->
-            [{{symbol, K}, {described, {symbol, K}, {utf8, V}}} | Acc];
-        (<<"apache.org:legacy-amqp-topic-binding:string">> = K, V, Acc) when is_binary(V) ->
-            [{{symbol, K}, {described, {symbol, K}, {utf8, V}}} | Acc];
-        (<<"apache.org:legacy-amqp-headers-binding:map">> = K, V, Acc) when is_map(V) ->
-            [{{symbol, K}, {described, {symbol, K}, translate_legacy_amqp_headers_binding(V)}} | Acc];
-        (<<"apache.org:no-local-filter:list">> = K, V, Acc) when is_list(V) ->
-            [{{symbol, K}, {described, {symbol, K}, lists:map(fun(Id) -> {utf8, Id} end, V)}} | Acc];
-        (<<"apache.org:selector-filter:string">> = K, V, Acc) when is_binary(V) ->
-                [{{symbol, K}, {described, {symbol, K}, {utf8, V}}} | Acc]
-        end,
-        [],
-        Filters)
-}.
+translate_filters(Filters)
+  when is_map(Filters) andalso
+       map_size(Filters) == 0 ->
+    undefined;
+translate_filters(Filters)
+  when is_map(Filters) ->
+    {map,
+     maps:fold(
+       fun
+          (<<"apache.org:legacy-amqp-headers-binding:map">> = K, V, Acc) when is_map(V) ->
+               %% special case conversion
+               Key = sym(K),
+               [{Key, {described, Key, translate_legacy_amqp_headers_binding(V)}} | Acc];
+          (K, V, Acc) when is_binary(K) ->
+               %% try treat any filter value generically
+               Key = sym(K),
+               Value = filter_value_type(V),
+               [{Key, {described, Key, Value}} | Acc]
+       end, [], Filters)}.
+
+filter_value_type(V) when is_binary(V) ->
+    %% this is clearly not always correct
+    {utf8, V};
+filter_value_type(V)
+  when is_integer(V) andalso V >= 0 ->
+    {uint, V};
+filter_value_type(VList) when is_list(VList) ->
+    [filter_value_type(V) || V <- VList];
+filter_value_type({T, _} = V) when is_atom(T) ->
+    %% looks like an already tagged type, just pass it through
+    V.
 
 % https://people.apache.org/~rgodfrey/amqp-1.0/apache-filters.html
-translate_legacy_amqp_headers_binding(LegacyHeaders) -> {
-    map,
-    maps:fold(
-        fun(<<"x-match">> = K, <<"any">> = V, Acc) ->
-            [{{utf8, K}, {utf8, V}} | Acc];
-        (<<"x-match">> = K, <<"all">> = V, Acc) ->
-            [{{utf8, K}, {utf8, V}} | Acc];
-        (<<"x-",_/binary>>, _, Acc) ->
-            Acc;
-        (K, V, Acc) ->
-            [{{utf8, K}, {utf8, V}} | Acc]
-        end,
-        [],
-        LegacyHeaders)
-}.
+translate_legacy_amqp_headers_binding(LegacyHeaders) ->
+    {map,
+     maps:fold(
+       fun(<<"x-match">> = K, <<"any">> = V, Acc) ->
+               [{{utf8, K}, {utf8, V}} | Acc];
+          (<<"x-match">> = K, <<"all">> = V, Acc) ->
+               [{{utf8, K}, {utf8, V}} | Acc];
+          (<<"x-", _/binary>>, _, Acc) ->
+               Acc;
+          (K, V, Acc) ->
+               [{{utf8, K}, filter_value_type(V)} | Acc]
+       end, [], LegacyHeaders)}.
 
 send_detach(Send, {detach, OutHandle}, _From, State = #state{links = Links}) ->
     case Links of
@@ -833,6 +850,14 @@ translate_delivery_state(#'v1_0.received'{}) -> received;
 translate_delivery_state(accepted) -> #'v1_0.accepted'{};
 translate_delivery_state(rejected) -> #'v1_0.rejected'{};
 translate_delivery_state(modified) -> #'v1_0.modified'{};
+translate_delivery_state({modified,
+                          DeliveryFailed,
+                          UndeliverableHere,
+                          MessageAnnotations}) ->
+    MA = translate_message_annotations(MessageAnnotations),
+    #'v1_0.modified'{delivery_failed = DeliveryFailed,
+                     undeliverable_here = UndeliverableHere,
+                     message_annotations = MA};
 translate_delivery_state(released) -> #'v1_0.released'{};
 translate_delivery_state(received) -> #'v1_0.received'{}.
 
@@ -930,7 +955,7 @@ update_link(Link = #link{output_handle = OutHandle},
             State#state{links = Links#{OutHandle => Link}}.
 
 incr_link_counters(#link{link_credit = LC, delivery_count = DC} = Link) ->
-    Link#link{delivery_count = DC+1, link_credit = LC+1}.
+    Link#link{delivery_count = DC+1, link_credit = LC-1}.
 
 append_partial_transfer(Transfer, Payload,
                         #link{partial_transfers = undefined} = Link) ->
@@ -970,6 +995,36 @@ socket_send0({ssl, Socket}, Data) ->
 -spec make_link_ref(_, _, _) -> link_ref().
 make_link_ref(Role, Session, Handle) ->
     #link_ref{role = Role, session = Session, link_handle = Handle}.
+
+translate_message_annotations(MA)
+  when is_map(MA) andalso
+       map_size(MA) > 0 ->
+    Content = maps:fold(fun (K, V, Acc) ->
+                                [{sym(K), wrap_map_value(V)} | Acc]
+                        end, [], MA),
+    #'v1_0.message_annotations'{content = Content};
+translate_message_annotations(_MA) ->
+    undefined.
+
+
+wrap_map_value(true) ->
+    {boolean, true};
+wrap_map_value(false) ->
+    {boolean, false};
+wrap_map_value(V) when is_integer(V) ->
+    {uint, V};
+wrap_map_value(V) when is_binary(V) ->
+    utf8(V);
+wrap_map_value(V) when is_list(V) ->
+    utf8(list_to_binary(V));
+wrap_map_value(V) when is_atom(V) ->
+    utf8(atom_to_list(V)).
+
+utf8(V) -> amqp10_client_types:utf8(V).
+
+sym(B) when is_binary(B) -> {symbol, B};
+sym(B) when is_list(B) -> {symbol, list_to_binary(B)};
+sym(B) when is_atom(B) -> {symbol, atom_to_binary(B, utf8)}.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

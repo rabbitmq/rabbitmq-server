@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(per_user_connection_channel_limit_partitions_SUITE).
@@ -32,7 +32,7 @@ groups() ->
 suite() ->
     [
       %% If a test hangs, no need to wait for 30 minutes.
-      {timetrap, {minutes, 8}}
+      {timetrap, {minutes, 5}}
     ].
 
 %% see partitions_SUITE
@@ -105,7 +105,10 @@ cluster_full_partition_with_autoheal(Config) ->
     %% B drops off the network, non-reachable by either A or C
     rabbit_ct_broker_helpers:block_traffic_between(A, B),
     rabbit_ct_broker_helpers:block_traffic_between(B, C),
-    timer:sleep(?DELAY),
+    LargeCluster = lists:sort([A, C]),
+    ?awaitMatch(LargeCluster, list_running(Config, A), 60000, 3000),
+    ?awaitMatch([B], list_running(Config, B), 60000, 3000),
+    ?awaitMatch(LargeCluster, list_running(Config, C), 60000, 3000),
 
     %% A and C are still connected, so 4 connections are tracked
     %% All connections to B are dropped
@@ -116,10 +119,20 @@ cluster_full_partition_with_autoheal(Config) ->
 
     rabbit_ct_broker_helpers:allow_traffic_between(A, B),
     rabbit_ct_broker_helpers:allow_traffic_between(B, C),
-    timer:sleep(?DELAY),
+    All = lists:sort([A, B, C]),
+    ?awaitMatch(All, list_running(Config, A), 60000, 3000),
+    ?awaitMatch(All, list_running(Config, B), 60000, 3000),
+    ?awaitMatch(All, list_running(Config, C), 60000, 3000),
 
-    %% during autoheal B's connections were dropped
-    ?awaitMatch({4, 10},
+    %% During autoheal B's connections were dropped. Autoheal is not running
+    %% when Khepri is used.
+    KhepriEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                      Config, khepri_db),
+    ExpectedCount = case KhepriEnabled of
+                        true  -> {6, 15};
+                        false -> {4, 10}
+                    end,
+    ?awaitMatch(ExpectedCount,
                 {count_connections_in(Config, Username),
                  count_channels_in(Config, Username)},
                 60000, 3000),
@@ -167,3 +180,18 @@ tracked_list_of_user(Config, NodeIndex, TrackingMod, Username) ->
     rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
                                  TrackingMod,
                                  list_of_user, [Username]).
+
+list_running(Config, NodeIndex) ->
+    Ret = (catch rabbit_ct_broker_helpers:rpc(Config, NodeIndex, rabbit_nodes, list_running, [])),
+    Running = case Ret of
+                  {'EXIT', {{exception, undef, _}, _}} ->
+                      rabbit_ct_broker_helpers:rpc(Config, NodeIndex, rabbit_mnesia, cluster_nodes, [running]);
+                  _ ->
+                      Ret
+              end,
+    case Running of
+        List when is_list(List) ->
+            lists:sort(List);
+        Any ->
+            Any
+    end.

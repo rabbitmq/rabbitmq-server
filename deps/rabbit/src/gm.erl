@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(gm).
@@ -1190,7 +1190,7 @@ record_new_member_in_group(NewMember, Left, GroupName, TxnFun) ->
                         true ->
                             %% This avois duplicates during partial partitions,
                             %% as inconsistent views might happen during them
-                            rabbit_log:warning("(~p) GM avoiding duplicate of ~p",
+                            rabbit_log:warning("(~tp) GM avoiding duplicate of ~tp",
                                                [self(), NewMember]),
                             Group;
                         false ->

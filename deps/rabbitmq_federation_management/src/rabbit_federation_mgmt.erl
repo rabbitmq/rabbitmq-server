@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%%  Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%%  Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_federation_mgmt).
@@ -113,7 +113,7 @@ format_item({timestamp, {{Y, M, D}, {H, Min, S}}}) ->
     {timestamp, print("~w-~2.2.0w-~2.2.0w ~w:~2.2.0w:~2.2.0w",
                       [Y, M, D, H, Min, S])};
 format_item({error, E}) ->
-    {error, rabbit_mgmt_format:print("~p", [E])};
+    {error, rabbit_mgmt_format:print("~tp", [E])};
 format_item(I) ->
     I.
 

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2017-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2017-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(proxy_protocol_SUITE).
@@ -20,8 +20,9 @@ all() ->
 
 groups() -> [
         {sequential_tests, [], [
-            proxy_protocol,
-            proxy_protocol_tls
+            proxy_protocol_v1,
+            proxy_protocol_v1_tls,
+            proxy_protocol_v2_local
         ]}
     ].
 
@@ -54,7 +55,7 @@ init_per_testcase(Testcase, Config) ->
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
-proxy_protocol(Config) ->
+proxy_protocol_v1(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
         [binary, {active, false}, {packet, raw}]),
@@ -64,26 +65,45 @@ proxy_protocol(Config) ->
     {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, connection_name, []),
-    match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
+    match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81 \\(\\d\\)">>, [{capture, none}]),
     gen_tcp:close(Socket),
     ok.
 
-proxy_protocol_tls(Config) ->
+proxy_protocol_v1_tls(Config) ->
     app_utils:start_applications([asn1, crypto, public_key, ssl]),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp_tls),
     {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
         [binary, {active, false}, {packet, raw}]),
     ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
-    {ok, SslSocket} = ssl:connect(Socket, [], ?TIMEOUT),
+    {ok, SslSocket} = ssl:connect(Socket, [{verify, verify_none}], ?TIMEOUT),
     [ok = ssl:send(SslSocket, amqp_1_0_frame(FrameType))
         || FrameType <- [header_sasl, sasl_init, header_amqp, open, 'begin']],
     {ok, _Packet} = ssl:recv(SslSocket, 0, ?TIMEOUT),
     timer:sleep(1000),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, connection_name, []),
-    match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
+    match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81 \\(\\d\\)$">>, [{capture, none}]),
     gen_tcp:close(Socket),
     ok.
+
+proxy_protocol_v2_local(Config) ->
+    ProxyInfo = #{
+        command => local,
+        version => 2
+    },
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
+        [binary, {active, false}, {packet, raw}]),
+    ok = inet:send(Socket, ranch_proxy_header:header(ProxyInfo)),
+    [ok = inet:send(Socket, amqp_1_0_frame(FrameType))
+        || FrameType <- [header_sasl, sasl_init, header_amqp, open, 'begin']],
+    {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
+    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
+        ?MODULE, connection_name, []),
+    match = re:run(ConnectionName, <<"^127.0.0.1:\\d+ -> 127.0.0.1:\\d+ \\(\\d\\)$">>, [{capture, none}]),
+    gen_tcp:close(Socket),
+    ok.
+
 
 %% hex frames to send to have the connection recorded in RabbitMQ
 %% use wireshark with one of the Java tests to record those
@@ -124,7 +144,9 @@ connection_name() ->
     end.
 
 connection_registered() ->
-    length(ets:tab2list(connection_created)) > 0.
+    I = ets:info(connection_created),
+    Size = proplists:get_value(size, I),
+    Size > 0.
 
 retry(_Function, 0) ->
     false;

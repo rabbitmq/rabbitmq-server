@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 %% This module provides access to runtime metrics that are exposed
@@ -56,11 +56,10 @@ msacc_stats(TimeInMs) ->
 % get the full path to the erl executable used to start this VM
 -spec get_erl_path() -> file:filename_all().
 get_erl_path() ->
-    ERTSDir = rabbit_misc:format("erts-~ts", [erlang:system_info(version)]),
-    Bin = filename:join([code:root_dir(), ERTSDir, "bin"]),
+    {ok, [[BinDir]]} = init:get_argument(bindir),
     case os:type() of
         {win32, _} ->
-            filename:join(Bin, "erl.exe");
+            filename:join(BinDir, "erl.exe");
         _ ->
-            filename:join(Bin, "erl")
+            filename:join(BinDir, "erl")
     end.

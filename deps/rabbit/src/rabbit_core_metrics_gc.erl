@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 -module(rabbit_core_metrics_gc).
 
@@ -40,7 +40,7 @@ handle_info(start_gc, State) ->
     {noreply, start_timer(State)}.
 
 terminate(_Reason, #state{timer = TRef}) ->
-    erlang:cancel_timer(TRef),
+    _ = erlang:cancel_timer(TRef),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -102,7 +102,7 @@ gc_exchanges() ->
     gc_process_and_entity(channel_exchange_metrics, GbSet).
 
 gc_nodes() ->
-    Nodes = rabbit_nodes:all(),
+    Nodes = rabbit_nodes:list_members(),
     GbSet = gb_sets:from_list(Nodes),
     gc_entity(node_node_metrics, GbSet).
 

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(eager_sync_SUITE).
@@ -43,8 +43,13 @@ suite() ->
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
-    rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config).
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            rabbit_ct_helpers:log_environment(),
+            rabbit_ct_helpers:run_setup_steps(Config);
+        _ ->
+            {skip, "Classic mirroring not supported by Khepri"}
+    end.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
@@ -65,12 +70,15 @@ init_per_testcase(Testcase, Config) ->
         {rmq_nodename_suffix, Testcase},
         {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
       ]),
-    rabbit_ct_helpers:run_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps() ++ [
-        fun rabbit_ct_broker_helpers:set_ha_policy_two_pos/1,
-        fun rabbit_ct_broker_helpers:set_ha_policy_two_pos_batch_sync/1
-      ]).
+    Config2 = rabbit_ct_helpers:run_steps(
+                Config1,
+                rabbit_ct_broker_helpers:setup_steps() ++
+                rabbit_ct_client_helpers:setup_steps() ++ [
+                                                           fun rabbit_ct_broker_helpers:set_ha_policy_two_pos/1,
+                                                           fun rabbit_ct_broker_helpers:set_ha_policy_two_pos_batch_sync/1
+                                                          ]),
+    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config2, message_containers),
+    Config2.
 
 end_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:run_steps(Config,

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_tracking).
@@ -13,7 +13,6 @@
 %%  * rabbit_connection_tracking
 %%  * rabbit_channel_tracking
 
--callback boot() -> ok.
 -callback update_tracked(term()) -> ok.
 -callback handle_cast(term()) -> ok.
 -callback register_tracked(
@@ -23,14 +22,11 @@
               rabbit_types:tracked_connection_id() |
                   rabbit_types:tracked_channel_id()) -> 'ok'.
 -callback count_tracked_items_in(term()) -> non_neg_integer().
--callback clear_tracking_tables() -> 'ok'.
 -callback shutdown_tracked_items(list(), term()) -> ok.
 
--export([id/2, delete_tracked_entry/4, delete_tracked_entry_internal/4,
-         clear_tracking_table/1, delete_tracking_table/3]).
--export([count_on_all_nodes/4, match_tracked_items_ets/2]).
+-export([id/2, delete_tracked_entry/4, delete_tracked_entry_internal/4]).
+-export([count_on_all_nodes/4, match_tracked_items/2]).
 -export([read_ets_counter/2, match_tracked_items_local/2]).
--export([count_tracked_items_mnesia/4, match_tracked_items_mnesia/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -42,7 +38,7 @@ id(Node, Name) -> {Node, Name}.
 -spec count_on_all_nodes(module(), atom(), [term()], iodata()) ->
     non_neg_integer().
 count_on_all_nodes(Mod, Fun, Args, ContextMsg) ->
-    Nodes = rabbit_nodes:all_running(),
+    Nodes = rabbit_nodes:list_running(),
     ResL = erpc:multicall(Nodes, Mod, Fun, Args),
     sum_rpc_multicall_result(ResL, Nodes, ContextMsg, 0).
 
@@ -50,12 +46,12 @@ sum_rpc_multicall_result([{ok, Int}|ResL], [_N|Nodes], ContextMsg, Acc) when is_
     sum_rpc_multicall_result(ResL, Nodes, ContextMsg, Acc + Int);
 sum_rpc_multicall_result([{ok, BadValue}|ResL], [BadNode|Nodes], ContextMsg, Acc) ->
     rabbit_log:error(
-      "Failed to fetch number of ~s on node ~p:~n not an integer ~p",
+      "Failed to fetch number of ~ts on node ~tp:~n not an integer ~tp",
       [ContextMsg, BadNode, BadValue]),
     sum_rpc_multicall_result(ResL, Nodes, ContextMsg, Acc);
 sum_rpc_multicall_result([{Class, Reason}|ResL], [BadNode|Nodes], ContextMsg, Acc) ->
     rabbit_log:error(
-      "Failed to fetch number of ~s on node ~p:~n~p:~p",
+      "Failed to fetch number of ~ts on node ~tp:~n~tp:~tp",
       [ContextMsg, BadNode, Class, Reason]),
     sum_rpc_multicall_result(ResL, Nodes, ContextMsg, Acc);
 sum_rpc_multicall_result([], [], _, Acc) ->
@@ -67,26 +63,8 @@ read_ets_counter(Tab, Key) ->
         [{_, Val}] -> Val
     end.
 
-count_tracked_items_mnesia(TableNameFun, CountRecPosition, Key, ContextMsg) ->
-    lists:foldl(fun (Node, Acc) ->
-                        Tab = TableNameFun(Node),
-                        try
-                            N = case mnesia:dirty_read(Tab, Key) of
-                                    []    -> 0;
-                                    [Val] ->
-                                        element(CountRecPosition, Val)
-                                end,
-                            Acc + N
-                        catch _:Err  ->
-                                rabbit_log:error(
-                                  "Failed to fetch number of ~p ~p on node ~p:~n~p",
-                                  [ContextMsg, Key, Node, Err]),
-                                Acc
-                        end
-                end, 0, rabbit_nodes:all_running()).
-
--spec match_tracked_items_ets(atom(), tuple()) -> term().
-match_tracked_items_ets(Tab, MatchSpec) ->
+-spec match_tracked_items(atom(), tuple()) -> term().
+match_tracked_items(Tab, MatchSpec) ->
     lists:foldl(
       fun (Node, Acc) when Node == node() ->
               Acc ++ match_tracked_items_local(Tab, MatchSpec);
@@ -98,42 +76,14 @@ match_tracked_items_ets(Tab, MatchSpec) ->
                   _ ->
                       Acc
               end
-      end, [], rabbit_nodes:all_running()).
+      end, [], rabbit_nodes:list_running()).
 
 match_tracked_items_local(Tab, MatchSpec) ->
     ets:match_object(Tab, MatchSpec).
 
-match_tracked_items_mnesia(TableNameFun, MatchSpec) ->
-    lists:foldl(
-        fun (Node, Acc) ->
-                Tab = TableNameFun(Node),
-                Acc ++ mnesia:dirty_match_object(
-                         Tab,
-                         MatchSpec)
-        end, [], rabbit_nodes:all_running()).
-
--spec clear_tracking_table(atom()) -> ok.
-clear_tracking_table(TableName) ->
-    case mnesia:clear_table(TableName) of
-        {atomic, ok} -> ok;
-        {aborted, _} -> ok
-    end.
-
--spec delete_tracking_table(atom(), node(), string()) -> ok.
-
-delete_tracking_table(TableName, Node, ContextMsg) ->
-    case mnesia:delete_table(TableName) of
-        {atomic, ok}              -> ok;
-        {aborted, {no_exists, _}} -> ok;
-        {aborted, Error} ->
-            rabbit_log:error("Failed to delete a ~p table for node ~p: ~p",
-                [ContextMsg, Node, Error]),
-            ok
-    end.
-
 -spec delete_tracked_entry({atom(), atom(), list()}, atom(), function(), term()) -> ok.
 delete_tracked_entry(_ExistsCheckSpec = {M, F, A}, TableName, TableNameFun, Key) ->
-    ClusterNodes = rabbit_nodes:all_running(),
+    ClusterNodes = rabbit_nodes:list_running(),
     ExistsInCluster =
         lists:any(fun(Node) -> rpc:call(Node, M, F, A) end, ClusterNodes),
     case ExistsInCluster of
@@ -144,15 +94,9 @@ delete_tracked_entry(_ExistsCheckSpec = {M, F, A}, TableName, TableNameFun, Key)
             ok
     end.
 
-delete_tracked_entry_internal(Node, Tab, TableNameFun, Key) when Node == node() ->
-    case rabbit_feature_flags:is_enabled(tracking_records_in_ets) of
-        true ->
-            true = ets:delete(Tab, Key),
-            ok;
-        false ->
-            mnesia:dirty_delete(TableNameFun(Node), Key),
-            ok
-    end;
+delete_tracked_entry_internal(Node, Tab, _TableNameFun, Key) when Node == node() ->
+    true = ets:delete(Tab, Key),
+    ok;
 delete_tracked_entry_internal(Node, Tab, TableNameFun, Key) ->
     case rabbit_misc:rpc_call(Node, ?MODULE, delete_tracked_entry_internal, [Node, Tab, TableNameFun, Key]) of
         ok ->

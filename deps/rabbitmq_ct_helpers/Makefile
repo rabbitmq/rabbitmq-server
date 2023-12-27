@@ -1,7 +1,7 @@
 PROJECT = rabbitmq_ct_helpers
 PROJECT_DESCRIPTION = Common Test helpers for RabbitMQ
 
-DEPS = rabbit_common proper inet_tcp_proxy
+DEPS = rabbit_common proper inet_tcp_proxy meck
 TEST_DEPS = rabbit
 
 dep_rabbit_common  = git-subfolder https://github.com/rabbitmq/rabbitmq-server main deps/rabbit_common

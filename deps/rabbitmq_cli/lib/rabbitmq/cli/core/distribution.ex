@@ -2,10 +2,10 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2016-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.Distribution do
-  alias RabbitMQ.CLI.Core.{ANSI, Config, Helpers}
+  alias RabbitMQ.CLI.Core.{Config, Helpers}
 
   #
   # API
@@ -69,7 +69,6 @@ defmodule RabbitMQ.CLI.Core.Distribution do
 
       cookie ->
         Node.set_cookie(cookie)
-        maybe_warn_about_deprecated_rabbitmq_erlang_cookie_env_variable(options)
         :ok
     end
   end
@@ -109,30 +108,6 @@ defmodule RabbitMQ.CLI.Core.Distribution do
         # Enum.random/1 is constant time and space with range arguments https://hexdocs.pm/elixir/Enum.html#random/1.
         id = Enum.random(1..1024)
         String.to_atom("rabbitmqcli-#{id}-#{rmq_hostname}")
-    end
-  end
-
-  defp maybe_warn_about_deprecated_rabbitmq_erlang_cookie_env_variable(options) do
-    case System.get_env("RABBITMQ_ERLANG_COOKIE") do
-      nil ->
-        :ok
-
-      _ ->
-        case Config.output_less?(options) do
-          true ->
-            :ok
-
-          false ->
-            warning =
-              ANSI.bright_red(
-                "RABBITMQ_ERLANG_COOKIE env variable support is deprecated and will be REMOVED in a future version. "
-              ) <>
-                ANSI.yellow(
-                  "Use the $HOME/.erlang.cookie file or the --erlang-cookie switch instead."
-                )
-
-            IO.puts(warning)
-        end
     end
   end
 end

@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 # Lists predefined error exit codes used by RabbitMQ CLI tools.
 # The codes are adopted from [1], which (according to our team's research)
@@ -42,6 +42,9 @@ defmodule RabbitMQ.CLI.Core.ExitCodes do
   # a special case of bad_argument
   def exit_code_for({:no_such_vhost, _}), do: exit_dataerr()
   def exit_code_for({:no_such_user, _}), do: exit_nouser()
+  def exit_code_for(:not_found), do: exit_dataerr()
+  def exit_code_for({:not_found, _vhost, _name}), do: exit_dataerr()
+  def exit_code_for({:not_found, _object_type, _vhost, _name}), do: exit_dataerr()
   def exit_code_for({:badrpc_multi, :timeout, _}), do: exit_tempfail()
   def exit_code_for({:badrpc, :timeout}), do: exit_tempfail()
   def exit_code_for({:badrpc, {:timeout, _}}), do: exit_tempfail()

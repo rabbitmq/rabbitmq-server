@@ -1,0 +1,208 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+            "+warn_export_vars",
+            "+warn_obsolete_guard",
+            "+warn_shadow_vars",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+            "+warn_export_vars",
+            "+warn_obsolete_guard",
+            "+warn_shadow_vars",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "behaviours",
+    srcs = [
+        "src/ra_machine.erl",
+        "src/ra_snapshot.erl",
+    ],
+    hdrs = [":public_and_private_hdrs"],
+    app_name = "ra",
+    dest = "ebin",
+    erlc_opts = "//:erlc_opts",
+)
+
+erlang_bytecode(
+    name = "other_beam",
+    srcs = [
+        "src/ra.erl",
+        "src/ra_app.erl",
+        "src/ra_bench.erl",
+        "src/ra_counters.erl",
+        "src/ra_dbg.erl",
+        "src/ra_directory.erl",
+        "src/ra_env.erl",
+        "src/ra_ets_queue.erl",
+        "src/ra_file_handle.erl",
+        "src/ra_flru.erl",
+        "src/ra_leaderboard.erl",
+        "src/ra_lib.erl",
+        "src/ra_log.erl",
+        "src/ra_log_cache.erl",
+        "src/ra_log_ets.erl",
+        "src/ra_log_meta.erl",
+        "src/ra_log_pre_init.erl",
+        "src/ra_log_reader.erl",
+        "src/ra_log_segment.erl",
+        "src/ra_log_segment_writer.erl",
+        "src/ra_log_snapshot.erl",
+        "src/ra_log_sup.erl",
+        "src/ra_log_wal.erl",
+        "src/ra_log_wal_sup.erl",
+        "src/ra_machine_ets.erl",
+        "src/ra_machine_simple.erl",
+        "src/ra_metrics_ets.erl",
+        "src/ra_monitors.erl",
+        "src/ra_server.erl",
+        "src/ra_server_proc.erl",
+        "src/ra_server_sup.erl",
+        "src/ra_server_sup_sup.erl",
+        "src/ra_sup.erl",
+        "src/ra_system.erl",
+        "src/ra_system_sup.erl",
+        "src/ra_systems_sup.erl",
+    ],
+    hdrs = [":public_and_private_hdrs"],
+    app_name = "ra",
+    beam = [":behaviours"],
+    dest = "ebin",
+    erlc_opts = "//:erlc_opts",
+    deps = [
+        "@gen_batch_server//:erlang_app",
+    ],
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        ":behaviours",
+        ":other_beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/ra.app.src",
+        "src/ra.erl",
+        "src/ra_app.erl",
+        "src/ra_bench.erl",
+        "src/ra_counters.erl",
+        "src/ra_dbg.erl",
+        "src/ra_directory.erl",
+        "src/ra_env.erl",
+        "src/ra_ets_queue.erl",
+        "src/ra_file_handle.erl",
+        "src/ra_flru.erl",
+        "src/ra_leaderboard.erl",
+        "src/ra_lib.erl",
+        "src/ra_log.erl",
+        "src/ra_log_cache.erl",
+        "src/ra_log_ets.erl",
+        "src/ra_log_meta.erl",
+        "src/ra_log_pre_init.erl",
+        "src/ra_log_reader.erl",
+        "src/ra_log_segment.erl",
+        "src/ra_log_segment_writer.erl",
+        "src/ra_log_snapshot.erl",
+        "src/ra_log_sup.erl",
+        "src/ra_log_wal.erl",
+        "src/ra_log_wal_sup.erl",
+        "src/ra_machine.erl",
+        "src/ra_machine_ets.erl",
+        "src/ra_machine_simple.erl",
+        "src/ra_metrics_ets.erl",
+        "src/ra_monitors.erl",
+        "src/ra_server.erl",
+        "src/ra_server_proc.erl",
+        "src/ra_server_sup.erl",
+        "src/ra_server_sup_sup.erl",
+        "src/ra_snapshot.erl",
+        "src/ra_sup.erl",
+        "src/ra_system.erl",
+        "src/ra_system_sup.erl",
+        "src/ra_systems_sup.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [
+        "src/ra.hrl",
+        "src/ra_server.hrl",
+    ],
+)
+
+filegroup(name = "public_hdrs")
+
+filegroup(name = "priv")
+
+filegroup(
+    name = "licenses",
+    srcs = [
+        "LICENSE",
+        "LICENSE-APACHE2",
+        "LICENSE-MPL-RabbitMQ",
+    ],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
+    app_name = "ra",
+    beam_files = [":beam_files"],
+    extra_apps = [
+        "crypto",
+        "sasl",
+    ],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "@aten//:erlang_app",
+        "@gen_batch_server//:erlang_app",
+        "@seshat_alt//:erlang_app",
+    ],
+)
+
+alias(
+    name = "ra",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "license_files",
+    srcs = [
+        "LICENSE",
+        "LICENSE-APACHE2",
+        "LICENSE-MPL-RabbitMQ",
+    ],
+)

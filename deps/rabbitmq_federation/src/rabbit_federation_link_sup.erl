@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_federation_link_sup).
@@ -22,7 +22,7 @@ start_link(XorQ) ->
     supervisor2:start_link(?MODULE, XorQ).
 
 adjust(Sup, XorQ, everything) ->
-    [stop(Sup, Upstream, XorQ) ||
+    _ = [stop(Sup, Upstream, XorQ) ||
         {Upstream, _, _, _} <- supervisor2:which_children(Sup)],
     [{ok, _Pid} = supervisor2:start_child(Sup, Spec) || Spec <- specs(XorQ)];
 
@@ -41,7 +41,7 @@ adjust(Sup, XorQ, {upstream, UpstreamName}) ->
                       false -> {OldUs, NewUs}
                   end
           end, {OldUpstreams0, NewUpstreams0}, OldUpstreams0),
-    [stop(Sup, OldUpstream, XorQ) || OldUpstream <- OldUpstreams],
+    _ = [stop(Sup, OldUpstream, XorQ) || OldUpstream <- OldUpstreams],
     [start(Sup, NewUpstream, XorQ) || NewUpstream <- NewUpstreams];
 
 adjust(Sup, XorQ, {clear_upstream, UpstreamName}) ->
@@ -50,7 +50,7 @@ adjust(Sup, XorQ, {clear_upstream, UpstreamName}) ->
     [stop(Sup, Upstream, XorQ) || Upstream <- children(Sup, UpstreamName)];
 
 adjust(Sup, X = #exchange{name = XName}, {upstream_set, _Set}) ->
-    adjust(Sup, X, everything),
+    _ = adjust(Sup, X, everything),
     case rabbit_federation_upstream:federate(X) of
         false -> ok;
         true  -> ok = rabbit_federation_db:prune_scratch(

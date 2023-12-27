@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.IsBootingCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -20,16 +20,20 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.IsBootingCommand do
       "result" => true,
       "message" => "RabbitMQ on node #{node_name} is booting"
     }
+
     {:ok, m}
   end
 
   def output(false, %{node: node_name, formatter: "json"}) do
     m = %{
       "result" => false,
-      "message" => "RabbitMQ on node #{node_name} is fully booted (check with is_running), stopped or has not started booting yet"
+      "message" =>
+        "RabbitMQ on node #{node_name} is fully booted (check with is_running), stopped or has not started booting yet"
     }
+
     {:ok, m}
   end
+
   def output(true, %{node: node_name}) do
     {:ok, "RabbitMQ on node #{node_name} is booting"}
   end

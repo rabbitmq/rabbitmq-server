@@ -42,6 +42,18 @@
     [{max_connections, 5000}]}],
   [rabbitmq_web_stomp]},
 
+  {use_file_handle_cache_is_off,
+   "web_stomp.use_file_handle_cache = false",
+   [{rabbitmq_web_stomp,
+     [{use_file_handle_cache, false}]}],
+   [rabbitmq_web_stomp]},
+
+  {use_file_handle_cache_is_on,
+   "web_stomp.use_file_handle_cache = true",
+   [{rabbitmq_web_stomp,
+     [{use_file_handle_cache, true}]}],
+   [rabbitmq_web_stomp]},
+
  {ssl_listener,
   "web_stomp.ssl.listener = 127.0.0.4:15672",
   [{rabbitmq_web_stomp,

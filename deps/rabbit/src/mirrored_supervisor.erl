@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(mirrored_supervisor).
@@ -48,10 +48,10 @@
 %% This is basically the same as for supervisor, except that:
 %%
 %% 1) start_link(Module, Args) becomes
-%%    start_link(Group, TxFun, Module, Args).
+%%    start_link(Group, Module, Args).
 %%
 %% 2) start_link({local, Name}, Module, Args) becomes
-%%    start_link({local, Name}, Group, TxFun, Module, Args).
+%%    start_link({local, Name}, Group, Module, Args).
 %%
 %% 3) start_link({global, Name}, Module, Args) is not available.
 %%
@@ -60,19 +60,6 @@
 %% 5) Mnesia is used to hold global state. At some point your
 %%    application should invoke create_tables() (or table_definitions()
 %%    if it wants to manage table creation itself).
-%%
-%% The TxFun parameter to start_link/{4,5} is a function which the
-%% mirrored supervisor can use to execute Mnesia transactions. In the
-%% RabbitMQ server this goes via a worker pool; in other cases a
-%% function like:
-%%
-%%  tx_fun(Fun) ->
-%%      case mnesia:sync_transaction(Fun) of
-%%          {atomic,  Result}         -> Result;
-%%          {aborted, Reason}         -> throw({error, Reason})
-%%      end.
-%%
-%% could be used.
 %%
 %% Internals
 %% ---------
@@ -111,15 +98,7 @@
 -define(GEN_SERVER, gen_server2).
 -define(SUP_MODULE, mirrored_supervisor_sups).
 
--define(TABLE, mirrored_sup_childspec).
--define(TABLE_DEF,
-        {?TABLE,
-         [{record_name, mirrored_sup_childspec},
-          {type, ordered_set},
-          {attributes, record_info(fields, mirrored_sup_childspec)}]}).
--define(TABLE_MATCH, {match, #mirrored_sup_childspec{ _ = '_' }}).
-
--export([start_link/4, start_link/5,
+-export([start_link/3, start_link/4,
          start_child/2, restart_child/2,
          delete_child/2, terminate_child/2,
          which_children/1, count_children/1, check_childspecs/1]).
@@ -129,10 +108,9 @@
 -export([init/1, handle_call/3, handle_info/2, terminate/2, code_change/3,
          handle_cast/2]).
 
--export([start_internal/3]).
+-export([start_internal/2]).
 -export([create_tables/0, table_definitions/0]).
-
--record(mirrored_sup_childspec, {key, mirroring_pid, childspec}).
+-export([supervisor/1, child/2]).
 
 -record(state, {overall,
                 delegate,
@@ -161,25 +139,20 @@
 
 -type group_name() :: any().
 
--type(tx_fun() :: fun((fun(() -> A)) -> A)).
-
--spec start_link(GroupName, TxFun, Module, Args) -> startlink_ret() when
+-spec start_link(GroupName, Module, Args) -> startlink_ret() when
       GroupName :: group_name(),
-      TxFun :: tx_fun(),
       Module :: module(),
       Args :: term().
 
--spec start_link(SupName, GroupName, TxFun, Module, Args) ->
+-spec start_link(SupName, GroupName, Module, Args) ->
                         startlink_ret() when
       SupName :: ?SUPERVISOR:sup_name(),
       GroupName :: group_name(),
-      TxFun :: tx_fun(),
       Module :: module(),
       Args :: term().
 
--spec start_internal(Group, TxFun, ChildSpecs) -> Result when
+-spec start_internal(Group, ChildSpecs) -> Result when
       Group :: group_name(),
-      TxFun :: tx_fun(),
       ChildSpecs :: [?SUPERVISOR:child_spec()],
       Result :: {'ok', pid()} | {'error', term()}.
 
@@ -188,18 +161,18 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(Group, TxFun, Mod, Args) ->
-    start_link0([], Group, TxFun, init(Mod, Args)).
+start_link(Group, Mod, Args) ->
+    start_link0([], Group, init(Mod, Args)).
 
-start_link({local, SupName}, Group, TxFun, Mod, Args) ->
-    start_link0([{local, SupName}], Group, TxFun, init(Mod, Args));
+start_link({local, SupName}, Group, Mod, Args) ->
+    start_link0([{local, SupName}], Group, init(Mod, Args));
 
-start_link({global, _SupName}, _Group, _TxFun, _Mod, _Args) ->
+start_link({global, _SupName}, _Group, _Mod, _Args) ->
     erlang:error(badarg).
 
-start_link0(Prefix, Group, TxFun, Init) ->
+start_link0(Prefix, Group, Init) ->
     case apply(?SUPERVISOR, start_link,
-               Prefix ++ [?SUP_MODULE, {overall, Group, TxFun, Init}]) of
+               Prefix ++ [?SUP_MODULE, {overall, Group, Init}]) of
         {ok, Pid} -> case catch call(Pid, {init, Pid}) of
                          ok -> {ok, Pid};
                          E  -> E
@@ -230,16 +203,13 @@ cast(Sup, Msg) -> with_exit_handler(
 
 find_call(Sup, Id, Msg) ->
     Group = call(Sup, group),
-    MatchHead = #mirrored_sup_childspec{mirroring_pid = '$1',
-                                        key           = {Group, Id},
-                                        _             = '_'},
-    %% If we did this inside a tx we could still have failover
-    %% immediately after the tx - we can't be 100% here. So we may as
-    %% well dirty_select.
-    case mnesia:dirty_select(?TABLE, [{MatchHead, [], ['$1']}]) of
-        [Mirror] -> call(Mirror, Msg);
-        []       -> {error, not_found}
+    case find_mirror(Group, Id) of
+        {ok, Mirror} -> call(Mirror, Msg);
+        Err -> Err
     end.
+
+find_mirror(Group, Id) ->
+    rabbit_db_msup:find_mirror(Group, Id).
 
 fold(FunAtom, Sup, AggFun) ->
     Group = call(Sup, group),
@@ -258,15 +228,14 @@ mirroring(Sup) -> child(Sup, mirroring).
 
 %%----------------------------------------------------------------------------
 
-start_internal(Group, TxFun, ChildSpecs) ->
-    ?GEN_SERVER:start_link(?MODULE, {Group, TxFun, ChildSpecs},
+start_internal(Group, ChildSpecs) ->
+    ?GEN_SERVER:start_link(?MODULE, {Group, ChildSpecs},
                            [{timeout, infinity}]).
 
 %%----------------------------------------------------------------------------
 
-init({Group, TxFun, ChildSpecs}) ->
+init({Group, ChildSpecs}) ->
     {ok, #state{group              = Group,
-                tx_fun             = TxFun,
                 initial_childspecs = ChildSpecs,
                 child_order = child_order_from(ChildSpecs)}}.
 
@@ -274,20 +243,19 @@ handle_call({init, Overall}, _From,
             State = #state{overall            = undefined,
                            delegate           = undefined,
                            group              = Group,
-                           tx_fun             = TxFun,
                            initial_childspecs = ChildSpecs}) ->
     process_flag(trap_exit, true),
     LockId = mirrored_supervisor_locks:lock(Group),
     maybe_log_lock_acquisition_failure(LockId, Group),
     ok = pg:join(Group, Overall),
-    rabbit_log:debug("Mirrored supervisor: initializing, overall supervisor ~p joined group ~p", [Overall, Group]),
+    rabbit_log:debug("Mirrored supervisor: initializing, overall supervisor ~tp joined group ~tp", [Overall, Group]),
     Rest = pg:get_members(Group) -- [Overall],
     Nodes = [node(M) || M <- Rest],
-    rabbit_log:debug("Mirrored supervisor: known group ~p members: ~p on nodes ~p", [Group, Rest, Nodes]),
+    rabbit_log:debug("Mirrored supervisor: known group ~tp members: ~tp on nodes ~tp", [Group, Rest, Nodes]),
     case Rest of
         [] ->
-            rabbit_log:debug("Mirrored supervisor: no known peer members in group ~p, will delete all child records for it", [Group]),
-            TxFun(fun() -> delete_all(Group) end);
+            rabbit_log:debug("Mirrored supervisor: no known peer members in group ~tp, will delete all child records for it", [Group]),
+            delete_all(Group);
         _  -> ok
     end,
     [begin
@@ -297,7 +265,7 @@ handle_call({init, Overall}, _From,
     Delegate = delegate(Overall),
     erlang:monitor(process, Delegate),
     State1 = State#state{overall = Overall, delegate = Delegate},
-    Results = [maybe_start(Group, TxFun, Overall, Delegate, S) || S <- ChildSpecs],
+    Results = [maybe_start(Group, Overall, Delegate, S) || S <- ChildSpecs],
     mirrored_supervisor_locks:unlock(LockId),
     case errors(Results) of
         []     -> {reply, ok, State1};
@@ -307,32 +275,30 @@ handle_call({init, Overall}, _From,
 handle_call({start_child, ChildSpec}, _From,
             State = #state{overall  = Overall,
                            delegate = Delegate,
-                           group    = Group,
-                           tx_fun   = TxFun}) ->
+                           group    = Group}) ->
     LockId = mirrored_supervisor_locks:lock(Group),
     maybe_log_lock_acquisition_failure(LockId, Group),
-    rabbit_log:debug("Mirrored supervisor: asked to consider starting a child, group: ~p", [Group]),
-    Result = case maybe_start(Group, TxFun, Overall, Delegate, ChildSpec) of
-                 already_in_mnesia ->
-                     rabbit_log:debug("Mirrored supervisor: maybe_start for group ~p,"
+    rabbit_log:debug("Mirrored supervisor: asked to consider starting a child, group: ~tp", [Group]),
+    Result = case maybe_start(Group, Overall, Delegate, ChildSpec) of
+                 already_in_store ->
+                     rabbit_log:debug("Mirrored supervisor: maybe_start for group ~tp,"
                                       " overall ~p returned 'record already present'", [Group, Overall]),
                      {error, already_present};
-                 {already_in_mnesia, Pid} ->
-                     rabbit_log:debug("Mirrored supervisor: maybe_start for group ~p,"
-                                      " overall ~p returned 'already running: ~p'", [Group, Overall, Pid]),
+                 {already_in_store, Pid} ->
+                     rabbit_log:debug("Mirrored supervisor: maybe_start for group ~tp,"
+                                      " overall ~p returned 'already running: ~tp'", [Group, Overall, Pid]),
                      {error, {already_started, Pid}};
                  Else ->
-                     rabbit_log:debug("Mirrored supervisor: maybe_start for group ~p,"
-                                      " overall ~p returned ~p", [Group, Overall, Else]),
+                     rabbit_log:debug("Mirrored supervisor: maybe_start for group ~tp,"
+                                      " overall ~tp returned ~tp", [Group, Overall, Else]),
                      Else
              end,
     mirrored_supervisor_locks:unlock(LockId),
     {reply, Result, State};
 
 handle_call({delete_child, Id}, _From, State = #state{delegate = Delegate,
-                                                      group    = Group,
-                                                      tx_fun   = TxFun}) ->
-    {reply, stop(Group, TxFun, Delegate, Id), State};
+                                                      group    = Group}) ->
+    {reply, stop(Group, Delegate, Id), State};
 
 handle_call({msg, F, A}, _From, State = #state{delegate = Delegate}) ->
     {reply, apply(?SUPERVISOR, F, [Delegate | A]), State};
@@ -371,16 +337,14 @@ handle_info({'DOWN', _Ref, process, Pid, Reason},
 handle_info({'DOWN', _Ref, process, Pid, _Reason},
             State = #state{delegate = Delegate,
                            group    = Group,
-                           tx_fun   = TxFun,
                            overall  = O,
                            child_order = ChildOrder}) ->
     %% No guarantee pg will have received the DOWN before us.
     R = case lists:sort(pg:get_members(Group)) -- [Pid] of
-            [O | _] -> ChildSpecs =
-                           TxFun(fun() -> update_all(O, Pid) end),
+            [O | _] -> ChildSpecs = update_all(O, Pid),
                        [start(Delegate, ChildSpec)
                         || ChildSpec <- restore_child_order(ChildSpecs,
-                           ChildOrder)];
+                                                            ChildOrder)];
             _       -> []
         end,
     case errors(R) of
@@ -402,72 +366,47 @@ code_change(_OldVsn, State, _Extra) ->
 tell_all_peers_to_die(Group, Reason) ->
     [cast(P, {die, Reason}) || P <- pg:get_members(Group) -- [self()]].
 
-maybe_start(Group, TxFun, Overall, Delegate, ChildSpec) ->
-    rabbit_log:debug("Mirrored supervisor: asked to consider starting, group: ~p", [Group]),
-    try TxFun(fun() -> check_start(Group, Overall, Delegate, ChildSpec) end) of
+maybe_start(Group, Overall, Delegate, ChildSpec) ->
+    rabbit_log:debug("Mirrored supervisor: asked to consider starting, group: ~tp",
+                     [Group]),
+    try check_start(Group, Overall, Delegate, ChildSpec) of
         start      ->
-            rabbit_log:debug("Mirrored supervisor: check_start for group ~p,"
-                             " overall ~p returned 'do start'", [Group, Overall]),
+            rabbit_log:debug("Mirrored supervisor: check_start for group ~tp,"
+                             " overall ~tp returned 'do start'", [Group, Overall]),
             start(Delegate, ChildSpec);
         undefined  ->
-            rabbit_log:debug("Mirrored supervisor: check_start for group ~p,"
-                             " overall ~p returned 'undefined'", [Group, Overall]),
-            already_in_mnesia;
-        Pid        ->
-            rabbit_log:debug("Mirrored supervisor: check_start for group ~p,"
-                             " overall ~p returned 'already running (~p)'", [Group, Overall, Pid]),
-            {already_in_mnesia, Pid}
+            rabbit_log:debug("Mirrored supervisor: check_start for group ~tp,"
+                             " overall ~tp returned 'undefined'", [Group, Overall]),
+            already_in_store;
+        Pid ->
+            rabbit_log:debug("Mirrored supervisor: check_start for group ~tp,"
+                             " overall ~tp returned 'already running (~tp)'",
+                             [Group, Overall, Pid]),
+            {already_in_store, Pid}
     catch
         %% If we are torn down while in the transaction...
         {error, E} -> {error, E}
     end.
 
 check_start(Group, Overall, Delegate, ChildSpec) ->
-    rabbit_log:debug("Mirrored supervisor: check_start for group ~p, id: ~p, overall: ~p",
-                     [Group, id(ChildSpec), Overall]),
-    ReadResult = mnesia:wread({?TABLE, {Group, id(ChildSpec)}}),
-    rabbit_log:debug("Mirrored supervisor: check_start table ~s read for key ~p returned ~p",
-                     [?TABLE, {Group, id(ChildSpec)}, ReadResult]),
-    case ReadResult of
-        []  -> _ = write(Group, Overall, ChildSpec),
-               start;
-        [S] -> #mirrored_sup_childspec{key           = {Group, Id},
-                                       mirroring_pid = Pid} = S,
-               case Overall of
-                   Pid ->
-                       rabbit_log:debug("Mirrored supervisor: overall matched mirrored pid ~p", [Pid]),
-                       child(Delegate, Id);
-                   _   ->
-                       rabbit_log:debug("Mirrored supervisor: overall ~p did not match mirrored pid ~p", [Overall, Pid]),
-                       rabbit_log:debug("Mirrored supervisor: supervisor(~p) returned ~p", [Pid, supervisor(Pid)]),
-                       case supervisor(Pid) of
-                          dead      ->
-                              _ = write(Group, Overall, ChildSpec),
-                              start;
-                          Delegate0 ->
-                              child(Delegate0, Id)
-                       end
-               end
+    Id = id(ChildSpec),
+    rabbit_log:debug("Mirrored supervisor: check_start for group ~tp, id: ~tp, "
+                     "overall: ~tp", [Group, Id, Overall]),
+    case rabbit_db_msup:create_or_update(Group, Overall, Delegate, ChildSpec, Id) of
+        Delegate0 when is_pid(Delegate0) ->
+            child(Delegate0, Id);
+        Other ->
+            Other
     end.
 
 supervisor(Pid) -> with_exit_handler(fun() -> dead end,
                                      fun() -> delegate(Pid) end).
 
-write(Group, Overall, ChildSpec) ->
-    S = #mirrored_sup_childspec{key           = {Group, id(ChildSpec)},
-                                mirroring_pid = Overall,
-                                childspec     = ChildSpec},
-    ok = mnesia:write(?TABLE, S, write),
-    ChildSpec.
-
-delete(Group, Id) ->
-    ok = mnesia:delete({?TABLE, {Group, Id}}).
-
 start(Delegate, ChildSpec) ->
     apply(?SUPERVISOR, start_child, [Delegate, ChildSpec]).
 
-stop(Group, TxFun, Delegate, Id) ->
-    try TxFun(fun() -> check_stop(Group, Delegate, Id) end) of
+stop(Group, Delegate, Id) ->
+    try check_stop(Group, Delegate, Id) of
         deleted    -> apply(?SUPERVISOR, delete_child, [Delegate, Id]);
         running    -> {error, running}
     catch
@@ -476,46 +415,30 @@ stop(Group, TxFun, Delegate, Id) ->
 
 check_stop(Group, Delegate, Id) ->
     case child(Delegate, Id) of
-        undefined -> delete(Group, Id),
-                     deleted;
-        _         -> running
+        undefined ->
+            rabbit_db_msup:delete(Group, Id),
+            deleted;
+        _ ->
+            running
     end.
 
 id({Id, _, _, _, _, _}) -> Id.
 
 update_all(Overall, OldOverall) ->
-    MatchHead = #mirrored_sup_childspec{mirroring_pid = OldOverall,
-                                        key           = '$1',
-                                        childspec     = '$2',
-                                        _             = '_'},
-    [write(Group, Overall, C) ||
-        [{Group, _Id}, C] <- mnesia:select(?TABLE, [{MatchHead, [], ['$$']}])].
+    rabbit_db_msup:update_all(Overall, OldOverall).
 
 delete_all(Group) ->
-    MatchHead = #mirrored_sup_childspec{key       = {Group, '_'},
-                                        childspec = '$1',
-                                        _         = '_'},
-    [delete(Group, id(C)) ||
-        C <- mnesia:select(?TABLE, [{MatchHead, [], ['$1']}])].
+    rabbit_db_msup:delete_all(Group).
 
 errors(Results) -> [E || {error, E} <- Results].
 
 %%----------------------------------------------------------------------------
 
-create_tables() -> create_tables([?TABLE_DEF]).
-
-create_tables([]) ->
-    ok;
-create_tables([{Table, Attributes} | Ts]) ->
-    case mnesia:create_table(Table, Attributes) of
-        {atomic, ok}                        -> create_tables(Ts);
-        {aborted, {already_exists, ?TABLE}} -> create_tables(Ts);
-        Err                                 -> Err
-    end.
+create_tables() ->
+    rabbit_db_msup:create_tables().
 
 table_definitions() ->
-    {Name, Attributes} = ?TABLE_DEF,
-    [{Name, [?TABLE_MATCH | Attributes]}].
+    rabbit_db_msup:table_definitions().
 
 %%----------------------------------------------------------------------------
 
@@ -553,6 +476,6 @@ restore_child_order(ChildSpecs, ChildOrder) ->
                end, ChildSpecs).
 
 maybe_log_lock_acquisition_failure(undefined = _LockId, Group) ->
-    rabbit_log:warning("Mirrored supervisor: could not acquire lock for group ~s", [Group]);
+    rabbit_log:warning("Mirrored supervisor: could not acquire lock for group ~ts", [Group]);
 maybe_log_lock_acquisition_failure(_, _) ->
     ok.

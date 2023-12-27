@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule ResolverInfoCommandTest do
   use ExUnit.Case, async: false
@@ -15,7 +15,7 @@ defmodule ResolverInfoCommandTest do
 
     start_rabbitmq_app()
 
-    ExUnit.configure([max_cases: 1])
+    ExUnit.configure(max_cases: 1)
 
     on_exit([], fn ->
       start_rabbitmq_app()
@@ -25,11 +25,12 @@ defmodule ResolverInfoCommandTest do
   end
 
   setup context do
-    {:ok, opts: %{
-        node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000,
-        offline: false
-      }}
+    {:ok,
+     opts: %{
+       node: get_rabbit_hostname(),
+       timeout: context[:test_timeout] || 30000,
+       offline: false
+     }}
   end
 
   test "merge_defaults: defaults to offline mode" do
@@ -46,7 +47,10 @@ defmodule ResolverInfoCommandTest do
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc", context do
-    assert match?({:badrpc, _}, @command.run([], Map.merge(context[:opts], %{node: :jake@thedog, timeout: 100})))
+    assert match?(
+             {:badrpc, _},
+             @command.run([], Map.merge(context[:opts], %{node: :jake@thedog, timeout: 100}))
+           )
   end
 
   test "run: returns host resolver (inetrc) information", context do

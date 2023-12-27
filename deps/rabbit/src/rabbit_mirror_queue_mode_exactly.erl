@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2010-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2010-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mirror_queue_mode_exactly).
@@ -42,4 +42,4 @@ shuffle(L) ->
 validate_policy(N) when is_integer(N) andalso N > 0 ->
     ok;
 validate_policy(Params) ->
-    {error, "ha-mode=\"exactly\" takes an integer, ~p given", [Params]}.
+    {error, "ha-mode=\"exactly\" takes an integer, ~tp given", [Params]}.

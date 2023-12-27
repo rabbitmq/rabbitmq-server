@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_stream_metrics).
@@ -30,8 +30,8 @@
 -define(CTAG_PREFIX, <<"stream.subid-">>).
 
 init() ->
-    rabbit_core_metrics:create_table({?TABLE_CONSUMER, set}),
-    rabbit_core_metrics:create_table({?TABLE_PUBLISHER, set}),
+    _ = rabbit_core_metrics:create_table({?TABLE_CONSUMER, set}),
+    _ = rabbit_core_metrics:create_table({?TABLE_PUBLISHER, set}),
     ok.
 
 consumer_created(Connection,

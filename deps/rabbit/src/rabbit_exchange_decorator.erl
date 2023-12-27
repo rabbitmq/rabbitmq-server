@@ -2,14 +2,14 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_exchange_decorator).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([select/2, set/1]).
+-export([select/2, set/1, active/1]).
 
 -behaviour(rabbit_registry_class).
 
@@ -24,8 +24,12 @@
 %% It's possible in the future we might make decorators
 %% able to manipulate messages as they are published.
 
--type(tx() :: 'transaction' | 'none').
--type(serial() :: pos_integer() | tx()).
+-type(serial() :: pos_integer() | 'none').
+
+%% Callbacks on Khepri are always executed outside of a transaction, thus
+%% this implementation has been updated to reflect this. The 'transaction'
+%% parameter disappears, even for mnesia, callbacks run only once
+%% and their implementation must ensure any transaction required.
 
 -callback description() -> [proplists:property()].
 
@@ -36,10 +40,10 @@
 -callback serialise_events(rabbit_types:exchange()) -> boolean().
 
 %% called after declaration and recovery
--callback create(tx(), rabbit_types:exchange()) -> 'ok'.
+-callback create(serial(), rabbit_types:exchange()) -> 'ok'.
 
 %% called after exchange (auto)deletion.
--callback delete(tx(), rabbit_types:exchange(), [rabbit_types:binding()]) ->
+-callback delete(serial(), rabbit_types:exchange()) ->
     'ok'.
 
 %% called when the policy attached to this exchange changes.
@@ -55,7 +59,7 @@
                           [rabbit_types:binding()]) -> 'ok'.
 
 %% Allows additional destinations to be added to the routing decision.
--callback route(rabbit_types:exchange(), rabbit_types:delivery()) ->
+-callback route(rabbit_types:exchange(), rabbit_types:message()) ->
     [rabbit_amqqueue:name() | rabbit_exchange:name()].
 
 %% Whether the decorator wishes to receive callbacks for the exchange
@@ -74,7 +78,8 @@ removed_from_rabbit_registry(_Type) ->
 %% select a subset of active decorators
 select(all,   {Route, NoRoute})  -> filter(Route ++ NoRoute);
 select(route, {Route, _NoRoute}) -> filter(Route);
-select(raw,   {Route, NoRoute})  -> Route ++ NoRoute.
+select(raw,   {Route, NoRoute})  -> Route ++ NoRoute;
+select(_, undefined) -> [].
 
 filter(Modules) ->
     [M || M <- Modules, code:which(M) =/= non_existing].
@@ -86,6 +91,15 @@ set(X) ->
                                 cons_if_eq(noroute, ActiveFor, D, NoRoute)}
                        end, {[], []}, list()),
     X#exchange{decorators = Decs}.
+
+%% TODO The list of decorators can probably be a parameter, to avoid multiple queries
+%% when we're updating many exchanges
+active(X) ->
+    lists:foldl(fun (D, {Route, NoRoute}) ->
+                        ActiveFor = D:active_for(X),
+                        {cons_if_eq(all,     ActiveFor, D, Route),
+                         cons_if_eq(noroute, ActiveFor, D, NoRoute)}
+                end, {[], []}, list()).
 
 list() -> [M || {_, M} <- rabbit_registry:lookup_all(exchange_decorator)].
 
@@ -100,6 +114,7 @@ maybe_recover(X = #exchange{name       = Name,
     case New of
         Old -> ok;
         _   -> %% TODO create a tx here for non-federation decorators
-               [M:create(none, X) || M <- New -- Old],
-               rabbit_exchange:update_decorators(Name)
+               Serial = rabbit_exchange:serial(X),
+               _ = [M:create(Serial, X) || M <- New -- Old],
+               rabbit_exchange:update_decorators(Name, Decs1)
     end.

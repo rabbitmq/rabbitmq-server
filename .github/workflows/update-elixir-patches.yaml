@@ -6,32 +6,33 @@ on:
 jobs:
   update-toolchains:
     name: Update Elixir Versions
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       max-parallel: 1
       fail-fast: false
       matrix:
         include:
-        - elixir_version: "1.10"
-          name: '1_10'
-        - elixir_version: "1.12"
-          name: '1_12'
         - elixir_version: "1.13"
           name: '1_13'
         - elixir_version: "1.14"
           name: '1_14'
+        - elixir_version: "1.15"
+          name: '1_15'
     timeout-minutes: 10
+    env:
+      branch: bump-elixir-${{ matrix.elixir_version }}
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v3
-    - name: SKIP IF THE PR ALREADY EXISTS
+      uses: actions/checkout@v4
+    - name: FAIL IF THE PR ALREADY EXISTS
       id: check-for-branch
       run: |
         set +e
-        git ls-remote --exit-code --heads origin bump-elixir-${{ matrix.elixir_version }}
-        echo "::set-output name=c::$?"
+        if git ls-remote --exit-code --heads origin ${{ env.branch }}; then
+          echo "Branch ${{ env.branch }} already exits"
+          exit 1
+        fi
     - name: DETERMINE LATEST PATCH & SHA
-      if: steps.check-for-branch.outputs.c != 0
       id: fetch-version
       run: |
         TAG_NAME=$(curl -s GET https://api.github.com/repos/elixir-lang/elixir/tags?per_page=100 \
@@ -51,28 +52,27 @@ jobs:
           exit 1
         fi
 
-        echo "::set-output name=VERSION::${TAG_NAME#v}"
-        echo "::set-output name=SHA::${SHA}"
+        echo "VERSION=${TAG_NAME#v}" >> $GITHUB_OUTPUT
+        echo "SHA=${SHA}" >> $GITHUB_OUTPUT
     - name: MODIFY VERSION FILE
-      if: steps.check-for-branch.outputs.c != 0
       run: |
         sudo npm install --global --silent @bazel/buildozer
 
         OLD_SHA="$(cat MODULE.bazel | buildozer 'print sha256' -:${{ matrix.name }})"
         OLD_VERSION="$(cat MODULE.bazel | buildozer 'print version' -:${{ matrix.name }})"
 
+        echo "OLD_SHA: $OLD_SHA"
+        echo "OLD_VERSION: $OLD_VERSION"
+
         echo "$(cat MODULE.bazel | buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA }}"' -:${{ matrix.name }})" > MODULE.bazel
         echo "$(cat MODULE.bazel | buildozer 'set version "${{ steps.fetch-version.outputs.VERSION }}"' -:${{ matrix.name }})" > MODULE.bazel
 
-        sed -i"_orig" "s/${OLD_SHA}/${{ steps.fetch-version.outputs.SHA }}/" WORKSPACE
-        sed -i"_orig" "s/${OLD_VERSION}/${{ steps.fetch-version.outputs.VERSION }}/" WORKSPACE
-        rm *_orig
+        echo "MODULE.bazel updated"
 
         set -x
         git diff
     - name: CREATE PULL REQUEST
-      if: steps.check-for-branch.outputs.c != 0
-      uses: peter-evans/create-pull-request@v4.1.3
+      uses: peter-evans/create-pull-request@v5.0.2
       with:
         token: ${{ secrets.REPO_SCOPED_TOKEN }}
         committer: GitHub <noreply@github.com>
@@ -86,8 +86,8 @@ jobs:
         commit-message: |
           Adopt elixir ${{ steps.fetch-version.outputs.VERSION }}
         labels: |
+          backport-v3.12.x
           backport-v3.11.x
           backport-v3.10.x
-          backport-v3.9.x
-        branch: bump-elixir-${{ matrix.elixir_version }}
+        branch: ${{ env.branch }}
         delete-branch: true

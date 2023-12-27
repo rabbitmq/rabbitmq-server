@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(unit_gm_SUITE).
@@ -70,7 +70,7 @@ member_death(_Config) ->
       fun (Pid, Pid2) ->
               {ok, Pid3} = gm:start_link(
                              ?MODULE, ?MODULE, self(),
-                             fun rabbit_misc:execute_mnesia_transaction/1),
+                             fun rabbit_mnesia:execute_mnesia_transaction/1),
               passed = receive_joined(Pid3, [Pid, Pid2, Pid3],
                                       timeout_joining_gm_group_3),
               passed = receive_birth(Pid, Pid3, timeout_waiting_for_birth_3_1),
@@ -120,10 +120,10 @@ down_in_members_change(_Config) ->
     %% Setup
     ok = gm:create_tables(),
     {ok, Pid} = gm:start_link(?MODULE, ?MODULE, self(),
-                              fun rabbit_misc:execute_mnesia_transaction/1),
+                              fun rabbit_mnesia:execute_mnesia_transaction/1),
     passed = receive_joined(Pid, [Pid], timeout_joining_gm_group_1),
     {ok, Pid2} = gm:start_link(?MODULE, ?MODULE, self(),
-                               fun rabbit_misc:execute_mnesia_transaction/1),
+                               fun rabbit_mnesia:execute_mnesia_transaction/1),
     passed = receive_joined(Pid2, [Pid, Pid2], timeout_joining_gm_group_2),
     passed = receive_birth(Pid, Pid2, timeout_waiting_for_birth_2),
 
@@ -167,11 +167,11 @@ with_two_members(Fun) ->
     ok = gm:create_tables(),
 
     {ok, Pid} = gm:start_link(?MODULE, ?MODULE, self(),
-                              fun rabbit_misc:execute_mnesia_transaction/1),
+                              fun rabbit_mnesia:execute_mnesia_transaction/1),
     passed = receive_joined(Pid, [Pid], timeout_joining_gm_group_1),
 
     {ok, Pid2} = gm:start_link(?MODULE, ?MODULE, self(),
-                               fun rabbit_misc:execute_mnesia_transaction/1),
+                               fun rabbit_mnesia:execute_mnesia_transaction/1),
     passed = receive_joined(Pid2, [Pid, Pid2], timeout_joining_gm_group_2),
     passed = receive_birth(Pid, Pid2, timeout_waiting_for_birth_2),
 

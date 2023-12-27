@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_amqp1_0_outgoing_link).
@@ -88,12 +88,12 @@ attach(#'v1_0.attach'{name = Name,
                        role = ?SEND_ROLE}], OutgoingLink};
                 Fail ->
                     protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                   "Consume failed: ~p", [Fail])
+                                   "Consume failed: ~tp", [Fail])
             end;
         {error, Reason} ->
             %% TODO proper link establishment protocol here?
             protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                               "Attach rejected: ~p", [Reason])
+                               "Attach rejected: ~tp", [Reason])
     end.
 
 credit_drained(#'basic.credit_drained'{credit_drained = CreditDrained},
@@ -208,7 +208,7 @@ delivery(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
                             batchable = false},
     Msg1_0 = rabbit_amqp1_0_message:annotated_message(
                RKey, Deliver, Msg),
-    ?DEBUG("Outbound content:~n  ~p",
+    ?DEBUG("Outbound content:~n  ~tp",
            [[amqp10_framing:pprint(Section) ||
                 Section <- amqp10_framing:decode_bin(
                              iolist_to_binary(Msg1_0))]]),
@@ -224,7 +224,7 @@ delivery(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
 
 encode_frames(_T, _Msg, MaxContentLen, _Transfers) when MaxContentLen =< 0 ->
     protocol_error(?V_1_0_AMQP_ERROR_FRAME_SIZE_TOO_SMALL,
-                   "Frame size is too small by ~p bytes", [-MaxContentLen]);
+                   "Frame size is too small by ~tp bytes", [-MaxContentLen]);
 encode_frames(T, Msg, MaxContentLen, Transfers) ->
     case iolist_size(Msg) > MaxContentLen of
         true  ->
@@ -250,7 +250,7 @@ transferred(DeliveryTag, Channel,
 
 source_filters_to_consumer_args(#'v1_0.source'{filter = {map, KVList}}) ->
     Key = {symbol, <<"rabbitmq:stream-offset-spec">>},
-    case lists:keyfind(Key, 1, KVList) of
+    case keyfind_unpack_described(Key, KVList) of
         {_, {timestamp, Ts}} ->
             [{<<"x-stream-offset">>, timestamp, Ts div 1000}]; %% 0.9.1 uses second based timestamps
         {_, {utf8, Spec}} ->
@@ -262,3 +262,17 @@ source_filters_to_consumer_args(#'v1_0.source'{filter = {map, KVList}}) ->
     end;
 source_filters_to_consumer_args(_Source) ->
     [].
+
+keyfind_unpack_described(Key, KvList) ->
+    %% filterset values _should_ be described values
+    %% they aren't always however for historical reasons so we need this bit of
+    %% code to return a plain value for the given filter key
+    case lists:keyfind(Key, 1, KvList) of
+        {Key, {described, Key, Value}} ->
+            {Key, Value};
+        {Key, _} = Kv ->
+            Kv;
+        false ->
+            false
+    end.
+

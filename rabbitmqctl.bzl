@@ -4,7 +4,7 @@ def _impl(ctx):
     rabbitmq_home_path = rabbitmq_home_short_path(ctx.attr.home)
 
     script = """
-    exec ./{home}/sbin/{cmd} $@
+    exec ./{home}/sbin/{cmd} "$@"
     """.format(
         home = rabbitmq_home_path,
         cmd = ctx.label.name,

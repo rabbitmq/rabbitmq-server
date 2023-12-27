@@ -8,7 +8,7 @@
 <table class="list">
  <thead>
   <tr>
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
     <th>Virtual Host</th>
 <% } %>
     <th>Name</th>
@@ -24,10 +24,10 @@
     var policy = policies[i];
 %>
    <tr<%= alt_rows(i)%>>
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
      <td><%= fmt_string(policy.vhost) %></td>
 <% } %>
-<% if (is_user_policymaker) { %>
+<% if (ac.isPolicyMakerUser()) { %>
      <td><%= link_policy(policy.vhost, policy.name) %></td>
 <% } else { %>
      <td><%= fmt_string(policy.name) %></td>
@@ -47,14 +47,14 @@
   </div>
 </div>
 
-<% if (is_user_policymaker && vhosts.length > 0) { %>
+<% if (ac.isPolicyMakerUser() && ac.canAccessVhosts()) { %>
 
 <div class="section-hidden">
   <h2>Add / update a policy</h2>
   <div class="hider">
     <form action="#/policies" method="put">
       <table class="form">
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
         <tr>
           <th><label>Virtual host:</label></th>
           <td>
@@ -83,6 +83,9 @@
               <option value="all">Exchanges and queues</option>
               <option value="exchanges">Exchanges</option>
               <option value="queues">Queues</option>
+              <option value="classic_queues">Classic Queues</option>
+              <option value="quorum_queues">Quorum Queues</option>
+              <option value="streams">Streams</option>
             </select>
           </td>
         </tr>
@@ -105,6 +108,7 @@
                   <span class="argument-link" field="definition" key="dead-letter-exchange" type="string">Dead letter exchange</span> |
                   <span class="argument-link" field="definition" key="dead-letter-routing-key" type="string">Dead letter routing key</span><br/>
                   <span class="argument-link" field="definition" key="message-ttl" type="number">Message TTL</span><span class="help" id="queue-message-ttl"></span></br>
+                  <span class="argument-link" field="definition" key="consumer-timeout" type="number">Consumer Timeout</span><span class="help" id="queue-consumer-timeout"></span></br>
                 </td>
               <tr>
                 <td>Queues [Classic]</td>
@@ -115,7 +119,6 @@
                   <span class="argument-link" field="definition" key="ha-promote-on-shutdown" type="string" value="">HA mirror promotion on shutdown</span> <span class="help" id="policy-ha-promote-on-shutdown"></span> |
                   <span class="argument-link" field="definition" key="ha-promote-on-failure" type="string" value="">HA mirror promotion on failure</span> <span class="help" id="policy-ha-promote-on-failure"></span>
                   </br>
-                  <span class="argument-link" field="definition" key="queue-mode" type="string" value="lazy">Lazy mode</span> |
                   <span class="argument-link" field="definition" key="queue-version" type="number">Version</span> <span class="help" id="queue-version"></span> |
                   <span class="argument-link" field="definition" key="queue-master-locator" type="string">Master locator</span></br>
                 </td>
@@ -138,6 +141,8 @@
                   <span class="help" id="queue-max-age"></span> |
                   <span class="argument-link" field="definition" key="stream-max-segment-size-bytes" type="number">Max segment size in bytes</span>
                   <span class="help" id="queue-stream-max-segment-size-bytes"></span> |
+                  <span class="argument-link" field="definition" key="stream-filter-size-bytes" type="number">Filter size in bytes. Valid range: 16-255</span>
+                  <span class="help" id="queue-stream-filter-size-bytes"></span> |
                   <span class="argument-link" field="definition" key="queue-leader-locator" type="string">Leader locator</span>
                   <span class="help" id="queue-leader-locator"></span>
                 </td>
@@ -178,7 +183,7 @@
 <table class="list">
  <thead>
   <tr>
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
     <th>Virtual Host</th>
 <% } %>
     <th>Name</th>
@@ -186,7 +191,9 @@
     <th>Apply to</th>
     <th>Definition</th>
     <th>Priority</th>
+<% if (ac.isAdministratorUser() && is_op_policy_updating_enabled) { %>
     <th class="administrator-only">Clear</th>
+<% } %>
   </tr>
  </thead>
  <tbody>
@@ -195,7 +202,7 @@
     var policy = operator_policies[i];
 %>
    <tr<%= alt_rows(i)%>>
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
      <td><%= fmt_string(policy.vhost) %></td>
 <% } %>
      <td><%= fmt_string(policy.name) %></td>
@@ -203,6 +210,7 @@
      <td><%= fmt_string(policy['apply-to']) %></td>
      <td><%= fmt_table_short(policy.definition) %></td>
      <td><%= fmt_string(policy.priority) %></td>
+<% if (ac.isAdministratorUser && is_op_policy_updating_enabled) { %>
      <td class="administrator-only">
         <form action="#/operator_policies" method="delete" class="confirm">
             <input type="hidden" name="name" value="<%= fmt_string(policy.name) %>"/>
@@ -210,6 +218,7 @@
             <input type="submit" value="Clear"/>
         </form>
       </td>
+<% } %>
    </tr>
 <% } %>
  </tbody>
@@ -221,14 +230,14 @@
   </div>
 </div>
 
-<% if (user_administrator && vhosts.length > 0) { %>
+<% if (ac.isAdministratorUser() && ac.canAccessVhosts() > 0 && is_op_policy_updating_enabled) { %>
 
 <div class="section-hidden">
   <h2>Add / update an operator policy</h2>
   <div class="hider">
     <form action="#/operator_policies" method="put">
       <table class="form">
-<% if (vhosts_interesting) { %>
+<% if (display.vhosts) { %>
         <tr>
           <th><label>Virtual host:</label></th>
           <td>
@@ -255,6 +264,9 @@
           <td>
             <select name="apply-to">
               <option value="queues">Queues</option>
+              <option value="classic_queues">Classic Queues</option>
+              <option value="quorum_queues">Quorum Queues</option>
+              <option value="streams">Streams</option>
             </select>
           </td>
         </tr>
@@ -268,27 +280,40 @@
             <div class="multifield" id="definitionop"></div>
             <table class="argument-links">
               <tr>
-                <td>Queues [All types]</td>
-                <td>
-                  <span class="argument-link" field="definitionop" key="max-length" type="number">Max length</span> |
-                  <span class="argument-link" field="definitionop" key="max-length-bytes" type="number">Max length bytes</span> |
-                  <span class="argument-link" field="definitionop" key="overflow" type="string">Overflow behaviour</span>
-                  <span class="help" id="queue-overflow"></span></br>
-                  <span class="argument-link" field="definitionop" key="message-ttl" type="number">Message TTL</span>
-                  <span class="help" id="queue-message-ttl"></span>
-                </td>
-              </tr>
-              <tr>
                 <td>Queues [Classic]</td>
                 <td>
-                  <span class="argument-link" field="definitionop" key="expires" type="number">Auto expire</span>
+                  <span class="argument-link" field="definitionop" key="expires" type="number">Auto expire</span> |
+                  <span class="argument-link" field="definitionop" key="ha-mode" type="string">HA mode</span> <span class="help" id="policy-ha-mode"></span> |
+                  <span class="argument-link" field="definitionop" key="ha-params" type="number">HA params</span> <span class="help" id="policy-ha-params"></span> |
+                  <span class="argument-link" field="definitionop" key="ha-sync-mode" type="string">HA sync mode</span> <span class="help" id="policy-ha-sync-mode"></span> </br>
+                  <span class="argument-link" field="definitionop" key="max-length" type="number">Max length</span> |
+                  <span class="argument-link" field="definitionop" key="max-length-bytes" type="number">Max length bytes</span> |
+                  <span class="argument-link" field="definitionop" key="message-ttl" type="number">Message TTL</span> |
+                  <span class="help" id="queue-message-ttl"></span> |
+                  <span class="argument-link" field="definitionop" key="queue-version" type="number">Version</span> <span class="help" id="queue-version"></span> </br> |
+                  <span class="argument-link" field="definitionop" key="overflow" type="string">Length limit overflow behaviour</span> <span class="help" id="queue-overflow"></span> </br>
                 </td>
               </tr>
               <tr>
                 <td>Queues [Quorum]</td>
                 <td>
-                  <span class="argument-link" field="definitionop" key="delivery-limit" type="string">Delivery limit</span>
-                  <span class="help" id="delivery-limit"></span>
+                  <span class="argument-link" field="definitionop" key="delivery-limit" type="number">Delivery limit</span>
+                  <span class="help" id="delivery-limit"></span> |
+                  <span class="argument-link" field="definitionop" key="expires" type="number">Auto expire</span> |
+                  <span class="argument-link" field="definitionop" key="max-in-memory-bytes" type="number">Max in-memory bytes</span> |
+                  <span class="argument-link" field="definitionop" key="max-in-memory-length" type="number">Max in-memory length</span> <br>
+                  <span class="argument-link" field="definitionop" key="max-length" type="number">Max length</span> |
+                  <span class="argument-link" field="definitionop" key="max-length-bytes" type="number">Max length bytes</span> |
+                  <span class="argument-link" field="definitionop" key="message-ttl" type="number">Message TTL</span>
+                  <span class="help" id="queue-message-ttl"></span> |
+                  <span class="argument-link" field="definitionop" key="target-group-size" type="number">Target group size</span> |
+                  <span class="argument-link" field="definitionop" key="overflow" type="string">Length limit overflow behaviour</span> <span class="help" id="queue-overflow"></span> </br>
+                </td>
+              </tr>
+              <tr>
+                <td>Queues [Streams]</td>
+                <td>
+                  <span class="argument-link" field="definitionop" key="max-length-bytes" type="number">Max length bytes</span>
                 </td>
               </tr>
             </table>
@@ -301,4 +326,3 @@
   </div>
 </div>
 <% } %>
-

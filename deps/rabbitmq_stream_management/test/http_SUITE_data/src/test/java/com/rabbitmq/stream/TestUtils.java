@@ -11,7 +11,7 @@
 // The Original Code is RabbitMQ.
 //
 // The Initial Developer of the Original Code is Pivotal Software, Inc.
-// Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
+// Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 //
 
 package com.rabbitmq.stream;
@@ -256,5 +256,12 @@ public class TestUtils {
 
   static Condition<Object> isNull() {
     return new Condition<>(Objects::isNull, "null");
+  }
+
+  static Client.ChunkListener credit() {
+    return (client, subscriptionId, offset, messageCount, dataSize) -> {
+      client.credit(subscriptionId, 1);
+      return null;
+    };
   }
 }

@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2016-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   alias RabbitMQ.CLI.Core.{DocGuide, Distribution, Validators}
@@ -22,7 +22,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
     Validators.chain(
       [
         &Validators.node_is_not_running/2,
-        &Validators.mnesia_dir_is_set/2,
+        &Validators.data_dir_is_set/2,
         &Validators.feature_flags_file_is_set/2,
         &Validators.rabbit_is_loaded/2
       ],
@@ -38,27 +38,103 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
     Stream.concat([
       become(node_name, opts),
       RabbitMQ.CLI.Core.Helpers.defer(fn ->
-        :rabbit_event.start_link()
-        :rabbit_mnesia.forget_cluster_node(to_atom(node_to_remove), true)
+        _ = :rabbit_event.start_link()
+
+        try do
+          :rabbit_db_cluster.forget_member(to_atom(node_to_remove), true)
+        catch
+          :error, :undef ->
+            :rabbit_mnesia.forget_cluster_node(to_atom(node_to_remove), true)
+        end
       end)
     ])
   end
 
   def run([node_to_remove], %{node: node_name, offline: false}) do
     atom_name = to_atom(node_to_remove)
-    args      = [atom_name, false]
-    case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :forget_cluster_node, args) do
+    args = [atom_name, false]
+
+    ret =
+      case :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :forget_member, args) do
+        {:badrpc, {:EXIT, {:undef, _}}} ->
+          :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :forget_cluster_node, args)
+
+        ret0 ->
+          ret0
+      end
+
+    case ret do
+      {:error, {:failed_to_remove_node, ^atom_name, :rabbit_still_running}} ->
+        {:error,
+         "RabbitMQ on node #{node_to_remove} must be stopped with 'rabbitmqctl -n #{node_to_remove} stop_app' before it can be removed"}
+
       {:error, {:failed_to_remove_node, ^atom_name, {:active, _, _}}} ->
-        {:error, "RabbitMQ on node #{node_to_remove} must be stopped with 'rabbitmqctl -n #{node_to_remove} stop_app' before it can be removed"};
-      {:error, _}  = error -> error;
-      {:badrpc, _} = error -> error;
+        {:error,
+         "RabbitMQ on node #{node_to_remove} must be stopped with 'rabbitmqctl -n #{node_to_remove} stop_app' before it can be removed"}
+
+      {:error, {:failed_to_remove_node, ^atom_name, unavailable}} ->
+        {:error, "Node #{node_to_remove} must be running before it can be removed"}
+
+      {:error, _} = error ->
+        error
+
+      {:badrpc, _} = error ->
+        error
+
       :ok ->
-        case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :shrink_all, [atom_name]) do
-          {:error, _} ->
-            {:error, "RabbitMQ failed to shrink some of the quorum queues on node #{node_to_remove}"};
-          _ -> :ok
+        qq_shrink_result =
+          :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :shrink_all, [atom_name])
+
+        stream_shrink_result =
+          case :rabbit_misc.rpc_call(node_name, :rabbit_stream_queue, :delete_all_replicas, [
+                 atom_name
+               ]) do
+            ## For backwards compatibility
+            {:badrpc, {:EXIT, {:undef, [{:rabbit_stream_queue, :delete_all_replicas, _, _}]}}} ->
+              []
+
+            any ->
+              any
+          end
+
+        is_error_fun = fn
+          {_, {:ok, _}} ->
+            false
+
+          {_, :ok} ->
+            false
+
+          {_, {:error, _, _}} ->
+            true
+
+          {_, {:error, _}} ->
+            true
         end
-      other                -> other
+
+        has_qq_error =
+          not Enum.empty?(qq_shrink_result) and Enum.any?(qq_shrink_result, is_error_fun)
+
+        has_stream_error =
+          not Enum.empty?(stream_shrink_result) and Enum.any?(stream_shrink_result, is_error_fun)
+
+        case {has_qq_error, has_stream_error} do
+          {false, false} ->
+            :ok
+
+          {true, false} ->
+            {:error,
+             "RabbitMQ failed to shrink some of the quorum queues on node #{node_to_remove}"}
+
+          {false, true} ->
+            {:error, "RabbitMQ failed to shrink some of the streams on node #{node_to_remove}"}
+
+          {true, true} ->
+            {:error,
+             "RabbitMQ failed to shrink some of the quorum queues and streams on node #{node_to_remove}"}
+        end
+
+      other ->
+        other
     end
   end
 
@@ -70,7 +146,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
 
   def usage_additional() do
     [
-      ["--offline", "try to update cluster membership state directly. Use when target node is stopped. Only works for local nodes."]
+      [
+        "--offline",
+        "try to update cluster membership state directly. Use when target node is stopped. Only works for local nodes."
+      ]
     ]
   end
 
@@ -88,6 +167,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   def banner([node_to_remove], %{offline: true}) do
     "Removing node #{node_to_remove} from the cluster. Warning: quorum queues cannot be shrunk in offline mode"
   end
+
   def banner([node_to_remove], _) do
     "Removing node #{node_to_remove} from the cluster"
   end

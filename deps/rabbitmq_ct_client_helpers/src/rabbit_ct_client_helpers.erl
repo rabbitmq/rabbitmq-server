@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_ct_client_helpers).
@@ -94,7 +94,7 @@ channels_manager(NodeConfig, ConnTuple, Channels) ->
             close_everything(ConnTuple, Channels);
         Unhandled ->
             ct:pal(?LOW_IMPORTANCE,
-              "Channels manager ~p: unhandled message: ~p",
+              "Channels manager ~tp: unhandled message: ~tp",
               [self(), Unhandled]),
             channels_manager(NodeConfig, ConnTuple, Channels)
     end.
@@ -117,7 +117,7 @@ close_everything(Conn, [{Ch, MRef} | Rest]) ->
             amqp_channel:close(Ch),
             receive
                 {'DOWN', MRef, _, Ch, Info} ->
-                    ct:pal("Channel ~p closed: ~p~n", [Ch, Info])
+                    ct:pal("Channel ~tp closed: ~tp~n", [Ch, Info])
             end;
         false ->
             ok
@@ -129,7 +129,7 @@ close_everything({Conn, MRef}, []) ->
             amqp_connection:close(Conn),
             receive
                 {'DOWN', MRef, _, Conn, Info} ->
-                    ct:pal("Connection ~p closed: ~p~n", [Conn, Info])
+                    ct:pal("Connection ~tp closed: ~tp~n", [Conn, Info])
             end;
         false ->
             ok
@@ -147,6 +147,8 @@ open_connection(Config, Node) ->
     Pid ! {open_connection, self()},
     receive
         Conn when is_pid(Conn) -> Conn
+    after 60_000 ->
+        ct:fail("Timed out waiting for connection to open")
     end.
 
 open_unmanaged_connection(Config) ->
@@ -215,6 +217,8 @@ open_channel(Config, Node) ->
     Pid ! {open_channel, self()},
     receive
         Ch when is_pid(Ch) -> Ch
+    after 60_000 ->
+        ct:fail("Timed out waiting for connection to open")
     end.
 
 open_connection_and_channel(Config) ->
@@ -253,12 +257,12 @@ close_channels_and_connection(Config, Node) ->
     end.
 
 publish(Ch, QName, Count) ->
-    amqp_channel:call(Ch, #'confirm.select'{}),
-    [amqp_channel:call(Ch,
-                       #'basic.publish'{routing_key = QName},
-                       #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
-                                 payload = list_to_binary(integer_to_list(I))})
-     || I <- lists:seq(1, Count)],
+    _ = amqp_channel:call(Ch, #'confirm.select'{}),
+    _ = [amqp_channel:call(Ch,
+                           #'basic.publish'{routing_key = QName},
+                           #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
+                                     payload = list_to_binary(integer_to_list(I))})
+         || I <- lists:seq(1, Count)],
     amqp_channel:wait_for_confirms(Ch).
 
 consume(Ch, QName, Count) ->
@@ -296,7 +300,7 @@ accumulate_without_acknowledging(Ch, CTag, Remaining, Acc) ->
 
 
 fetch(Ch, QName, Count) ->
-    [{#'basic.get_ok'{}, _} =
-         amqp_channel:call(Ch, #'basic.get'{queue = QName}) ||
-        _ <- lists:seq(1, Count)],
+    _ = [{#'basic.get_ok'{}, _} =
+             amqp_channel:call(Ch, #'basic.get'{queue = QName}) ||
+            _ <- lists:seq(1, Count)],
     ok.

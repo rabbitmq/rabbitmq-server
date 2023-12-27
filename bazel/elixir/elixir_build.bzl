@@ -64,6 +64,7 @@ fi
 {maybe_install_erlang}
 
 export PATH="{erlang_home}"/bin:${{PATH}}
+export HOME="$(mktemp -d)"
 
 ABS_BUILD_DIR=$PWD/{build_path}
 ABS_RELEASE_DIR=$PWD/{release_path}

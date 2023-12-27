@@ -2,14 +2,14 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_format).
 
 -export([format/2, ip/1, ipb/1, amqp_table/1, tuple/1]).
 -export([parameter/1, now_to_str/0, now_to_str/1, strip_pids/1]).
--export([protocol/1, resource/1, queue/1, queue_state/1, queue_info/1]).
+-export([protocol/1, resource/1, queue/1, queue/2, queue_state/1, queue_info/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, tokenise/1]).
 -export([to_amqp_table/1, listener/1, web_context/1, properties/1, basic_properties/1]).
@@ -18,7 +18,8 @@
 -export([format_nulls/1, escape_html_tags/1]).
 -export([print/2, print/1]).
 
--export([format_queue_stats/1, format_channel_stats/1,
+-export([format_queue_stats/1, format_queue_basic_stats/1,
+         format_channel_stats/1,
          format_consumer_arguments/1,
          format_connection_created/1,
          format_accept_content/1, format_args/1]).
@@ -65,7 +66,10 @@ format_queue_stats({effective_policy_definition, []}) ->
 format_queue_stats({synchronised_slave_pids, Pids}) ->
     [{synchronised_slave_nodes, [node(Pid) || Pid <- Pids]}];
 format_queue_stats({backing_queue_status, Value}) ->
-    [{backing_queue_status, properties(Value)}];
+    case proplists:get_value(version, Value, undefined) of
+        undefined -> [];
+        Version   -> [{storage_version, Version}]
+    end;
 format_queue_stats({idle_since, Value}) ->
     [{idle_since, now_to_str(Value)}];
 format_queue_stats({state, Value}) ->
@@ -75,6 +79,40 @@ format_queue_stats({disk_reads, _}) ->
 format_queue_stats({disk_writes, _}) ->
     [];
 format_queue_stats(Stat) ->
+    [Stat].
+
+format_queue_basic_stats({_, ''}) ->
+    [];
+format_queue_basic_stats({reductions, _}) ->
+    [];
+format_queue_basic_stats({exclusive_consumer_pid, _}) ->
+    [];
+format_queue_basic_stats({single_active_consumer_pid, _}) ->
+    [];
+format_queue_basic_stats({slave_pids, Pids}) ->
+    [{slave_nodes, [node(Pid) || Pid <- Pids]}];
+format_queue_basic_stats({leader, Leader}) ->
+    [{node, Leader}];
+format_queue_basic_stats({effective_policy_definition, []}) ->
+    [{effective_policy_definition, #{}}];
+format_queue_basic_stats({synchronised_slave_pids, Pids}) ->
+    [{synchronised_slave_nodes, [node(Pid) || Pid <- Pids]}];
+format_queue_basic_stats({backing_queue_status, Value}) ->
+    case proplists:get_value(version, Value, undefined) of
+        undefined -> [];
+        Version   -> [{storage_version, Version}]
+    end;
+format_queue_basic_stats({garbage_collection, _}) ->
+    [];
+format_queue_basic_stats({idle_since, _Value}) ->
+    [];
+format_queue_basic_stats({state, Value}) ->
+    queue_state(Value);
+format_queue_basic_stats({disk_reads, _}) ->
+    [];
+format_queue_basic_stats({disk_writes, _}) ->
+    [];
+format_queue_basic_stats(Stat) ->
     [Stat].
 
 format_channel_stats([{idle_since, Value} | Rest]) ->
@@ -154,7 +192,7 @@ ip(IP)      -> list_to_binary(rabbit_misc:ntoa(IP)).
 ipb(unknown) -> unknown;
 ipb(IP)      -> list_to_binary(rabbit_misc:ntoab(IP)).
 
-addr(S)    when is_list(S); is_atom(S); is_binary(S) -> print("~s", S);
+addr(S)    when is_list(S); is_atom(S); is_binary(S) -> print("~ts", S);
 addr(Addr) when is_tuple(Addr)                       -> ip(Addr).
 
 port(Port) when is_number(Port) -> Port;
@@ -177,9 +215,9 @@ protocol(unknown) ->
 protocol(Version = {_Major, _Minor, _Revision}) ->
     protocol({'AMQP', Version});
 protocol({Family, Version}) ->
-    print("~s ~s", [Family, protocol_version(Version)]);
+    print("~ts ~ts", [Family, protocol_version(Version)]);
 protocol(Protocol) when is_binary(Protocol) ->
-    print("~s", [Protocol]).
+    print("~ts", [Protocol]).
 
 protocol_version(Arbitrary)
   when is_list(Arbitrary)                  -> Arbitrary;
@@ -329,34 +367,26 @@ exchange(X) ->
 %% We get queues using rabbit_amqqueue:list/1 rather than :info_all/1 since
 %% the latter wakes up each queue. Therefore we have a record rather than a
 %% proplist to deal with.
-queue(Q) when ?is_amqqueue(Q) ->
-    Name = amqqueue:get_name(Q),
+queue(Q) ->
+    queue(Q, #{}).
+
+queue(Q, Ctx) when ?is_amqqueue(Q) ->
+    #resource{name = Name, virtual_host = VHost} = amqqueue:get_name(Q),
     Durable = amqqueue:is_durable(Q),
     AutoDelete = amqqueue:is_auto_delete(Q),
     ExclusiveOwner = amqqueue:get_exclusive_owner(Q),
     Arguments = amqqueue:get_arguments(Q),
     Pid = amqqueue:get_pid(Q),
-    State = amqqueue:get_state(Q),
-    %% TODO: in the future queue types should be registered with their
-    %% full and short names and this hard-coded translation should not be
-    %% necessary
-    Type = case amqqueue:get_type(Q) of
-               rabbit_classic_queue -> classic;
-               rabbit_quorum_queue -> quorum;
-               rabbit_stream_queue -> stream;
-               T -> T
-           end,
-    format(
-      [{name,        Name},
-       {durable,     Durable},
-       {auto_delete, AutoDelete},
-       {exclusive,   is_pid(ExclusiveOwner)},
-       {owner_pid,   ExclusiveOwner},
-       {arguments,   Arguments},
-       {pid,         Pid},
-       {type,        Type},
-       {state,       State}] ++ rabbit_amqqueue:format(Q),
-      {fun format_exchange_and_queue/1, false}).
+    [{name, Name},
+     {vhost, VHost},
+     {durable, Durable},
+     {auto_delete, AutoDelete},
+     {exclusive, is_pid(ExclusiveOwner)},
+     {owner_pid, ExclusiveOwner},
+     {arguments, amqp_table(Arguments)},
+     {pid, Pid}
+     %% type specific stuff like, state, type, members etc is returned here
+     | rabbit_queue_type:format(Q, Ctx)].
 
 queue_info(List) ->
     format(List, {fun format_exchange_and_queue/1, false}).
@@ -540,9 +570,12 @@ clean_channel_details(Obj) ->
          undefined -> Obj0;
          Chd ->
              pset(channel_details,
-                  lists:keydelete(pid, 1, Chd),
+                  format_channel_details(lists:keydelete(pid, 1, Chd)),
                   Obj0)
      end.
+
+format_channel_details([]) -> #{};
+format_channel_details(Any) -> Any.
 
 -spec format_consumer_arguments(proplists:proplist()) -> proplists:proplist().
 format_consumer_arguments(Obj) ->

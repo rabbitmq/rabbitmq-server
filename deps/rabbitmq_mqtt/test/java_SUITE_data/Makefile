@@ -9,7 +9,7 @@ MVN_FLAGS += -Ddeps.dir="$(abspath $(DEPS_DIR))" \
 			 -Dmqtt.port.3=$(MQTT_PORT_3) \
 			 -Damqp.port=$(AMQP_PORT)
 
-.PHONY: deps tests clean distclean
+.PHONY: deps tests v5tests ssltests clean distclean
 
 deps:
 	mkdir -p lib
@@ -18,7 +18,16 @@ deps:
 tests:
 	# Note: to run a single test
 	# @mvnw -q $(MVN_FLAGS) -Dtest=MqttTest#subscribeMultiple test
-	@mvnw -q $(MVN_FLAGS) test
+	@mvnw -q $(MVN_FLAGS) -Dtest=MqttTest test
+
+ssltests:
+	@mvnw -q $(MVN_FLAGS) -Dtest=MqttSSLTest test
+
+v5tests:
+	@mvnw -q $(MVN_FLAGS) -Dtest=MqttV5Test test
+
+v5ssltests:
+	@mvnw -q $(MVN_FLAGS) -Dtest=MqttV5SSLTest test
 
 clean:
 	@mvnw clean

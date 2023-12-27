@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 %% An HTTP API counterpart of 'rabbitmq-diagnostics check_if_node_is_quorum_critical'
@@ -34,7 +34,7 @@ to_json(ReqData, Context) ->
             rabbit_mgmt_util:reply([{status, ok},
                                     {reason, <<"single node cluster">>}], ReqData, Context);
         false ->
-            case rabbit_quorum_queue:list_with_minimum_quorum_for_cli() of
+            case rabbit_upgrade_preparation:list_with_minimum_quorum_for_cli() of
                 [] ->
                     rabbit_mgmt_util:reply([{status, ok}], ReqData, Context);
                 Qs when length(Qs) > 0 ->

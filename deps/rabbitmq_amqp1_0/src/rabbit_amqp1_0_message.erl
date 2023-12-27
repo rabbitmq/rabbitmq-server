@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_amqp1_0_message).
@@ -23,9 +23,16 @@
 -include("rabbit_amqp1_0.hrl").
 
 assemble(MsgBin) ->
-    {RKey, Props, Content} = assemble(header, {<<"">>, #'P_basic'{}, []},
+    {RKey, Props, Content0} = assemble(header, {<<"">>, #'P_basic'{}, []},
                                       decode_section(MsgBin), MsgBin),
-    {RKey, #amqp_msg{props = Props, payload = Content}}.
+
+    Content1 = case Content0 of
+                   Sections when is_list(Content0) ->
+                       lists:reverse(Sections);
+                   _ ->
+                       Content0
+               end,
+    {RKey, #amqp_msg{props = Props, payload = Content1}}.
 
 assemble(header, {R, P, C}, {H = #'v1_0.header'{}, Rest}, _Uneaten) ->
     assemble(message_annotations, {R, translate_header(H, P), C},
@@ -33,13 +40,15 @@ assemble(header, {R, P, C}, {H = #'v1_0.header'{}, Rest}, _Uneaten) ->
 assemble(header, {R, P, C}, Else, Uneaten) ->
     assemble(message_annotations, {R, P, C}, Else, Uneaten);
 
-assemble(delivery_annotations, RPC, {#'v1_0.delivery_annotations'{}, Rest},
-         Uneaten) ->
-    %% ignore delivery annotations for now
-    %% TODO: handle "rejected" error
-    assemble(message_annotations, RPC, Rest, Uneaten);
-assemble(delivery_annotations, RPC, Else, Uneaten) ->
-    assemble(message_annotations, RPC, Else, Uneaten);
+%% This clause doesn't get called, and is commented out as not to confuse dialyzer.
+%%
+%% assemble(delivery_annotations, RPC, {#'v1_0.delivery_annotations'{}, Rest},
+%%          Uneaten) ->
+%%     %% ignore delivery annotations for now
+%%     %% TODO: handle "rejected" error
+%%     assemble(message_annotations, RPC, Rest, Uneaten);
+%% assemble(delivery_annotations, RPC, Else, Uneaten) ->
+%%     assemble(message_annotations, RPC, Else, Uneaten);
 
 assemble(message_annotations, {R, P = #'P_basic'{headers = Headers}, C},
          {#'v1_0.message_annotations'{}, Rest}, Uneaten) ->
@@ -114,10 +123,11 @@ assemble(footer, {R, P = #'P_basic'{headers = Headers}, C},
 assemble(footer, {R, P, C}, none, _) ->
     {R, P, C};
 assemble(footer, _, Else, _) ->
-    exit({unexpected_trailing_sections, Else});
+    exit({unexpected_trailing_sections, Else}).
 
-assemble(Expected, _, Actual, _) ->
-    exit({expected_section, Expected, Actual}).
+%% Catch-all clause, not needed according to dialyzer
+%% assemble(Expected, _, Actual, _) ->
+%%     exit({expected_section, Expected, Actual}).
 
 decode_section(<<>>) ->
     none;
@@ -179,8 +189,6 @@ to_expiration(undefined) ->
 to_expiration({uint, Num}) ->
     list_to_binary(integer_to_list(Num)).
 
-from_expiration(undefined) ->
-    undefined;
 from_expiration(PBasic) ->
     case rabbit_basic:parse_expiration(PBasic) of
         {ok, undefined} -> undefined;
@@ -302,8 +310,6 @@ wrap(Type, Val) ->
 table_lookup(undefined, _)    -> undefined;
 table_lookup(Headers, Header) -> rabbit_misc:table_lookup(Headers, Header).
 
-map_add(_T, _Key, _Type, undefined, Acc) ->
-    Acc;
 map_add(KeyType, Key, Type, Value, Acc) ->
     [{wrap(KeyType, Key), wrap(Type, Value)} | Acc].
 

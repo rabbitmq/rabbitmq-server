@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(product_info_SUITE).
@@ -142,7 +142,7 @@ set_motd_in_conf(Config) ->
 grep_in_log_file(Config, Node, String) ->
     [Log | _] = rabbit_ct_broker_helpers:rpc(
                   Config, Node, rabbit, log_locations, []),
-    ct:pal(?LOW_IMPORTANCE, "Grepping \"~s\" in ~s", [String, Log]),
+    ct:pal(?LOW_IMPORTANCE, "Grepping \"~ts\" in ~ts", [String, Log]),
     %% We try to grep several times, in case the log file was not
     %% fsync'd yet (and thus we don't see the content yet).
     do_grep_in_log_file(String, Log, 30).
@@ -164,7 +164,7 @@ grep_in_stdout(Config, Node, String) ->
                   Config, Node, rabbit, log_locations, []),
     LogDir = filename:dirname(Log),
     Stdout = filename:join(LogDir, "startup_log"),
-    ct:pal(?LOW_IMPORTANCE, "Grepping \"~s\" in ~s", [String, Stdout]),
+    ct:pal(?LOW_IMPORTANCE, "Grepping \"~ts\" in ~ts", [String, Stdout]),
     {ok, Content} = file:read_file(Stdout),
     ?assertMatch(
        match,

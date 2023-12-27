@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_guid).
@@ -25,7 +25,7 @@
 
 -export_type([guid/0]).
 
--type guid() :: binary().
+-type guid() :: rabbit_types:guid().
 
 %%----------------------------------------------------------------------------
 
@@ -42,7 +42,7 @@ start_link() ->
 -spec filename() -> string().
 
 filename() ->
-    filename:join(rabbit_mnesia:dir(), ?SERIAL_FILENAME).
+    filename:join(rabbit:data_dir(), ?SERIAL_FILENAME).
 
 update_disk_serial() ->
     Filename = filename(),

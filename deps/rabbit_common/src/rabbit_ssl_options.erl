@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_ssl_options).
@@ -18,7 +18,9 @@
 -spec fix(rabbit_types:infos()) -> rabbit_types:infos().
 
 fix(Config) ->
-    fix_verify_fun(fix_ssl_protocol_versions(Config)).
+    fix_verify_fun(
+      fix_ssl_protocol_versions(
+        hibernate_after(Config))).
 
 fix_verify_fun(SslOptsConfig) ->
     %% Starting with ssl 4.0.1 in Erlang R14B, the verify_fun function
@@ -43,7 +45,7 @@ make_verify_fun(Module, Function, InitialUserState) ->
         Module:module_info()
     catch
         _:Exception ->
-            rabbit_log:error("TLS verify_fun: module ~s missing: ~p",
+            rabbit_log:error("TLS verify_fun: module ~ts missing: ~tp",
                              [Module, Exception]),
             throw({error, {invalid_verify_fun, missing_module}})
     end,
@@ -66,7 +68,7 @@ make_verify_fun(Module, Function, InitialUserState) ->
                     Module:Function(Args)
             end;
         _ ->
-            rabbit_log:error("TLS verify_fun: no ~s:~s/3 exported",
+            rabbit_log:error("TLS verify_fun: no ~ts:~ts/3 exported",
               [Module, Function]),
             throw({error, {invalid_verify_fun, function_not_exported}})
     end.
@@ -83,4 +85,13 @@ fix_ssl_protocol_versions(Config) ->
                              Vs        -> Vs
                          end,
             rabbit_misc:pset(versions, Configured -- ?BAD_SSL_PROTOCOL_VERSIONS, Config)
+    end.
+
+hibernate_after(Config) ->
+    Key = hibernate_after,
+    case proplists:is_defined(Key, Config) of
+        true ->
+            Config;
+        false ->
+            [{Key, 6_000} | Config]
     end.

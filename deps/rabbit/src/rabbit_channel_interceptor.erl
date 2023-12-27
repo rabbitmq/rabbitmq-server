@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_channel_interceptor).
@@ -48,12 +48,12 @@ check_no_overlap(Mods) ->
 
 %% Check no non-empty pairwise intersection in a list of sets
 check_no_overlap1(Sets) ->
-    lists:foldl(fun(Set, Union) ->
+    _ = lists:foldl(fun(Set, Union) ->
                     Is = sets:intersection(Set, Union),
                     case sets:size(Is) of
                         0 -> ok;
                         _ ->
-                            internal_error("Interceptor: more than one module handles ~p", [Is])
+                            internal_error("Interceptor: more than one module handles ~tp", [Is])
                       end,
                     sets:union(Set, Union)
                 end,
@@ -72,21 +72,23 @@ call_module(Mod, St, M, C) ->
     % this little dance is because Mod might be unloaded at any point
     case (catch {ok, Mod:intercept(M, C, St)}) of
         {ok, R} -> validate_response(Mod, M, C, R);
-        {'EXIT', {undef, [{Mod, intercept, _, _} | _]}} -> {M, C}
+        {'EXIT', {undef, [{Mod, intercept, _, _} | _]}} -> {M, C};
+        {'EXIT', {amqp_error, _Type, _ErrMsg, _} = AMQPError} ->
+            rabbit_misc:protocol_error(AMQPError)
     end.
 
 validate_response(Mod, M1, C1, R = {M2, C2}) ->
     case {validate_method(M1, M2), validate_content(C1, C2)} of
         {true, true} -> R;
         {false, _} ->
-            internal_error("Interceptor: ~p expected to return "
-                                "method: ~p but returned: ~p",
+            internal_error("Interceptor: ~tp expected to return "
+                                "method: ~tp but returned: ~tp",
                            [Mod, rabbit_misc:method_record_type(M1),
                             rabbit_misc:method_record_type(M2)]);
         {_, false} ->
-            internal_error("Interceptor: ~p expected to return "
+            internal_error("Interceptor: ~tp expected to return "
                                 "content iff content is provided but "
-                                "content in = ~p; content out = ~p",
+                                "content in = ~tp; content out = ~tp",
                            [Mod, C1, C2])
     end;
 validate_response(_Mod, _M1, _C1, AMQPError = #amqp_error{}) ->

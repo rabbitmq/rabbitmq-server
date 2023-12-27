@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2012-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2012-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %% -----------------------------------------------------------------------------
 
 %% JMS on Rabbit Selector Exchange plugin
@@ -19,10 +19,10 @@
 %% Rabbit exchange type functions:
 -export([ description/0
         , serialise_events/0
-        , route/2
+        , route/3
         , validate/1
         , create/2
-        , delete/3
+        , delete/2
         , validate_binding/2
         , add_binding/3
         , remove_bindings/3
@@ -55,14 +55,7 @@
 
 % Initialise database table for all exchanges of type <<"x-jms-topic">>
 setup_db_schema() ->
-  case mnesia:create_table( ?JMS_TOPIC_TABLE
-                          , [ {attributes, record_info(fields, ?JMS_TOPIC_RECORD)}
-                            , {record_name, ?JMS_TOPIC_RECORD}
-                            , {type, set} ]
-                          ) of
-    {atomic, ok} -> ok;
-    {aborted, {already_exists, ?JMS_TOPIC_TABLE}} -> ok
-  end.
+    rabbit_db_jms_exchange:setup_schema().
 
 %%----------------------------------------------------------------------------
 %% R E F E R E N C E   T Y P E   I N F O R M A T I O N
@@ -96,14 +89,14 @@ description() -> [ {name, <<"jms-selector">>}
 serialise_events() -> false.
 
 % Route messages
-route( #exchange{name = XName}
-     , #delivery{message = #basic_message{content = MessageContent, routing_keys = RKs}}
-     ) ->
+route(#exchange{name = XName}, Msg, _Opts) ->
+    RKs = mc:get_annotation(routing_keys, Msg),
+    Content = mc:protocol_state(mc:convert(mc_amqpl, Msg)),
     case get_binding_funs_x(XName) of
         not_found ->
             [];
         BindingFuns ->
-            match_bindings(XName, RKs, MessageContent, BindingFuns)
+            match_bindings(XName, RKs, Content, BindingFuns)
     end.
 
 
@@ -111,46 +104,38 @@ route( #exchange{name = XName}
 validate(_X) -> ok.
 
 % After exchange declaration and recovery
-create(transaction, #exchange{name = XName}) ->
-  add_initial_record(XName);
-create(_Tx, _X) ->
-  ok.
+create(_Tx, #exchange{name = XName}) ->
+  add_initial_record(XName).
 
 % Delete an exchange
-delete(transaction, #exchange{name = XName}, _Bs) ->
-  delete_state(XName),
-  ok;
-delete(_Tx, _X, _Bs) ->
-  ok.
+delete(_Tx, #exchange{name = XName}) ->
+    delete_state(XName),
+    ok.
 
 % Before add binding
 validate_binding(_X, _B) -> ok.
 
 % A new binding has ben added or recovered
-add_binding( Tx
+add_binding( _Tx
            , #exchange{name = XName}
            , #binding{key = BindingKey, destination = Dest, args = Args}
            ) ->
   Selector = get_string_arg(Args, ?RJMS_COMPILED_SELECTOR_ARG),
   BindGen = generate_binding_fun(Selector),
-  case {Tx, BindGen} of
-    {transaction, {ok, BindFun}} ->
+  case BindGen of
+    {ok, BindFun} ->
       add_binding_fun(XName, {{BindingKey, Dest}, BindFun});
-    {none, {error, _}} ->
-      parsing_error(XName, Selector, Dest);
-    _ ->
-      ok
+    error ->
+      parsing_error(XName, Selector, Dest)
   end,
   ok.
 
 % Binding removal
-remove_bindings( transaction
+remove_bindings( _Tx
                , #exchange{name = XName}
                , Bindings
                ) ->
   remove_binding_funs(XName, Bindings),
-  ok;
-remove_bindings(_Tx, _X, _Bs) ->
   ok.
 
 % Exchange argument equivalence
@@ -234,80 +219,43 @@ selector_match(Selector, Headers) ->
 
 % get binding funs from state (using dirty_reads)
 get_binding_funs_x(XName) ->
-  mnesia:async_dirty(
-    fun() ->
-      case read_state_no_error(XName) of
-          not_found ->
-              not_found;
-          #?JMS_TOPIC_RECORD{x_selector_funs = BindingFuns} ->
-            BindingFuns
-      end
-    end,
-    []
-  ).
+    rabbit_db_jms_exchange:get(XName).
 
 add_initial_record(XName) ->
   write_state_fun(XName, dict:new()).
 
 % add binding fun to binding fun dictionary
 add_binding_fun(XName, BindingKeyAndFun) ->
-  #?JMS_TOPIC_RECORD{x_selector_funs = BindingFuns} = read_state_for_update(XName),
-  write_state_fun(XName, put_item(BindingFuns, BindingKeyAndFun)).
+    rabbit_db_jms_exchange:create_or_update(XName, BindingKeyAndFun, fun exchange_state_corrupt_error/1).
 
 % remove binding funs from binding fun dictionary
 remove_binding_funs(XName, Bindings) ->
   BindingKeys = [ {BindingKey, DestName} || #binding{key = BindingKey, destination = DestName} <- Bindings ],
-  #?JMS_TOPIC_RECORD{x_selector_funs = BindingFuns} = read_state_for_update(XName),
-  write_state_fun(XName, remove_items(BindingFuns, BindingKeys)).
-
-% add an item to the dictionary of binding functions
-put_item(Dict, {Key, Item}) -> dict:store(Key, Item, Dict).
-
-% remove a list of keyed items from the dictionary, by key
-remove_items(Dict, []) -> Dict;
-remove_items(Dict, [Key | Keys]) -> remove_items(dict:erase(Key, Dict), Keys).
+    rabbit_db_jms_exchange:delete(XName, BindingKeys, fun exchange_state_corrupt_error/1).
 
 % delete all the state saved for this exchange
 delete_state(XName) ->
-  mnesia:delete(?JMS_TOPIC_TABLE, XName, write).
-
-% Basic read for update
-read_state_for_update(XName) -> read_state(XName, write).
-
-% Lockable read
-read_state(XName, Lock) ->
-  case mnesia:read(?JMS_TOPIC_TABLE, XName, Lock) of
-    [Rec] -> Rec;
-    _     -> exchange_state_corrupt_error(XName)
-  end.
-
-read_state_no_error(XName) ->
-  case mnesia:read(?JMS_TOPIC_TABLE, XName, read) of
-    [Rec] -> Rec;
-    _     -> not_found
-  end.
-
-
+    rabbit_db_jms_exchange:delete(XName).
 
 % Basic write
 write_state_fun(XName, BFuns) ->
-  mnesia:write( ?JMS_TOPIC_TABLE
-              , #?JMS_TOPIC_RECORD{x_name = XName, x_selector_funs = BFuns}
-              , write ).
+    rabbit_db_jms_exchange:insert(XName, BFuns).
 
 %%----------------------------------------------------------------------------
 %% E R R O R S
 
 % state error
+-spec exchange_state_corrupt_error(#resource{}) -> no_return().
 exchange_state_corrupt_error(#resource{name = XName}) ->
   rabbit_misc:protocol_error( internal_error
-                            , "exchange named '~s' has no saved state or incorrect saved state"
+                            , "exchange named '~ts' has no saved state or incorrect saved state"
                             , [XName] ).
 
 % parsing error
+-spec parsing_error(#resource{}, term(), #resource{}) -> no_return().
 parsing_error(#resource{name = XName}, S, #resource{name = DestName}) ->
   rabbit_misc:protocol_error( precondition_failed
-                            , "cannot parse selector '~p' binding destination '~s' to exchange '~s'"
+                            , "cannot parse selector '~tp' binding destination '~ts' to exchange '~ts'"
                             , [S, DestName, XName] ).
 
 %%----------------------------------------------------------------------------

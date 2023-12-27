@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_error_logger_handler).
@@ -150,11 +150,11 @@ code_change(_OldVsn, State, _Extra) ->
 format({check_dflag_xnc_failed, _What}) ->
     {"  * Remote node uses an incompatible Erlang version ~n", []};
 format({recv_challenge_failed, no_node, Node}) ->
-    {"  * Node name (or hostname) mismatch: node ~p believes its node name is not ~p but something else.~n"
-     "    All nodes and CLI tools must refer to node ~p using the same name the node itself uses (see its logs to find out what it is)~n",
+    {"  * Node name (or hostname) mismatch: node ~tp believes its node name is not ~tp but something else.~n"
+     "    All nodes and CLI tools must refer to node ~tp using the same name the node itself uses (see its logs to find out what it is)~n",
      [Node, Node, Node]};
 format({recv_challenge_failed, Error}) ->
-    {"  * Distribution failed unexpectedly while waiting for challenge: ~p~n", [Error]};
+    {"  * Distribution failed unexpectedly while waiting for challenge: ~tp~n", [Error]};
 format({recv_challenge_ack_failed, bad_cookie}) ->
     {"  * Authentication failed (rejected by the local node), please check the Erlang cookie~n", []};
 format({recv_challenge_ack_failed, {error, closed}}) ->

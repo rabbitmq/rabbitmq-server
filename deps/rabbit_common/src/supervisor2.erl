@@ -38,7 +38,7 @@
 %% 4) normal, and {shutdown, _} exit reasons are all treated the same
 %%    (i.e. are regarded as normal exits)
 %%
-%% All modifications are (C) 2010-2022 VMware, Inc. or its affiliates.
+%% All modifications are (C) 2010-2023 VMware, Inc. or its affiliates.
 %%
 %% %CopyrightBegin%
 %%
@@ -111,7 +111,7 @@
 
 %%--------------------------------------------------------------------------
 
--export_type([sup_flags/0, child_spec/0, startchild_ret/0, strategy/0]).
+-export_type([sup_flags/0, child_spec/0, startchild_ret/0, strategy/0, sup_name/0]).
 
 %%--------------------------------------------------------------------------
 

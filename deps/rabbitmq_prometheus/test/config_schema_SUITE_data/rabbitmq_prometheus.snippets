@@ -107,6 +107,22 @@
     ], [rabbitmq_prometheus]
    },
 
+   {tcp_listener,
+    "prometheus.tcp.listener = 192.1.1.2:15676",
+    [{rabbitmq_prometheus,[
+                           {tcp_config,[
+                                        {ip, "192.1.1.2"},
+                                        {port,15676}
+                                       ]}
+                          ]}],
+    [rabbitmq_prometheus]},
+
+   {tcp_listener_none,
+    "prometheus.tcp.listener = none",
+    [{rabbitmq_prometheus,[
+                           {tcp_config,[]}
+                          ]}],
+    [rabbitmq_prometheus]},
 
    %%
    %% TLS listener
@@ -278,6 +294,15 @@
     [
      {rabbitmq_prometheus, [
                             {ssl_config, [{cowboy_opts, [{max_keepalive, 120}]}]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+  {authentication,
+    "prometheus.authentication.enabled = true",
+    [
+     {rabbitmq_prometheus, [
+                            {authentication, [{enabled, true}]}
                            ]}
     ], [rabbitmq_prometheus]
    }

@@ -2,8 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
-
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule DeleteUserCommandTest do
   use ExUnit.Case, async: false
@@ -36,7 +35,7 @@ defmodule DeleteUserCommandTest do
   test "run: A valid username returns ok", context do
     assert @command.run([context[:user]], context[:opts]) == :ok
 
-    assert list_users() |> Enum.count(fn(record) -> record[:user] == context[:user] end) == 0
+    assert list_users() |> Enum.count(fn record -> record[:user] == context[:user] end) == 0
   end
 
   test "run: An invalid Rabbit node returns a bad rpc message" do
@@ -46,8 +45,8 @@ defmodule DeleteUserCommandTest do
   end
 
   @tag user: @user
-  test "run: An invalid username returns an error", context do
-    assert @command.run(["no_one"], context[:opts]) == {:error, {:no_such_user, "no_one"}}
+  test "run: deleting a non-existing user still succeeds", context do
+    assert @command.run(["no_one"], context[:opts]) == :ok
   end
 
   @tag user: @user

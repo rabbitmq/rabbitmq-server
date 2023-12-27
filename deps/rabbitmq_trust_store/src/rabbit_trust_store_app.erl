@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_trust_store_app).
@@ -49,7 +49,7 @@ edit(Options) ->
             ok;
         Val       ->
             rabbit_log:warning("RabbitMQ trust store plugin is used "
-                               "and the verify_fun TLS option is set: ~p. "
+                               "and the verify_fun TLS option is set: ~tp. "
                                "It will be overwritten by the plugin.", [Val]),
             ok
     end,

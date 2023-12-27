@@ -1,8 +1,0 @@
-load("@rules_erlang//:erlang_app.bzl", "erlang_app")
-
-erlang_app(
-    app_description = "Erlang distribution proxy to simulate network failures",
-    app_module = "inet_tcp_proxy_dist_app",
-    app_name = "inet_tcp_proxy_dist",
-    app_version = "0.1.0",
-)

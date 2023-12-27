@@ -2,16 +2,17 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 -module(mqtt_node).
 
--export([start/0, node_id/0, server_id/0, all_node_ids/0, leave/1, trigger_election/0]).
+-export([start/0, node_id/0, server_id/0, all_node_ids/0, leave/1, trigger_election/0,
+         delete/1]).
 
 -define(ID_NAME, mqtt_node).
--define(START_TIMEOUT, 100000).
+-define(START_TIMEOUT, 100_000).
 -define(RETRY_INTERVAL, 5000).
--define(RA_OPERATION_TIMEOUT, 60000).
+-define(RA_OPERATION_TIMEOUT, 60_000).
 -define(RA_SYSTEM, coordination).
 
 node_id() ->
@@ -24,7 +25,7 @@ server_id(Node) ->
     {?ID_NAME, Node}.
 
 all_node_ids() ->
-    [server_id(N) || N <- rabbit_nodes:all(),
+    [server_id(N) || N <- rabbit_nodes:list_members(),
                    can_participate_in_clientid_tracking(N)].
 
 start() ->
@@ -33,7 +34,7 @@ start() ->
     start(300, Repetitions).
 
 start(_Delay, AttemptsLeft) when AttemptsLeft =< 0 ->
-    start_server(),
+    ok = start_server(),
     trigger_election();
 start(Delay, AttemptsLeft) ->
     NodeId = server_id(),
@@ -51,24 +52,23 @@ start(Delay, AttemptsLeft) ->
                       %% This scenario does not guarantee single cluster formation but without knowing the list of members
                       %% ahead of time, this is a best effort workaround. Multi-node consensus is apparently hard
                       %% to achieve without having consensus around expected cluster members.
-                      rabbit_log:info("MQTT: will wait for ~p more ms for cluster members to join before triggering a Raft leader election", [Delay]),
+                      rabbit_log:info("MQTT: will wait for ~tp more ms for cluster members to join before triggering a Raft leader election", [Delay]),
                       timer:sleep(Delay),
                       start(Delay, AttemptsLeft - 1);
                   Peers ->
                       %% Trigger an election.
                       %% This is required when we start a node for the first time.
                       %% Using default timeout because it supposed to reply fast.
-                      rabbit_log:info("MQTT: discovered ~p cluster peers that support client ID tracking", [length(Peers)]),
-                      start_server(),
-                      join_peers(NodeId, Peers),
+                      rabbit_log:info("MQTT: discovered cluster peers that support client ID tracking: ~p", [Peers]),
+                      ok = start_server(),
+                      _ = join_peers(NodeId, Peers),
                       ra:trigger_election(NodeId, ?RA_OPERATION_TIMEOUT)
               end;
           _ ->
-              join_peers(NodeId, Nodes),
-              ra:restart_server(?RA_SYSTEM, NodeId),
+              _ = join_peers(NodeId, Nodes),
+              ok = ra:restart_server(?RA_SYSTEM, NodeId),
               ra:trigger_election(NodeId, ?RA_OPERATION_TIMEOUT)
-    end,
-    ok.
+    end.
 
 compatible_peer_servers() ->
     all_node_ids() -- [(node_id())].
@@ -86,7 +86,8 @@ start_server() ->
              log_init_args => #{uid => UId},
              tick_timeout => Timeout,
              machine => {module, mqtt_machine, #{}}
-    },
+            },
+    rabbit_log:info("MQTT: starting Ra server with initial members: ~p", [Nodes]),
     ra:start_server(?RA_SYSTEM, Conf).
 
 trigger_election() ->
@@ -129,4 +130,45 @@ can_participate_in_clientid_tracking(Node) ->
     case rpc:call(Node, mqtt_machine, module_info, []) of
         {badrpc, _} -> false;
         _           -> true
+    end.
+
+-spec delete(Args) -> Ret when
+      Args :: rabbit_feature_flags:enable_callback_args(),
+      Ret :: rabbit_feature_flags:enable_callback_ret().
+delete(_) ->
+    RaNodes = all_node_ids(),
+    Nodes = lists:map(fun({_, N}) -> N end, RaNodes),
+    LockId = {?ID_NAME, node_id()},
+    rabbit_log:info("Trying to acquire lock ~p on nodes ~p ...", [LockId, Nodes]),
+    true = global:set_lock(LockId, Nodes),
+    rabbit_log:info("Acquired lock ~p", [LockId]),
+    try whereis(?ID_NAME) of
+        undefined ->
+            rabbit_log:info("Local Ra process ~s does not exist", [?ID_NAME]),
+            ok;
+        _ ->
+            rabbit_log:info("Deleting Ra cluster ~s ...", [?ID_NAME]),
+            try ra:delete_cluster(RaNodes, 15_000) of
+                {ok, _Leader} ->
+                    rabbit_log:info("Successfully deleted Ra cluster ~s", [?ID_NAME]),
+                    ok;
+                {error, Reason} ->
+                    rabbit_log:info("Failed to delete Ra cluster ~s: ~p", [?ID_NAME, Reason]),
+                    ServerId = server_id(),
+                    case ra:force_delete_server(?RA_SYSTEM, ServerId) of
+                        ok ->
+                            rabbit_log:info("Successfully force deleted Ra server ~p", [ServerId]),
+                            ok;
+                        Error ->
+                            rabbit_log:error("Failed to force delete Ra server ~p: ~p",
+                                             [ServerId, Error]),
+                            {error, Error}
+                    end
+            catch exit:{{shutdown, delete}, _StackTrace} ->
+                      rabbit_log:info("Ra cluster ~s already being deleted", [?ID_NAME]),
+                      ok
+            end
+    after
+        true = global:del_lock(LockId, Nodes),
+        rabbit_log:info("Released lock ~p", [LockId])
     end.

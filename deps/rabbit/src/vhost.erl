@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(vhost).
@@ -20,6 +20,7 @@
   upgrade/1,
   upgrade_to/2,
   pattern_match_all/0,
+  pattern_match_names/0,
   get_name/1,
   get_limits/1,
   get_metadata/1,
@@ -34,50 +35,62 @@
 
 -define(record_version, vhost_v2).
 
--type(name() :: binary()).
+-type(name() :: rabbit_types:vhost()).
+
+-type(limits() :: list()).
 
 -type(metadata_key() :: atom()).
 
--type(metadata() :: #{description => binary(),
-                      tags => [atom()],
+-type(metadata() :: #{description => description(),
+                      tags => [tag()],
                       metadata_key() => any()} | undefined).
+
+-type(description() :: binary()).
+-type(tag() :: atom()).
+-type(tags() :: [tag()]).
+-type(unparsed_tags() :: binary() | string() | atom()).
 
 -type vhost() :: vhost_v2().
 
 -record(vhost, {
     %% name as a binary
-    virtual_host :: name() | '_',
+    virtual_host :: name() | '_' | '$1',
     %% proplist of limits configured, if any
-    limits :: list() | '_',
+    limits :: limits() | '_',
     metadata :: metadata() | '_'
 }).
 
 -type vhost_v2() :: #vhost{
                           virtual_host :: name(),
-                          limits :: list(),
+                          limits :: limits(),
                           metadata :: metadata()
                          }.
 
 -type vhost_pattern() :: vhost_v2_pattern().
 -type vhost_v2_pattern() :: #vhost{
-                                  virtual_host :: name() | '_',
+                                  virtual_host :: name() | '_' | '$1',
                                   limits :: '_',
                                   metadata :: '_'
                                  }.
 
 -export_type([name/0,
+              limits/0,
               metadata_key/0,
               metadata/0,
+              description/0,
+              tag/0,
+              unparsed_tags/0,
+              tags/0,
               vhost/0,
               vhost_v2/0,
               vhost_pattern/0,
               vhost_v2_pattern/0]).
 
--spec new(name(), list()) -> vhost().
+-spec new(name(), limits()) -> vhost().
 new(Name, Limits) ->
     #vhost{virtual_host = Name, limits = Limits}.
 
--spec new(name(), list(), map()) -> vhost().
+-spec new(name(), limits(), metadata()) -> vhost().
 new(Name, Limits, Metadata) ->
     #vhost{virtual_host = Name, limits = Limits, metadata = Metadata}.
 
@@ -116,10 +129,14 @@ info_keys() ->
 pattern_match_all() ->
     #vhost{_ = '_'}.
 
+-spec pattern_match_names() -> vhost_pattern().
+pattern_match_names() ->
+    #vhost{virtual_host = '$1', _ = '_'}.
+
 -spec get_name(vhost()) -> name().
 get_name(#vhost{virtual_host = Value}) -> Value.
 
--spec get_limits(vhost()) -> list().
+-spec get_limits(vhost()) -> limits().
 get_limits(#vhost{limits = Value}) -> Value.
 
 -spec get_metadata(vhost()) -> metadata().
@@ -129,9 +146,9 @@ get_metadata(#vhost{metadata = Value}) -> Value.
 get_description(#vhost{} = VHost) ->
     maps:get(description, get_metadata(VHost), undefined).
 
--spec get_tags(vhost()) -> [atom()].
+-spec get_tags(vhost()) -> [tag()].
 get_tags(#vhost{} = VHost) ->
-    maps:get(tags, get_metadata(VHost), undefined).
+    maps:get(tags, get_metadata(VHost), []).
 
 -spec get_default_queue_type(vhost()) -> binary() | undefined.
 get_default_queue_type(#vhost{} = VHost) ->
@@ -152,6 +169,6 @@ merge_metadata(VHost, Value) ->
     NewMeta = maps:merge(Meta0, Value),
     VHost#vhost{metadata = NewMeta}.
 
--spec is_tagged_with(vhost:vhost(), atom()) -> boolean().
+-spec is_tagged_with(vhost:vhost(), tag()) -> boolean().
 is_tagged_with(VHost, Tag) ->
     lists:member(Tag, get_tags(VHost)).

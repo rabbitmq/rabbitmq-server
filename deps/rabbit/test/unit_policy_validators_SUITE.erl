@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(unit_policy_validators_SUITE).
@@ -34,7 +34,7 @@ groups() ->
           classic_queue_lazy_mode,
           length_limit_overflow_mode
         ]},
-        
+
         {classic_queue_mirroring_validators, [parallel], [
           classic_queue_ha_mode,
           classic_queue_ha_params
@@ -53,12 +53,19 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(Group = classic_queue_mirroring_validators, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, Group},
-        {rmq_nodes_count, 1}
-      ]),
-    rabbit_ct_helpers:run_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps());
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            Config1 = rabbit_ct_helpers:set_config(
+                        Config, [
+                                 {rmq_nodename_suffix, Group},
+                                 {rmq_nodes_count, 1}
+                                ]),
+            rabbit_ct_helpers:run_steps(
+              Config1,
+              rabbit_ct_broker_helpers:setup_steps());
+        {khepri, _} ->
+            {skip, "Classic queue mirroring not supported by Khepri"}
+    end;
 init_per_group(_, Config) ->
     Config.
 

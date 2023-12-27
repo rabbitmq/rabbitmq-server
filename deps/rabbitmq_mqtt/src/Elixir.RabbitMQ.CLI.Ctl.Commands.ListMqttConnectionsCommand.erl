@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 -module('Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand').
 
@@ -30,14 +30,15 @@ scopes() -> [ctl, diagnostics].
 switches() -> [{verbose, boolean}].
 aliases() -> [{'V', verbose}].
 
-description() -> <<"Lists MQTT connections on the target node">>.
+description() -> <<"Lists all MQTT connections">>.
 
 help_section() ->
     {plugin, mqtt}.
 
 validate(Args, _) ->
+    InfoItems = lists:map(fun atom_to_list/1, ?INFO_ITEMS),
     case 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':validate_info_keys(Args,
-                                                               ?INFO_ITEMS) of
+                                                               InfoItems) of
         {ok, _} -> ok;
         Error   -> Error
     end.
@@ -68,9 +69,7 @@ run(Args, #{node := NodeName,
         false -> 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':prepare_info_keys(Args)
     end,
 
-    %% a node uses the Raft-based collector to list connections, which knows about all connections in the cluster
-    %% so no need to reach out to all the nodes
-    Nodes = [NodeName],
+    Nodes = 'Elixir.RabbitMQ.CLI.Core.Helpers':nodes_in_cluster(NodeName),
 
     'Elixir.RabbitMQ.CLI.Ctl.RpcStream':receive_list_items(
         NodeName,

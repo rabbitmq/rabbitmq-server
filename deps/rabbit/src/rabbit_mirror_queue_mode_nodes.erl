@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2010-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2010-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mirror_queue_mode_nodes).
@@ -63,7 +63,7 @@ validate_policy(Nodes) when is_list(Nodes) ->
     case [I || I <- Nodes, not is_binary(I)] of
         []      -> ok;
         Invalid -> {error, "ha-mode=\"nodes\" takes a list of strings, "
-                    "~p was not a string", [Invalid]}
+                    "~tp was not a string", [Invalid]}
     end;
 validate_policy(Params) ->
-    {error, "ha-mode=\"nodes\" takes a list, ~p given", [Params]}.
+    {error, "ha-mode=\"nodes\" takes a list, ~tp given", [Params]}.

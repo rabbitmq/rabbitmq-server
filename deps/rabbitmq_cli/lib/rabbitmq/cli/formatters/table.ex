@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 alias RabbitMQ.CLI.Formatters.FormatterHelpers
 
@@ -18,7 +18,7 @@ defmodule RabbitMQ.CLI.Formatters.Table do
       fn
         [first | _] = element ->
           case FormatterHelpers.proplist?(first) or is_map(first) do
-            true -> element
+            true -> FormatterHelpers.to_predictably_ordered_keyword_list(element)
             false -> [element]
           end
 
@@ -38,7 +38,10 @@ defmodule RabbitMQ.CLI.Formatters.Table do
     )
   end
 
-  def format_output(output, options) do
+  def format_output(output0, options) do
+    # on Erlang 26, map entry ordering has changed, this avoids
+    # implicitly depending on map key order
+    output = FormatterHelpers.to_predictably_ordered_keyword_list(output0)
     maybe_header(output, options)
   end
 
@@ -61,6 +64,7 @@ defmodule RabbitMQ.CLI.Formatters.Table do
   defp format_output_1(output, options) when is_map(output) do
     escaped = escaped?(options)
     pad_to_header = pad_to_header?(options)
+
     format_line(output, escaped, pad_to_header)
   end
 

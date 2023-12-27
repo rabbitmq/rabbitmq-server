@@ -2,11 +2,11 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2019-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2019-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 %% @author The RabbitMQ team
-%% @copyright 2019-2022 VMware, Inc. or its affiliates.
+%% @copyright 2019-2023 VMware, Inc. or its affiliates.
 %%
 %% @doc
 %% This module manages the configuration of the Erlang Logger facility. In
@@ -261,15 +261,15 @@ setup(Context) ->
 set_log_level(Level) ->
     %% Primary log level.
     ?LOG_DEBUG(
-       "Logging: changing primary log level to ~s", [Level],
+       "Logging: changing primary log level to ~ts", [Level],
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-    logger:set_primary_config(level, Level),
+    _ = logger:set_primary_config(level, Level),
 
     %% Per-module log level.
     lists:foreach(
       fun({Module, _}) ->
               ?LOG_DEBUG(
-                 "Logging: changing '~s' module log level to ~s",
+                 "Logging: changing '~ts' module log level to ~ts",
                  [Module, Level],
                  #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
               _ = logger:set_module_level(Module, Level)
@@ -283,7 +283,7 @@ set_log_level(Level) ->
       fun
           (#{id := Id, filters := Filters, config := Config}) ->
               ?LOG_DEBUG(
-                 "Logging: changing '~s' handler log level to ~s",
+                 "Logging: changing '~ts' handler log level to ~ts",
                  [Id, Level],
                  #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
               Filters1 = lists:map(
@@ -318,20 +318,20 @@ set_log_level(Level) ->
               %% If the log level is set to `debug', we turn off burst limit to
               %% make sure all debug messages make it.
               Config1 = adjust_burst_limit(Config, Level),
-              logger:set_handler_config(Id, filters, Filters1),
-              logger:set_handler_config(Id, config, Config1),
-              logger:set_handler_config(Id, level, Level),
+              _ = logger:set_handler_config(Id, filters, Filters1),
+              _ = logger:set_handler_config(Id, config, Config1),
+              _ = logger:set_handler_config(Id, level, Level),
               ok;
           (#{id := Id, config := Config}) ->
               ?LOG_DEBUG(
-                 "Logging: changing '~s' handler log level to ~s",
+                 "Logging: changing '~ts' handler log level to ~ts",
                  [Id, Level],
                  #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
               %% If the log level is set to `debug', we turn off burst limit to
               %% make sure all debug messages make it.
               Config1 = adjust_burst_limit(Config, Level),
-              logger:set_handler_config(Id, config, Config1),
-              logger:set_handler_config(Id, level, Level),
+              _ = logger:set_handler_config(Id, config, Config1),
+              _ = logger:set_handler_config(Id, level, Level),
               ok
       end, logger:get_handler_config()),
     ok.
@@ -391,14 +391,14 @@ log_locations([#{module := syslog_logger_h} | Rest],
     Host = application:get_env(syslog, dest_host, ""),
     Locations1 = add_once(
                    Locations,
-                   rabbit_misc:format("syslog:~s", [Host])),
+                   rabbit_misc:format("syslog:~ts", [Host])),
     log_locations(Rest, Locations1);
 log_locations([#{module := rabbit_logger_exchange_h,
                  config := #{exchange := Exchange}} | Rest],
               Locations) ->
     Locations1 = add_once(
                    Locations,
-                   rabbit_misc:format("exchange:~p", [Exchange])),
+                   rabbit_misc:format("exchange:~tp", [Exchange])),
     log_locations(Rest, Locations1);
 log_locations([_ | Rest], Locations) ->
     log_locations(Rest, Locations);
@@ -570,10 +570,10 @@ get_log_app_env() ->
 extract_file_rotation_spec(Defaults) ->
     Spec = lists:filter(fun(Elem) ->
             case Elem of
-                {rotate_on_date, _}     -> true; 
-                {compress_on_rotate, _} -> true; 
-                {max_no_bytes, _}       -> true; 
-                {max_no_files, _}       -> true; 
+                {rotate_on_date, _}     -> true;
+                {compress_on_rotate, _} -> true;
+                {max_no_bytes, _}       -> true;
+                {max_no_files, _}       -> true;
                 _ -> false
             end
         end, Defaults),
@@ -986,9 +986,7 @@ normalize_per_cat_log_config([], LogConfig, _) ->
     log_config().
 
 handle_default_and_overridden_outputs(LogConfig, Context) ->
-    LogConfig1 = handle_default_main_output(LogConfig, Context),
-    LogConfig2 = handle_default_upgrade_cat_output(LogConfig1, Context),
-    LogConfig2.
+    handle_default_main_output(LogConfig, Context).
 
 -spec handle_default_main_output(log_config(), rabbit_env:context()) ->
     log_config().
@@ -1024,37 +1022,6 @@ handle_default_main_output(
         _       -> LogConfig#{
                      global => GlobalConfig#{
                                  outputs => Outputs1}}
-    end.
-
--spec handle_default_upgrade_cat_output(log_config(), rabbit_env:context()) ->
-    log_config().
-
-handle_default_upgrade_cat_output(
-  #{per_category := PerCatConfig} = LogConfig,
-  #{upgrade_log_file := UpgLogFile} = Context) ->
-    UpgCatConfig = case PerCatConfig of
-                       #{upgrade := CatConfig} -> CatConfig;
-                       _                       -> #{outputs => []}
-                   end,
-    #{outputs := Outputs} = UpgCatConfig,
-    NoOutputsConfigured = Outputs =:= [],
-    Overridden = rabbit_env:has_var_been_overridden(
-                   Context, upgrade_log_file),
-    Outputs1 = if
-                   NoOutputsConfigured orelse Overridden ->
-                       Output0 = log_file_var_to_output(UpgLogFile),
-                       Output1 = keep_log_level_from_equivalent_output(
-                                   Output0, Outputs),
-                       [Output1];
-                   true ->
-                      Outputs
-               end,
-    case Outputs1 of
-        Outputs -> LogConfig;
-        _       -> LogConfig#{
-                     per_category => PerCatConfig#{
-                                       upgrade => UpgCatConfig#{
-                                                    outputs => Outputs1}}}
     end.
 
 -spec log_file_var_to_output(file:filename() | string()) ->
@@ -1614,28 +1581,28 @@ adjust_running_dependencies(Handlers) ->
 
 adjust_running_dependencies1([{App, true} | Rest]) ->
     ?LOG_DEBUG(
-       "Logging: ensure log handler dependency '~s' is started", [App],
+       "Logging: ensure log handler dependency '~ts' is started", [App],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     case application:ensure_all_started(App) of
         {ok, _} ->
             adjust_running_dependencies1(Rest);
         {error, Reason} ->
             ?LOG_ERROR(
-               "Failed to start log handlers dependency '~s': ~p",
+               "Failed to start log handlers dependency '~ts': ~tp",
                [App, Reason],
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             error
     end;
 adjust_running_dependencies1([{App, false} | Rest]) ->
     ?LOG_DEBUG(
-       "Logging: ensure log handler dependency '~s' is stopped", [App],
+       "Logging: ensure log handler dependency '~ts' is stopped", [App],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     case application:stop(App) of
         ok ->
             ok;
         {error, Reason} ->
             ?LOG_NOTICE(
-               "Logging: failed to stop log handlers dependency '~s': ~p",
+               "Logging: failed to stop log handlers dependency '~ts': ~tp",
                [App, Reason],
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})
     end,
@@ -1681,7 +1648,7 @@ remove_old_handlers() ->
                       if
                           Num < RunNum ->
                               ?LOG_DEBUG(
-                                "Logging: removing old logger handler ~s",
+                                "Logging: removing old logger handler ~ts",
                                 [Id],
                                 #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                               ok = logger:remove_handler(Id);

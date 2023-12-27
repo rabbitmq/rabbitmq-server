@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 -module(rabbit_prometheus_handler).
 
@@ -11,24 +11,38 @@
 -export([setup/0]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_web_dispatch/include/rabbitmq_web_dispatch_records.hrl").
 
 -define(SCRAPE_DURATION, telemetry_scrape_duration_seconds).
 -define(SCRAPE_SIZE, telemetry_scrape_size_bytes).
 -define(SCRAPE_ENCODED_SIZE, telemetry_scrape_encoded_size_bytes).
+
+-define(AUTH_REALM, "Basic realm=\"RabbitMQ Prometheus\"").
 
 %% ===================================================================
 %% Cowboy Handler Callbacks
 %% ===================================================================
 
 init(Req, _State) ->
-  {cowboy_rest, Req, #{}}.
+    {cowboy_rest, Req, #context{}}.
+
 
 content_types_provided(ReqData, Context) ->
     %% Since Prometheus 2.0 Protobuf is no longer supported
     {[{{<<"text">>, <<"plain">>, '*'}, generate_response}], ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
-    {true, ReqData, Context}.
+    AuthSettings = rabbit_misc:get_env(rabbitmq_prometheus, authentication, []),
+    case proplists:get_value(enabled, AuthSettings) of
+        true ->
+            rabbit_web_dispatch_access_control:is_authorized_monitor(ReqData,
+                                                                     Context,
+                                                                     #auth_settings{basic_auth_enabled = true,
+                                                                                    auth_realm = ?AUTH_REALM});
+        _ ->
+            {true, ReqData, Context}
+    end.
+
 
 setup() ->
     setup_metrics(telemetry_registry()),
@@ -94,11 +108,7 @@ reply(Registry, Request) ->
         {true, RealRegistry} ->
             format_metrics(Request, RealRegistry);
         {registry_conflict, _ReqR, _ConfR} ->
-            {409, [], <<>>};
-        {registry_not_found, _ReqR} ->
-            {404, [], <<>>};
-        false ->
-            false
+            {409, [], <<>>}
     end.
 
 format_metrics(Request, Registry) ->

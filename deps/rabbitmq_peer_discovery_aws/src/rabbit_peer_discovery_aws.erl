@@ -4,13 +4,12 @@
 %%
 %% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2015-2016 AWeber Communications
-%% Copyright (c) 2016-2022 VMware, Inc. or its affiliates. All rights reserved.
+%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates. All rights reserved.
 %%
 
 -module(rabbit_peer_discovery_aws).
 -behaviour(rabbit_peer_discovery_backend).
 
--include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_peer_discovery_common/include/rabbit_peer_discovery.hrl").
 
 -export([init/0, list_nodes/0, supports_registration/0, register/0, unregister/0,
@@ -18,6 +17,8 @@
 
 -type tags() :: map().
 -type filters() :: [{string(), string()}].
+-type props() :: [{string(), props()}] | string().
+-type path() :: [string() | integer()].
 
 -ifdef(TEST).
 -compile(export_all).
@@ -55,6 +56,11 @@
                                                    env_variable  = "AWS_EC2_REGION",
                                                    default_value = "undefined"
                                                   },
+          aws_hostname_path                 => #peer_discovery_config_entry_meta{
+                                                   type          = list,
+                                                   env_variable  = "AWS_HOSTNAME_PATH",
+                                                   default_value = ["privateDnsName"]
+                                                  },
           aws_use_private_ip                 => #peer_discovery_config_entry_meta{
                                                    type          = atom,
                                                    env_variable  = "AWS_USE_PRIVATE_IP",
@@ -71,24 +77,23 @@ init() ->
     ok = application:ensure_started(inets),
     %% we cannot start this plugin yet since it depends on the rabbit app,
     %% which is in the process of being started by the time this function is called
-    application:load(rabbitmq_peer_discovery_common),
+    _ = application:load(rabbitmq_peer_discovery_common),
     rabbit_peer_discovery_httpc:maybe_configure_proxy(),
     rabbit_peer_discovery_httpc:maybe_configure_inet6().
 
 -spec list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} |
                       {error, Reason :: string()}.
-
 list_nodes() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     {ok, _} = application:ensure_all_started(rabbitmq_aws),
-    rabbit_log:debug("Will use AWS access key of '~s'", [get_config_key(aws_access_key, M)]),
+    rabbit_log:debug("Will use AWS access key of '~ts'", [get_config_key(aws_access_key, M)]),
     ok = maybe_set_region(get_config_key(aws_ec2_region, M)),
     ok = maybe_set_credentials(get_config_key(aws_access_key, M),
                                get_config_key(aws_secret_key, M)),
     case get_config_key(aws_autoscaling, M) of
         true ->
             case rabbitmq_aws_config:instance_id() of
-                {ok, InstanceId} -> rabbit_log:debug("EC2 instance ID is determined from metadata service: ~p", [InstanceId]),
+                {ok, InstanceId} -> rabbit_log:debug("EC2 instance ID is determined from metadata service: ~tp", [InstanceId]),
                                     get_autoscaling_group_node_list(InstanceId, get_tags());
                 _                -> {error, "Failed to determine EC2 instance ID from metadata service"}
             end;
@@ -114,34 +119,28 @@ unregister() ->
 post_registration() ->
     ok.
 
--spec lock(Node :: node()) -> {ok, {{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}} |
-                              {error, Reason :: string()}.
+-spec lock(Nodes :: [node()]) ->
+    {ok, {{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}} |
+    {error, Reason :: string()}.
 
-lock(Node) ->
-  %% call list_nodes/0 externally such that meck can mock the function
-  case ?MODULE:list_nodes() of
-    {ok, {[], disc}} ->
-          {error, "Cannot lock since no nodes got discovered."};
-    {ok, {Nodes, disc}} ->
-      case lists:member(Node, Nodes) of
+lock(Nodes) ->
+    Node = node(),
+    case lists:member(Node, Nodes) of
         true ->
-          rabbit_log:info("Will try to lock connecting to nodes ~p", [Nodes]),
-          LockId = rabbit_nodes:lock_id(Node),
-          Retries = rabbit_nodes:lock_retries(),
-          case global:set_lock(LockId, Nodes, Retries) of
-            true ->
-              {ok, {LockId, Nodes}};
-            false ->
-              {error, io_lib:format("Acquiring lock taking too long, bailing out after ~b retries", [Retries])}
-          end;
+            rabbit_log:info("Will try to lock connecting to nodes ~tp", [Nodes]),
+            LockId = rabbit_nodes:lock_id(Node),
+            Retries = rabbit_nodes:lock_retries(),
+            case global:set_lock(LockId, Nodes, Retries) of
+                true ->
+                    {ok, {LockId, Nodes}};
+                false ->
+                    {error, io_lib:format("Acquiring lock taking too long, bailing out after ~b retries", [Retries])}
+            end;
         false ->
-          %% Don't try to acquire the global lock when our own node is not discoverable by peers.
-          %% We shouldn't run into this branch because our node is running and should have been discovered.
-          {error, lists:flatten(io_lib:format("Local node ~s is not part of discovered nodes ~p", [Node, Nodes]))}
-      end;
-    {error, _} = Error ->
-      Error
-  end.
+            %% Don't try to acquire the global lock when our own node is not discoverable by peers.
+            %% We shouldn't run into this branch because our node is running and should have been discovered.
+            {error, lists:flatten(io_lib:format("Local node ~ts is not part of discovered nodes ~tp", [Node, Nodes]))}
+    end.
 
 -spec unlock({{ResourceId :: string(), LockRequestedId :: atom()}, Nodes :: [atom()]}) -> 'ok'.
 unlock({LockId, Nodes}) ->
@@ -167,7 +166,7 @@ get_config_key(Key, Map) ->
 maybe_set_credentials("undefined", _) -> ok;
 maybe_set_credentials(_, "undefined") -> ok;
 maybe_set_credentials(AccessKey, SecretKey) ->
-    rabbit_log:debug("Setting AWS credentials, access key: '~s'", [AccessKey]),
+    rabbit_log:debug("Setting AWS credentials, access key: '~ts'", [AccessKey]),
     rabbitmq_aws:set_credentials(AccessKey, SecretKey).
 
 
@@ -178,32 +177,27 @@ maybe_set_credentials(AccessKey, SecretKey) ->
 %%
 maybe_set_region("undefined") ->
     case rabbitmq_aws_config:region() of
-        {ok, Region} -> maybe_set_region(Region);
-        _            -> ok
+        {ok, Region} -> maybe_set_region(Region)
     end;
 maybe_set_region(Value) ->
-    rabbit_log:debug("Setting AWS region to ~p", [Value]),
+    rabbit_log:debug("Setting AWS region to ~tp", [Value]),
     rabbitmq_aws:set_region(Value).
 
-get_autoscaling_group_node_list(error, _) ->
-    rabbit_log:warning("Cannot discover any nodes: failed to fetch this node's EC2 "
-                       "instance id from ~s", [rabbitmq_aws_config:instance_id_url()]),
-    {ok, {[], disc}};
 get_autoscaling_group_node_list(Instance, Tag) ->
     case get_all_autoscaling_instances([]) of
         {ok, Instances} ->
             case find_autoscaling_group(Instances, Instance) of
                 {ok, Group} ->
-                    rabbit_log:debug("Performing autoscaling group discovery, group: ~p", [Group]),
+                    rabbit_log:debug("Performing autoscaling group discovery, group: ~tp", [Group]),
                     Values = get_autoscaling_instances(Instances, Group, []),
-                    rabbit_log:debug("Performing autoscaling group discovery, found instances: ~p", [Values]),
+                    rabbit_log:debug("Performing autoscaling group discovery, found instances: ~tp", [Values]),
                     case get_hostname_by_instance_ids(Values, Tag) of
                         error ->
                             Msg = "Cannot discover any nodes: DescribeInstances API call failed",
                             rabbit_log:error(Msg),
                             {error, Msg};
                         Names ->
-                            rabbit_log:debug("Performing autoscaling group-based discovery, hostnames: ~p", [Names]),
+                            rabbit_log:debug("Performing autoscaling group-based discovery, hostnames: ~tp", [Names]),
                             {ok, {[?UTIL_MODULE:node_name(N) || N <- Names], disc}}
                     end;
                 error ->
@@ -248,7 +242,7 @@ fetch_all_autoscaling_instances(QArgs, Accum) ->
             NextToken = get_next_token(Payload),
             get_all_autoscaling_instances(lists:append(Instances, Accum), NextToken);
         {error, Reason} = Error ->
-            rabbit_log:error("Error fetching autoscaling group instance list: ~p", [Reason]),
+            rabbit_log:error("Error fetching autoscaling group instance list: ~tp", [Reason]),
             Error
     end.
 
@@ -265,7 +259,7 @@ get_next_token(Value) ->
     NextToken.
 
 -spec find_autoscaling_group(Instances :: list(), Instance :: string())
-                            -> string() | error.
+                            -> {'ok', string()} | error.
 %% @private
 %% @doc Attempt to find the Auto Scaling Group ID by finding the current
 %%      instance in the list of instances returned by the autoscaling API
@@ -312,22 +306,21 @@ maybe_add_tag_filters(Tags, QArgs, Num) ->
     Filters.
 
 -spec get_node_list_from_tags(tags()) -> {ok, {[node()], disc}}.
-get_node_list_from_tags([]) ->
+get_node_list_from_tags(M) when map_size(M) =:= 0 ->
     rabbit_log:warning("Cannot discover any nodes because AWS tags are not configured!", []),
     {ok, {[], disc}};
 get_node_list_from_tags(Tags) ->
     {ok, {[?UTIL_MODULE:node_name(N) || N <- get_hostname_by_tags(Tags)], disc}}.
 
+-spec get_hostname_name_from_reservation_set(props(), [string()]) -> [string()].
 get_hostname_name_from_reservation_set([], Accum) -> Accum;
 get_hostname_name_from_reservation_set([{"item", RI}|T], Accum) ->
     InstancesSet = proplists:get_value("instancesSet", RI),
     Items = [Item || {"item", Item} <- InstancesSet],
-    HostnameKey = select_hostname(),
-    Hostnames = [Hostname || Item <- Items,
-                             {HKey, Hostname} <- Item,
-                             HKey == HostnameKey,
-                             Hostname =/= ""],
-    get_hostname_name_from_reservation_set(T, Accum ++ Hostnames).
+    HostnamePath = get_hostname_path(),
+    Hostnames = [get_hostname(HostnamePath, Item) || Item <- Items],
+    Hostnames2 = [Name || Name <- Hostnames, Name =/= ""],
+    get_hostname_name_from_reservation_set(T, Accum ++ Hostnames2).
 
 get_hostname_names(Path) ->
     case rabbitmq_aws:api_get_request("ec2", Path) of
@@ -336,7 +329,7 @@ get_hostname_names(Path) ->
             ReservationSet = proplists:get_value("reservationSet", Response),
             get_hostname_name_from_reservation_set(ReservationSet, []);
         {error, Reason} ->
-            rabbit_log:error("Error fetching node list via EC2 API, request path: ~s, error: ~p", [Path, Reason]),
+            rabbit_log:error("Error fetching node list via EC2 API, request path: ~ts, error: ~tp", [Path, Reason]),
             error
     end.
 
@@ -347,19 +340,37 @@ get_hostname_by_tags(Tags) ->
     case get_hostname_names(Path) of
         error ->
             rabbit_log:warning("Cannot discover any nodes because AWS "
-                               "instance description with tags ~p failed", [Tags]),
+                               "instance description with tags ~tp failed", [Tags]),
             [];
         Names ->
             Names
     end.
 
--spec select_hostname() -> string().
-select_hostname() ->
-    case get_config_key(aws_use_private_ip, ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY)) of
-        true  -> "privateIpAddress";
-        false -> "privateDnsName";
-        _     -> "privateDnsName"
+-spec get_hostname_path() -> path().
+get_hostname_path() ->
+    UsePrivateIP = get_config_key(aws_use_private_ip, ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY)),
+    HostnamePath = get_config_key(aws_hostname_path, ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY)),
+    case HostnamePath of
+        ["privateDnsName"] when UsePrivateIP -> ["privateIpAddress"];
+        P -> P
     end.
+
+-spec get_hostname(path(), props()) -> string().
+get_hostname(Path, Props) ->
+    List = lists:foldl(fun get_value/2, Props, Path),
+    case io_lib:latin1_char_list(List) of
+        true -> List;
+        _ -> ""
+    end.
+
+-spec get_value(string()|integer(), props()) -> props().
+get_value(_, []) ->
+    [];
+get_value(Key, Props) when is_integer(Key) ->
+    {"item", Props2} = lists:nth(Key, Props),
+    Props2;
+get_value(Key, Props) ->
+    proplists:get_value(Key, Props).
 
 -spec get_tags() -> tags().
 get_tags() ->

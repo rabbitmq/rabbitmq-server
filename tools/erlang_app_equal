@@ -1,0 +1,75 @@
+#!/usr/bin/env escript
+%% -*- erlang -*-
+%%! -nocookie
+
+-mode(compile).
+
+main([Left, Right]) ->
+    {ok, LeftMetadata} = file:consult(Left),
+    {ok, RightMetadata} = file:consult(Right),
+    compare(LeftMetadata, RightMetadata),
+    halt();
+main(_) ->
+    halt(1).
+
+compare(LeftMetadata, RightMetadata) ->
+    [{application, LeftApp, LeftProps}] = LeftMetadata,
+    [{application, RightApp, RightProps}] = RightMetadata,
+
+    assert_equal(LeftApp, RightApp, "application name"),
+
+    LeftId = proplists:get_value(id, LeftProps),
+    RightId = proplists:get_value(id, RightProps),
+    case LeftId of
+        RightId ->
+            ok;
+        _ ->
+            io:format(standard_error,
+                      "Warning:\t 'id' does not match (~p != ~p)~n", [LeftId, RightId])
+    end,
+
+    FilterEmptyRegistered = fun
+        (registered, []) -> false;
+        (_, _) -> true
+    end,
+
+    LeftPropsMap = maps:filter(FilterEmptyRegistered,
+                               proplists:to_map(proplists:delete(id, LeftProps))),
+    RightPropsMap = maps:filter(FilterEmptyRegistered,
+                                proplists:to_map(proplists:delete(id, RightProps))),
+    assert_equal(
+        lists:sort(maps:keys(LeftPropsMap)),
+        lists:sort(maps:keys(RightPropsMap)),
+        "app property keys"
+    ),
+    [case K of
+        K when K =:= applications orelse K =:= modules ->
+            assert_equal(
+                lists:sort(maps:get(K, LeftPropsMap)),
+                lists:sort(maps:get(K, RightPropsMap)),
+                K
+            );
+        env ->
+            assert_equal(
+                proplists:to_map(maps:get(K, LeftPropsMap)),
+                proplists:to_map(maps:get(K, RightPropsMap)),
+                K
+            );
+        _ ->
+            assert_equal(
+                maps:get(K, LeftPropsMap),
+                maps:get(K, RightPropsMap),
+                K
+            )
+     end || K <- lists:sort(maps:keys(LeftPropsMap))],
+    ok.
+
+assert_equal(Expected, Actual, Context) ->
+    case Actual of
+        Expected ->
+            ok;
+        _ ->
+            io:format(standard_error,
+                      "Expected:\t~p~n But got:\t~p~n    For:\t~p~n", [Expected, Actual, Context]),
+            erlang:error(assertion_failed)
+    end.

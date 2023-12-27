@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_amqp10_shovel).
@@ -30,6 +30,7 @@
          close_dest/1,
          ack/3,
          nack/3,
+         status/1,
          forward/4
         ]).
 
@@ -37,7 +38,7 @@
 -import(rabbit_data_coercion, [to_binary/1]).
 
 -define(INFO(Text, Args), rabbit_log_shovel:info(Text, Args)).
--define(LINK_CREDIT_TIMEOUT, 5000).
+-define(LINK_CREDIT_TIMEOUT, 20_000).
 
 -type state() :: rabbit_shovel_behaviour:state().
 -type uri() :: rabbit_shovel_behaviour:uri().
@@ -172,7 +173,8 @@ dest_endpoint(#{shovel_type := dynamic,
                 dest := #{target_address := Addr}}) ->
     [{dest_address, Addr}].
 
--spec handle_source(Msg :: any(), state()) -> not_handled | state().
+-spec handle_source(Msg :: any(), state()) ->
+    not_handled | state() | {stop, any()}.
 handle_source({amqp10_msg, _LinkRef, Msg}, State) ->
     Tag = amqp10_msg:delivery_id(Msg),
     Payload = amqp10_msg:body_bin(Msg),
@@ -183,7 +185,7 @@ handle_source({amqp10_event, {connection, Conn, opened}},
 handle_source({amqp10_event, {connection, Conn, {closed, Why}}},
               #{source := #{current := #{conn := Conn}},
                 name := Name}) ->
-    ?INFO("Shovel ~s source connection closed. Reason: ~p", [Name, Why]),
+    ?INFO("Shovel ~ts source connection closed. Reason: ~tp", [Name, Why]),
     {stop, {inbound_conn_closed, Why}};
 handle_source({amqp10_event, {session, Sess, begun}},
               State = #{source := #{current := #{session := Sess}}}) ->
@@ -201,7 +203,7 @@ handle_source({'EXIT', Conn, Reason},
               #{source := #{current := #{conn := Conn}}}) ->
     {stop, {outbound_conn_died, Reason}};
 
-handle_source({'EXIT', _Pid, {shutdown, {server_initiated_close, ?PRECONDITION_FAILED, Reason}}}, _State) ->
+handle_source({'EXIT', _Pid, {shutdown, {server_initiated_close, _, Reason}}}, _State) ->
     {stop, {inbound_link_or_channel_closure, Reason}};
 
 handle_source(_Msg, _State) ->
@@ -220,7 +222,7 @@ handle_dest({amqp10_disposition, {Result, Tag}},
             {#{Tag := IncomingTag}, rejected} ->
                 {1, rabbit_shovel_behaviour:nack(IncomingTag, false, State1)};
             _ -> % not found - this should ideally not happen
-                rabbit_log_shovel:warning("Shovel ~s amqp10 destination disposition tag not found: ~p",
+                rabbit_log_shovel:warning("Shovel ~ts amqp10 destination disposition tag not found: ~tp",
                                           [Name, Tag]),
                 {0, State1}
         end,
@@ -231,7 +233,7 @@ handle_dest({amqp10_event, {connection, Conn, opened}},
 handle_dest({amqp10_event, {connection, Conn, {closed, Why}}},
             #{name := Name,
               dest := #{current := #{conn := Conn}}}) ->
-    ?INFO("Shovel ~s destination connection closed. Reason: ~p", [Name, Why]),
+    ?INFO("Shovel ~ts destination connection closed. Reason: ~tp", [Name, Why]),
     {stop, {outbound_conn_died, Why}};
 handle_dest({amqp10_event, {session, Sess, begun}},
             State = #{dest := #{current := #{session := Sess}}}) ->
@@ -259,7 +261,7 @@ handle_dest({'EXIT', Conn, Reason},
             #{dest := #{current := #{conn := Conn}}}) ->
     {stop, {outbound_conn_died, Reason}};
 
-handle_dest({'EXIT', _Pid, {shutdown, {server_initiated_close, ?PRECONDITION_FAILED, Reason}}}, _State) ->
+handle_dest({'EXIT', _Pid, {shutdown, {server_initiated_close, _, Reason}}}, _State) ->
     {stop, {outbound_link_or_channel_closure, Reason}};
 
 handle_dest(_Msg, _State) ->
@@ -302,8 +304,17 @@ nack(Tag, true, State = #{source := #{current := #{session := Session},
                                            Tag, true, accepted),
     State#{source => Src#{last_nacked_tag => Tag}}.
 
+status(#{dest := #{current := #{link_state := attached}}}) ->
+    flow;
+status(#{dest := #{current := #{link_state := credited}}}) ->
+    running;
+status(_) ->
+    %% Destination not yet connected
+    ignore.
+
 -spec forward(Tag :: tag(), Props :: #{atom() => any()},
-              Payload :: binary(), state()) -> state().
+              Payload :: binary(), state()) ->
+    state() | {stop, any()}.
 forward(_Tag, _Props, _Payload,
         #{source := #{remaining_unacked := 0}} = State) ->
     State;
@@ -322,17 +333,33 @@ forward(Tag, Props, Payload,
     Msg = add_timestamp_header(
             State, set_message_properties(
                      Props, add_forward_headers(State, Msg0))),
-    ok = amqp10_client:send_msg(Link, Msg),
-    rabbit_shovel_behaviour:decr_remaining_unacked(
-      case AckMode of
-          no_ack ->
-              rabbit_shovel_behaviour:decr_remaining(1, State);
-          on_confirm ->
-              State#{dest => Dst#{unacked => Unacked#{OutTag => Tag}}};
-          on_publish ->
-              State1 = rabbit_shovel_behaviour:ack(Tag, false, State),
-              rabbit_shovel_behaviour:decr_remaining(1, State1)
-      end).
+    case send_msg(Link, Msg) of
+        ok ->
+            rabbit_shovel_behaviour:decr_remaining_unacked(
+              case AckMode of
+                  no_ack ->
+                      rabbit_shovel_behaviour:decr_remaining(1, State);
+                  on_confirm ->
+                      State#{dest => Dst#{unacked => Unacked#{OutTag => Tag}}};
+                  on_publish ->
+                      State1 = rabbit_shovel_behaviour:ack(Tag, false, State),
+                      rabbit_shovel_behaviour:decr_remaining(1, State1)
+              end);
+        Stop ->
+            Stop
+    end.
+
+send_msg(Link, Msg) ->
+    case amqp10_client:send_msg(Link, Msg) of
+        ok ->
+            ok;
+        {error, insufficient_credit} ->
+            receive {amqp10_event, {link, Link, credited}} ->
+                        ok = amqp10_client:send_msg(Link, Msg)
+            after ?LINK_CREDIT_TIMEOUT ->
+                      {stop, credited_timeout}
+            end
+    end.
 
 new_message(Tag, Payload, #{ack_mode := AckMode,
                             dest := #{properties := Props,

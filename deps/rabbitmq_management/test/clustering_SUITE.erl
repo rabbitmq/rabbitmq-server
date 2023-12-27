@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(clustering_SUITE).
@@ -15,22 +15,21 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 
 -import(rabbit_ct_broker_helpers, [get_node_config/3, restart_node/2]).
--import(rabbit_mgmt_test_util, [http_get/2, http_put/4, http_delete/3]).
+-import(rabbit_mgmt_test_util, [http_get/2, http_put/4, http_post/4, http_delete/3, http_delete/4]).
 -import(rabbit_misc, [pget/2]).
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 all() ->
     [
-     {group, non_parallel_tests}
+     {group, non_parallel_tests},
+     {group, non_parallel_tests_mirroring}
     ].
 
 groups() ->
     [{non_parallel_tests, [], [
                                list_cluster_nodes_test,
-                               multi_node_case1_test,
-                               ha_queue_hosted_on_other_node,
-                               ha_queue_with_multiple_consumers,
                                queue_on_other_node,
                                queue_with_multiple_consumers,
                                queue_consumer_cancelled,
@@ -52,8 +51,17 @@ groups() ->
                                vhosts,
                                nodes,
                                overview,
-                               disable_plugin
-                              ]}
+                               disable_plugin,
+                               qq_replicas_add,
+                               qq_replicas_delete,
+                               qq_replicas_grow,
+                               qq_replicas_shrink
+                              ]},
+     {non_parallel_tests_mirroring, [
+                                     multi_node_case1_test,
+                                     ha_queue_hosted_on_other_node,
+                                     ha_queue_with_multiple_consumers
+                                    ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -90,6 +98,13 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
                                          rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_group(non_parallel_tests_mirroring, Config) ->
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            Config;
+        {khepri, _} ->
+            {skip, "Classic queue mirroring not supported by Khepri"}
+    end;
 init_per_group(_, Config) ->
     Config.
 
@@ -224,6 +239,91 @@ ha_queue_with_multiple_consumers(Config) ->
 
     ok.
 
+qq_replicas_add(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    _ = queue_declare_quorum(Chan, <<"qq.22">>),
+    _ = wait_for_queue(Config, "/queues/%2F/qq.22"),
+
+    Nodename1 = rabbit_data_coercion:to_binary(get_node_config(Config, 1, nodename)),
+    Body = [{node, Nodename1}],
+    http_post(Config, "/queues/quorum/%2F/qq.22/replicas/add", Body, ?NO_CONTENT),
+
+    http_delete(Config, "/queues/%2F/qq.22", ?NO_CONTENT),
+
+    amqp_channel:close(Chan),
+    rabbit_ct_client_helpers:close_connection(Conn),
+
+    ok.
+
+qq_replicas_delete(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    _ = queue_declare_quorum(Chan, <<"qq.23">>),
+    _ = wait_for_queue(Config, "/queues/%2F/qq.23"),
+
+    Nodename1 = rabbit_data_coercion:to_binary(get_node_config(Config, 1, nodename)),
+    Body = [{node, Nodename1}],
+    http_post(Config, "/queues/quorum/%2F/qq.23/replicas/add", Body, ?NO_CONTENT),
+    timer:sleep(1100),
+
+    http_delete(Config, "/queues/quorum/%2F/qq.23/replicas/delete", ?ACCEPTED, Body),
+    timer:sleep(1100),
+
+    http_delete(Config, "/queues/%2F/qq.23", ?NO_CONTENT),
+
+    amqp_channel:close(Chan),
+    rabbit_ct_client_helpers:close_connection(Conn),
+
+    ok.
+
+qq_replicas_grow(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    _ = queue_declare_quorum(Chan, <<"qq.24">>),
+    _ = wait_for_queue(Config, "/queues/%2F/qq.24"),
+
+    Nodename1 = rabbit_data_coercion:to_list(get_node_config(Config, 1, nodename)),
+    Body = [
+        {strategy, <<"all">>},
+        {queue_pattern, <<"qq.24">>},
+        {vhost_pattern, <<".*">>}
+    ],
+    http_post(Config, "/queues/quorum/replicas/on/" ++ Nodename1 ++ "/grow", Body, ?NO_CONTENT),
+    timer:sleep(1100),
+
+    http_delete(Config, "/queues/%2F/qq.24", ?NO_CONTENT),
+
+    amqp_channel:close(Chan),
+    rabbit_ct_client_helpers:close_connection(Conn),
+
+    ok.
+
+qq_replicas_shrink(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    _ = queue_declare_quorum(Chan, <<"qq.24">>),
+    _ = wait_for_queue(Config, "/queues/%2F/qq.24"),
+
+    Nodename1 = rabbit_data_coercion:to_list(get_node_config(Config, 1, nodename)),
+    Body = [
+        {strategy, <<"all">>},
+        {queue_pattern, <<"qq.24">>},
+        {vhost_pattern, <<".*">>}
+    ],
+    http_post(Config, "/queues/quorum/replicas/on/" ++ Nodename1 ++ "/grow", Body, ?NO_CONTENT),
+    timer:sleep(1100),
+
+    http_delete(Config, "/queues/quorum/replicas/on/" ++ Nodename1 ++ "/shrink", ?ACCEPTED),
+    timer:sleep(1100),
+
+    http_delete(Config, "/queues/%2F/qq.24", ?NO_CONTENT),
+
+    amqp_channel:close(Chan),
+    rabbit_ct_client_helpers:close_connection(Conn),
+
+    ok.
+
 queue_on_other_node(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan} = amqp_connection:open_channel(Conn),
@@ -256,7 +356,6 @@ queue_with_multiple_consumers(Config) ->
     Q = <<"multi-consumer-queue1">>,
     _ = queue_declare(Chan, Q),
     _ = wait_for_queue(Config, "/queues/%2F/multi-consumer-queue1"),
-
 
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan2} = amqp_connection:open_channel(Conn),
@@ -738,7 +837,7 @@ disable_plugin(Config) ->
 
 clear_all_table_data() ->
     [ets:delete_all_objects(T) || {T, _} <- ?CORE_TABLES],
-    [ets:delete_all_objects(T) || {T, _} <- ?TABLES],
+    rabbit_mgmt_storage:reset(),
     [gen_server:call(P, purge_cache)
      || {_, P, _, _} <- supervisor:which_children(rabbit_mgmt_db_cache_sup)],
     send_to_all_collectors(purge_old_stats).
@@ -787,6 +886,18 @@ queue_declare_durable(Chan, Name) ->
     #'queue.declare_ok'{queue = Q} = amqp_channel:call(Chan, Declare),
     Q.
 
+queue_declare_quorum(Chan, Name) ->
+    Declare = #'queue.declare'{
+        queue = Name,
+        durable = true,
+        arguments = [
+            {<<"x-queue-type">>, longstr, <<"quorum">>}
+        ]
+    },
+    #'queue.declare_ok'{queue = Q} = amqp_channel:call(Chan, Declare),
+    Q.
+
+
 queue_bind(Chan, Ex, Q, Key) ->
     Binding = #'queue.bind'{queue = Q,
                             exchange = Ex,
@@ -831,7 +942,7 @@ trace_fun(Config, MFs) ->
     Nodename2 = get_node_config(Config, 1, nodename),
     dbg:tracer(process, {fun(A,_) ->
                                  ct:pal(?LOW_IMPORTANCE,
-                                        "TRACE: ~p", [A])
+                                        "TRACE: ~tp", [A])
                          end, ok}),
     dbg:n(Nodename1),
     dbg:n(Nodename2),
@@ -841,9 +952,9 @@ trace_fun(Config, MFs) ->
 
 dump_table(Config, Table) ->
     Data = rabbit_ct_broker_helpers:rpc(Config, 0, ets, tab2list, [Table]),
-    ct:pal(?LOW_IMPORTANCE, "Node 0: Dump of table ~p:~n~p~n", [Table, Data]),
+    ct:pal(?LOW_IMPORTANCE, "Node 0: Dump of table ~tp:~n~tp~n", [Table, Data]),
     Data0 = rabbit_ct_broker_helpers:rpc(Config, 1, ets, tab2list, [Table]),
-    ct:pal(?LOW_IMPORTANCE, "Node 1: Dump of table ~p:~n~p~n", [Table, Data0]).
+    ct:pal(?LOW_IMPORTANCE, "Node 1: Dump of table ~tp:~n~tp~n", [Table, Data0]).
 
 force_stats() ->
     force_all(),

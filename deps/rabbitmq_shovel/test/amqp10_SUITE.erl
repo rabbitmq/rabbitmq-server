@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(amqp10_SUITE).
@@ -194,12 +194,12 @@ setup_amqp10_source_shovel(Config, SourceQueue, DestQueue, AckMode) ->
     Shovel = [{test_shovel,
                [{source,
                  [{protocol, amqp10},
-                  {uris, [rabbit_misc:format("amqp://~s:~b",
+                  {uris, [rabbit_misc:format("amqp://~ts:~b",
                                              [Hostname, Port])]},
                   {source_address, SourceQueue}]
                 },
                 {destination,
-                 [{uris, [rabbit_misc:format("amqp://~s:~b/%2f?heartbeat=5",
+                 [{uris, [rabbit_misc:format("amqp://~ts:~b/%2f?heartbeat=5",
                                              [Hostname, Port])]},
                   {declarations,
                    [{'queue.declare', [{queue, DestQueue}, auto_delete]}]},
@@ -220,7 +220,7 @@ setup_amqp10_destination_shovel(Config, Queue, AckMode) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     Shovel = [{test_shovel,
                [{source,
-                 [{uris, [rabbit_misc:format("amqp://~s:~b/%2f?heartbeat=5",
+                 [{uris, [rabbit_misc:format("amqp://~ts:~b/%2f?heartbeat=5",
                                              [Hostname, Port])]},
                   {declarations,
                    [{'queue.declare', [exclusive, auto_delete]},
@@ -230,7 +230,7 @@ setup_amqp10_destination_shovel(Config, Queue, AckMode) ->
                   {queue, <<>>}]},
                 {destination,
                  [{protocol, amqp10},
-                  {uris, [rabbit_misc:format("amqp://~s:~b",
+                  {uris, [rabbit_misc:format("amqp://~ts:~b",
                                              [Hostname, Port])]},
                   {add_forward_headers, true},
                   {add_timestamp_header, true},
@@ -245,12 +245,12 @@ setup_amqp10_shovel(Config, SourceQueue, DestQueue, AckMode) ->
     Shovel = [{test_shovel,
                [{source,
                  [{protocol, amqp10},
-                  {uris, [rabbit_misc:format("amqp://~s:~b",
+                  {uris, [rabbit_misc:format("amqp://~ts:~b",
                                              [Hostname, Port])]},
                   {source_address, SourceQueue}]},
                 {destination,
                  [{protocol, amqp10},
-                  {uris, [rabbit_misc:format("amqp://~s:~b",
+                  {uris, [rabbit_misc:format("amqp://~ts:~b",
                                              [Hostname, Port])]},
                   {add_forward_headers, true},
                   {add_timestamp_header, true},

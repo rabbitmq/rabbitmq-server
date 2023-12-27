@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2010-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2010-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_prequeue).
@@ -55,9 +55,9 @@ init(Q0, restart) when ?is_amqqueue(Q0) ->
     QPid = amqqueue:get_pid(Q1),
     SPids = amqqueue:get_slave_pids(Q1),
     LocalOrMasterDown = node(QPid) =:= node()
-        orelse not rabbit_mnesia:on_running_node(QPid),
-    Slaves = [SPid || SPid <- SPids, rabbit_mnesia:is_process_alive(SPid)],
-    case rabbit_mnesia:is_process_alive(QPid) of
+        orelse not rabbit_process:on_running_node(QPid),
+    Slaves = [SPid || SPid <- SPids, rabbit_process:is_process_alive(SPid)],
+    case rabbit_process:is_process_alive(QPid) of
         true  -> false = LocalOrMasterDown, %% assertion
                  rabbit_mirror_queue_slave:go(self(), async),
                  rabbit_mirror_queue_slave:init(Q1); %% [1]
@@ -79,7 +79,7 @@ init(Q0, restart) when ?is_amqqueue(Q0) ->
 
 crash_restart(Q0) when ?is_amqqueue(Q0) ->
     QueueName = amqqueue:get_name(Q0),
-    rabbit_log:error("Restarting crashed ~s.", [rabbit_misc:rs(QueueName)]),
+    rabbit_log:error("Restarting crashed ~ts.", [rabbit_misc:rs(QueueName)]),
     gen_server2:cast(self(), init),
     Q1 = amqqueue:set_pid(Q0, self()),
     rabbit_amqqueue_process:init(Q1).

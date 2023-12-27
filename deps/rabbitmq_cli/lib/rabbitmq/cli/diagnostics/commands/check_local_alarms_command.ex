@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckLocalAlarmsCommand do
   @moduledoc """
@@ -75,7 +75,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckLocalAlarmsCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Health check that exits with a non-zero code if the target node reports any local alarms"
+  def description(),
+    do: "Health check that exits with a non-zero code if the target node reports any local alarms"
 
   def usage, do: "check_local_alarms"
 

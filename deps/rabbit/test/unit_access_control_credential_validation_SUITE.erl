@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(unit_access_control_credential_validation_SUITE).
@@ -260,10 +260,10 @@ failed_validation(Result) ->
     not passed_validation(Result).
 
 regexp_that_requires_length_of_at_least(N) when is_integer(N) ->
-    rabbit_misc:format("^[a-zA-Z0-9]{~p,~p}", [N, N + 10]).
+    rabbit_misc:format("^[a-zA-Z0-9]{~tp,~tp}", [N, N + 10]).
 
 regexp_that_requires_length_of_at_most(N) when is_integer(N) ->
-    rabbit_misc:format("^[a-zA-Z0-9]{0,~p}", [N]).
+    rabbit_misc:format("^[a-zA-Z0-9]{0,~tp}", [N]).
 
 validator_backend(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_credential_validation, backend, []).

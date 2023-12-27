@@ -4,7 +4,7 @@
 %%
 %% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2015-2016 AWeber Communications
-%% Copyright (c) 2016-2022 VMware, Inc. or its affiliates. All rights reserved.
+%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates. All rights reserved.
 %%
 
 -module(rabbitmq_peer_discovery_etcd).
@@ -44,7 +44,7 @@ unregister() ->
 post_registration() ->
     ?DELEGATE:post_registration().
 
--spec lock(Node :: atom()) -> not_supported.
+-spec lock(Nodes :: [node()]) -> {'ok', term()} | {'error', string()}.
 lock(Node) ->
     ?DELEGATE:lock(Node).
 

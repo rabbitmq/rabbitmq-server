@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(list_queues_online_and_offline_SUITE).
@@ -42,7 +42,7 @@ init_per_group(Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [
                                             {rmq_nodename_suffix, Group},
-                                            {rmq_nodes_count, 2}
+                                            {rmq_nodes_count, 3}
                                            ]),
     rabbit_ct_helpers:run_steps(
       Config1,
@@ -65,7 +65,7 @@ end_per_testcase(Testcase, Config) ->
 %% ---------------------------------------------------------------------------
 
 list_queues_online_and_offline(Config) ->
-    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
     %% Node B will be stopped
     BCh = rabbit_ct_client_helpers:open_channel(Config, B),
@@ -78,7 +78,7 @@ list_queues_online_and_offline(Config) ->
 
     rabbit_ct_helpers:await_condition(
       fun() ->
-              [A] == rpc:call(A, rabbit_mnesia, cluster_nodes, [running])
+              lists:sort([A, C]) == lists:sort(rpc:call(A, rabbit_nodes, list_running, []))
       end, 60000),
 
     GotUp = lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(Config, A,

@@ -40,18 +40,21 @@ for (var k in IMPLICIT_ARGS) ALL_ARGS[k] = IMPLICIT_ARGS[k];
 for (var k in KNOWN_ARGS)    ALL_ARGS[k] = KNOWN_ARGS[k];
 
 var NAVIGATION = {'Overview':    ['#/',            "management"],
-                  'Connections': ['#/connections', "management"],
-                  'Channels':    ['#/channels',    "management"],
-                  'Exchanges':   ['#/exchanges',   "management"],
-                  'Queues':      ['#/queues',      "management"],
+                  'Connections': ['#/connections', "management", true],
+                  'Channels':    ['#/channels',    "management", true],
+                  'Exchanges':   ['#/exchanges',   "management", true],
+                  'Queues and Streams': ['#/queues',      "management", true],
                   'Admin':
                     [{'Users':         ['#/users',              "administrator"],
                       'Virtual Hosts': ['#/vhosts',             "administrator"],
                       'Feature Flags': ['#/feature-flags',      "administrator"],
+                      'Deprecated Features': ['#/deprecated-features',      "administrator"],
                       'Policies':      ['#/policies',           "management"],
                       'Limits':        ['#/limits',             "management"],
                       'Cluster':       ['#/cluster-name',       "administrator"]},
-                     "management"]
+                     "management",
+                     true
+                     ]
                  };
 
 var CHART_RANGES = {'global': [], 'basic': []};
@@ -112,7 +115,7 @@ var ALL_COLUMNS =
                   ['channels',       'Channels',       true],
                   ['channel_max',    'Channel max',    false],
                   ['frame_max',      'Frame max',      false],
-                  ['auth_mechanism', 'Auth mechanism', false],
+                  ['auth_mechanism', 'SASL auth mechanism', false],
                   ['client',         'Client',         false]],
       'Network': [['from_client',  'From client',  true],
                   ['to_client',    'To client',    true],
@@ -120,7 +123,8 @@ var ALL_COLUMNS =
                   ['connected_at', 'Connected at', false]]},
 
      'vhosts':
-     {'Overview': [['cluster-state',   'Cluster state',  false],
+     {'Overview': [['default-queue-type', 'Default queue type', false],
+                   ['cluster-state',   'Cluster state',  false],
                    ['description',   'Description',  false],
                    ['tags',   'Tags',  false]],
       'Messages': [['msgs-ready',      'Ready',          true],
@@ -188,6 +192,9 @@ var HELP = {
     'queue-message-ttl':
     'How long a message published to a queue can live before it is discarded (milliseconds).<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/ttl.html#per-queue-message-ttl">x-message-ttl</a>" argument.)',
 
+    'queue-consumer-timeout':
+    'If a consumer does not ack its delivery for more than the <a href="https://www.rabbitmq.com/consumers.html#acknowledgement-timeout">timeout value</a> (30 minutes by default), its channel will be closed with a <code>PRECONDITION_FAILED</code> channel exception.',
+
     'queue-expires':
       'How long a queue can be unused for before it is automatically deleted (milliseconds).<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/ttl.html#queue-ttl">x-expires</a>" argument.)',
 
@@ -202,6 +209,9 @@ var HELP = {
 
     'queue-stream-max-segment-size-bytes':
       'Total segment size for stream segments on disk.<br/>(Sets the x-stream-max-segment-size-bytes argument.)',
+
+    'queue-stream-filter-size-bytes':
+      'Size of the filter data attached to each stream chunk.<br/>(Sets the x-stream-filter-size-bytes argument.)',
 
     'queue-auto-delete':
       'If yes, the queue will delete itself after at least one consumer has connected, and then all consumers have disconnected.',
@@ -223,9 +233,6 @@ var HELP = {
 
     'queue-max-age':
       'Sets the data retention for stream queues in time units </br>(Y=Years, M=Months, D=Days, h=hours, m=minutes, s=seconds).<br/>E.g. "1h" configures the stream to only keep the last 1 hour of received messages.</br></br>(Sets the x-max-age argument.)',
-
-    'queue-lazy':
-      'Set the queue into lazy mode, keeping as many messages as possible on disk to reduce RAM usage; if not set, the queue will keep an in-memory cache to deliver messages as fast as possible.<br/>(Sets the "<a target="_blank" href="https://www.rabbitmq.com/lazy-queues.html">x-queue-mode</a>" argument.)',
 
     'queue-version':
       'Set the queue version. Defaults to version 1.<br/>Version 1 has a journal-based index that embeds small messages.<br/>Version 2 has a different index which improves memory usage and performance in many scenarios, as well as a per-queue store for messages that were previously embedded.<br/>(Sets the "x-queue-version" argument.)',
@@ -489,8 +496,7 @@ var HELP = {
 
     'filter-regex' :
     'Whether to enable regular expression matching. Both string literals \
-    and regular expressions are matched in a case-insensitive manner.<br/><br/> \
-    (<a href="https://developer.mozilla.org/en/docs/Web/JavaScript/Guide/Regular_Expressions" target="_blank">Regular expression reference</a>)',
+    and regular expressions are matched in a case-insensitive manner.<br/><br/>',
 
     'consumer-active' :
     'Whether the consumer is active or not, i.e. whether the consumer can get messages from the queue. \
@@ -500,7 +506,7 @@ var HELP = {
     (<a href="https://www.rabbitmq.com/consumers.html#active-consumer" target="_blank">Documentation</a>)',
 
     'consumer-owner' :
-    '<a href="https://www.rabbitmq.com/consumers.html">AMQP consumers</a> belong to an AMQP channel, \
+    '<a href="https://www.rabbitmq.com/consumers.html">AMQP 0-9-1 consumers</a> belong to a channel, \
     and <a href="https://www.rabbitmq.com/stream.html">stream consumers</a> belong to a stream connection.',
 
     'plugins' :
@@ -618,6 +624,7 @@ var is_user_policymaker;         // ...user is not a policymaker
 var user_monitor;                // ...user cannot monitor
 var nodes_interesting;           // ...we are not in a cluster
 var vhosts_interesting;          // ...there is only one vhost
+var is_op_policy_updating_enabled;      // ...editing operator policies is enabled
 var queue_type;
 var rabbit_versions_interesting; // ...all cluster nodes run the same version
 var disable_stats;               // ...disable all stats, management only mode
@@ -637,11 +644,78 @@ var exchange_types;
 // Used for access control
 var user_tags;
 var user;
+var ac = new AccessControl();
+var display = new DisplayControl();
+
+var ui_data_model = {
+  vhosts: [],
+  nodes: [],
+
+};
+
+// Access control
+
+function AccessControl() {
+
+  this.update = function(user, ui_data_model) {
+    this.user = user;
+    this.user_tags = expand_user_tags(user.tags);
+    this.ui_data_model = ui_data_model;
+  };
+  this.isMonitoringUser = function() {
+    if (this.user_tags)
+      return this.user_tags.includes("monitoring");
+    else return false;
+  };
+  this.isAdministratorUser = function() {
+    if (this.user_tags)
+      return this.user_tags.includes("administrator");
+    else return false;
+  };
+  this.isPolicyMakerUser = function() {
+    if (this.user_tags)
+      return this.user_tags.includes("policymaker");
+    else return false;
+  };
+  this.canAccessVhosts = function() {
+    if (this.ui_data_model)
+      return this.ui_data_model.vhosts.length > 0;
+    else return false;
+  };
+  this.canListNodes = function() {
+    if (this.ui_data_model)
+      return this.isMonitoringUser() && this.ui_data_model.nodes.length > 1;
+    else return false;
+  };
+
+};
+
+function DisplayControl() {
+  this.nodes = false
+  this.vhosts = false
+  this.rabbitmqVersions = false
+
+  this.update = function(overview, ui_data_model) {    
+    this.nodes = ac.canListNodes() && ui_data_model.nodes.length > 1
+    this.vhosts = ac.canAccessVhosts()
+    this.rabbitmqVersions = false
+    var v = '';
+    for (var i = 0; i < ui_data_model.nodes.length; i++) {
+        var v1 = fmt_rabbit_version(ui_data_model.nodes[i].applications);
+        if (v1 != 'unknown') {
+            if (v != '' && v != v1) this.rabbitmqVersions = true;
+            v = v1;
+        }
+    }
+    this.data = ui_data_model;
+  }
+
+}
 
 // Set up the above vars
-function setup_global_vars() {
-    var overview = JSON.parse(sync_get('/overview'));
+function setup_global_vars(overview) {
     rates_mode = overview.rates_mode;
+    is_op_policy_updating_enabled = overview.is_op_policy_updating_enabled;
     user_tags = expand_user_tags(user.tags);
     user_administrator = jQuery.inArray("administrator", user_tags) != -1;
     is_user_policymaker = jQuery.inArray("policymaker", user_tags) != -1;
@@ -674,8 +748,8 @@ function setup_global_vars() {
         if (nodes.length > 1) {
             nodes_interesting = true;
             var v = '';
-            for (var i = 0; i < nodes.length; i++) {
-                var v1 = fmt_rabbit_version(nodes[i].applications);
+            for (var i = 0; i < ui_data_model.nodes.length; i++) {
+                var v1 = fmt_rabbit_version(ui_data_model.nodes[i].applications);
                 if (v1 != 'unknown') {
                     if (v != '' && v != v1) rabbit_versions_interesting = true;
                     v = v1;
@@ -683,9 +757,9 @@ function setup_global_vars() {
             }
         }
     }
-    vhosts_interesting = JSON.parse(sync_get('/vhosts')).length > 1;
+    vhosts_interesting = ui_data_model.vhosts.length > 1;
 
-    queue_type = "classic";
+    queue_type = "default";
     current_vhost = get_pref('vhost');
     exchange_types = overview.exchange_types;
 

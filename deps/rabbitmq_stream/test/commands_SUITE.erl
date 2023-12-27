@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(commands_SUITE).
@@ -25,12 +25,14 @@
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamPublishersCommand').
 -define(COMMAND_ADD_SUPER_STREAM,
         'Elixir.RabbitMQ.CLI.Ctl.Commands.AddSuperStreamCommand').
--define(COMMAND_DELETE_SUPER_STREAM,
+-define(COMMAND_DELETE_SUPER_STREAM_CLI,
         'Elixir.RabbitMQ.CLI.Ctl.Commands.DeleteSuperStreamCommand').
 -define(COMMAND_LIST_CONSUMER_GROUPS,
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumerGroupsCommand').
 -define(COMMAND_LIST_GROUP_CONSUMERS,
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamGroupConsumersCommand').
+-define(COMMAND_LIST_STREAM_TRACKING,
+        'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamTrackingCommand').
 
 all() ->
     [{group, list_connections},
@@ -38,6 +40,7 @@ all() ->
      {group, list_publishers},
      {group, list_consumer_groups},
      {group, list_group_consumers},
+     {group, list_stream_tracking},
      {group, super_streams}].
 
 groups() ->
@@ -49,10 +52,14 @@ groups() ->
      {list_publishers, [],
       [list_publishers_merge_defaults, list_publishers_run]},
      {list_consumer_groups, [],
-      [list_consumer_groups_merge_defaults, list_consumer_groups_run]},
+      [list_consumer_groups_validate, list_consumer_groups_merge_defaults,
+       list_consumer_groups_run]},
      {list_group_consumers, [],
       [list_group_consumers_validate, list_group_consumers_merge_defaults,
        list_group_consumers_run]},
+     {list_stream_tracking, [],
+      [list_stream_tracking_validate, list_stream_tracking_merge_defaults,
+       list_stream_tracking_run]},
      {super_streams, [],
       [add_super_stream_merge_defaults,
        add_super_stream_validate,
@@ -96,7 +103,7 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 list_connections_merge_defaults(_Config) ->
-    {[<<"conn_name">>], #{verbose := false}} =
+    {[<<"node">>, <<"conn_name">>], #{verbose := false}} =
         ?COMMAND_LIST_CONNECTIONS:merge_defaults([], #{}),
 
     {[<<"other_key">>], #{verbose := true}} =
@@ -197,7 +204,7 @@ list_tls_connections_run(Config) ->
 list_consumers_merge_defaults(_Config) ->
     DefaultItems =
         [rabbit_data_coercion:to_binary(Item)
-         || Item <- ?CONSUMER_INFO_ITEMS],
+         || Item <- ?CONSUMER_INFO_ITEMS -- [connection_pid, node]],
     {DefaultItems, #{verbose := false}} =
         ?COMMAND_LIST_CONSUMERS:merge_defaults([], #{}),
 
@@ -266,7 +273,7 @@ list_consumers_run(Config) ->
 list_publishers_merge_defaults(_Config) ->
     DefaultItems =
         [rabbit_data_coercion:to_binary(Item)
-         || Item <- ?PUBLISHER_INFO_ITEMS],
+         || Item <- ?PUBLISHER_INFO_ITEMS -- [connection_pid, node]],
     {DefaultItems, #{verbose := false}} =
         ?COMMAND_LIST_PUBLISHERS:merge_defaults([], #{}),
 
@@ -331,6 +338,18 @@ list_publishers_run(Config) ->
     close(S2, C2_2),
     ?awaitMatch(0, publisher_count(Config), ?WAIT),
     ok.
+
+list_consumer_groups_validate(_) ->
+    ValidOpts = #{vhost => <<"/">>},
+    ?assertMatch({validation_failure, {bad_info_key, [foo]}},
+                 ?COMMAND_LIST_CONSUMER_GROUPS:validate([<<"foo">>],
+                                                        ValidOpts)),
+    ?assertMatch(ok,
+                 ?COMMAND_LIST_CONSUMER_GROUPS:validate([<<"reference">>],
+                                                        ValidOpts)),
+    ?assertMatch(ok,
+                 ?COMMAND_LIST_CONSUMER_GROUPS:validate([], ValidOpts)).
+
 
 list_consumer_groups_merge_defaults(_Config) ->
     DefaultItems =
@@ -521,6 +540,106 @@ assertConsumerGroup(S, R, PI, Cs, Record) ->
     ?assertEqual(Cs, proplists:get_value(consumers, Record)),
     ok.
 
+list_stream_tracking_validate(_) ->
+    ValidOpts = #{vhost => <<"/">>, <<"writer">> => true},
+    ?assertMatch({validation_failure, not_enough_args},
+                 ?COMMAND_LIST_STREAM_TRACKING:validate([], #{})),
+    ?assertMatch({validation_failure, not_enough_args},
+                 ?COMMAND_LIST_STREAM_TRACKING:validate([],
+                                                        #{vhost =>
+                                                              <<"test">>})),
+    ?assertMatch({validation_failure, "Specify only one of --all, --offset, --writer."},
+                 ?COMMAND_LIST_STREAM_TRACKING:validate([<<"stream">>],
+                                                        #{all => true, writer => true})),
+    ?assertMatch({validation_failure, too_many_args},
+                 ?COMMAND_LIST_STREAM_TRACKING:validate([<<"stream">>, <<"bad">>],
+                                                        ValidOpts)),
+
+    ?assertMatch(ok,
+                 ?COMMAND_LIST_STREAM_TRACKING:validate([<<"stream">>],
+                                                        ValidOpts)).
+list_stream_tracking_merge_defaults(_Config) ->
+    ?assertMatch({[<<"s">>], #{all := true, vhost := <<"/">>}},
+      ?COMMAND_LIST_STREAM_TRACKING:merge_defaults([<<"s">>], #{})),
+
+    ?assertMatch({[<<"s">>], #{writer := true, vhost := <<"/">>}},
+      ?COMMAND_LIST_STREAM_TRACKING:merge_defaults([<<"s">>], #{writer => true})),
+
+    ?assertMatch({[<<"s">>], #{all := true, vhost := <<"dev">>}},
+      ?COMMAND_LIST_STREAM_TRACKING:merge_defaults([<<"s">>], #{vhost => <<"dev">>})),
+
+    ?assertMatch({[<<"s">>], #{writer := true, vhost := <<"dev">>}},
+      ?COMMAND_LIST_STREAM_TRACKING:merge_defaults([<<"s">>], #{writer => true, vhost => <<"dev">>})).
+
+list_stream_tracking_run(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Stream = <<"list_stream_tracking_run">>,
+    ConsumerReference = <<"foo">>,
+    PublisherReference = <<"bar">>,
+    Opts =
+        #{node => Node,
+          timeout => 10000,
+          vhost => <<"/">>},
+    Args = [Stream],
+
+    %% the stream does not exist yet
+    ?assertMatch({error, "The stream does not exist."},
+                 ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{all => true})),
+
+    StreamPort = rabbit_stream_SUITE:get_stream_port(Config),
+    {S, C} = start_stream_connection(StreamPort),
+    ?awaitMatch(1, connection_count(Config), ?WAIT),
+
+    create_stream(S, Stream, C),
+
+    ?assertMatch([],
+                 ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{all => true})),
+
+    store_offset(S, Stream, ConsumerReference, 42, C),
+
+    ?assertMatch([[{type,offset}, {name, ConsumerReference}, {tracking_value, 42}]],
+                ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{all => true})),
+
+    ?assertMatch([[{type,offset}, {name, ConsumerReference}, {tracking_value, 42}]],
+                ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{offset => true})),
+
+    ok = store_offset(S, Stream, ConsumerReference, 55, C),
+    ?assertMatch([[{type,offset}, {name, ConsumerReference}, {tracking_value, 55}]],
+                ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{offset => true})),
+
+
+    PublisherId = 1,
+    rabbit_stream_SUITE:test_declare_publisher(gen_tcp, S, PublisherId,
+                                               PublisherReference, Stream, C),
+    rabbit_stream_SUITE:test_publish_confirm(gen_tcp, S, PublisherId, 42, <<"">>, C),
+
+    ok = check_publisher_sequence(S, Stream, PublisherReference, 42, C),
+
+    ?assertMatch([
+                  [{type,writer},{name,<<"bar">>},{tracking_value, 42}],
+                  [{type,offset},{name,<<"foo">>},{tracking_value, 55}]
+                 ],
+                 ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{all => true})),
+
+    ?assertMatch([
+                  [{type,writer},{name,<<"bar">>},{tracking_value, 42}]
+                 ],
+                 ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{writer => true})),
+
+    rabbit_stream_SUITE:test_publish_confirm(gen_tcp, S, PublisherId, 66, <<"">>, C),
+
+    ok = check_publisher_sequence(S, Stream, PublisherReference, 66, C),
+
+    ?assertMatch([
+                  [{type,writer},{name,<<"bar">>},{tracking_value, 66}]
+                 ],
+                 ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{writer => true})),
+
+    delete_stream(S, Stream, C),
+
+    close(S, C),
+    ok.
+
 add_super_stream_merge_defaults(_Config) ->
     ?assertMatch({[<<"super-stream">>],
                   #{partitions := 3, vhost := <<"/">>}},
@@ -531,17 +650,27 @@ add_super_stream_merge_defaults(_Config) ->
                   #{partitions := 5, vhost := <<"/">>}},
                  ?COMMAND_ADD_SUPER_STREAM:merge_defaults([<<"super-stream">>],
                                                           #{partitions => 5})),
+    DefaultWithBindingKeys =
+        ?COMMAND_ADD_SUPER_STREAM:merge_defaults([<<"super-stream">>],
+                                                 #{binding_keys =>
+                                                       <<"amer,emea,apac">>}),
+    ?assertMatch({[<<"super-stream">>],
+                  #{binding_keys := <<"amer,emea,apac">>, vhost := <<"/">>}},
+                 DefaultWithBindingKeys),
+
+    {_, OptsBks} = DefaultWithBindingKeys,
+    ?assertEqual(false, maps:is_key(partitions, OptsBks)),
 
     DefaultWithRoutingKeys =
         ?COMMAND_ADD_SUPER_STREAM:merge_defaults([<<"super-stream">>],
                                                  #{routing_keys =>
                                                        <<"amer,emea,apac">>}),
     ?assertMatch({[<<"super-stream">>],
-                  #{routing_keys := <<"amer,emea,apac">>, vhost := <<"/">>}},
+                  #{binding_keys := <<"amer,emea,apac">>, vhost := <<"/">>}},
                  DefaultWithRoutingKeys),
 
-    {_, Opts} = DefaultWithRoutingKeys,
-    ?assertEqual(false, maps:is_key(partitions, Opts)).
+    {_, OptsRks} = DefaultWithRoutingKeys,
+    ?assertEqual(false, maps:is_key(partitions, OptsRks)).
 
 add_super_stream_validate(_Config) ->
     ?assertMatch({validation_failure, not_enough_args},
@@ -555,6 +684,17 @@ add_super_stream_validate(_Config) ->
                                                           <<"a,b,c">>})),
     ?assertMatch({validation_failure, _},
                  ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
+                                                    #{partitions => 1,
+                                                      binding_keys => <<"a,b,c">>})),
+
+    ?assertMatch({validation_failure, _},
+                 ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
+                                                    #{routing_keys => 1,
+                                                      binding_keys => <<"a,b,c">>}
+                                                    )),
+
+    ?assertMatch({validation_failure, _},
+                 ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
                                                     #{partitions => 0})),
     ?assertEqual(ok,
                  ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
@@ -562,6 +702,10 @@ add_super_stream_validate(_Config) ->
     ?assertEqual(ok,
                  ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
                                                     #{routing_keys =>
+                                                          <<"a,b,c">>})),
+    ?assertEqual(ok,
+                 ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
+                                                    #{binding_keys =>
                                                           <<"a,b,c">>})),
 
     [case Expected of
@@ -600,15 +744,15 @@ add_super_stream_validate(_Config) ->
 
 delete_super_stream_merge_defaults(_Config) ->
     ?assertMatch({[<<"super-stream">>], #{vhost := <<"/">>}},
-                 ?COMMAND_DELETE_SUPER_STREAM:merge_defaults([<<"super-stream">>],
+                 ?COMMAND_DELETE_SUPER_STREAM_CLI:merge_defaults([<<"super-stream">>],
                                                              #{})),
     ok.
 
 delete_super_stream_validate(_Config) ->
     ?assertMatch({validation_failure, not_enough_args},
-                 ?COMMAND_DELETE_SUPER_STREAM:validate([], #{})),
+                 ?COMMAND_DELETE_SUPER_STREAM_CLI:validate([], #{})),
     ?assertMatch({validation_failure, too_many_args},
-                 ?COMMAND_DELETE_SUPER_STREAM:validate([<<"a">>, <<"b">>],
+                 ?COMMAND_DELETE_SUPER_STREAM_CLI:validate([<<"a">>, <<"b">>],
                                                        #{})),
     ?assertEqual(ok, ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>], #{})),
     ok.
@@ -629,22 +773,21 @@ add_delete_super_stream_run(Config) ->
                   [<<"invoices-0">>, <<"invoices-1">>, <<"invoices-2">>]},
                  partitions(Config, <<"invoices">>)),
     ?assertMatch({ok, _},
-                 ?COMMAND_DELETE_SUPER_STREAM:run([<<"invoices">>], Opts)),
+                 ?COMMAND_DELETE_SUPER_STREAM_CLI:run([<<"invoices">>], Opts)),
     ?assertEqual({error, stream_not_found},
                  partitions(Config, <<"invoices">>)),
 
-    % with routing keys
+    % with binding keys
     ?assertMatch({ok, _},
                  ?COMMAND_ADD_SUPER_STREAM:run([<<"invoices">>],
-                                               maps:merge(#{routing_keys =>
-                                                                <<" amer,emea , apac">>},
+                                               maps:merge(#{binding_keys => <<" amer,emea , apac">>},
                                                           Opts))),
     ?assertEqual({ok,
                   [<<"invoices-amer">>, <<"invoices-emea">>,
                    <<"invoices-apac">>]},
                  partitions(Config, <<"invoices">>)),
     ?assertMatch({ok, _},
-                 ?COMMAND_DELETE_SUPER_STREAM:run([<<"invoices">>], Opts)),
+                 ?COMMAND_DELETE_SUPER_STREAM_CLI:run([<<"invoices">>], Opts)),
     ?assertEqual({error, stream_not_found},
                  partitions(Config, <<"invoices">>)),
 
@@ -678,7 +821,7 @@ add_delete_super_stream_run(Config) ->
                  rabbit_misc:table_lookup(Args, <<"x-queue-type">>)),
 
     ?assertMatch({ok, _},
-                 ?COMMAND_DELETE_SUPER_STREAM:run([<<"invoices">>], Opts)),
+                 ?COMMAND_DELETE_SUPER_STREAM_CLI:run([<<"invoices">>], Opts)),
 
     ok.
 
@@ -698,6 +841,7 @@ subscribe(S, SubId, Stream, SubProperties, C) ->
                                        SubId,
                                        Stream,
                                        SubProperties,
+                                       ?RESPONSE_CODE_OK,
                                        C).
 
 subscribe(S, SubId, Stream, C) ->
@@ -712,6 +856,9 @@ declare_publisher(S, PubId, Stream, C) ->
 
 delete_stream(S, Stream, C) ->
     rabbit_stream_SUITE:test_delete_stream(gen_tcp, S, Stream, C).
+
+delete_stream_no_metadata_update(S, Stream, C) ->
+    rabbit_stream_SUITE:test_delete_stream(gen_tcp, S, Stream, C, false).
 
 metadata_update_stream_deleted(S, Stream, C) ->
     rabbit_stream_SUITE:test_metadata_update_stream_deleted(gen_tcp,
@@ -769,9 +916,13 @@ start_stream_tls_connection(Port) ->
     start_stream_connection(ssl, Port).
 
 start_stream_connection(Transport, Port) ->
+    TlsOpts = case Transport of
+        ssl -> [{verify, verify_none}];
+        _   -> []
+      end,
     {ok, S} =
         Transport:connect("localhost", Port,
-                          [{active, false}, {mode, binary}]),
+                          [{active, false}, {mode, binary}] ++ TlsOpts),
     C0 = rabbit_stream_core:init(0),
     C1 = rabbit_stream_SUITE:test_peer_properties(Transport, S, C0),
     C = rabbit_stream_SUITE:test_authenticate(Transport, S, C1),
@@ -793,3 +944,52 @@ queue_lookup(Config, Q) ->
                                  rabbit_amqqueue,
                                  lookup,
                                  [QueueName]).
+
+store_offset(S, Stream, Reference, Value, C) ->
+    StoreOffsetFrame =
+        rabbit_stream_core:frame({store_offset, Reference, Stream, Value}),
+    ok = gen_tcp:send(S, StoreOffsetFrame),
+    case check_stored_offset(S, Stream, Reference, Value, C, 20) of
+        ok ->
+            ok;
+        _ ->
+            {error, offset_not_stored}
+    end.
+
+check_stored_offset(_, _, _, _, _, 0) ->
+    error;
+check_stored_offset(S, Stream, Reference, Expected, C, Attempt) ->
+    QueryOffsetFrame =
+        rabbit_stream_core:frame({request, 1, {query_offset, Reference, Stream}}),
+    ok = gen_tcp:send(S, QueryOffsetFrame),
+    {Cmd, _} = rabbit_stream_SUITE:receive_commands(gen_tcp, S, C),
+    ?assertMatch({response, 1, {query_offset, ?RESPONSE_CODE_OK, _}}, Cmd),
+    {response, 1, {query_offset, ?RESPONSE_CODE_OK, StoredValue}} = Cmd,
+    case StoredValue of
+        Expected ->
+            ok;
+        _ ->
+            timer:sleep(50),
+            check_stored_offset(S, Stream, Reference, Expected, C, Attempt - 1)
+    end.
+
+check_publisher_sequence(S, Stream, Reference, Expected, C) ->
+    check_publisher_sequence(S, Stream, Reference, Expected, C, 20).
+
+check_publisher_sequence(_, _, _, _, _, 0) ->
+    error;
+check_publisher_sequence(S, Stream, Reference, Expected, C, Attempt) ->
+    QueryFrame =
+        rabbit_stream_core:frame({request, 1, {query_publisher_sequence, Reference, Stream}}),
+    ok = gen_tcp:send(S, QueryFrame),
+    {Cmd, _} = rabbit_stream_SUITE:receive_commands(gen_tcp, S, C),
+    ?assertMatch({response, 1, {query_publisher_sequence, _, _}}, Cmd),
+    {response, 1, {query_publisher_sequence, _, StoredValue}} = Cmd,
+    case StoredValue of
+        Expected ->
+            ok;
+        _ ->
+            timer:sleep(50),
+            check_publisher_sequence(S, Stream, Reference, Expected, C, Attempt - 1)
+    end.
+

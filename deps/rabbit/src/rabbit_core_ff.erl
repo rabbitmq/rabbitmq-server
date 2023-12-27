@@ -2,21 +2,15 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_core_ff).
 
--export([direct_exchange_routing_v2_enable/1,
-         listener_records_in_ets_enable/1,
-         listener_records_in_ets_post_enable/1,
-         tracking_records_in_ets_enable/1,
-         tracking_records_in_ets_post_enable/1]).
-
 -rabbit_feature_flag(
    {classic_mirrored_queue_version,
     #{desc          => "Support setting version for classic mirrored queues",
-      stability     => stable
+      stability     => required
      }}).
 
 -rabbit_feature_flag(
@@ -30,7 +24,7 @@
    {stream_queue,
     #{desc          => "Support queues of type `stream`",
       doc_url       => "https://www.rabbitmq.com/stream.html",
-      stability     => stable,
+      stability     => required,
       depends_on    => [quorum_queue]
      }}).
 
@@ -63,159 +57,94 @@
    {stream_single_active_consumer,
     #{desc          => "Single active consumer for streams",
       doc_url       => "https://www.rabbitmq.com/stream.html",
-      stability     => stable,
+      stability     => required,
       depends_on    => [stream_queue]
      }}).
 
 -rabbit_feature_flag(
     {feature_flags_v2,
      #{desc          => "Feature flags subsystem V2",
-       stability     => stable
+       stability     => required
      }}).
 
 -rabbit_feature_flag(
    {direct_exchange_routing_v2,
     #{desc       => "v2 direct exchange routing implementation",
-      stability  => stable,
-      depends_on => [feature_flags_v2, implicit_default_bindings],
-      callbacks  => #{enable => {?MODULE, direct_exchange_routing_v2_enable}}
+      stability  => required,
+      depends_on => [feature_flags_v2, implicit_default_bindings]
      }}).
 
 -rabbit_feature_flag(
    {listener_records_in_ets,
     #{desc       => "Store listener records in ETS instead of Mnesia",
-      stability  => stable,
-      depends_on => [feature_flags_v2],
-      callbacks  => #{enable =>
-                      {?MODULE, listener_records_in_ets_enable},
-                      post_enable =>
-                      {?MODULE, listener_records_in_ets_post_enable}}
+      stability  => required,
+      depends_on => [feature_flags_v2]
      }}).
 
 -rabbit_feature_flag(
    {tracking_records_in_ets,
     #{desc          => "Store tracking records in ETS instead of Mnesia",
-      stability     => stable,
-      depends_on    => [feature_flags_v2],
-      callbacks     => #{enable =>
-                             {?MODULE, tracking_records_in_ets_enable},
-                         post_enable =>
-                             {?MODULE, tracking_records_in_ets_post_enable}}
+      stability     => required,
+      depends_on    => [feature_flags_v2]
      }}).
 
-%% -------------------------------------------------------------------
-%% Direct exchange routing v2.
-%% -------------------------------------------------------------------
+-rabbit_feature_flag(
+   {classic_queue_type_delivery_support,
+    #{desc          => "Bug fix for classic queue deliveries using mixed versions",
+      doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/5931",
+      %%TODO remove compatibility code
+      stability     => required,
+      depends_on    => [stream_queue]
+     }}).
 
--spec direct_exchange_routing_v2_enable(Args) -> Ret when
-      Args :: rabbit_feature_flags:enable_callback_args(),
-      Ret :: rabbit_feature_flags:enable_callback_ret().
-direct_exchange_routing_v2_enable(#{feature_name := FeatureName}) ->
-    TableName = rabbit_index_route,
-    ok = rabbit_table:wait([rabbit_route], _Retry = true),
-    try
-        ok = rabbit_table:create(
-               TableName, rabbit_table:rabbit_index_route_definition()),
-        case rabbit_table:ensure_table_copy(TableName, node(), ram_copies) of
-            ok ->
-                ok = rabbit_binding:populate_index_route_table();
-            {error, Err} = Error ->
-                rabbit_log_feature_flags:error(
-                  "Feature flags: `~s`: failed to add copy of table ~s to "
-                  "node ~p: ~p",
-                  [FeatureName, TableName, node(), Err]),
-                Error
-        end
-    catch throw:{error, Reason} ->
-              rabbit_log_feature_flags:error(
-                "Feature flags: `~s`: enable callback failure: ~p",
-                [FeatureName, Reason]),
-              {error, Reason}
-    end.
+-rabbit_feature_flag(
+   {restart_streams,
+    #{desc          => "Support for restarting streams with optional preferred next leader argument."
+      "Used to implement stream leader rebalancing",
+      stability     => stable,
+      depends_on    => [stream_queue]
+     }}).
 
-%% -------------------------------------------------------------------
-%% Listener records moved from Mnesia to ETS.
-%% -------------------------------------------------------------------
+-rabbit_feature_flag(
+   {stream_sac_coordinator_unblock_group,
+    #{desc          => "Bug fix to unblock a group of consumers in a super stream partition",
+      doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/7743",
+      stability     => stable,
+      depends_on    => [stream_single_active_consumer]
+     }}).
 
-listener_records_in_ets_enable(#{feature_name := FeatureName}) ->
-    try
-        rabbit_misc:execute_mnesia_transaction(
-          fun () ->
-                  mnesia:lock({table, rabbit_listener}, read),
-                  Listeners = mnesia:select(
-                                rabbit_listener, [{'$1',[],['$1']}]),
-                  lists:foreach(
-                    fun(Listener) ->
-                            ets:insert(rabbit_listener_ets, Listener)
-                    end, Listeners)
-          end)
-    catch
-        throw:{error, {no_exists, rabbit_listener}} ->
-            ok;
-        throw:{error, Reason} ->
-            rabbit_log_feature_flags:error(
-              "Feature flags: `~s`: failed to migrate Mnesia table: ~p",
-              [FeatureName, Reason]),
-            {error, Reason}
-    end.
+-rabbit_feature_flag(
+   {stream_filtering,
+    #{desc          => "Support for stream filtering.",
+      stability     => stable,
+      depends_on    => [stream_queue]
+     }}).
 
-listener_records_in_ets_post_enable(#{feature_name := FeatureName}) ->
-    try
-        case mnesia:delete_table(rabbit_listener) of
-            {atomic, ok} ->
-                ok;
-            {aborted, {no_exists, _}} ->
-                ok;
-            {aborted, Err} ->
-                rabbit_log_feature_flags:error(
-                  "Feature flags: `~s`: failed to delete Mnesia table: ~p",
-                  [FeatureName, Err]),
-                ok
-        end
-    catch
-        throw:{error, Reason} ->
-            rabbit_log_feature_flags:error(
-              "Feature flags: `~s`: failed to delete Mnesia table: ~p",
-              [FeatureName, Reason]),
-            ok
-    end.
+-rabbit_feature_flag(
+   {message_containers,
+    #{desc          => "Message containers.",
+      stability     => stable,
+      depends_on    => [feature_flags_v2]
+     }}).
 
-tracking_records_in_ets_enable(#{feature_name := FeatureName}) ->
-    try
-        rabbit_connection_tracking:migrate_tracking_records(),
-        rabbit_channel_tracking:migrate_tracking_records()
-    catch
-        throw:{error, {no_exists, _}} ->
-            ok;
-        throw:{error, Reason} ->
-            rabbit_log_feature_flags:error("Enabling feature flag ~s failed: ~p",
-                                           [FeatureName, Reason]),
-            {error, Reason}
-    end.
+-rabbit_feature_flag(
+   {khepri_db,
+    #{desc          => "Use the new Khepri Raft-based metadata store",
+      doc_url       => "", %% TODO
+      stability     => experimental,
+      depends_on    => [feature_flags_v2,
+                        direct_exchange_routing_v2,
+                        maintenance_mode_status,
+                        user_limits,
+                        virtual_host_metadata,
+                        tracking_records_in_ets,
+                        listener_records_in_ets,
 
-tracking_records_in_ets_post_enable(#{feature_name := FeatureName}) ->
-    try
-        [delete_table(FeatureName, Tab) ||
-            Tab <- rabbit_connection_tracking:get_all_tracked_connection_table_names_for_node(node())],
-        [delete_table(FeatureName, Tab) ||
-            Tab <- rabbit_channel_tracking:get_all_tracked_channel_table_names_for_node(node())]
-    catch
-        throw:{error, Reason} ->
-            rabbit_log_feature_flags:error("Enabling feature flag ~s failed: ~p",
-                                           [FeatureName, Reason]),
-            %% adheres to the callback interface
-            ok
-    end.
-
-delete_table(FeatureName, Tab) ->
-    case mnesia:delete_table(Tab) of
-        {atomic, ok} ->
-            ok;
-        {aborted, {no_exists, _}} ->
-            ok;
-        {aborted, Err} ->
-            rabbit_log_feature_flags:error("Enabling feature flag ~s failed to delete mnesia table ~p: ~p",
-                                           [FeatureName, Tab, Err]),
-            %% adheres to the callback interface
-            ok
-    end.
+                        %% Deprecated features.
+                        classic_queue_mirroring,
+                        ram_node_type],
+      callbacks     => #{enable =>
+                         {rabbit_khepri, khepri_db_migration_enable},
+                         post_enable =>
+                         {rabbit_khepri, khepri_db_migration_post_enable}}
+     }}).

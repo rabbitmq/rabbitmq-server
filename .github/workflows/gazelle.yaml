@@ -1,0 +1,37 @@
+name: Run gazelle
+on:
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: Branch on which to run
+        required: true
+        default: main
+jobs:
+  bazel-run-gazelle:
+    name: bazel run gazelle
+    runs-on: ubuntu-20.04
+    timeout-minutes: 10
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.target_branch }}
+    - name: BAZEL RUN GAZELLE
+      run: |
+        bazel run gazelle
+    - name: CREATE PULL REQUEST
+      uses: peter-evans/create-pull-request@v5.0.2
+      with:
+        token: ${{ secrets.REPO_SCOPED_TOKEN }}
+        committer: GitHub <noreply@github.com>
+        author: GitHub <noreply@github.com>
+        title: bazel run gazelle
+        body: >
+          Automated changes created by
+          ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          using the [create-pull-request](https://github.com/peter-evans/create-pull-request)
+          GitHub action in the ${{ github.workflow }} workflow.
+        commit-message: |
+          bazel run gazelle
+        branch: gazelle-${{ github.event.inputs.target_branch }}
+        delete-branch: true

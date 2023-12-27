@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -include("amqqueue_v2.hrl").
@@ -33,16 +33,17 @@
 -define(amqqueue_v1_type, rabbit_classic_queue).
 
 -define(amqqueue_is_classic(Q),
-        (?is_amqqueue_v2(Q) andalso
-         ?amqqueue_v2_field_type(Q) =:= rabbit_classic_queue)).
+        ?amqqueue_type_is(Q, rabbit_classic_queue)).
 
 -define(amqqueue_is_quorum(Q),
-        (?is_amqqueue_v2(Q) andalso
-         ?amqqueue_v2_field_type(Q) =:= rabbit_quorum_queue)).
+        ?amqqueue_type_is(Q, rabbit_quorum_queue)).
 
 -define(amqqueue_is_stream(Q),
+        ?amqqueue_type_is(Q, rabbit_stream_queue)).
+
+-define(amqqueue_type_is(Q, Type),
         (?is_amqqueue_v2(Q) andalso
-         ?amqqueue_v2_field_type(Q) =:= rabbit_stream_queue)).
+         ?amqqueue_v2_field_type(Q) =:= Type)).
 
 -define(amqqueue_has_valid_pid(Q),
         (?is_amqqueue_v2(Q) andalso

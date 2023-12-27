@@ -5,7 +5,7 @@
    mqtt.allow_anonymous  = true
    mqtt.vhost            = /
    mqtt.exchange         = amq.topic
-   mqtt.subscription_ttl = 1800000
+   mqtt.max_session_expiry_interval_seconds = 86400
    mqtt.prefetch         = 10
    mqtt.sparkplug      = true
    mqtt.listeners.ssl    = none
@@ -15,7 +15,9 @@
    mqtt.tcp_listen_options.backlog = 128
    mqtt.tcp_listen_options.nodelay = true
    mqtt.durable_queue_type = classic
-   mqtt.proxy_protocol = false",
+   mqtt.proxy_protocol = false
+   mqtt.mailbox_soft_limit = 200
+   mqtt.topic_alias_maximum = 16",
   [{rabbit,[{tcp_listeners,[5672]}]},
    {rabbitmq_mqtt,
        [{default_user,<<"guest">>},
@@ -23,14 +25,16 @@
         {allow_anonymous,true},
         {vhost,<<"/">>},
         {exchange,<<"amq.topic">>},
-        {subscription_ttl,1800000},
+        {max_session_expiry_interval_seconds,86400},
         {prefetch,10},
         {sparkplug,true},
         {ssl_listeners,[]},
         {tcp_listeners,[1883]},
         {tcp_listen_options,[{backlog,128},{nodelay,true}]},
         {durable_queue_type,classic},
-        {proxy_protocol,false}]}],
+        {proxy_protocol,false},
+        {mailbox_soft_limit,200},
+        {topic_alias_maximum,16}]}],
   [rabbitmq_mqtt]},
 
  {listener_tcp_options,
@@ -102,7 +106,7 @@
    mqtt.allow_anonymous  = true
    mqtt.vhost            = /
    mqtt.exchange         = amq.topic
-   mqtt.subscription_ttl = undefined
+   mqtt.max_session_expiry_interval_seconds = infinity
    mqtt.prefetch         = 10
    mqtt.proxy_protocol = true",
   [{rabbit,[{tcp_listeners,[5672]}]},
@@ -112,7 +116,7 @@
         {allow_anonymous,true},
         {vhost,<<"/">>},
         {exchange,<<"amq.topic">>},
-        {subscription_ttl,undefined},
+        {max_session_expiry_interval_seconds,infinity},
         {prefetch,10},
         {proxy_protocol,true}]}],
   [rabbitmq_mqtt]},
@@ -122,7 +126,7 @@
    mqtt.allow_anonymous  = true
    mqtt.vhost            = /
    mqtt.exchange         = amq.topic
-   mqtt.subscription_ttl = 1800000
+   mqtt.max_session_expiry_interval_seconds = 1800
    mqtt.prefetch         = 10
 ## use DETS (disk-based) store for retained messages
    mqtt.retained_message_store = rabbit_mqtt_retained_msg_store_dets
@@ -137,10 +141,31 @@
         {allow_anonymous,true},
         {vhost,<<"/">>},
         {exchange,<<"amq.topic">>},
-        {subscription_ttl,1800000},
+        {max_session_expiry_interval_seconds,1800},
         {prefetch,10},
         {retained_message_store,rabbit_mqtt_retained_msg_store_dets},
         {retained_message_store_dets_sync_interval,2000},
         {ssl_listeners,[]},
         {tcp_listeners,[1883]}]}],
-  [rabbitmq_mqtt]}].
+  [rabbitmq_mqtt]},
+
+ {mailbox_soft_limit,
+  "mqtt.mailbox_soft_limit = 30",
+  [{rabbitmq_mqtt,[
+      {mailbox_soft_limit, 30}]}],
+   [rabbitmq_mqtt]},
+
+ {max_packet_size,
+  "mqtt.max_packet_size_unauthenticated = 1234
+   mqtt.max_packet_size_authenticated = 5678",
+  [{rabbitmq_mqtt,[
+      {max_packet_size_unauthenticated, 1234},
+      {max_packet_size_authenticated, 5678}]}],
+   [rabbitmq_mqtt]},
+
+  {topic_alias_maximum,
+  "mqtt.topic_alias_maximum = 0",
+  [{rabbitmq_mqtt,[
+      {topic_alias_maximum, 0}]}],
+   [rabbitmq_mqtt]}
+].

@@ -1,0 +1,146 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+            "+warn_export_vars",
+            "+warnings_as_errors",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+            "+warn_export_vars",
+            "+warnings_as_errors",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "other_beam",
+    srcs = [
+        "src/khepri_mnesia_migration_app.erl",
+        "src/khepri_mnesia_migration_sup.erl",
+        "src/kmm_utils.erl",
+        "src/m2k_cluster_sync.erl",
+        "src/m2k_cluster_sync_sup.erl",
+        "src/m2k_export.erl",
+        "src/m2k_subscriber.erl",
+        "src/m2k_table_copy.erl",
+        "src/m2k_table_copy_sup.erl",
+        "src/m2k_table_copy_sup_sup.erl",
+        "src/mnesia_to_khepri.erl",
+        "src/mnesia_to_khepri_example_converter.erl",
+    ],
+    hdrs = [":public_and_private_hdrs"],
+    app_name = "khepri_mnesia_migration",
+    beam = [":behaviours"],
+    dest = "ebin",
+    erlc_opts = "//:erlc_opts",
+    deps = ["@khepri//:erlang_app"],
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [
+        ":behaviours",
+        ":other_beam",
+    ],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/khepri_mnesia_migration.app.src",
+        "src/khepri_mnesia_migration_app.erl",
+        "src/khepri_mnesia_migration_sup.erl",
+        "src/kmm_utils.erl",
+        "src/m2k_cluster_sync.erl",
+        "src/m2k_cluster_sync_sup.erl",
+        "src/m2k_export.erl",
+        "src/m2k_subscriber.erl",
+        "src/m2k_table_copy.erl",
+        "src/m2k_table_copy_sup.erl",
+        "src/m2k_table_copy_sup_sup.erl",
+        "src/mnesia_to_khepri.erl",
+        "src/mnesia_to_khepri_example_converter.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [
+        "src/kmm_error.hrl",
+        # "src/kmm_logging.hrl", # keep
+    ],
+)
+
+filegroup(
+    name = "public_hdrs",
+    srcs = ["src/kmm_logging.hrl"] + glob(["include/**/*.hrl"]), # keep
+)
+
+filegroup(
+    name = "priv",
+    srcs = glob(["priv/**/*"]),
+)
+
+filegroup(
+    name = "licenses",
+    srcs = [
+        "LICENSE-Apache-2.0",
+        "LICENSE-MPL-2.0",
+    ],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
+    app_name = "khepri_mnesia_migration",
+    beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = ["@khepri//:erlang_app"],
+)
+
+alias(
+    name = "khepri_mnesia_migration",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+erlang_bytecode(
+    name = "behaviours",
+    srcs = [
+        "src/mnesia_to_khepri_converter.erl",
+    ],
+    hdrs = [":public_and_private_hdrs"],
+    app_name = "khepri_mnesia_migration",
+    dest = "ebin",
+    erlc_opts = "//:erlc_opts",
+)
+
+filegroup(
+    name = "license_files",
+    srcs = glob(["LICENSE*"]),
+)

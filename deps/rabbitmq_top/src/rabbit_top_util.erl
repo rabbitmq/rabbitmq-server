@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_top_util).
@@ -49,7 +49,7 @@ fmt_all(Info) -> [{K, fmt(V)} || {K, V} <- Info].
 fmt(Pid) when is_pid(Pid) ->
     list_to_binary(pid_to_list(Pid));
 fmt(Other) ->
-    list_to_binary(rabbit_misc:format("~p", [Other])).
+    list_to_binary(rabbit_misc:format("~tp", [Other])).
 
 obtain_name(Pid) ->
     lists:foldl(fun(Fun,  fail) -> Fun(Pid);

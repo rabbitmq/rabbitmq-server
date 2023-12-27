@@ -26,6 +26,11 @@ const CONSUMER_OWNER_FORMATTERS_COMPARATOR = function(formatter1, formatter2) {
     return formatter1.order - formatter2.order;
 }
 
+const DEPRECATION_PHASES = [['permitted_by_default', 'Permitted by default'],
+                            ['denied_by_default', 'Denied by default'],
+                            ['disconnect', 'Disconnect'],
+                            ['removed', 'Removed']];
+
 function fmt_string(str, unknown) {
     if (unknown == undefined) {
         unknown = UNKNOWN_REPR;
@@ -194,6 +199,9 @@ function args_to_features(obj) {
     if (obj.messages_delayed != undefined){
         res['messages delayed'] = obj.messages_delayed;
     }
+    if (obj.storage_version){
+	res['queue storage version'] = obj.storage_version
+    }
     return res;
 }
 
@@ -275,6 +283,7 @@ function fmt_rate_num(num) {
 }
 
 function fmt_num_thousands(num) {
+    if (num == undefined) return UNKNOWN_REPR;
     var conv_num = parseFloat(num); // to avoid errors, if someone calls fmt_num_thousands(someNumber.toFixed(0))
     return fmt_num_thousands_unfixed(conv_num.toFixed(0));
 }
@@ -288,11 +297,9 @@ function fmt_num_thousands_unfixed(num) {
 }
 
 function fmt_percent(num) {
-    if (num === '') {
-        return 'N/A';
-    } else {
-        return Math.round(num * 100) + '%';
-    }
+    if (num == undefined) return UNKNOWN_REPR;
+    if (num === '') return UNKNOWN_REPR;
+    return Math.round(num * 100) + '%';
 }
 
 function pick_rate(fmt, obj, name, mode) {
@@ -618,6 +625,11 @@ function fmt_object_state(obj) {
     else if (obj.state == 'stopped') {
         colour = 'red';
         explanation = 'The queue process was stopped by the vhost supervisor.';
+    }
+    else if (obj.state == 'minority') {
+        colour = 'yellow';
+        explanation = 'The queue does not have sufficient online members to ' +
+            'make progress'
     }
 
     return fmt_state(colour, text, explanation);
@@ -1101,4 +1113,14 @@ function isNumberKey(evt){
     if (charCode > 31 && (charCode < 48 || charCode > 57))
         return false;
     return true;
+}
+
+function fmt_deprecation_phase(phase, deprecation_phases){
+    for (var i in deprecation_phases) {
+        var deprecation_phase = deprecation_phases[i][0];
+
+        if (phase == deprecation_phase) {
+            return deprecation_phases[i][1];
+        }
+    }
 }

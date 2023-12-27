@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 
@@ -75,6 +75,9 @@ report_ram_duration(Pid, QueueDuration) ->
 stop() ->
     gen_server2:cast(?SERVER, stop).
 
+-spec conserve_resources(pid(),
+                         rabbit_alarm:resource_alarm_source(),
+                         rabbit_alarm:resource_alert()) -> ok.
 %% Paging should be enabled/disabled only in response to disk resource alarms
 %% for the current node.
 conserve_resources(Pid, disk, {_, Conserve, Node}) when node(Pid) =:= Node ->
@@ -163,7 +166,7 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, #state { timer = TRef }) ->
-    timer:cancel(TRef),
+    _ = timer:cancel(TRef),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->

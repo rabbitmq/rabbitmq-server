@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 -module(prometheus_rabbitmq_core_metrics_collector).
 -export([register/0,
@@ -15,6 +15,8 @@
                                    gauge_metric/2,
                                    counter_metric/2,
                                    untyped_metric/2]).
+
+-import(prometheus_text_format, [escape_label_value/1]).
 
 -include_lib("prometheus/include/prometheus.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -117,15 +119,15 @@
     ]},
 
     {auth_attempt_metrics, [
-        {2, undefined, auth_attempts_total, counter, "Total number of authorization attempts"},
+        {2, undefined, auth_attempts_total, counter, "Total number of authentication attempts"},
         {3, undefined, auth_attempts_succeeded_total, counter, "Total number of successful authentication attempts"},
         {4, undefined, auth_attempts_failed_total, counter, "Total number of failed authentication attempts"}
     ]},
 
     {auth_attempt_detailed_metrics, [
-        {2, undefined, auth_attempts_detailed_total, counter, "Total number of authorization attempts with source info"},
-        {3, undefined, auth_attempts_detailed_succeeded_total, counter, "Total number of successful authorization attempts with source info"},
-        {4, undefined, auth_attempts_detailed_failed_total, counter, "Total number of failed authorization attempts with source info"}
+        {2, undefined, auth_attempts_detailed_total, counter, "Total number of authentication attempts with source info"},
+        {3, undefined, auth_attempts_detailed_succeeded_total, counter, "Total number of successful authentication attempts with source info"},
+        {4, undefined, auth_attempts_detailed_failed_total, counter, "Total number of failed authentication attempts with source info"}
     ]},
 
 %%% Those metrics have reference only to a queue name. This is the only group where filtering (e.g. by vhost) makes sense.
@@ -262,13 +264,14 @@ collect_mf(_Registry, Callback) ->
     ok.
 
 collect(PerObjectMetrics, Prefix, VHostsFilter, QueuesFilter, IncludedMFs, Callback) ->
-    [begin
+    _ = [begin
          Data = get_data(Table, PerObjectMetrics, VHostsFilter, QueuesFilter),
          mf(Callback, Prefix, Contents, Data)
-     end || {Table, Contents} <- IncludedMFs, not mutually_exclusive_mf(PerObjectMetrics, Table, IncludedMFs)].
+     end || {Table, Contents} <- IncludedMFs, not mutually_exclusive_mf(PerObjectMetrics, Table, IncludedMFs)],
+    ok.
 
 totals(Callback) ->
-    [begin
+    _ = [begin
          Size = ets:info(Table, size),
          mf_totals(Callback, Name, Type, Help, Size)
      end || {Table, Name, Type, Help} <- ?TOTALS],
@@ -345,7 +348,7 @@ add_metric_family({Name, Type, Help, Metrics}, Callback) ->
     Callback(create_mf(MN, Help, Type, Metrics)).
 
 mf(Callback, Prefix, Contents, Data) ->
-    [begin
+    _ = [begin
          Fun = case Conversion of
                    undefined ->
                        fun(D) -> element(Index, D) end;
@@ -390,8 +393,15 @@ mf_totals(Callback, Name, Type, Help, Size) ->
         )
     ).
 
+has_value_p('NaN') ->
+    false;
+has_value_p(undefined) ->
+    false;
+has_value_p(_) ->
+    true.
+
 collect_metrics(_, {Type, Fun, Items}) ->
-    [metric(Type, labels(Item), Fun(Item)) || Item <- Items].
+    [metric(Type, labels(Item), V) || {Item, V} <- [{Item, Fun(Item)} || Item <- Items], has_value_p(V)].
 
 labels(Item) ->
     label(element(1, Item)).
@@ -400,22 +410,24 @@ label(L) when is_binary(L) ->
     L;
 label(M) when is_map(M) ->
     maps:fold(fun (K, V, Acc = <<>>) ->
-                      <<Acc/binary, K/binary, "=\"", V/binary, "\"">>;
+                      <<Acc/binary, K/binary, "=\"", (escape_label_value(V))/binary, "\"">>;
                   (K, V, Acc) ->
-                      <<Acc/binary, ",", K/binary, "=\"", V/binary, "\"">>
+                      <<Acc/binary, ",", K/binary, "=\"", (escape_label_value(V))/binary, "\"">>
               end, <<>>, M);
 label(#resource{virtual_host = VHost, kind = exchange, name = Name}) ->
-    <<"vhost=\"", VHost/binary, "\",exchange=\"", Name/binary, "\"">>;
+    <<"vhost=\"", (escape_label_value(VHost))/binary, "\",",
+      "exchange=\"", (escape_label_value(Name))/binary, "\"">>;
 label(#resource{virtual_host = VHost, kind = queue, name = Name}) ->
-    <<"vhost=\"", VHost/binary, "\",queue=\"", Name/binary, "\"">>;
+    <<"vhost=\"", (escape_label_value(VHost))/binary, "\",",
+      "queue=\"", (escape_label_value(Name))/binary, "\"">>;
 label({P, {#resource{virtual_host = QVHost, kind = queue, name = QName},
             #resource{virtual_host = EVHost, kind = exchange, name = EName}}}) when is_pid(P) ->
     %% channel_queue_exchange_metrics {channel_id, {queue_id, exchange_id}}
     <<"channel=\"", (iolist_to_binary(pid_to_list(P)))/binary, "\",",
-      "queue_vhost=\"", QVHost/binary, "\",",
-      "queue=\"", QName/binary, "\",",
-      "exchange_vhost=\"", EVHost/binary, "\",",
-      "exchange=\"", EName/binary, "\""
+      "queue_vhost=\"", (escape_label_value(QVHost))/binary, "\",",
+      "queue=\"", (escape_label_value(QName))/binary, "\",",
+      "exchange_vhost=\"", (escape_label_value(EVHost))/binary, "\",",
+      "exchange=\"", (escape_label_value(EName))/binary, "\""
     >>;
 label({RemoteAddress, Username, Protocol}) when is_binary(RemoteAddress), is_binary(Username),
                                                 is_atom(Protocol) ->
@@ -626,16 +638,17 @@ get_data(exchange_bindings, _, _, _) ->
                                 (#exchange{name = EName, type = EType}, Acc) ->
                                     maps:put(EName, #{type => atom_to_binary(EType), binding_count => 0}, Acc)
                             end, #{}, rabbit_exchange:list()),
-    WithCount = ets:foldl(
-                  fun (#route{binding = #binding{source = EName}}, Acc) ->
+    WithCount = rabbit_db_binding:fold(
+                  fun (#binding{source = EName}, Acc) ->
                           case maps:is_key(EName, Acc) of
                               false -> Acc;
                               true ->
-                                  maps:update_with(EName, fun (R = #{binding_count := Cnt}) ->
-                                                                  R#{binding_count => Cnt + 1}
-                                                          end, Acc)
+                                  maps:update_with(EName,
+                                                   fun (R = #{binding_count := Cnt}) ->
+                                                           R#{binding_count => Cnt + 1}
+                                                   end, Acc)
                           end
-                  end, Exchanges, rabbit_route),
+                  end, Exchanges),
     maps:fold(fun(#resource{virtual_host = VHost, name = Name}, #{type := Type, binding_count := Bindings}, Acc) ->
                       [{<<"vhost=\"", VHost/binary, "\",exchange=\"", Name/binary, "\",type=\"", Type/binary, "\"">>,
                         Bindings}|Acc]

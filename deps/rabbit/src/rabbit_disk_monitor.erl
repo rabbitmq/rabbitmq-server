@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_disk_monitor).
@@ -136,9 +136,7 @@ init([Limit]) ->
                {unix, _} ->
                    start_portprogram();
                {win32, _OSname} ->
-                   not_used;
-               _ ->
-                   exit({unsupported_os, OS})
+                   not_used
            end,
     State3 = State2#state{port=Port, os=OS},
 
@@ -163,15 +161,25 @@ handle_call({set_min_check_interval, MinInterval}, _From, State) ->
 handle_call({set_max_check_interval, MaxInterval}, _From, State) ->
     {reply, ok, set_max_check_interval(MaxInterval, State)};
 
-handle_call({set_enabled, _Enabled = true}, _From, State) ->
-    start_timer(set_disk_limits(State, State#state.limit)),
-    rabbit_log:info("Free disk space monitor was enabled"),
+handle_call({set_enabled, _Enabled = true}, _From, State = #state{enabled = true}) ->
+    _ = start_timer(set_disk_limits(State, State#state.limit)),
+    rabbit_log:info("Free disk space monitor was already enabled"),
     {reply, ok, State#state{enabled = true}};
 
-handle_call({set_enabled, _Enabled = false}, _From, State) ->
-    erlang:cancel_timer(State#state.timer),
+handle_call({set_enabled, _Enabled = true}, _From, State = #state{enabled = false}) ->
+  _ = start_timer(set_disk_limits(State, State#state.limit)),
+  rabbit_log:info("Free disk space monitor was manually enabled"),
+  {reply, ok, State#state{enabled = true}};
+
+handle_call({set_enabled, _Enabled = false}, _From, State = #state{enabled = true}) ->
+    _ = erlang:cancel_timer(State#state.timer),
     rabbit_log:info("Free disk space monitor was manually disabled"),
     {reply, ok, State#state{enabled = false}};
+
+handle_call({set_enabled, _Enabled = false}, _From, State = #state{enabled = false}) ->
+  _ = erlang:cancel_timer(State#state.timer),
+  rabbit_log:info("Free disk space monitor was already disabled"),
+  {reply, ok, State#state{enabled = false}};
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -250,7 +258,7 @@ safe_ets_lookup(Key, Default) ->
     end.
 
 % the partition / drive containing this directory will be monitored
-dir() -> rabbit_mnesia:dir().
+dir() -> rabbit:data_dir().
 
 set_min_check_interval(MinInterval, State) ->
     ets:insert(?ETS_NAME, {min_check_interval, MinInterval}),
@@ -274,6 +282,7 @@ internal_update(State = #state{limit   = Limit,
                                os      = OS,
                                port    = Port}) ->
     CurrentFree = get_disk_free(Dir, OS, Port),
+    %% note: 'NaN' is considered to be less than a number
     NewAlarmed = CurrentFree < Limit,
     case {Alarmed, NewAlarmed} of
         {false, true} ->
@@ -313,23 +322,30 @@ get_disk_free(Dir, {win32, _}, not_used) ->
                 end,
             % Note: we can use os_mon_sysinfo:get_disk_info/1 after the following is fixed:
             % https://github.com/erlang/otp/issues/6156
-            [DriveInfoStr] = lists:filter(F, os_mon_sysinfo:get_disk_info()),
+            try
+                  % Note: DriveInfoStr is in this format
+                  % "C:\\ DRIVE_FIXED 720441434112 1013310287872 720441434112\n"
+                  Lines = os_mon_sysinfo:get_disk_info(),
+                  [DriveInfoStr] = lists:filter(F, Lines),
+                  [DriveLetter, $:, $\\, $\s | DriveInfo] = DriveInfoStr,
 
-            % Note: DriveInfoStr is in this format
-            % "C:\\ DRIVE_FIXED 720441434112 1013310287872 720441434112\n"
-            [DriveLetter, $:, $\\, $\s | DriveInfo] = DriveInfoStr,
-
-            % https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdiskfreespaceexa
-            % lib/os_mon/c_src/win32sysinfo.c:
-            % if (fpGetDiskFreeSpaceEx(drive,&availbytes,&totbytes,&totbytesfree)){
-            %     sprintf(answer,"%s DRIVE_FIXED %I64u %I64u %I64u\n",drive,availbytes,totbytes,totbytesfree);
-            ["DRIVE_FIXED", FreeBytesAvailableToCallerStr,
-             _TotalNumberOfBytesStr, _TotalNumberOfFreeBytesStr] = string:tokens(DriveInfo, " "),
-            list_to_integer(FreeBytesAvailableToCallerStr)
+                  % https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdiskfreespaceexa
+                  % lib/os_mon/c_src/win32sysinfo.c:
+                  % if (fpGetDiskFreeSpaceEx(drive,&availbytes,&totbytes,&totbytesfree)){
+                  %     sprintf(answer,"%s DRIVE_FIXED %I64u %I64u %I64u\n",drive,availbytes,totbytes,totbytesfree);
+                  ["DRIVE_FIXED", FreeBytesAvailableToCallerStr,
+                  _TotalNumberOfBytesStr, _TotalNumberOfFreeBytesStr] = string:tokens(DriveInfo, " "),
+                  list_to_integer(FreeBytesAvailableToCallerStr)
+            catch _:{timeout, _}:_ ->
+                    %% could not compute the result
+                    'NaN';
+                  _:Reason:_ ->
+                    rabbit_log:warning("Free disk space monitoring failed to retrieve the amount of available space: ~p", [Reason]),
+                    %% could not compute the result
+                    'NaN'
+             end
     end.
 
-parse_free_unix({error, Error}) ->
-    exit({unparseable, Error});
 parse_free_unix(Str) ->
     case string:tokens(Str, "\n") of
         [_, S | _] -> case string:tokens(S, " \t") of
@@ -396,7 +412,7 @@ interpret_limit(Absolute) ->
 
 emit_update_info(StateStr, CurrentFree, Limit) ->
     rabbit_log:info(
-      "Free disk space is ~s. Free bytes: ~b. Limit: ~b",
+      "Free disk space is ~ts. Free bytes: ~b. Limit: ~b",
       [StateStr, CurrentFree, Limit]).
 
 start_timer(State) ->

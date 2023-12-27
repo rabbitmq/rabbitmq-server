@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQCtl.MixfileBase do
   use Mix.Project
@@ -10,14 +10,17 @@ defmodule RabbitMQCtl.MixfileBase do
   def project do
     [
       app: :rabbitmqctl,
-      version: "3.12.0-dev",
-      elixir: ">= 1.13.4 and < 1.15.0",
-      build_embedded: Mix.env == :prod,
-      start_permanent: Mix.env == :prod,
-      escript: [main_module: RabbitMQCtl,
-                emu_args: "-hidden",
-                path: "escript/rabbitmqctl"],
-      deps: deps(),
+      version: "3.13.0-dev",
+      elixir: ">= 1.13.4 and < 1.16.0",
+      build_embedded: Mix.env() == :prod,
+      start_permanent: Mix.env() == :prod,
+      escript: [
+        main_module: RabbitMQCtl,
+        emu_args: "-noinput -hidden",
+        path: "escript/rabbitmqctl"
+      ],
+      prune_code_paths: false,
+      deps: deps(Mix.env()),
       aliases: aliases(),
       xref: [
         exclude: [
@@ -32,6 +35,7 @@ defmodule RabbitMQCtl.MixfileBase do
           :rabbit,
           :rabbit_control_misc,
           :rabbit_data_coercion,
+          :rabbit_db_cluster,
           :rabbit_env,
           :rabbit_event,
           :rabbit_file,
@@ -47,55 +51,62 @@ defmodule RabbitMQCtl.MixfileBase do
           :stdout_formatter
         ]
       ]
-   ]
+    ]
   end
 
   # Configuration for the OTP application
   #
   # Type "mix help compile.app" for more information
   def application do
-    [applications: [:logger],
-     env: [scopes: ['rabbitmq-plugins': :plugins,
-                    rabbitmqctl: :ctl,
-                    'rabbitmq-diagnostics': :diagnostics,
-                    'rabbitmq-queues': :queues,
-                    'rabbitmq-streams': :streams,
-                    'rabbitmq-upgrade': :upgrade,
-                    'rabbitmq-tanzu': :tanzu
-     ]]
+    [
+      applications: [:logger],
+      env: [
+        scopes: [
+          "rabbitmq-plugins": :plugins,
+          rabbitmqctl: :ctl,
+          "rabbitmq-diagnostics": :diagnostics,
+          "rabbitmq-queues": :queues,
+          "rabbitmq-streams": :streams,
+          "rabbitmq-upgrade": :upgrade,
+          "vmware-rabbitmq": :vmware
+        ]
+      ]
     ]
-    |> add_modules(Mix.env)
+    |> add_modules(Mix.env())
   end
-
 
   defp add_modules(app, :test) do
     # There are issues with building a package without this line ¯\_(ツ)_/¯
-    Mix.Project.get
-    path = Mix.Project.compile_path
+    Mix.Project.get()
+    path = Mix.Project.compile_path()
     mods = modules_from(Path.wildcard("#{path}/*.beam"))
-    test_modules = [RabbitMQ.CLI.Ctl.Commands.DuckCommand,
-                    RabbitMQ.CLI.Ctl.Commands.GrayGooseCommand,
-                    RabbitMQ.CLI.Ctl.Commands.UglyDucklingCommand,
-                    RabbitMQ.CLI.Plugins.Commands.StorkCommand,
-                    RabbitMQ.CLI.Plugins.Commands.HeronCommand,
-                    RabbitMQ.CLI.Custom.Commands.CrowCommand,
-                    RabbitMQ.CLI.Custom.Commands.RavenCommand,
-                    RabbitMQ.CLI.Seagull.Commands.SeagullCommand,
-                    RabbitMQ.CLI.Seagull.Commands.PacificGullCommand,
-                    RabbitMQ.CLI.Seagull.Commands.HerringGullCommand,
-                    RabbitMQ.CLI.Seagull.Commands.HermannGullCommand,
-                    RabbitMQ.CLI.Wolf.Commands.CanisLupusCommand,
-                    RabbitMQ.CLI.Wolf.Commands.CanisLatransCommand,
-                    RabbitMQ.CLI.Wolf.Commands.CanisAureusCommand
-                  ]
-    [{:modules, mods ++ test_modules |> Enum.sort} | app]
+
+    test_modules = [
+      RabbitMQ.CLI.Ctl.Commands.DuckCommand,
+      RabbitMQ.CLI.Ctl.Commands.GrayGooseCommand,
+      RabbitMQ.CLI.Ctl.Commands.UglyDucklingCommand,
+      RabbitMQ.CLI.Plugins.Commands.StorkCommand,
+      RabbitMQ.CLI.Plugins.Commands.HeronCommand,
+      RabbitMQ.CLI.Custom.Commands.CrowCommand,
+      RabbitMQ.CLI.Custom.Commands.RavenCommand,
+      RabbitMQ.CLI.Seagull.Commands.SeagullCommand,
+      RabbitMQ.CLI.Seagull.Commands.PacificGullCommand,
+      RabbitMQ.CLI.Seagull.Commands.HerringGullCommand,
+      RabbitMQ.CLI.Seagull.Commands.HermannGullCommand,
+      RabbitMQ.CLI.Wolf.Commands.CanisLupusCommand,
+      RabbitMQ.CLI.Wolf.Commands.CanisLatransCommand,
+      RabbitMQ.CLI.Wolf.Commands.CanisAureusCommand
+    ]
+
+    [{:modules, (mods ++ test_modules) |> Enum.sort()} | app]
   end
+
   defp add_modules(app, _) do
     app
   end
 
   defp modules_from(beams) do
-    Enum.map beams, &(&1 |> Path.basename |> Path.rootname(".beam") |> String.to_atom)
+    Enum.map(beams, &(&1 |> Path.basename() |> Path.rootname(".beam") |> String.to_atom()))
   end
 
   # Dependencies can be Hex packages:
@@ -117,83 +128,104 @@ defmodule RabbitMQCtl.MixfileBase do
   # from Hex.pm in RabbitMQ source archive (the source archive must be
   # self-contained and RabbitMQ must be buildable offline). However, we
   # don't have the equivalent for other methods.
-  defp deps() do
-    elixir_deps = [
-      {:json, "~> 1.4.1"},
-      {:csv, "~> 2.4.0"},
-      {:stdout_formatter, "~> 0.2.3"},
-      {:observer_cli, "~> 1.7.3"},
+  defp deps(env) do
+    deps_dir = System.get_env("DEPS_DIR", "deps")
 
-      {:amqp, "~> 2.1.0", only: :test},
-      {:dialyxir, "~> 0.5", only: :test, runtime: false},
-      {:temp, "~> 0.4", only: :test},
-      {:x509, "~> 0.7", only: :test}
-    ]
-
-    rabbitmq_deps = case System.get_env("DEPS_DIR") do
-      nil ->
-        # rabbitmq_cli is built as a standalone Elixir application.
-        [
-          {:rabbit_common, "~> 3.8.0"},
-          {:amqp_client, "~> 3.8.0", only: :test}
-        ]
-      deps_dir ->
-        # rabbitmq_cli is built as part of RabbitMQ.
-
-        # Mix is confused by any `rebar.{config,lock}` we might have left in
-        # `rabbit_common` or `amqp_client`. So just remove those files to be
-        # safe, as they are generated when we publish to Hex.pm only.
-        for dir <- ["rabbit_common", "amqp_client"] do
-          for file <- ["rebar.config", "rebar.lock"] do
-            File.rm(Path.join([deps_dir, dir, file]))
-          end
-        end
-
-        make_cmd = System.get_env("MAKE", "make")
-        is_bazel = System.get_env("IS_BAZEL") != nil
-
-        [
-          {
-            :rabbit_common,
-            path: Path.join(deps_dir, "rabbit_common"),
-            compile: (if is_bazel, do: false, else: make_cmd),
-            override: true
-          },
-          {
-            :amqp_client,
-            path: Path.join(deps_dir, "amqp_client"),
-            compile: (if is_bazel, do: false, else: make_cmd),
-            override: true,
-            only: :test
-          },
-        ]
+    # Mix is confused by any `rebar.{config,lock}` we might have left in
+    # `rabbit_common` or `amqp_client`. So just remove those files to be
+    # safe, as they are generated when we publish to Hex.pm only.
+    for dir <- ["rabbit_common", "amqp_client"] do
+      for file <- ["rebar.config", "rebar.lock"] do
+        File.rm(Path.join([deps_dir, dir, file]))
+      end
     end
 
-    elixir_deps ++ rabbitmq_deps
+    make_cmd = System.get_env("MAKE", "make")
+    fake_cmd = "true"
+    is_bazel = System.get_env("IS_BAZEL") != nil
+
+    [
+      {
+        :json,
+        path: Path.join(deps_dir, "json")
+      },
+      {
+        :csv,
+        path: Path.join(deps_dir, "csv")
+      },
+      {
+        :stdout_formatter,
+        path: Path.join(deps_dir, "stdout_formatter"),
+        compile: if(is_bazel, do: fake_cmd, else: make_cmd)
+      },
+      {
+        :observer_cli,
+        path: Path.join(deps_dir, "observer_cli"),
+        compile: if(is_bazel, do: fake_cmd, else: make_cmd)
+      },
+      {
+        :rabbit_common,
+        path: Path.join(deps_dir, "rabbit_common"),
+        compile: if(is_bazel, do: fake_cmd, else: make_cmd),
+        override: true
+      }
+    ] ++
+      case env do
+        :test ->
+          [
+            {
+              :amqp,
+              path: Path.join(deps_dir, "amqp")
+            },
+            {
+              :rabbit,
+              path: Path.join(deps_dir, "rabbit"),
+              compile: if(is_bazel, do: fake_cmd, else: make_cmd),
+              override: true
+            },
+            {
+              :temp,
+              path: Path.join(deps_dir, "temp")
+            },
+            {
+              :x509,
+              path: Path.join(deps_dir, "x509")
+            },
+            {
+              :amqp_client,
+              path: Path.join(deps_dir, "amqp_client"),
+              compile: if(is_bazel, do: fake_cmd, else: make_cmd),
+              override: true
+            }
+          ]
+
+        _ ->
+          []
+      end
   end
 
   defp aliases do
     [
       make_deps: [
         "deps.get",
-        "deps.compile",
+        "deps.compile"
       ],
       make_app: [
         "compile",
-        "escript.build",
+        "escript.build"
       ],
       make_all: [
         "deps.get",
         "deps.compile",
         "compile",
-        "escript.build",
+        "escript.build"
       ],
       make_all_in_src_archive: [
         "deps.get --only prod",
         "deps.compile",
         "compile",
-        "escript.build",
-      ],
+        "escript.build"
+      ]
     ]
   end
 end

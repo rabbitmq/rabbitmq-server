@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 -module(mqtt_machine_v0).
 -behaviour(ra_machine).
@@ -19,10 +19,10 @@
 -type config() :: map().
 
 -type reply() :: {ok, term()} | {error, term()}.
--type client_id() :: term().
+-type client_id_ra() :: term().
 
--type command() :: {register, client_id(), pid()} |
-                   {unregister, client_id(), pid()} |
+-type command() :: {register, client_id_ra(), pid()} |
+                   {unregister, client_id_ra(), pid()} |
                    list.
 
 -spec init(config()) -> state().
@@ -79,7 +79,7 @@ apply(Meta, {down, DownPid, _}, #machine_state{client_ids = Ids} = State0) ->
     Delta = maps:keys(Ids) -- maps:keys(Ids1),
     Effects = lists:map(fun(Id) ->
                   [{mod_call, rabbit_log, debug,
-                    ["MQTT connection with client id '~s' failed", [Id]]}] end, Delta),
+                    ["MQTT connection with client id '~ts' failed", [Id]]}] end, Delta),
     {State, ok, Effects ++ snapshot_effects(Meta, State)};
 
 apply(_Meta, {nodeup, Node}, State) ->
@@ -101,7 +101,7 @@ apply(Meta, {leave, Node}, #machine_state{client_ids = Ids} = State0) ->
                             {demonitor, process, Pid},
                             {mod_call, ?MODULE, notify_connection, [Pid, decommission_node]},
                             {mod_call, rabbit_log, debug,
-                              ["MQTT will remove client ID '~s' from known "
+                              ["MQTT will remove client ID '~ts' from known "
                                "as its node has been decommissioned", [ClientId]]}
                           ]  ++ Acc
                           end, [], Delta),
@@ -110,9 +110,11 @@ apply(Meta, {leave, Node}, #machine_state{client_ids = Ids} = State0) ->
     {State, ok, Effects ++ snapshot_effects(Meta, State)};
 
 apply(_Meta, Unknown, State) ->
-    logger:error("MQTT Raft state machine received an unknown command ~p", [Unknown]),
+    logger:error("MQTT Raft state machine received an unknown command ~tp", [Unknown]),
     {State, {error, {unknown_command, Unknown}}, []}.
 
+-spec state_enter(ra_server:ra_state(), state()) ->
+    ra_machine:effects().
 state_enter(leader, State) ->
     %% re-request monitors for all known pids, this would clean up
     %% records for all connections are no longer around, e.g. right after node restart
@@ -123,6 +125,7 @@ state_enter(_, _) ->
 %% ==========================
 
 %% Avoids blocking the Raft leader.
+-spec notify_connection(pid(), duplicate_id | decommission_node) -> pid().
 notify_connection(Pid, Reason) ->
   spawn(fun() -> gen_server2:cast(Pid, Reason) end).
 

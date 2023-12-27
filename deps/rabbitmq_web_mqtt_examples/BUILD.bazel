@@ -1,10 +1,20 @@
 load("@rules_erlang//:xref2.bzl", "xref")
-load("@rules_erlang//:dialyze.bzl", "dialyze")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "rabbitmq_app",
 )
+load(
+    ":app.bzl",
+    "all_beam_files",
+    "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
+)
+
+# gazelle:erlang_always_generate_test_beam_files
 
 APP_NAME = "rabbitmq_web_mqtt_examples"
 
@@ -16,24 +26,60 @@ APP_ENV = """[
 	    {listener, [{port, 15670}]}
 	  ]"""
 
-RUNTIME_DEPS = [
-    "//deps/rabbit_common:erlang_app",
-    "//deps/rabbit:erlang_app",
-    "//deps/rabbitmq_web_dispatch:erlang_app",
-    "//deps/rabbitmq_web_mqtt:erlang_app",
-]
+all_beam_files(name = "all_beam_files")
+
+all_test_beam_files(name = "all_test_beam_files")
+
+all_srcs(name = "all_srcs")
+
+test_suite_beam_files(name = "test_suite_beam_files")
+
+# gazelle:erlang_app_dep rabbit_common
+# gazelle:erlang_app_dep rabbit
+# gazelle:erlang_app_dep rabbitmq_web_mqtt
 
 rabbitmq_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
     app_module = APP_MODULE,
     app_name = APP_NAME,
-    runtime_deps = RUNTIME_DEPS,
+    beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbitmq_web_dispatch:erlang_app",
+        "//deps/rabbitmq_web_mqtt:erlang_app",
+    ],
 )
 
-xref()
+xref(
+    name = "xref",
+    target = ":erlang_app",
+)
 
-dialyze(
-    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+plt(
+    name = "deps_plt",
+    for_target = ":erlang_app",
+    ignore_warnings = True,
     plt = "//:base_plt",
 )
+
+dialyze(
+    name = "dialyze",
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = ":deps_plt",
+    target = ":erlang_app",
+)
+
+alias(
+    name = "rabbitmq_web_mqtt_examples",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
+
+assert_suites()

@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2016-2022 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.AwaitOnlineNodesCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -37,9 +37,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AwaitOnlineNodesCommand do
   use RabbitMQ.CLI.DefaultOutput
 
   def banner([count], %{node: node_name, timeout: timeout}) when is_number(timeout) do
-    "Will wait for at least #{count} nodes to join the cluster of #{node_name}. Timeout: #{
-      trunc(timeout / 1000)
-    } seconds."
+    "Will wait for at least #{count} nodes to join the cluster of #{node_name}. Timeout: #{trunc(timeout / 1000)} seconds."
   end
 
   def banner([count], %{node: node_name, timeout: _timeout}) do
@@ -52,7 +50,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AwaitOnlineNodesCommand do
 
   def usage_additional() do
     [
-      ["<count>", "how many cluster members must be up in order for this command to exit. When <count> is 1, always exits immediately."]
+      [
+        "<count>",
+        "how many cluster members must be up in order for this command to exit. When <count> is 1, always exits immediately."
+      ]
     ]
   end
 
