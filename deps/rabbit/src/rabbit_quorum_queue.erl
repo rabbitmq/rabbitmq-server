@@ -193,18 +193,20 @@ start_cluster(Q) ->
                  {error, {too_long, N}} ->
                      rabbit_data_coercion:to_atom(ra:new_uid(N))
              end,
-    {Leader, Followers} = rabbit_queue_location:select_leader_and_followers(Q, QuorumSize),
-    LeaderId = {RaName, Leader},
+    {LeaderNode, FollowerNodes} =
+        rabbit_queue_location:select_leader_and_followers(Q, QuorumSize),
+    LeaderId = {RaName, LeaderNode},
     NewQ0 = amqqueue:set_pid(Q, LeaderId),
-    NewQ1 = amqqueue:set_type_state(NewQ0, #{nodes => [Leader | Followers]}),
+    NewQ1 = amqqueue:set_type_state(NewQ0,
+                                    #{nodes => [LeaderNode | FollowerNodes]}),
 
     rabbit_log:debug("Will start up to ~w replicas for quorum ~ts with leader on node '~ts'",
-                     [QuorumSize, rabbit_misc:rs(QName), Leader]),
+                     [QuorumSize, rabbit_misc:rs(QName), LeaderNode]),
     case rabbit_amqqueue:internal_declare(NewQ1, false) of
         {created, NewQ} ->
             RaConfs = [make_ra_conf(NewQ, ServerId)
                        || ServerId <- members(NewQ)],
-            try erpc_call(Leader, ra, start_cluster,
+            try erpc_call(LeaderNode, ra, start_cluster,
                           [?RA_SYSTEM, RaConfs, ?START_CLUSTER_TIMEOUT],
                           ?START_CLUSTER_RPC_TIMEOUT) of
                 {ok, _, _} ->
@@ -228,10 +230,10 @@ start_cluster(Q) ->
                                           ActingUser}]),
                     {new, NewQ};
                 {error, Error} ->
-                    declare_queue_error(Error, NewQ, Leader, ActingUser)
+                    declare_queue_error(Error, NewQ, LeaderNode, ActingUser)
             catch
                 error:Error ->
-                    declare_queue_error(Error, NewQ, Leader, ActingUser)
+                    declare_queue_error(Error, NewQ, LeaderNode, ActingUser)
             end;
         {existing, _} = Ex ->
             Ex
@@ -321,26 +323,28 @@ local_or_remote_handler(ChPid, Module, Function, Args) ->
     end.
 
 become_leader(QName, Name) ->
+    %% as this function is called synchronously when a ra node becomes leader
+    %% we need to ensure there is no chance of blocking as else the ra node
+    %% may not be able to establish its leadership
+    spawn(fun () -> become_leader0(QName, Name) end).
+
+become_leader0(QName, Name) ->
     Fun = fun (Q1) ->
                   amqqueue:set_state(
                     amqqueue:set_pid(Q1, {Name, node()}),
                     live)
           end,
-    %% as this function is called synchronously when a ra node becomes leader
-    %% we need to ensure there is no chance of blocking as else the ra node
-    %% may not be able to establish its leadership
-    spawn(fun() ->
-                  _ = rabbit_amqqueue:update(QName, Fun),
-                  case rabbit_amqqueue:lookup(QName) of
-                      {ok, Q0} when ?is_amqqueue(Q0) ->
-                          Nodes = get_nodes(Q0),
-                          [_ = erpc_call(Node, ?MODULE, rpc_delete_metrics,
-                                         [QName], ?RPC_TIMEOUT)
-                           || Node <- Nodes, Node =/= node()];
-                      _ ->
-                          ok
-                  end
-          end).
+    _ = rabbit_amqqueue:update(QName, Fun),
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q0} when ?is_amqqueue(Q0) ->
+            Nodes = get_nodes(Q0),
+            _ = [_ = erpc_call(Node, ?MODULE, rpc_delete_metrics,
+                               [QName], ?RPC_TIMEOUT)
+                 || Node <- Nodes, Node =/= node()],
+            ok;
+        _ ->
+            ok
+    end.
 
 -spec all_replica_states() -> {node(), #{atom() => atom()}}.
 all_replica_states() ->
@@ -496,7 +500,7 @@ handle_tick(QName,
               catch
                   _:Err ->
                       rabbit_log:debug("~ts: handle tick failed with ~p",
-                             [rabbit_misc:rs(QName), Err]),
+                                       [rabbit_misc:rs(QName), Err]),
                       ok
               end
       end).
@@ -512,7 +516,7 @@ repair_leader_record(QName, Self) ->
             rabbit_log:debug("~ts: repairing leader record",
                              [rabbit_misc:rs(QName)]),
             {_, Name} = erlang:process_info(Self, registered_name),
-            become_leader(QName, Name),
+            ok = become_leader0(QName, Name),
             ok
     end,
     ok.
@@ -579,7 +583,7 @@ recover(_Vhost, Queues) ->
                           Err1 == name_not_registered ->
                        rabbit_log:warning("Quorum queue recovery: configured member of ~ts was not found on this node. Starting member as a new one. "
                                           "Context: ~s",
-                                       [rabbit_misc:rs(QName), Err1]),
+                                          [rabbit_misc:rs(QName), Err1]),
                        % queue was never started on this node
                        % so needs to be started from scratch.
                        case start_server(make_ra_conf(Q0, ServerId)) of
