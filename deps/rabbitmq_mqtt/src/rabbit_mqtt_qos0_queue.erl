@@ -67,7 +67,8 @@ is_stateful() ->
     false.
 
 -spec declare(amqqueue:amqqueue(), node()) ->
-    {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()}.
+    {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
+    {'absent', amqqueue:amqqueue(), rabbit_amqqueue:absent_reason()}.
 declare(Q0, _Node) ->
     %% The queue gets persisted such that routing to this
     %% queue (via the topic exchange) works as usual.
@@ -84,6 +85,7 @@ declare(Q0, _Node) ->
                                  {arguments, amqqueue:get_arguments(Q0)},
                                  {user_who_performed_action, ActingUser}]),
             {new, Q};
+<<<<<<< HEAD
         {absent, OldQ, nodedown} ->
             %% This case body can be deleted once Mnesia is unsupported.
             OldPid = amqqueue:get_pid(OldQ),
@@ -98,6 +100,8 @@ declare(Q0, _Node) ->
                 Other ->
                     Other
             end;
+=======
+>>>>>>> 78b4fcc899 (Allow MQTT QoS 0 subscribers to reconnect)
         Other ->
             Other
     end.
