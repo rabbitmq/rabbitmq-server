@@ -67,9 +67,13 @@ is_ra_system_running(Children, RaSystem) ->
 -spec ensure_started() -> ok | no_return().
 
 ensure_started() ->
-    ?LOG_DEBUG("Starting Ra systems"),
+    ?LOG_DEBUG(
+       "Starting Ra systems",
+       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
     lists:foreach(fun ensure_ra_system_started/1, all_ra_systems()),
-    ?LOG_DEBUG("Ra systems started"),
+    ?LOG_DEBUG(
+       "Ra systems started",
+       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
     ok.
 
 -spec ensure_ra_system_started(ra_system_name()) -> ok | no_return().
@@ -134,9 +138,13 @@ get_default_config() ->
 -spec ensure_stopped() -> ok | no_return().
 
 ensure_stopped() ->
-    ?LOG_DEBUG("Stopping Ra systems"),
+    ?LOG_DEBUG(
+       "Stopping Ra systems",
+       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
     lists:foreach(fun ensure_ra_system_stopped/1, all_ra_systems()),
-    ?LOG_DEBUG("Ra systems stopped"),
+    ?LOG_DEBUG(
+       "Ra systems stopped",
+       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
     ok.
 
 -spec ensure_ra_system_stopped(ra_system_name()) -> ok | no_return().
