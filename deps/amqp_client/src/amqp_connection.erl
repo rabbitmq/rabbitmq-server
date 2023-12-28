@@ -155,8 +155,9 @@ start(AmqpParams) ->
 %% normal or an SSL connection.
 %% If ConnectionName is binary - it will be added to client_properties as
 %% user specified connection name.
-start(AmqpParams, ConnName) when ConnName == undefined; is_binary(ConnName) ->
+start(AmqpParams_, ConnName) when ConnName == undefined; is_binary(ConnName) ->
     ensure_started(),
+    AmqpParams  = if_maps_into_proplists(AmqpParams_),
     AmqpParams0 =
         case AmqpParams of
             #amqp_params_direct{password = Password} ->
@@ -405,6 +406,22 @@ connection_name(ConnectionPid) ->
         {<<"connection_name">>, _, ConnName} -> ConnName;
         false                                -> undefined
     end.
+
+if_maps_into_proplists(#amqp_params_network{client_properties = []} = Params) ->
+    Params;
+if_maps_into_proplists(#amqp_params_network{client_properties = Props} = Params)  
+  when is_list(Props) ->
+    AsPropLists = [if_map_into_proplist(Prop) || Prop <- Props],
+    Params#amqp_params_network{client_properties = AsPropLists};
+if_maps_into_proplists(#amqp_params_direct{client_properties  = []}  = Params) ->
+    Params;
+if_maps_into_proplists(#amqp_params_direct{client_properties  = Props}  = Params) 
+  when is_list(Props) ->
+    AsPropLists = [if_map_into_proplist(Prop) || Prop <- Props],
+    Params#amqp_params_network{client_properties = AsPropLists}.
+
+if_map_into_proplist({Key, Type, Val}) -> {Key, Type, Val};
+if_map_into_proplist(#{key:=Key, type:=Type, val:=Val}) -> {Key, Type, Val}. 
 
 ensure_safe_call_timeout(#amqp_params_network{connection_timeout = ConnTimeout}, CallTimeout) ->
     maybe_update_call_timeout(ConnTimeout, CallTimeout);
