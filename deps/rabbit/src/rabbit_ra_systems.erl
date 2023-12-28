@@ -29,9 +29,7 @@ setup() ->
 -spec setup(Context :: map()) -> ok | no_return().
 
 setup(_) ->
-    ?LOG_DEBUG("Starting Ra systems"),
-    lists:foreach(fun ensure_ra_system_started/1, all_ra_systems()),
-    ?LOG_DEBUG("Ra systems started"),
+    ensure_started(),
     ok.
 
 -spec all_ra_systems() -> [ra_system_name()].
@@ -39,6 +37,14 @@ setup(_) ->
 all_ra_systems() ->
     [quorum_queues,
      coordination].
+
+-spec ensure_started() -> ok | no_return().
+
+ensure_started() ->
+    ?LOG_DEBUG("Starting Ra systems"),
+    lists:foreach(fun ensure_ra_system_started/1, all_ra_systems()),
+    ?LOG_DEBUG("Ra systems started"),
+    ok.
 
 -spec ensure_ra_system_started(ra_system_name()) -> ok | no_return().
 
