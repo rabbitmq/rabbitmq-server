@@ -14,7 +14,9 @@
 -export([setup/0,
          setup/1,
          all_ra_systems/0,
-         ensure_ra_system_started/1]).
+         ensure_ra_system_started/1,
+         ensure_started/0,
+         ensure_stopped/0]).
 
 -type ra_system_name() :: atom().
 
@@ -104,3 +106,25 @@ get_config(coordination = RaSystem) ->
 
 get_default_config() ->
     ra_system:default_config().
+
+-spec ensure_stopped() -> ok | no_return().
+
+ensure_stopped() ->
+    ?LOG_DEBUG("Stopping Ra systems"),
+    lists:foreach(fun ensure_ra_system_stopped/1, all_ra_systems()),
+    ?LOG_DEBUG("Ra systems stopped"),
+    ok.
+
+-spec ensure_ra_system_stopped(ra_system_name()) -> ok | no_return().
+
+ensure_ra_system_stopped(RaSystem) ->
+    case ra_system:stop(RaSystem) of
+        ok ->
+            ok;
+        {error, _} = Error ->
+            ?LOG_ERROR(
+               "Failed to stop Ra system \"~ts\": ~tp",
+               [RaSystem, Error],
+               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+            throw(Error)
+    end.
