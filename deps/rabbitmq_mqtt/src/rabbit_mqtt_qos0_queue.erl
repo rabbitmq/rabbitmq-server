@@ -85,23 +85,6 @@ declare(Q0, _Node) ->
                                  {arguments, amqqueue:get_arguments(Q0)},
                                  {user_who_performed_action, ActingUser}]),
             {new, Q};
-<<<<<<< HEAD
-        {absent, OldQ, nodedown} ->
-            %% This case body can be deleted once Mnesia is unsupported.
-            OldPid = amqqueue:get_pid(OldQ),
-            OldNode = node(OldPid),
-            rabbit_log_queue:debug(
-              "Overwriting record of ~s of type ~s on node ~s since "
-              "formerly hosting node ~s seems to be down (former pid ~p)",
-              [rabbit_misc:rs(amqqueue:get_name(Q0)), ?MODULE, node(), OldNode, OldPid]),
-            case rabbit_amqqueue:internal_declare(Q0, true) of
-                {created, Q} ->
-                    {new, Q};
-                Other ->
-                    Other
-            end;
-=======
->>>>>>> 78b4fcc899 (Allow MQTT QoS 0 subscribers to reconnect)
         Other ->
             Other
     end.
