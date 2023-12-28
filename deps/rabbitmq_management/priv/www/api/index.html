@@ -760,7 +760,7 @@ vary: accept, accept-encoding, origin</pre>
         <td>An individual user. To PUT a user, you will need a body looking something like this:
 <pre>{"password":"secret","tags":"administrator"}</pre>
 or:
-<pre>{"password_hash":"2lmoth8l4H0DViLaK9Fxi6l9ds8=", "tags":"administrator"}</pre>
+<pre>{"password_hash":"2lmoth8l4H0DViLaK9Fxi6l9ds8=", "tags":["administrator"]}</pre>
         The <code>tags</code> key is mandatory. Either
         <code>password</code> or <code>password_hash</code>
         can be set. If neither are set the user will not be able to log in with a password,
