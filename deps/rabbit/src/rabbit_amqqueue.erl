@@ -1972,7 +1972,8 @@ on_node_down(Node) ->
         {QueueNames, Deletions} ->
             case length(QueueNames) of
                 0 -> ok;
-                _ -> rabbit_log:info("~tp transient queues from an old incarnation of node ~tp deleted in ~fs", [length(QueueNames), Node, Time/1000000])
+                N -> rabbit_log:info("~b transient queues from an old incarnation of node ~tp deleted in ~fs",
+                                     [N, Node, Time / 1_000_000])
             end,
             notify_queue_binding_deletions(Deletions),
             rabbit_core_metrics:queues_deleted(QueueNames),
@@ -1987,6 +1988,7 @@ filter_transient_queues_to_delete(Node) ->
                 andalso (not amqqueue:is_classic(Q) orelse not amqqueue:is_durable(Q))
                 andalso (not rabbit_amqqueue:is_replicated(Q)
                          orelse rabbit_amqqueue:is_dead_exclusive(Q))
+                andalso amqqueue:get_type(Q) =/= rabbit_mqtt_qos0_queue
     end.
 
 notify_queue_binding_deletions(QueueDeletions) when is_list(QueueDeletions) ->
