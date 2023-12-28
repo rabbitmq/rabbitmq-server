@@ -1214,38 +1214,45 @@ rabbit_mqtt_qos0_queue(Config) ->
     ok = emqtt:disconnect(Pub).
 
 rabbit_mqtt_qos0_queue_kill_node(Config) ->
-    Topic = atom_to_binary(?FUNCTION_NAME),
+    Topic1 = <<"t/1">>,
+    Topic2 = <<"t/2">>,
     Pub = connect(<<"publisher">>, Config, 2, []),
 
     SubscriberId = <<"subscriber">>,
     Sub0 = connect(SubscriberId, Config, 0, []),
-    {ok, _, [0]} = emqtt:subscribe(Sub0, Topic, qos0),
-    ok = emqtt:publish(Pub, Topic, <<"m0">>, qos0),
-    ok = expect_publishes(Sub0, Topic, [<<"m0">>]),
+    {ok, _, [0]} = emqtt:subscribe(Sub0, Topic1, qos0),
+    ok = emqtt:publish(Pub, Topic1, <<"m0">>, qos0),
+    ok = expect_publishes(Sub0, Topic1, [<<"m0">>]),
 
     process_flag(trap_exit, true),
     ok = rabbit_ct_broker_helpers:kill_node(Config, 0),
-    %% Wait a bit to ensure that Mnesia deletes the queue record on nodes 1 and 2 from Mnesia
-    %% table rabbit_queue (but the queue record is still present in rabbit_durable_queue).
+    ok = await_exit(Sub0),
+    %% Wait to run rabbit_amqqueue:on_node_down/1 on both live nodes.
     timer:sleep(500),
+    %% Re-connect to a live node with same MQTT client ID.
     Sub1 = connect(SubscriberId, Config, 1, []),
-    {ok, _, [0]} = emqtt:subscribe(Sub1, Topic, qos0),
-    ok = emqtt:publish(Pub, Topic, <<"m1">>, qos0),
-    ok = expect_publishes(Sub1, Topic, [<<"m1">>]),
+    {ok, _, [0]} = emqtt:subscribe(Sub1, Topic2, qos0),
+    ok = emqtt:publish(Pub, Topic2, <<"m1">>, qos0),
+    ok = expect_publishes(Sub1, Topic2, [<<"m1">>]),
+    %% Since we started a new clean session, previous subscription should have been deleted.
+    ok = emqtt:publish(Pub, Topic1, <<"m2">>, qos0),
+    receive {publish, _} = Publish -> ct:fail({unexpected, Publish})
+    after 300 -> ok
+    end,
 
-    %% Start node 0 to have a majority for Khepri.
     ok = rabbit_ct_broker_helpers:start_node(Config, 0),
     ok = rabbit_ct_broker_helpers:kill_node(Config, 1),
-    %% This time, do not wait. Mnesia will contain the queue record in rabbit_durable_queue,
-    %% but this time Mnesia may or may not contain the queue record in rabbit_queue.
+    %% This time, do not wait.
+    %% rabbit_amqqueue:on_node_down/1 may or may not have run.
     Sub2 = connect(SubscriberId, Config, 2, []),
-    {ok, _, [0]} = emqtt:subscribe(Sub2, Topic, qos0),
-    ok = emqtt:publish(Pub, Topic, <<"m2">>, qos0),
-    ok = expect_publishes(Sub2, Topic, [<<"m2">>]),
+    {ok, _, [0]} = emqtt:subscribe(Sub2, Topic2, qos0),
+    ok = emqtt:publish(Pub, Topic2, <<"m3">>, qos0),
+    ok = expect_publishes(Sub2, Topic2, [<<"m3">>]),
 
     ok = emqtt:disconnect(Sub2),
     ok = emqtt:disconnect(Pub),
-    ok = rabbit_ct_broker_helpers:start_node(Config, 1).
+    ok = rabbit_ct_broker_helpers:start_node(Config, 1),
+    ?assertEqual([], rpc(Config, rabbit_db_binding, get_all, [])).
 
 %% Test that MQTT connection can be listed and closed via the rabbitmq_management plugin.
 management_plugin_connection(Config) ->
