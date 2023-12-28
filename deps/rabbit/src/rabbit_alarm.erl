@@ -20,7 +20,7 @@
 
 -behaviour(gen_event).
 
--export([start_link/0, start/0, stop/0, register/2, set_alarm/1,
+-export([start_link/0, start/0, stop/0, register/2, register_async/3, is_registered/1, set_alarm/1,
          clear_alarm/1, get_alarms/0, get_alarms/1, get_local_alarms/0, get_local_alarms/1, on_node_up/1, on_node_down/1,
          format_as_map/1, format_as_maps/1, is_local/1]).
 
@@ -92,6 +92,20 @@ stop() -> ok.
 
 register(Pid, AlertMFA) ->
     gen_event:call(?SERVER, ?MODULE, {register, Pid, AlertMFA}, infinity).
+
+-spec register_async(pid(), reference(), rabbit_types:mfargs()) -> pid().
+
+register_async(Pid, Ref, AlertMFA) ->
+    _ = spawn(
+        fun() ->
+            Alarms = gen_event:call(?SERVER, ?MODULE, {register, Pid, AlertMFA}, infinity),
+            erlang:send(Pid, {alarms_async_registration_reply, self(), Ref, Alarms})
+        end).
+
+-spec is_registered(pid()) -> boolean().
+
+is_registered(Pid) ->
+    gen_event:call(?SERVER, ?MODULE, {is_registered, Pid}, infinity).
 
 -spec set_alarm({alarm(), []}) -> 'ok'.
 
@@ -182,6 +196,14 @@ init([]) ->
 handle_call({register, Pid, AlertMFA}, State = #alarms{alarmed_nodes = AN}) ->
     {ok, lists:usort(lists:append([V || {_, V} <- dict:to_list(AN)])),
      internal_register(Pid, AlertMFA, State)};
+
+handle_call({is_registered, Pid}, State = #alarms{alertees = Alertees}) ->
+    Reply =
+        case dict:find(Pid, Alertees) of
+            {ok, _V} -> true;
+            error    -> false
+        end,
+    {ok, Reply, State};
 
 handle_call(get_alarms, State) ->
     {ok, compute_alarms(State), State};

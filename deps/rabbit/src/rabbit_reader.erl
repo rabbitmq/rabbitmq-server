@@ -60,6 +60,7 @@
 %% from connection storms and DoS.
 -define(SILENT_CLOSE_DELAY, 3).
 -define(CHANNEL_MIN, 1).
+-define(ALARMS_REGISTRATION_CHECK_TIMEOUT, 60_000).
 
 %%--------------------------------------------------------------------------
 
@@ -94,7 +95,9 @@
           %% throttling state, for both
           %% credit- and resource-driven flow control
           throttle,
-          proxy_socket}).
+          proxy_socket,
+          %% flag indicating if connection is subscribed to alarms
+          alarms_enabled = false}).
 
 -record(throttle, {
   %% never | timestamp()
@@ -307,7 +310,8 @@ start_connection(Parent, HelperSup, RanchRef, Deb, Sock) ->
            end,
     {ok, HandshakeTimeout} = application:get_env(rabbit, handshake_timeout),
     InitialFrameMax = application:get_env(rabbit, initial_frame_max, ?FRAME_MIN_SIZE),
-    erlang:send_after(HandshakeTimeout, self(), handshake_timeout),
+    _ = erlang:send_after(HandshakeTimeout, self(), handshake_timeout),
+    _ = schedule_alarms_registration_check(),
     {PeerHost, PeerPort, Host, Port} =
         socket_op(Sock, fun (S) -> rabbit_net:socket_ends(S, inbound) end),
     ?store_proc_name(Name),
@@ -548,6 +552,39 @@ stop(Reason, State) ->
     maybe_emit_stats(State),
     throw({inet_error, Reason}).
 
+handle_other({alarms_async_registration_reply, From, Ref, Alarms}, State = #v1{throttle = Throttle}) ->
+    RabbitAlarmPid = whereis(rabbit_alarm),
+    case get({rabbit_alarm, From, Ref}) of
+        RabbitAlarmPid ->
+            BlockedBy = sets:from_list([{resource, Alarm} || Alarm <- Alarms]),
+            Throttle1 = Throttle#throttle{blocked_by = BlockedBy},
+            maybe_emit_stats(
+                State1 = control_throttle(State#v1{throttle = Throttle1})),
+            erase({rabbit_alarm, From, Ref}),
+            State1#v1{alarms_enabled = true};
+
+        _ ->
+            State#v1{alarms_enabled = false}
+    end;
+handle_other(alarms_registration_check, State = #v1{alarms_enabled = AlarmsEnabled}) ->
+    if AlarmsEnabled ->
+        ok;
+    true ->
+        try
+            true = is_process_alive(whereis(rabbit_alarm)),
+            _ = register_to_resource_alarms_async(),
+            _ = schedule_alarms_registration_check(),
+            ok
+        catch
+            _:_ ->
+                %% Connection is active but for some reason, the alarm manager is down.
+                %% The node is in a bad state and this connection won't throttle from
+                %% resource alarms. In this rare case, we terminate the connection and
+                %% expect the AMQP client to attempt reconnection.
+                throw({noproc, rabbit_alarm})
+        end
+    end,
+    State;
 handle_other({conserve_resources, Source, Conserve},
              State = #v1{throttle = Throttle = #throttle{blocked_by = Blockers}}) ->
   Resource  = {resource, Source},
@@ -1219,8 +1256,7 @@ handle_method0(#'connection.open'{virtual_host = VHost},
                                                 user = User = #user{username = Username},
                                                 protocol = Protocol},
                            helper_sup       = SupPid,
-                           sock             = Sock,
-                           throttle         = Throttle}) ->
+                           sock             = Sock}) ->
     ok = is_over_node_connection_limit(RanchRef),
     ok = is_over_vhost_connection_limit(VHost, User),
     ok = is_over_user_connection_limit(User),
@@ -1229,17 +1265,16 @@ handle_method0(#'connection.open'{virtual_host = VHost},
     NewConnection = Connection#connection{vhost = VHost},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
 
-    Alarms = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
-    BlockedBy = sets:from_list([{resource, Alarm} || Alarm <- Alarms]),
-    Throttle1 = Throttle#throttle{blocked_by = BlockedBy},
+    register_to_resource_alarms_async(),
 
     {ok, ChannelSupSupPid} =
         rabbit_connection_helper_sup:start_channel_sup_sup(SupPid),
-    State1 = control_throttle(
-               State#v1{connection_state    = running,
-                        connection          = NewConnection,
-                        channel_sup_sup_pid = ChannelSupSupPid,
-                        throttle            = Throttle1}),
+
+    State1 = State#v1{connection_state    = running,
+                      connection          = NewConnection,
+                      channel_sup_sup_pid = ChannelSupSupPid,
+                      alarms_enabled      = false},
+
     Infos = augment_infos_with_user_provided_connection_name(
         [{type, network} | infos(?CREATION_EVENT_KEYS, State1)],
         State1
@@ -1761,6 +1796,16 @@ control_throttle(State = #v1{connection_state = CS,
         blocked -> maybe_block(maybe_unblock(State1));
         _       -> State1
     end.
+
+register_to_resource_alarms_async() ->
+    ProcPid = rabbit_alarm:register_async(self(), Ref = make_ref(), {?MODULE, conserve_resources, []}),
+    put({rabbit_alarm, ProcPid, Ref}, whereis(rabbit_alarm)),
+    ok.
+
+schedule_alarms_registration_check() ->
+    Timeout = application:get_env(rabbit, alarms_registration_check_timeout,
+        ?ALARMS_REGISTRATION_CHECK_TIMEOUT),
+    erlang:send_after(Timeout, self(), alarms_registration_check).
 
 augment_connection_log_name(#connection{name = Name} = Connection) ->
     case user_provided_connection_name(Connection) of
