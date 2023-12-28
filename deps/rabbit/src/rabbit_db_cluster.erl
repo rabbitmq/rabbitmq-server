@@ -101,11 +101,22 @@ join(RemoteNode, NodeType)
             %% database because we might change it during the join.
             RestartMnesia = rabbit_mnesia:is_running(),
             RestartFFCtl = rabbit_ff_controller:is_running(),
+            RestartRaSystems = rabbit_ra_systems:are_running(),
             RestartRabbit = rabbit:is_running(),
             case RestartRabbit of
                 true ->
                     rabbit:stop();
                 false ->
+                    %% The Ra systems were started before we initialize the
+                    %% database (because Khepri depends on one of them).
+                    %% Therefore, there are files in the data directory. They
+                    %% will go away with the reset and we will need to restart
+                    %% Ra systems afterwards.
+                    case RestartRaSystems of
+                        true  -> ok = rabbit_ra_systems:ensure_stopped();
+                        false -> ok
+                    end,
+
                     case RestartFFCtl of
                         true ->
                             ok = rabbit_ff_controller:wait_for_task_and_stop();
@@ -134,6 +145,30 @@ join(RemoteNode, NodeType)
                   RemoteNode)
             after
                 rabbit_ff_registry_factory:release_state_change_lock()
+            end,
+
+            %% After the regular reset, we also reset Mnesia specifically if
+            %% it is meant to be used. That's because we may switch back from
+            %% Khepri to Mnesia. To be safe, remove possibly stale files from
+            %% a previous instance where Mnesia was used.
+            case rabbit_khepri:is_enabled(RemoteNode) of
+                true  -> ok;
+                false -> ok = rabbit_mnesia:reset_gracefully()
+            end,
+
+            %% Now that the files are all gone after the reset above, restart
+            %% the Ra systems. They will recreate their folder in the process.
+            case RestartRabbit of
+                true ->
+                    ok;
+                false ->
+                    case RestartRaSystems of
+                        true ->
+                            ok = rabbit_ra_systems:ensure_started(),
+                            ok = rabbit_khepri:setup();
+                        false ->
+                            ok
+                    end
             end,
 
             ?LOG_INFO(
@@ -182,7 +217,6 @@ join(RemoteNode, NodeType)
     end.
 
 join_using_mnesia(ClusterNodes, NodeType) when is_list(ClusterNodes) ->
-    ok = rabbit_mnesia:reset_gracefully(),
     rabbit_mnesia:join_cluster(ClusterNodes, NodeType).
 
 join_using_khepri(ClusterNodes, disc) ->
