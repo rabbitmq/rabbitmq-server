@@ -20,4 +20,4 @@ set -a
 # shellcheck source=./rabbitmq-env
 . "${0%/*}"/rabbitmq-env
 
-run_escript "${ESCRIPT_DIR:?must be defined}"/rabbitmq-queues "$@"
+run_escript "${ESCRIPT_DIR:?must be defined}"/rabbitmq-queues 'noinput' "$@"

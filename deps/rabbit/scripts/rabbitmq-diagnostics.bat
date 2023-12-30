@@ -42,9 +42,10 @@ if "%1"=="remote_shell" (
     set ERL_CMD=erl.exe
 )
 
+REM Note: do NOT add -noinput because "observer" depends on it
 "!ERLANG_HOME!\bin\!ERL_CMD!" +B ^
 -boot !CLEAN_BOOT_FILE! ^
--noinput -noshell -hidden -smp enable ^
+-noshell -hidden -smp enable ^
 !RABBITMQ_CTL_ERL_ARGS! ^
 -kernel inet_dist_listen_min !RABBITMQ_CTL_DIST_PORT_MIN! ^
 -kernel inet_dist_listen_max !RABBITMQ_CTL_DIST_PORT_MAX! ^
