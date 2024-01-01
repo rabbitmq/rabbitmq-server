@@ -20,4 +20,11 @@ set -a
 # shellcheck source=./rabbitmq-env
 . "${0%/*}"/rabbitmq-env
 
-run_escript "${ESCRIPT_DIR:?must be defined}"/rabbitmq-diagnostics "$@"
+maybe_noinput='noinput'
+
+if [ "$1" = 'observer' ]
+then
+    maybe_noinput='input'
+fi
+
+run_escript "${ESCRIPT_DIR:?must be defined}"/rabbitmq-diagnostics "$maybe_noinput" "$@"
