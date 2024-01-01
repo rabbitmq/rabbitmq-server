@@ -181,10 +181,21 @@ run_escript()
     escript="${1:?escript must be defined}"
     shift
 
+    maybe_noinput="${1:?maybe_noinput must be defined}"
+    shift
+
     _rmq_env_set_erl_libs
 
-    # shellcheck disable=SC2086
-    ERL_FLAGS="-boot $CLEAN_BOOT_FILE $RABBITMQ_CTL_ERL_ARGS -kernel inet_dist_listen_min $RABBITMQ_CTL_DIST_PORT_MIN -kernel inet_dist_listen_max $RABBITMQ_CTL_DIST_PORT_MAX" "$escript" "$@"
+    tmp_erl_flags="-boot $CLEAN_BOOT_FILE $RABBITMQ_CTL_ERL_ARGS -kernel inet_dist_listen_min $RABBITMQ_CTL_DIST_PORT_MIN -kernel inet_dist_listen_max $RABBITMQ_CTL_DIST_PORT_MAX"
+
+    if [ "$maybe_noinput" = 'noinput' ]
+    then
+        tmp_erl_flags="-noinput $tmp_erl_flags"
+    fi
+
+    ERL_FLAGS="$tmp_erl_flags" "$escript" "$@"
+
+    unset tmp_erl_flags
 }
 
 RABBITMQ_ENV_LOADED=1
