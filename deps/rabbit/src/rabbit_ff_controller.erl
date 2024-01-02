@@ -168,6 +168,7 @@ callback_mode() ->
     state_functions.
 
 init(_Args) ->
+    process_flag(trap_exit, true),
     {ok, standing_by, none}.
 
 standing_by(
