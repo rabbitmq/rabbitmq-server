@@ -22,9 +22,16 @@ set -a
 
 maybe_noinput='noinput'
 
-if [ "$1" = 'observer' ]
-then
-    maybe_noinput='input'
-fi
+case "$1" in
+    observer)
+        maybe_noinput='input'
+        ;;
+    remote_shell)
+        maybe_noinput='input'
+        ;;
+    *)
+        maybe_noinput='noinput'
+        ;;
+esac
 
 run_escript "${ESCRIPT_DIR:?must be defined}"/rabbitmq-diagnostics "$maybe_noinput" "$@"
