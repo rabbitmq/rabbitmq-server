@@ -78,4 +78,4 @@ RabbitMQ server is [licensed under the MPL 2.0](LICENSE-MPL-RabbitMQ).
 
 ## Copyright
 
-(c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
+(c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
