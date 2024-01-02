@@ -148,7 +148,7 @@ init(Proto, Data, Anns0, Env)
            end,
     #?MODULE{protocol = Proto,
              data = ProtoData,
-             annotations = maps:merge(ProtoAnns, Anns)}.
+             annotations = set_received_at_timestamp(maps:merge(ProtoAnns, Anns))}.
 
 -spec size(state()) ->
     {MetadataSize :: non_neg_integer(),
@@ -424,6 +424,10 @@ is_cycle(Queue, [{Queue, Reason} | _])
     true;
 is_cycle(Queue, [_ | Rem]) ->
     is_cycle(Queue, Rem).
+
+set_received_at_timestamp(Anns) ->
+    Millis = os:system_time(millisecond),
+    maps:put(rts, Millis, Anns).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
