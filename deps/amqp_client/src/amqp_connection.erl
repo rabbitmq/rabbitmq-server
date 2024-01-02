@@ -157,20 +157,14 @@ start(AmqpParams) ->
 %% user specified connection name.
 start(AmqpParams, ConnName) when ConnName == undefined; is_binary(ConnName) ->
     ensure_started(),
-    ObfuscateFn = fun credentials_obfuscation:encrypt/1,
-    ToPropList  = fun rabbit_data_coercion:to_proplist/1,
     AmqpParams0 =
         case AmqpParams of
             #amqp_params_direct{password = Password, client_properties = Props} ->
-                AmqpParams#amqp_params_direct{
-		  password          = ObfuscateFn(Password),
-		  client_properties = ToPropList(Props)
-		 };
+                AmqpParams#amqp_params_direct{password          = credentials_obfuscation:encrypt(Password),
+                                              client_properties = rabbit_data_coercion:to_proplist(Props)};
             #amqp_params_network{password = Password, client_properties = Props} ->
-                AmqpParams#amqp_params_network{
-		  password          = ObfuscateFn(Password),
-		  client_properties = ToPropList(Props)
-		 }
+                AmqpParams#amqp_params_network{password          = credentials_obfuscation:encrypt(Password),
+                                               client_properties = rabbit_data_coercion:to_proplist(Props)}
         end,
     AmqpParams1 =
         case AmqpParams0 of
