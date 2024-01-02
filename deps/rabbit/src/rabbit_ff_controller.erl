@@ -186,6 +186,7 @@ init(_Args) ->
     ?LOG_DEBUG(
        "Feature flags: controller standing by",
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+    process_flag(trap_exit, true),
     {ok, standing_by, none}.
 
 standing_by(
