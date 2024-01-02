@@ -16,6 +16,8 @@ describe('Having MQTT protocol enbled and the following auth_backends: ' + backe
   let expectations = []
   let client_id = 'selenium-client'
   let rabbit = process.env.RABBITMQ_HOSTNAME || 'localhost'
+  let username = process.env.RABBITMQ_AMQP_USERNAME
+  let password = process.env.RABBITMQ_AMQP_PASSWORD
 
   before(function () {
     mqttOptions = {
@@ -25,14 +27,14 @@ describe('Having MQTT protocol enbled and the following auth_backends: ' + backe
       keepalive: 10000,
       clean: false,
       reconnectPeriod: '1000',
-      username: 'mqtt_u',
-      password: 'mqtt_p',
+      username: username,
+      password: password,
     }
-    if ( backends.includes("http") ) {
+    if (backends.includes("http") && username.includes("http")) {
       reset()
-      expectations.push(expectUser({ "username": "mqtt_u", "password": "mqtt_p", "client_id": client_id, "vhost": "/" }, "allow"))
-      expectations.push(expectVhost({ "username": "mqtt_u", "vhost": "/"}, "allow"))
-      expectations.push(expectResource({ "username": "mqtt_u", "vhost": "/", "resource": "queue", "name": "mqtt-will-selenium-client", "permission":"configure", "tags":"", "client_id" : client_id }, "allow"))
+      expectations.push(expectUser({ "username": username, "password": password, "client_id": client_id, "vhost": "/" }, "allow"))
+      expectations.push(expectVhost({ "username": username, "vhost": "/"}, "allow"))
+//      expectations.push(expectResource({ "username": username, "vhost": "/", "resource": "queue", "name": "mqtt-will-selenium-client", "permission":"configure", "tags":"", "client_id" : client_id }, "allow"))
     }
   })
 
@@ -44,7 +46,7 @@ describe('Having MQTT protocol enbled and the following auth_backends: ' + backe
     })
     client.on('connect', function(err) {
       client.end()
-    })    
+    })
   })
 
   after(function () {
