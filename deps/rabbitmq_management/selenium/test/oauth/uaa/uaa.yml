@@ -97,6 +97,8 @@ jwt:
 scim:
   users:
     - rabbit_admin|rabbit_admin|scim.read,openid,rabbitmq.read:*/*,rabbitmq.write:*/*,rabbitmq.configure:*/*,rabbitmq.tag:administrator
+    - rabbit_admin_1|rabbit_admin_1|scim.read,openid,rmq-uaa-1.read:*/*,rmq-uaa-1.write:*/*,rmq-uaa-1.configure:*/*,rmq-uaa-1.tag:administrator
+    - rabbit_admin_2|rabbit_admin_2|scim.read,openid,rmq-uaa-2.read:*/*,rmq-uaa-2.write:*/*,rmq-uaa-2.configure:*/*,rmq-uaa-2.tag:administrator
     - rabbitmq_management|rabbitmq_management|scim.read,openid,rabbitmq.read:*/*,rabbitmq.write:*/*,rabbitmq.configure:*/*,rabbitmq.tag:management
     - rabbit_monitor|rabbit_monitor|scim.read,openid,rabbitmq.tag:monitoring
     - rabbit_no_management|rabbit_no_management|scim.read,openid,rabbitmq.read:*/*
@@ -107,6 +109,7 @@ scim:
     'rabbitmq.tag:management': Management
     'rabbitmq.tag:monitoring': Monitoring
     'rabbitmq.tag:administrator': Administrator
+
 
 oauth:
   # Always override clients on startup
@@ -126,15 +129,15 @@ oauth:
       secret: mgt_api_client
       authorized-grant-types: client_credentials
       authorities: rabbitmq.tag:monitoring
-    rabbit_client_code:
-      id: rabbit_client_code
-      secret: rabbit_client_code
+    rabbitmq_client_code:
+      id: rabbitmq_client_code
+      secret: rabbitmq_client_code
       authorized-grant-types: authorization_code,refresh_token
       scope: rabbitmq.*,openid,profile
       authorities: uaa.resource,rabbitmq
       redirect-uri: ${RABBITMQ_SCHEME}://${RABBITMQ_HOST}${RABBITMQ_PATH}
       autoapprove: true
-      allowpublic: true
+      allowpublic: true  
     rabbit_idp_user:
       id: rabbit_idp_user
       secret: rabbit_idp_user

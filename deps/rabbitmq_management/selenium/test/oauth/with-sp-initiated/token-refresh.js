@@ -1,31 +1,32 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown, delay } = require('../../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, delay, idpLoginPage } = require('../../utils')
 
 const SSOHomePage = require('../../pageobjects/SSOHomePage')
 const UAALoginPage = require('../../pageobjects/UAALoginPage')
+const KeycloakLoginPage = require('../../pageobjects/KeycloakLoginPage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
 
 describe('Once user is logged in', function () {
   let homePage
-  let uaaLogin
+  let idpLogin
   let overview
   let captureScreen
-  this.timeout(25000) // hard-coded to 25secs because this test requires 25sec to run
+  this.timeout(45000) // hard-coded to 25secs because this test requires 35sec to run
 
   before(async function () {
     driver = buildDriver()
     await goToHome(driver)
     homePage = new SSOHomePage(driver)
-    uaaLogin = new UAALoginPage(driver)
+    idpLogin = idpLoginPage(driver)
     overview = new OverviewPage(driver)
     captureScreen = captureScreensFor(driver, __filename)
   })
 
   it('its token is automatically renewed', async function () {
     await homePage.clickToLogin()
-    await uaaLogin.login('rabbit_admin', 'rabbit_admin')
+    await idpLogin.login('rabbit_admin', 'rabbit_admin')
     await overview.isLoaded()
 
     await delay(15000)

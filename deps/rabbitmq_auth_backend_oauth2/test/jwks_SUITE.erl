@@ -22,8 +22,8 @@ all() ->
     [
      {group, happy_path},
      {group, unhappy_path},
-     {group, unvalidated_jwks_server},
-     {group, no_peer_verification}
+     {group, no_peer_verification},
+     {group, multi_resource}
     ].
 
 groups() ->
@@ -48,8 +48,14 @@ groups() ->
                          test_failed_token_refresh_case1,
                          test_failed_token_refresh_case2
                         ]},
-     {unvalidated_jwks_server, [], [test_failed_connection_with_unvalidated_jwks_server]},
-     {no_peer_verification, [], [{group, happy_path}, {group, unhappy_path}]}
+     {no_peer_verification, [], [
+        {group, happy_path},
+        {group, unhappy_path}
+      ]},
+     {multi_resource, [], [
+                            test_m_successful_connection,
+                            test_m_failed_connection_due_to_missing_key
+                          ]}
     ].
 
 %%
@@ -82,8 +88,37 @@ init_per_group(no_peer_verification, Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_auth_backend_oauth2, key_config, KeyConfig]),
     rabbit_ct_helpers:set_config(Config, {key_config, KeyConfig});
 
+init_per_group(multi_resource, Config) ->
+    add_vhosts(Config),
+    ResourceServersConfig =
+      #{
+        <<"rabbitmq1">> => [
+          {id, <<"rabbitmq1">>},
+          {oauth_provider_id, <<"one">>}
+        ],
+        <<"rabbitmq2">> => [
+          {id, <<"rabbitmq2">>},
+          {oauth_provider_id, <<"two">>}
+        ]
+      },
+    OAuthProviders =
+      #{
+        <<"one">> => [
+          {issuer, strict_jwks_url(Config, "/")},
+          {jwks_uri, strict_jwks_url(Config, "/jwks1")}
+        ],
+        <<"two">> => [
+          {issuer, strict_jwks_url(Config, "/")},
+          {jwks_uri, strict_jwks_url(Config, "/jwks2")}
+        ]
+      },
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_auth_backend_oauth2, resource_servers, ResourceServersConfig]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_auth_backend_oauth2, oauth_providers, OAuthProviders]),
+    Config;
+
 init_per_group(_Group, Config) ->
     add_vhosts(Config),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_auth_backend_oauth2, resource_server_id, ?RESOURCE_SERVER_ID]),
     Config.
 
 end_per_group(no_peer_verification, Config) ->
@@ -138,12 +173,6 @@ init_per_testcase(Testcase, Config) when Testcase =:= test_failed_connection_wit
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
 
-init_per_testcase(Testcase, Config) when Testcase =:= test_failed_connection_with_unvalidated_jwks_server ->
-    KeyConfig = rabbit_ct_helpers:set_config(?config(key_config, Config), {jwks_url, ?config(non_strict_jwks_url, Config)}),
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_auth_backend_oauth2, key_config, KeyConfig]),
-    rabbit_ct_helpers:testcase_started(Config, Testcase),
-    Config;
-
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config.
@@ -158,14 +187,13 @@ end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_
                                         Testcase =:= test_successful_connection_with_complex_claim_as_a_list orelse
                                         Testcase =:= test_successful_connection_with_complex_claim_as_a_binary ->
   rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>),
-  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-    [rabbitmq_auth_backend_oauth2, extra_scopes_source, undefined]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_auth_backend_oauth2, extra_scopes_source]),
   rabbit_ct_helpers:testcase_started(Config, Testcase),
   Config;
 
 end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_algorithm_restriction orelse
-                                        Testcase =:= test_failed_connection_with_algorithm_restriction orelse
-                                        Testcase =:= test_failed_connection_with_unvalidated_jwks_server ->
+                                        Testcase =:= test_failed_connection_with_algorithm_restriction ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_auth_backend_oauth2, key_config, ?config(key_config, Config)]),
     rabbit_ct_helpers:testcase_finished(Config, Testcase),
@@ -183,32 +211,52 @@ preconfigure_node(Config) ->
                                       [rabbitmq_auth_backend_oauth2, resource_server_id, ?RESOURCE_SERVER_ID]),
     Config.
 
-start_jwks_server(Config) ->
+start_jwks_server(Config0) ->
     Jwk   = ?UTIL_MOD:fixture_jwk(),
+    Jwk1  = ?UTIL_MOD:fixture_jwk(<<"token-key-1">>),
+    Jwk2  = ?UTIL_MOD:fixture_jwk(<<"token-key-2">>),
+    Jwk3  = ?UTIL_MOD:fixture_jwk(<<"token-key-3">>),
     %% Assume we don't have more than 100 ports allocated for tests
-    PortBase = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_ports_base),
+    PortBase = rabbit_ct_broker_helpers:get_node_config(Config0, 0, tcp_ports_base),
     JwksServerPort = PortBase + 100,
+    Config = rabbit_ct_helpers:set_config(Config0, [{jwksServerPort, JwksServerPort}]),
 
     %% Both URLs direct to the same JWKS server
     %% The NonStrictJwksUrl identity cannot be validated while StrictJwksUrl identity can be validated
-    NonStrictJwksUrl = "https://127.0.0.1:" ++ integer_to_list(JwksServerPort) ++ "/jwks",
-    StrictJwksUrl = "https://localhost:" ++ integer_to_list(JwksServerPort) ++ "/jwks",
+    NonStrictJwksUrl = non_strict_jwks_url(Config),
+    StrictJwksUrl = strict_jwks_url(Config),
 
-    ok = application:set_env(jwks_http, keys, [Jwk]),
     {ok, _} = application:ensure_all_started(ssl),
     {ok, _} = application:ensure_all_started(cowboy),
     CertsDir = ?config(rmq_certsdir, Config),
-    ok = jwks_http_app:start(JwksServerPort, CertsDir),
+    ok = jwks_http_app:start(JwksServerPort, CertsDir,
+      [ {"/jwks", [Jwk]},
+        {"/jwks1", [Jwk1, Jwk3]},
+        {"/jwks2", [Jwk2]}
+      ]),
     KeyConfig = [{jwks_url, StrictJwksUrl},
                  {peer_verification, verify_peer},
                  {cacertfile, filename:join([CertsDir, "testca", "cacert.pem"])}],
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                       [rabbitmq_auth_backend_oauth2, key_config, KeyConfig]),
     rabbit_ct_helpers:set_config(Config,
-                                 [{non_strict_jwks_url, NonStrictJwksUrl},
+                                 [
+                                  {non_strict_jwks_url, NonStrictJwksUrl},
                                   {strict_jwks_url, StrictJwksUrl},
                                   {key_config, KeyConfig},
-                                  {fixture_jwk, Jwk}]).
+                                  {fixture_jwk, Jwk},
+                                  {fixture_jwks_1, [Jwk1, Jwk3]},
+                                  {fixture_jwks_2, [Jwk2]}
+                                  ]).
+strict_jwks_url(Config) ->
+  strict_jwks_url(Config, "/jwks").
+strict_jwks_url(Config, Path) ->
+  "https://localhost:" ++ integer_to_list(?config(jwksServerPort, Config)) ++ Path.
+non_strict_jwks_url(Config) ->
+  non_strict_jwks_url(Config, "/jwks").
+non_strict_jwks_url(Config, Path) ->
+  "https://127.0.0.1:" ++ integer_to_list(?config(jwksServerPort, Config)) ++ Path.
+
 
 stop_jwks_server(Config) ->
     ok = jwks_http_app:stop(),
@@ -222,9 +270,12 @@ generate_valid_token(Config, Scopes) ->
 
 generate_valid_token(Config, Scopes, Audience) ->
     Jwk = case rabbit_ct_helpers:get_config(Config, fixture_jwk) of
-              undefined -> ?UTIL_MOD:fixture_jwk();
-              Value     -> Value
-          end,
+            undefined -> ?UTIL_MOD:fixture_jwk();
+            Value     -> Value
+        end,
+    generate_valid_token(Config, Jwk, Scopes, Audience).
+
+generate_valid_token(_Config, Jwk, Scopes, Audience) ->
     Token = case Audience of
         undefined -> ?UTIL_MOD:fixture_token_with_scopes(Scopes);
         DefinedAudience -> maps:put(<<"aud">>, DefinedAudience, ?UTIL_MOD:fixture_token_with_scopes(Scopes))
@@ -264,17 +315,58 @@ preconfigure_token(Config) ->
     Token = generate_valid_token(Config),
     rabbit_ct_helpers:set_config(Config, {fixture_jwt, Token}).
 
+
 %%
 %% Test Cases
 %%
 
 test_successful_connection_with_a_full_permission_token_and_all_defaults(Config) ->
     {_Algo, Token} = rabbit_ct_helpers:get_config(Config, fixture_jwt),
+    verify_queue_declare_with_token(Config, Token).
+
+verify_queue_declare_with_token(Config, Token) ->
     Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{queue = _} =
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     close_connection_and_channel(Conn, Ch).
+
+test_m_successful_connection(Config) ->
+    {_Alg, Token1} = generate_valid_token(
+        Config,
+        lists:nth(1, ?config(fixture_jwks_1, Config)),
+        <<"rabbitmq1.configure:*/* rabbitmq1.write:*/* rabbitmq1.read:*/*">>,
+        [<<"rabbitmq1">>]
+    ),
+    verify_queue_declare_with_token(Config, Token1),
+
+    {_Alg2, Token2} = generate_valid_token(
+        Config,
+        lists:nth(2, ?config(fixture_jwks_1, Config)),
+        <<"rabbitmq1.configure:*/* rabbitmq1.write:*/* rabbitmq1.read:*/*">>,
+        [<<"rabbitmq1">>]
+    ),
+    verify_queue_declare_with_token(Config, Token2),
+
+    {_Alg3, Token3} = generate_valid_token(
+        Config,
+        lists:nth(1, ?config(fixture_jwks_2, Config)),
+        <<"rabbitmq2.configure:*/* rabbitmq2.write:*/* rabbitmq2.read:*/*">>,
+        [<<"rabbitmq2">>]
+    ),
+    verify_queue_declare_with_token(Config, Token3).
+
+
+test_m_failed_connection_due_to_missing_key(Config) ->
+    {_Alg, Token} = generate_valid_token(
+        Config,
+        lists:nth(1, ?config(fixture_jwks_2, Config)), %% used signing key for rabbitmq2 instead of rabbitmq1 one
+        <<"rabbitmq1.configure:*/* rabbitmq1.write:*/* rabbitmq1.read:*/*">>,
+        [<<"rabbitmq1">>]
+    ),
+    ?assertMatch({error, {auth_failure, _}},
+                 open_unmanaged_connection(Config, 0, <<"username">>, Token)).
+
 
 test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost(Config) ->
     {_Algo, Token} = generate_valid_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
@@ -290,7 +382,7 @@ test_successful_connection_with_simple_strings_for_aud_and_scope(Config) ->
     {_Algo, Token} = generate_valid_token(
         Config,
         <<"rabbitmq.configure:*/* rabbitmq.write:*/* rabbitmq.read:*/*">>,
-        <<"hare rabbitmq">>
+        [<<"hare">>, <<"rabbitmq">>]
     ),
     Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
@@ -323,7 +415,7 @@ test_successful_connection_with_complex_claim_as_a_list(Config) ->
 test_successful_connection_with_complex_claim_as_a_binary(Config) ->
     {_Algo, Token} = generate_valid_token_with_extra_fields(
         Config,
-        #{<<"additional_rabbitmq_scopes">> => <<"rabbitmq.configure:*/* rabbitmq.read:*/*" "rabbitmq.write:*/*">>}
+        #{<<"additional_rabbitmq_scopes">> => <<"rabbitmq.configure:*/* rabbitmq.read:*/* rabbitmq.write:*/*">>}
     ),
     Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
@@ -456,11 +548,6 @@ test_failed_token_refresh_case2(Config) ->
     close_connection(Conn).
 
 test_failed_connection_with_algorithm_restriction(Config) ->
-    {_Algo, Token} = rabbit_ct_helpers:get_config(Config, fixture_jwt),
-    ?assertMatch({error, {auth_failure, _}},
-                 open_unmanaged_connection(Config, 0, <<"username">>, Token)).
-
-test_failed_connection_with_unvalidated_jwks_server(Config) ->
     {_Algo, Token} = rabbit_ct_helpers:get_config(Config, fixture_jwt),
     ?assertMatch({error, {auth_failure, _}},
                  open_unmanaged_connection(Config, 0, <<"username">>, Token)).
