@@ -58,6 +58,7 @@ cd ../../../../
 make package-generic-unix
 make docker-image
 ```
+>> Equivalent bazel command: `bazelisk run packaging/docker-image:rabbitmq` 
 
 The last command prints something like this:
 ```
