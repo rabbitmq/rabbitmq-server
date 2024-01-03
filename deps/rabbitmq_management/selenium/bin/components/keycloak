@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+KEYCLOAK_DOCKER_IMAGE=quay.io/keycloak/keycloak:20.0
+
+init_keycloak() {
+  KEYCLOAK_CONFIG_PATH=${KEYCLOAK_CONFIG_PATH:-oauth/keycloak}
+  KEYCLOAK_CONFIG_DIR=$(realpath ${TEST_DIR}/${KEYCLOAK_CONFIG_PATH})
+  KEYCLOAK_URL=${OAUTH_PROVIDER_URL}
+
+  print "> KEYCLOAK_CONFIG_DIR: ${KEYCLOAK_CONFIG_DIR}"
+  print "> KEYCLOAK_URL: ${KEYCLOAK_URL}"
+  print "> KEYCLOAK_DOCKER_IMAGE: ${KEYCLOAK_DOCKER_IMAGE}"
+}
+start_keycloak() {
+  begin "Starting keycloak ..."
+
+  init_keycloak
+  kill_container_if_exist keycloak
+
+  MOUNT_KEYCLOAK_CONF_DIR=$CONF_DIR/keycloak
+
+  mkdir -p $MOUNT_KEYCLOAK_CONF_DIR
+  ${BIN_DIR}/gen-keycloak-json ${KEYCLOAK_CONFIG_DIR} $ENV_FILE $MOUNT_KEYCLOAK_CONF_DIR/test-realm.json
+  print "> EFFECTIVE KEYCLOAK_CONFIG_FILE: $MOUNT_KEYCLOAK_CONF_DIR/test-realm.json"
+  cp ${KEYCLOAK_CONFIG_DIR}/*.pem $MOUNT_KEYCLOAK_CONF_DIR
+
+  docker run \
+		--detach \
+		--name keycloak \
+    --net ${DOCKER_NETWORK} \
+		--publish 8081:8080 \
+    --publish 8443:8443 \
+		--env KEYCLOAK_ADMIN=admin \
+		--env KEYCLOAK_ADMIN_PASSWORD=admin \
+		--mount type=bind,source=${MOUNT_KEYCLOAK_CONF_DIR},target=/opt/keycloak/data/import/ \
+		${KEYCLOAK_DOCKER_IMAGE} start-dev --import-realm \
+    --https-certificate-file=/opt/keycloak/data/import/server_keycloak_certificate.pem \
+    --https-certificate-key-file=/opt/keycloak/data/import/server_keycloak_key.pem
+
+  wait_for_oidc_endpoint keycloak $KEYCLOAK_URL $MOUNT_KEYCLOAK_CONF_DIR/ca_certificate.pem
+  end "Keycloak is ready"
+}

@@ -1,0 +1,44 @@
+
+
+init_fakeproxy() {
+  FAKEPROXY_URL=${FAKEPROXY_URL:-http://fakeproxy:9090}
+  FAKEPROXY_DIR=${SCRIPT}/../fakeportal
+  CLIENT_ID="${CLIENT_ID:-rabbit_idp_user}"
+  CLIENT_SECRET="${CLIENT_SECRET:-rabbit_idp_user}"
+  RABBITMQ_HOST_FOR_FAKEPROXY=${RABBITMQ_HOST_FOR_FAKEPROXY:-rabbitmq:15672}
+  UAA_URL_FOR_FAKEPROXY=${UAA_URL_FOR_FAKEPROXY:-http://uaa:8080}
+
+  RABBITMQ_URL_FOR_FAKEPROXY=$(calculate_rabbitmq_url $RABBITMQ_HOST_FOR_FAKEPROXY)
+
+  print "> FAKEPROXY_URL: ${FAKEPROXY_URL}"
+  print "> UAA_URL: ${UAA_URL_FOR_FAKEPROXY}"
+  print "> RABBITMQ_HOST_FOR_FAKEPROXY: ${RABBITMQ_HOST_FOR_FAKEPROXY}"
+  print "> CLIENT_ID: ${CLIENT_ID}"
+  print "> CLIENT_SECRET: ${CLIENT_SECRET}"
+  print "> RABBITMQ_URL_FOR_FAKEPROXY: ${RABBITMQ_URL_FOR_FAKEPROXY}"
+
+}
+start_fakeproxy() {
+  begin "Starting fakeproxy ..."
+
+  init_fakeproxy
+  kill_container_if_exist fakeproxy
+  mocha_test_tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))
+
+  docker run \
+    --detach \
+    --name fakeproxy \
+    --net ${DOCKER_NETWORK} \
+    --publish 9090:9090 \
+    --env PORT=9090 \
+    --env RABBITMQ_URL="${RABBITMQ_URL_FOR_FAKEPROXY}" \
+    --env UAA_URL="${UAA_URL_FOR_FAKEPROXY}" \
+    --env CLIENT_ID="${CLIENT_ID}" \
+    --env CLIENT_SECRET="${CLIENT_SECRET}" \
+    -v ${FAKEPROXY_DIR}:/code/fakeportal \
+    mocha-test:${mocha_test_tag} run fakeproxy
+
+  wait_for_url $FAKEPROXY_URL
+  end "fakeproxy is ready"
+
+}

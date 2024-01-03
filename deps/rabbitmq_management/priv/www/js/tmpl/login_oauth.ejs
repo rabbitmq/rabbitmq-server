@@ -1,5 +1,76 @@
 <div id="login">
   <p><img src="img/rabbitmqlogo.svg" alt="RabbitMQ logo" width="204" height="37"/></p>
 
-  <div id="login-status"><button id="loginWindow" onclick="oauth_initiateLogin()">Click here to log in</button></div>
-</div>
+
+  <!-- begin login status -->
+    <div id="login-status">
+<% if (typeof message == 'string') { %>
+        <p class="warning"><%=fmt_string(message)%> </p>
+<% } %>
+<% if (typeof errorCode == 'number' && errorCode == 401) { %>
+        <button id="logout" onclick="oauth_initiateLogout()">Click here to logout</button>
+<%} %>
+    </div>
+<% if (!(typeof errorCode == 'number' && errorCode == 401)) { %>
+
+  <!-- end login status -->
+<% if ((typeof resource_servers == 'object' && resource_servers.length == 1) && oauth_disable_basic_auth) { %>
+    <button id="login" onclick="oauth_initiateLogin('<%=resource_servers[0].id%>')">Click here to log in</button>
+<% } else if (typeof resource_servers == 'object') { %>
+
+      <b>Login with :</b>
+      <p></p>
+      <!-- begin login with oauth2  -->
+      <div class="section" id="login-with-oauth2">
+        <h2>OAuth 2.0</h2>
+        <div class="hider"><div class="updatable">
+<% if (resource_servers.length == 1) { %>
+          <button id="login" onclick="oauth_initiateLogin('<%=resource_servers[0].id%>')">Click here to log in</button>
+<% } else { %>
+          <form onsubmit="oauth_initiateLogin(document.getElementById('oauth2-resource').value)">
+            <label for="oauth2-resource">Resource:</label>
+            <select id="oauth2-resource">
+                <% for (var i = 0; i < resource_servers.length; i++) { %>
+                   <option value="<%= fmt_string(resource_servers[i].id) %>"><%= resource_servers[i].label %></option>
+                <% } %>
+            </select>
+            <br></br>
+            <button id="login" type="submit">Click here to log in</button>
+          </form>
+<% } %>
+        </div></div>
+      </div>
+<% } %>
+      <!-- end login with oauth2  -->
+
+      <!-- begin login with basic auth   -->
+<%if (!oauth_disable_basic_auth) { %>
+      <div class="section-hidden" id="login-with-basic-auth">
+        <h2>Basic Authentication</h2>
+        <div class="hider"><div class="updatable">
+
+          <form action="#/login"  id="basic-auth-form" method="put">
+          <table class="form">
+            <tr>
+              <th><label>Username:</label></th>
+              <td><input type="text" id="username" name="username" autocomplete="username"/><span class="mand">*</span></td>
+            </tr>
+            <tr>
+              <th><label>Password:</label></th>
+              <td><input type="password" id="password" name="password" autocomplete="current-password"/><span class="mand">*</span></td>
+            </tr>
+            <tr>
+              <th>&nbsp;</th>
+              <td><input type="submit" value="Login"/></td>
+            </tr>
+          </table>
+          </form>
+        </div></div>
+      </div> <!-- section -->
+
+<% } %>
+      <!-- end login with basic auth  -->
+<% } %>
+
+
+</div> <!-- login -->
