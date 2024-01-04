@@ -21,8 +21,9 @@ module.exports = class BasePage {
   constructor (webdriver) {
     this.driver = webdriver
     this.timeout = parseInt(process.env.SELENIUM_TIMEOUT) || 1000 // max time waiting to locate an element. Should be less that test timeout
-    this.polling = parseInt(process.env.SELENIUM_POLLING) || 500 // how frequent selenium searches for an element    
+    this.polling = parseInt(process.env.SELENIUM_POLLING) || 500 // how frequent selenium searches for an element
   }
+
 
   async isLoaded () {
     return this.waitForDisplayed(MENU_TABS)
@@ -129,6 +130,10 @@ module.exports = class BasePage {
       table_model.push(table_row)
     }
     return table_model
+  }
+
+  async isDisplayed(locator) {
+    return this.driver.findElement(locator).isDisplayed()
   }
 
   async waitForLocated (locator) {
