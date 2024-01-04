@@ -418,8 +418,10 @@ handle_call({topology, VirtualHost, Stream}, _From, State) ->
                                      #{leader_node => undefined,
                                        replica_nodes => []},
                                      Members)};
-                      _ ->
-                          {error, not_available}
+                      Err ->
+                          rabbit_log:info("Error locating ~tp stream members: ~tp",
+                                          [StreamName, Err]),
+                          {error, stream_not_available}
                   end;
               {error, not_found} ->
                   {error, stream_not_found};
