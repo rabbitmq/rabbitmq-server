@@ -70,16 +70,14 @@ module.exports = class SSOHomePage extends BasePage {
 
   async isOAuth2SectionVisible() {
     try {
-      await this.waitForDisplayed(SECTION_LOGIN_WITH_OAUTH)
-      return Promise.resolve(true)
+      return Promise.resolve(this.isDiplayed(SECTION_LOGIN_WITH_OAUTH))
     } catch (e) {
       return Promise.resolve(false)
     }
   }
   async isBasicAuthSectionVisible() {
     try {
-      await this.waitForDisplayed(SECTION_LOGIN_WITH_BASIC_AUTH)
-      return Promise.resolve(true)
+      return Promise.resolve(this.isDiplayed(SECTION_LOGIN_WITH_BASIC_AUTH))
     } catch (e) {
       return Promise.resolve(false)
     }
