@@ -22,7 +22,9 @@
 
 -export([start_link/0, start/0, stop/0, register/2, register_async/3, is_registered/1, set_alarm/1,
          clear_alarm/1, get_alarms/0, get_alarms/1, get_local_alarms/0, get_local_alarms/1, on_node_up/1, on_node_down/1,
-         format_as_map/1, format_as_maps/1, is_local/1]).
+         format_as_map/1, format_as_maps/1, is_local/1,
+         schedule_alarms_registration_check/0, schedule_alarms_registration_check/1,
+         retry_alarms_registration_async/0]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -37,6 +39,8 @@
 -define(FILE_DESCRIPTOR_RESOURCE, <<"file descriptors">>).
 -define(MEMORY_RESOURCE, <<"memory">>).
 -define(DISK_SPACE_RESOURCE, <<"disk space">>).
+-define(ALARMS_ASYNC_REGISTRATION_REPLY_DELAY, 100).
+-define(ALARMS_REGISTRATION_CHECK_TIMEOUT, 30_000).
 
 %%----------------------------------------------------------------------------
 
@@ -96,11 +100,15 @@ register(Pid, AlertMFA) ->
 -spec register_async(pid(), reference(), rabbit_types:mfargs()) -> pid().
 
 register_async(Pid, Ref, AlertMFA) ->
-    _ = spawn(
-        fun() ->
-            Alarms = gen_event:call(?SERVER, ?MODULE, {register, Pid, AlertMFA}, infinity),
-            erlang:send(Pid, {alarms_async_registration_reply, self(), Ref, Alarms})
-        end).
+    ProcPid =
+        spawn(
+            fun() ->
+                Alarms = gen_event:call(?SERVER, ?MODULE, {register, Pid, AlertMFA}, infinity),
+                erlang:send_after(?ALARMS_ASYNC_REGISTRATION_REPLY_DELAY, Pid,
+                    {alarms_async_registration_reply, self(), Ref, Alarms})
+            end),
+    put({?MODULE, ProcPid, Ref}, whereis(?SERVER)),
+    ok.
 
 -spec is_registered(pid()) -> boolean().
 
@@ -185,6 +193,30 @@ remote_conserve_resources(Pid, Source, {false, _, _}) ->
     gen_event:notify({?SERVER, node(Pid)},
                      {clear_alarm, {resource_limit, Source, node()}}).
 
+-spec schedule_alarms_registration_check() -> 'ok'.
+schedule_alarms_registration_check() ->
+    schedule_alarms_registration_check(self()).
+
+-spec schedule_alarms_registration_check(pid()) -> 'ok'.
+schedule_alarms_registration_check(Pid) ->
+    Timeout = application:get_env(rabbit, alarms_registration_check_timeout,
+        ?ALARMS_REGISTRATION_CHECK_TIMEOUT),
+    erlang:send_after(Timeout, Pid, alarms_registration_check).
+
+retry_alarms_registration_async() ->
+    try
+        true = is_process_alive(whereis(rabbit_alarm)),
+        _ = register_async(self(), make_ref(), {?MODULE, conserve_resources, []}),
+        _ = schedule_alarms_registration_check(),
+        ok
+    catch
+        _:_ ->
+            %% Connection is active but for some reason, the alarm manager is down.
+            %% The node is in a bad state and this connection won't throttle from
+            %% resource alarms. In this rare case, we terminate the connection and
+            %% expect the client to attempt reconnection.
+            throw({noproc, rabbit_alarm})
+    end.
 
 %%----------------------------------------------------------------------------
 
