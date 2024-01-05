@@ -253,34 +253,6 @@ make package-windows PROJECT_VERSION=3.13.0-rc.3 PRODUCT_VERSION=3.13.0.0
 To build the Windows package using a Windows machine, follow the
 instructions in [`PKG_WINDOWS.md`](PKG_WINDOWS.md).
 
-### Standalone package
-
-This is the equivalent of the `generic-unix` package with Erlang
-embbeded.
-
-To create it:
-```
-make -C packaging/standalone SOURCE_DIST_FILE=... VERSION=...
-```
-
-There is no package revision, only the project version and no
-restriction on it.
-
-Unlike other packages, the top-level `Makefile` and `packaging/Makefile`
-provide targets to build the standalone package for specific platforms:
-```
-make package-standalone-macosx
-make package-standalone-linux-x86_64
-make package-standalone-freebsd-x86_64
-```
-
-Cross-build isn't supported so using those targets on incompatible
-platforms is a no-op.
-
-If you want to build a standalone package for your platform, you can use
-`packaging/standalone/Makefile` as described at the beginning of this
-section.
-
 ### Building all packages in one go
 
 If you want to build all packages in one command, you can use the
