@@ -32,7 +32,7 @@
 -record(v1, {parent, sock, connection, callback, recv_len, pending_recv,
              connection_state, queue_collector, heartbeater, helper_sup,
              channel_sup_sup_pid, buf, buf_len, throttle, proxy_socket,
-             tracked_channels}).
+             tracked_channels, alarms_enabled}).
 
 -record(v1_connection, {user, timeout_sec, frame_max, auth_mechanism, auth_state,
                         hostname}).
@@ -68,7 +68,8 @@ unpack_from_0_9_1({Parent, Sock,RecvLen, PendingRecv,
                                     auth_mechanism = none,
                                     auth_state     = none},
         proxy_socket        = ProxySocket,
-        tracked_channels    = maps:new()}.
+        tracked_channels    = maps:new(),
+        alarms_enabled      = false}.
 
 shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
@@ -142,6 +143,24 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
                 NewState -> recvloop(Deb, NewState)
             end
     end.
+
+handle_other({alarms_async_registration_reply, From, Ref, Alarms}, State = #v1{throttle = Throttle}) ->
+    RabbitAlarmPid = whereis(rabbit_alarm),
+    case get({rabbit_alarm, From, Ref}) of
+        RabbitAlarmPid ->
+            State1 =
+                control_throttle(
+                    State#v1{throttle = Throttle#throttle{alarmed_by = Alarms}}),
+            erase({rabbit_alarm, From, Ref}),
+            State1#v1{alarms_enabled = true};
+
+        _ ->
+            State#v1{alarms_enabled = false}
+    end;
+handle_other(alarms_registration_check, State = #v1{alarms_enabled = true}) -> State;
+handle_other(alarms_registration_check, State) ->
+    ok = rabbit_alarm:retry_alarms_registration_async(),
+    State;
 
 handle_other({conserve_resources, Source, Conserve},
              State = #v1{throttle = Throttle =
@@ -372,7 +391,7 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                             State = #v1{
                               connection_state = starting,
                               connection = Connection,
-                              throttle   = Throttle,
+                              throttle   = _Throttle,
                               helper_sup = HelperSupPid,
                               sock = Sock}) ->
     ClientHeartbeatSec = case IdleTimeout of
@@ -435,10 +454,9 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                         idle_time_out  = {uint, HeartbeatSec * 1000},
                         container_id   = {utf8, rabbit_nodes:cluster_name()},
                         properties     = server_properties()}),
-    Conserve = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+    _ = rabbit_alarm:register_async(self(), make_ref(), {?MODULE, conserve_resources, []}),
     rabbit_amqp1_0:register_connection(self()),
-    control_throttle(
-      State1#v1{throttle = Throttle#throttle{alarmed_by = Conserve}});
+    State1;
 
 handle_1_0_connection_frame(_Frame, State) ->
     maybe_close(State#v1{connection_state = closing}).
