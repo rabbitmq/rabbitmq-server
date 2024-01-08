@@ -455,6 +455,7 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                         container_id   = {utf8, rabbit_nodes:cluster_name()},
                         properties     = server_properties()}),
     _ = rabbit_alarm:register_async(self(), make_ref(), {?MODULE, conserve_resources, []}),
+    _ = rabbit_alarm:schedule_alarms_registration_check(),
     rabbit_amqp1_0:register_connection(self()),
     State1;
 
