@@ -40,7 +40,8 @@
     heartbeat_sup, heartbeat,
     %% heartbeat timeout value used, 0 means
     %% heartbeats are disabled
-    timeout_sec
+    timeout_sec,
+    alarms_enabled = false
 }).
 
 %%----------------------------------------------------------------------------
@@ -78,7 +79,8 @@ init([SupHelperPid, Ref, Configuration]) ->
                 [self(), ConnName]),
 
             ParseState = rabbit_stomp_frame:initial_state(),
-            _ = register_resource_alarm(),
+            _ = rabbit_alarm:register_async(self(), make_ref(), {?MODULE, conserve_resources, []}),
+            _ = rabbit_alarm:schedule_alarms_registration_check(),
 
             LoginTimeout = application:get_env(rabbitmq_stomp, login_timeout, 10_000),
             MaxFrameSize = application:get_env(rabbitmq_stomp, max_frame_size, ?DEFAULT_MAX_FRAME_SIZE),
@@ -162,6 +164,25 @@ handle_info(login_timeout, State) ->
         _ ->
             {noreply, State, hibernate}
     end;
+
+%%----------------------------------------------------------------------------
+
+handle_info({alarms_async_registration_reply, From, Ref, _Alarms}, State) ->
+    RabbitAlarmPid = whereis(rabbit_alarm),
+    State1 =
+        case get({rabbit_alarm, From, Ref}) of
+            RabbitAlarmPid ->
+                erase({rabbit_alarm, From, Ref}),
+                State#reader_state{alarms_enabled = true};
+            _ ->
+                State#reader_state{alarms_enabled = false}
+        end,
+    {noreply, State1, hibernate};
+handle_info(alarms_registration_check, State = #reader_state{alarms_enabled = true}) ->
+    {noreply, State, hibernate};
+handle_info(alarms_registration_check, State) ->
+    ok = rabbit_alarm:retry_alarms_registration_async(),
+    {noreply, State, hibernate};
 
 %%----------------------------------------------------------------------------
 
@@ -287,9 +308,6 @@ process_received_bytes(Bytes,
 conserve_resources(Pid, _Source, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Conserve},
     ok.
-
-register_resource_alarm() ->
-    rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}).
 
 
 control_throttle(State = #reader_state{state              = CS,

@@ -10,6 +10,7 @@
 
 -import(rabbit_misc, [pget/2]).
 
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
@@ -24,7 +25,11 @@ all() ->
         heartbeat,
         login_timeout,
         frame_size,
-        frame_size_huge
+        frame_size_huge,
+        alarm_registration,
+        alarm_registration_after_scheduled_check,
+        failed_alarm_registration_before_check,
+        failed_connection_and_failed_alarm_registration_after_check
     ].
 
 merge_app_env(Config) ->
@@ -36,12 +41,19 @@ merge_app_env(Config) ->
 
 init_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config,
-                                           [{rmq_nodename_suffix, ?MODULE}]),
+                                           [{rmq_nodename_suffix, ?MODULE},
+                                            {find_crashes, false}]),
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:run_setup_steps(Config1,
       [ fun merge_app_env/1 ] ++
       rabbit_ct_broker_helpers:setup_steps()).
 
+init_per_testcase(_Testcase, Config) ->
+    rabbit_ct_broker_helpers:set_alarms_registration_check_timeout(Config, 30_000),
+    Config.
+
+end_per_testcase(_Testcase, Config) ->
+    Config.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
@@ -209,3 +221,88 @@ frame_size_huge(Config) ->
     {S, _} = Client,
     {error, closed} = gen_tcp:recv(S, 0, 500),
     ok.
+
+alarm_registration(Config) ->
+    StompPort = get_stomp_port(Config),
+    N = count_connections(Config),
+    {ok, Client} = rabbit_stomp_client:connect(StompPort),
+    StompReaderPid = get_stomp_reader_pid(Config),
+    ?assert(rabbit_ct_broker_helpers:is_pid_registered_to_resource_alarms(Config, 0, StompReaderPid)),
+    rabbit_stomp_client:disconnect(Client),
+    N = count_connections(Config),
+    ok.
+
+alarm_registration_after_scheduled_check(Config) ->
+    StompPort = get_stomp_port(Config),
+    N = count_connections(Config),
+    {ok, Client} = rabbit_stomp_client:connect(StompPort),
+
+    Timeout = 500,
+    rabbit_ct_broker_helpers:set_alarms_registration_check_timeout(Config, 0, Timeout),
+    timer:sleep(Timeout + 500),
+
+    StompReaderPid = get_stomp_reader_pid(Config),
+    ?assert(rabbit_ct_broker_helpers:is_pid_registered_to_resource_alarms(Config, 0, StompReaderPid)),
+
+    rabbit_stomp_client:disconnect(Client),
+    N = count_connections(Config),
+    ok.
+
+failed_alarm_registration_before_check(Config) ->
+    rabbit_ct_broker_helpers:terminate_rabbit_alarm(Config),
+
+    Timeout = 10_000,
+    rabbit_ct_broker_helpers:set_alarms_registration_check_timeout(Config, 0, Timeout),
+
+    StompPort = get_stomp_port(Config),
+    N = count_connections(Config),
+    {ok, Client} = rabbit_stomp_client:connect(StompPort),
+    StompReaderPid = get_stomp_reader_pid(Config),
+
+    try
+        ?assert(rabbit_ct_broker_helpers:is_pid_registered_to_resource_alarms(Config, 0, StompReaderPid))
+    catch
+        _:{_,{noproc,{_,_,[rabbit_alarm,_,_,_]}}} ->
+            ok
+    end,
+
+    ?assert(rabbit_ct_broker_helpers:is_process_alive(Config, StompReaderPid)),
+
+    rabbit_stomp_client:disconnect(Client),
+    N = count_connections(Config),
+    ok.
+
+failed_connection_and_failed_alarm_registration_after_check(Config) ->
+    ok = rabbit_ct_broker_helpers:restart_broker(Config),
+    ?assert(rabbit_ct_broker_helpers:is_process_alive(Config, rabbit_alarm)),
+    rabbit_ct_broker_helpers:terminate_rabbit_alarm(Config),
+
+    Timeout = 500,
+    rabbit_ct_broker_helpers:set_alarms_registration_check_timeout(Config, Timeout),
+
+    StompPort = get_stomp_port(Config),
+    N = count_connections(Config),
+    {ok, Client} = rabbit_stomp_client:connect(StompPort),
+    StompReaderPid = get_stomp_reader_pid(Config),
+
+    %% delay > timeout, and let connection fail with {noproc, rabbit_alarm}
+    timer:sleep(Timeout + 500),
+
+    try
+        ?assert(rabbit_ct_broker_helpers:is_pid_registered_to_resource_alarms(Config, 0, StompReaderPid))
+    catch
+        _:{_,{noproc,{_,_,[rabbit_alarm,_,_,_]}}} ->
+            ok
+    end,
+
+    ?assertNot(rabbit_ct_broker_helpers:is_process_alive(Config, StompReaderPid)),
+
+    rabbit_stomp_client:disconnect(Client),
+    N = count_connections(Config),
+    ok.
+
+get_stomp_reader_pid(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, get_stomp_reader_pid1, []).
+
+get_stomp_reader_pid1() ->
+     lists:last(rabbit_stomp:list()).
