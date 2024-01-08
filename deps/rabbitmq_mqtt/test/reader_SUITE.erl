@@ -44,7 +44,11 @@ tests() ->
      classic_clean_session_true,
      classic_clean_session_false,
      event_authentication_failure,
-     rabbit_mqtt_qos0_queue_overflow
+     rabbit_mqtt_qos0_queue_overflow,
+     alarm_registration,
+     alarm_registration_after_scheduled_check,
+     failed_alarm_registration_before_check,
+     failed_connection_and_failed_alarm_registration_after_check
     ].
 
 suite() ->
@@ -329,6 +333,76 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
 
     ok = emqtt:disconnect(Sub),
     ok = emqtt:disconnect(Pub).
+
+alarm_registration(Config) ->
+    C = connect(<<"alarmRegistrationOK">>, Config, [{clean_start, true}]),
+    MqttReaderPid = get_mqtt_reader_pid(Config),
+    ?assert(rabbit_ct_broker_helpers:is_pid_registered_to_resource_alarms(Config, 0, MqttReaderPid)),
+    ok = emqtt:disconnect(C),
+    ok.
+
+alarm_registration_after_scheduled_check(Config) ->
+    C = connect(<<"alarmRegistrationOKafterSchedule">>, Config, [{clean_start, true}]),
+
+    Timeout = 500,
+    rabbit_ct_broker_helpers:set_alarms_registration_check_timeout(Config, 0, Timeout),
+    timer:sleep(Timeout + 500),
+
+    MqttReaderPid = get_mqtt_reader_pid(Config),
+    ?assert(rabbit_ct_broker_helpers:is_pid_registered_to_resource_alarms(Config, 0, MqttReaderPid)),
+
+    ok = emqtt:disconnect(C).
+
+failed_alarm_registration_before_check(Config) ->
+    rabbit_ct_broker_helpers:terminate_rabbit_alarm(Config),
+
+    Timeout = 10_000,
+    rabbit_ct_broker_helpers:set_alarms_registration_check_timeout(Config, 0, Timeout),
+
+    C = connect(<<"failedAlarmRegistrationBeforeSchedule">>, Config, [{clean_start, true}]),
+    MqttReaderPid = get_mqtt_reader_pid(Config),
+
+    try
+        ?assert(rabbit_ct_broker_helpers:is_pid_registered_to_resource_alarms(Config, 0, MqttReaderPid))
+    catch
+        _:{_,{noproc,{_,_,[rabbit_alarm,_,_,_]}}} ->
+            ok
+    end,
+
+    ?assert(rabbit_ct_broker_helpers:is_process_alive(Config, MqttReaderPid)),
+
+    ok = emqtt:disconnect(C).
+
+failed_connection_and_failed_alarm_registration_after_check(Config) ->
+    ok = rabbit_ct_broker_helpers:restart_broker(Config),
+    ?assert(rabbit_ct_broker_helpers:is_process_alive(Config, rabbit_alarm)),
+    rabbit_ct_broker_helpers:terminate_rabbit_alarm(Config),
+
+    Timeout = 500,
+    rabbit_ct_broker_helpers:set_alarms_registration_check_timeout(Config, 0, Timeout),
+
+    C = connect(<<"failedConnFailedAlarmRegistrationAfterCheck">>, Config, [{clean_start, true}]),
+    MqttReaderPid = get_mqtt_reader_pid(Config),
+
+    %% delay > timeout, and let connection fail with {noproc, rabbit_alarm}
+    timer:sleep(Timeout + 500),
+
+    try
+        ?assert(rabbit_ct_broker_helpers:is_pid_registered_to_resource_alarms(Config, 0, MqttReaderPid))
+    catch
+        _:{_,{noproc,{_,_,[rabbit_alarm,_,_,_]}}} ->
+            ok
+    end,
+
+    ?assertNot(rabbit_ct_broker_helpers:is_process_alive(Config, MqttReaderPid)),
+
+    ok = emqtt:disconnect(C).
+
+get_mqtt_reader_pid(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, get_mqtt_reader_pid1, []).
+
+get_mqtt_reader_pid1() ->
+     lists:last(rabbit_mqtt:local_connection_pids()).
 
 num_received(Topic, Payload, N) ->
     receive

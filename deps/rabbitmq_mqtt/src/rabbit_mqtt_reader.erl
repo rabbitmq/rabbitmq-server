@@ -39,7 +39,8 @@
          conserve :: boolean(),
          stats_timer :: option(rabbit_event:state()),
          keepalive = rabbit_mqtt_keepalive:init() :: rabbit_mqtt_keepalive:state(),
-         conn_name :: binary()
+         conn_name :: binary(),
+         alarms_enabled = false :: boolean()
         }).
 
 -type(state() :: #state{}).
@@ -78,7 +79,8 @@ init(Ref) ->
         {ok, ConnStr} ->
             ConnName = rabbit_data_coercion:to_binary(ConnStr),
             ?LOG_DEBUG("MQTT accepting TCP connection ~tp (~ts)", [self(), ConnName]),
-            _ = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+            _ = rabbit_alarm:register_async(self(), make_ref(), {?MODULE, conserve_resources, []}),
+            _ = rabbit_alarm:schedule_alarms_registration_check(),
             LoginTimeout = application:get_env(?APP_NAME, login_timeout, 10_000),
             erlang:send_after(LoginTimeout, self(), login_timeout),
             State0 = #state{socket = RealSocket,
@@ -173,6 +175,23 @@ handle_info(timeout, State) ->
 
 handle_info({'EXIT', _Conn, Reason}, State) ->
     {stop, {connection_died, Reason}, State};
+
+handle_info({alarms_async_registration_reply, From, Ref, _Alarms}, State) ->
+    RabbitAlarmPid = whereis(rabbit_alarm),
+    State1 =
+        case get({rabbit_alarm, From, Ref}) of
+            RabbitAlarmPid ->
+                erase({rabbit_alarm, From, Ref}),
+                State#state{alarms_enabled = true};
+            _ ->
+                State#state{alarms_enabled = false}
+        end,
+    {noreply, State1, ?HIBERNATE_AFTER};
+handle_info(alarms_registration_check, State = #state{alarms_enabled = true}) ->
+    {noreply, State, ?HIBERNATE_AFTER};
+handle_info(alarms_registration_check, State) ->
+    ok = rabbit_alarm:retry_alarms_registration_async(),
+    {noreply, State, ?HIBERNATE_AFTER};
 
 handle_info({Tag, Sock, Data},
             State = #state{ socket = Sock, connection_state = blocked })
