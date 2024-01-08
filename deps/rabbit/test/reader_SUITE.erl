@@ -84,110 +84,75 @@ end_per_testcase(Testcase, Config) ->
 successful_connection_and_alarm_registration(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     _Conn1 = open_connection(Config, A),
-    [ReaderPid] = get_reader_pid(Config),
-    ?assert(is_connection_registered_to_resource_alarms(Config, ReaderPid)),
+    ReaderPid = get_reader_pid(Config),
+    ?assert(rabbit_ct_broker_helpers:is_pid_registered_to_resource_alarms(Config, ReaderPid)),
     passed.
 
 successful_connection_and_alarm_registration_after_scheduled_check(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     _Conn1 = open_connection(Config, A),
 
-    set_alarms_registration_check_timeout(Config, 500),
-    timer:sleep(1_000),
+    Timeout = 500,
+    rabbit_ct_broker_helpers:set_alarms_registration_check_timeout(Config, Timeout),
+    timer:sleep(Timeout + 500),
 
-    [ReaderPid] = get_reader_pid(Config),
-    ?assert(is_connection_registered_to_resource_alarms(Config, ReaderPid)),
+    ReaderPid = get_reader_pid(Config),
+    ?assert(rabbit_ct_broker_helpers:is_pid_registered_to_resource_alarms(Config, ReaderPid)),
     passed.
 
 successful_connection_and_failed_alarm_registration_before_check(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    [_ = terminate_rabbit_alarm(Config) || _ <- lists:seq(0, 10)],
+    rabbit_ct_broker_helpers:terminate_rabbit_alarm(Config),
 
-    set_alarms_registration_check_timeout(Config, 10_000),
+    Timeout = 10_000,
+    rabbit_ct_broker_helpers:set_alarms_registration_check_timeout(Config, Timeout),
 
     _Conn1 = open_connection(Config, A),
-    [ReaderPid] = get_reader_pid(Config),
+    ReaderPid = get_reader_pid(Config),
 
     try
-        ?assert(is_connection_registered_to_resource_alarms(Config, ReaderPid))
+        ?assert(rabbit_ct_broker_helpers:is_pid_registered_to_resource_alarms(Config, ReaderPid))
     catch
         _:{_,{noproc,{_,_,[rabbit_alarm,_,_,_]}}} ->
             ok
     end,
 
-    ?assert(is_remote_process_alive(Config, ReaderPid)),
+    ?assert(rabbit_ct_broker_helpers:is_process_alive(Config, ReaderPid)),
     passed.
 
 unsuccessful_connection_and_failed_alarm_registration_after_check(Config) ->
-    ok = restart_rabbit_app(Config),
+    ok = rabbit_ct_broker_helpers:restart_broker(Config),
+    ?assert(rabbit_ct_broker_helpers:is_process_alive(Config, rabbit_alarm)),
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    [_ = terminate_rabbit_alarm(Config) || _ <- lists:seq(0, 10)],
+    rabbit_ct_broker_helpers:terminate_rabbit_alarm(Config),
 
-    set_alarms_registration_check_timeout(Config, 500),
+    Timeout = 500,
+    rabbit_ct_broker_helpers:set_alarms_registration_check_timeout(Config, Timeout),
 
     _Conn1 = open_connection(Config, A),
-    [ReaderPid] = get_reader_pid(Config),
+    ReaderPid = get_reader_pid(Config),
 
-    %% delay and let connection fail with {noproc, rabbit_alarm} after scheduled
-    timer:sleep(1_000),
+    %% delay > timeout, and let connection fail with {noproc, rabbit_alarm}
+    timer:sleep(Timeout + 500),
 
     try
-        ?assert(is_connection_registered_to_resource_alarms(Config, ReaderPid))
+        ?assert(rabbit_ct_broker_helpers:is_pid_registered_to_resource_alarms(Config, ReaderPid))
     catch
         _:{_,{noproc,{_,_,[rabbit_alarm,_,_,_]}}} ->
             ok
     end,
 
-    ?assertNot(is_remote_process_alive(Config, ReaderPid)),
+    ?assertNot(rabbit_ct_broker_helpers:is_process_alive(Config, ReaderPid)),
     passed.
-
-is_connection_registered_to_resource_alarms(Config, Conn) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, is_connection_registered_to_resource_alarms1, [Conn]).
-
-is_connection_registered_to_resource_alarms1(Conn) ->
-    rabbit_alarm:is_registered(Conn).
 
 get_reader_pid(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, get_reader_pid1, []).
 
 get_reader_pid1() ->
-    rabbit_networking:local_connections().
+    lists:last(rabbit_networking:local_connections()).
 
 get_reader_state(Config, ReaderPid) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, get_reader_state1, [ReaderPid]).
 
 get_reader_state1(ReaderPid) ->
     sys:get_state(ReaderPid).
-
-set_alarms_registration_check_timeout(Config, Timeout) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, set_alarms_registration_check_timeout1, [Timeout]).
-
-is_remote_process_alive(Config, ReaderPid) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, is_remote_process_alive1, [ReaderPid]).
-
-is_remote_process_alive1(ReaderPid) ->
-    is_process_alive(ReaderPid).
-
-set_alarms_registration_check_timeout1(Timeout) ->
-    application:set_env(rabbit, alarms_registration_check_timeout, Timeout).
-
-restart_rabbit_app(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, restart_rabbit_app1, []).
-
-restart_rabbit_app1() ->
-    rabbit:stop(),
-    rabbit:start(),
-    true = is_process_alive(whereis(rabbit_alarm)),
-    ok.
-
-terminate_rabbit_alarm(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, terminate_rabbit_alarm1, []).
-
-terminate_rabbit_alarm1() ->
-    case whereis(rabbit_alarm) of
-        undefined -> ok;
-        Pid when is_pid(Pid) ->
-            exit(Pid, kill),
-            ?assertNot(is_process_alive(Pid)),
-            ok
-    end.

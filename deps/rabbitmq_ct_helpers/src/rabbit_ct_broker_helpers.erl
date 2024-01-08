@@ -45,6 +45,7 @@
     async_start_node/2,
     wait_for_async_start_node/1,
     start_broker/2,
+    restart_broker/1,
     restart_broker/2,
     stop_broker/2,
     restart_node/2,
@@ -84,6 +85,17 @@
 
     get_connection_pids/1,
     close_all_connections/3,
+
+    is_pid_registered_to_resource_alarms/2,
+    is_pid_registered_to_resource_alarms/3,
+    set_alarms_registration_check_timeout/2,
+    set_alarms_registration_check_timeout/3,
+    terminate_rabbit_alarm/0,
+    terminate_rabbit_alarm/1,
+    terminate_rabbit_alarm/2,
+
+    is_process_alive/2,
+    is_process_alive/3,
 
     set_policy/6,
     set_policy/7,
@@ -1864,6 +1876,8 @@ wait_for_async_start_node(Node) ->
 start_broker(Config, Node) ->
     ok = rpc(Config, Node, rabbit, start, []).
 
+restart_broker(Config) ->
+    restart_broker(Config, 0).
 restart_broker(Config, Node) ->
     ok = rpc(Config, Node, ?MODULE, do_restart_broker, []).
 
@@ -2042,6 +2056,45 @@ get_connection_pids(Connections) ->
 close_all_connections(Config, Node, Reason) ->
     rpc(Config, Node, rabbit_networking, close_all_connections, [Reason]),
     ok.
+%% -------------------------------------------------------------------
+%% Alarm helpers.
+%% -------------------------------------------------------------------
+
+is_pid_registered_to_resource_alarms(Config, ConnPid) when is_pid(ConnPid) ->
+    is_pid_registered_to_resource_alarms(Config, 0, ConnPid).
+is_pid_registered_to_resource_alarms(Config, Node, ConnPid) when is_pid(ConnPid) ->
+    rpc(Config, Node, rabbit_alarm, is_registered, [ConnPid]).
+
+set_alarms_registration_check_timeout(Config, Timeout) when is_integer(Timeout) ->
+    set_alarms_registration_check_timeout(Config, 0, Timeout).
+set_alarms_registration_check_timeout(Config, Node, Timeout) when is_integer(Timeout) ->
+    rpc(Config, Node, application, set_env, [rabbit, alarms_registration_check_timeout, Timeout]).
+
+terminate_rabbit_alarm(Config) ->
+    terminate_rabbit_alarm(Config, 0).
+terminate_rabbit_alarm(Config, Node) ->
+    %% ensure no recovery from supervisor
+    [_ = rpc(Config, Node, ?MODULE, terminate_rabbit_alarm, []) || _ <- lists:seq(0, 10)].
+
+terminate_rabbit_alarm() ->
+    case whereis(rabbit_alarm) of
+        undefined -> ok;
+        Pid when is_pid(Pid) ->
+            exit(Pid, kill),
+            ?assertNot(is_process_alive(Pid)),
+            ok
+    end.
+
+is_process_alive(Config, Pid) when is_pid(Pid) ->
+    is_process_alive(Config, 0, Pid);
+is_process_alive(Config, RegisteredProcName) when is_atom(RegisteredProcName) ->
+    is_process_alive(Config, 0, RegisteredProcName).
+
+is_process_alive(Config, Node, Pid) when is_pid(Pid) ->
+    rpc(Config, Node, erlang, is_process_alive, [Pid]);
+is_process_alive(Config, Node, RegisteredProcName) when is_atom(RegisteredProcName) ->
+    Pid = rpc(Config, Node, erlang, whereis, [RegisteredProcName]),
+    is_process_alive(Config, 0, Pid).
 
 %% -------------------------------------------------------------------
 %% Policy helpers.
