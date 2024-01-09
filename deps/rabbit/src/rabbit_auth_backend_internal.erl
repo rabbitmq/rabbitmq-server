@@ -41,7 +41,7 @@
          list_user_vhost_permissions/2,
          list_user_topic_permissions/1, list_vhost_topic_permissions/1, list_user_vhost_topic_permissions/2]).
 
--export([state_can_expire/0]).
+-export([state_can_expire/0, expiry_timestamp/1]).
 
 -export([hashing_module_for_user/1, expand_topic_permission/2]).
 
@@ -110,6 +110,8 @@ user_login_authentication(Username, AuthProps) ->
     end.
 
 state_can_expire() -> false.
+
+expiry_timestamp(_) -> never.
 
 user_login_authorization(Username, _AuthProps) ->
     case user_login_authentication(Username, []) of
