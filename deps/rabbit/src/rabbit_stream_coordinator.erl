@@ -395,6 +395,8 @@ process_command([Server | Servers], Cmd) ->
             process_command(Servers, Cmd);
         {error, noproc} ->
             process_command(Servers, Cmd);
+        {error, nodedown} ->
+            process_command(Servers, Cmd);
         Reply ->
             Reply
     end.
