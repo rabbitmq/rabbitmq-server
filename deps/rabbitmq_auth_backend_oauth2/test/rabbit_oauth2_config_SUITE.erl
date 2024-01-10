@@ -8,17 +8,16 @@
 -module(rabbit_oauth2_config_SUITE).
 
 -compile(export_all).
-
+-include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("oauth2_client/include/oauth2_client.hrl").
 
 -define(RABBITMQ,<<"rabbitmq">>).
+-define(AUTH_PORT, 8000).
 
 all() ->
     [
       %  {group, with_rabbitmq_node},
-        {group, get_oauth_provider_with_legacy_resource_server_id},
-        {group, get_oauth_provider_with_resource_servers},
         {group, with_resource_server_id},
         {group, without_resource_server_id},
         {group, with_resource_servers},
@@ -97,9 +96,7 @@ groups() ->
 
         ]
       },
-      {get_oauth_provider_with_legacy_resource_server_id, [], [
 
-      ]},
       {inheritance_group, [], [
           resolve_settings_via_inheritance,
           get_key_config,
@@ -123,9 +120,24 @@ groups() ->
 
 init_per_suite(Config) ->
   rabbit_ct_helpers:log_environment(),
-  rabbit_ct_helpers:run_setup_steps(Config).
+	{ok, _} = application:ensure_all_started(ssl),
+  application:ensure_all_started(cowboy),
+	CertsDir = ?config(rmq_certsdir, Config),
+	CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
+	WrongCaCertFile = filename:join([CertsDir, "server", "server.pem"]),
+
+	HttpOauthServerExpectations = get_openid_configuration_expectations(),
+	ListOfExpectations = maps:values(proplists:to_map(HttpOauthServerExpectations)),
+
+	start_https_oauth_server(?AUTH_PORT, CertsDir, ListOfExpectations),
+
+  rabbit_ct_helpers:run_setup_steps([
+		{ssl_options, ssl_options(verify_peer, false, CaCertFile)}
+	  |
+	 	Config]).
 
 end_per_suite(Config) ->
+  stop_http_auth_server(),
   rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(with_rabbitmq_node, Config) ->
@@ -486,3 +498,56 @@ get_oauth_provider_for_resource_server_id_should_return_auth_provider_A(_Config)
   {ok, #oauth_provider{jwks_uri = URI}} = rabbit_oauth2_config:get_oauth_provider_for_resource_server_id(?RABBITMQ, [jwks_uri]),
   ?assertEqual(rabbit_oauth2_config:get_jwks_url(?RABBITMQ), URI),
   ?assertEqual(rabbit_oauth2_config:get_jwks_url(?RABBITMQ), <<"A">>).
+
+get_openid_configuration_expectations() ->
+	 [ {get_openid_configuration,
+
+      #{request => #{
+         method => <<"GET">>,
+         path => ?DEFAULT_OPENID_CONFIGURATION_PATH
+       },
+       response => [
+         {code, 200},
+         {content_type, ?CONTENT_JSON},
+         {payload, [
+           {issuer, build_issuer("https") },
+           {jwks_uri, build_jwks_uri("https")}
+         ]}
+       ]
+     } }
+	].
+
+start_https_oauth_server(Port, CertsDir, Expectations) when is_list(Expectations) ->
+	Dispatch = cowboy_router:compile([
+		{'_', [{Path, oauth_http_mock, Expected} || #{request := #{path := Path}} = Expected <- Expectations ]}
+	]),
+	ct:log("start_https_oauth_server with expectation list : ~p -> dispatch: ~p", [Expectations, Expectations]),
+	{ok, _} = cowboy:start_tls(
+      mock_http_auth_listener,
+				[{port, Port},
+				 {certfile, filename:join([CertsDir, "server", "cert.pem"])},
+				 {keyfile, filename:join([CertsDir, "server", "key.pem"])}
+				],
+				#{env => #{dispatch => Dispatch}}).
+
+build_issuer(Scheme) ->
+	uri_string:recompose(#{scheme => Scheme,
+												 host => "localhost",
+												 port => rabbit_data_coercion:to_integer(?AUTH_PORT),
+												 path => ""}).
+build_jwks_uri(Scheme) ->
+	uri_string:recompose(#{scheme => Scheme,
+												 host => "localhost",
+												 port => rabbit_data_coercion:to_integer(?AUTH_PORT),
+												 path => "/certs"}).
+stop_http_auth_server() ->
+  cowboy:stop_listener(mock_http_auth_listener).
+
+-spec ssl_options(ssl:verify_type(), boolean(), file:filename()) -> list().
+ssl_options(PeerVerification, FailIfNoPeerCert, CaCertFile) ->
+	[{verify, PeerVerification},
+	  {depth, 10},
+	  {fail_if_no_peer_cert, FailIfNoPeerCert},
+	  {crl_check, false},
+	  {crl_cache, {ssl_crl_cache, {internal, [{http, 10000}]}}},
+		{cacertfile, CaCertFile}].
