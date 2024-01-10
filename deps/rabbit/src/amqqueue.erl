@@ -84,6 +84,7 @@
          reset_mirroring_and_decorators/1,
          set_immutable/1,
          qnode/1,
+         to_printable/1,
          macros/0]).
 
 -define(record_version, amqqueue_v2).
@@ -640,6 +641,14 @@ qnode(none) ->
     undefined;
 qnode({_, Node}) ->
     Node.
+
+-spec to_printable(amqqueue()) -> #{binary() => any()}.
+to_printable(#amqqueue{name = QName = #resource{name = Name},
+                       vhost = VHost, type = Type}) ->
+     #{<<"readable_name">> => rabbit_data_coercion:to_binary(rabbit_misc:rs(QName)),
+       <<"name">> => Name,
+       <<"virtual_host">> => VHost,
+       <<"type">> => Type}.
 
 % private
 

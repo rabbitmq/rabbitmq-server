@@ -55,7 +55,8 @@
          file_handle_other_reservation/0]).
 -export([file_handle_release_reservation/0]).
 -export([list_with_minimum_quorum/0,
-         filter_quorum_critical/1,
+         list_with_local_promotable/0,
+         list_with_local_promotable_for_cli/0,
          filter_quorum_critical/3,
          all_replica_states/0]).
 -export([capabilities/0]).
@@ -77,6 +78,10 @@
 -export([force_shrink_member_to_current_member/2,
          force_all_queues_shrink_member_to_current_member/0]).
 
+-ifdef(TEST).
+-export([filter_promotable/2]).
+-endif.
+
 -import(rabbit_queue_type_util, [args_policy_lookup/3,
                                  qname_to_internal_name/1]).
 
@@ -88,6 +93,8 @@
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(),
                  mc:state()}.
 -type membership() :: voter | non_voter | promotable.  %% see ra_membership() in Ra.
+-type replica_states() :: #{atom() => replica_state()}.
+-type replica_state() :: leader | follower | non_voter | promotable.
 
 -define(RA_SYSTEM, quorum_queues).
 -define(RA_WAL_NAME, ra_log_wal).
@@ -404,35 +411,37 @@ all_replica_states() ->
 
 -spec list_with_minimum_quorum() -> [amqqueue:amqqueue()].
 list_with_minimum_quorum() ->
-    filter_quorum_critical(
-      rabbit_amqqueue:list_local_quorum_queues()).
-
--spec filter_quorum_critical([amqqueue:amqqueue()]) -> [amqqueue:amqqueue()].
-filter_quorum_critical(Queues) ->
-    %% Example map of QQ replica states:
-    %%    #{rabbit@warp10 =>
-    %%      #{'%2F_qq.636' => leader,'%2F_qq.243' => leader,
-    %%        '%2F_qq.1939' => leader,'%2F_qq.1150' => leader,
-    %%        '%2F_qq.1109' => leader,'%2F_qq.1654' => leader,
-    %%        '%2F_qq.1679' => leader,'%2F_qq.1003' => leader,
-    %%        '%2F_qq.1593' => leader,'%2F_qq.1765' => leader,
-    %%        '%2F_qq.933' => leader,'%2F_qq.38' => leader,
-    %%        '%2F_qq.1357' => leader,'%2F_qq.1345' => leader,
-    %%        '%2F_qq.1694' => leader,'%2F_qq.994' => leader,
-    %%        '%2F_qq.490' => leader,'%2F_qq.1704' => leader,
-    %%        '%2F_qq.58' => leader,'%2F_qq.564' => leader,
-    %%        '%2F_qq.683' => leader,'%2F_qq.386' => leader,
-    %%        '%2F_qq.753' => leader,'%2F_qq.6' => leader,
-    %%        '%2F_qq.1590' => leader,'%2F_qq.1363' => leader,
-    %%        '%2F_qq.882' => leader,'%2F_qq.1161' => leader,...}}
-    ReplicaStates = maps:from_list(
-                        rabbit_misc:append_rpc_all_nodes(rabbit_nodes:list_running(),
-                            ?MODULE, all_replica_states, [])),
+    Queues = rabbit_amqqueue:list_local_quorum_queues(),
+    ReplicaStates = get_replica_states(rabbit_nodes:list_running()),
     filter_quorum_critical(Queues, ReplicaStates, node()).
 
--spec filter_quorum_critical([amqqueue:amqqueue()], #{node() => #{atom() => atom()}}, node()) ->
-    [amqqueue:amqqueue()].
+-spec list_with_local_promotable() -> [amqqueue:amqqueue()].
+list_with_local_promotable() ->
+    Queues = rabbit_amqqueue:list_local_quorum_queues(),
+    #{node() := ReplicaStates} = get_replica_states([node()]),
+    filter_promotable(Queues, ReplicaStates).
 
+-spec list_with_local_promotable_for_cli() -> [#{binary() => any()}].
+list_with_local_promotable_for_cli() ->
+    Qs = list_with_local_promotable(),
+    lists:map(fun amqqueue:to_printable/1, Qs).
+
+-spec get_replica_states([node()]) -> #{node() => replica_states()}.
+get_replica_states(Nodes) ->
+    maps:from_list(
+      rabbit_misc:append_rpc_all_nodes(Nodes, ?MODULE, all_replica_states, [])).
+
+-spec filter_promotable([amqqueue:amqqueue()], replica_states()) ->
+    [amqqueue:amqqueue()].
+filter_promotable(Queues, ReplicaStates) ->
+    lists:filter(fun (Q) ->
+                    {RaName, _Node} = amqqueue:get_pid(Q),
+                    State = maps:get(RaName, ReplicaStates),
+                    State == promotable
+                 end, Queues).
+
+-spec filter_quorum_critical([amqqueue:amqqueue()], #{node() => replica_states()}, node()) ->
+    [amqqueue:amqqueue()].
 filter_quorum_critical(Queues, ReplicaStates, Self) ->
     lists:filter(fun (Q) ->
                     MemberNodes = get_nodes(Q),
