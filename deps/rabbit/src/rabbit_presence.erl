@@ -21,6 +21,7 @@
 
 -define(SERVER, ?MODULE).
 -define(INTERVAL, 1000).
+-define(CUTOFF, ?INTERVAL * 3).
 
 -record(?MODULE, {tbl :: ets:table(),
                   nodes = [] :: [node()]}).
@@ -38,7 +39,7 @@ list_present() ->
             %% TODO: change return type to ok | error?
             exit(presence_server_not_running);
         _ ->
-            Cutoff = erlang:system_time(millisecond) - 5000,
+            Cutoff = erlang:system_time(millisecond) - ?CUTOFF,
             [N || {N, SeenMs} <- ets:tab2list(?MODULE),
                   %% if it hasn't been seen since the cutoff
                   SeenMs > Cutoff,
@@ -52,10 +53,10 @@ start_link() ->
 
 init([]) ->
     process_flag(trap_exit, true),
-    Ref = ets:new(?MODULE, [set, named_table, public]),
+    Ref = ets:new(?MODULE, [set, named_table, protected]),
+    _ = erlang:send_after(?INTERVAL, self(), beat),
     Nodes = rabbit_nodes:list_members(),
-    beat_all(Nodes),
-    erlang:send_after(?INTERVAL, self(), beat),
+    _ = beat_all(Nodes),
     {ok, #?MODULE{tbl = Ref,
                   nodes = Nodes}}.
 
@@ -69,26 +70,32 @@ handle_info(beat, #?MODULE{tbl = _Tbl,
                            nodes = Nodes} = State) ->
     _ = erlang:send_after(?INTERVAL, self(), beat),
     _ = beat_all(Nodes),
-    {noreply, State};
+    %% this will only be efficient to do this often once list_members
+    %% make use of the ra_leaderboard rather than calling into the local
+    %% khepri process
+    case rabbit_nodes:list_members() of
+        Nodes ->
+            {noreply, State};
+        NewNodes ->
+            {noreply, State#?MODULE{nodes = NewNodes}}
+    end;
 handle_info({hb, Node}, #?MODULE{tbl = Tbl,
                                  nodes = _Nodes} = State) ->
     ets:insert(Tbl, {Node, erlang:system_time(millisecond)}),
     {noreply, State};
-handle_info({terminate, Node}, #?MODULE{tbl = Tbl,
-                                        nodes = _Nodes} = State) ->
-    ets:delete(Tbl, Node),
+handle_info({terminate, Node}, #?MODULE{tbl = Tbl} = State) ->
+    _ = ets:delete(Tbl, Node),
     {noreply, State};
 handle_info(_Msg, State) ->
     {noreply, State}.
 
 terminate(_Reason, #?MODULE{nodes = Nodes}) ->
-    %% only send terminate if reason is `shutdown`?
+    %% TODO: only send terminate if reason is `shutdown`?
     _ = send_terminate(Nodes),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
 
 %% INTERNAL
 
