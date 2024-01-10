@@ -258,7 +258,7 @@ handle_pre_hibernate(State) ->
     %% rabbit_mgmt_db is hibernating the odds are rabbit_event is
     %% quiescing in some way too).
     _ = rpc:multicall(
-      rabbit_nodes:list_running(), rabbit_mgmt_db_handler, gc, []),
+          rabbit_presence:list_present(), rabbit_mgmt_db_handler, gc, []),
     {hibernate, State}.
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).

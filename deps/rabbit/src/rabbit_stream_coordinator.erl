@@ -57,6 +57,11 @@
 -export([eval_listeners/3,
          state/0]).
 
+
+-import(rabbit_queue_type_util, [
+                                 erpc_call/5
+                                ]).
+
 -rabbit_boot_step({?MODULE,
                    [{description, "Restart stream coordinator"},
                     {mfa,         {?MODULE, recover, []}},
@@ -396,17 +401,24 @@ process_command([Server | Servers], Cmd) ->
 
 ensure_coordinator_started() ->
     Local = {?MODULE, node()},
-    AllNodes = all_coord_members(),
+    ExpectedMembers = expected_coord_members(),
     case whereis(?MODULE) of
         undefined ->
             global:set_lock(?STREAM_COORDINATOR_STARTUP),
             Nodes = case ra:restart_server(?RA_SYSTEM, Local) of
                         {error, Reason} when Reason == not_started orelse
                                              Reason == name_not_registered ->
-                            OtherNodes = all_coord_members() -- [Local],
+                            OtherNodes = ExpectedMembers -- [Local],
+                            %% this could potentially be slow if some expected
+                            %% members are on nodes that have recently terminated
+                            %% and have left a dangling TCP connection
+                            %% I suspect this rarely happens as the local coordinator
+                            %% server is started in recover/0
                             case lists:filter(
                                    fun({_, N}) ->
-                                           erpc:call(N, erlang, whereis, [?MODULE]) =/= undefined
+                                           is_pid(erpc_call(N, erlang,
+                                                            whereis, [?MODULE],
+                                                            1000))
                                    end, OtherNodes) of
                                 [] ->
                                     start_coordinator_cluster();
@@ -414,16 +426,19 @@ ensure_coordinator_started() ->
                                     OtherNodes
                             end;
                         ok ->
-                            AllNodes;
+                            %% TODO: it may be better to do a leader call
+                            %% here as the local member will not have caught up
+                            %% yet
+                            locally_known_members();
                         {error, {already_started, _}} ->
-                            AllNodes;
+                            locally_known_members();
                         _ ->
-                            AllNodes
+                            locally_known_members()
                     end,
             global:del_lock(?STREAM_COORDINATOR_STARTUP),
             Nodes;
         _ ->
-            AllNodes
+            locally_known_members()
     end.
 
 start_coordinator_cluster() ->
@@ -440,9 +455,15 @@ start_coordinator_cluster() ->
             []
     end.
 
-all_coord_members() ->
-    Nodes = rabbit_nodes:list_running() -- [node()],
-    [{?MODULE, Node} || Node <- [node() | Nodes]].
+present_coord_members() ->
+    Local = {?MODULE, node()},
+    Nodes = rabbit_presence:list_present(),
+    [Local] ++ [{?MODULE, Node} || Node <- [node() | Nodes]].
+
+expected_coord_members() ->
+    Local = {?MODULE, node()},
+    Nodes = rabbit_nodes:list_members(),
+    [Local] ++ [{?MODULE, Node} || Node <- [node() | Nodes]].
 
 version() -> 4.
 
@@ -680,6 +701,15 @@ all_member_nodes(Streams) ->
 
 tick(_Ts, _State) ->
     [{aux, maybe_resize_coordinator_cluster}].
+
+locally_known_members() ->
+    %% TODO: use ra_leaderboard and fallback if leaderboard not populated
+    case ra:members({local, {?MODULE, node()}}) of
+        {_, Members, _} ->
+            Members;
+        Err ->
+            exit({error_fetching_locally_known_coordinator_members, Err})
+    end.
 
 maybe_resize_coordinator_cluster() ->
     spawn(fun() ->

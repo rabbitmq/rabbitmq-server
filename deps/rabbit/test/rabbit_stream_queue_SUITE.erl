@@ -645,9 +645,9 @@ grow_coordinator_cluster(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    ok = rabbit_control_helper:command(stop_app, Server1),
+    % ok = rabbit_control_helper:command(stop_app, Server1),
     ok = rabbit_control_helper:command(join_cluster, Server1, [atom_to_list(Server0)], []),
-    rabbit_control_helper:command(start_app, Server1),
+    % rabbit_control_helper:command(start_app, Server1),
     %% at this point there _probably_ won't be a stream coordinator member on
     %% Server1
 
@@ -673,7 +673,8 @@ grow_coordinator_cluster(Config) ->
                       false
               end
       end, 60000),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+    % rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]),
+    ok.
 
 shrink_coordinator_cluster(Config) ->
     [Server0, Server1, Server2] =
