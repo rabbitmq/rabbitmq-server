@@ -32,25 +32,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-<<<<<<< HEAD
-  def run([], %{node: node_name, timeout: timeout}) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :status, []) do
-=======
   def run([], %{node: node_name, timeout: timeout} = opts) do
-    status =
-      case :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :cli_cluster_status, []) do
-        {:badrpc, {:EXIT, {:undef, _}}} ->
-          :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :status, [])
-
-        {:badrpc, _} = err ->
-          err
-
-        status ->
-          status
-      end
-
-    case status do
->>>>>>> a9e488dbed (Fix for #8557, removed ANSI codes in JSON output)
+    case :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :status, []) do
       {:badrpc, _} = err ->
         err
 
