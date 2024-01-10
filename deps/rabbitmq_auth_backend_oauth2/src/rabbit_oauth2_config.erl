@@ -163,7 +163,6 @@ get_signing_key(TopResourceServerId, KeyId, ResourceServerId) when ResourceServe
 
 
 get_jwks_url(ResourceServerId) ->
-  rabbit_log:debug("get_jwks_url for resource-server_id ~p : ~p", [ResourceServerId,get_key_config(ResourceServerId)]),
   proplists:get_value(jwks_url, get_key_config(ResourceServerId)).
 
 append_or_return_default(ListOrBinary, Default) ->
