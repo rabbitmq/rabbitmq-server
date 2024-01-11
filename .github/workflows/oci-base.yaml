@@ -25,7 +25,7 @@ jobs:
         run: echo ${{ steps.buildx.outputs.platforms }}
 
       - name: Cache Docker layers
-        uses: actions/cache@v3.3.2
+        uses: actions/cache@v3.3.3
         with:
           path: /tmp/.buildx-cache
           key: ${{ runner.os }}-${{ matrix.image_tag_suffix }}-buildx-${{ github.event.pull_request.head.sha || github.sha }}

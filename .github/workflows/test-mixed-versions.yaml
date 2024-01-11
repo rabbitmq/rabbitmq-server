@@ -72,7 +72,7 @@ jobs:
         path: secondary-umbrella
     - name: MOUNT BAZEL CACHE
       if: env.exists != 'true'
-      uses: actions/cache@v3.3.2
+      uses: actions/cache@v3.3.3
       with:
         path: "/home/runner/repo-cache/"
         key: repo-cache-secondary-umbrella-${{ hashFiles('primary-umbrella/MODULE.bazel','primary-umbrella/WORKSPACE','primary-umbrella/bazel/bzlmod/secondary_umbrella.bzl') }}
@@ -139,7 +139,7 @@ jobs:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v3.3.2
+      uses: actions/cache@v3.3.3
       with:
         path: "/home/runner/repo-cache/"
         key: ${{ runner.os }}-repo-cache-${{ hashFiles('MODULE.bazel','WORKSPACE','bazel/bzlmod/secondary_umbrella.bzl') }}
