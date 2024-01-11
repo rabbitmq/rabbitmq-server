@@ -11,6 +11,7 @@
 
 -export([format_ra_event/2]).
 
+%% machine callbacks
 -export([init/1,
          apply/3,
          state_enter/2,
@@ -19,42 +20,47 @@
          tick/2,
          version/0,
          which_module/1,
-         overview/1]).
+         overview/1,
+         policy_changed/1]).
 
--export([recover/0,
-         stop/0,
-         add_replica/2,
-         delete_replica/2,
-         register_listener/1,
-         register_local_member_listener/1]).
-
--export([new_stream/2,
+%% stream API
+-export([
+         new_stream/2,
          restart_stream/1,
          restart_stream/2,
          delete_stream/2,
-         transfer_leadership/1]).
-
--export([policy_changed/1]).
-
--export([local_pid/1,
+         add_replica/2,
+         delete_replica/2,
+         register_listener/1,
+         register_local_member_listener/1,
+         local_pid/1,
          writer_pid/1,
          members/1,
-         stream_overview/1]).
+         stream_overview/1
+        ]).
+
+%% coordinator API
+-export([process_command/1,
+         recover/0,
+         stop/0,
+         transfer_leadership/1,
+         forget_node/1
+        ]).
+
+%% queries
 -export([query_local_pid/3,
          query_writer_pid/2,
          query_members/2,
          query_stream_overview/2]).
 
-
 -export([log_overview/1]).
--export([replay/1]).
 
 %% for SAC coordinator
--export([process_command/1,
-         sac_state/1]).
+-export([sac_state/1]).
 
 %% for testing and debugging
 -export([eval_listeners/3,
+         replay/1,
          state/0]).
 
 
@@ -414,7 +420,7 @@ ensure_coordinator_started() ->
                             %% this could potentially be slow if some expected
                             %% members are on nodes that have recently terminated
                             %% and have left a dangling TCP connection
-                            %% I suspect this rarely happens as the local coordinator
+                            %% I suspect this very rarely happens as the local coordinator
                             %% server is started in recover/0
                             case lists:filter(
                                    fun({_, N}) ->
@@ -429,7 +435,7 @@ ensure_coordinator_started() ->
                             end;
                         ok ->
                             %% TODO: it may be better to do a leader call
-                            %% here as the local member will not have caught up
+                            %% here as the local member may not have caught up
                             %% yet
                             locally_known_members();
                         {error, {already_started, _}} ->
@@ -457,10 +463,10 @@ start_coordinator_cluster() ->
             []
     end.
 
-present_coord_members() ->
-    Local = {?MODULE, node()},
-    Nodes = rabbit_presence:list_present(),
-    [Local] ++ [{?MODULE, Node} || Node <- [node() | Nodes]].
+% present_coord_members() ->
+%     Local = {?MODULE, node()},
+%     Nodes = rabbit_presence:list_present(),
+%     [Local] ++ [{?MODULE, Node} || Node <- [node() | Nodes]].
 
 expected_coord_members() ->
     Local = {?MODULE, node()},
@@ -718,18 +724,22 @@ maybe_resize_coordinator_cluster() ->
                   case ra:members({?MODULE, node()}) of
                       {_, Members, _} ->
                           MemberNodes = [Node || {_, Node} <- Members],
-                          Running = rabbit_nodes:list_running(),
-                          All = rabbit_nodes:list_members(),
-                          case Running -- MemberNodes of
+                          Present = rabbit_presence:list_present(),
+                          RabbitNodes = rabbit_nodes:list_members(),
+                          AddableNodes = [N || N <- RabbitNodes,
+                                               lists:member(N, Present)],
+                          case AddableNodes -- MemberNodes of
                               [] ->
                                   ok;
-                              New ->
+                              [New | _] ->
+                                  %% any remaining members will be added
+                                  %% next tick
                                   rabbit_log:info("~ts: New rabbit node(s) detected, "
                                                   "adding : ~w",
                                                   [?MODULE, New]),
-                                  add_members(Members, New)
+                                  add_member(Members, New)
                           end,
-                          case MemberNodes -- All of
+                          case MemberNodes -- RabbitNodes of
                               [] ->
                                   ok;
                               Old ->
@@ -742,30 +752,43 @@ maybe_resize_coordinator_cluster() ->
                   end
           end).
 
-add_members(_, []) ->
+add_member(_, []) ->
     ok;
-add_members(Members, [Node | Nodes]) ->
+add_member(Members, Node) ->
     Conf = make_ra_conf(Node, [N || {_, N} <- Members]),
     case ra:start_server(?RA_SYSTEM, Conf) of
         ok ->
             case ra:add_member(Members, {?MODULE, Node}) of
-                {ok, NewMembers, _} ->
-                    add_members(NewMembers, Nodes);
-                _ ->
-                    add_members(Members, Nodes)
+                {ok, _, _} ->
+                    ok;
+                {error, Err} ->
+                    rabbit_log:warning("~ts: Failed to add member, reason ~w"
+                                       "deleting started server on ~w",
+                                       [?MODULE, Err, Node]),
+                    case ra:force_delete_server(?RA_SYSTEM, {?MODULE, Node}) of
+                        ok ->
+                            ok;
+                        Err ->
+                            rabbit_log:warning("~ts: Failed to delete server "
+                                               "on ~w, reason ~w",
+                                               [?MODULE, Node, Err]),
+                            ok
+                    end
             end;
         Error ->
-            rabbit_log:warning("Stream coordinator failed to start on node ~ts : ~W",
+            %% TODO: there is a chance here that a server was started but never
+            %% added to the cluster
+            rabbit_log:warning("Stream coordinator server failed to start on node ~ts : ~W",
                                [Node, Error, 10]),
-            add_members(Members, Nodes)
+            ok
     end.
 
 remove_members(_, []) ->
     ok;
 remove_members(Members, [Node | Nodes]) ->
     case ra:remove_member(Members, {?MODULE, Node}) of
-        {ok, NewMembers, _} ->
-            remove_members(NewMembers, Nodes);
+        {ok, _, _} ->
+            remove_members(Members, Nodes);
         _ ->
             remove_members(Members, Nodes)
     end.
@@ -2133,6 +2156,32 @@ transfer_leadership([Destination | _] = _TransferCandidates) ->
         undefined ->
             {ok, undefined}
     end.
+
+-spec forget_node(node()) -> ok | {error, term()}.
+forget_node(Node) when is_atom(Node) ->
+    IsRunning = rabbit_nodes:is_running(Node),
+    ExpectedMembers = expected_coord_members(),
+    ToRemove = {?MODULE, Node},
+    case ra:members(ExpectedMembers) of
+        {ok, Members, Leader} ->
+            case lists:member(ToRemove, Members) of
+                true ->
+                    case ra:remove_member(Leader, ToRemove) of
+                        {ok, _, _} when IsRunning ->
+                            _ = ra:force_delete_server(?RA_SYSTEM, ToRemove),
+                            ok;
+                        {ok, _, _} ->
+                            ok;
+                        {error, _} = Err ->
+                            Err
+                    end;
+                false ->
+                    ok
+            end;
+        Err ->
+            Err
+    end.
+
 
 maps_to_list(M) ->
     lists:sort(maps:to_list(M)).
