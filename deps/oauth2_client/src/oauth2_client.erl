@@ -50,7 +50,6 @@ append_paths(Path1, Path2) ->
 get_openid_configuration(IssuerURI, OpenIdConfigurationPath, TLSOptions) ->
   URLMap = uri_string:parse(IssuerURI),
   Path = case maps:get(path, URLMap) of
-    undefined -> OpenIdConfigurationPath;
     "/" -> OpenIdConfigurationPath;
     "" -> OpenIdConfigurationPath;
     P -> append_paths(P, OpenIdConfigurationPath)
