@@ -114,10 +114,10 @@ def all_srcs(name = "all_srcs"):
 
 def test_suite_beam_files(name = "test_suite_beam_files"):
     erlang_bytecode(
-        name = "test_oauth_http_mock_beam",
+        name = "test_oauth2_http_mock_beam",
         testonly = True,
-        srcs = ["test/oauth_http_mock.erl"],
-        outs = ["test/oauth_http_mock.beam"],
+        srcs = ["test/oauth2_http_mock.erl"],
+        outs = ["test/oauth2_http_mock.beam"],
         app_name = "rabbitmq_oauth2_client",
         erlc_opts = "//:test_erlc_opts",
     )
