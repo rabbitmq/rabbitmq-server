@@ -86,7 +86,7 @@ eunit(
         ":test_openid_http_handler_beam",
         ":test_jwks_http_sup_beam",
         ":test_rabbit_auth_backend_oauth2_test_util_beam",
-        "test_oauth_http_mock_beam"
+        ":test_oauth2_http_mock_beam"
     ],
     target = ":test_erlang_app",
 )
@@ -115,7 +115,7 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "rabbit_oauth2_config_SUITE",
     additional_beam = [
-        "test/oauth_http_mock.beam",
+        "test/oauth2_http_mock.beam",
     ],
     runtime_deps = [
         "@cowboy//:erlang_app",

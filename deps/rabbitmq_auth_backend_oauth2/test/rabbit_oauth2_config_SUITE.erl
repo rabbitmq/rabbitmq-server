@@ -153,36 +153,42 @@ init_per_group(with_jwks_url, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, key_config, [{jwks_url,build_url_to_oauth_provider(<<"/keys">>)}]),
   Config;
 init_per_group(with_issuer, Config) ->
+  {ok, _} = application:ensure_all_started(inets),
   {ok, _} = application:ensure_all_started(ssl),
   application:ensure_all_started(cowboy),
 	CertsDir = ?config(rmq_certsdir, Config),
 	CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
+  SslOptions = ssl_options(verify_peer, false, CaCertFile),
 
 	HttpOauthServerExpectations = get_openid_configuration_expectations(),
 	ListOfExpectations = maps:values(proplists:to_map(HttpOauthServerExpectations)),
 
 	start_https_oauth_server(?AUTH_PORT, CertsDir, ListOfExpectations),
-
+  application:set_env(rabbitmq_auth_backend_oauth2, use_global_locks, false),
   application:set_env(rabbitmq_auth_backend_oauth2, issuer, build_url_to_oauth_provider(<<"/">>)),
+  application:set_env(rabbitmq_auth_backend_oauth2, key_config, SslOptions),
 
-  [{ssl_options, ssl_options(verify_peer, false, CaCertFile)} | Config];
+  [{ssl_options, SslOptions} | Config];
 
 init_per_group(with_oauth_providers_A_with_jwks_uri, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, oauth_providers,
     #{<<"A">> => [
       {issuer,build_url_to_oauth_provider(<<"/A">>) },
-      {jwks_uri,build_url_to_oauth_provider(<<"/A/keys">>) }
+      {jwks_uri,build_url_to_oauth_provider(<<"/A/keys">>) },
+      {https, ?config(ssl_options, Config)}
       ] } ),
   Config;
 init_per_group(with_oauth_providers_A_B_with_jwks_uri, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, oauth_providers,
     #{ <<"A">> => [
       {issuer,build_url_to_oauth_provider(<<"/A">>) },
-      {jwks_uri,build_url_to_oauth_provider(<<"/A/keys">>) }
+      {jwks_uri,build_url_to_oauth_provider(<<"/A/keys">>),
+      {https, ?config(ssl_options, Config)} }
       ],
        <<"B">> => [
       {issuer,build_url_to_oauth_provider(<<"/B">>) },
-      {jwks_uri,build_url_to_oauth_provider(<<"/B/keys">>) }
+      {jwks_uri,build_url_to_oauth_provider(<<"/B/keys">>),
+      {https, ?config(ssl_options, Config)} }
       ] }),
   Config;
 init_per_group(with_default_oauth_provider_A, Config) ->
@@ -523,6 +529,7 @@ get_oauth_provider_should_return_root_oauth_provider_with_jwks_uri(_Config) ->
   {ok, OAuthProvider} = rabbit_oauth2_config:get_oauth_provider_for_resource_server_id(?RABBITMQ, [jwks_uri]),
   ?assertEqual(build_url_to_oauth_provider(<<"/keys">>), OAuthProvider#oauth_provider.jwks_uri).
 get_oauth_provider_should_return_root_oauth_provider_with_all_discovered_endpoints(_Config) ->
+
   {ok, OAuthProvider} = rabbit_oauth2_config:get_oauth_provider_for_resource_server_id(?RABBITMQ, [jwks_uri]),
   ?assertEqual(build_url_to_oauth_provider(<<"/keys">>), OAuthProvider#oauth_provider.jwks_uri),
   ?assertEqual(build_url_to_oauth_provider(<<"/">>), OAuthProvider#oauth_provider.issuer).
@@ -600,16 +607,17 @@ get_openid_configuration_expectations() ->
 
 start_https_oauth_server(Port, CertsDir, Expectations) when is_list(Expectations) ->
 	Dispatch = cowboy_router:compile([
-		{'_', [{Path, oauth_http_mock, Expected} || #{request := #{path := Path}} = Expected <- Expectations ]}
+		{'_', [{Path, oauth2_http_mock, Expected} || #{request := #{path := Path}} = Expected <- Expectations ]}
 	]),
 	ct:log("start_https_oauth_server (port:~p) with expectation list : ~p -> dispatch: ~p", [Port, Expectations, Dispatch]),
-	{ok, _} = cowboy:start_tls(
+	{ok, Pid} = cowboy:start_tls(
       mock_http_auth_listener,
 				[{port, Port},
 				 {certfile, filename:join([CertsDir, "server", "cert.pem"])},
 				 {keyfile, filename:join([CertsDir, "server", "key.pem"])}
 				],
-				#{env => #{dispatch => Dispatch}}).
+				#{env => #{dispatch => Dispatch}}),
+  ct:log("Started on Port ~p and pid ~p", [ranch:get_port(mock_http_auth_listener), Pid]).
 
 build_url_to_oauth_provider(Path) ->
 	uri_string:recompose(#{scheme => "https",

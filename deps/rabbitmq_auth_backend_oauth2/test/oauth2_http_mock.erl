@@ -1,4 +1,4 @@
--module(oauth_http_mock).
+-module(oauth2_http_mock).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
