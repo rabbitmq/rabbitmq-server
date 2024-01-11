@@ -54,10 +54,9 @@ get_openid_configuration(IssuerURI, OpenIdConfigurationPath, TLSOptions) ->
     "/" -> OpenIdConfigurationPath;
     "" -> OpenIdConfigurationPath;
     P -> append_paths(P, OpenIdConfigurationPath)
-  end,  
+  end,
   URL = uri_string:resolve(Path, IssuerURI),
   rabbit_log:debug("get_openid_configuration issuer URL ~p (~p)", [URL, TLSOptions]),
-  ct:log("get_openid_configuration URLMap: ~p Path:~p URL:~p ", [URLMap, Path, URL]),
   Options = [],
   Response = httpc:request(get, {URL, []}, TLSOptions, Options),
   enrich_oauth_provider(parse_openid_configuration_response(Response), TLSOptions).
@@ -153,25 +152,21 @@ unlock(LockId) ->
 
 -spec get_oauth_provider(list()) -> {ok, oauth_provider()} | {error, any()}.
 get_oauth_provider(ListOfRequiredAttributes) ->
-  ct:log("rabbitmq_auth_backend_oauth2 : ~p", [application:get_all_env(rabbitmq_auth_backend_oauth2)]),
   case application:get_env(rabbitmq_auth_backend_oauth2, default_oauth_provider) of
-    undefined -> ct:log("------1"), get_oauth_provider_from_keyconfig(ListOfRequiredAttributes);
+    undefined -> get_oauth_provider_from_keyconfig(ListOfRequiredAttributes);
     {ok, DefaultOauthProvider} ->
-      ct:log("------2"),
       rabbit_log:debug("Using default_oauth_provider ~p", [DefaultOauthProvider]),
       get_oauth_provider(DefaultOauthProvider, ListOfRequiredAttributes)
   end.
 
 get_oauth_provider_from_keyconfig(ListOfRequiredAttributes) ->
   OAuthProvider = lookup_oauth_provider_from_keyconfig(),
-  ct:log("OAuthProvider:::: ~p ",[OAuthProvider]),
   rabbit_log:debug("Using oauth_provider ~p from keyconfig", [OAuthProvider]),
   case find_missing_attributes(OAuthProvider, ListOfRequiredAttributes) of
     [] -> {ok, OAuthProvider};
     _ -> Result2 = case OAuthProvider#oauth_provider.issuer of
             undefined -> {error, {missing_oauth_provider_attributes, [issuer]}};
             Issuer ->
-                ct:log("Issuer::: ~p",[Issuer] ),
                 rabbit_log:debug("Downloading oauth_provider using issuer ~p", [Issuer]),
                 case get_openid_configuration(Issuer, get_ssl_options_if_any(OAuthProvider)) of
                   {ok, OauthProvider} -> {ok, update_oauth_provider_endpoints_configuration(OauthProvider)};
