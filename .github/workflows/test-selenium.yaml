@@ -51,7 +51,7 @@ jobs:
         elixir-version: ${{ matrix.elixir_version }}
 
     - name: Mount Bazel Cache
-      uses: actions/cache@v3.3.2
+      uses: actions/cache@v3.3.3
       with:
         path: "/home/runner/repo-cache/"
         key: ${{ runner.os }}-repo-cache-${{ hashFiles('MODULE.bazel','WORKSPACE','bazel/bzlmod/secondary_umbrella.bzl') }}

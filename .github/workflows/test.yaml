@@ -42,7 +42,7 @@ jobs:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v3.3.2
+      uses: actions/cache@v3.3.3
       with:
         path: "/home/runner/repo-cache/"
         key: ${{ runner.os }}-repo-cache-${{ hashFiles('MODULE.bazel','WORKSPACE','bazel/bzlmod/secondary_umbrella.bzl') }}
