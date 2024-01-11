@@ -336,7 +336,7 @@ put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
                                         Metadata0#{default_queue_type =>
                                                        DefaultQueueType}
                                 end,
-                     case add(Name, Metadata, Username) of
+                     case catch do_add(Name, Metadata, Username) of
                          ok ->
                              %% wait for up to 45 seconds for the vhost to initialise
                              %% on all nodes
