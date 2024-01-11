@@ -107,10 +107,7 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %%----------------------------------------------------------------------------
 
 ensure_vhost_exists(VHost) ->
-    case rabbit_vhost:exists(VHost) of
-        false -> rabbit_vhost:add(VHost, ?INTERNAL_USER);
-        _     -> ok
-    end.
+    rabbit_vhost:add(VHost, ?INTERNAL_USER).
 
 %% pattern matching is way more efficient that the string operations,
 %% let's use all the keys we're aware of to speed up the handler.
