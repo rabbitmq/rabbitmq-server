@@ -19,7 +19,7 @@
 -export([
   add_signing_key/2, add_signing_key/3, replace_signing_keys/1, replace_signing_keys/2,
   get_signing_keys/0, get_signing_keys/1, get_signing_key/2,
-  get_key_config/0, get_key_config/1, get_jwks_url/1, get_default_resource_server_id/0,
+  get_key_config/0, get_key_config/1, get_default_resource_server_id/0,
   get_oauth_provider_for_resource_server_id/2,
   get_allowed_resource_server_ids/0, find_audience_in_resource_server_ids/1,
   is_verify_aud/0, is_verify_aud/1,
@@ -133,10 +133,19 @@ get_signing_keys(TopResourceServerId, ResourceServerId) when ResourceServerId =/
 get_oauth_provider_for_resource_server_id(ResourceServerId, RequiredAttributeList) ->
   get_oauth_provider_for_resource_server_id(get_default_resource_server_id(), ResourceServerId, RequiredAttributeList).
 get_oauth_provider_for_resource_server_id(TopResourceServerId, ResourceServerId, RequiredAttributeList) when ResourceServerId =:= TopResourceServerId ->
-  oauth2_client:get_oauth_provider(RequiredAttributeList);
+  case application:get_env(?APP, default_oauth_provider) of
+    undefined -> ct:log("YYY1"), oauth2_client:get_oauth_provider(RequiredAttributeList);
+    {ok, DefaultOauthProviderId} -> ct:log("YYY2"), oauth2_client:get_oauth_provider(DefaultOauthProviderId, RequiredAttributeList)
+  end;
+
 get_oauth_provider_for_resource_server_id(TopResourceServerId, ResourceServerId, RequiredAttributeList) when ResourceServerId =/= TopResourceServerId ->
+  ct:log("XXXXX"),
   case proplists:get_value(oauth_provider_id, get_resource_server_props(ResourceServerId)) of
-    undefined -> rabbit_log:error("Missing oauth_provider_id attribute for ResourceServer ~p", [ResourceServerId]);
+    undefined ->
+      case application:get_env(?APP, default_oauth_provider) of
+        undefined -> oauth2_client:get_oauth_provider(RequiredAttributeList);
+        {ok, DefaultOauthProviderId} -> oauth2_client:get_oauth_provider(DefaultOauthProviderId, RequiredAttributeList)
+      end;
     OauthProviderId -> oauth2_client:get_oauth_provider(OauthProviderId, RequiredAttributeList)
   end.
 
@@ -161,9 +170,6 @@ get_signing_key(TopResourceServerId, KeyId, ResourceServerId) when ResourceServe
 get_signing_key(TopResourceServerId, KeyId, ResourceServerId) when ResourceServerId =/= TopResourceServerId ->
   maps:get(KeyId, get_signing_keys(ResourceServerId), undefined).
 
-
-get_jwks_url(ResourceServerId) ->
-  proplists:get_value(jwks_url, get_key_config(ResourceServerId)).
 
 append_or_return_default(ListOrBinary, Default) ->
   case ListOrBinary of
