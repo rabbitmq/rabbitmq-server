@@ -15,6 +15,7 @@
 -define(RABBITMQ,<<"rabbitmq">>).
 -define(AUTH_PORT, 8000).
 
+
 all() ->
     [
       %  {group, with_rabbitmq_node},
@@ -40,36 +41,51 @@ groups() ->
           get_default_resource_server_id,
           get_allowed_resource_server_ids_returns_resource_server_id,
           find_audience_in_resource_server_ids_found_resource_server_id,
-          get_oauth_provider_for_resource_server_id_should_fail,
-          get_jwks_url_for_resource_server_id_should_fail,
-          {with_jwks_uri, [], [
-              get_oauth_provider_for_resource_server_id_should_return_jwks_uri,
-              {with_oauth_providers_A, [], [
-                  get_oauth_provider_for_resource_server_id_should_return_jwks_uri,
+          get_oauth_provider_should_fail,
+          {with_jwks_url, [], [
+              get_oauth_provider_should_return_root_oauth_provider_with_jwks_uri,
+              {with_oauth_providers_A_with_jwks_uri, [], [
+                  get_oauth_provider_should_return_root_oauth_provider_with_jwks_uri,
                   {with_default_oauth_provider_A, [], [
-                      get_oauth_provider_for_resource_server_id_should_return_oauth_provider_A
+                      get_oauth_provider_should_return_oauth_provider_A_with_jwks_uri
                     ]
                   }
                 ]
               },
-              {with_oauth_providers_A_B, [], [
-                  get_oauth_provider_for_resource_server_id_should_return_jwks_uri,
+              {with_oauth_providers_A_B_with_jwks_uri, [], [
+                  get_oauth_provider_should_return_root_oauth_provider_with_jwks_uri,
                   {with_default_oauth_provider_B, [], [
-                      get_oauth_provider_for_resource_server_id_should_return_oauth_provider_B
+                      get_oauth_provider_should_return_oauth_provider_B_with_jwks_uri
                     ]
                   }
                 ]
               }
             ]
           },
-          {with_oauth_providers_A, [], [
-              get_oauth_provider_for_resource_server_id_should_return_oauth_provider_A
+          {with_oauth_providers_A_with_jwks_uri, [], [
+              get_oauth_provider_should_fail,
+              {with_default_oauth_provider_A, [], [
+                  get_oauth_provider_should_return_oauth_provider_A_with_jwks_uri
+                ]
+              }
             ]
           },
-          {with_oauth_providers_A_B, [], [
-              get_oauth_provider_for_resource_server_id_should_fail,
-              {with_default_oauth_provider_B, [], [
-                  get_oauth_provider_for_resource_server_id_should_return_oauth_provider_B
+          {with_issuer, [], [
+              get_oauth_provider_should_return_root_oauth_provider_with_all_discovered_endpoints,
+              {with_oauth_providers_A, [], [
+                  get_oauth_provider_should_return_root_oauth_provider_with_all_discovered_endpoints,
+                  {with_default_oauth_provider_A, [], [
+                      get_oauth_provider_should_return_oauth_provider_A_with_all_discovered_endpoints
+                    ]
+                  }
+                ]
+              },
+              {with_oauth_providers_A_B, [], [
+                  get_oauth_provider_should_return_root_oauth_provider_with_all_discovered_endpoints,
+                  {with_default_oauth_provider_B, [], [
+                      get_oauth_provider_should_return_oauth_provider_B_with_all_discovered_endpoints
+                    ]
+                  }
                 ]
               }
             ]
@@ -120,24 +136,9 @@ groups() ->
 
 init_per_suite(Config) ->
   rabbit_ct_helpers:log_environment(),
-	{ok, _} = application:ensure_all_started(ssl),
-  application:ensure_all_started(cowboy),
-	CertsDir = ?config(rmq_certsdir, Config),
-	CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
-	WrongCaCertFile = filename:join([CertsDir, "server", "server.pem"]),
-
-	HttpOauthServerExpectations = get_openid_configuration_expectations(),
-	ListOfExpectations = maps:values(proplists:to_map(HttpOauthServerExpectations)),
-
-	start_https_oauth_server(?AUTH_PORT, CertsDir, ListOfExpectations),
-
-  rabbit_ct_helpers:run_setup_steps([
-		{ssl_options, ssl_options(verify_peer, false, CaCertFile)}
-	  |
-	 	Config]).
+  rabbit_ct_helpers:run_setup_steps(Config).
 
 end_per_suite(Config) ->
-  stop_http_auth_server(),
   rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(with_rabbitmq_node, Config) ->
@@ -148,21 +149,46 @@ init_per_group(with_rabbitmq_node, Config) ->
   rabbit_ct_helpers:run_steps(Config1, rabbit_ct_broker_helpers:setup_steps());
 
 
-init_per_group(with_jwks_uri, Config) ->
-  application:set_env(rabbitmq_auth_backend_oauth2, key_config, [{jwks_url,<<"https://some-idp">> }]),
+init_per_group(with_jwks_url, Config) ->
+  application:set_env(rabbitmq_auth_backend_oauth2, key_config, [{jwks_url,build_url_to_oauth_provider(<<"/keys">>)}]),
   Config;
-init_per_group(with_oauth_providers_A, Config) ->
-  application:set_env(rabbitmq_auth_backend_oauth2, resource_servers,
-    #{<<"rabbitmq1">> =>  [ { oauth_provider_id, <<"A">> } ]
-      }),
+init_per_group(with_issuer, Config) ->
+  {ok, _} = application:ensure_all_started(ssl),
+  application:ensure_all_started(cowboy),
+	CertsDir = ?config(rmq_certsdir, Config),
+	CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
+
+	HttpOauthServerExpectations = get_openid_configuration_expectations(),
+	ListOfExpectations = maps:values(proplists:to_map(HttpOauthServerExpectations)),
+
+	start_https_oauth_server(?AUTH_PORT, CertsDir, ListOfExpectations),
+
+  application:set_env(rabbitmq_auth_backend_oauth2, issuer, build_url_to_oauth_provider(<<"/">>)),
+
+  [{ssl_options, ssl_options(verify_peer, false, CaCertFile)} | Config];
+
+init_per_group(with_oauth_providers_A_with_jwks_uri, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, oauth_providers,
-    #{<<"A">> => [ {jwks_uri,<<"https://A">> }] } ),
+    #{<<"A">> => [
+      {issuer,build_url_to_oauth_provider(<<"/A">>) },
+      {jwks_uri,build_url_to_oauth_provider(<<"/A/keys">>) }
+      ] } ),
   Config;
-init_per_group(with_oauth_providers_A_B, Config) ->
+init_per_group(with_oauth_providers_A_B_with_jwks_uri, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, oauth_providers,
-    #{ <<"A">> => [ {jwks_uri,<<"https://A">> }],
-       <<"B">> => [ {jwks_uri,<<"https://B">> }] }),
+    #{ <<"A">> => [
+      {issuer,build_url_to_oauth_provider(<<"/A">>) },
+      {jwks_uri,build_url_to_oauth_provider(<<"/A/keys">>) }
+      ],
+       <<"B">> => [
+      {issuer,build_url_to_oauth_provider(<<"/B">>) },
+      {jwks_uri,build_url_to_oauth_provider(<<"/B/keys">>) }
+      ] }),
   Config;
+init_per_group(with_default_oauth_provider_A, Config) ->
+  application:set_env(rabbitmq_auth_backend_oauth2, default_oauth_provider, <<"A">>),
+  Config;
+
 init_per_group(with_default_oauth_provider_B, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, default_oauth_provider, <<"B">>),
   Config;
@@ -241,6 +267,19 @@ end_per_group(with_rabbitmq_node, Config) ->
 end_per_group(with_resource_server_id, Config) ->
   application:unset_env(rabbitmq_auth_backend_oauth2, resource_server_id),
   Config;
+end_per_group(with_jwks_url, Config) ->
+  application:unset_env(rabbitmq_auth_backend_oauth2, key_config),
+  Config;
+end_per_group(with_issuer, Config) ->
+  application:unset_env(rabbitmq_auth_backend_oauth2, issuer),
+  stop_http_auth_server(),
+  Config;
+end_per_group(with_oauth_providers_A_with_jwks_uri, Config) ->
+  application:unset_env(rabbitmq_auth_backend_oauth2, oauth_providers),
+  Config;
+end_per_group(with_oauth_providers_A_B_with_jwks_uri, Config) ->
+  application:unset_env(rabbitmq_auth_backend_oauth2, oauth_providers),
+  Config;
 
 end_per_group(with_oauth_providers_A, Config) ->
   application:unset_env(rabbitmq_auth_backend_oauth2, oauth_providers),
@@ -249,6 +288,9 @@ end_per_group(with_oauth_providers_A_B, Config) ->
   application:unset_env(rabbitmq_auth_backend_oauth2, oauth_providers),
   Config;
 end_per_group(with_default_oauth_provider_B, Config) ->
+  application:unset_env(rabbitmq_auth_backend_oauth2, default_oauth_provider),
+  Config;
+end_per_group(with_default_oauth_provider_A, Config) ->
   application:unset_env(rabbitmq_auth_backend_oauth2, default_oauth_provider),
   Config;
 
@@ -401,15 +443,6 @@ find_audience_in_resource_server_ids_found_resource_server_id(_Config) ->
 find_audience_in_resource_server_ids_using_binary_audience(_Config) ->
   {ok, ?RABBITMQ} = rabbit_oauth2_config:find_audience_in_resource_server_ids(<<"rabbitmq other">>).
 
-get_jwks_url_for_resource_server_id_should_fail(_Config) ->
-  {error, _Message} = rabbit_oauth2_config:get_jwks_url(?RABBITMQ).
-
-get_jwks_url_for_resource_server_id(_Config) ->
-  ?assertEqual(<<"https://oauth-for-rabbitmq">>, rabbit_oauth2_config:get_jwks_url(?RABBITMQ)).
-
-get_jwks_url_for_resource_servers_id(_Config) ->
-  ?assertEqual(<<"https://oauth-for-rabbitmq1">>, rabbit_oauth2_config:get_jwks_url(<<"rabbitmq1">>)).
-
 resolve_settings_via_inheritance(_Config) ->
   ?assertEqual(<<"https://oauth-for-rabbitmq">>, rabbit_oauth2_config:get_jwks_url(<<"rabbitmq-2">>)).
 
@@ -484,44 +517,92 @@ get_scope_aliases(_Config) ->
   ?assertEqual(#{}, rabbit_oauth2_config:get_scope_aliases(<<"rabbitmq1">>)),
   ?assertEqual(rabbit_oauth2_config:get_scope_aliases(?RABBITMQ), rabbit_oauth2_config:get_scope_aliases(<<"rabbitmq2">>)).
 
-get_oauth_provider_for_resource_server_id_should_fail(_Config) ->
+get_oauth_provider_should_fail(_Config) ->
   {error, _Message} = rabbit_oauth2_config:get_oauth_provider_for_resource_server_id(?RABBITMQ, [jwks_uri]).
-get_oauth_provider_for_resource_server_id_should_return_jwks_uri(_Config) ->
-  {ok, #oauth_provider{jwks_uri = URI}} = rabbit_oauth2_config:get_oauth_provider_for_resource_server_id(?RABBITMQ, [jwks_uri]),
-  ?assertEqual(rabbit_oauth2_config:get_jwks_url(?RABBITMQ), URI),
-  ?assertEqual(rabbit_oauth2_config:get_jwks_url(?RABBITMQ), <<"https://some-idp">>).
-get_oauth_provider_for_resource_server_id_should_return_oauth_provider_B(_Config) ->
-  {ok, #oauth_provider{jwks_uri = URI}} = rabbit_oauth2_config:get_oauth_provider_for_resource_server_id(?RABBITMQ, [jwks_uri]),
-  ?assertEqual(rabbit_oauth2_config:get_jwks_url(?RABBITMQ), URI),
-  ?assertEqual(rabbit_oauth2_config:get_jwks_url(?RABBITMQ), <<"B">>).
-get_oauth_provider_for_resource_server_id_should_return_auth_provider_A(_Config) ->
-  {ok, #oauth_provider{jwks_uri = URI}} = rabbit_oauth2_config:get_oauth_provider_for_resource_server_id(?RABBITMQ, [jwks_uri]),
-  ?assertEqual(rabbit_oauth2_config:get_jwks_url(?RABBITMQ), URI),
-  ?assertEqual(rabbit_oauth2_config:get_jwks_url(?RABBITMQ), <<"A">>).
+get_oauth_provider_should_return_root_oauth_provider_with_jwks_uri(_Config) ->
+  {ok, OAuthProvider} = rabbit_oauth2_config:get_oauth_provider_for_resource_server_id(?RABBITMQ, [jwks_uri]),
+  ?assertEqual(build_url_to_oauth_provider(<<"/keys">>), OAuthProvider#oauth_provider.jwks_uri).
+get_oauth_provider_should_return_root_oauth_provider_with_all_discovered_endpoints(_Config) ->
+  {ok, OAuthProvider} = rabbit_oauth2_config:get_oauth_provider_for_resource_server_id(?RABBITMQ, [jwks_uri]),
+  ?assertEqual(build_url_to_oauth_provider(<<"/keys">>), OAuthProvider#oauth_provider.jwks_uri),
+  ?assertEqual(build_url_to_oauth_provider(<<"/">>), OAuthProvider#oauth_provider.issuer).
+append_paths(Path1, Path2) ->
+  erlang:iolist_to_binary([Path1, Path2]).
+
+get_oauth_provider_should_return_oauth_provider_B_with_jwks_uri(_Config) ->
+  {ok, OAuthProvider} = rabbit_oauth2_config:get_oauth_provider_for_resource_server_id(?RABBITMQ, [jwks_uri]),
+  ?assertEqual(build_url_to_oauth_provider(<<"/B/keys">>), OAuthProvider#oauth_provider.jwks_uri).
+
+get_oauth_provider_should_return_oauth_provider_B_with_all_discovered_endpoints(_Config) ->
+  {ok, OAuthProvider} = rabbit_oauth2_config:get_oauth_provider_for_resource_server_id(?RABBITMQ, [jwks_uri]),
+  ?assertEqual(build_url_to_oauth_provider(<<"/B/keys">>), OAuthProvider#oauth_provider.jwks_uri),
+  ?assertEqual(build_url_to_oauth_provider(<<"/B">>), OAuthProvider#oauth_provider.issuer).
+
+get_oauth_provider_should_return_oauth_provider_A_with_jwks_uri(_Config) ->
+  {ok, OAuthProvider} = rabbit_oauth2_config:get_oauth_provider_for_resource_server_id(?RABBITMQ, [jwks_uri]),
+  ?assertEqual(build_url_to_oauth_provider(<<"/A/keys">>), OAuthProvider#oauth_provider.jwks_uri).
+
+get_oauth_provider_should_return_oauth_provider_A_with_all_discovered_endpoints(_Config) ->
+  {ok, OAuthProvider} = rabbit_oauth2_config:get_oauth_provider_for_resource_server_id(?RABBITMQ, [jwks_uri]),
+  ?assertEqual(build_url_to_oauth_provider(<<"/A/keys">>), OAuthProvider#oauth_provider.jwks_uri),
+  ?assertEqual(build_url_to_oauth_provider(<<"/A">>), OAuthProvider#oauth_provider.issuer).
 
 get_openid_configuration_expectations() ->
-	 [ {get_openid_configuration,
+	 [ {get_root_openid_configuration,
 
       #{request => #{
          method => <<"GET">>,
-         path => ?DEFAULT_OPENID_CONFIGURATION_PATH
+         path => <<"/.well-known/openid-configuration">>
        },
        response => [
          {code, 200},
          {content_type, ?CONTENT_JSON},
          {payload, [
-           {issuer, build_issuer("https") },
-           {jwks_uri, build_jwks_uri("https")}
+           {issuer, build_url_to_oauth_provider(<<"/">>) },
+           {jwks_uri, build_url_to_oauth_provider(<<"/keys">>)}
          ]}
        ]
-     } }
+     }
+     },
+   {get_A_openid_configuration,
+
+      #{request => #{
+         method => <<"GET">>,
+         path => <<"/A/.well-known/openid-configuration">>
+       },
+       response => [
+         {code, 200},
+         {content_type, ?CONTENT_JSON},
+         {payload, [
+           {issuer, build_url_to_oauth_provider(<<"/A">>) },
+           {jwks_uri, build_url_to_oauth_provider(<<"/A/keys">>)}
+         ]}
+       ]
+     }
+     },
+    {get_B_openid_configuration,
+
+       #{request => #{
+          method => <<"GET">>,
+          path => <<"/B/.well-known/openid-configuration">>
+        },
+        response => [
+          {code, 200},
+          {content_type, ?CONTENT_JSON},
+          {payload, [
+            {issuer, build_url_to_oauth_provider(<<"/B">>) },
+            {jwks_uri, build_url_to_oauth_provider(<<"/B/keys">>)}
+          ]}
+        ]
+      }
+      }
 	].
 
 start_https_oauth_server(Port, CertsDir, Expectations) when is_list(Expectations) ->
 	Dispatch = cowboy_router:compile([
 		{'_', [{Path, oauth_http_mock, Expected} || #{request := #{path := Path}} = Expected <- Expectations ]}
 	]),
-	ct:log("start_https_oauth_server with expectation list : ~p -> dispatch: ~p", [Expectations, Expectations]),
+	ct:log("start_https_oauth_server (port:~p) with expectation list : ~p -> dispatch: ~p", [Port, Expectations, Dispatch]),
 	{ok, _} = cowboy:start_tls(
       mock_http_auth_listener,
 				[{port, Port},
@@ -530,16 +611,12 @@ start_https_oauth_server(Port, CertsDir, Expectations) when is_list(Expectations
 				],
 				#{env => #{dispatch => Dispatch}}).
 
-build_issuer(Scheme) ->
-	uri_string:recompose(#{scheme => Scheme,
+build_url_to_oauth_provider(Path) ->
+	uri_string:recompose(#{scheme => "https",
 												 host => "localhost",
 												 port => rabbit_data_coercion:to_integer(?AUTH_PORT),
-												 path => ""}).
-build_jwks_uri(Scheme) ->
-	uri_string:recompose(#{scheme => Scheme,
-												 host => "localhost",
-												 port => rabbit_data_coercion:to_integer(?AUTH_PORT),
-												 path => "/certs"}).
+												 path => Path}).
+
 stop_http_auth_server() ->
   cowboy:stop_listener(mock_http_auth_listener).
 
