@@ -134,12 +134,11 @@ get_oauth_provider_for_resource_server_id(ResourceServerId, RequiredAttributeLis
   get_oauth_provider_for_resource_server_id(get_default_resource_server_id(), ResourceServerId, RequiredAttributeList).
 get_oauth_provider_for_resource_server_id(TopResourceServerId, ResourceServerId, RequiredAttributeList) when ResourceServerId =:= TopResourceServerId ->
   case application:get_env(?APP, default_oauth_provider) of
-    undefined -> ct:log("YYY1"), oauth2_client:get_oauth_provider(RequiredAttributeList);
-    {ok, DefaultOauthProviderId} -> ct:log("YYY2"), oauth2_client:get_oauth_provider(DefaultOauthProviderId, RequiredAttributeList)
+    undefined -> oauth2_client:get_oauth_provider(RequiredAttributeList);
+    {ok, DefaultOauthProviderId} -> oauth2_client:get_oauth_provider(DefaultOauthProviderId, RequiredAttributeList)
   end;
 
 get_oauth_provider_for_resource_server_id(TopResourceServerId, ResourceServerId, RequiredAttributeList) when ResourceServerId =/= TopResourceServerId ->
-  ct:log("XXXXX"),
   case proplists:get_value(oauth_provider_id, get_resource_server_props(ResourceServerId)) of
     undefined ->
       case application:get_env(?APP, default_oauth_provider) of

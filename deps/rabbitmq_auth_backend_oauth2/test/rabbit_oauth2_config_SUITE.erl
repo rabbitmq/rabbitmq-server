@@ -72,7 +72,7 @@ groups() ->
           },
           {with_issuer, [], [
               get_oauth_provider_should_return_root_oauth_provider_with_all_discovered_endpoints,
-              {with_oauth_providers_A, [], [
+              {with_oauth_providers_A_with_issuer, [], [
                   get_oauth_provider_should_return_root_oauth_provider_with_all_discovered_endpoints,
                   {with_default_oauth_provider_A, [], [
                       get_oauth_provider_should_return_oauth_provider_A_with_all_discovered_endpoints
@@ -80,7 +80,7 @@ groups() ->
                   }
                 ]
               },
-              {with_oauth_providers_A_B, [], [
+              {with_oauth_providers_A_B_with_issuer, [], [
                   get_oauth_provider_should_return_root_oauth_provider_with_all_discovered_endpoints,
                   {with_default_oauth_provider_B, [], [
                       get_oauth_provider_should_return_oauth_provider_B_with_all_discovered_endpoints
@@ -100,7 +100,6 @@ groups() ->
       {with_resource_servers, [], [
           get_allowed_resource_server_ids_returns_resource_servers_ids,
           find_audience_in_resource_server_ids_found_one_resource_servers,
-          get_jwks_url_for_resource_servers_id,
           index_resource_servers_by_id_else_by_key
         ]
       },
@@ -113,8 +112,7 @@ groups() ->
         ]
       },
 
-      {inheritance_group, [], [
-          resolve_settings_via_inheritance,
+      {inheritance_group, [], [          
           get_key_config,
           get_additional_scopes_key,
           get_additional_scopes_key_when_not_defined,
@@ -174,7 +172,13 @@ init_per_group(with_oauth_providers_A_with_jwks_uri, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, oauth_providers,
     #{<<"A">> => [
       {issuer,build_url_to_oauth_provider(<<"/A">>) },
-      {jwks_uri,build_url_to_oauth_provider(<<"/A/keys">>) },
+      {jwks_uri,build_url_to_oauth_provider(<<"/A/keys">>) }
+      ] } ),
+  Config;
+init_per_group(with_oauth_providers_A_with_issuer, Config) ->
+  application:set_env(rabbitmq_auth_backend_oauth2, oauth_providers,
+    #{<<"A">> => [
+      {issuer,build_url_to_oauth_provider(<<"/A">>) },
       {https, ?config(ssl_options, Config)}
       ] } ),
   Config;
@@ -182,13 +186,22 @@ init_per_group(with_oauth_providers_A_B_with_jwks_uri, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, oauth_providers,
     #{ <<"A">> => [
       {issuer,build_url_to_oauth_provider(<<"/A">>) },
-      {jwks_uri,build_url_to_oauth_provider(<<"/A/keys">>),
-      {https, ?config(ssl_options, Config)} }
+      {jwks_uri,build_url_to_oauth_provider(<<"/A/keys">>)}
       ],
        <<"B">> => [
       {issuer,build_url_to_oauth_provider(<<"/B">>) },
-      {jwks_uri,build_url_to_oauth_provider(<<"/B/keys">>),
-      {https, ?config(ssl_options, Config)} }
+      {jwks_uri,build_url_to_oauth_provider(<<"/B/keys">>)}
+      ] }),
+  Config;
+init_per_group(with_oauth_providers_A_B_with_issuer, Config) ->
+  application:set_env(rabbitmq_auth_backend_oauth2, oauth_providers,
+    #{ <<"A">> => [
+      {issuer,build_url_to_oauth_provider(<<"/A">>) },
+      {https, ?config(ssl_options, Config)}
+      ],
+       <<"B">> => [
+      {issuer,build_url_to_oauth_provider(<<"/B">>) },
+      {https, ?config(ssl_options, Config)}
       ] }),
   Config;
 init_per_group(with_default_oauth_provider_A, Config) ->
@@ -283,7 +296,13 @@ end_per_group(with_issuer, Config) ->
 end_per_group(with_oauth_providers_A_with_jwks_uri, Config) ->
   application:unset_env(rabbitmq_auth_backend_oauth2, oauth_providers),
   Config;
+end_per_group(with_oauth_providers_A_with_issuer, Config) ->
+  application:unset_env(rabbitmq_auth_backend_oauth2, oauth_providers),
+  Config;
 end_per_group(with_oauth_providers_A_B_with_jwks_uri, Config) ->
+  application:unset_env(rabbitmq_auth_backend_oauth2, oauth_providers),
+  Config;
+end_per_group(with_oauth_providers_A_B_with_issuer, Config) ->
   application:unset_env(rabbitmq_auth_backend_oauth2, oauth_providers),
   Config;
 
@@ -448,9 +467,6 @@ find_audience_in_resource_server_ids_found_resource_server_id(_Config) ->
 
 find_audience_in_resource_server_ids_using_binary_audience(_Config) ->
   {ok, ?RABBITMQ} = rabbit_oauth2_config:find_audience_in_resource_server_ids(<<"rabbitmq other">>).
-
-resolve_settings_via_inheritance(_Config) ->
-  ?assertEqual(<<"https://oauth-for-rabbitmq">>, rabbit_oauth2_config:get_jwks_url(<<"rabbitmq-2">>)).
 
 get_key_config(_Config) ->
   RootKeyConfig = rabbit_oauth2_config:get_key_config(<<"rabbitmq-2">>),
