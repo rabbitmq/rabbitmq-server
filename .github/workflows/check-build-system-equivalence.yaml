@@ -45,7 +45,7 @@ jobs:
       with:
         ref: ${{ inputs.ref || github.ref }}
     - name: CONFIGURE ERLANG
-      uses: erlef/setup-beam@v1.16
+      uses: erlef/setup-beam@v1.17
       with:
         otp-version: ${{ env.erlang_version }}
         elixir-version: ${{ env.elixir_version }}
@@ -79,7 +79,7 @@ jobs:
         path: rabbitmq
         ref: ${{ inputs.ref || github.ref }}
     - name: CONFIGURE ERLANG
-      uses: erlef/setup-beam@v1.16
+      uses: erlef/setup-beam@v1.17
       with:
         otp-version: ${{ env.erlang_version }}
         elixir-version: ${{ env.elixir_version }}
@@ -117,7 +117,7 @@ jobs:
         path: rabbitmq-server
         ref: ${{ inputs.ref || github.ref }}
     - name: CONFIGURE ERLANG
-      uses: erlef/setup-beam@v1.16
+      uses: erlef/setup-beam@v1.17
       with:
         otp-version: ${{ env.erlang_version }}
         elixir-version: ${{ env.elixir_version }}
