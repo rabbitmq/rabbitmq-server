@@ -75,11 +75,17 @@ delete_on_all_nodes(VHost) ->
 
 stop_and_delete_vhost(VHost) ->
     StopResult = case lookup_vhost_sup_record(VHost) of
-        not_found -> ok;
+        not_found ->
+            rabbit_log:warning("Supervisor for vhost '~ts' not found during deletion procedure",
+                            [VHost]),
+            ok;
         #vhost_sup{wrapper_pid = WrapperPid,
                    vhost_sup_pid = VHostSupPid} ->
             case is_process_alive(WrapperPid) of
-                false -> ok;
+                false ->
+                    rabbit_log:info("Supervisor ~tp for vhost '~ts' already stopped",
+                                    [VHostSupPid, VHost]),
+                    ok;
                 true  ->
                     rabbit_log:info("Stopping vhost supervisor ~tp"
                                     " for vhost '~ts'",
