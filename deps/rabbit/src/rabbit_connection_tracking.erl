@@ -127,7 +127,7 @@ handle_cast({user_deleted, Details}) ->
     %% Schedule user entry deletion, allowing time for connections to close
     _ = timer:apply_after(?TRACKING_EXECUTION_TIMEOUT, ?MODULE,
             delete_tracked_connection_user_entry, [Username]),
-    rabbit_log_connection:info("Closing all connections from user '~ts' because it's being deleted", [Username]),
+    rabbit_log_connection:info("Closing all connections for user '~ts' because the user is being deleted", [Username]),
     shutdown_tracked_items(
         rabbit_connection_tracking:list_of_user(Username),
         rabbit_misc:format("user '~ts' is deleted", [Username])).
