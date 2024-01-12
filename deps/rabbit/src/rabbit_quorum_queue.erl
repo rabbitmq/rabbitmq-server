@@ -78,7 +78,8 @@
          force_all_queues_shrink_member_to_current_member/0]).
 
 -import(rabbit_queue_type_util, [args_policy_lookup/3,
-                                 qname_to_internal_name/1]).
+                                 qname_to_internal_name/1,
+                                 erpc_call/5]).
 
 -include_lib("stdlib/include/qlc.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -1840,31 +1841,6 @@ notify_decorators(QName, F, A) ->
             ok;
         {error, not_found} ->
             ok
-    end.
-
-erpc_call(Node, M, F, A, _Timeout)
-  when Node =:= node()  ->
-    %% Only timeout 'infinity' optimises the local call in OTP 23-25 avoiding a new process being spawned:
-    %% https://github.com/erlang/otp/blob/47f121af8ee55a0dbe2a8c9ab85031ba052bad6b/lib/kernel/src/erpc.erl#L121
-    try erpc:call(Node, M, F, A, infinity) of
-        Result ->
-            Result
-    catch
-        error:Err ->
-            {error, Err}
-    end;
-erpc_call(Node, M, F, A, Timeout) ->
-    case lists:member(Node, nodes()) of
-        true ->
-            try erpc:call(Node, M, F, A, Timeout) of
-                Result ->
-                    Result
-            catch
-                error:Err ->
-                    {error, Err}
-            end;
-        false ->
-            {error, noconnection}
     end.
 
 is_stateful() -> true.
