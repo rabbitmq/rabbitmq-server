@@ -40,7 +40,8 @@
 -export([emit_unresponsive/6, emit_unresponsive_local/5, is_unresponsive/2]).
 -export([has_synchronised_mirrors_online/1, is_match/2, is_in_virtual_host/2]).
 -export([is_replicated/1, is_exclusive/1, is_not_exclusive/1, is_dead_exclusive/1]).
--export([list_local_quorum_queues/0, list_local_quorum_queue_names/0, list_local_stream_queues/0,
+-export([list_local_quorum_queues/0, list_local_quorum_queue_names/0,
+         list_local_stream_queues/0, list_stream_queues_on/1,
          list_local_mirrored_classic_queues/0, list_local_mirrored_classic_names/0,
          list_local_leaders/0, list_local_followers/0, get_quorum_nodes/1,
          list_local_mirrored_classic_without_synchronised_mirrors/0,
@@ -1220,9 +1221,12 @@ list_local_quorum_queues() ->
 
 -spec list_local_stream_queues() -> [amqqueue:amqqueue()].
 list_local_stream_queues() ->
-    [ Q || Q <- list_by_type(stream),
-      amqqueue:get_state(Q) =/= crashed,
-      lists:member(node(), get_quorum_nodes(Q))].
+    list_stream_queues_on(node()).
+
+-spec list_stream_queues_on(node()) -> [amqqueue:amqqueue()].
+list_stream_queues_on(Node) when is_atom(Node) ->
+     [Q || Q <- list_by_type(rabbit_stream_queue),
+           lists:member(Node, get_quorum_nodes(Q))].
 
 -spec list_local_leaders() -> [amqqueue:amqqueue()].
 list_local_leaders() ->

@@ -983,7 +983,7 @@ delete_replica(VHost, Name, Node) ->
 
 delete_all_replicas(Node) ->
     rabbit_log:info("Asked to remove all stream replicas from node ~ts", [Node]),
-    Streams = rabbit_amqqueue:list_by_type(stream),
+    Streams = rabbit_amqqueue:list_stream_queues_on(Node),
     lists:map(fun(Q) ->
                       QName = amqqueue:get_name(Q),
                       rabbit_log:info("~ts: removing replica on node ~w",
