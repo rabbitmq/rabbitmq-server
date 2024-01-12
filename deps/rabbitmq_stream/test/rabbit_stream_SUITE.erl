@@ -11,7 +11,8 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2024 Broadcom. All Rights Reserved.
+%% The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_stream_SUITE).
@@ -27,6 +28,7 @@
 -compile(export_all).
 
 -import(rabbit_stream_core, [frame/1]).
+-import(rabbit_ct_broker_helpers, [rpc/5]).
 
 -define(WAIT, 5000).
 
@@ -55,7 +57,9 @@ groups() ->
        max_segment_size_bytes_validation,
        close_connection_on_consumer_update_timeout,
        set_filter_size,
-       vhost_queue_limit
+       vhost_queue_limit,
+       connection_should_be_closed_on_token_expiry,
+       should_receive_metadata_update_after_update_secret
       ]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
@@ -686,6 +690,75 @@ vhost_queue_limit(Config) ->
     {Cmd6, C} = receive_commands(T, S, C),
     ?assertMatch({response, 1, {delete_stream, ?RESPONSE_CODE_OK}}, Cmd6),
 
+    ok.
+
+connection_should_be_closed_on_token_expiry(Config) ->
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    Mod = rabbit_access_control,
+    ok = rpc(Config, 0, meck, new, [Mod, [no_link, passthrough]]),
+    ok = rpc(Config, 0, meck, expect, [Mod, check_user_loopback, 2, ok]),
+    ok = rpc(Config, 0, meck, expect, [Mod, check_vhost_access, 4, ok]),
+    ok = rpc(Config, 0, meck, expect, [Mod, permission_cache_can_expire, 1, true]),
+    Expiry = os:system_time(seconds) + 2,
+    ok = rpc(Config, 0, meck, expect, [Mod, expiry_timestamp, 1, Expiry]),
+
+    T = gen_tcp,
+    Port = get_port(T, Config),
+    Opts = get_opts(T),
+    {ok, S} = T:connect("localhost", Port, Opts),
+    C = rabbit_stream_core:init(0),
+    test_peer_properties(T, S, C),
+    test_authenticate(T, S, C),
+    closed = wait_for_socket_close(T, S, 10),
+    ok = rpc(Config, 0, meck, unload, [Mod]).
+
+should_receive_metadata_update_after_update_secret(Config) ->
+    T = gen_tcp,
+    Port = get_port(T, Config),
+    Opts = get_opts(T),
+    {ok, S} = T:connect("localhost", Port, Opts),
+    C = rabbit_stream_core:init(0),
+    test_peer_properties(T, S, C),
+    test_authenticate(T, S, C),
+
+    Prefix = atom_to_binary(?FUNCTION_NAME, utf8),
+    PublishStream = <<Prefix/binary, <<"-publish">>/binary>>,
+    test_create_stream(T, S, PublishStream, C),
+    ConsumeStream = <<Prefix/binary, <<"-consume">>/binary>>,
+    test_create_stream(T, S, ConsumeStream, C),
+
+    test_declare_publisher(T, S, 1, PublishStream, C),
+    test_subscribe(T, S, 1, ConsumeStream, C),
+
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    Mod = rabbit_stream_utils,
+    ok = rpc(Config, 0, meck, new, [Mod, [no_link, passthrough]]),
+    ok = rpc(Config, 0, meck, expect, [Mod, check_write_permitted, 2, error]),
+    ok = rpc(Config, 0, meck, expect, [Mod, check_read_permitted, 3, error]),
+
+    C01 = expect_successful_authentication(try_authenticate(T, S, C, <<"PLAIN">>, <<"guest">>, <<"guest">>)),
+
+    {Meta1, C02} = receive_commands(T, S, C01),
+    {metadata_update, Stream1, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE} = Meta1,
+    {Meta2, C03} = receive_commands(T, S, C02),
+    {metadata_update, Stream2, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE} = Meta2,
+    ImpactedStreams = #{Stream1 => ok, Stream2 => ok},
+    ?assert(maps:is_key(PublishStream, ImpactedStreams)),
+    ?assert(maps:is_key(ConsumeStream, ImpactedStreams)),
+
+    test_close(T, S, C03),
+    closed = wait_for_socket_close(T, S, 10),
+
+    ok = rpc(Config, 0, meck, unload, [Mod]),
+
+    {ok, S2} = T:connect("localhost", Port, Opts),
+    C2 = rabbit_stream_core:init(0),
+    test_peer_properties(T, S2, C2),
+    test_authenticate(T, S2, C2),
+    test_delete_stream(T, S2, PublishStream, C2, false),
+    test_delete_stream(T, S2, ConsumeStream, C2, false),
+    test_close(T, S2, C2),
+    closed = wait_for_socket_close(T, S2, 10),
     ok.
 
 consumer_count(Config) ->
