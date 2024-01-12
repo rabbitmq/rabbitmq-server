@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2024 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_stream_utils).
@@ -35,7 +35,8 @@
          filter_spec/1,
          command_versions/0,
          filtering_supported/0,
-         check_super_stream_management_permitted/4]).
+         check_super_stream_management_permitted/4,
+         clear_permission_cache/0]).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -201,6 +202,10 @@ check_resource_access(User, Resource, Perm, Context) ->
                     error
             end
     end.
+
+clear_permission_cache() ->
+    erase(permission_cache),
+    ok.
 
 check_configure_permitted(Resource, User) ->
     check_resource_access(User, Resource, configure, #{}).

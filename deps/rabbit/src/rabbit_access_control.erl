@@ -257,7 +257,7 @@ update_state(User = #user{authz_backends = Backends0}, NewState) ->
 permission_cache_can_expire(#user{authz_backends = Backends}) ->
     lists:any(fun ({Module, _State}) -> Module:state_can_expire() end, Backends).
 
--spec expiry_timestamp(User :: rabbit_types:user()) -> integer | never.
+-spec expiry_timestamp(User :: rabbit_types:user()) -> integer() | never.
 expiry_timestamp(User = #user{authz_backends = Modules}) ->
     lists:foldl(fun({Module, Impl}, Ts0) ->
                         case Module:expiry_timestamp(auth_user(User, Impl)) of
