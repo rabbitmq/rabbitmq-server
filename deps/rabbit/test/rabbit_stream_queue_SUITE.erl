@@ -43,7 +43,8 @@ all() ->
      {group, cluster_size_3_parallel_5},
      {group, unclustered_size_3_1},
      {group, unclustered_size_3_2},
-     {group, unclustered_size_3_3}
+     {group, unclustered_size_3_3},
+     {group, unclustered_size_3_4}
     ].
 
 groups() ->
@@ -102,7 +103,8 @@ groups() ->
      {cluster_size_3_parallel_5, [parallel], all_tests_4()},
      {unclustered_size_3_1, [], [add_replica]},
      {unclustered_size_3_2, [], [consume_without_local_replica]},
-     {unclustered_size_3_3, [], [grow_coordinator_cluster]}
+     {unclustered_size_3_3, [], [grow_coordinator_cluster]},
+     {unclustered_size_3_4, [], [grow_then_shrink_coordinator_cluster]}
     ].
 
 all_tests_1() ->
@@ -213,12 +215,14 @@ init_per_group1(Group, Config) ->
                       cluster_size_3_2 -> 3;
                       unclustered_size_3_1 -> 3;
                       unclustered_size_3_2 -> 3;
-                      unclustered_size_3_3 -> 3
+                      unclustered_size_3_3 -> 3;
+                      unclustered_size_3_4 -> 3
                   end,
     Clustered = case Group of
                     unclustered_size_3_1 -> false;
                     unclustered_size_3_2 -> false;
                     unclustered_size_3_3 -> false;
+                    unclustered_size_3_4 -> false;
                     _ -> true
                 end,
     Config1 = rabbit_ct_helpers:set_config(Config,
@@ -227,7 +231,14 @@ init_per_group1(Group, Config) ->
                                             {tcp_ports_base},
                                             {rmq_nodes_clustered, Clustered}]),
     Config1b = rabbit_ct_helpers:set_config(Config1, [{net_ticktime, 10}]),
-    Ret = rabbit_ct_helpers:run_steps(Config1b,
+    Config1c = case Group of
+                   unclustered_size_3_4 ->
+                       rabbit_ct_helpers:merge_app_env(
+                         Config1b, {rabbit, [{stream_tick_interval, 5000}]});
+                   _ ->
+                       Config1b
+               end,
+    Ret = rabbit_ct_helpers:run_steps(Config1c,
                                       [fun merge_app_env/1 ] ++
                                       rabbit_ct_broker_helpers:setup_steps()),
     case Ret of
@@ -638,6 +649,46 @@ delete_last_replica(Config) ->
     %% It's still here
     check_leader_and_replicas(Config, [Server0]),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+grow_then_shrink_coordinator_cluster(Config) ->
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Q = ?config(queue_name, Config),
+
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    ok = rabbit_control_helper:command(join_cluster, Server1, [atom_to_list(Server0)], []),
+    ok = rabbit_control_helper:command(join_cluster, Server2, [atom_to_list(Server0)], []),
+
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              case rpc:call(Server0, ra, members,
+                            [{rabbit_stream_coordinator, Server0}]) of
+                  {_, Members, _} ->
+                      Nodes = lists:sort([N || {_, N} <- Members]),
+                      lists:sort([Server0, Server1, Server2]) == Nodes;
+                  _ ->
+                      false
+              end
+      end, 60000),
+
+    ok = rabbit_control_helper:command(stop_app, Server1),
+    ok = rabbit_control_helper:command(forget_cluster_node, Server0, [atom_to_list(Server1)], []),
+    ok = rabbit_control_helper:command(stop_app, Server2),
+    ok = rabbit_control_helper:command(forget_cluster_node, Server0, [atom_to_list(Server2)], []),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              case rpc:call(Server0, ra, members,
+                            [{rabbit_stream_coordinator, Server0}]) of
+                  {_, Members, _} ->
+                      Nodes = lists:sort([N || {_, N} <- Members]),
+                      lists:sort([Server0]) == Nodes;
+                  _ ->
+                      false
+              end
+      end, 60000),
+    ok.
 
 grow_coordinator_cluster(Config) ->
     [Server0, Server1, _Server2] =

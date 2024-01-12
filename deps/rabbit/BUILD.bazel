@@ -829,7 +829,7 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_queue_utils_beam",
     ],
-    shard_count = 21,
+    shard_count = 22,
     deps = [
         "@proper//:erlang_app",
     ],
