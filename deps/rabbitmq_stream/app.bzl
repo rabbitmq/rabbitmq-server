@@ -95,6 +95,7 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "private_hdrs",
+        srcs = ["src/rabbit_stream_reader.hrl"],
     )
     filegroup(
         name = "srcs",
@@ -174,4 +175,14 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         app_name = "rabbitmq_stream",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "rabbit_stream_reader_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/rabbit_stream_reader_SUITE.erl"],
+        outs = ["test/rabbit_stream_reader_SUITE.beam"],
+        hdrs = ["src/rabbit_stream_reader.hrl"],
+        app_name = "rabbitmq_stream",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/rabbit_common:erlang_app", "//deps/rabbitmq_stream_common:erlang_app"],
     )
