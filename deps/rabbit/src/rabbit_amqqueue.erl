@@ -403,7 +403,7 @@ maybe_rebalance({true, Id}, Type, VhostSpec, QueueSpec) ->
                     [Type, VhostSpec, QueueSpec]),
     Running = rabbit_maintenance:filter_out_drained_nodes_consistent_read(rabbit_nodes:list_running()),
     NumRunning = length(Running),
-    ToRebalance = [Q || Q <- rabbit_amqqueue:list(),
+    ToRebalance = [Q || Q <- list(),
                         filter_per_type(Type, Q),
                         is_replicated(Q),
                         is_match(amqqueue:get_vhost(Q), VhostSpec) andalso
@@ -1137,7 +1137,7 @@ list() ->
 count() ->
     rabbit_db_queue:count().
 
--spec list_names() -> [rabbit_amqqueue:name()].
+-spec list_names() -> [name()].
 
 list_names() ->
     rabbit_db_queue:list().
@@ -1168,7 +1168,7 @@ is_down(Q) ->
 -spec sample_local_queues() -> [amqqueue:amqqueue()].
 sample_local_queues() -> sample_n_by_name(list_local_names(), 300).
 
--spec sample_n_by_name([rabbit_amqqueue:name()], pos_integer()) -> [amqqueue:amqqueue()].
+-spec sample_n_by_name([name()], pos_integer()) -> [amqqueue:amqqueue()].
 sample_n_by_name([], _N) ->
     [];
 sample_n_by_name(Names, N) when is_list(Names) andalso is_integer(N) andalso N > 0 ->
@@ -1182,7 +1182,7 @@ sample_n_by_name(Names, N) when is_list(Names) andalso is_integer(N) andalso N >
                      end,
          [], lists:seq(1, M)),
     lists:map(fun (Id) ->
-                {ok, Q} = rabbit_amqqueue:lookup(Id),
+                {ok, Q} = lookup(Id),
                 Q
               end,
               lists:usort(Ids)).
@@ -1205,7 +1205,7 @@ list_by_type(stream)  -> list_by_type(rabbit_stream_queue);
 list_by_type(Type) ->
     rabbit_db_queue:get_all_durable_by_type(Type).
 
--spec list_local_quorum_queue_names() -> [rabbit_amqqueue:name()].
+-spec list_local_quorum_queue_names() -> [name()].
 
 list_local_quorum_queue_names() ->
     [ amqqueue:get_name(Q) || Q <- list_by_type(quorum),
@@ -1248,7 +1248,7 @@ list_local_mirrored_classic_queues() ->
         is_local_to_node(amqqueue:get_pid(Q), node()),
         is_replicated(Q)].
 
--spec list_local_mirrored_classic_names() -> [rabbit_amqqueue:name()].
+-spec list_local_mirrored_classic_names() -> [name()].
 list_local_mirrored_classic_names() ->
     [ amqqueue:get_name(Q) || Q <- list(),
            amqqueue:get_state(Q) =/= crashed,
@@ -2009,8 +2009,7 @@ filter_transient_queues_to_delete(Node) ->
             amqqueue:qnode(Q) == Node andalso
                 not rabbit_process:is_process_alive(amqqueue:get_pid(Q))
                 andalso (not amqqueue:is_classic(Q) orelse not amqqueue:is_durable(Q))
-                andalso (not rabbit_amqqueue:is_replicated(Q)
-                         orelse rabbit_amqqueue:is_dead_exclusive(Q))
+                andalso (not is_replicated(Q) orelse is_dead_exclusive(Q))
                 andalso amqqueue:get_type(Q) =/= rabbit_mqtt_qos0_queue
     end.
 
