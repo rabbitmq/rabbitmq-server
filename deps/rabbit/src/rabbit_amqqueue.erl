@@ -339,7 +339,9 @@ is_server_named_allowed(Args) ->
             [amqqueue:amqqueue()].
 
 lookup(Name) when is_record(Name, resource) ->
-    rabbit_db_queue:get(Name).
+    rabbit_db_queue:get(Name);
+lookup(Names) when is_list(Names) ->
+    [rabbit_db_queue:get(Name) || Name <- Names].
 
 lookup_durable_queue(QName) ->
     rabbit_db_queue:get_durable(QName).
@@ -1667,7 +1669,7 @@ delete_with(QueueName, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive) whe
         {error, not_empty} ->
             rabbit_misc:precondition_failed("~ts not empty", [rabbit_misc:rs(QueueName)]);
         {error, {exit, _, _}} ->
-            %% rabbit_amqqueue:delete()/delegate:invoke might return {error, {exit, _, _}}
+            %% delete/1 or delegate:invoke/2 might return {error, {exit, _, _}}
             {ok, 0};
         {ok, Count} ->
             {ok, Count};
@@ -2123,8 +2125,7 @@ queue_names(Queues)
     {ok, amqqueue:amqqueue()} | {error, not_found}.
 get_bcc_queue(Q, BCCName) ->
     #resource{virtual_host = VHost} = amqqueue:get_name(Q),
-    BCCQueueName = rabbit_misc:r(VHost, queue, BCCName),
-    rabbit_amqqueue:lookup(BCCQueueName).
+    lookup(VHost, BCCName).
 
 is_queue_args_combination_permitted(Q) ->
     Durable = amqqueue:is_durable(Q),
