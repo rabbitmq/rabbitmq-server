@@ -14,38 +14,83 @@
 
 all() ->
     [
-     {group, auth_setting_tests}
+     {group, without_any_settings},
+     {group, with_oauth_disabled},
+     {group, with_oauth_enabled}
     ].
 
 groups() ->
     [
-      {auth_setting_tests, [], [
-          auth_settings_with_oauth_disabled,
-          auth_settings_with_oauth_enabled,
-          auth_settings_with_oauth_disabled_due_to_misconfig,
-          auth_settings_with_idp_initiated,
-
-          resolve_oauth_provider_with_mgt_oauth_provider_url,
-          resolve_oauth_provider_with_issuer,
-          resolve_oauth_provider_with_default_provider_issuer,
-
-          auth_settings_with_unknown_oauth_resources,
-          auth_settings_with_multi_oauth_resources,
-          auth_settings_for_multi_oauth_resources_with_missing_client_id,
-          auth_settings_for_multi_oauth_resources_with_partly_missing_client_id,
-          auth_settings_for_multi_oauth_resources_with_partly_missing_oauth_provider_url
-      ]}
+      {without_any_settings, [], {
+        should_return_disabled_auth_settings
+      }},
+      {with_oauth_disabled, [], {
+        should_return_disabled_auth_settings
+      }},
+      {with_oauth_enabled, [], {
+        should_return_disabled_auth_settings,
+        {with_resource_server_id, [], {
+          {with_client_id, [], {
+            should_return_disabled_auth_settings,
+            {with_mgt_aouth_provider_url, [], {
+              should_return_enabled_auth_settings
+            }}
+          }}
+        }}
+      }}
     ].
 
 %% -------------------------------------------------------------------
 %% Setup/teardown.
 %% -------------------------------------------------------------------
+init_per_suite(Config) ->
+  [ {resource_server_id, <<"rabbitmq">>},
+    {client_id, <<"rabbitmq_client">>},
+    {oauth_scopes, <<>>},
+    {oauth_disable_basic_auth, true} | Config].
+
+end_per_suite(_Config) ->
+    ok.
+
+init_per_group(with_oauth_disabled, Config) ->
+  application:set_env(rabbitmq_management, oauth_enabled, false),
+  Config;
+init_per_group(with_oauth_enabled, Config) ->
+  application:set_env(rabbitmq_management, oauth_enabled, true),
+  Config;
+
+init_per_group(with_resource_server_id, Config) ->
+  application:set_env(rabbitmq_management, resource_server_id, ?config(resource_server_id, Config)),
+  Config;
+init_per_group(with_client_id, Config) ->
+  application:set_env(rabbitmq_management, client_id, ?config(client_id, Config)),
+  Config;
+init_per_group(with_mgt_aouth_provider_url, Config) ->
+  application:set_env(rabbitmq_management, oauth_provider_url, <<"http://oauth_provider_url">>),
+  [  {oauth_provider_url, <<"http://oauth_provider_url">>}  | Config];
 
 init_per_group(_, Config) ->
-    Config.
+  Config.
 
+end_per_group(with_oauth_disabled, Config) ->
+  application:unset_env(rabbitmq_management, oauth_enabled),
+  Config;
+end_per_group(with_oauth_enabled, Config) ->
+  application:unset_env(rabbitmq_management, oauth_enabled),
+  Config;
+end_per_group(with_resource_server_id, Config) ->
+  application:unset_env(rabbitmq_management, resource_server_id),
+  Config;
+end_per_group(with_mgt_aouth_provider_url, Config) ->
+  application:unset_env(rabbitmq_management, oauth_provider_url),
+  Config;
+end_per_group(with_client_id, Config) ->
+  application:unset_env(rabbitmq_management, client_id),
+  Config;
 end_per_group(_, Config) ->
-    Config.
+  Config.
+
+
 
 init_per_testcase(_, Config) ->
   case application:get_all_env(rabbitmq_management) of
@@ -67,8 +112,23 @@ init_per_testcase(_, Config) ->
 %% Test cases.
 %% -------------------------------------------------------------------
 
-auth_settings_with_oauth_disabled(_Config) ->
+should_return_disabled_auth_settings(_Config) ->
   [{oauth_enabled, false}] = rabbit_mgmt_wm_auth:authSettings().
+
+should_return_enabled_auth_settings(Config) ->
+  ClientId = ?config(oauth_client_id, Config),
+  ProviderUrl = ?config(oauth_provider_url, Config),
+  ResourceId = ?config(resource_server_id, Config),
+  Scopes = ?config(oauth_scopes, Config),
+  [
+    {oauth_enabled, true},
+    {oauth_disable_basic_auth, true},
+    {oauth_client_id, ClientId},
+    {oauth_provider_url, ProviderUrl},
+    {oauth_resource_id, ResourceId},
+    {oauth_scopes, Scopes},
+    {oauth_metadata_url, <<>>}
+  ] = rabbit_mgmt_wm_auth:authSettings().
 
 auth_settings_with_oauth_enabled(_Config) ->
   application:set_env(rabbitmq_management, oauth_enabled, true),
@@ -166,7 +226,8 @@ auth_settings_with_multi_oauth_resources(_Config) ->
     {oauth_resource_servers, ExpectedResourceServers},
     {oauth_disable_basic_auth, true}
   ] = rabbit_mgmt_wm_auth:authSettings().
-çauth_settings_with_multi_oauth_resources(_Config) ->
+
+oauth_settings_with_multi_oauth_resources(_Config) ->
   application:set_env(rabbitmq_management, oauth_enabled, true),
   MgtResourceServers = #{
     <<"one">> => [
