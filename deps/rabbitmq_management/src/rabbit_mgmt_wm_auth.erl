@@ -99,11 +99,13 @@ authSettings() ->
         _ -> case skip_unknown_resource_servers(OAuthResourceServers) of
               Map when map_size(Map) == 0 ->
                 rabbit_log:error("Empty or unknown set of rabbitmq_management oauth_resource_servers"),
+                ct:log("exit1"),
                 [{oauth_enabled, false}];
               Map -> multi_resource_auth_settings(Map)
             end
       end;
     false ->
+      ct:log("exit0"),
       [{oauth_enabled, false}]
   end.
 %% Ensure each resource has a client_id or there is a top level some_client_id
@@ -156,12 +158,14 @@ single_resource_auth_settings() ->
       case is_invalid([OAuthResourceId]) of
         true ->
             rabbit_log:error("Invalid rabbitmq_auth_backend_oauth2.resource_server_id ~p", [OAuthResourceId]),
+            ct:log("exit3"),
             [{oauth_enabled, false}];
         false ->
             case is_invalid([OAuthClientId, OAuthProviderUrl]) of
                 true ->
-                    rabbit_log:error("Invalid rabbitmq_management oauth_client_id ~p or resolved oauth_provider_url ~p",
-                      [OAuthResourceId, OAuthProviderUrl]),
+                    ct:log("Invalid rabbitmq_management oauth_client_id ~p or resolved oauth_provider_url ~p",
+                      [OAuthClientId, OAuthProviderUrl]),
+                    ct:log("exit4"),
                     [{oauth_enabled, false}];
                 false ->
                     append_oauth_optional([
@@ -179,11 +183,13 @@ single_resource_auth_settings() ->
       case is_invalid([OAuthResourceId]) of
         true ->
             rabbit_log:error("Invalid rabbitmq_auth_backend_oauth2.resource_server_id ~p", [OAuthResourceId]),
+            ct:log("exit5"),
             [{oauth_enabled, false}];
         false ->
             case is_invalid([OAuthProviderUrl]) of
               true ->
                 rabbit_log:error("Invalid rabbitmq_management resolved oauth_provider_url ~p", [OAuthProviderUrl]),
+                ct:log("exit6"),
                 [{oauth_enabled, false}];
               false ->
                [{oauth_enabled, true},
