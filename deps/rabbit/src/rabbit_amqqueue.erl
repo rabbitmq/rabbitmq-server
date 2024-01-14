@@ -1572,19 +1572,25 @@ get_queue_consumer_info(Q, ConsumerInfoKeys) ->
 stat(Q) ->
     rabbit_queue_type:stat(Q).
 
--spec pid_of(amqqueue:amqqueue()) ->
+-spec pid_of(binary() | amqqueue:amqqueue()) ->
           pid() | amqqueue:ra_server_id() | 'none'.
 
-pid_of(Q) -> amqqueue:get_pid(Q).
+pid_of(Queue) when is_binary(Queue) ->
+    DefaultVHost = rabbit_vhost:default_name(),
+    case lookup(Queue, DefaultVHost) of
+	{ok, Q}                -> pid_of(Q);
+	{error, not_found} = E -> E
+    end;
+pid_of(Queue) -> amqqueue:get_pid(Queue).
 
 -spec pid_of(rabbit_types:vhost(), rabbit_misc:resource_name()) ->
           pid() | rabbit_types:error('not_found').
 
-pid_of(VHost, QueueName) ->
-  case lookup(rabbit_misc:r(VHost, queue, QueueName)) of
-    {ok, Q}                -> pid_of(Q);
-    {error, not_found} = E -> E
-  end.
+pid_of(VHost, Queue) ->
+    case lookup(Queue, VHost) of
+	{ok, Q}                -> pid_of(Q);
+	{error, not_found} = E -> E
+    end.
 
 -spec delete_exclusive(qpids(), pid()) -> 'ok'.
 
@@ -2125,7 +2131,7 @@ queue_names(Queues)
     {ok, amqqueue:amqqueue()} | {error, not_found}.
 get_bcc_queue(Q, BCCName) ->
     #resource{virtual_host = VHost} = amqqueue:get_name(Q),
-    lookup(VHost, BCCName).
+    lookup(BCCName, VHost).
 
 is_queue_args_combination_permitted(Q) ->
     Durable = amqqueue:is_durable(Q),
