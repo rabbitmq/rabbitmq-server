@@ -10,7 +10,6 @@
          x_header/2,
          property/2,
          routing_headers/2,
-         get_property/2,
          convert_to/3,
          convert_from/3,
          protocol_state/2,
@@ -133,20 +132,6 @@ get_property(timestamp, Msg) ->
         _ ->
             undefined
     end;
-get_property(correlation_id, Msg) ->
-    case Msg of
-        #msg{properties = #'v1_0.properties'{correlation_id = {_Type, CorrId}}} ->
-            CorrId;
-        _ ->
-            undefined
-    end;
-get_property(message_id, Msg) ->
-    case Msg of
-        #msg{properties = #'v1_0.properties'{message_id = {_Type, CorrId}}} ->
-            CorrId;
-        _ ->
-            undefined
-    end;
 get_property(ttl, Msg) ->
     case Msg of
         #msg{header = #'v1_0.header'{ttl = {_, Ttl}}} ->
@@ -173,9 +158,7 @@ get_property(priority, Msg) ->
                 _ ->
                     undefined
             end
-    end;
-get_property(_P, _Msg) ->
-    undefined.
+    end.
 
 convert_to(?MODULE, Msg, _Env) ->
     Msg;
@@ -188,8 +171,8 @@ serialize(Sections) ->
     encode_bin(Sections).
 
 protocol_state(Msg, Anns) ->
-    Exchange = maps:get(exchange, Anns),
-    [RKey | _] = maps:get(routing_keys, Anns),
+    #{?EXCHANGE := Exchange,
+      ?ROUTING_KEYS := [RKey | _]} = Anns,
 
     %% any x-* annotations get added as message annotations
     AnnsToAdd = maps:filter(fun (Key, _) -> mc_util:is_x_header(Key) end, Anns),
@@ -426,11 +409,11 @@ essential_properties(#msg{message_annotations = MA} = Msg) ->
                      undefined
              end,
     Anns = maps_put_falsy(
-             durable, Durable,
+             ?DURABLE, Durable,
              maps_put_truthy(
-               priority, Priority,
+               ?PRIORITY, Priority,
                maps_put_truthy(
-                 timestamp, Timestamp,
+                 ?TIMESTAMP, Timestamp,
                  maps_put_truthy(
                    ttl, Ttl,
                    maps_put_truthy(
@@ -443,20 +426,20 @@ essential_properties(#msg{message_annotations = MA} = Msg) ->
             lists:foldl(
               fun ({{symbol, <<"x-routing-key">>},
                     {utf8, Key}}, Acc) ->
-                      maps:update_with(routing_keys,
+                      maps:update_with(?ROUTING_KEYS,
                                        fun(L) -> [Key | L] end,
                                        [Key],
                                        Acc);
                   ({{symbol, <<"x-cc">>},
                     {list, CCs0}}, Acc) ->
                       CCs = [CC || {_T, CC} <- CCs0],
-                      maps:update_with(routing_keys,
+                      maps:update_with(?ROUTING_KEYS,
                                        fun(L) -> L ++ CCs end,
                                        CCs,
                                        Acc);
                   ({{symbol, <<"x-exchange">>},
                     {utf8, Exchange}}, Acc) ->
-                      Acc#{exchange => Exchange};
+                      Acc#{?EXCHANGE => Exchange};
                   (_, Acc) ->
                       Acc
               end, Anns, MA)

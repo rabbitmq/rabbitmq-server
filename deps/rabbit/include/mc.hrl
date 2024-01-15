@@ -20,3 +20,11 @@
 %% "Short strings can carry up to 255 octets of UTF-8 data, but
 %% may not contain binary zero octets." [AMQP 0.9.1 $4.2.5.3]
 -define(IS_SHORTSTR_LEN(B), byte_size(B) < 256).
+
+%% We keep the following atom annotation keys short as they are stored per message on disk.
+-define(EXCHANGE, x).
+-define(ROUTING_KEYS, rk).
+-define(TIMESTAMP, ts).
+-define(RECEIVED_AT_TIMESTAMP, rts).
+-define(DURABLE, d).
+-define(PRIORITY, p).

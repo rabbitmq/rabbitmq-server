@@ -420,7 +420,7 @@ protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
                                   end, Headers1)
               end,
     Timestamp = case Anns of
-                    #{timestamp := Ts} ->
+                    #{?TIMESTAMP := Ts} ->
                         Ts div 1000;
                     _ ->
                         undefined
@@ -473,8 +473,8 @@ message(#resource{name = ExchangeNameBin}, RoutingKey,
         HeaderRoutes ->
             {ok, mc:init(?MODULE,
                          rabbit_basic:strip_bcc_header(Content),
-                         Anns#{routing_keys => [RoutingKey | HeaderRoutes],
-                               exchange => ExchangeNameBin})}
+                         Anns#{?ROUTING_KEYS => [RoutingKey | HeaderRoutes],
+                               ?EXCHANGE => ExchangeNameBin})}
     end;
 message(#resource{} = XName, RoutingKey,
         #content{} = Content, Anns, false) ->
@@ -707,13 +707,13 @@ essential_properties(#content{} = C) ->
                 end,
     Durable = Mode == 2,
     maps_put_truthy(
-      priority, Priority,
+      ?PRIORITY, Priority,
       maps_put_truthy(
         ttl, MsgTTL,
         maps_put_truthy(
-          timestamp, Timestamp,
+          ?TIMESTAMP, Timestamp,
           maps_put_falsy(
-            durable, Durable,
+            ?DURABLE, Durable,
             #{})))).
 
 %% headers that are added as annotations during conversions

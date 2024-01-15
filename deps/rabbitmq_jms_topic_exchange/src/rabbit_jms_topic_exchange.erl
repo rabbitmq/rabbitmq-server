@@ -90,13 +90,12 @@ serialise_events() -> false.
 
 % Route messages
 route(#exchange{name = XName}, Msg, _Opts) ->
-    RKs = mc:get_annotation(routing_keys, Msg),
     Content = mc:protocol_state(mc:convert(mc_amqpl, Msg)),
     case get_binding_funs_x(XName) of
         not_found ->
             [];
         BindingFuns ->
-            match_bindings(XName, RKs, Content, BindingFuns)
+            match_bindings(XName, Content, BindingFuns)
     end.
 
 
@@ -163,7 +162,7 @@ get_string_arg(Args, ArgName, Default) ->
   end.
 
 % Match bindings for the current message
-match_bindings( XName, _RoutingKeys, MessageContent, BindingFuns) ->
+match_bindings(XName, MessageContent, BindingFuns) ->
   MessageHeaders = get_headers(MessageContent),
   rabbit_router:match_bindings( XName
                               , fun(#binding{key = Key, destination = Dest}) ->

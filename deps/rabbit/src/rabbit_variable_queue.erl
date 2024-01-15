@@ -1228,7 +1228,7 @@ oldest_message_received_timestamp(Q3, RPA) ->
     Timestamps =
         [Timestamp
          || HeadMsg <- HeadMsgs,
-            Timestamp <- [mc:get_annotation(rts, HeadMsg)],
+            Timestamp <- [mc:get_annotation(?RECEIVED_AT_TIMESTAMP, HeadMsg)],
             Timestamp /= undefined
         ],
 
