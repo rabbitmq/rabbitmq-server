@@ -668,6 +668,10 @@ function postprocess() {
                            "after deletion.");
         });
 
+    $('form.enable-feature-flag').on('submit', function() {
+                    full_refresh();
+    });
+
     $('label').map(function() {
             if ($(this).attr('for') == '') {
                 var id = 'auto-label-' + Math.floor(Math.random()*1000000000);
