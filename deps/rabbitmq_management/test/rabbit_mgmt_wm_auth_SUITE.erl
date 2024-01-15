@@ -30,19 +30,22 @@ groups() ->
       {with_oauth_enabled, [], [
         should_return_disabled_auth_settings,
         {with_resource_server_id, [], [
+          should_return_disabled_auth_settings,
           {with_client_id, [], [
             should_return_disabled_auth_settings,
-            {with_root_issuer, [], [
-              should_return_enabled_auth_settings_sp_initiated_logon,
-              {with_mgt_aouth_provider_url, [], [
-                should_return_enabled_auth_settings_sp_initiated_logon
-              ]}
-            ]},
             {with_mgt_aouth_provider_url, [], [
+              should_return_enabled_auth_settings_with_client_server_id_and_resource_server_id,
               should_return_enabled_auth_settings_sp_initiated_logon,
+              should_return_configured_oauth_provider_url,
+              should_return_oauth_disable_basic_auth,
+              should_return_empty_scopes,
               {with_idp_initiated_logon, [], [
                 should_return_enabled_auth_settings_idp_initiated_logon
               ]}
+            ]},
+            {with_root_issuer, [], [
+              should_return_enabled_auth_settings_with_client_server_id_and_resource_server_id,
+              should_return_root_issuer_as_oauth_provider_url
             ]}
           ]}
         ]}
@@ -76,10 +79,10 @@ init_per_group(with_client_id, Config) ->
   Config;
 init_per_group(with_mgt_aouth_provider_url, Config) ->
   application:set_env(rabbitmq_management, oauth_provider_url, <<"http://oauth_provider_url">>),
-  [  {oauth_provider_url, <<"http://oauth_provider_url">>}  | Config];
+  Config;
 init_per_group(with_root_issuer, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, issuer, <<"http://issuer">>),
-  [  {oauth_provider_url, <<"http://issuer">>}  | Config];
+  Config;
 init_per_group(with_idp_initiated_logon, Config) ->
   application:set_env(rabbitmq_management, oauth_initiated_logon_type, idp_initiated),
   [ {oauth_initiated_logon_type, idp_initiated} | Config];
@@ -100,14 +103,15 @@ end_per_group(with_mgt_aouth_provider_url, Config) ->
   application:unset_env(rabbitmq_management, oauth_provider_url),
   Config;
 end_per_group(with_root_issuer, Config) ->
-  application:unset_env(rabbitmq_auth_backend_oauth2, issuer);
+  application:unset_env(rabbitmq_auth_backend_oauth2, issuer),
+  Config;
 
 end_per_group(with_client_id, Config) ->
   application:unset_env(rabbitmq_management, oauth_client_id),
   Config;
 end_per_group(with_idp_initiated_logon, Config) ->
-  application:set_env(rabbitmq_management, oauth_initiated_logon_type, idp_initiated),
-  proplists:delete(oauth_initiated_logon_type, Config);
+  application:unset_env(rabbitmq_management, oauth_initiated_logon_type),
+  Config;
 
 end_per_group(_, Config) ->
   Config.
@@ -120,35 +124,50 @@ end_per_group(_, Config) ->
 should_return_disabled_auth_settings(_Config) ->
   [{oauth_enabled, false}] = rabbit_mgmt_wm_auth:authSettings().
 
-should_return_enabled_auth_settings_sp_initiated_logon(Config) ->
+should_return_enabled_auth_settings_with_client_server_id_and_resource_server_id(Config) ->
   ClientId = ?config(oauth_client_id, Config),
-  ProviderUrl = ?config(oauth_provider_url, Config),
   ResourceId = ?config(resource_server_id, Config),
-  Scopes = ?config(oauth_scopes, Config),
-  ct:log("rabbitmq_management : ~p", [application:get_all_env(rabbitmq_management)]),
-  ct:log("rabbitmq_auth_backend_oauth2 : ~p", [application:get_all_env(rabbitmq_auth_backend_oauth2)]),
-  [
-    {oauth_enabled, true},
-    {oauth_disable_basic_auth, true},
-    {oauth_client_id, ClientId},
-    {oauth_provider_url, ProviderUrl},
-    {oauth_scopes, Scopes},
-    {oauth_metadata_url, <<>>},
-    {oauth_resource_id, ResourceId}
-  ] = rabbit_mgmt_wm_auth:authSettings().
+  Actual = rabbit_mgmt_wm_auth:authSettings(),
+  ct:log("Actual : ~p vs ~p", [Actual, ResourceId]),
+  ?assertEqual(true, proplists:get_value(oauth_enabled, Actual)),
+  ?assertEqual(ClientId, proplists:get_value(oauth_client_id, Actual)),
+  ?assertEqual(ResourceId, proplists:get_value(oauth_resource_id, Actual)),
+  ?assertEqual(<<>>, proplists:get_value(oauth_metadata_url, Actual)).
+
+should_return_empty_scopes(_Config) ->
+  Actual = rabbit_mgmt_wm_auth:authSettings(),
+  ?assertEqual(false, proplists:is_defined(scopes, Actual)).
+
+should_return_enabled_auth_settings_sp_initiated_logon(_Config) ->
+  Actual = rabbit_mgmt_wm_auth:authSettings(),
+  ?assertEqual(false, proplists:is_defined(oauth_initiated_logon_type, Actual)).
 
 should_return_enabled_auth_settings_idp_initiated_logon(Config) ->
-  ProviderUrl = ?config(oauth_provider_url, Config),
   ResourceId = ?config(resource_server_id, Config),
-  ct:log("rabbitmq_management : ~p", [application:get_all_env(rabbitmq_management)]),
-  ct:log("rabbitmq_auth_backend_oauth2 : ~p", [application:get_all_env(rabbitmq_auth_backend_oauth2)]),
-  [
-    {oauth_enabled, true},
-    {oauth_disable_basic_auth, true},
-    {oauth_initiated_logon_type, <<"idp_initiated">>},
-    {oauth_provider_url, ProviderUrl},
-    {oauth_resource_id, ResourceId}
-  ] = rabbit_mgmt_wm_auth:authSettings().
+  Actual = rabbit_mgmt_wm_auth:authSettings(),
+  ?assertNot(proplists:is_defined(oauth_client_id, Actual)),
+  ?assertNot(proplists:is_defined(scopes, Actual)),
+  ?assertNot(proplists:is_defined(oauth_metadata_url, Actual)),
+  ?assertEqual(ResourceId, proplists:get_value(oauth_resource_id, Actual)),
+  ?assertEqual( <<"idp_initiated">>, proplists:get_value(oauth_initiated_logon_type, Actual)).
+
+should_return_root_issuer_as_oauth_provider_url(_Config) ->
+  Actual = rabbit_mgmt_wm_auth:authSettings(),
+  Issuer = application:get_env(rabbitmq_auth_backend_oauth2, issuer, ""),
+  ?assertEqual(Issuer, proplists:get_value(oauth_provider_url, Actual)).
+
+should_return_oauth_disable_basic_auth(_Config) ->
+  Actual = rabbit_mgmt_wm_auth:authSettings(),
+  ?assertEqual(true, proplists:get_value(oauth_disable_basic_auth, Actual)).
+
+should_return_oauth_enabled_basic_auth(_Config) ->
+  Actual = rabbit_mgmt_wm_auth:authSettings(),
+  ?assertEqual(false, proplists:get_value(oauth_disable_basic_auth, Actual)).
+
+should_return_configured_oauth_provider_url(_Config) ->
+  Actual = rabbit_mgmt_wm_auth:authSettings(),
+  Issuer = application:get_env(rabbitmq_management, oauth_provider_url, ""),
+  ?assertEqual(Issuer, proplists:get_value(oauth_provider_url, Actual)).
 
 auth_settings_with_oauth_enabled(_Config) ->
   application:set_env(rabbitmq_management, oauth_enabled, true),
