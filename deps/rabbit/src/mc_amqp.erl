@@ -112,7 +112,7 @@ routing_headers(Msg, Opts) ->
 get_property(durable, Msg) ->
     case Msg of
         #msg{header = #'v1_0.header'{durable = Durable}}
-          when is_atom(Durable) ->
+          when is_boolean(Durable) ->
             Durable;
         #msg{header = #'v1_0.header'{durable = {boolean, Durable}}} ->
             Durable;
