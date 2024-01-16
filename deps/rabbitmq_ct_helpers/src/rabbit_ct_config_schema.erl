@@ -40,7 +40,7 @@ snippet_id(A) when is_atom(A) ->
 snippet_id(L) when is_list(L) ->
     L.
 
-test_snippet(Config, Snippet, Expected, _Plugins) ->
+test_snippet(Config, Snippet = {SnipID, _, _}, Expected, _Plugins) ->
     {ConfFile, AdvancedFile} = write_snippet(Config, Snippet),
     %% We ignore the rabbit -> log portion of the config on v3.9+, where the lager
     %% dependency has been dropped
@@ -55,8 +55,8 @@ test_snippet(Config, Snippet, Expected, _Plugins) ->
     case Exp of
         Gen -> ok;
         _         ->
-            ct:pal("Expected: ~tp~ngenerated: ~tp", [Expected, Generated]),
-            ct:pal("Expected (sorted): ~tp~ngenerated (sorted): ~tp", [Exp, Gen]),
+            ct:pal("Snippet ~tp. Expected: ~tp~ngenerated: ~tp", [SnipID, Expected, Generated]),
+            ct:pal("Snippet ~tp. Expected (sorted): ~tp~ngenerated (sorted): ~tp", [SnipID, Exp, Gen]),
             error({config_mismatch, Snippet, Exp, Gen})
     end.
 
