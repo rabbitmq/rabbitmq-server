@@ -34,6 +34,19 @@ ElixirAppInfo = provider(
     },
 )
 
+def _copy(ctx, src, dst):
+    ctx.actions.run_shell(
+        inputs = [src],
+        outputs = [dst],
+        command = """set -euo pipefail
+
+cp -RL "{src}" "{dst}"
+""".format(
+            src = src.path,
+            dst = dst.path,
+        ),
+    )
+
 def deps_dir_contents(ctx, deps, dir):
     files = []
     for dep in deps:
@@ -51,15 +64,7 @@ def deps_dir_contents(ctx, deps, dir):
                 lib_info.app_name,
                 rp,
             ))
-            args = ctx.actions.args()
-            args.add(src)
-            args.add(f)
-            ctx.actions.run(
-                inputs = [src],
-                outputs = [f],
-                executable = "cp",
-                arguments = [args],
-            )
+            _copy(ctx, src, f)
             files.append(f)
         for beam in lib_info.beam:
             if not beam.is_directory:
@@ -69,15 +74,7 @@ def deps_dir_contents(ctx, deps, dir):
                     "ebin",
                     beam.basename,
                 ))
-                args = ctx.actions.args()
-                args.add(beam)
-                args.add(f)
-                ctx.actions.run(
-                    inputs = [beam],
-                    outputs = [f],
-                    executable = "cp",
-                    arguments = [args],
-                )
+                _copy(ctx, beam, f)
                 files.append(f)
             else:
                 fail("unexpected directory in", lib_info)
