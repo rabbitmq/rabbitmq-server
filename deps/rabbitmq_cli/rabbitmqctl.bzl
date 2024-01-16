@@ -155,8 +155,8 @@ done
 
 cp escript/rabbitmqctl ${{ABS_ESCRIPT_PATH}}
 
-cp _build/${{MIX_ENV}}/lib/rabbitmqctl/ebin/* ${{ABS_EBIN_DIR}}
-cp _build/${{MIX_ENV}}/lib/rabbitmqctl/consolidated/* ${{ABS_CONSOLIDATED_DIR}}
+cp -RL _build/${{MIX_ENV}}/lib/rabbitmqctl/ebin/* ${{ABS_EBIN_DIR}}
+cp -RL _build/${{MIX_ENV}}/lib/rabbitmqctl/consolidated/* ${{ABS_CONSOLIDATED_DIR}}
 
 # remove symlinks from the _build directory since it
 # is not used, and bazel does not allow them
