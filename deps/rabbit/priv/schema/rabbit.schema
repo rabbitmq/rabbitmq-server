@@ -889,6 +889,9 @@ end}.
 
 {mapping, "channel_max", "rabbit.channel_max", [{datatype, integer}]}.
 
+{mapping, "channel_max_per_node", "rabbit.channel_max_per_node",
+          [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
 %% Set the max permissible number of client connections per node.
 %% `infinity` means "no limit".
 %%
