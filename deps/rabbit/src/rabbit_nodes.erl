@@ -366,9 +366,10 @@ filter_not_running(Nodes) ->
 do_filter_running(Members) ->
     %% All clustered members where `rabbit' is running, regardless if they are
     %% under maintenance or not.
+    ReachableMembers = do_filter_reachable(Members),
     Rets = erpc:multicall(
-             Members, rabbit, is_running, [], ?FILTER_RPC_TIMEOUT),
-    RetPerMember = lists:zip(Members, Rets),
+             ReachableMembers, rabbit, is_running, [], ?FILTER_RPC_TIMEOUT),
+    RetPerMember = lists:zip(ReachableMembers, Rets),
     lists:filtermap(
       fun
           ({Member, {ok, true}}) ->
