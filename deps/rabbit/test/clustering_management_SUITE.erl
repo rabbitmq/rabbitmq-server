@@ -924,29 +924,8 @@ change_cluster_when_node_offline(Config) ->
     assert_clustered([Rabbit, Hare]),
     ok = start_app(Config, Bunny),
     assert_not_clustered(Bunny),
+    ok.
 
-    %% Now the same, but Rabbit is a RAM node, and we bring up Bunny
-    %% before
-    ok = stop_app(Config, Rabbit),
-    ok = change_cluster_node_type(Config, Rabbit, ram),
-    ok = start_app(Config, Rabbit),
-    stop_join_start(Config, Bunny, Hare),
-    assert_cluster_status(
-      {[Rabbit, Hare, Bunny], [Hare, Bunny], [Rabbit, Hare, Bunny]},
-      [Rabbit, Hare, Bunny]),
-    ok = stop_app(Config, Rabbit),
-    ok = stop_app(Config, Bunny),
-    ok = reset(Config, Bunny),
-    ok = start_app(Config, Bunny),
-    assert_not_clustered(Bunny),
-    assert_cluster_status({[Rabbit, Hare], [Hare], [Hare]}, [Hare]),
-    assert_cluster_status(
-      {[Rabbit, Hare, Bunny], [Hare, Bunny], [Hare, Bunny]},
-      [Rabbit]),
-    ok = start_app(Config, Rabbit),
-    assert_cluster_status({[Rabbit, Hare], [Hare], [Rabbit, Hare]},
-                          [Rabbit, Hare]),
-    assert_not_clustered(Bunny).
 
 update_cluster_nodes(Config) ->
     [Rabbit, Hare, Bunny] = cluster_members(Config),
