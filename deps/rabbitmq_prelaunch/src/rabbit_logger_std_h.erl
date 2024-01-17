@@ -20,19 +20,9 @@
 -module(rabbit_logger_std_h).
 
 -ifdef(TEST).
--define(io_put_chars(DEVICE, DATA), begin
-                                        %% We log to Common Test log as well.
-                                        %% This is the file we use to check
-                                        %% the message made it to
-                                        %% stdout/stderr.
-                                        ct:log("~ts", [DATA]),
-                                        io:put_chars(DEVICE, DATA)
-                                    end).
-
 -export([parse_date_spec/1, parse_day_of_week/2, parse_day_of_month/2, parse_hour/2, parse_minute/2]).
--else.
--define(io_put_chars(DEVICE, DATA), io:put_chars(DEVICE, DATA)).
 -endif.
+
 -define(file_write(DEVICE, DATA), file:write(DEVICE, DATA)).
 -define(file_datasync(DEVICE), file:datasync(DEVICE)).
 
@@ -49,6 +39,9 @@
 %% logger callbacks
 -export([log/2, adding_handler/1, removing_handler/1, changing_config/3,
          filter_config/1]).
+
+%% Internal export to allow the use of meck.
+-export([io_put_chars/2]).
 
 -define(DEFAULT_CALL_TIMEOUT, 5000).
 
@@ -549,15 +542,15 @@ ensure_open(Filename, Modes) ->
 
 write_to_dev(Bin,#{dev:=standard_io}=State) ->
     try
-        io:put_chars(user, Bin)
+        ?MODULE:io_put_chars(user, Bin)
     catch _E:_R ->
-            io:put_chars(
+            ?MODULE:io_put_chars(
               standard_error, "Failed to write log message to stdout, trying stderr\n"),
-            io:put_chars(standard_error, Bin)
+            ?MODULE:io_put_chars(standard_error, Bin)
     end,
     State;
 write_to_dev(Bin,#{dev:=DevName}=State) ->
-    ?io_put_chars(DevName, Bin),
+    ?MODULE:io_put_chars(DevName, Bin),
     State;
 write_to_dev(Bin, State) ->
     State1 = #{fd:=Fd} = maybe_ensure_file(State),
@@ -565,6 +558,9 @@ write_to_dev(Bin, State) ->
     State2 = maybe_rotate_file(Bin,State1),
     maybe_notify_error(write,Result,State2),
     State2#{synced=>false,write_res=>Result}.
+
+io_put_chars(DevName, Bin) ->
+    io:put_chars(DevName, Bin).
 
 sync_dev(#{synced:=false}=State) ->
     State1 = #{fd:=Fd} = maybe_ensure_file(State),
