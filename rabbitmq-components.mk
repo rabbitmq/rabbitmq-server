@@ -79,6 +79,7 @@ dep_rabbitmq_peer_discovery_common    = git_rmq-subfolder rabbitmq-peer-discover
 dep_rabbitmq_peer_discovery_consul    = git_rmq-subfolder rabbitmq-peer-discovery-consul $(current_rmq_ref) $(base_rmq_ref) main
 dep_rabbitmq_peer_discovery_etcd      = git_rmq-subfolder rabbitmq-peer-discovery-etcd $(current_rmq_ref) $(base_rmq_ref) main
 dep_rabbitmq_peer_discovery_k8s       = git_rmq-subfolder rabbitmq-peer-discovery-k8s $(current_rmq_ref) $(base_rmq_ref) main
+dep_rabbitmq_prelaunch                = git_rmq-subfolder rabbitmq-prelaunch $(current_rmq_ref) $(base_rmq_ref) main
 dep_rabbitmq_prometheus               = git_rmq-subfolder rabbitmq-prometheus $(current_rmq_ref) $(base_rmq_ref) main
 dep_rabbitmq_random_exchange          = git_rmq-subfolder rabbitmq-random-exchange $(current_rmq_ref) $(base_rmq_ref) main
 dep_rabbitmq_recent_history_exchange  = git_rmq-subfolder rabbitmq-recent-history-exchange $(current_rmq_ref) $(base_rmq_ref) main
