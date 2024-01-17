@@ -942,8 +942,8 @@ is_over_limits(Username) ->
     end.
 
 is_over_node_channel_limit() ->
-    case rabbit_misc:get_env(rabbit, channel_max_per_node, 0) of
-        0 ->
+    case rabbit_misc:get_env(rabbit, channel_max_per_node, infinity) of
+        infinity ->
             false;
         NodeLimit ->
             %% Only fetch this if a limit is set
