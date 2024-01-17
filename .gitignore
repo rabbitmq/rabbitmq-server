@@ -36,6 +36,7 @@
 !/deps/rabbitmq_peer_discovery_consul/
 !/deps/rabbitmq_peer_discovery_etcd/
 !/deps/rabbitmq_peer_discovery_k8s/
+!/deps/rabbitmq_prelaunch/
 !/deps/rabbitmq_prometheus/
 !/deps/rabbitmq_random_exchange/
 !/deps/rabbitmq_recent_history_exchange/
