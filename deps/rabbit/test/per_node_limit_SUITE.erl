@@ -168,7 +168,7 @@ open_channel(Conn) when is_pid(Conn) ->
 
 count_channels_per_node(Config)  ->
     NodeConfig = rabbit_ct_broker_helpers:get_node_config(Config, 0),
-    length(rabbit_ct_broker_helpers:rpc(Config, 0,
-                                        rabbit_channel_tracking,
-                                        list_on_node,
-                                        [?config(nodename, NodeConfig)])).
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 rabbit_channel_tracking,
+                                 channel_count_on_node,
+                                 [?config(nodename, NodeConfig)]).
