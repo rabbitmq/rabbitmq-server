@@ -1373,11 +1373,12 @@ with_member_acc(Fun, Id, {MembersState, Acc}) ->
     {MemberState, Acc1} = Fun(find_member_or_blank(Id, MembersState), Acc),
     {store_member(Id, MemberState, MembersState), Acc1}.
 
-find_member_or_blank(Id, MembersState) ->
+find_member_or_blank(Id, MembersState) when is_map(MembersState) ->
     case maps:find(Id, MembersState) of
         {ok, Result} -> Result;
         error        -> blank_member()
-    end.
+    end;
+find_member_or_blank(_Id, _MembersState) -> blank_member().
 
 erase_member(Id, MembersState) -> maps:remove(Id, MembersState).
 
