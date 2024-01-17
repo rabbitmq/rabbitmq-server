@@ -58,7 +58,7 @@ function auth_settings_apply_defaults(authSettings) {
         if (!resource_server.client_id) {
           resource_server.client_id = authSettings.oauth_client_id
         }
-        if (!resource_server.client_secret) {
+        if (!resource_server.client_secret && !resource_server.client_id) {
           resource_server.client_secret = authSettings.oauth_client_secret
         }
         if (resource_server.initiated_logon_type == "idp_initiated") {
