@@ -947,7 +947,7 @@ is_over_node_channel_limit() ->
             false;
         NodeLimit ->
             %% Only fetch this if a limit is set
-            CurrNodeChannels = length(rabbit_channel_tracking:list_on_node(node())),
+            CurrNodeChannels = rabbit_channel_tracking:channel_count_on_node(node()),
             case CurrNodeChannels < NodeLimit of
                 true ->
                     false;
