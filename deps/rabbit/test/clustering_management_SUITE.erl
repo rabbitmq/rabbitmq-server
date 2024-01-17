@@ -484,7 +484,9 @@ change_cluster_when_node_offline(Config) ->
     assert_clustered([Rabbit, Hare]),
     ok = start_app(Bunny),
     assert_not_clustered(Bunny),
+    ok.
 
+<<<<<<< HEAD
     %% Now the same, but Rabbit is a RAM node, and we bring up Bunny
     %% before
     ok = stop_app(Rabbit),
@@ -507,6 +509,8 @@ change_cluster_when_node_offline(Config) ->
     assert_cluster_status({[Rabbit, Hare], [Hare], [Rabbit, Hare]},
                           [Rabbit, Hare]),
     assert_not_clustered(Bunny).
+=======
+>>>>>>> 87664e9fcb (Remove clustering test that assert on ram nodes.)
 
 update_cluster_nodes(Config) ->
     [Rabbit, Hare, Bunny] = cluster_members(Config),
