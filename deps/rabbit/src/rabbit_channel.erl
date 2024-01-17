@@ -1264,7 +1264,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                 Opts = maps_put_truthy(flow, Flow, #{correlation => SeqNo, mandatory => Mandatory}),
                 {Opts, State0#ch{publish_seqno = SeqNo + 1}}
         end,
-    % rabbit_feature_flags:is_enabled(message_containers),
+
     case mc_amqpl:message(ExchangeName,
                           RoutingKey,
                           DecodedContent) of
