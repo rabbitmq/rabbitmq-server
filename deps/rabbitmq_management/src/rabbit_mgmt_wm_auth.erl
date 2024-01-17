@@ -35,14 +35,14 @@ content_types_provided(ReqData, Context) ->
 %%
 %% If there is only one auth_provider and the url where to forward users to log in is the same as the issuer url
 %% then users are encouraged to just set auth_oauth2.issuer
-resolve_oauth_provider_url(DefaultValue) ->
-  case application:get_env(rabbitmq_management, oauth_provider_url) of
+resolve_oauth_provider_url(ManagementProps) ->
+  case proplists:get_value(oauth_provider_url, ManagementProps) of
     undefined ->
       case oauth2_client:get_oauth_provider([issuer]) of
         {ok, OAuthProvider} -> OAuthProvider#oauth_provider.issuer; %% 2.1 & 3
-        {error, _} -> DefaultValue
+        {error, _} = Error -> Error
       end;
-    {ok, Value} -> Value %% 1
+    Value -> Value %% 1
   end.
 
 %% Order of precedence to determine the provider url for one specific oauth resource
@@ -55,152 +55,182 @@ resolve_oauth_provider_url(DefaultValue) ->
 %% 4. if auth_oauth2.default_provider_id is set
 %%  4.1. auth_oauth2.auth_providers.?.issuer where ? is the auth_provider whose id attribute = auth_oauth2.default_provider_id
 %% 5. auth_oauth2.issuer
-resolve_oauth_provider_url(ResourceServerId, ResourceServers, DefaultValue) ->
-  case maps:get(ResourceServerId, ResourceServers, undefined) of
-    undefined -> resolve_oauth_provider_url(DefaultValue);
-    ResourceServer ->
-      case proplists:get_value(oauth_provider_url, ResourceServer) of
+resolve_oauth_provider_url(OAuthResourceServer, MgtResourceServer, ManagementProps) ->
+  case proplists:get_value(oauth_provider_url, MgtResourceServer) of
+    undefined ->
+      case proplists:get_value(oauth_provider_url, ManagementProps) of
         undefined ->
-          case application:get_env(rabbitmq_management, oauth_provider_url) of
-            undefined ->
-              case proplists:get_value(oauth_provider_id, ResourceServer) of
-                  undefined ->
-                    case oauth2_client:get_oauth_provider([issuer]) of
-                      {ok, OAuthProvider} -> OAuthProvider#oauth_provider.issuer; %%  5
-                      {error, _} -> DefaultValue
-                    end;
-                  OauthProviderId ->
-                    case oauth2_client:get_oauth_provider(OauthProviderId, [issuer]) of
-                      {ok, OAuthProvider2} -> OAuthProvider2#oauth_provider.issuer; %%  3.1
-                      {error, _} ->
-                        case oauth2_client:get_oauth_provider([issuer]) of
-                          {ok, OAuthProvider} -> OAuthProvider#oauth_provider.issuer; %%  5
-                          {error, _} -> DefaultValue
-                        end
-                    end
-              end;
-            MgtOauthProviderUrl ->  MgtOauthProviderUrl %% 2
+          OAuthProviderResult = case proplists:get_value(oauth_provider_id, OAuthResourceServer) of
+            undefined -> oauth2_client:get_oauth_provider([issuer]);
+            OauthProviderId -> oauth2_client:get_oauth_provider(OauthProviderId, [issuer])
+          end,
+          case OAuthProviderResult of
+            {ok, OAuthProvider} -> OAuthProvider#oauth_provider.issuer;
+            {error, _} = Error -> Error
           end;
-        ResourceMgtOAuthProviderUrl -> ResourceMgtOAuthProviderUrl  % 1
+        MgtUrl -> MgtUrl
+      end;
+    ResourceMgtUrl -> ResourceMgtUrl
+  end.
+
+
+skip_unknown_resource_servers(MgtOauthResources, OAuth2Resources) ->
+  maps:filter(fun(Key, _Value) -> maps:is_key(Key, OAuth2Resources) end, MgtOauthResources).
+skip_disabled_mgt_resource_servers(MgtOauthResources) ->
+  maps:filter(fun(_Key, Value) -> not proplists:get_value(disabled, Value, false) end, MgtOauthResources).
+
+has_multi_resources(OAuth2BackendProps, ManagementProps) ->
+  OAuth2Resources = getAllDeclaredOauth2Resources(OAuth2BackendProps),
+  MgtResources0 = skip_unknown_resource_servers(proplists:get_value(resource_servers, ManagementProps, #{}), OAuth2Resources),
+  MgtResources1 = maps:merge(MgtResources0, maps:filtermap(fun(K,_V) ->
+      case maps:is_key(K, MgtResources0) of
+        true -> false;
+        false -> {true, [{id, K}]}
+      end end, OAuth2Resources)),
+  MgtResources = skip_disabled_mgt_resource_servers(MgtResources1),
+
+  ct:log("OAuth2Resources: ~p MgtResources: ~p", [OAuth2Resources, MgtResources]),
+  case maps:size(MgtResources) of
+    0 ->
+      case maps:size(OAuth2Resources) of
+        0 -> false;
+        _ -> {true, OAuth2Resources, MgtResources}
+      end;
+    _ -> {true, OAuth2Resources, MgtResources}
+  end.
+getAllDeclaredOauth2Resources(OAuth2BackendProps) ->
+  OAuth2Resources = proplists:get_value(resource_servers, OAuth2BackendProps, #{}),
+  case proplists:get_value(resource_server_id, OAuth2BackendProps) of
+    undefined -> OAuth2Resources;
+    Id -> maps:put(Id, [{id, Id}], OAuth2Resources)
+  end.
+
+authSettings() ->
+  ManagementProps = application:get_all_env(rabbitmq_management),
+  OAuth2BackendProps = application:get_all_env(rabbitmq_auth_backend_oauth2),
+  EnableOAUTH = proplists:get_value(oauth_enabled, ManagementProps, false),
+  case EnableOAUTH of
+    false -> [{oauth_enabled, false}];
+    true ->
+      case has_multi_resources(OAuth2BackendProps, ManagementProps) of
+        {true, OAuth2Resources, MgtResources} ->
+          multi_resource_auth_settings(OAuth2Resources, MgtResources, ManagementProps);
+        false -> single_resource_auth_settings(OAuth2BackendProps, ManagementProps)
       end
   end.
 
-skip_unknown_resource_servers(MgtOauthResources) ->
-  DeclaredResourceServers = application:get_env(rabbitmq_auth_backend_oauth2, resource_servers, #{}),
-  maps:filter(fun(Key, _Value) -> maps:is_key(Key, DeclaredResourceServers) end, MgtOauthResources).
+skip_resource_servers_without_oauth_client_id(MgtResourceServers) ->
+  maps:filter(fun(_K,ResourceServer) ->
+    not is_invalid([proplists:get_value(oauth_client_id, ResourceServer)]) end, MgtResourceServers).
 
-authSettings() ->
-  EnableOAUTH = application:get_env(rabbitmq_management, oauth_enabled, false),
-  case EnableOAUTH of
-    true ->
-      OAuthResourceServers = application:get_env(rabbitmq_management, oauth_resource_servers, undefined),
-      case OAuthResourceServers of
-        undefined -> single_resource_auth_settings();
-        _ -> case skip_unknown_resource_servers(OAuthResourceServers) of
-              Map when map_size(Map) == 0 ->
-                rabbit_log:error("Empty or unknown set of rabbitmq_management oauth_resource_servers"),
-                ct:log("exit1"),
-                [{oauth_enabled, false}];
-              Map -> multi_resource_auth_settings(Map)
+
+filter_resource_servers_without_resolvable_oauth_client_id(MgtResourceServers, ManagementProps) ->
+  case is_invalid([proplists:get_value(oauth_client_id, ManagementProps)]) of
+    true -> skip_resource_servers_without_oauth_client_id(MgtResourceServers);
+    false -> MgtResourceServers
+  end.
+
+filter_resource_servers_without_resolvable_oauth_provider_url(OAuthResourceServers, MgtResourceServers, ManagementProps) ->
+  maps:filter(fun(_K1,V1) -> proplists:is_defined(oauth_provider_url, V1) end, maps:map(fun(K,V) ->
+    case proplists:is_defined(oauth_provider_url, V)  of
+      true -> V;
+      false ->
+        case maps:get(K, OAuthResourceServers) of
+          {badkey, _} -> V;
+          OAuthResourceServer ->
+            case resolve_oauth_provider_url(OAuthResourceServer, V, ManagementProps) of
+              {error, _} -> V;
+              Url -> [ {oauth_provider_url, Url} | V ]
             end
-      end;
-    false ->
-      ct:log("exit0"),
-      [{oauth_enabled, false}]
-  end.
-%% Ensure each resource has a client_id or there is a top level some_client_id
-%% and it has a provider_url
-is_valid_value_orelse_its_default(Value, Default) ->
-  not is_invalid([Value]) or not is_invalid([Default]).
+        end
+    end end , MgtResourceServers)).
 
-validate_oauth_resource_servers_settings(Settings) ->
-  FilteredMap = maps:filter(fun(_K,V) ->
-    OAuthClientId = proplists:get_value(oauth_client_id, V, ""),
-    OAuthProviderUrl = proplists:get_value(oauth_provider_url, V, ""),
-    is_valid_value_orelse_its_default(OAuthClientId, proplists:get_value(oauth_client_id, Settings))
-      and
-      is_valid_value_orelse_its_default(OAuthProviderUrl, proplists:get_value(oauth_provider_url, Settings))
-    end, proplists:get_value(oauth_resource_servers, Settings)),
-  map_size(FilteredMap) > 0.
+multi_resource_auth_settings(OAuthResourceServers, MgtResourceServers, ManagementProps) ->
+  ct:log("multi_resource_auth_settings: ~p ~p", [OAuthResourceServers, MgtResourceServers]),
+  ConvertValuesToBinary = fun(_K,V) -> [ {K1, to_binary(V1)} || {K1,V1} <- V ] end,
+  FilteredMgtResourceServers = filter_resource_servers_without_resolvable_oauth_provider_url(OAuthResourceServers,
+    filter_resource_servers_without_resolvable_oauth_client_id(MgtResourceServers, ManagementProps), ManagementProps),
 
-multi_resource_auth_settings(OAuthResourceServers) ->
-  ConvertValuesToBinary = fun(K,V) ->
-     [ {K1, rabbit_data_coercion:to_binary(V1)} || {K1,V1} <- V, K1 =/= oauth_provider_url ] ++
-     [ {K1, rabbit_data_coercion:to_binary(resolve_oauth_provider_url(K, OAuthResourceServers, ""))} || {K1,_V1} <- V, K1 =:= oauth_provider_url ]
-  end,
-
-  Settings = [ {oauth_enabled, true},
-    {oauth_resource_servers, maps:map(ConvertValuesToBinary, OAuthResourceServers)},
-    oauth_tuple(oauth_disable_basic_auth, application:get_env(rabbitmq_management, oauth_disable_basic_auth, true)),
-    oauth_tuple(oauth_client_id, application:get_env(rabbitmq_management, oauth_client_id, "")),
-    oauth_tuple(oauth_client_secret, application:get_env(rabbitmq_management, oauth_client_secret, "")),
-    oauth_tuple(oauth_scopes, application:get_env(rabbitmq_management, oauth_scopes, "")),
-    oauth_tuple(oauth_provider_url, resolve_oauth_provider_url(""))
-  ],
-  case validate_oauth_resource_servers_settings(Settings) of
-    true -> [ {K,V} || {K,V} <- Settings ];
-    false ->
-      rabbit_log:error("management.oauth_resource_servers is invalid (check oauth_client_id and/or oauth_provider_url)"),
-      [{oauth_enabled, false}]
+  case maps:size(FilteredMgtResourceServers) of
+    0 -> [{oauth_enabled, false}];
+    _ ->
+       filter_empty_properties([
+        {oauth_enabled, true},
+        {oauth_resource_servers, maps:map(ConvertValuesToBinary, FilteredMgtResourceServers)},
+        to_tuple(oauth_disable_basic_auth, ManagementProps, true),
+        to_tuple(oauth_client_id, ManagementProps),
+        to_tuple(oauth_client_secret, ManagementProps),
+        to_tuple(oauth_scopes, ManagementProps),
+        case resolve_oauth_provider_url(ManagementProps) of
+          {error, _} -> {};
+          Url -> {oauth_provider, to_binary(Url)}
+        end
+        ])
   end.
 
-single_resource_auth_settings() ->
-  OAuthInitiatedLogonType = application:get_env(rabbitmq_management, oauth_initiated_logon_type, sp_initiated),
-  OAuthDisableBasicAuth = application:get_env(rabbitmq_management, oauth_disable_basic_auth, true),
-  OAuthProviderUrl = resolve_oauth_provider_url(""),
-  OAuthResourceId = application:get_env(rabbitmq_auth_backend_oauth2, resource_server_id, ""),
+
+
+single_resource_auth_settings(OAuth2BackendProps, ManagementProps) ->
+  OAuthInitiatedLogonType = proplists:get_value(oauth_initiated_logon_type, ManagementProps, sp_initiated),
+  OAuthDisableBasicAuth = proplists:get_value(oauth_disable_basic_auth, ManagementProps, true),
+  OAuthProviderUrl = resolve_oauth_provider_url(ManagementProps),
+  OAuthResourceId =  proplists:get_value(resource_server_id, OAuth2BackendProps),
   case OAuthInitiatedLogonType of
     sp_initiated ->
-      OAuthClientId = application:get_env(rabbitmq_management, oauth_client_id, ""),
-      OAuthClientSecret = application:get_env(rabbitmq_management, oauth_client_secret, ""),
-      OAuthMetadataUrl = application:get_env(rabbitmq_management, oauth_metadata_url, ""),
-      OAuthScopes = application:get_env(rabbitmq_management, oauth_scopes, ""),
+      OAuthClientId = proplists:get_value(oauth_client_id, ManagementProps),
       case is_invalid([OAuthResourceId]) of
         true ->
-            rabbit_log:error("Invalid rabbitmq_auth_backend_oauth2.resource_server_id ~p", [OAuthResourceId]),
-            ct:log("exit3"),
-            [{oauth_enabled, false}];
+          rabbit_log:error("Invalid rabbitmq_auth_backend_oauth2.resource_server_id ~p", [OAuthResourceId]),
+          [{oauth_enabled, false}];
         false ->
-            case is_invalid([OAuthClientId, OAuthProviderUrl]) of
-                true ->
-                    ct:log("Invalid rabbitmq_management oauth_client_id ~p or resolved oauth_provider_url ~p",
-                      [OAuthClientId, OAuthProviderUrl]),
-                    ct:log("exit4"),
-                    [{oauth_enabled, false}];
-                false ->
-                    append_oauth_optional([
-                     {oauth_enabled, true},
-                     {oauth_disable_basic_auth, OAuthDisableBasicAuth},
-                     {oauth_client_id, rabbit_data_coercion:to_binary(OAuthClientId)},
-                     {oauth_provider_url, rabbit_data_coercion:to_binary(OAuthProviderUrl)},
-                     {oauth_scopes, rabbit_data_coercion:to_binary(OAuthScopes)},
-                     {oauth_metadata_url, rabbit_data_coercion:to_binary(OAuthMetadataUrl)},
-                     {oauth_resource_id, rabbit_data_coercion:to_binary(OAuthResourceId)}
-                     ], oauth_client_secret, OAuthClientSecret)
-            end
+          case is_invalid([OAuthClientId, OAuthProviderUrl]) of
+            true ->
+              ct:log("Invalid rabbitmq_management oauth_client_id ~p or resolved oauth_provider_url ~p",
+                [OAuthClientId, OAuthProviderUrl]),
+              [{oauth_enabled, false}];
+            false ->
+              filter_empty_properties([
+               {oauth_enabled, true},
+               {oauth_disable_basic_auth, OAuthDisableBasicAuth},
+               {oauth_client_id, to_binary(OAuthClientId)},
+               {oauth_provider_url, to_binary(OAuthProviderUrl)},
+               to_tuple(oauth_scopes, ManagementProps),
+               to_tuple(oauth_metadata_url, ManagementProps),
+               {oauth_resource_id, to_binary(OAuthResourceId)},
+               to_tuple(oauth_client_secret, ManagementProps)
+              ])
+          end
       end;
     idp_initiated ->
       case is_invalid([OAuthResourceId]) of
         true ->
-            rabbit_log:error("Invalid rabbitmq_auth_backend_oauth2.resource_server_id ~p", [OAuthResourceId]),
-            ct:log("exit5"),
-            [{oauth_enabled, false}];
+          rabbit_log:error("Invalid rabbitmq_auth_backend_oauth2.resource_server_id ~p", [OAuthResourceId]),
+          [{oauth_enabled, false}];
         false ->
-            case is_invalid([OAuthProviderUrl]) of
-              true ->
-                rabbit_log:error("Invalid rabbitmq_management resolved oauth_provider_url ~p", [OAuthProviderUrl]),
-                ct:log("exit6"),
-                [{oauth_enabled, false}];
-              false ->
-               [{oauth_enabled, true},
-                {oauth_disable_basic_auth, OAuthDisableBasicAuth},
-                {oauth_initiated_logon_type, rabbit_data_coercion:to_binary(OAuthInitiatedLogonType)},
-                {oauth_provider_url, rabbit_data_coercion:to_binary(OAuthProviderUrl)},
-                {oauth_resource_id, rabbit_data_coercion:to_binary(OAuthResourceId)}
-                ]
-              end
+          case is_invalid([OAuthProviderUrl]) of
+            true ->
+              rabbit_log:error("Invalid rabbitmq_management resolved oauth_provider_url ~p", [OAuthProviderUrl]),              
+              [{oauth_enabled, false}];
+            false ->
+             [{oauth_enabled, true},
+              {oauth_disable_basic_auth, OAuthDisableBasicAuth},
+              {oauth_initiated_logon_type, to_binary(OAuthInitiatedLogonType)},
+              {oauth_provider_url, to_binary(OAuthProviderUrl)},
+              {oauth_resource_id, to_binary(OAuthResourceId)}
+              ]
+            end
         end
     end.
+
+filter_empty_properties(ListOfProperties) ->
+  lists:filter(fun(Prop) ->
+      case Prop of
+        {} -> false;
+        _ -> true
+      end
+    end, ListOfProperties).
+
+to_binary(Value) -> rabbit_data_coercion:to_binary(Value).
 
 to_json(ReqData, Context) ->
    rabbit_mgmt_util:reply(authSettings(), ReqData, Context).
@@ -208,18 +238,19 @@ to_json(ReqData, Context) ->
 is_authorized(ReqData, Context) ->
     {true, ReqData, Context}.
 
+is_invalid(Value) when Value == undefined -> true;
 is_invalid(List) ->
     lists:any(fun(V) -> case V of
       "" -> true;
       undefined -> true;
+      {error, _} -> true;
       _ -> false
     end end, List).
 
-append_oauth_optional(List, _Attribute, Value) when Value == "" ->
-    List;
-append_oauth_optional(List, Attribute, Value) ->
-    lists:append(List, [{Attribute, rabbit_data_coercion:to_binary(Value)}]).
-
-oauth_tuple(_Attribute, Value) when Value == "" -> {};
-oauth_tuple(Attribute, Value) when is_atom(Value) -> {Attribute, Value};
-oauth_tuple(Attribute, Value) -> {Attribute, rabbit_data_coercion:to_binary(Value)}.
+to_tuple(Key, Proplist) ->
+  case proplists:is_defined(Key, Proplist) of
+    true -> {Key, rabbit_data_coercion:to_binary(proplists:get_value(Key, Proplist))};
+    false -> {}
+  end.
+to_tuple(Key, Proplist, DefaultValue) ->
+  {Key, proplists:get_value(Key, Proplist, DefaultValue)}.

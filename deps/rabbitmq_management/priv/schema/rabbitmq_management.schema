@@ -496,6 +496,13 @@ end}.
 }.
 
 {mapping,
+  "management.oauth_resource_servers.$name.disabled",
+  "rabbitmq_management.oauth_resource_servers",
+  [{datatype, {enum, [true, false]}}]},
+  {include_default, false}
+}.
+
+{mapping,
   "management.oauth_resource_servers.$name.label",
   "rabbitmq_management.oauth_resource_servers",
   [{datatype, string}]
