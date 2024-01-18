@@ -517,13 +517,13 @@ end}.
 
 
 {mapping,
-  "management.oauth_resource_servers.$name.client_id",
+  "management.oauth_resource_servers.$name.oauth_client_id",
   "rabbitmq_management.oauth_resource_servers",
   [{datatype, string}]
 }.
 
 {mapping,
-  "management.oauth_resource_servers.$name.client_secret",
+  "management.oauth_resource_servers.$name.oauth_client_secret",
   "rabbitmq_management.oauth_resource_servers",
   [{datatype, string}]
 }.
@@ -536,19 +536,19 @@ end}.
 
 
 {mapping,
-  "management.oauth_resource_servers.$name.scopes",
+  "management.oauth_resource_servers.$name.oauth_scopes",
   "rabbitmq_management.oauth_resource_servers",
   [{datatype, string}]
 }.
 
 {mapping,
-  "management.oauth_resource_servers.$name.metadata_url",
+  "management.oauth_resource_servers.$name.oauth_metadata_url",
   "rabbitmq_management.oauth_resource_servers",
   [{datatype, string}]
 }.
 
 {mapping,
-  "management.oauth_resource_servers.$name.initiated_logon_type",
+  "management.oauth_resource_servers.$name.oauth_initiated_logon_type",
     "rabbitmq_management.oauth_resource_servers",
   [{datatype, {enum, [sp_initiated, idp_initiated]}}]}.
 
