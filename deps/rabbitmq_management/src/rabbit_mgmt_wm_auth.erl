@@ -160,11 +160,7 @@ multi_resource_auth_settings(OAuthResourceServers, MgtResourceServers, Managemen
         to_tuple(oauth_disable_basic_auth, ManagementProps, true),
         to_tuple(oauth_client_id, ManagementProps),
         to_tuple(oauth_client_secret, ManagementProps),
-        to_tuple(oauth_scopes, ManagementProps),
-        case resolve_oauth_provider_url(ManagementProps) of
-          {error, _} -> {};
-          Url -> {oauth_provider, to_binary(Url)}
-        end
+        to_tuple(oauth_scopes, ManagementProps)
         ])
   end.
 
@@ -209,7 +205,7 @@ single_resource_auth_settings(OAuth2BackendProps, ManagementProps) ->
         false ->
           case is_invalid([OAuthProviderUrl]) of
             true ->
-              rabbit_log:error("Invalid rabbitmq_management resolved oauth_provider_url ~p", [OAuthProviderUrl]),              
+              rabbit_log:error("Invalid rabbitmq_management resolved oauth_provider_url ~p", [OAuthProviderUrl]),
               [{oauth_enabled, false}];
             false ->
              [{oauth_enabled, true},
