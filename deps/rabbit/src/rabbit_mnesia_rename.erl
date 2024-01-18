@@ -144,6 +144,9 @@ maybe_finish(AllNodes) ->
 finish(FromNode, ToNode, AllNodes) ->
     case node() of
         ToNode ->
+            %% filter_running/1 does not perform reconnections so we need
+            %% to do that manually
+            _ = [net_kernel:connect_node(N) || N <- AllNodes],
             case rabbit_nodes:filter_running(AllNodes) of
                 [] -> finish_primary(FromNode, ToNode);
                 _  -> finish_secondary(FromNode, ToNode, AllNodes)
