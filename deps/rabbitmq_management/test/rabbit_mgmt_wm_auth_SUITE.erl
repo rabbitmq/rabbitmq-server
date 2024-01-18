@@ -260,7 +260,7 @@ init_per_group(with_mgt_oauth_client_id_z, Config) ->
   Config;
 init_per_group(with_mgt_resource_server_a_with_client_secret_w, Config) ->
   set_attribute_in_entry_for_env_variable(rabbitmq_management, resource_servers,
-    ?config(a, Config), client_secret, ?config(w, Config)),
+    ?config(a, Config), oauth_client_secret, ?config(w, Config)),
   Config;
 init_per_group(with_mgt_oauth_client_secret_q, Config) ->
   application:set_env(rabbitmq_management, oauth_client_secret, ?config(q, Config)),
@@ -318,7 +318,7 @@ init_per_group(with_mgt_oauth_resource_server_a_with_oauth_provider_url_url1, Co
   Config;
 init_per_group(with_mgt_resource_server_a_with_client_id_x, Config) ->
   set_attribute_in_entry_for_env_variable(rabbitmq_management, resource_servers,
-    ?config(a, Config), client_id, ?config(x, Config)),
+    ?config(a, Config), oauth_client_id, ?config(x, Config)),
   Config;
 init_per_group(with_default_oauth_provider_idp1, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, default_oauth_provider, ?config(idp1, Config)),
@@ -370,7 +370,7 @@ end_per_group(with_oauth_initiated_logon_type_sp_initiated, Config) ->
   Config;
 end_per_group(with_mgt_resource_server_a_with_client_secret_w, Config) ->
   remove_attribute_from_entry_from_env_variable(rabbitmq_management, resource_servers,
-    ?config(a, Config), client_secret),
+    ?config(a, Config), oauth_client_secret),
   Config;
 end_per_group(with_resource_server_a, Config) ->
   remove_entry_from_env_variable(rabbitmq_auth_backend_oauth2, resource_servers,
@@ -398,7 +398,7 @@ end_per_group(with_oauth_resource_server_a_with_oauth_initiated_logon_type_idp_i
   Config;
 end_per_group(with_mgt_resource_server_a_with_client_id_x, Config) ->
   remove_attribute_from_entry_from_env_variable(rabbitmq_management, resource_servers,
-    ?config(a, Config), client_id),
+    ?config(a, Config), oauth_client_id),
   Config;
 end_per_group(with_default_oauth_provider_idp1, Config) ->
   application:unset_env(rabbitmq_auth_backend_oauth2, default_oauth_provider),
@@ -421,13 +421,13 @@ should_return_oauth_client_secret_q(Config) ->
   ?assertEqual(?config(q, Config), proplists:get_value(oauth_client_secret, Actual)).
 should_return_oauth_resource_server_a_with_client_id_x(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
-    Config, a, client_id, x).
+    Config, a, oauth_client_id, x).
 should_return_oauth_resource_server_a_with_client_secret_w(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
-    Config, a, client_secret, w).
+    Config, a, oauth_client_secret, w).
 should_not_return_oauth_resource_server_a_with_client_secret(Config) ->
   assert_attribute_not_defined_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
-    Config, a, client_secret).
+    Config, a, oauth_client_secret).
 
 should_return_oauth_provider_url_idp1_url(Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
@@ -446,11 +446,11 @@ should_return_disabled_auth_settings(_Config) ->
 
 should_return_mgt_resource_server_a_oauth_provider_url_url0(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
-    Config, a, provider_url, url0).
+    Config, a, oauth_provider_url, url0).
 
 should_return_mgt_oauth_resource_server_a_with_client_id_x(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
-    Config, a, client_id, x).
+    Config, a, oauth_client_id, x).
 
 should_return_oauth_resource_server_a_with_oauth_provider_url_idp1_url(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
