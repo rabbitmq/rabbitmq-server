@@ -25,10 +25,9 @@
 -export([filter_log_event/2]).
 -export([filter_discarded_message/2]).
 
--ifdef(TEST).
+%% For internal testing purpose only.
 -export([levels/0,
          determine_prefix/1]).
--endif.
 
 -define(CONFIGURED_KEY, {?MODULE, configured}).
 
