@@ -38,7 +38,7 @@ groups() ->
               should_return_oauth_resource_server_a_with_oauth_provider_url_idp1_url,
               should_return_oauth_client_id_z
             ]},
-            {with_mgt_resource_server_A_with_client_id_x, [], [
+            {with_mgt_resource_server_a_with_client_id_x, [], [
               should_return_oauth_resource_server_a_with_client_id_x
             ]}
           ]},
@@ -47,12 +47,12 @@ groups() ->
             {with_resource_server_a, [], [
               should_return_disabled_auth_settings,
               {with_mgt_oauth_client_id_z, [], [
-                should_return_oauth_resource_server_a_oauth_provider_url_url0,
+                should_return_oauth_resource_server_a_with_oauth_provider_url_url1,
                 should_return_oauth_client_id_z
               ]},
-              {with_mgt_resource_server_A_with_client_id_x, [], [
-                should_return_oauth_resource_server_a_oauth_provider_url_url0,
-                should_return_oauth_resource_server_A_with_client_id_x
+              {with_mgt_resource_server_a_with_client_id_x, [], [
+                should_return_oauth_resource_server_a_with_oauth_provider_url_url1,
+                should_return_oauth_resource_server_a_with_client_id_x
               ]}
             ]}
           ]}
@@ -64,9 +64,8 @@ groups() ->
             {with_mgt_aouth_provider_url_url0, [], [
               should_return_oauth_enabled,
               should_return_oauth_client_id_z,
-              should_return_oauth_resource_id_rabbit,
+              should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url0,
               should_return_sp_initiated_logon,
-              oauth_provider_url_should_be_url0,
               should_return_oauth_disable_basic_auth,
               should_not_return_scopes,
               {with_idp_initiated_logon, [], [
@@ -76,9 +75,8 @@ groups() ->
             {with_root_issuer_Url1, [], [
               should_return_oauth_enabled,
               should_return_oauth_client_id_z,
-              should_return_oauth_resource_id_rabbit,
-              should_return_sp_initiated_logon,
-              should_return_oauth_provider_url_url1
+              should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url1,
+              should_return_sp_initiated_logon
             ]},
             {with_oauth_providers_idp1_idp2, [], [
               should_return_disabled_auth_settings,
@@ -86,7 +84,7 @@ groups() ->
                 should_return_disabled_auth_settings
               ]},
               {with_default_oauth_provider_idp1, [], [
-                should_return_oauth_provider_url_idp1_url
+                should_return_oauth_resource_server_rabbit_with_oauth_provider_url_idp1_url
               ]}
             ]}
           ]}
@@ -136,7 +134,7 @@ init_per_group(with_mgt_oauth_client_id_z, Config) ->
   logEnvVars(),
   Config;
 init_per_group(with_mgt_aouth_provider_url_url0, Config) ->
-  Url = ?config(url90, Config),
+  Url = ?config(url0, Config),
   application:set_env(rabbitmq_management, oauth_provider_url, Url),
   Config;
 init_per_group(with_root_issuer_url1, Config) ->
@@ -302,6 +300,7 @@ should_return_mgt_resource_server_a_oauth_provider_url_url0(Config) ->
 
 should_return_oauth_resource_server_a_with_client_id_x(Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
+  log(Actual),
   OAuthResourceServers =  proplists:get_value(oauth_resource_servers, Actual),
   OauthResource = maps:get(?config(a, Config), OAuthResourceServers),
   ?assertEqual(?config(x, Config), proplists:get_value(oauth_client_id, OauthResource)).
@@ -312,7 +311,41 @@ should_return_oauth_resource_server_a_with_oauth_provider_url_idp1_url(Config) -
   OauthResource = maps:get(?config(a, Config), OAuthResourceServers),
   ?assertEqual(?config(idp1_url, Config), proplists:get_value(oauth_provider_url, OauthResource)).
 
-should_return_empty_scopes(_Config) ->
+should_return_oauth_resource_server_a_with_oauth_provider_url_url1(Config) ->
+  Actual = rabbit_mgmt_wm_auth:authSettings(),
+  OAuthResourceServers =  proplists:get_value(oauth_resource_servers, Actual),
+  OauthResource = maps:get(?config(a, Config), OAuthResourceServers),
+  ?assertEqual(?config(url1, Config), proplists:get_value(oauth_provider_url, OauthResource)).
+
+should_return_oauth_resource_server_a_with_oauth_provider_url_url0(Config) ->
+  Actual = rabbit_mgmt_wm_auth:authSettings(),
+  OAuthResourceServers =  proplists:get_value(oauth_resource_servers, Actual),
+  OauthResource = maps:get(?config(a, Config), OAuthResourceServers),
+  ?assertEqual(?config(url0, Config), proplists:get_value(oauth_provider_url, OauthResource)).
+
+should_return_oauth_resource_server_rabbit_with_oauth_provider_url_idp1_url(Config) ->
+  Actual = rabbit_mgmt_wm_auth:authSettings(),
+  OAuthResourceServers =  proplists:get_value(oauth_resource_servers, Actual),
+  OauthResource = maps:get(?config(rabbit, Config), OAuthResourceServers),
+  ?assertEqual(?config(idp1_url, Config), proplists:get_value(oauth_provider_url, OauthResource)).
+
+should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url1(Config) ->
+  Actual = rabbit_mgmt_wm_auth:authSettings(),
+  OAuthResourceServers =  proplists:get_value(oauth_resource_servers, Actual),
+  OauthResource = maps:get(?config(rabbit, Config), OAuthResourceServers),
+  ?assertEqual(?config(url1, Config), proplists:get_value(oauth_provider_url, OauthResource)).
+
+should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url0(Config) ->
+  Actual = rabbit_mgmt_wm_auth:authSettings(),
+  OAuthResourceServers =  proplists:get_value(oauth_resource_servers, Actual),
+  OauthResource = maps:get(?config(rabbit, Config), OAuthResourceServers),
+  ?assertEqual(?config(url0, Config), proplists:get_value(oauth_provider_url, OauthResource)).
+
+should_return_sp_initiated_logon(Config) ->
+  Actual = rabbit_mgmt_wm_auth:authSettings(),
+  ?assertEqual(false, proplists:is_defined(oauth_initiated_logon_type, Actual)).
+
+should_not_return_scopes(_Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
   ?assertEqual(false, proplists:is_defined(scopes, Actual)).
 
@@ -320,9 +353,10 @@ should_return_oauth_enabled(_Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
   ?assertEqual(true, proplists:get_value(oauth_enabled, Actual)).
 
-should_return_enabled_auth_settings_sp_initiated_logon(_Config) ->
+should_return_oauth_resource_id_rabbit(Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
-  ?assertEqual(false, proplists:is_defined(oauth_initiated_logon_type, Actual)).
+  log(Actual),
+  ?assertEqual(?config(rabbit, Config), proplists:get_value(oauth_resource_id, Actual)).
 
 should_return_enabled_auth_settings_idp_initiated_logon(Config) ->
   ResourceId = ?config(resource_server_id, Config),
