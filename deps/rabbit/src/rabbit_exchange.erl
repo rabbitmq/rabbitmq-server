@@ -351,7 +351,7 @@ route(Exchange, Message) ->
 route(#exchange{name = #resource{name = ?DEFAULT_EXCHANGE_NAME,
                                  virtual_host = VHost}},
       Message, _Opts) ->
-    RKs0 = mc:get_annotation(routing_keys, Message),
+    RKs0 = mc:routing_keys(Message),
     RKs = lists:usort(RKs0),
     [begin
          case virtual_reply_queue(RK) of
