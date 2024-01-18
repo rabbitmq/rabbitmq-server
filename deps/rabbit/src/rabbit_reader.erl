@@ -930,7 +930,7 @@ is_over_limits(Username) ->
                     false;
                 {true, Limit} ->
                     Fmt =
-                        "number of channels opened for node '~ts' has reached "
+                        "number of channels opened on node '~ts' has reached "
                         "the maximum allowed limit of (~w)",
                     {true, Limit, Fmt}
             end;
