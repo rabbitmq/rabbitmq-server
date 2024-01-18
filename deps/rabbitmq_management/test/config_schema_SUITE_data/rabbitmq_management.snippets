@@ -638,12 +638,12 @@
    management.oauth_resource_servers.1.oauth_provider_url = http://one:8080
    management.oauth_resource_servers.1.id = resource-one
    management.oauth_resource_servers.1.label = One
-   management.oauth_resource_servers.1.client_id = one
-   management.oauth_resource_servers.1.scopes = openid profile rabbitmq.*
+   management.oauth_resource_servers.1.oauth_client_id = one
+   management.oauth_resource_servers.1.oauth_scopes = openid profile rabbitmq.*
    management.oauth_resource_servers.2.oauth_provider_url = http://two
    management.oauth_resource_servers.2.id = resource-two
-   management.oauth_resource_servers.2.client_id = two
-   management.oauth_resource_servers.3.initiated_logon_type = idp_initiated
+   management.oauth_resource_servers.2.oauth_client_id = two
+   management.oauth_resource_servers.3.oauth_initiated_logon_type = idp_initiated
    management.oauth_resource_servers.3.oauth_provider_url = http://three",
    [
    {rabbitmq_management, [
@@ -651,19 +651,19 @@
                           {oauth_resource_servers,
                             #{
                               <<"resource-one">> => [
-                                {scopes, "openid profile rabbitmq.*"},
-                                {client_id, "one"},
+                                {oauth_scopes, "openid profile rabbitmq.*"},
+                                {oauth_client_id, "one"},
                                 {id, "resource-one"},
                                 {label, "One"},
                                 {oauth_provider_url, "http://one:8080"}
                               ],
                               <<"resource-two">> => [
-                                {client_id, "two"},
+                                {oauth_client_id, "two"},
                                 {id, "resource-two"},
                                 {oauth_provider_url, "http://two"}
                               ],
                               <<"3">> => [
-                                {initiated_logon_type, idp_initiated},
+                                {oauth_initiated_logon_type, idp_initiated},
                                 {oauth_provider_url, "http://three"}
                               ]
                             }
