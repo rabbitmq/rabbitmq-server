@@ -124,6 +124,7 @@ init(#mqtt_packet{fixed = #mqtt_packet_fixed{type = ?CONNECT},
     %% alarm and client therefore disconnected due to client side CONNACK timeout.
     case rabbit_net:socket_ends(Socket, inbound) of
         {ok, SocketEnds} ->
+            rabbit_networking:register_non_amqp_connection(self()),
             process_connect(ConnectPacket, Socket, ConnName, SendFun, SocketEnds);
         {error, Reason} ->
             {error, {socket_ends, Reason}}
@@ -188,6 +189,7 @@ process_connect(
 
         {VHostPickedUsing, {VHost, Username2}} = get_vhost(Username1, SslLoginName, Port),
         ?LOG_DEBUG("MQTT connection ~s picked vhost using ~s", [ConnName0, VHostPickedUsing]),
+        ok ?= check_node_connection_limit(),
         ok ?= check_vhost_exists(VHost, Username2, PeerIp),
         ok ?= check_vhost_alive(VHost),
         ok ?= check_vhost_connection_limit(VHost),
@@ -318,7 +320,6 @@ process_connect(State0) ->
         {ok, QoS0SessPresent, State1} ?= handle_clean_start_qos0(State0),
         {ok, SessPresent, State2} ?= handle_clean_start_qos1(QoS0SessPresent, State1),
         {ok, State} ?= init_subscriptions(SessPresent, State2),
-        rabbit_networking:register_non_amqp_connection(self()),
         self() ! connection_created,
         {ok, SessPresent, State}
     else
@@ -1031,6 +1032,14 @@ make_will_msg(#mqtt_packet_connect{will_flag = true,
                    dup = false,
                    props = Props,
                    payload = Payload}}.
+
+check_node_connection_limit() ->
+    case rabbit_networking:is_over_node_connection_limit() of
+        false -> ok;
+        {true, Limit} ->
+            ?LOG_ERROR("MQTT connection failed: node connection limit ~p is reached", [Limit]),
+            {error, ?RC_QUOTA_EXCEEDED}
+    end.
 
 check_vhost_exists(VHost, Username, PeerIp) ->
     case rabbit_vhost:exists(VHost) of

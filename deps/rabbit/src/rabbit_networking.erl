@@ -24,6 +24,7 @@
          stop_tcp_listener/1, active_listeners/0,
          node_listeners/1, node_client_listeners/1,
          register_connection/1, unregister_connection/1,
+         register_amqp10_connection/1, unregister_amqp10_connection/1,
          register_non_amqp_connection/1, unregister_non_amqp_connection/1,
          connections/0, non_amqp_connections/0, connection_info_keys/0,
          connection_info/1, connection_info/2,
@@ -48,7 +49,10 @@
 -deprecated([{force_connection_event_refresh, 1, eventually}]).
 
 -export([
+    count_all_local_connections/0,
+    is_over_node_connection_limit/0,
     local_connections/0,
+    local_amqp10_connections/0,
     local_non_amqp_connections/0,
     %% prefer local_connections/0
     connections_local/0
@@ -63,7 +67,7 @@
 -define(ETS_TABLE, rabbit_listener_ets).
 %% Number of re-try in case of no_epmd_port
 %% it can happen when the DNS is not ready
-%% for example, in Kubernetes during the start-up phase  
+%% for example, in Kubernetes during the start-up phase
 -define(PORT_PLEASE_ATTEMPTS, 10).
 
 %% Wait for retry when erl_epmd:port_please fails
@@ -447,16 +451,51 @@ register_connection(Pid) -> pg_local:join(rabbit_connections, Pid).
 
 unregister_connection(Pid) -> pg_local:leave(rabbit_connections, Pid).
 
+-spec register_amqp10_connection(pid()) -> ok.
+
+register_amqp10_connection(Pid) -> pg_local:join(rabbit_amqp10_connections, Pid).
+
+-spec unregister_amqp10_connection(pid()) -> ok.
+
+unregister_amqp10_connection(Pid) -> pg_local:leave(rabbit_amqp10_connections, Pid).
+
 -spec connections() -> [rabbit_types:connection()].
 
 connections() ->
     Nodes = rabbit_nodes:list_running(),
     rabbit_misc:append_rpc_all_nodes(Nodes, rabbit_networking, connections_local, [], ?RPC_TIMEOUT).
 
+-spec count_all_local_connections() -> non_neg_integer().
+%% @doc Returns the number of AMQP/non-AMQP connections registered
+%% we are using pg variant that allows registering same pid many times
+%% however here we count each pid only once.
+count_all_local_connections() ->
+    pg_local:count_unique_members(rabbit_non_amqp_connections) +
+        pg_local:count_unique_members(rabbit_amqp10_connections) +
+        pg_local:count_unique_members(rabbit_connections).
+
+%% @doc returns false if new connection is allowed and {true, Limit} otherwise
+%% should be same return format as rabbit_vhost_limit:is_over_connection_limit
+is_over_node_connection_limit() ->
+    Limit = rabbit_misc:get_env(rabbit, connection_max, infinity),
+    case Limit of
+        infinity -> false;
+        N when is_integer(N) ->
+            ActiveConns = count_all_local_connections(),
+            case ActiveConns > Limit of
+                false -> false;
+                true  -> {true, Limit}
+            end
+    end.
+
 -spec local_connections() -> [rabbit_types:connection()].
 %% @doc Returns pids of AMQP 0-9-1 and AMQP 1.0 connections local to this node.
 local_connections() ->
     connections_local().
+
+-spec local_amqp10_connections() -> [rabbit_types:connection()].
+local_amqp10_connections() ->
+    pg_local:get_members(rabbit_amqp10_connections).
 
 -spec connections_local() -> [rabbit_types:connection()].
 %% @deprecated Prefer {@link local_connections}

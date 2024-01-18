@@ -751,9 +751,7 @@ status() ->
     Totals = case is_running() of
                  true ->
                      [{virtual_host_count, rabbit_vhost:count()},
-                      {connection_count,
-                       length(rabbit_networking:connections_local()) +
-                       length(rabbit_networking:local_non_amqp_connections())},
+                      {connection_count, rabbit_networking:count_all_local_connections()},
                       {queue_count, total_queue_count()}];
                  false ->
                      []

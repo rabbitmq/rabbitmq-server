@@ -29,12 +29,12 @@ emit_connection_info_local(Items, Ref, AggregatorPid) ->
 
 -spec list() -> [pid()].
 list() ->
-    pg_local:get_members(rabbit_amqp10_connections).
+   rabbit_networking:local_amqp10_connections().
 
 -spec register_connection(pid()) -> ok.
 register_connection(Pid) ->
-    pg_local:join(rabbit_amqp10_connections, Pid).
+    rabbit_networking:register_amqp10_connection(Pid).
 
 -spec unregister_connection(pid()) -> ok.
 unregister_connection(Pid) ->
-    pg_local:leave(rabbit_amqp10_connections, Pid).
+    rabbit_networking:unregister_amqp10_connection(Pid).

@@ -40,6 +40,7 @@ groups() ->
           access_failure,
           access_failure_not_allowed,
           access_failure_send,
+          node_connections_limit,
           streams
         ]},
       {java, [], [
@@ -99,6 +100,7 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
+    set_node_limit(Config, infinity),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 build_dotnet_test_project(Config) ->
@@ -262,6 +264,10 @@ access_failure_send(Config) ->
                                             ),
     run(Config, [ {dotnet, "access_failure_send"} ]).
 
+node_connections_limit(Config) ->
+    set_node_limit(Config, 0),
+    run(Config, [ {dotnet, "node_connections_limit"} ]).
+
 run(Config, Flavors) ->
     ClientLibrary = ?config(amqp10_client_library, Config),
     Fun = case ClientLibrary of
@@ -292,3 +298,8 @@ run_java_test(Config, Class) ->
       ],
       [{cd, TestProjectDir}]),
     {ok, _} = Ret.
+
+set_node_limit(Config, Limit) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 application,
+                                 set_env, [rabbit, connection_max, Limit]).

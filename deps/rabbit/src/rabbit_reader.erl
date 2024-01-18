@@ -1246,8 +1246,7 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
              heartbeater = Heartbeater};
 
 handle_method0(#'connection.open'{virtual_host = VHost},
-               State = #v1{ranch_ref        = RanchRef,
-                           connection_state = opening,
+               State = #v1{connection_state = opening,
                            connection       = Connection = #connection{
                                                 log_name = ConnName,
                                                 user = User = #user{username = Username},
@@ -1255,7 +1254,7 @@ handle_method0(#'connection.open'{virtual_host = VHost},
                            helper_sup       = SupPid,
                            sock             = Sock,
                            throttle         = Throttle}) ->
-    ok = is_over_node_connection_limit(RanchRef),
+    ok = is_over_node_connection_limit(),
     ok = is_over_vhost_connection_limit(VHost, User),
     ok = is_over_user_connection_limit(User),
     ok = rabbit_access_control:check_vhost_access(User, VHost, {socket, Sock}, #{}),
@@ -1356,21 +1355,14 @@ is_vhost_alive(VHostPath, User) ->
                             [VHostPath, User#user.username, VHostPath])
     end.
 
-is_over_node_connection_limit(RanchRef) ->
-    Limit = rabbit_misc:get_env(rabbit, connection_max, infinity),
-    case Limit of
-        infinity -> ok;
-        N when is_integer(N) ->
-            #{active_connections := ActiveConns} = ranch:info(RanchRef),
-
-            case ActiveConns > Limit of
-                false -> ok;
-                true ->
-                    rabbit_misc:protocol_error(not_allowed,
-                                            "connection refused: "
-                                            "node connection limit (~tp) is reached",
-                                            [Limit])
-            end
+is_over_node_connection_limit() ->
+    case rabbit_networking:is_over_node_connection_limit() of
+        false -> ok;
+        {true, Limit} ->
+            rabbit_misc:protocol_error(not_allowed,
+                                       "connection refused: "
+                                       "node connection limit (~tp) is reached",
+                                       [Limit])
     end.
 
 is_over_vhost_connection_limit(VHostPath, User) ->

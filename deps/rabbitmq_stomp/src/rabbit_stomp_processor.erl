@@ -7,6 +7,8 @@
 
 -module(rabbit_stomp_processor).
 
+-feature(maybe_expr, enable).
+
 -compile({no_auto_import, [error/3]}).
 
 -export([initial_state/2, process_frame/2, flush_and_die/1]).
@@ -583,33 +585,38 @@ do_login(undefined, _, _, _, _, _, State) ->
     error("Bad CONNECT", "Missing login or passcode header(s)", State);
 do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
          State = #proc_state{peer_addr = Addr}) ->
-    case start_connection(
+    maybe
+        ok ?= check_node_connection_limit(),
+        {ok, Connection} ?= start_connection(
            #amqp_params_direct{username     = Username,
                                password     = Passwd,
                                virtual_host = VirtualHost,
-                               adapter_info = AdapterInfo}, Username, Addr) of
-        {ok, Connection} ->
-            link(Connection),
-            {ok, Channel} = amqp_connection:open_channel(Connection),
-            link(Channel),
-            amqp_channel:enable_delivery_flow_control(Channel),
-            SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
-            {SendTimeout, ReceiveTimeout} = ensure_heartbeats(Heartbeat),
+                               adapter_info = AdapterInfo}, Username, Addr),
+        link(Connection),
+        {ok, Channel} = amqp_connection:open_channel(Connection),
+        link(Channel),
+        amqp_channel:enable_delivery_flow_control(Channel),
+        SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
+        {SendTimeout, ReceiveTimeout} = ensure_heartbeats(Heartbeat),
 
-          Headers = [{?HEADER_SESSION, SessionId},
-                     {?HEADER_HEART_BEAT,
-                      io_lib:format("~B,~B", [SendTimeout, ReceiveTimeout])},
-                     {?HEADER_VERSION, Version}],
-          ok("CONNECTED",
-              case application:get_env(rabbitmq_stomp, hide_server_info, false) of
-                true  -> Headers;
-                false -> [{?HEADER_SERVER, server_header()} | Headers]
-              end,
-               "",
-               State#proc_state{session_id = SessionId,
-                                channel    = Channel,
-                                connection = Connection,
-                                version    = Version});
+      Headers = [{?HEADER_SESSION, SessionId},
+                 {?HEADER_HEART_BEAT,
+                  io_lib:format("~B,~B", [SendTimeout, ReceiveTimeout])},
+                 {?HEADER_VERSION, Version}],
+      ok("CONNECTED",
+          case application:get_env(rabbitmq_stomp, hide_server_info, false) of
+            true  -> Headers;
+            false -> [{?HEADER_SERVER, server_header()} | Headers]
+          end,
+           "",
+           State#proc_state{session_id = SessionId,
+                            channel    = Channel,
+                            connection = Connection,
+                            version    = Version})
+    else
+        {error, {node_connections_limit, Limit}} ->
+            rabbit_log:warning("STOMP connection failed: node connections limit ~p reached", [Limit]),
+            error("Bad CONNECT", "STOMP connection failed: node connections limit ~p reached", [Limit], State);
         {error, {auth_failure, _}} ->
             rabbit_log:warning("STOMP login failed for user '~ts': authentication failed", [Username]),
             error("Bad CONNECT", "Access refused for user '" ++
@@ -630,6 +637,13 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
             rabbit_log:warning("STOMP login failed for user '~ts': "
                                "this user's access is restricted to localhost", [Username]),
             error("Bad CONNECT", "non-loopback access denied", State)
+    end.
+
+check_node_connection_limit() ->
+    case rabbit_networking:is_over_node_connection_limit() of
+        false -> ok;
+        {true, Limit} ->
+            {error, {node_connections_limit, Limit}}
     end.
 
 start_connection(Params, Username, Addr) ->

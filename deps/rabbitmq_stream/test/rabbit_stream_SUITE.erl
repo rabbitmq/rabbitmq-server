@@ -55,7 +55,8 @@ groups() ->
        max_segment_size_bytes_validation,
        close_connection_on_consumer_update_timeout,
        set_filter_size,
-       vhost_queue_limit
+       vhost_queue_limit,
+       node_connection_limit
       ]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
@@ -187,12 +188,17 @@ end_per_testcase(close_connection_on_consumer_update_timeout = TestCase, Config)
                                       set_env,
                                       [rabbitmq_stream, request_timeout, 60000]),
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
+
 end_per_testcase(vhost_queue_limit = TestCase, Config) ->
     _ = rabbit_ct_broker_helpers:rpc(Config,
                                      0,
                                      rabbit_vhost_limit,
                                      clear,
                                      [<<"/">>, <<"guest">>]),
+    rabbit_ct_helpers:testcase_finished(Config, TestCase);
+
+end_per_testcase(node_connection_limit = TestCase, Config) ->
+    set_node_limit(Config, infinity),
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 end_per_testcase(TestCase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, TestCase).
@@ -482,6 +488,22 @@ test_gc_publishers(Config) ->
                                   0,
                                   <<"ref">>]),
     ?awaitMatch(0, publisher_count(Config), ?WAIT),
+    ok.
+
+node_connection_limit(Config) ->
+    Transport = gen_tcp,
+    %% Set limit to 0, don't accept any connections
+    set_node_limit(Config, 0),
+    open_connection_fails_at_peer_properties(Config),
+
+    %% Set limit to 5, accept 5 connections
+    {Transport, Connections} = open_connections_to_limit(Config, Transport, 5),
+    %% %% But no more than 5
+    open_connection_fails_at_peer_properties(Config),
+
+    set_node_limit(Config, infinity),
+    Conn = connect_and_authenticate(Transport, Config),
+    close_all_connections(Transport, [Conn | Connections]),
     ok.
 
 unauthenticated_client_rejected_tcp_connected(Config) ->
@@ -1126,8 +1148,34 @@ get_global_counters(Config) ->
                                           overview,
                                           [])).
 
+
 request(Cmd) ->
     request(1, Cmd).
 
 request(CorrId, Cmd) ->
     rabbit_stream_core:frame({request, CorrId, Cmd}).
+
+set_node_limit(Config, Limit) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 application,
+                                 set_env, [rabbit, connection_max, Limit]).
+
+open_connections_to_limit(Config, Transport, Limit) ->
+    set_node_limit(Config, Limit),
+    Connections = [connect_and_authenticate(Transport, Config) || _ <- lists:seq(1,Limit)],
+    {Transport, Connections}.
+
+open_connection_fails_at_peer_properties(Config) ->
+    Transport = gen_tcp,
+    Port = get_stream_port(Config),
+    {ok, S} = gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    C0 = rabbit_stream_core:init(0),
+    PeerPropertiesFrame = request({peer_properties, #{}}),
+    ok = Transport:send(S, PeerPropertiesFrame),
+    {Cmd, _C} = receive_commands(Transport, S, C0),
+    ?assertMatch({response, 1, {peer_properties, ?RESPONSE_CODE_PRECONDITION_FAILED}},
+                 Cmd),
+    ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
+
+close_all_connections(Transport, Connections) ->
+    [test_close(Transport, S, C) || {S, C} <- Connections].

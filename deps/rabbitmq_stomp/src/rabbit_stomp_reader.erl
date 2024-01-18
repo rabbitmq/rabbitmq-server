@@ -6,7 +6,11 @@
 %%
 
 -module(rabbit_stomp_reader).
+
+-feature(maybe_expr, enable).
+
 -behaviour(gen_server2).
+
 
 -export([start_link/3]).
 -export([conserve_resources/3]).
@@ -67,38 +71,40 @@ init([SupHelperPid, Ref, Configuration]) ->
         application:get_env(rabbitmq_stomp, proxy_protocol, false)),
     RealSocket = rabbit_net:unwrap_socket(Sock),
 
-    case rabbit_net:connection_string(Sock, inbound) of
-        {ok, ConnStr} ->
-            ConnName = rabbit_data_coercion:to_binary(ConnStr),
-            ProcInitArgs = processor_args(Configuration, Sock),
-            ProcState = rabbit_stomp_processor:initial_state(Configuration,
-                                                             ProcInitArgs),
+    maybe
+        {ok, ConnStr} ?= rabbit_net:connection_string(Sock, inbound),
+        rabbit_networking:register_non_amqp_connection(self()),
+        ConnName = rabbit_data_coercion:to_binary(ConnStr),
+        ProcInitArgs = processor_args(Configuration, Sock),
+        ProcState = rabbit_stomp_processor:initial_state(Configuration,
+                                                         ProcInitArgs),
 
-            rabbit_log_connection:info("accepting STOMP connection ~tp (~ts)",
-                [self(), ConnName]),
+        rabbit_log_connection:info("accepting STOMP connection ~tp (~ts)",
+            [self(), ConnName]),
 
-            ParseState = rabbit_stomp_frame:initial_state(),
-            _ = register_resource_alarm(),
+        ParseState = rabbit_stomp_frame:initial_state(),
+        _ = register_resource_alarm(),
 
-            LoginTimeout = application:get_env(rabbitmq_stomp, login_timeout, 10_000),
-            MaxFrameSize = application:get_env(rabbitmq_stomp, max_frame_size, ?DEFAULT_MAX_FRAME_SIZE),
-            erlang:send_after(LoginTimeout, self(), login_timeout),
+        LoginTimeout = application:get_env(rabbitmq_stomp, login_timeout, 10_000),
+        MaxFrameSize = application:get_env(rabbitmq_stomp, max_frame_size, ?DEFAULT_MAX_FRAME_SIZE),
+        erlang:send_after(LoginTimeout, self(), login_timeout),
 
-            gen_server2:enter_loop(?MODULE, [],
-              rabbit_event:init_stats_timer(
-                run_socket(control_throttle(
-                  #reader_state{socket             = RealSocket,
-                                conn_name          = ConnName,
-                                parse_state        = ParseState,
-                                processor_state    = ProcState,
-                                heartbeat_sup      = SupHelperPid,
-                                heartbeat          = {none, none},
-                                max_frame_size     = MaxFrameSize,
-                                current_frame_size = 0,
-                                state              = running,
-                                conserve_resources = false,
-                                recv_outstanding   = false})), #reader_state.stats_timer),
-              {backoff, 1000, 1000, 10000});
+        gen_server2:enter_loop(?MODULE, [],
+          rabbit_event:init_stats_timer(
+            run_socket(control_throttle(
+              #reader_state{socket             = RealSocket,
+                            conn_name          = ConnName,
+                            parse_state        = ParseState,
+                            processor_state    = ProcState,
+                            heartbeat_sup      = SupHelperPid,
+                            heartbeat          = {none, none},
+                            max_frame_size     = MaxFrameSize,
+                            current_frame_size = 0,
+                            state              = running,
+                            conserve_resources = false,
+                            recv_outstanding   = false})), #reader_state.stats_timer),
+          {backoff, 1000, 1000, 10000})
+    else
         {error, enotconn} ->
             rabbit_net:fast_close(RealSocket),
             terminate(shutdown, undefined);
@@ -324,9 +330,10 @@ terminate(Reason, undefined) ->
     log_reason(Reason, undefined),
     {stop, Reason};
 terminate(Reason, State = #reader_state{processor_state = ProcState}) ->
-  maybe_emit_stats(State),
-  log_reason(Reason, State),
-  _ = rabbit_stomp_processor:flush_and_die(ProcState),
+    maybe_emit_stats(State),
+    log_reason(Reason, State),
+    _ = rabbit_stomp_processor:flush_and_die(ProcState),
+    rabbit_networking:unregister_non_amqp_connection(self()),
     {stop, Reason}.
 
 code_change(_OldVsn, State, _Extra) ->
