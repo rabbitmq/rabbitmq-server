@@ -6,6 +6,7 @@
 %%
 
 -module(rabbit_dead_letter).
+-include("mc.hrl").
 
 -export([publish/5,
          detect_cycles/3]).
@@ -26,15 +27,15 @@ publish(Msg0, Reason, #exchange{name = XName} = DLX, RK,
         #resource{name = SourceQName}) ->
     DLRKeys = case RK of
                   undefined ->
-                      mc:get_annotation(routing_keys, Msg0);
+                      mc:routing_keys(Msg0);
                   _ ->
                       [RK]
               end,
     Msg1 = mc:record_death(Reason, SourceQName, Msg0),
     {Ttl, Msg2} = mc:take_annotation(dead_letter_ttl, Msg1),
     Msg3 = mc:set_ttl(Ttl, Msg2),
-    Msg4 = mc:set_annotation(routing_keys, DLRKeys, Msg3),
-    DLMsg = mc:set_annotation(exchange, XName#resource.name, Msg4),
+    Msg4 = mc:set_annotation(?ANN_ROUTING_KEYS, DLRKeys, Msg3),
+    DLMsg = mc:set_annotation(?ANN_EXCHANGE, XName#resource.name, Msg4),
     Routed = rabbit_exchange:route(DLX, DLMsg, #{return_binding_keys => true}),
     {QNames, Cycles} = detect_cycles(Reason, DLMsg, Routed),
     lists:foreach(fun log_cycle_once/1, Cycles),

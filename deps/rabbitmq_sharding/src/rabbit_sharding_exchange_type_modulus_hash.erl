@@ -34,7 +34,7 @@ description() ->
 serialise_events() -> false.
 
 route(#exchange{name = Name}, Msg, _Options) ->
-    Routes = mc:get_annotation(routing_keys, Msg),
+    Routes = mc:routing_keys(Msg),
     Qs = rabbit_router:match_routing_key(Name, ['_']),
     case length(Qs) of
         0 -> [];

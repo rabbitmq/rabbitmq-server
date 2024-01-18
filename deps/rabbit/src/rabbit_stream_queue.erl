@@ -6,6 +6,7 @@
 %%
 
 -module(rabbit_stream_queue).
+-include("mc.hrl").
 
 -behaviour(rabbit_queue_type).
 
@@ -1111,12 +1112,12 @@ binary_to_msg(#resource{kind = queue,
     %% If exchange or routing_keys annotation isn't present the data most likely came
     %% from the rabbitmq-stream plugin so we'll choose defaults that simulate use
     %% of the direct exchange.
-    Mc = case mc:get_annotation(exchange, Mc0) of
-             undefined -> mc:set_annotation(exchange, <<>>, Mc0);
+    Mc = case mc:exchange(Mc0) of
+             undefined -> mc:set_annotation(?ANN_EXCHANGE, <<>>, Mc0);
              _ -> Mc0
          end,
-    case mc:get_annotation(routing_keys, Mc) of
-        undefined -> mc:set_annotation(routing_keys, [QName], Mc);
+    case mc:routing_keys(Mc) of
+        [] -> mc:set_annotation(?ANN_ROUTING_KEYS, [QName], Mc);
         _ -> Mc
     end.
 

@@ -317,14 +317,14 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
     #resource{name = DLXName} = DLXRef,
     DLRKeys = case RKey of
                   undefined ->
-                      mc:get_annotation(routing_keys, ConsumedMsg);
+                      mc:routing_keys(ConsumedMsg);
                   _ ->
                       [RKey]
               end,
     Msg0 = mc:record_death(Reason, SourceQName, ConsumedMsg),
     Msg1 = mc:set_ttl(undefined, Msg0),
-    Msg2 = mc:set_annotation(routing_keys, DLRKeys, Msg1),
-    Msg = mc:set_annotation(exchange, DLXName, Msg2),
+    Msg2 = mc:set_annotation(?ANN_ROUTING_KEYS, DLRKeys, Msg1),
+    Msg = mc:set_annotation(?ANN_EXCHANGE, DLXName, Msg2),
     {TargetQs, State3} =
         case DLX of
             not_found ->
@@ -478,8 +478,8 @@ redeliver0(#pending{delivery = Msg0,
   when is_list(DLRKeys) ->
     #resource{name = DLXName} = DLXRef,
     Msg1 = mc:set_ttl(undefined, Msg0),
-    Msg2 = mc:set_annotation(routing_keys, DLRKeys, Msg1),
-    Msg = mc:set_annotation(exchange, DLXName, Msg2),
+    Msg2 = mc:set_annotation(?ANN_ROUTING_KEYS, DLRKeys, Msg1),
+    Msg = mc:set_annotation(?ANN_EXCHANGE, DLXName, Msg2),
     %% Because of implicit default bindings rabbit_exchange:route/2 can route to target
     %% queues that do not exist. Therefore, filter out non-existent target queues.
     RouteToQs0 = queue_names(
