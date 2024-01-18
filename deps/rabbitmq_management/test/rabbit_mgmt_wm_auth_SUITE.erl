@@ -145,15 +145,18 @@ groups() ->
         {with_resource_server_id_rabbit, [], [
           {with_root_issuer_url1, [], [
             should_return_disabled_auth_settings,
-            {with_mgt_oauth_client_id_z, [], [
-              should_return_oauth_enabled,
-              should_not_return_oauth_initiated_logon_type,
-              {with_oauth_initiated_logon_type_sp_initiated, [], [
-                should_not_return_oauth_initiated_logon_type
-              ]},
-              {with_resource_server_a, [], [
-                {with_oauth_resource_server_a_with_oauth_initiated_logon_type_sp_initiated, [], [
-                  should_not_return_oauth_resource_server_a_with_oauth_initiated_logon_type
+            {with_oauth_enabled, [], [
+              should_return_disabled_auth_settings,
+              {with_mgt_oauth_client_id_z, [], [
+                should_return_oauth_enabled,
+                should_not_return_oauth_initiated_logon_type,
+                {with_oauth_initiated_logon_type_sp_initiated, [], [
+                  should_not_return_oauth_initiated_logon_type
+                ]},
+                {with_resource_server_a, [], [
+                  {with_oauth_resource_server_a_with_oauth_initiated_logon_type_sp_initiated, [], [
+                    should_return_oauth_resource_server_a_with_oauth_initiated_logon_type_sp_initiated
+                  ]}
                 ]}
               ]}
             ]}
@@ -165,15 +168,18 @@ groups() ->
         {with_resource_server_id_rabbit, [], [
           {with_root_issuer_url1, [], [
             should_return_disabled_auth_settings,
-            {with_mgt_oauth_client_id_z, [], [
-              should_return_oauth_enabled,
-              {with_oauth_initiated_logon_type_idp_initiated, [], [
-                should_return_oauth_initiated_logon_type_idp_initiated
-              ]},
-              {with_resource_server_a, [], [
-                {with_oauth_resource_server_a_with_oauth_initiated_logon_type_idp_initiated, [], [
-                  should_not_return_oauth_initiated_logon_type,
-                  should_return_oauth_resource_server_a_with_oauth_initiated_logon_type_idp_initiated
+            {with_oauth_enabled, [], [
+              should_return_disabled_auth_settings,
+              {with_mgt_oauth_client_id_z, [], [
+                should_return_oauth_enabled,
+                {with_oauth_initiated_logon_type_idp_initiated, [], [
+                  should_return_oauth_initiated_logon_type_idp_initiated
+                ]},
+                {with_resource_server_a, [], [
+                  {with_oauth_resource_server_a_with_oauth_initiated_logon_type_idp_initiated, [], [
+                    should_not_return_oauth_initiated_logon_type,
+                    should_return_oauth_resource_server_a_with_oauth_initiated_logon_type_idp_initiated
+                  ]}
                 ]}
               ]}
             ]}
@@ -183,10 +189,12 @@ groups() ->
       {verify_oauth_disable_basic_auth, [], [
         {with_resource_server_id_rabbit, [], [
           {with_root_issuer_url1, [], [
-            {with_mgt_oauth_client_id_z, [], [
-              should_return_oauth_disable_basic_auth_true,
-              {with_oauth_disable_basic_auth_false, [], [
-                should_return_oauth_disable_basic_auth_false
+            {with_oauth_enabled, [], [
+              {with_mgt_oauth_client_id_z, [], [
+                should_return_oauth_disable_basic_auth_true,
+                {with_oauth_disable_basic_auth_false, [], [
+                  should_return_oauth_disable_basic_auth_false
+                ]}
               ]}
             ]}
           ]}
@@ -195,13 +203,15 @@ groups() ->
       {verify_oauth_scopes, [], [
         {with_resource_server_id_rabbit, [], [
           {with_root_issuer_url1, [], [
-            {with_mgt_oauth_client_id_z, [], [
-              should_not_return_oauth_scopes,
-              {with_oauth_scopes_admin_mgt, [], [
-                should_return_oauth_scopes_admin_mgt,
-                {with_resource_server_a, [], [
-                  {with_mgt_resource_server_a_with_scopes_read_write, [], [
-                    should_return_mgt_oauth_resource_server_a_with_scopes_read_write
+            {with_oauth_enabled, [], [
+              {with_mgt_oauth_client_id_z, [], [
+                should_not_return_oauth_scopes,
+                {with_oauth_scopes_admin_mgt, [], [
+                  should_return_oauth_scopes_admin_mgt,
+                  {with_resource_server_a, [], [
+                    {with_mgt_resource_server_a_with_scopes_read_write, [], [
+                      should_return_mgt_oauth_resource_server_a_with_scopes_read_write
+                    ]}
                   ]}
                 ]}
               ]}
@@ -319,6 +329,9 @@ init_per_group(with_default_oauth_provider_idp3, Config) ->
 init_per_group(_, Config) ->
   Config.
 
+end_per_group(with_oauth_providers_idp1_idp2, Config) ->
+  application:unset_env(rabbitmq_auth_backend_oauth2, oauth_providers),
+  Config;
 end_per_group(with_mgt_oauth_client_secret_q, Config) ->
   application:unset_env(rabbitmq_management, oauth_client_secret),
   Config;
@@ -477,6 +490,9 @@ should_not_return_oauth_resource_server_a_with_oauth_initiated_logon_type(Config
 should_return_oauth_resource_server_a_with_oauth_initiated_logon_type_idp_initiated(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
     Config, a, oauth_initiated_logon_type, <<"idp_initiated">>).
+should_return_oauth_resource_server_a_with_oauth_initiated_logon_type_sp_initiated(Config) ->
+  assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
+    Config, a, oauth_initiated_logon_type, <<"sp_initiated">>).
 
 should_not_return_oauth_scopes(_Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
@@ -484,6 +500,7 @@ should_not_return_oauth_scopes(_Config) ->
 
 should_return_oauth_enabled(_Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
+  log(Actual),
   ?assertEqual(true, proplists:get_value(oauth_enabled, Actual)).
 
 should_return_oauth_idp_initiated_logon(_Config) ->

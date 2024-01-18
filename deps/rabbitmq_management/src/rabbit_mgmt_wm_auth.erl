@@ -159,7 +159,10 @@ multi_resource_auth_settings(OAuthResourceServers, MgtResourceServers, Managemen
         to_tuple(oauth_client_id, ManagementProps),
         to_tuple(oauth_client_secret, ManagementProps),
         to_tuple(oauth_scopes, ManagementProps),
-        to_tuple(oauth_initiated_logon_type, ManagementProps)
+        case proplists:get_value(oauth_initiated_logon_type, ManagementProps, sp_initiated) of
+          sp_initiated -> {};
+          idp_initiated -> {oauth_initiated_logon_type, <<"idp_initiated">>}
+        end
         ])
   end.
 
@@ -177,7 +180,7 @@ single_resource_auth_settings(OAuth2BackendProps, ManagementProps) ->
           rabbit_log:error("Invalid rabbitmq_auth_backend_oauth2.resource_server_id ~p", [OAuthResourceId]),
           [{oauth_enabled, false}];
         false ->
-          OAuthClientId = proplists:get_value(oauth_client_id, ManagementProps),          
+          OAuthClientId = proplists:get_value(oauth_client_id, ManagementProps),
           case is_invalid([OAuthClientId, OAuthProviderUrl]) of
             true ->
               rabbit_log:error("Invalid rabbitmq_management oauth_client_id ~p or resolved oauth_provider_url ~p",
