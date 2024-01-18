@@ -2666,7 +2666,7 @@ end}.
        false ->
          %% this is a string
          S = string:strip(S0, right),
-         %% The prefix is optional
+         %% The suffix is optional
          {ok, HasIUSuffix} = re:compile("([0-9]+)([a-zA-Z]){1,3}$", [dollar_endonly, caseless]),
          %% Here are the prefixes we accept. This must match
          %% what rabbit_resource_monitor_misc and 'rabbitmq-diagnostics status' can format.
