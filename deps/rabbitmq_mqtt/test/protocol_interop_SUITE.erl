@@ -183,6 +183,11 @@ amqp(Config) ->
                               'User-Property' => UserProperty},
                             RequestPayload, [{qos, 1}]),
 
+    %% this test sometimes flakes, and the call to amqp10_client:get_msg/1
+    %% times out, I can't quite work it out but there is a chance waiting a
+    %% little bit could help, [Karl]
+    timer:sleep(500),
+
     %% As of 3.13, AMQP 1.0 is proxied via AMQP 0.9.1 and therefore the conversion from
     %% mc_mqtt to mc_amqpl takes place. We therefore lose MQTT User Property and Response Topic
     %% which gets converted to AMQP 0.9.1 headers. In the future, Native AMQP 1.0 will convert
