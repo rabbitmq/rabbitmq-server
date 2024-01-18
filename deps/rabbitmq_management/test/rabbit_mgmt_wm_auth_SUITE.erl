@@ -65,18 +65,15 @@ groups() ->
               should_return_oauth_enabled,
               should_return_oauth_client_id_z,
               should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url0,
-              should_return_sp_initiated_logon,
+              should_not_return_oauth_initiated_logon_type,
               should_return_oauth_disable_basic_auth,
               should_not_return_scopes,
               {with_idp_initiated_logon, [], [
-                should_return_enabled_auth_settings_idp_initiated_logon
+                should_return_oauth_idp_initiated_logon
               ]}
             ]},
-            {with_root_issuer_Url1, [], [
-              should_return_oauth_enabled,
-              should_return_oauth_client_id_z,
-              should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url1,
-              should_return_sp_initiated_logon
+            {with_root_issuer_url1, [], [
+              should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url1
             ]},
             {with_oauth_providers_idp1_idp2, [], [
               should_return_disabled_auth_settings,
@@ -96,12 +93,7 @@ groups() ->
 %% Setup/teardown.
 %% -------------------------------------------------------------------
 init_per_suite(Config) ->
-  [ {resource_server_id, <<"rabbitmq">>},
-    {oauth_client_id, <<"rabbitmq_client">>},
-    {oauth_scopes, <<>>},
-    {oauth_provider_idp1, <<"idp1">>},
-    {resource_A, <<"resource-a">>},
-    {rabbit, <<"rabbit">>},
+  [ {rabbit, <<"rabbit">>},
     {idp1, <<"idp1">>},
     {idp2, <<"idp2">>},
     {idp3, <<"idp3">>},
@@ -144,8 +136,7 @@ init_per_group(with_root_issuer_url1, Config) ->
   Config;
 init_per_group(with_idp_initiated_logon, Config) ->
   application:set_env(rabbitmq_management, oauth_initiated_logon_type, idp_initiated),
-  [ {oauth_initiated_logon_type, idp_initiated} | Config];
-
+  Config;
 init_per_group(with_oauth_providers_idp1_idp2, Config) ->
   Idp1 = ?config(idp1, Config),
   Idp2 = ?config(idp2, Config),
@@ -341,7 +332,7 @@ should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url0(Config) 
   OauthResource = maps:get(?config(rabbit, Config), OAuthResourceServers),
   ?assertEqual(?config(url0, Config), proplists:get_value(oauth_provider_url, OauthResource)).
 
-should_return_sp_initiated_logon(Config) ->
+should_not_return_oauth_initiated_logon_type(_Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
   ?assertEqual(false, proplists:is_defined(oauth_initiated_logon_type, Actual)).
 
@@ -351,21 +342,12 @@ should_not_return_scopes(_Config) ->
 
 should_return_oauth_enabled(_Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
+  log(Actual),
   ?assertEqual(true, proplists:get_value(oauth_enabled, Actual)).
 
-should_return_oauth_resource_id_rabbit(Config) ->
+should_return_oauth_idp_initiated_logon(_Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
-  log(Actual),
-  ?assertEqual(?config(rabbit, Config), proplists:get_value(oauth_resource_id, Actual)).
-
-should_return_enabled_auth_settings_idp_initiated_logon(Config) ->
-  ResourceId = ?config(resource_server_id, Config),
-  Actual = rabbit_mgmt_wm_auth:authSettings(),
-  ?assertNot(proplists:is_defined(oauth_client_id, Actual)),
-  ?assertNot(proplists:is_defined(scopes, Actual)),
-  ?assertNot(proplists:is_defined(oauth_metadata_url, Actual)),
-  ?assertEqual(ResourceId, proplists:get_value(oauth_resource_id, Actual)),
-  ?assertEqual( <<"idp_initiated">>, proplists:get_value(oauth_initiated_logon_type, Actual)).
+  ?assertEqual(<<"idp_initiated">>, proplists:get_value(oauth_initiated_logon_type, Actual)).
 
 should_return_root_issuer_as_oauth_provider_url(_Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),

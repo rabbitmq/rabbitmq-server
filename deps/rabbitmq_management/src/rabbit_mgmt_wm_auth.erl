@@ -160,7 +160,8 @@ multi_resource_auth_settings(OAuthResourceServers, MgtResourceServers, Managemen
         to_tuple(oauth_disable_basic_auth, ManagementProps, true),
         to_tuple(oauth_client_id, ManagementProps),
         to_tuple(oauth_client_secret, ManagementProps),
-        to_tuple(oauth_scopes, ManagementProps)
+        to_tuple(oauth_scopes, ManagementProps),
+        to_tuple(oauth_initiated_logon_type, ManagementProps)
         ])
   end.
 
