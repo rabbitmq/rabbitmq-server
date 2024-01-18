@@ -26,10 +26,10 @@ function startWithOAuthLogin () {
     if (oauth.resource_servers.length == 1 && oauth.resource_servers[0].sp_initiated) {
       get(readiness_url(oauth.resource_servers[0]), 'application/json', function (req) {
         if (req.status !== 200) {
-          let message = 'Unable to retrieve OpenID configuration from ' + oauth.resource_servers[0].provider_url + '. '
+          let message = 'Unable to retrieve OpenID configuration from ' + oauth.resource_servers[0].oauth_provider_url + '. '
           switch(req.status) {
             case 0:
-              message += 'Reason: ' + oauth.resource_servers[0].provider_url + " not reachable"
+              message += 'Reason: ' + oauth.resource_servers[0].oauth_provider_url + " not reachable"
               break
             case 404:
               message += 'Reason: ' + readiness_url(oauth.resource_servers[0]) + " return 404"

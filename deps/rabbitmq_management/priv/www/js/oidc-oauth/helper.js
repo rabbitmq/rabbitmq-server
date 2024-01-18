@@ -13,10 +13,10 @@ function rabbit_port() {
   return window.location.port ? ":" +  window.location.port : "";
 }
 function readiness_url(resource_server) {
-    if (!resource_server.metadata_url) {
-      return resource_server.provider_url + "/.well-known/openid-configuration"
+    if (!resource_server.oauth_metadata_url) {
+      return resource_server.oauth_provider_url + "/.well-known/openid-configuration"
     }else {
-      return resource_server.metadata_url
+      return resource_server.oauth_metadata_url
     }
 }
 
@@ -37,37 +37,37 @@ function auth_settings_apply_defaults(authSettings) {
   if (authSettings.oauth_resource_servers && Object.keys(authSettings.oauth_resource_servers).length > 0) {
 
     for (const [resource_server_id, resource_server] of Object.entries(authSettings.oauth_resource_servers)) {
-        if (!resource_server.provider_url) {
-          resource_server.provider_url = authSettings.oauth_provider_url
+        if (!resource_server.oauth_provider_url) {
+          resource_server.oauth_provider_url = authSettings.oauth_provider_url
         }
-        if (!resource_server.provider_url) {
+        if (!resource_server.oauth_provider_url) {
           break
         }
-        if (!resource_server.response_type) {
-          resource_server.response_type = authSettings.oauth_response_type
-          if (!resource_server.response_type) {
-            resource_server.response_type = "code"
+        if (!resource_server.oauth_response_type) {
+          resource_server.oauth_response_type = authSettings.oauth_response_type
+          if (!resource_server.oauth_response_type) {
+            resource_server.oauth_response_type = "code"
           }
         }
-        if (!resource_server.scopes) {
-          resource_server.scopes = authSettings.oauth_scopes
-          if (!resource_server.scopes) {
-            resource_server.scopes = "openid profile"
+        if (!resource_server.oauth_scopes) {
+          resource_server.oauth_scopes = authSettings.oauth_scopes
+          if (!resource_server.oauth_scopes) {
+            resource_server.oauth_scopes = "openid profile"
           }
         }
-        if (!resource_server.client_id) {
-          resource_server.client_id = authSettings.oauth_client_id
+        if (!resource_server.oauth_client_id) {
+          resource_server.oauth_client_id = authSettings.oauth_client_id
         }
-        if (!resource_server.client_secret && !resource_server.client_id) {
-          resource_server.client_secret = authSettings.oauth_client_secret
+        if (!resource_server.oauth_client_secret && !resource_server.oauth_client_id) {
+          resource_server.oauth_client_secret = authSettings.oauth_client_secret
         }
-        if (resource_server.initiated_logon_type == "idp_initiated") {
+        if (resource_server.oauth_initiated_logon_type == "idp_initiated") {
           resource_server.sp_initiated = false
         } else {
           resource_server.sp_initiated = true
         }
-        if (!resource_server.metadata_url) {
-          resource_server.metadata_url = authSettings.metadata_url
+        if (!resource_server.oauth_metadata_url) {
+          resource_server.oauth_metadata_url = authSettings.metadata_url
         }
         resource_server.id = resource_server_id
         authSettings.resource_servers.push(resource_server)
@@ -100,10 +100,10 @@ function auth_settings_apply_defaults(authSettings) {
 function oauth_initialize_user_manager(resource_server) {
     oidcSettings = {
         //userStore: new WebStorageStateStore({ store: window.localStorage }),
-        authority: resource_server.provider_url,
-        client_id: resource_server.client_id,
-        response_type: resource_server.response_type,
-        scope: resource_server.scopes,
+        authority: resource_server.oauth_provider_url,
+        client_id: resource_server.oauth_client_id,
+        response_type: resource_server.oauth_response_type,
+        scope: resource_server.oauth_scopes,
         resource: resource_server.id,
         redirect_uri: rabbit_base_uri() + "/js/oidc-oauth/login-callback.html",
         post_logout_redirect_uri: rabbit_base_uri() + "/",
@@ -114,11 +114,11 @@ function oauth_initialize_user_manager(resource_server) {
           audience: resource_server.id, // required by oauth0
         },
     };
-    if (resource_server.client_secret != "") {
-      oidcSettings.client_secret = resource_server.client_secret;
+    if (resource_server.oauth_client_secret != "") {
+      oidcSettings.client_secret = resource_server.oauth_client_secret;
     }
-    if (resource_server.metadata_url != "") {
-      oidcSettings.metadataUrl = resource_server.metadata_url;
+    if (resource_server.oauth_metadata_url != "") {
+      oidcSettings.metadataUrl = resource_server.oauth_metadata_url;
     }
 
     oidc.Log.setLevel(oidc.Log.DEBUG);
@@ -165,7 +165,7 @@ function oauth_initialize(authSettings) {
 
     if (resource_server) {
       oauth.sp_initiated = resource_server.sp_initiated
-      oauth.authority = resource_server.provider_url
+      oauth.authority = resource_server.oauth_provider_url
       if (!resource_server.sp_initiated) return oauth;
       else oauth_initialize_user_manager(resource_server)
     }
@@ -211,7 +211,7 @@ function oauth_initiateLogin(resource_server_id) {
   set_auth_resource(resource_server_id)
 
   oauth.sp_initiated = resource_server.sp_initiated
-  oauth.authority = resource_server.provider_url
+  oauth.authority = resource_server.oauth_provider_url
 
   if (resource_server.sp_initiated) {
     if (!mgr) oauth_initialize_user_manager(resource_server)
@@ -222,7 +222,7 @@ function oauth_initiateLogin(resource_server_id) {
         _management_logger.error(err)
     })
   } else {
-    location.href = resource_server.provider_url
+    location.href = resource_server.oauth_provider_url
   }
 }
 
