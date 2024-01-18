@@ -23,11 +23,6 @@
          check_consistency/0,
          cli_cluster_status/0]).
 
-%% These two functions are not supported by Khepri and probably
-%% shouldn't be part of this API in the future, but currently
-%% they're needed here so they can fail when invoked using Khepri.
--export([update_cluster_nodes/1]).
-
 -type node_type() :: disc_node_type() | ram_node_type().
 -type disc_node_type() :: disc.
 -type ram_node_type() :: ram.
@@ -389,9 +384,3 @@ cli_cluster_status_using_mnesia() ->
 
 cli_cluster_status_using_khepri() ->
     rabbit_khepri:cli_cluster_status().
-
-update_cluster_nodes(DiscoveryNode) ->
-    case rabbit_khepri:is_enabled() of
-        true  -> {error, not_supported};
-        false -> rabbit_mnesia:update_cluster_nodes(DiscoveryNode)
-    end.
