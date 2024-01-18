@@ -2145,9 +2145,12 @@ leader_locator_balanced_maintenance(Config) ->
                  declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                               {<<"x-queue-leader-locator">>, longstr, <<"balanced">>}])),
 
-    Info = find_queue_info(Config, [leader]),
-    Leader = proplists:get_value(leader, Info),
-    ?assert(lists:member(Leader, [Server1, Server2])),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Info = find_queue_info(Config, [leader]),
+              Leader = proplists:get_value(leader, Info),
+              lists:member(Leader, [Server1, Server2])
+      end, 60000),
 
     true = rabbit_ct_broker_helpers:unmark_as_being_drained(Config, Server3),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
