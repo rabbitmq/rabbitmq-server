@@ -168,7 +168,7 @@ notify_node_up() ->
 
 notify_joined_cluster() ->
     NewMember = node(),
-    Nodes = rabbit_nodes:list_running() -- [NewMember],
+    Nodes = alive_rabbit_nodes() -- [NewMember],
     gen_server:abcast(Nodes, ?SERVER,
                       {joined_cluster, node(), rabbit_db_cluster:node_type()}),
 
@@ -177,7 +177,7 @@ notify_joined_cluster() ->
 -spec notify_left_cluster(node()) -> 'ok'.
 
 notify_left_cluster(Node) ->
-    Nodes = rabbit_nodes:list_running(),
+    Nodes = alive_rabbit_nodes(),
     gen_server:abcast(Nodes, ?SERVER, {left_cluster, Node}),
     ok.
 
@@ -1020,11 +1020,13 @@ alive_nodes() -> rabbit_nodes:list_reachable().
 
 alive_nodes(Nodes) -> rabbit_nodes:filter_reachable(Nodes).
 
-alive_rabbit_nodes() -> rabbit_nodes:list_running().
+alive_rabbit_nodes() ->
+    alive_rabbit_nodes(rabbit_nodes:list_members()).
 
 -spec alive_rabbit_nodes([node()]) -> [node()].
 
 alive_rabbit_nodes(Nodes) ->
+    ok = ping(Nodes),
     rabbit_nodes:filter_running(Nodes).
 
 %% This one is allowed to connect!
@@ -1032,7 +1034,10 @@ alive_rabbit_nodes(Nodes) ->
 -spec ping_all() -> 'ok'.
 
 ping_all() ->
-    [net_adm:ping(N) || N <- rabbit_nodes:list_members()],
+    ping(rabbit_nodes:list_members()).
+
+ping(Nodes) ->
+    _ = [net_adm:ping(N) || N <- Nodes],
     ok.
 
 possibly_partitioned_nodes() ->
