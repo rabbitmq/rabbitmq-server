@@ -46,5 +46,5 @@ set_timestamp(Msg, Timestamp, Overwrite) ->
         {Ts, false} when is_integer(Ts) ->
             Msg;
         _ ->
-            mc:set_annotation(?TIMESTAMP, Timestamp, Msg)
+            mc:set_annotation(?ANN_TIMESTAMP, Timestamp, Msg)
     end.

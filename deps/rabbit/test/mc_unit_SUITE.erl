@@ -294,7 +294,8 @@ amqpl_amqp_bin_amqpl(_Config) ->
     Sections = amqp10_framing:decode_bin(
                  iolist_to_binary(amqp_serialize(Msg10Pre))),
     Msg10 = mc:init(mc_amqp, Sections, #{}),
-    ?assertEqual({<<"exch">>, [<<"apple">>]}, mc:exchange_and_routing_keys(Msg10)),
+    ?assertEqual(<<"exch">>, mc:exchange(Msg10)),
+    ?assertEqual([<<"apple">>], mc:routing_keys(Msg10)),
     ?assertEqual(98, mc:priority(Msg10)),
     ?assertEqual(true, mc:is_persistent(Msg10)),
     ?assertEqual(99000, mc:timestamp(Msg10)),
@@ -708,5 +709,5 @@ amqp_map_get(K, Tuples) ->
     end.
 
 annotations() ->
-    #{?EXCHANGE => <<"exch">>,
-      ?ROUTING_KEYS => [<<"apple">>]}.
+    #{?ANN_EXCHANGE => <<"exch">>,
+      ?ANN_ROUTING_KEYS => [<<"apple">>]}.

@@ -22,9 +22,9 @@
 -define(IS_SHORTSTR_LEN(B), byte_size(B) < 256).
 
 %% We keep the following atom annotation keys short as they are stored per message on disk.
--define(EXCHANGE, x).
--define(ROUTING_KEYS, rk).
--define(TIMESTAMP, ts).
--define(RECEIVED_AT_TIMESTAMP, rts).
--define(DURABLE, d).
--define(PRIORITY, p).
+-define(ANN_EXCHANGE, x).
+-define(ANN_ROUTING_KEYS, rk).
+-define(ANN_TIMESTAMP, ts).
+-define(ANN_RECEIVED_AT_TIMESTAMP, rts).
+-define(ANN_DURABLE, d).
+-define(ANN_PRIORITY, p).

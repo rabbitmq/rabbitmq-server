@@ -20,7 +20,6 @@
          routing_headers/2,
          exchange/1,
          routing_keys/1,
-         exchange_and_routing_keys/1,
          %%
          convert/2,
          convert/3,
@@ -226,29 +225,21 @@ routing_headers(#?MODULE{protocol = Proto,
 routing_headers(BasicMsg, Opts) ->
     mc_compat:routing_headers(BasicMsg, Opts).
 
--spec exchange(state()) -> rabbit_misc:resource_name().
-exchange(#?MODULE{annotations = #{?EXCHANGE := Exchange}}) ->
-    Exchange;
+-spec exchange(state()) -> undefined | rabbit_misc:resource_name().
+exchange(#?MODULE{annotations = Anns}) ->
+    maps:get(?ANN_EXCHANGE, Anns, undefined);
 exchange(BasicMessage) ->
-    mc_compat:get_annotation(?EXCHANGE, BasicMessage).
+    mc_compat:get_annotation(?ANN_EXCHANGE, BasicMessage).
 
--spec routing_keys(state()) -> [rabbit_types:routing_key(),...].
-routing_keys(#?MODULE{annotations = #{?ROUTING_KEYS := RoutingKeys}}) ->
-    RoutingKeys;
+-spec routing_keys(state()) -> [rabbit_types:routing_key()].
+routing_keys(#?MODULE{annotations = Anns}) ->
+    maps:get(?ANN_ROUTING_KEYS, Anns, []);
 routing_keys(BasicMessage) ->
-    mc_compat:get_annotation(?ROUTING_KEYS, BasicMessage).
-
--spec exchange_and_routing_keys(state()) ->
-    {rabbit_misc:resource_name(), [rabbit_types:routing_key(),...]}.
-exchange_and_routing_keys(#?MODULE{annotations = #{?EXCHANGE := Exchange,
-                                                   ?ROUTING_KEYS := RoutingKeys}}) ->
-    {Exchange, RoutingKeys};
-exchange_and_routing_keys(BasicMessage) ->
-    {exchange(BasicMessage), routing_keys(BasicMessage)}.
+    mc_compat:get_annotation(?ANN_ROUTING_KEYS, BasicMessage).
 
 -spec is_persistent(state()) -> boolean().
 is_persistent(#?MODULE{annotations = Anns}) ->
-    maps:get(?DURABLE, Anns, true);
+    maps:get(?ANN_DURABLE, Anns, true);
 is_persistent(BasicMsg) ->
     mc_compat:is_persistent(BasicMsg).
 
@@ -260,13 +251,13 @@ ttl(BasicMsg) ->
 
 -spec timestamp(state()) -> undefined | non_neg_integer().
 timestamp(#?MODULE{annotations = Anns}) ->
-    maps:get(?TIMESTAMP, Anns, undefined);
+    maps:get(?ANN_TIMESTAMP, Anns, undefined);
 timestamp(BasicMsg) ->
     mc_compat:timestamp(BasicMsg).
 
 -spec priority(state()) -> undefined | non_neg_integer().
 priority(#?MODULE{annotations = Anns}) ->
-    maps:get(?PRIORITY, Anns, undefined);
+    maps:get(?ANN_PRIORITY, Anns, undefined);
 priority(BasicMsg) ->
     mc_compat:priority(BasicMsg).
 
@@ -349,8 +340,8 @@ record_death(Reason, SourceQueue,
                       annotations = Anns0} = State)
   when is_atom(Reason) andalso is_binary(SourceQueue) ->
     Key = {SourceQueue, Reason},
-    #{?EXCHANGE := Exchange,
-      ?ROUTING_KEYS := RoutingKeys} = Anns0,
+    #{?ANN_EXCHANGE := Exchange,
+      ?ANN_ROUTING_KEYS := RoutingKeys} = Anns0,
     Timestamp = os:system_time(millisecond),
     Ttl = maps:get(ttl, Anns0, undefined),
 
@@ -449,7 +440,7 @@ is_cycle(Queue, [_ | Rem]) ->
 
 set_received_at_timestamp(Anns) ->
     Millis = os:system_time(millisecond),
-    Anns#{?RECEIVED_AT_TIMESTAMP => Millis}.
+    Anns#{?ANN_RECEIVED_AT_TIMESTAMP => Millis}.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

@@ -54,7 +54,7 @@ roundtrip_amqp(_Config) ->
                                            {<<"key-2">>, <<"val-2">>},
                                            {<<"key-3">>, <<"val-3">>},
                                            {<<"key-1">>, <<"val-1">>}]}},
-    Anns = #{?ROUTING_KEYS => [rabbit_mqtt_util:mqtt_to_amqp(Msg#mqtt_msg.topic)]},
+    Anns = #{?ANN_ROUTING_KEYS => [rabbit_mqtt_util:mqtt_to_amqp(Msg#mqtt_msg.topic)]},
     Mc0 = mc:init(mc_mqtt, Msg, Anns),
 
     BytesTopic = 9,
@@ -147,7 +147,7 @@ roundtrip_amqpl(_Config) ->
                                            {<<"key-2">>, <<"val-2">>},
                                            {<<"key-3">>, <<"val-3">>},
                                            {<<"key-1">>, <<"val-1">>}]}},
-    Anns = #{?ROUTING_KEYS => [rabbit_mqtt_util:mqtt_to_amqp(Msg#mqtt_msg.topic)]},
+    Anns = #{?ANN_ROUTING_KEYS => [rabbit_mqtt_util:mqtt_to_amqp(Msg#mqtt_msg.topic)]},
     Mc0 = mc:init(mc_mqtt, Msg, Anns),
     Mc1 = mc:convert(mc_amqpl, Mc0),
     Mc = mc:convert(mc_mqtt, Mc1),
@@ -303,7 +303,7 @@ mqtt_amqpl(_Config) ->
                                   'Response-Topic' => <<"tmp/blah/responses">>
                                  }
                        },
-    Anns = #{?ROUTING_KEYS => [rabbit_mqtt_util:mqtt_to_amqp(Msg#mqtt_msg.topic)]},
+    Anns = #{?ANN_ROUTING_KEYS => [rabbit_mqtt_util:mqtt_to_amqp(Msg#mqtt_msg.topic)]},
     Mc = mc:init(mc_mqtt, Msg, Anns),
     MsgL = mc:convert(mc_amqpl, Mc),
 
@@ -330,7 +330,7 @@ mqtt_amqpl_alt(_Config) ->
                                   'Correlation-Data' => InvalidUtf8
                                  }
                        },
-    Anns = #{?ROUTING_KEYS => [rabbit_mqtt_util:mqtt_to_amqp(Msg#mqtt_msg.topic)]},
+    Anns = #{?ANN_ROUTING_KEYS => [rabbit_mqtt_util:mqtt_to_amqp(Msg#mqtt_msg.topic)]},
     Mc = mc:init(mc_mqtt, Msg, Anns),
     MsgL = mc:convert(mc_amqpl, Mc),
 
@@ -361,8 +361,8 @@ mqtt_amqp(_Config) ->
                                     'Response-Topic' => <<"tmp/blah/responses">>
                                    }
                          },
-    Anns = #{?EXCHANGE => Ex,
-             ?ROUTING_KEYS => [rabbit_mqtt_util:mqtt_to_amqp(Mqtt#mqtt_msg.topic)]},
+    Anns = #{?ANN_EXCHANGE => Ex,
+             ?ANN_ROUTING_KEYS => [rabbit_mqtt_util:mqtt_to_amqp(Mqtt#mqtt_msg.topic)]},
     Mc = mc:init(mc_mqtt, Mqtt, Anns, Env),
     %% no target env
     Msg = mc:convert(mc_amqp, Mc),
@@ -403,8 +403,8 @@ mqtt_amqp_alt(_Config) ->
                                     'Response-Topic' => <<"tmp/blah/responses">>
                                    }
                          },
-    Anns = #{?EXCHANGE => Ex,
-             ?ROUTING_KEYS => [rabbit_mqtt_util:mqtt_to_amqp(Mqtt#mqtt_msg.topic)]},
+    Anns = #{?ANN_EXCHANGE => Ex,
+             ?ANN_ROUTING_KEYS => [rabbit_mqtt_util:mqtt_to_amqp(Mqtt#mqtt_msg.topic)]},
     Mc = mc:init(mc_mqtt, Mqtt, Anns, Env),
     Msg = mc:convert(mc_amqp, Mc),
 
@@ -467,8 +467,8 @@ amqp_mqtt(_Config) ->
     A =  #'v1_0.application_properties'{content = AC},
     D =  #'v1_0.data'{content = <<"data">>},
 
-    Anns = #{?EXCHANGE => <<"exch">>,
-             ?ROUTING_KEYS => [<<"apple">>]},
+    Anns = #{?ANN_EXCHANGE => <<"exch">>,
+             ?ANN_ROUTING_KEYS => [<<"apple">>]},
     AMsg = mc:init(mc_amqp, [H, M, P, A, D], Anns),
     Msg = mc:convert(mc_mqtt, AMsg, Env),
     ?assertMatch({uuid, CorrUUId}, mc:correlation_id(Msg)),
@@ -510,7 +510,7 @@ roundtrip(Mod, MqttMsg) ->
     roundtrip(Mod, MqttMsg, #{}).
 
 roundtrip(Mod, MqttMsg, SrcEnv) ->
-    Anns = #{?ROUTING_KEYS => [rabbit_mqtt_util:mqtt_to_amqp(MqttMsg#mqtt_msg.topic)]},
+    Anns = #{?ANN_ROUTING_KEYS => [rabbit_mqtt_util:mqtt_to_amqp(MqttMsg#mqtt_msg.topic)]},
     Mc0 = mc:init(mc_mqtt, MqttMsg, Anns, SrcEnv),
     Mc1 = mc:convert(Mod, Mc0),
     Mc = mc:convert(mc_mqtt, Mc1),
@@ -520,7 +520,7 @@ amqp_to_mqtt(Sections) ->
     amqp_to_mqtt(Sections, #{}).
 
 amqp_to_mqtt(Sections, Env) ->
-    Anns = #{?ROUTING_KEYS => [<<"apple">>]},
+    Anns = #{?ANN_ROUTING_KEYS => [<<"apple">>]},
     Mc0 = mc:init(mc_amqp, Sections, Anns),
     Mc = mc:convert(mc_mqtt, Mc0, Env),
     mc:protocol_state(Mc).

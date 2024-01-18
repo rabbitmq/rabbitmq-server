@@ -1550,8 +1550,8 @@ publish_to_queues(
                     conn_name = ConnName,
                     trace_state = TraceState},
          auth_state = #auth_state{user = #user{username = Username}}} = State) ->
-    Anns = #{?EXCHANGE => ExchangeNameBin,
-             ?ROUTING_KEYS => [mqtt_to_amqp(Topic)]},
+    Anns = #{?ANN_EXCHANGE => ExchangeNameBin,
+             ?ANN_ROUTING_KEYS => [mqtt_to_amqp(Topic)]},
     Msg0 = mc:init(mc_mqtt, MqttMsg, Anns, mc_env()),
     Msg = rabbit_message_interceptor:intercept(Msg0),
     case rabbit_exchange:lookup(ExchangeName) of
@@ -1768,13 +1768,13 @@ maybe_send_will(
                                  kind = exchange,
                                  name = ?DEFAULT_EXCHANGE_NAME},
             #resource{name = QNameBin} = amqqueue:get_name(Q),
-            Anns0 = #{?EXCHANGE => ?DEFAULT_EXCHANGE_NAME,
-                      ?ROUTING_KEYS => [QNameBin],
+            Anns0 = #{?ANN_EXCHANGE => ?DEFAULT_EXCHANGE_NAME,
+                      ?ANN_ROUTING_KEYS => [QNameBin],
                       ttl => Ttl,
                       %% Persist message regardless of Will QoS since there is no noticable
                       %% performance benefit if that single message is transient. This ensures that
                       %% delayed Will Messages are not lost after a broker restart.
-                      ?DURABLE => true},
+                      ?ANN_DURABLE => true},
             Anns = case Props of
                        #{'Message-Expiry-Interval' := MEI} ->
                            Anns0#{dead_letter_ttl => timer:seconds(MEI)};
