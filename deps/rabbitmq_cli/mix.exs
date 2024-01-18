@@ -43,7 +43,6 @@ defmodule RabbitMQCtl.MixfileBase do
           :rabbit_log,
           :rabbit_misc,
           :rabbit_mnesia,
-          :rabbit_mnesia_rename,
           :rabbit_nodes_common,
           :rabbit_pbe,
           :rabbit_plugins,
