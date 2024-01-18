@@ -89,7 +89,6 @@ has_multi_resources(OAuth2BackendProps, ManagementProps) ->
       end end, OAuth2Resources)),
   MgtResources = skip_disabled_mgt_resource_servers(MgtResources1),
 
-  ct:log("OAuth2Resources: ~p MgtResources: ~p", [OAuth2Resources, MgtResources]),
   case maps:size(MgtResources) of
     0 ->
       case maps:size(OAuth2Resources) of
@@ -146,7 +145,6 @@ filter_resource_servers_without_resolvable_oauth_provider_url(OAuthResourceServe
     end end , MgtResourceServers)).
 
 multi_resource_auth_settings(OAuthResourceServers, MgtResourceServers, ManagementProps) ->
-  ct:log("multi_resource_auth_settings: ~p ~p", [OAuthResourceServers, MgtResourceServers]),
   ConvertValuesToBinary = fun(_K,V) -> [ {K1, to_binary(V1)} || {K1,V1} <- V ] end,
   FilteredMgtResourceServers = filter_resource_servers_without_resolvable_oauth_provider_url(OAuthResourceServers,
     filter_resource_servers_without_resolvable_oauth_client_id(MgtResourceServers, ManagementProps), ManagementProps),
@@ -174,15 +172,15 @@ single_resource_auth_settings(OAuth2BackendProps, ManagementProps) ->
   OAuthResourceId =  proplists:get_value(resource_server_id, OAuth2BackendProps),
   case OAuthInitiatedLogonType of
     sp_initiated ->
-      OAuthClientId = proplists:get_value(oauth_client_id, ManagementProps),
       case is_invalid([OAuthResourceId]) of
         true ->
           rabbit_log:error("Invalid rabbitmq_auth_backend_oauth2.resource_server_id ~p", [OAuthResourceId]),
           [{oauth_enabled, false}];
         false ->
+          OAuthClientId = proplists:get_value(oauth_client_id, ManagementProps),          
           case is_invalid([OAuthClientId, OAuthProviderUrl]) of
             true ->
-              ct:log("Invalid rabbitmq_management oauth_client_id ~p or resolved oauth_provider_url ~p",
+              rabbit_log:error("Invalid rabbitmq_management oauth_client_id ~p or resolved oauth_provider_url ~p",
                 [OAuthClientId, OAuthProviderUrl]),
               [{oauth_enabled, false}];
             false ->
