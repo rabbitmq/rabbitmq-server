@@ -169,7 +169,6 @@ def all_beam_files(name = "all_beam_files"):
             "src/rabbit_mirror_queue_slave.erl",
             "src/rabbit_mirror_queue_sync.erl",
             "src/rabbit_mnesia.erl",
-            "src/rabbit_mnesia_rename.erl",
             "src/rabbit_mnesia_to_khepri_record_converter.erl",
             "src/rabbit_msg_file.erl",
             "src/rabbit_msg_record.erl",
@@ -434,7 +433,6 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/rabbit_mirror_queue_slave.erl",
             "src/rabbit_mirror_queue_sync.erl",
             "src/rabbit_mnesia.erl",
-            "src/rabbit_mnesia_rename.erl",
             "src/rabbit_mnesia_to_khepri_record_converter.erl",
             "src/rabbit_msg_file.erl",
             "src/rabbit_msg_record.erl",
@@ -717,7 +715,6 @@ def all_srcs(name = "all_srcs"):
             "src/rabbit_mirror_queue_slave.erl",
             "src/rabbit_mirror_queue_sync.erl",
             "src/rabbit_mnesia.erl",
-            "src/rabbit_mnesia_rename.erl",
             "src/rabbit_mnesia_to_khepri_record_converter.erl",
             "src/rabbit_msg_file.erl",
             "src/rabbit_msg_record.erl",
@@ -867,15 +864,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         deps = ["//deps/amqp_client:erlang_app"],
     )
 
-    erlang_bytecode(
-        name = "cluster_rename_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/cluster_rename_SUITE.erl"],
-        outs = ["test/cluster_rename_SUITE.beam"],
-        app_name = "rabbit",
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app"],
-    )
     erlang_bytecode(
         name = "clustering_management_SUITE_beam_files",
         testonly = True,

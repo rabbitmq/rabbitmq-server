@@ -37,7 +37,8 @@
          dir/0,
          cluster_status_from_mnesia/0,
 
-         %% Operations on the db and utils, mainly used in `rabbit_mnesia_rename' and `rabbit'
+         %% Operations on the db and utils, mainly used in `rabbit' and Mnesia-era modules
+         %% (some of which may now be gone)
          init_db_unchecked/2,
          copy_db/1,
          check_mnesia_consistency/1,
