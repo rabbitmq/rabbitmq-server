@@ -688,8 +688,8 @@ handle_cast({deliver_reply, Key, Msg},
                         next_tag = DeliveryTag,
                         reply_consumer = {ConsumerTag, _Suffix, Key}}) ->
     Content = mc:protocol_state(mc:convert(mc_amqpl, Msg)),
-    ExchName = mc:get_annotation(exchange, Msg),
-    [RoutingKey | _] = mc:get_annotation(routing_keys, Msg),
+    ExchName = mc:exchange(Msg),
+    [RoutingKey | _] = mc:routing_keys(Msg),
     ok = rabbit_writer:send_command(
            WriterPid,
            #'basic.deliver'{consumer_tag = ConsumerTag,
@@ -2125,8 +2125,7 @@ notify_limiter(Limiter, Acked) ->
 
 deliver_to_queues({Message, _Options, _RoutedToQueues} = Delivery,
                   #ch{cfg = #conf{virtual_host = VHost}} = State) ->
-    XNameBin = mc:get_annotation(exchange, Message),
-    XName = rabbit_misc:r(VHost, exchange,  XNameBin),
+    XName = rabbit_misc:r(VHost, exchange, mc:exchange(Message)),
     deliver_to_queues(XName, Delivery, State).
 
 deliver_to_queues(XName,
@@ -2192,7 +2191,7 @@ process_routing_mandatory(_Mandatory = true,
                   false ->
                       Content0
               end,
-    [RoutingKey | _] = mc:get_annotation(routing_keys, Msg),
+    [RoutingKey | _] = mc:routing_keys(Msg),
     ok = basic_return(Content, RoutingKey, XName#resource.name, State, no_route);
 process_routing_mandatory(_Mandatory = false,
                           _RoutedToQs = [],
@@ -2673,14 +2672,14 @@ handle_deliver0(ConsumerTag, AckRequired,
                                        writer_gc_threshold = GCThreshold},
                            next_tag   = DeliveryTag,
                            queue_states = Qs}) ->
-    [RoutingKey | _] = mc:get_annotation(routing_keys, MsgCont0),
-    ExchangeNameBin = mc:get_annotation(exchange, MsgCont0),
+    Exchange = mc:exchange(MsgCont0),
+    [RoutingKey | _] = mc:routing_keys(MsgCont0),
     MsgCont = mc:convert(mc_amqpl, MsgCont0),
     Content = mc:protocol_state(MsgCont),
     Deliver = #'basic.deliver'{consumer_tag = ConsumerTag,
                                delivery_tag = DeliveryTag,
                                redelivered  = Redelivered,
-                               exchange     = ExchangeNameBin,
+                               exchange     = Exchange,
                                routing_key  = RoutingKey},
     {ok, QueueType} = rabbit_queue_type:module(QName, Qs),
     case QueueType of
@@ -2699,15 +2698,15 @@ handle_deliver0(ConsumerTag, AckRequired,
 handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount,
                  Msg0 = {_QName, _QPid, _MsgId, Redelivered, MsgCont0},
                  QueueType, State) ->
-    [RoutingKey | _] = mc:get_annotation(routing_keys, MsgCont0),
-    ExchangeName = mc:get_annotation(exchange, MsgCont0),
+    Exchange = mc:exchange(MsgCont0),
+    [RoutingKey | _] = mc:routing_keys(MsgCont0),
     MsgCont = mc:convert(mc_amqpl, MsgCont0),
     Content = mc:protocol_state(MsgCont),
     ok = rabbit_writer:send_command(
            WriterPid,
            #'basic.get_ok'{delivery_tag  = DeliveryTag,
                            redelivered   = Redelivered,
-                           exchange      = ExchangeName,
+                           exchange      = Exchange,
                            routing_key   = RoutingKey,
                            message_count = MessageCount},
            Content),
