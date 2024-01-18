@@ -61,15 +61,56 @@ groups() ->
           should_return_disabled_auth_settings,
           {with_mgt_oauth_client_id_z, [], [
             should_return_disabled_auth_settings,
+            {with_resource_server_a, [], [
+              should_return_disabled_auth_settings,
+              {with_oauth_providers_idp1_idp2, [], [
+                {with_default_oauth_provider_idp1, [], [
+                  should_return_oauth_resource_server_rabbit_with_oauth_provider_url_idp1_url,
+                  should_return_oauth_resource_server_a_with_oauth_provider_url_idp1_url,
+                  {with_mgt_aouth_provider_url_url0, [], [
+                    should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url0,
+                    should_return_oauth_resource_server_a_with_oauth_provider_url_url0,
+                    {with_mgt_oauth_resource_server_a_with_oauth_provider_url_url1, [], [
+                      should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url0,
+                      should_return_oauth_resource_server_a_with_oauth_provider_url_url1
+                    ]}
+                  ]}
+                ]}
+              ]},
+              {with_root_issuer_url1, [], [
+                should_return_oauth_enabled,
+                should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url1,
+                should_return_oauth_resource_server_a_with_oauth_provider_url_url1,
+                should_return_oauth_client_id_z,
+                should_return_oauth_disable_basic_auth_true,
+                should_not_return_oauth_initiated_logon_type,
+                should_not_return_scopes,
+                {with_mgt_aouth_provider_url_url0, [], [
+                  should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url0,
+                  should_return_oauth_resource_server_a_with_oauth_provider_url_url0,
+                  {with_oauth_providers_idp1_idp2, [], [
+                    {with_resource_server_a_with_oauth_provider_idp1, [], [
+                      should_return_oauth_resource_server_a_with_oauth_provider_url_url0
+                    ]}
+                  ]}
+                ]}
+              ]}
+            ]},
             {with_mgt_aouth_provider_url_url0, [], [
               should_return_oauth_enabled,
               should_return_oauth_client_id_z,
               should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url0,
               should_not_return_oauth_initiated_logon_type,
-              should_return_oauth_disable_basic_auth,
+              should_return_oauth_disable_basic_auth_true,
               should_not_return_scopes,
               {with_idp_initiated_logon, [], [
                 should_return_oauth_idp_initiated_logon
+              ]},
+              {with_oauth_disable_basic_auth_false, [], [
+                should_return_oauth_disable_basic_auth_false
+              ]},
+              {with_scopes_admin_mgt, [], [
+                should_return_scopes_admin_mgt
               ]}
             ]},
             {with_root_issuer_url1, [], [
@@ -97,15 +138,17 @@ init_per_suite(Config) ->
     {idp1, <<"idp1">>},
     {idp2, <<"idp2">>},
     {idp3, <<"idp3">>},
-    {idp1_url, <<"idp1_url">>},
-    {idp2_url, <<"idp2_url">>},
-    {idp3_url, <<"idp3_url">>},
+    {idp1_url, <<"https://idp1">>},
+    {idp2_url, <<"https://idp2">>},
+    {idp3_url, <<"https://idp3">>},
     {url0, <<"https://url0">>},
     {url1, <<"https://url1">>},
     {a, <<"a">>},
     {b, <<"b">>},
     {z, <<"z">>},
-    {x, <<"x">>} | Config].
+    {x, <<"x">>},
+    {admin_mgt, <<"admin mgt">>},
+    {read_write, <<"read write">>} | Config].
 
 end_per_suite(_Config) ->
     ok.
@@ -121,22 +164,28 @@ init_per_group(with_resource_server_id_rabbit, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, ?config(rabbit, Config)),
   Config;
 init_per_group(with_mgt_oauth_client_id_z, Config) ->
-  ClientId = ?config(z, Config),
-  application:set_env(rabbitmq_management, oauth_client_id, ClientId),
-  logEnvVars(),
+  application:set_env(rabbitmq_management, oauth_client_id, ?config(z, Config)),
   Config;
 init_per_group(with_mgt_aouth_provider_url_url0, Config) ->
-  Url = ?config(url0, Config),
-  application:set_env(rabbitmq_management, oauth_provider_url, Url),
+  application:set_env(rabbitmq_management, oauth_provider_url, ?config(url0, Config)),
   Config;
 init_per_group(with_root_issuer_url1, Config) ->
-  Url = ?config(url1, Config),
-  application:set_env(rabbitmq_auth_backend_oauth2, issuer, Url),
-  logEnvVars(),
+  application:set_env(rabbitmq_auth_backend_oauth2, issuer, ?config(url1, Config)),
   Config;
+init_per_group(with_scopes_admin_mgt, Config) ->
+  application:set_env(rabbitmq_management, oauth_scopes, ?config(admin_mgt, Config)),
+  Config;
+init_per_group(with_scopes_write_read, Config) ->
+  application:set_env(rabbitmq_management, oauth_scopes, ?config(write_read, Config)),
+  Config;
+
 init_per_group(with_idp_initiated_logon, Config) ->
   application:set_env(rabbitmq_management, oauth_initiated_logon_type, idp_initiated),
   Config;
+init_per_group(with_oauth_disable_basic_auth_false, Config) ->
+  application:set_env(rabbitmq_management, oauth_disable_basic_auth, false),
+  Config;
+
 init_per_group(with_oauth_providers_idp1_idp2, Config) ->
   Idp1 = ?config(idp1, Config),
   Idp2 = ?config(idp2, Config),
@@ -152,7 +201,6 @@ init_per_group(with_resource_server_a, Config) ->
   ResourceServers = application:get_env(rabbitmq_auth_backend_oauth2, resource_servers, #{}),
   ResourceServers1 = maps:put(ResourceA, [ { id, ResourceA} | maps:get(ResourceA, ResourceServers, []) ], ResourceServers),
   application:set_env(rabbitmq_auth_backend_oauth2, resource_servers, ResourceServers1),
-  logEnvVars(),
   Config;
 
 init_per_group(with_resource_server_a_with_oauth_provider_idp1, Config) ->
@@ -161,8 +209,16 @@ init_per_group(with_resource_server_a_with_oauth_provider_idp1, Config) ->
   ResourceServers = application:get_env(rabbitmq_auth_backend_oauth2, resource_servers, #{}),
   ResourceServers1 = maps:put(ResourceA, [ { oauth_provider_id, Idp1} | maps:get(ResourceA, ResourceServers, []) ], ResourceServers),
   application:set_env(rabbitmq_auth_backend_oauth2, resource_servers, ResourceServers1),
-  logEnvVars(),
   Config;
+
+init_per_group(with_mgt_oauth_resource_server_a_with_oauth_provider_url_url1, Config) ->
+  ResourceA = ?config(a, Config),
+  Url = ?config(url1, Config),
+  ResourceServers = application:get_env(rabbitmq_management, resource_servers, #{}),
+  ResourceServers1 = maps:put(ResourceA, [ { oauth_provider_url, Url} | maps:get(ResourceA, ResourceServers, []) ], ResourceServers),
+  application:set_env(rabbitmq_management, resource_servers, ResourceServers1),
+  Config;
+
 
 init_per_group(with_mgt_resource_server_a_with_client_id_x, Config) ->
   ResourceA = ?config(a, Config),
@@ -182,18 +238,24 @@ init_per_group(with_default_oauth_provider_idp3, Config) ->
   Idp = ?config(idp3, Config),
   application:set_env(rabbitmq_auth_backend_oauth2, default_oauth_provider, Idp),
   Config;
-init_per_group(with_unknown_default_oauth_provider, Config) ->
-  application:set_env(rabbitmq_auth_backend_oauth2, default_oauth_provider, <<"unknown">>),
-  Config;
 
 init_per_group(_, Config) ->
   Config.
 
+end_per_group(with_scopes_admin_mgt, Config) ->
+  application:unset_env(rabbitmq_management, oauth_scopes),
+  Config;
+end_per_group(with_scopes_write_read, Config) ->
+  application:unset_env(rabbitmq_management, oauth_scopes),
+  Config;
 end_per_group(with_oauth_disabled, Config) ->
   application:unset_env(rabbitmq_management, oauth_enabled),
   Config;
 end_per_group(with_oauth_enabled, Config) ->
   application:unset_env(rabbitmq_management, oauth_enabled),
+  Config;
+end_per_group(with_oauth_disable_basic_auth_false, Config) ->
+  application:unset_env(rabbitmq_management, oauth_disable_basic_auth),
   Config;
 end_per_group(with_resource_server_id_rabbit, Config) ->
   application:unset_env(rabbitmq_auth_backend_oauth2, resource_server_id),
@@ -209,12 +271,6 @@ end_per_group(with_mgt_oauth_client_id_z, Config) ->
   Config;
 end_per_group(with_idp_initiated_logon, Config) ->
   application:unset_env(rabbitmq_management, oauth_initiated_logon_type),
-  Config;
-end_per_group(with_two_oauth_providers, Config) ->
-  application:unset_env(rabbitmq_auth_backend_oauth2, oauth_providers),
-  Config;
-end_per_group(with_many_resource_servers, Config) ->
-  application:unset_env(rabbitmq_auth_backend_oauth2, resource_servers),
   Config;
 end_per_group(with_resource_server_a, Config) ->
   ResourceA = ?config(a, Config),
@@ -233,6 +289,16 @@ end_per_group(with_resource_server_a_with_oauth_provider_idp1, Config) ->
   case maps:size(NewMap) of
     0 -> application:unset_env(rabbitmq_auth_backend_oauth2, resource_servers);
     _ -> application:set_env(rabbitmq_auth_backend_oauth2, resource_servers, NewMap)
+  end,
+  Config;
+end_per_group(with_mgt_oauth_resource_server_a_with_oauth_provider_url_url1, Config) ->
+  ResourceA = ?config(a, Config),
+  ResourceServers = application:get_env(rabbitmq_management, resource_servers, #{}),
+  OAuthResourceA = proplists:delete(oauth_provider_url, maps:get(ResourceA, ResourceServers, [])),
+  NewMap = delete_key_with_empty_proplist(ResourceA, maps:put(ResourceA, OAuthResourceA, ResourceServers)),
+  case maps:size(NewMap) of
+    0 -> application:unset_env(rabbitmq_management, resource_servers);
+    _ -> application:set_env(rabbitmq_management, resource_servers, NewMap)
   end,
   Config;
 
@@ -259,7 +325,8 @@ end_per_group(_, Config) ->
 
 delete_key_with_empty_proplist(Key, Map) ->
   case maps:get(Key, Map) of
-    [] -> maps:remove(Key, Map)
+    [] -> maps:remove(Key, Map);
+    _ -> Map
   end.
 
 %% -------------------------------------------------------------------
@@ -270,18 +337,12 @@ should_return_oauth_provider_url_idp1_url(Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
   ?assertEqual(?config(idp1_url, Config), proplists:get_value(oauth_provider_url, Actual)).
 
+should_return_scopes_admin_mgt(Config) ->
+  Actual = rabbit_mgmt_wm_auth:authSettings(),
+  ?assertEqual(?config(admin_mgt, Config), proplists:get_value(oauth_scopes, Actual)).
+
 should_return_disabled_auth_settings(_Config) ->
   [{oauth_enabled, false}] = rabbit_mgmt_wm_auth:authSettings().
-
-should_return_oauth_resource_server_A_with_client_id(Config) ->
-  ResourceA = ?config(resource_A, Config),
-  Actual = rabbit_mgmt_wm_auth:authSettings(),
-  ResourceServers = proplists:get_value(oauth_resource_servers, Actual),
-  ResourceServerA = maps:get(ResourceA, ResourceServers),
-
-  {ok, ConfiguredResourceServers} = application:get_env(rabbitmq_management, resource_servers),
-  Expected = proplists:get_value(oauth_client_id, maps:get(ResourceA, ConfiguredResourceServers)),
-  ?assertEqual(Expected, proplists:get_value(oauth_client_id, ResourceServerA)).
 
 should_return_mgt_resource_server_a_oauth_provider_url_url0(Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
@@ -349,17 +410,11 @@ should_return_oauth_idp_initiated_logon(_Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
   ?assertEqual(<<"idp_initiated">>, proplists:get_value(oauth_initiated_logon_type, Actual)).
 
-should_return_root_issuer_as_oauth_provider_url(_Config) ->
-  Actual = rabbit_mgmt_wm_auth:authSettings(),
-  log(Actual),
-  Issuer = application:get_env(rabbitmq_auth_backend_oauth2, issuer, ""),
-  ?assertEqual(Issuer, proplists:get_value(oauth_provider_url, Actual)).
-
-should_return_oauth_disable_basic_auth(_Config) ->
+should_return_oauth_disable_basic_auth_true(_Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
   ?assertEqual(true, proplists:get_value(oauth_disable_basic_auth, Actual)).
 
-should_return_oauth_enabled_basic_auth(_Config) ->
+should_return_oauth_disable_basic_auth_false(_Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
   ?assertEqual(false, proplists:get_value(oauth_disable_basic_auth, Actual)).
 
