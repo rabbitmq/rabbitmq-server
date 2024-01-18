@@ -775,7 +775,6 @@ rabbit:
 - rabbit_mirror_queue_slave
 - rabbit_mirror_queue_sync
 - rabbit_mnesia
-- rabbit_mnesia_rename
 - rabbit_mnesia_to_khepri_record_converter
 - rabbit_msg_file
 - rabbit_msg_record
