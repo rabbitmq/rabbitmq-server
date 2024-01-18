@@ -452,11 +452,13 @@ handle_event(QName, {osiris_offset, _From, _Offs},
     {ok, State#stream_client{readers = Readers}, Deliveries};
 handle_event(_QName, {stream_leader_change, Pid}, State) ->
     {ok, update_leader_pid(Pid, State), []};
-handle_event(_QName, {stream_local_member_change, Pid}, #stream_client{local_pid = P} = State)
+handle_event(_QName, {stream_local_member_change, Pid},
+             #stream_client{local_pid = P} = State)
   when P == Pid ->
     {ok, State, []};
-handle_event(_QName, {stream_local_member_change, Pid}, State = #stream_client{name = QName,
-                                                                       readers = Readers0}) ->
+handle_event(_QName, {stream_local_member_change, Pid},
+             #stream_client{name = QName,
+                            readers = Readers0} = State) ->
     rabbit_log:debug("Local member change event for ~tp", [QName]),
     Readers1 = maps:fold(fun(T, #stream{log = Log0} = S0, Acc) ->
                                  Offset = osiris_log:next_offset(Log0),
