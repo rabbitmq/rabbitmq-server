@@ -96,6 +96,7 @@
 
 -export([setup/0,
          setup/1,
+         stop/0,
          can_join_cluster/1,
          add_member/2,
          remove_member/1,
@@ -286,6 +287,9 @@ wait_for_leader(Timeout, Retries) ->
         {error, Reason} ->
             throw(Reason)
     end.
+
+stop() ->
+    ok = khepri:stop(?RA_CLUSTER_NAME).
 
 %% @private
 
