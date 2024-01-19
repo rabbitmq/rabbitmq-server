@@ -17,6 +17,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
     :ok
   end
 
+  use RabbitMQ.CLI.DefaultOutput
+
   def usage() do
     "update_cluster_nodes <seed_node>"
   end
