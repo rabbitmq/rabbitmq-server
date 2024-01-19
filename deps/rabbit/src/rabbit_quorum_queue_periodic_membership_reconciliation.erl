@@ -131,6 +131,11 @@ reconciliate_quorum_queue_membership(State) ->
     Running = rabbit_nodes:list_running(),
     reconciliate_quorum_members(ExpectedNodes, Running, LocalLeaders, State, noop).
 
+reconciliate_quorum_members([], _Running, _, _State, Result) ->
+    %% if there are no expected nodes rabbit_nodes:list_running/0 encountered
+    %% an error during query and returned the empty list which is case we need
+    %% to handle
+    Result;
 reconciliate_quorum_members(_ExpectedNodes, _Running, [], _State, Result) ->
     Result;
 reconciliate_quorum_members(ExpectedNodes, Running, [Q | LocalLeaders],
