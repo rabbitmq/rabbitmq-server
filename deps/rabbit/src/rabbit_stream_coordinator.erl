@@ -683,27 +683,35 @@ tick(_Ts, _State) ->
 
 maybe_resize_coordinator_cluster() ->
     spawn(fun() ->
-                  case ra:members({?MODULE, node()}) of
-                      {_, Members, _} ->
-                          MemberNodes = [Node || {_, Node} <- Members],
-                          Running = rabbit_nodes:list_running(),
-                          All = rabbit_nodes:list_members(),
-                          case Running -- MemberNodes of
-                              [] ->
-                                  ok;
-                              New ->
-                                  rabbit_log:info("~ts: New rabbit node(s) detected, "
-                                                  "adding : ~w",
-                                                  [?MODULE, New]),
-                                  add_members(Members, New)
-                          end,
-                          case MemberNodes -- All of
-                              [] ->
-                                  ok;
-                              Old ->
-                                  rabbit_log:info("~ts: Rabbit node(s) removed from the cluster, "
-                                                  "deleting: ~w", [?MODULE, Old]),
-                                  remove_members(Members, Old)
+                  RabbitIsRunning = rabbit:is_running(),
+                  case rabbit_nodes:list_members() of
+                      All when RabbitIsRunning andalso length(All) > 0 ->
+                          %% the members need to be the non-empty list _and_
+                          %% rabbit needs to be running for it to be safe
+                          %% to do any of the below
+                          case ra:members({?MODULE, node()}) of
+                              {_, Members, _} ->
+                                  MemberNodes = [Node || {_, Node} <- Members],
+                                  Running = rabbit_nodes:list_running(),
+                                  case Running -- MemberNodes of
+                                      [] ->
+                                          ok;
+                                      New ->
+                                          rabbit_log:info("~ts: New rabbit node(s) detected, "
+                                                          "adding : ~w",
+                                                          [?MODULE, New]),
+                                          add_members(Members, New)
+                                  end,
+                                  case MemberNodes -- All of
+                                      [] ->
+                                          ok;
+                                      Old ->
+                                          rabbit_log:info("~ts: Rabbit node(s) removed from the cluster, "
+                                                          "deleting: ~w", [?MODULE, Old]),
+                                          remove_members(Members, Old)
+                                  end;
+                              _ ->
+                                  ok
                           end;
                       _ ->
                           ok
