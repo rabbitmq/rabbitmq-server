@@ -236,7 +236,6 @@ to_json(ReqData, Context) ->
 is_authorized(ReqData, Context) ->
     {true, ReqData, Context}.
 
-is_invalid(Value) when Value == undefined -> true;
 is_invalid(List) ->
     lists:any(fun(V) -> case V of
       "" -> true;
