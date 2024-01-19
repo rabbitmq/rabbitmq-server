@@ -1809,45 +1809,25 @@ handle_frame_post_auth(Transport,
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
                                           credits = Credits,
-                                          user = User,
                                           publishers = Publishers} =
                            Connection,
                        State,
                        {publish, Version, PublisherId, MessageCount, Messages}) ->
     case Publishers of
         #{PublisherId := Publisher} ->
-            #publisher{stream = Stream,
-                       reference = Reference,
+            #publisher{reference = Reference,
                        internal_id = InternalId,
                        leader = Leader,
                        message_counters = Counters} =
                 Publisher,
-            increase_messages_received(Counters, MessageCount),
-            case rabbit_stream_utils:check_write_permitted(stream_r(Stream, Connection),
-                                                           User) of
-                ok ->
-                    rabbit_stream_utils:write_messages(Version, Leader,
-                                                       Reference,
-                                                       PublisherId,
-                                                       InternalId,
-                                                       Messages),
-                    sub_credits(Credits, MessageCount),
-                    {Connection, State};
-                error ->
-                    PublishingIds = publishing_ids_from_messages(Version, Messages),
-                    Command =
-                        {publish_error,
-                         PublisherId,
-                         ?RESPONSE_CODE_ACCESS_REFUSED,
-                         PublishingIds},
-                    Frame = rabbit_stream_core:frame(Command),
-                    send(Transport, S, Frame),
-                    rabbit_global_counters:increase_protocol_counter(stream,
-                                                                     ?ACCESS_REFUSED,
-                                                                     1),
-                    increase_messages_errored(Counters, MessageCount),
-                    {Connection, State}
-            end;
+                increase_messages_received(Counters, MessageCount),
+                rabbit_stream_utils:write_messages(Version, Leader,
+                                                   Reference,
+                                                   PublisherId,
+                                                   InternalId,
+                                                   Messages),
+                sub_credits(Credits, MessageCount),
+                {Connection, State};
         _ ->
             PublishingIds = publishing_ids_from_messages(Version, Messages),
             Command =
