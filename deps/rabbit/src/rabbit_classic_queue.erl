@@ -312,7 +312,6 @@ handle_event(QName, {reject_publish, SeqNo, _QPid},
 handle_event(QName, {down, Pid, Info}, #?STATE{monitored = Monitored,
                                                pid = MasterPid,
                                                unconfirmed = U0} = State0) ->
-    rabbit_log:info("~s: down queue ~w with ~p", [?MODULE, QName, Info]),
     State = State0#?STATE{monitored = maps:remove(Pid, Monitored)},
     Actions0 = case Pid =:= MasterPid of
                    true ->
