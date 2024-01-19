@@ -58,7 +58,8 @@ function auth_settings_apply_defaults(authSettings) {
         if (!resource_server.oauth_client_id) {
           resource_server.oauth_client_id = authSettings.oauth_client_id
         }
-        if (!resource_server.oauth_client_secret && !resource_server.oauth_client_id) {
+        if (!resource_server.oauth_client_secret && resource_server.oauth_client_id
+            && authSettings.oauth_client_secret) {
           resource_server.oauth_client_secret = authSettings.oauth_client_secret
         }
         if (resource_server.oauth_initiated_logon_type == "idp_initiated") {
@@ -81,11 +82,11 @@ function auth_settings_apply_defaults(authSettings) {
         "sp_initiated" : authSettings.oauth_initiated_logon_type == "sp_initiated",
         "id" : authSettings.oauth_resource_id
     }
-    if (authSettings.oauth_client_secret) {
-      resource.client_secret = authSettings.oauth_client_secret
-    }
     if (authSettings.oauth_client_id) {
       resource.client_id = authSettings.oauth_client_id
+    }
+    if (authSettings.oauth_client_secret && authSettings.oauth_client_id) {
+      resource.client_secret = authSettings.oauth_client_secret
     }
     if (authSettings.metadata_url) {
       resource.metadata_url = authSettings.metadata_url
