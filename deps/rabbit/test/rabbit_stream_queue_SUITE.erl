@@ -2052,9 +2052,14 @@ leader_locator_client_local(Config) ->
     Info3 = find_queue_info(Config, [leader]),
     ?assertEqual(Server3, proplists:get_value(leader, Info3)),
 
+<<<<<<< HEAD
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch3, #'queue.delete'{queue = Q})),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+=======
+    ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server3, Q)),
+    ok.
+>>>>>>> 77e15dc971 (Streams tests: no need to delete test queue if already deleted.)
 
 leader_locator_balanced(Config) ->
     [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
