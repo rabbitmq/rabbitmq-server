@@ -2107,7 +2107,7 @@ leader_locator_client_local(Config) ->
                                               find_queue_info(Config, [leader]))),
 
     ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server3, Q)),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+    ok.
 
 leader_locator_balanced(Config) ->
     [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
