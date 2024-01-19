@@ -2990,13 +2990,15 @@ per_message_ttl(Config) ->
 
     Msg1 = <<"msg1">>,
 
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
     ok = amqp_channel:cast(Ch,
                            #'basic.publish'{routing_key = QQ},
                            #amqp_msg{props = #'P_basic'{delivery_mode = 2,
                                                         expiration = <<"2000">>},
                                      payload = Msg1}),
-
-    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
+    amqp_channel:wait_for_confirms(Ch, 5),
+    %% we know the message got to the queue in 2s it should be gone
     timer:sleep(2000),
     wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
     ok.
