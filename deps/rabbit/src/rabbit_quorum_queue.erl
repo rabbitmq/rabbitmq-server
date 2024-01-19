@@ -485,9 +485,9 @@ handle_tick(QName,
                   ok = repair_leader_record(QName, Self),
                   ExpectedNodes = rabbit_nodes:list_members(),
                   case Nodes -- ExpectedNodes of
-                      [] ->
-                          ok;
-                      Stale ->
+                      Stale when length(ExpectedNodes) > 0 ->
+                          %% rabbit_nodes:list_members/0 returns [] when there
+                          %% is an error so we need to handle that case
                           rabbit_log:debug("~ts: stale nodes detected. Purging ~w",
                                            [rabbit_misc:rs(QName), Stale]),
                           %% pipeline purge command
@@ -495,6 +495,8 @@ handle_tick(QName,
                           ok = ra:pipeline_command(amqqueue:get_pid(Q),
                                                    rabbit_fifo:make_purge_nodes(Stale)),
 
+                          ok;
+                      _ ->
                           ok
                   end
               catch
