@@ -38,12 +38,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
   def help_section(), do: :deprecated
 
   def description() do
-    "DEPRECATED. This command is a no-op. Node renaming is incompatible with Raft-based features such as quorum queues, streams, Khepri. "
+    "DEPRECATED. This command is a no-op. Node update is incompatible with Raft-based features such as quorum queues, streams, Khepri. "
   end
 
   def banner(_, _opts) do
-    [
-      "DEPRECATED. This command is a no-op. Node renaming is incompatible with Raft-based features such as quorum queues, streams, Khepri. "
-    ]
+      "DEPRECATED. This command is a no-op. Node update is incompatible with Raft-based features such as quorum queues, streams, Khepri. "
   end
 end

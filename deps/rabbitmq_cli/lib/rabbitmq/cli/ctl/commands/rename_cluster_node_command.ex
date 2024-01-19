@@ -44,9 +44,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
   end
 
   def banner(_, _opts) do
-    [
       "DEPRECATED. This command is a no-op. Node renaming is incompatible with Raft-based features such as quorum queues, streams, Khepri. "
-    ]
   end
-
 end
