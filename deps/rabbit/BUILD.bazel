@@ -340,7 +340,7 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_clustering_utils_beam",
     ],
-    shard_count = 48,
+    shard_count = 45,
     sharding_method = "case",
 )
 
