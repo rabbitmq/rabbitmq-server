@@ -137,7 +137,7 @@ oauth:
       authorities: uaa.resource,rabbitmq
       redirect-uri: ${RABBITMQ_SCHEME}://${RABBITMQ_HOST}${RABBITMQ_PATH}
       autoapprove: true
-      allowpublic: true  
+      allowpublic: true
     rabbit_idp_user:
       id: rabbit_idp_user
       secret: rabbit_idp_user
@@ -181,3 +181,37 @@ oauth:
       secret: consumer_with_roles_secret
       authorities: rabbitmq.* api://rabbitmq:Read.All,api://rabbitmq:Configure.All,api://rabbitmq:Write.All
       authorized-grant-types: client_credentials
+
+cors:
+  xhr:
+    allowed:
+      headers:
+        - Accept
+        - Authorization
+        - Content-Type
+        - authorization
+        - content-type
+        - X-Requested-With
+      origin:
+        - ^*$
+      methods:
+        - GET
+        - PUT
+        - POST
+        - DELETE
+  default:
+    allowed:
+      headers:
+        - Accept
+        - Authorization
+        - Content-Type
+        - authorization
+        - content-type        
+        - X-Requested-With
+      origin:
+        - ^*$
+      methods:
+        - GET
+        - PUT
+        - POST
+        - DELETE
