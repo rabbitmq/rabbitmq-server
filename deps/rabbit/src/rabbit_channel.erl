@@ -1991,7 +1991,11 @@ record_sent(Type, QueueType, Tag, AckRequired,
                 false ->
                     UAMQ
             end,
-    State#ch{unacked_message_q = UAMQ1, next_tag = DeliveryTag + 1}.
+    NextTag = case DeliveryTag=<math:pow(2,63)-1 of
+		  true  -> Tag + 1;
+		  false -> 1
+	      end,
+    State#ch{unacked_message_q = UAMQ1, next_tag = NextTag}.
 
 %% Records a client-sent acknowledgement. Handles both single delivery acks
 %% and multi-acks.
