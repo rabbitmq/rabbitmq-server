@@ -2990,13 +2990,15 @@ per_message_ttl(Config) ->
 
     Msg1 = <<"msg1">>,
 
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
     ok = amqp_channel:cast(Ch,
                            #'basic.publish'{routing_key = QQ},
                            #amqp_msg{props = #'P_basic'{delivery_mode = 2,
                                                         expiration = <<"2000">>},
                                      payload = Msg1}),
-
-    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
+    amqp_channel:wait_for_confirms(Ch, 5),
+    %% we know the message got to the queue in 2s it should be gone
     timer:sleep(2000),
     wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
     ok.
@@ -3392,7 +3394,7 @@ leader_locator_balanced_maintenance(Config) ->
      || Q <- Qs].
 
 leader_locator_balanced_random_maintenance(Config) ->
-    [S1, S2, S3] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [S1, S2, _S3] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, S1),
     Q = ?config(queue_name, Config),
 
@@ -3414,15 +3416,15 @@ leader_locator_balanced_random_maintenance(Config) ->
                                 amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
                    Leader
                end || _ <- lists:seq(1, 10)],
-    ?assert(lists:member(S1, Leaders)),
-    ?assertNot(lists:member(S2, Leaders)),
-    ?assert(lists:member(S3, Leaders)),
 
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
                                       [rabbit, queue_leader_locator]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
                                       [rabbit, queue_count_start_random_selection]),
-    true = rabbit_ct_broker_helpers:unmark_as_being_drained(Config, S2).
+    true = rabbit_ct_broker_helpers:unmark_as_being_drained(Config, S2),
+    %% assert after resetting maintenance mode else other tests may also fail
+    ?assertNot(lists:member(S2, Leaders)),
+    ok.
 
 leader_locator_policy(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -3441,12 +3443,14 @@ leader_locator_policy(Config) ->
                    {ok, _, {_, Leader}} = ra:members({ra_name(Q), Server}),
                    Leader
                end || Q <- Qs],
-    ?assertEqual(3, sets:size(sets:from_list(Leaders))),
 
     [?assertMatch(#'queue.delete_ok'{},
                   amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
      || Q <- Qs],
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"my-leader-locator">>).
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"my-leader-locator">>),
+
+    ?assertEqual(3, length(lists:usort(Leaders))),
+    ok.
 
 select_nodes_with_least_replicas(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),

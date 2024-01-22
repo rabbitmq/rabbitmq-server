@@ -447,7 +447,9 @@ find_queue_info(Config, Keys) ->
     find_queue_info(Config, 0, Keys).
 
 find_queue_info(Config, Node, Keys) ->
-    Name = ?config(queue_name, Config),
+    find_queue_info(?config(queue_name, Config), Config, Node, Keys).
+
+find_queue_info(Name, Config, Node, Keys) ->
     QName = rabbit_misc:r(<<"/">>, queue, Name),
     Infos = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_amqqueue, info_all,
                                              [<<"/">>, [name] ++ Keys]),
@@ -891,12 +893,13 @@ recover(Config) ->
     %% Such a slow test, let's select a single random permutation and trust that over enough
     %% ci rounds any failure will eventually show up
 
+    flush(),
     ct:pal("recover: running stop start for permutation ~w", [Servers]),
     [rabbit_ct_broker_helpers:stop_node(Config, S) || S <- Servers],
     [rabbit_ct_broker_helpers:async_start_node(Config, S) || S <- lists:reverse(Servers)],
     [ok = rabbit_ct_broker_helpers:wait_for_async_start_node(S) || S <- lists:reverse(Servers)],
 
-    ct:pal("recover: running stop waiting for messages ~w", [Servers]),
+    ct:pal("recover: post stop / start, waiting for messages ~w", [Servers]),
     check_leader_and_replicas(Config, Servers0),
     queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]], 60),
 
@@ -2087,27 +2090,30 @@ leader_locator_client_local(Config) ->
     ?assertMatch(#'queue.delete_ok'{},
                  delete(Config, Server1, Q)),
 
+    Q2 = <<Q/binary, "-2">>,
     %% Try second node
-    ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Config, Server2, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+    ?assertEqual({'queue.declare_ok', Q2, 0, 0},
+                 declare(Config, Server2, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                               {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
 
     ?assertMatch(Server2, proplists:get_value(leader,
-                                              find_queue_info(Config, [leader]))),
+                                              find_queue_info(Q2, Config, 0, [leader]))),
 
-    ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server2, Q)),
+    ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server2, Q2)),
 
+
+    Q3 = <<Q/binary, "-3">>,
     %% Try third node
-    ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Config, Server3, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+    ?assertEqual({'queue.declare_ok', Q3, 0, 0},
+                 declare(Config, Server3, Q3, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                               {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
 
 
     ?assertEqual(Server3, proplists:get_value(leader,
-                                              find_queue_info(Config, [leader]))),
+                                              find_queue_info(Q3, Config, 0, [leader]))),
 
-    ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server3, Q)),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+    ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server3, Q3)),
+    ok.
 
 leader_locator_balanced(Config) ->
     [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -2145,9 +2151,12 @@ leader_locator_balanced_maintenance(Config) ->
                  declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                               {<<"x-queue-leader-locator">>, longstr, <<"balanced">>}])),
 
-    Info = find_queue_info(Config, [leader]),
-    Leader = proplists:get_value(leader, Info),
-    ?assert(lists:member(Leader, [Server1, Server2])),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Info = find_queue_info(Config, [leader]),
+              Leader = proplists:get_value(leader, Info),
+              lists:member(Leader, [Server1, Server2])
+      end, 60000),
 
     true = rabbit_ct_broker_helpers:unmark_as_being_drained(Config, Server3),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
@@ -2590,10 +2599,15 @@ check_leader_and_replicas(Config, Members) ->
 check_leader_and_replicas(Config, Members, Tag) ->
     rabbit_ct_helpers:await_condition(
       fun() ->
-              Info = find_queue_info(Config, [leader, Tag]),
-              ct:pal("~ts members ~w ~tp", [?FUNCTION_NAME, Members, Info]),
-              lists:member(proplists:get_value(leader, Info), Members)
-                  andalso (lists:sort(Members) == lists:sort(proplists:get_value(Tag, Info)))
+              case find_queue_info(Config, [leader, Tag]) of
+                  [] ->
+                      false;
+                  Info ->
+                      ct:pal("~ts members ~w ~tp", [?FUNCTION_NAME, Members, Info]),
+                      lists:member(proplists:get_value(leader, Info), Members)
+                          andalso (lists:sort(Members) ==
+                                   lists:sort(proplists:get_value(Tag, Info)))
+              end
       end, 60_000).
 
 check_members(Config, ExpectedMembers) ->
