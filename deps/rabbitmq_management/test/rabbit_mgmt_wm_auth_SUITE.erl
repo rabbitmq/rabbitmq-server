@@ -165,21 +165,17 @@ groups() ->
       ]},
       {verify_oauth_initiated_logon_type_for_idp_initiated, [], [
         should_return_disabled_auth_settings,
-        {with_resource_server_id_rabbit, [], [
-          {with_root_issuer_url1, [], [
+        {with_root_issuer_url1, [], [
+          should_return_disabled_auth_settings,
+          {with_oauth_initiated_logon_type_idp_initiated, [], [
             should_return_disabled_auth_settings,
             {with_oauth_enabled, [], [
-              should_return_disabled_auth_settings,
-              {with_mgt_oauth_client_id_z, [], [
-                should_return_oauth_enabled,
-                {with_oauth_initiated_logon_type_idp_initiated, [], [
-                  should_return_oauth_initiated_logon_type_idp_initiated
-                ]},
-                {with_resource_server_a, [], [
-                  {with_oauth_resource_server_a_with_oauth_initiated_logon_type_idp_initiated, [], [
-                    should_not_return_oauth_initiated_logon_type,
-                    should_return_oauth_resource_server_a_with_oauth_initiated_logon_type_idp_initiated
-                  ]}
+              should_return_oauth_enabled,
+              should_return_oauth_initiated_logon_type_idp_initiated
+              {with_resource_server_a, [], [
+                {with_oauth_resource_server_a_with_oauth_initiated_logon_type_idp_initiated, [], [
+                  should_not_return_oauth_initiated_logon_type,
+                  should_return_oauth_resource_server_a_with_oauth_initiated_logon_type_idp_initiated
                 ]}
               ]}
             ]}

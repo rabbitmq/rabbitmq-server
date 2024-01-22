@@ -62,6 +62,13 @@ function auth_settings_apply_defaults(authSettings) {
             && authSettings.oauth_client_secret) {
           resource_server.oauth_client_secret = authSettings.oauth_client_secret
         }
+        if (!resource_server.oauth_initiated_logon_type) {
+          if (authSettings.oauth_initiated_logon_type) {
+            resource_server.oauth_initiated_logon_type = authSettings.oauth_initiated_logon_type
+          }else {
+            resource_server.oauth_initiated_logon_type = "sp_initiated"
+          }
+        }
         if (resource_server.oauth_initiated_logon_type == "idp_initiated") {
           resource_server.sp_initiated = false
         } else {
