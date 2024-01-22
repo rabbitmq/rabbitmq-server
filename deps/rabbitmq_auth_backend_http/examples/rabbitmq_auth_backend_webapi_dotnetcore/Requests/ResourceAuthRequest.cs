@@ -2,13 +2,13 @@
 {
     public class ResourceAuthRequest
     {
-        public string UserName { get; set; }
+        public required string UserName { get; set; }
 
-        public string Vhost { get; set; }
+        public required string Vhost { get; set; }
 
         public Resource Resource { get; set; }
 
-        public string Name { get; set; }
+        public required string Name { get; set; }
 
         public ResourcePermission Permission { get; set; }
     }

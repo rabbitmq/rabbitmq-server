@@ -2,10 +2,10 @@
 {
     public class VhostAuthRequest
     {
-        public string UserName { get; set; }
+        public required string UserName { get; set; }
 
-        public string Vhost { get; set; }
+        public required string Vhost { get; set; }
 
-        public string Ip { get; set; }
+        public required string Ip { get; set; }
     }
 }
