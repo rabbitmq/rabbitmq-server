@@ -2201,29 +2201,25 @@ handle_frame_post_auth(Transport,
             {Connection, State}
     end;
 handle_frame_post_auth(_Transport,
-                       #stream_connection{user = User} = Connection,
+                       #stream_connection{stream_subscriptions = Subscriptions,
+                                          user = User} = Connection0,
                        State,
                        {store_offset, Reference, Stream, Offset}) ->
-    case rabbit_stream_utils:check_write_permitted(stream_r(Stream, Connection),
-                                                   User) of
-        ok ->
-            case lookup_leader(Stream, Connection) of
-                {error, Error} ->
-                    rabbit_log:warning("Could not find leader to store offset on ~tp: "
-                                       "~tp",
-                                       [Stream, Error]),
-                    %% FIXME store offset is fire-and-forget, so no response even if error, change this?
-                    {Connection, State};
-                {ClusterLeader, Connection1} ->
-                    osiris:write_tracking(ClusterLeader, Reference, Offset),
-                    {Connection1, State}
-            end;
-        error ->
-            %% FIXME store offset is fire-and-forget, so no response even if error, change this?
-            rabbit_log:warning("Not authorized to store offset on stream ~tp",
-                               [Stream]),
-            {Connection, State}
-    end;
+    Connection1 =
+    case Subscriptions of
+        #{Stream := _} ->
+            store_offset(Reference, Stream, Offset, Connection0);
+        _ ->
+            case rabbit_stream_utils:check_read_permitted(stream_r(Stream, Connection0), User, #{}) of
+                ok ->
+                    store_offset(Reference, Stream, Offset, Connection0);
+                _ ->
+                    rabbit_log:warning("Not authorized to store offset on stream ~tp",
+                                       [Stream]),
+                    Connection0
+            end
+    end,
+    {Connection1, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
                                           virtual_host = VirtualHost,
@@ -3161,7 +3157,6 @@ evaluate_state_after_secret_update(Transport,
                                                       stream_subscriptions = Subscriptions} = Conn0,
                                    State0) ->
     {_, Conn1} = ensure_token_expiry_timer(User, Conn0),
-    rabbit_stream_utils:clear_permission_cache(),
     PublisherStreams =
     lists:foldl(fun(#publisher{stream = Str}, Acc) ->
                         case rabbit_stream_utils:check_write_permitted(stream_r(Str, Conn0), User) of
@@ -3486,6 +3481,18 @@ clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
             {cleaned, C3#stream_connection{stream_leaders = Leaders1}, S2};
         false ->
             {not_cleaned, C2#stream_connection{stream_leaders = Leaders1}, S2}
+    end.
+
+store_offset(Reference, Stream, Offset, Connection0) ->
+    case lookup_leader(Stream, Connection0) of
+        {error, Error} ->
+            rabbit_log:warning("Could not find leader to store offset on ~tp: "
+                               "~tp",
+                               [Stream, Error]),
+            Connection0;
+        {ClusterLeader, Connection1} ->
+            osiris:write_tracking(ClusterLeader, Reference, Offset),
+            Connection1
     end.
 
 lookup_leader(Stream,
