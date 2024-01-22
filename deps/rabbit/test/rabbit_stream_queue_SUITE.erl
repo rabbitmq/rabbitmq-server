@@ -2447,10 +2447,15 @@ check_leader_and_replicas(Config, Members) ->
 check_leader_and_replicas(Config, Members, Tag) ->
     rabbit_ct_helpers:await_condition(
       fun() ->
-              Info = find_queue_info(Config, [leader, Tag]),
-              ct:pal("~ts members ~w ~tp", [?FUNCTION_NAME, Members, Info]),
-              lists:member(proplists:get_value(leader, Info), Members)
-                  andalso (lists:sort(Members) == lists:sort(proplists:get_value(Tag, Info)))
+              case find_queue_info(Config, [leader, Tag]) of
+                  [] ->
+                      false;
+                  Info ->
+                      ct:pal("~ts members ~w ~tp", [?FUNCTION_NAME, Members, Info]),
+                      lists:member(proplists:get_value(leader, Info), Members)
+                          andalso (lists:sort(Members) ==
+                                   lists:sort(proplists:get_value(Tag, Info)))
+              end
       end, 60_000).
 
 check_members(Config, ExpectedMembers) ->
