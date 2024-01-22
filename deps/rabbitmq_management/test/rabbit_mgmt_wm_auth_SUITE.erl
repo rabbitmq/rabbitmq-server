@@ -17,8 +17,8 @@ all() ->
      {group, without_any_settings},
      {group, with_oauth_disabled},
      {group, verify_client_id_and_secret},
-     {group, verify_oauth_provider_url_with_single_resource},
-     {group, verify_oauth_provider_url_with_single_resource_and_another_resource},
+     {group, verify_mgt_oauth_provider_url_with_single_resource},
+     {group, verify_mgt_oauth_provider_url_with_single_resource_and_another_resource},
      {group, verify_oauth_initiated_logon_type_for_sp_initiated},
      {group, verify_oauth_initiated_logon_type_for_idp_initiated},
      {group, verify_oauth_disable_basic_auth},
@@ -65,15 +65,15 @@ groups() ->
           ]}
         ]}
       ]},
-      {verify_oauth_provider_url_with_single_resource, [], [
+      {verify_mgt_oauth_provider_url_with_single_resource, [], [
         {with_resource_server_id_rabbit, [], [
           {with_root_issuer_url1, [], [
             {with_oauth_enabled, [], [
               should_return_disabled_auth_settings,
               {with_mgt_oauth_client_id_z, [], [
-                should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url1,
+                should_return_mgt_oauth_provider_url_url1,
                 {with_mgt_oauth_provider_url_url0, [], [
-                  should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url0
+                  should_return_mgt_oauth_provider_url_url0
                 ]}
               ]}
             ]}
@@ -83,12 +83,12 @@ groups() ->
               {with_oauth_enabled, [], [
                 should_return_disabled_auth_settings,
                 {with_mgt_oauth_client_id_z, [], [
-                  should_return_oauth_resource_server_rabbit_with_oauth_provider_url_idp1_url,
+                  should_return_mgt_oauth_provider_url_idp1_url,
                   {with_root_issuer_url1, [], [
-                    should_return_oauth_resource_server_rabbit_with_oauth_provider_url_idp1_url
+                    should_return_mgt_oauth_provider_url_idp1_url
                   ]},
                   {with_mgt_oauth_provider_url_url0, [], [
-                    should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url0
+                    should_return_mgt_oauth_provider_url_url0
                   ]}
                 ]}
               ]}
@@ -96,7 +96,7 @@ groups() ->
           ]}
         ]}
       ]},
-      {verify_oauth_provider_url_with_single_resource_and_another_resource, [], [
+      {verify_mgt_oauth_provider_url_with_single_resource_and_another_resource, [], [
         {with_resource_server_id_rabbit, [], [
           {with_resource_server_a, [], [
             {with_root_issuer_url1, [], [
@@ -169,13 +169,18 @@ groups() ->
           should_return_disabled_auth_settings,
           {with_oauth_initiated_logon_type_idp_initiated, [], [
             should_return_disabled_auth_settings,
-            {with_oauth_enabled, [], [
-              should_return_oauth_enabled,
-              should_return_oauth_initiated_logon_type_idp_initiated
-              {with_resource_server_a, [], [
-                {with_oauth_resource_server_a_with_oauth_initiated_logon_type_idp_initiated, [], [
-                  should_not_return_oauth_initiated_logon_type,
-                  should_return_oauth_resource_server_a_with_oauth_initiated_logon_type_idp_initiated
+            {with_resource_server_id_rabbit, [], [
+              should_return_disabled_auth_settings,
+              {with_oauth_enabled, [], [
+                should_return_oauth_enabled,
+                should_return_oauth_initiated_logon_type_idp_initiated,
+                {with_resource_server_a, [], [
+                  {with_oauth_resource_server_a_with_oauth_initiated_logon_type_idp_initiated, [], [
+                    should_return_oauth_resource_server_a_with_oauth_initiated_logon_type_idp_initiated
+                  ]},
+                  {with_oauth_resource_server_a_with_oauth_initiated_logon_type_sp_initiated, [], [
+                    should_not_return_oauth_resource_server_a
+                  ]}
                 ]}
               ]}
             ]}
@@ -425,9 +430,17 @@ should_not_return_oauth_resource_server_a_with_client_secret(Config) ->
   assert_attribute_not_defined_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
     Config, a, oauth_client_secret).
 
-should_return_oauth_provider_url_idp1_url(Config) ->
-  Actual = rabbit_mgmt_wm_auth:authSettings(),
-  ?assertEqual(?config(idp1_url, Config), proplists:get_value(oauth_provider_url, Actual)).
+should_return_mgt_oauth_provider_url_idp1_url(Config) ->
+  assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
+    Config, rabbit, oauth_provider_url, idp1_url).
+
+should_return_mgt_oauth_provider_url_url1(Config) ->
+  assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
+    Config, rabbit, oauth_provider_url, url1).
+
+should_return_mgt_oauth_provider_url_url0(Config) ->
+  assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
+    Config, rabbit, oauth_provider_url, url0).
 
 should_return_oauth_scopes_admin_mgt(Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
@@ -478,6 +491,10 @@ should_not_return_oauth_initiated_logon_type(_Config) ->
 should_return_oauth_initiated_logon_type_idp_initiated(_Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
   ?assertEqual(<<"idp_initiated">>, proplists:get_value(oauth_initiated_logon_type, Actual)).
+
+should_not_return_oauth_resource_server_a(Config) ->
+  Actual = rabbit_mgmt_wm_auth:authSettings(),
+  assert_not_defined_oauth_resource_server(Actual, Config, a).
 
 should_not_return_oauth_resource_server_a_with_oauth_initiated_logon_type(Config) ->
   assert_attribute_not_defined_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
@@ -557,6 +574,11 @@ assert_attribute_not_defined_for_oauth_resource_server(Actual, Config, ConfigKey
   OAuthResourceServers =  proplists:get_value(oauth_resource_servers, Actual),
   OauthResource = maps:get(?config(ConfigKey, Config), OAuthResourceServers),
   ?assertEqual(false, proplists:is_defined(Attribute, OauthResource)).
+
+assert_not_defined_oauth_resource_server(Actual, Config, ConfigKey) ->
+  log(Actual),
+  OAuthResourceServers =  proplists:get_value(oauth_resource_servers, Actual),
+  ?assertEqual(false, maps:is_key(?config(ConfigKey, Config), OAuthResourceServers)).
 
 set_attribute_in_entry_for_env_variable(Application, EnvVar, Key, Attribute, Value) ->
   Map = application:get_env(Application, EnvVar, #{}),
