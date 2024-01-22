@@ -366,8 +366,9 @@ declare_fast_reply_to_v1(EncodedBin) ->
 -spec list() -> [pid()].
 
 list() ->
-    Nodes = rabbit_nodes:list_running(),
-    rabbit_misc:append_rpc_all_nodes(Nodes, rabbit_channel, list_local, [], ?RPC_TIMEOUT).
+    Nodes = rabbit_presence:list_present(),
+    rabbit_misc:append_rpc_all_nodes(Nodes, rabbit_channel, list_local,
+                                     [], ?RPC_TIMEOUT).
 
 -spec list_local() -> [pid()].
 

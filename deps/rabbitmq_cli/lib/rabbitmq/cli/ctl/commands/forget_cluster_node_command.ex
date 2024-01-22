@@ -97,6 +97,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
               any
           end
 
+        stream_coord_result =
+          :rabbit_misc.rpc_call(node_name, :rabbit_stream_coordinator, :forget_node, [atom_name])
+
         is_error_fun = fn
           {_, {:ok, _}} ->
             false

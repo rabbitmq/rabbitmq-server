@@ -168,6 +168,13 @@
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 
+-rabbit_boot_step({rabbit_presence,
+                   [{description, "rabbit node presence server"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_presence]}},
+                    {requires,    [database]},
+                    {enables,     core_initialized}]}).
+
 -rabbit_boot_step({rabbit_node_monitor,
                    [{description, "node monitor"},
                     {mfa,         {rabbit_sup, start_restartable_child,

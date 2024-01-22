@@ -72,10 +72,9 @@ is_authorized(ReqData, {Mode, Context}) ->
 %% Exported functions
 
 basic(ReqData) ->
-    %% rabbit_nodes:list_running/1 is a potentially slow function that performs
-    %% a cluster wide query with a reasonably long (10s) timeout.
-    %% TODO: replace with faster approximate function
-    Running = rabbit_nodes:list_running(),
+    %% rabbit_presence:list_present/1 is an approximate, "good enough" view of
+    %% the current active running cluster members.
+    Running = rabbit_presence:list_present(),
     Ctx = #{running_nodes => Running},
     FmtQ = fun (Q) -> rabbit_mgmt_format:queue(Q, Ctx) end,
     case rabbit_mgmt_util:disable_stats(ReqData) of
