@@ -83,7 +83,7 @@ ensure_token_expiry_timer_test(_) ->
     DummyTRef = erlang:send_after(1_000 * 1_000, self(), dummy),
     meck:expect(rabbit_access_control, permission_cache_can_expire, fun (_) -> false end),
     {Cancel5, #stream_connection{token_expiry_timer = TR5}} = ensure_token_expiry_timer(#user{},
-                                                                                       #stream_connection{token_expiry_timer = DummyTRef}),
+                                                                                        #stream_connection{token_expiry_timer = DummyTRef}),
     ?assertEqual(undefined, TR5),
     ?assert(is_integer(Cancel5)),
 
