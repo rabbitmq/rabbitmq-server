@@ -823,10 +823,18 @@ recover(Config) ->
     %% Such a slow test, let's select a single random permutation and trust that over enough
     %% ci rounds any failure will eventually show up
 
+    flush(),
     ct:pal("recover: running stop start for permutation ~w", [Servers]),
     [rabbit_ct_broker_helpers:stop_node(Config, S) || S <- Servers],
+<<<<<<< HEAD
     [rabbit_ct_broker_helpers:start_node(Config, S) || S <- lists:reverse(Servers)],
     ct:pal("recover: running stop waiting for messages ~w", [Servers]),
+=======
+    [rabbit_ct_broker_helpers:async_start_node(Config, S) || S <- lists:reverse(Servers)],
+    [ok = rabbit_ct_broker_helpers:wait_for_async_start_node(S) || S <- lists:reverse(Servers)],
+
+    ct:pal("recover: post stop / start, waiting for messages ~w", [Servers]),
+>>>>>>> 0a814e945a (rabbit_stream_queue:recover try a flush for info)
     check_leader_and_replicas(Config, Servers0),
     queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]], 60),
 
