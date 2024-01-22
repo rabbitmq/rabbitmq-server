@@ -374,7 +374,9 @@ find_queue_info(Config, Keys) ->
     find_queue_info(Config, 0, Keys).
 
 find_queue_info(Config, Node, Keys) ->
-    Name = ?config(queue_name, Config),
+    find_queue_info(?config(queue_name, Config), Config, Node, Keys).
+
+find_queue_info(Name, Config, Node, Keys) ->
     QName = rabbit_misc:r(<<"/">>, queue, Name),
     Infos = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_amqqueue, info_all,
                                              [<<"/">>, [name] ++ Keys]),
@@ -2038,7 +2040,9 @@ leader_locator_client_local(Config) ->
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
 
+    Q2 = <<Q/binary, "-2">>,
     %% Try second node
+<<<<<<< HEAD
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch2, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
@@ -2049,8 +2053,21 @@ leader_locator_client_local(Config) ->
 
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch2, #'queue.delete'{queue = Q})),
+=======
+    ?assertEqual({'queue.declare_ok', Q2, 0, 0},
+                 declare(Config, Server2, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                              {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
 
+    ?assertMatch(Server2, proplists:get_value(leader,
+                                              find_queue_info(Q2, Config, 0, [leader]))),
+
+    ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server2, Q2)),
+>>>>>>> 61df65e256 (Test leader locator local with unique queue names.)
+
+
+    Q3 = <<Q/binary, "-3">>,
     %% Try third node
+<<<<<<< HEAD
     Ch3 = rabbit_ct_client_helpers:open_channel(Config, Server3),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch3, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
@@ -2066,6 +2083,17 @@ leader_locator_client_local(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 =======
     ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server3, Q)),
+=======
+    ?assertEqual({'queue.declare_ok', Q3, 0, 0},
+                 declare(Config, Server3, Q3, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                              {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
+
+
+    ?assertEqual(Server3, proplists:get_value(leader,
+                                              find_queue_info(Q3, Config, 0, [leader]))),
+
+    ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server3, Q3)),
+>>>>>>> 61df65e256 (Test leader locator local with unique queue names.)
     ok.
 >>>>>>> 77e15dc971 (Streams tests: no need to delete test queue if already deleted.)
 
