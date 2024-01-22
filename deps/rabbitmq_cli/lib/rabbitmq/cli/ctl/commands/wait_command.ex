@@ -245,10 +245,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
       timeout,
       fn ->
         case :file.read_file(pid_file) do
+          {:ok, <<>>} ->
+            {:error, :loop}
+
           {:ok, bin} ->
             case Integer.parse(bin) do
               :error ->
-                {:error, {:garbage_in_pid_file, {bin, pid_file}}}
+                {:error, {:garbage_in_pid_file, pid_file}}
 
               {pid, _} ->
                 case check_distribution(pid, node_name) do
