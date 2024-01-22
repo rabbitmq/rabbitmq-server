@@ -229,9 +229,18 @@ forget_member(Node, RemoveWhenOffline) ->
             ?LOG_DEBUG(
                "DB: removing cluster member `~ts`", [Node],
                #{domain => ?RMQLOG_DOMAIN_DB}),
-            case rabbit_khepri:is_enabled() of
-                true  -> forget_member_using_khepri(Node, RemoveWhenOffline);
-                false -> forget_member_using_mnesia(Node, RemoveWhenOffline)
+            {ok, _} = erpc:call(Node, application, ensure_all_started, [ra]),
+            ok = erpc:call(Node, rabbit_ra_systems, ensure_started, []),
+            try
+                case rabbit_khepri:is_enabled() of
+                    true ->
+                        forget_member_using_khepri(Node, RemoveWhenOffline);
+                    false ->
+                        forget_member_using_mnesia(Node, RemoveWhenOffline)
+                end
+            after
+                      catch erpc:call(
+                              Node, rabbit_ra_systems, ensure_stopped, [])
             end;
         true ->
             {error, {failed_to_remove_node, Node, rabbit_still_running}}
