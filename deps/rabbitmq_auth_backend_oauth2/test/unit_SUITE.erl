@@ -1081,6 +1081,10 @@ test_token_expiration(_) ->
 
     assert_resource_access_granted(User, VHost, <<"foo">>, configure),
     assert_resource_access_granted(User, VHost, <<"foo">>, write),
+    Now = os:system_time(seconds),
+    ExpiryTs = rabbit_auth_backend_oauth2:expiry_timestamp(User),
+    ?assert(ExpiryTs > (Now - 10)),
+    ?assert(ExpiryTs < (Now + 10)),
 
     ?UTIL_MOD:wait_for_token_to_expire(),
     #{<<"exp">> := Exp} = TokenData,
