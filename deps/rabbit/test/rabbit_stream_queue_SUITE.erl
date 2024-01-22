@@ -447,7 +447,9 @@ find_queue_info(Config, Keys) ->
     find_queue_info(Config, 0, Keys).
 
 find_queue_info(Config, Node, Keys) ->
-    Name = ?config(queue_name, Config),
+    find_queue_info(?config(queue_name, Config), Config, Node, Keys).
+
+find_queue_info(Name, Config, Node, Keys) ->
     QName = rabbit_misc:r(<<"/">>, queue, Name),
     Infos = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_amqqueue, info_all,
                                              [<<"/">>, [name] ++ Keys]),
@@ -2088,26 +2090,29 @@ leader_locator_client_local(Config) ->
     ?assertMatch(#'queue.delete_ok'{},
                  delete(Config, Server1, Q)),
 
+    Q2 = <<Q/binary, "-2">>,
     %% Try second node
-    ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Config, Server2, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+    ?assertEqual({'queue.declare_ok', Q2, 0, 0},
+                 declare(Config, Server2, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                               {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
 
     ?assertMatch(Server2, proplists:get_value(leader,
-                                              find_queue_info(Config, [leader]))),
+                                              find_queue_info(Q2, Config, 0, [leader]))),
 
-    ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server2, Q)),
+    ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server2, Q2)),
 
+
+    Q3 = <<Q/binary, "-3">>,
     %% Try third node
-    ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Config, Server3, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+    ?assertEqual({'queue.declare_ok', Q3, 0, 0},
+                 declare(Config, Server3, Q3, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                               {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
 
 
     ?assertEqual(Server3, proplists:get_value(leader,
-                                              find_queue_info(Config, [leader]))),
+                                              find_queue_info(Q3, Config, 0, [leader]))),
 
-    ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server3, Q)),
+    ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server3, Q3)),
     ok.
 
 leader_locator_balanced(Config) ->
