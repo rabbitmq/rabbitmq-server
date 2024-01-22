@@ -19,10 +19,6 @@ defmodule RabbitMQ.CLI.Core.Platform do
     end
   end
 
-  def os_name({:unix, :linux}) do
-    "Linux"
-  end
-
   def os_name({:unix, :darwin}) do
     "macOS"
   end
