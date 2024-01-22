@@ -79,7 +79,7 @@ skip_unknown_resource_servers(MgtOauthResources, OAuth2Resources) ->
 skip_disabled_mgt_resource_servers(MgtOauthResources) ->
   maps:filter(fun(_Key, Value) -> not proplists:get_value(disabled, Value, false) end, MgtOauthResources).
 
-has_multi_resources(OAuth2BackendProps, ManagementProps) ->
+extract_oauth2_and_mgt_resources(OAuth2BackendProps, ManagementProps) ->
   OAuth2Resources = getAllDeclaredOauth2Resources(OAuth2BackendProps),
   MgtResources0 = skip_unknown_resource_servers(proplists:get_value(resource_servers, ManagementProps, #{}), OAuth2Resources),
   MgtResources1 = maps:merge(MgtResources0, maps:filtermap(fun(K,_V) ->
@@ -88,14 +88,14 @@ has_multi_resources(OAuth2BackendProps, ManagementProps) ->
         false -> {true, [{id, K}]}
       end end, OAuth2Resources)),
   MgtResources = skip_disabled_mgt_resource_servers(MgtResources1),
-
+  HasMulti = {true, OAuth2Resources, MgtResources},
   case maps:size(MgtResources) of
     0 ->
       case maps:size(OAuth2Resources) of
-        0 -> false;
-        _ -> {true, OAuth2Resources, MgtResources}
+        1 -> {};
+        _ -> HasMulti
       end;
-    _ -> {true, OAuth2Resources, MgtResources}
+    _ -> HasMulti
   end.
 getAllDeclaredOauth2Resources(OAuth2BackendProps) ->
   OAuth2Resources = proplists:get_value(resource_servers, OAuth2BackendProps, #{}),
@@ -111,21 +111,27 @@ authSettings() ->
   case EnableOAUTH of
     false -> [{oauth_enabled, false}];
     true ->
-      case has_multi_resources(OAuth2BackendProps, ManagementProps) of
+      case extract_oauth2_and_mgt_resources(OAuth2BackendProps, ManagementProps) of
         {true, OAuth2Resources, MgtResources} ->
-          multi_resource_auth_settings(OAuth2Resources, MgtResources, ManagementProps);
-        false -> single_resource_auth_settings(OAuth2BackendProps, ManagementProps)
+          produce_auth_settings(OAuth2Resources, MgtResources, ManagementProps);
+        {} -> [{oauth_enabled, false}]
       end
   end.
 
-skip_resource_servers_without_oauth_client_id(MgtResourceServers) ->
+skip_resource_servers_without_oauth_client_id_with_sp_initiated_logon(MgtResourceServers, ManagementProps) ->
+  DefaultOauthInitiatedLogonType = proplists:get_value(oauth_initiated_logon_type, ManagementProps, sp_initiated),
   maps:filter(fun(_K,ResourceServer) ->
+    SpInitiated = case proplists:get_value(oauth_initiated_logon_type, ResourceServer, DefaultOauthInitiatedLogonType) of
+      sp_initiated -> true;
+      _ -> false
+    end,
+    not SpInitiated or
     not is_invalid([proplists:get_value(oauth_client_id, ResourceServer)]) end, MgtResourceServers).
 
 
-filter_resource_servers_without_resolvable_oauth_client_id(MgtResourceServers, ManagementProps) ->
+filter_resource_servers_without_resolvable_oauth_client_id_for_sp_initiated(MgtResourceServers, ManagementProps) ->
   case is_invalid([proplists:get_value(oauth_client_id, ManagementProps)]) of
-    true -> skip_resource_servers_without_oauth_client_id(MgtResourceServers);
+    true -> skip_resource_servers_without_oauth_client_id_with_sp_initiated_logon(MgtResourceServers, ManagementProps);
     false -> MgtResourceServers
   end.
 
@@ -144,10 +150,10 @@ filter_resource_servers_without_resolvable_oauth_provider_url(OAuthResourceServe
         end
     end end , MgtResourceServers)).
 
-multi_resource_auth_settings(OAuthResourceServers, MgtResourceServers, ManagementProps) ->
+produce_auth_settings(OAuthResourceServers, MgtResourceServers, ManagementProps) ->
   ConvertValuesToBinary = fun(_K,V) -> [ {K1, to_binary(V1)} || {K1,V1} <- V ] end,
   FilteredMgtResourceServers = filter_resource_servers_without_resolvable_oauth_provider_url(OAuthResourceServers,
-    filter_resource_servers_without_resolvable_oauth_client_id(MgtResourceServers, ManagementProps), ManagementProps),
+    filter_resource_servers_without_resolvable_oauth_client_id_for_sp_initiated(MgtResourceServers, ManagementProps), ManagementProps),
 
   case maps:size(FilteredMgtResourceServers) of
     0 -> [{oauth_enabled, false}];
@@ -165,60 +171,6 @@ multi_resource_auth_settings(OAuthResourceServers, MgtResourceServers, Managemen
         end
         ])
   end.
-
-
-
-single_resource_auth_settings(OAuth2BackendProps, ManagementProps) ->
-  OAuthInitiatedLogonType = proplists:get_value(oauth_initiated_logon_type, ManagementProps, sp_initiated),
-  OAuthDisableBasicAuth = proplists:get_value(oauth_disable_basic_auth, ManagementProps, true),
-  OAuthProviderUrl = resolve_oauth_provider_url(ManagementProps),
-  OAuthResourceId =  proplists:get_value(resource_server_id, OAuth2BackendProps),
-  case OAuthInitiatedLogonType of
-    sp_initiated ->
-      case is_invalid([OAuthResourceId]) of
-        true ->
-          rabbit_log:error("Invalid rabbitmq_auth_backend_oauth2.resource_server_id ~p", [OAuthResourceId]),
-          [{oauth_enabled, false}];
-        false ->
-          OAuthClientId = proplists:get_value(oauth_client_id, ManagementProps),
-          case is_invalid([OAuthClientId, OAuthProviderUrl]) of
-            true ->
-              rabbit_log:error("Invalid rabbitmq_management oauth_client_id ~p or resolved oauth_provider_url ~p",
-                [OAuthClientId, OAuthProviderUrl]),
-              [{oauth_enabled, false}];
-            false ->
-              filter_empty_properties([
-               {oauth_enabled, true},
-               {oauth_disable_basic_auth, OAuthDisableBasicAuth},
-               {oauth_client_id, to_binary(OAuthClientId)},
-               {oauth_provider_url, to_binary(OAuthProviderUrl)},
-               to_tuple(oauth_scopes, ManagementProps),
-               to_tuple(oauth_metadata_url, ManagementProps),
-               {oauth_resource_id, to_binary(OAuthResourceId)},
-               to_tuple(oauth_client_secret, ManagementProps)
-              ])
-          end
-      end;
-    idp_initiated ->
-      case is_invalid([OAuthResourceId]) of
-        true ->
-          rabbit_log:error("Invalid rabbitmq_auth_backend_oauth2.resource_server_id ~p", [OAuthResourceId]),
-          [{oauth_enabled, false}];
-        false ->
-          case is_invalid([OAuthProviderUrl]) of
-            true ->
-              rabbit_log:error("Invalid rabbitmq_management resolved oauth_provider_url ~p", [OAuthProviderUrl]),
-              [{oauth_enabled, false}];
-            false ->
-             [{oauth_enabled, true},
-              {oauth_disable_basic_auth, OAuthDisableBasicAuth},
-              {oauth_initiated_logon_type, to_binary(OAuthInitiatedLogonType)},
-              {oauth_provider_url, to_binary(OAuthProviderUrl)},
-              {oauth_resource_id, to_binary(OAuthResourceId)}
-              ]
-            end
-        end
-    end.
 
 filter_empty_properties(ListOfProperties) ->
   lists:filter(fun(Prop) ->

@@ -34,7 +34,7 @@ function auth_settings_apply_defaults(authSettings) {
   }
   authSettings.resource_servers = []
 
-  if (authSettings.oauth_resource_servers && Object.keys(authSettings.oauth_resource_servers).length > 0) {
+  if (authSettings.oauth_resource_servers) {
 
     for (const [resource_server_id, resource_server] of Object.entries(authSettings.oauth_resource_servers)) {
         if (!resource_server.oauth_provider_url) {
@@ -80,25 +80,6 @@ function auth_settings_apply_defaults(authSettings) {
         resource_server.id = resource_server_id
         authSettings.resource_servers.push(resource_server)
     }
-
-  }else if (authSettings.oauth_provider_url) {
-    let resource = {
-        "provider_url" : authSettings.oauth_provider_url,
-        "scopes" : authSettings.oauth_scopes,
-        "response_type" : authSettings.oauth_response_type,
-        "sp_initiated" : authSettings.oauth_initiated_logon_type == "sp_initiated",
-        "id" : authSettings.oauth_resource_id
-    }
-    if (authSettings.oauth_client_id) {
-      resource.client_id = authSettings.oauth_client_id
-    }
-    if (authSettings.oauth_client_secret && authSettings.oauth_client_id) {
-      resource.client_secret = authSettings.oauth_client_secret
-    }
-    if (authSettings.metadata_url) {
-      resource.metadata_url = authSettings.metadata_url
-    }
-    authSettings.resource_servers.push(resource)
   }
 
   return authSettings;
