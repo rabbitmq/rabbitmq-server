@@ -67,10 +67,6 @@
     rabbit_types:topic_access_context()) ->
     boolean() | {'error', any()}.
 
-%% Returns true for backends that support state or credential expiration (e.g. use JWTs).
-%% @deprecated Please use {@link expiry_timestamp/1} instead.
--callback state_can_expire() -> boolean().
-
 %% Updates backend state that has expired.
 %%
 %% Possible responses:
