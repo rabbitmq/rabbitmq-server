@@ -138,8 +138,7 @@ groups() ->
             ]}
           ]}
         ]}
-      ]},
-      %-----
+      ]},      
       {verify_oauth_initiated_logon_type_for_sp_initiated, [], [
         should_return_disabled_auth_settings,
         {with_resource_server_id_rabbit, [], [
@@ -154,7 +153,7 @@ groups() ->
                   should_not_return_oauth_initiated_logon_type
                 ]},
                 {with_resource_server_a, [], [
-                  {with_oauth_resource_server_a_with_oauth_initiated_logon_type_sp_initiated, [], [
+                  {with_mgt_resource_server_a_with_oauth_initiated_logon_type_sp_initiated, [], [
                     should_return_oauth_resource_server_a_with_oauth_initiated_logon_type_sp_initiated
                   ]}
                 ]}
@@ -175,11 +174,14 @@ groups() ->
                 should_return_oauth_enabled,
                 should_return_oauth_initiated_logon_type_idp_initiated,
                 {with_resource_server_a, [], [
-                  {with_oauth_resource_server_a_with_oauth_initiated_logon_type_idp_initiated, [], [
+                  {with_mgt_resource_server_a_with_oauth_initiated_logon_type_idp_initiated, [], [
                     should_return_oauth_resource_server_a_with_oauth_initiated_logon_type_idp_initiated
                   ]},
-                  {with_oauth_resource_server_a_with_oauth_initiated_logon_type_sp_initiated, [], [
-                    should_not_return_oauth_resource_server_a
+                  {with_mgt_resource_server_a_with_oauth_initiated_logon_type_sp_initiated, [], [
+                    should_not_return_oauth_resource_server_a,
+                    {with_mgt_resource_server_a_with_client_id_x, [], [
+                      should_return_oauth_resource_server_a_with_client_id_x
+                    ]}
                   ]}
                 ]}
               ]}
@@ -260,7 +262,7 @@ init_per_group(with_mgt_oauth_client_id_z, Config) ->
   application:set_env(rabbitmq_management, oauth_client_id, ?config(z, Config)),
   Config;
 init_per_group(with_mgt_resource_server_a_with_client_secret_w, Config) ->
-  set_attribute_in_entry_for_env_variable(rabbitmq_management, resource_servers,
+  set_attribute_in_entry_for_env_variable(rabbitmq_management, oauth_resource_servers,
     ?config(a, Config), oauth_client_secret, ?config(w, Config)),
   Config;
 init_per_group(with_mgt_oauth_client_secret_q, Config) ->
@@ -284,12 +286,12 @@ init_per_group(with_oauth_initiated_logon_type_idp_initiated, Config) ->
 init_per_group(with_oauth_initiated_logon_type_sp_initiated, Config) ->
   application:set_env(rabbitmq_management, oauth_initiated_logon_type, sp_initiated),
   Config;
-init_per_group(with_oauth_resource_server_a_with_oauth_initiated_logon_type_sp_initiated, Config) ->
-  set_attribute_in_entry_for_env_variable(rabbitmq_management, resource_servers,
+init_per_group(with_mgt_resource_server_a_with_oauth_initiated_logon_type_sp_initiated, Config) ->
+  set_attribute_in_entry_for_env_variable(rabbitmq_management, oauth_resource_servers,
     ?config(a, Config), oauth_initiated_logon_type, sp_initiated),
   Config;
-init_per_group(with_oauth_resource_server_a_with_oauth_initiated_logon_type_idp_initiated, Config) ->
-  set_attribute_in_entry_for_env_variable(rabbitmq_management, resource_servers,
+init_per_group(with_mgt_resource_server_a_with_oauth_initiated_logon_type_idp_initiated, Config) ->
+  set_attribute_in_entry_for_env_variable(rabbitmq_management, oauth_resource_servers,
     ?config(a, Config), oauth_initiated_logon_type, idp_initiated),
   Config;
 init_per_group(with_oauth_disable_basic_auth_false, Config) ->
@@ -310,15 +312,15 @@ init_per_group(with_resource_server_a_with_oauth_provider_idp1, Config) ->
     ?config(a, Config), oauth_provider_id, ?config(idp1, Config)),
   Config;
 init_per_group(with_mgt_resource_server_a_with_scopes_read_write, Config) ->
-  set_attribute_in_entry_for_env_variable(rabbitmq_management, resource_servers,
+  set_attribute_in_entry_for_env_variable(rabbitmq_management, oauth_resource_servers,
     ?config(a, Config), scopes, ?config(read_write, Config)),
   Config;
 init_per_group(with_mgt_oauth_resource_server_a_with_oauth_provider_url_url1, Config) ->
-  set_attribute_in_entry_for_env_variable(rabbitmq_management, resource_servers,
+  set_attribute_in_entry_for_env_variable(rabbitmq_management, oauth_resource_servers,
     ?config(a, Config), oauth_provider_url, ?config(url1, Config)),
   Config;
 init_per_group(with_mgt_resource_server_a_with_client_id_x, Config) ->
-  set_attribute_in_entry_for_env_variable(rabbitmq_management, resource_servers,
+  set_attribute_in_entry_for_env_variable(rabbitmq_management, oauth_resource_servers,
     ?config(a, Config), oauth_client_id, ?config(x, Config)),
   Config;
 init_per_group(with_default_oauth_provider_idp1, Config) ->
@@ -370,7 +372,7 @@ end_per_group(with_oauth_initiated_logon_type_sp_initiated, Config) ->
   application:unset_env(rabbitmq_management, oauth_initiated_logon_type),
   Config;
 end_per_group(with_mgt_resource_server_a_with_client_secret_w, Config) ->
-  remove_attribute_from_entry_from_env_variable(rabbitmq_management, resource_servers,
+  remove_attribute_from_entry_from_env_variable(rabbitmq_management, oauth_resource_servers,
     ?config(a, Config), oauth_client_secret),
   Config;
 end_per_group(with_resource_server_a, Config) ->
@@ -382,23 +384,23 @@ end_per_group(with_resource_server_a_with_oauth_provider_idp1, Config) ->
     ?config(a, Config), oauth_provider_id),
   Config;
 end_per_group(with_mgt_resource_server_a_with_scopes_read_write, Config) ->
-  remove_attribute_from_entry_from_env_variable(rabbitmq_management, resource_servers,
+  remove_attribute_from_entry_from_env_variable(rabbitmq_management, oauth_resource_servers,
     ?config(a, Config), scopes),
   Config;
 end_per_group(with_mgt_oauth_resource_server_a_with_oauth_provider_url_url1, Config) ->
-  remove_attribute_from_entry_from_env_variable(rabbitmq_management, resource_servers,
+  remove_attribute_from_entry_from_env_variable(rabbitmq_management, oauth_resource_servers,
     ?config(a, Config), oauth_provider_url),
   Config;
-end_per_group(with_oauth_resource_server_a_with_oauth_initiated_logon_type_sp_initiated, Config) ->
-  remove_attribute_from_entry_from_env_variable(rabbitmq_management, resource_servers,
+end_per_group(with_mgt_resource_server_a_with_oauth_initiated_logon_type_sp_initiated, Config) ->
+  remove_attribute_from_entry_from_env_variable(rabbitmq_management, oauth_resource_servers,
     ?config(a, Config), oauth_initiated_logon_type),
   Config;
-end_per_group(with_oauth_resource_server_a_with_oauth_initiated_logon_type_idp_initiated, Config) ->
-  remove_attribute_from_entry_from_env_variable(rabbitmq_management, resource_servers,
+end_per_group(with_mgt_resource_server_a_with_oauth_initiated_logon_type_idp_initiated, Config) ->
+  remove_attribute_from_entry_from_env_variable(rabbitmq_management, oauth_resource_servers,
     ?config(a, Config), oauth_initiated_logon_type),
   Config;
 end_per_group(with_mgt_resource_server_a_with_client_id_x, Config) ->
-  remove_attribute_from_entry_from_env_variable(rabbitmq_management, resource_servers,
+  remove_attribute_from_entry_from_env_variable(rabbitmq_management, oauth_resource_servers,
     ?config(a, Config), oauth_client_id),
   Config;
 end_per_group(with_default_oauth_provider_idp1, Config) ->

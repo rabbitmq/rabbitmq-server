@@ -26,35 +26,16 @@ variances(Req, Context) ->
 content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
-
-%% Order of precedence to determine the provider url for the single oauth resource
-%% 1. rabbitmq_management.oauth_provider_url
-%% 2. if auth_oauth2.default_provider_id is set
-%%  2.1. auth_oauth2.auth_providers.?.issuer where ? is the auth_provider whose id attribute = auth_oauth2.default_provider_id
-%% 3. auth_oauth2.issuer
-%%
-%% If there is only one auth_provider and the url where to forward users to log in is the same as the issuer url
-%% then users are encouraged to just set auth_oauth2.issuer
 resolve_oauth_provider_url(ManagementProps) ->
   case proplists:get_value(oauth_provider_url, ManagementProps) of
     undefined ->
       case oauth2_client:get_oauth_provider([issuer]) of
-        {ok, OAuthProvider} -> OAuthProvider#oauth_provider.issuer; %% 2.1 & 3
+        {ok, OAuthProvider} -> OAuthProvider#oauth_provider.issuer;
         {error, _} = Error -> Error
       end;
-    Value -> Value %% 1
+    Value -> Value
   end.
 
-%% Order of precedence to determine the provider url for one specific oauth resource
-%% 1. rabbitmq_management.resource_servers.?.oauth_provider_url same as rabbitmq_management.oauth_provider_url but
-%%     for a given resource_server
-%% 2. rabbitmq_management.oauth_provider_url
-%% 3. if auth_oauth2.resource_servers.?.oauth_provider_id is set where ? is the resource whose id matches rabbitmq_management.resource_servers.?.id
-%%    3.1 if auth_oauth2.auth_providers.?.issuer is set where ? is the auth_provider whose id matches the auth_oauth2.resource_servers.?.oauth_provider_id
-%%        then use this issuer url to login
-%% 4. if auth_oauth2.default_provider_id is set
-%%  4.1. auth_oauth2.auth_providers.?.issuer where ? is the auth_provider whose id attribute = auth_oauth2.default_provider_id
-%% 5. auth_oauth2.issuer
 resolve_oauth_provider_url(OAuthResourceServer, MgtResourceServer, ManagementProps) ->
   case proplists:get_value(oauth_provider_url, MgtResourceServer) of
     undefined ->
@@ -81,7 +62,7 @@ skip_disabled_mgt_resource_servers(MgtOauthResources) ->
 
 extract_oauth2_and_mgt_resources(OAuth2BackendProps, ManagementProps) ->
   OAuth2Resources = getAllDeclaredOauth2Resources(OAuth2BackendProps),
-  MgtResources0 = skip_unknown_resource_servers(proplists:get_value(resource_servers, ManagementProps, #{}), OAuth2Resources),
+  MgtResources0 = skip_unknown_resource_servers(proplists:get_value(oauth_resource_servers, ManagementProps, #{}), OAuth2Resources),
   MgtResources1 = maps:merge(MgtResources0, maps:filtermap(fun(K,_V) ->
       case maps:is_key(K, MgtResources0) of
         true -> false;
