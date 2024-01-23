@@ -15,7 +15,7 @@
 
 -export([user_login_authentication/2, user_login_authorization/2,
   check_vhost_access/3, check_resource_access/4, check_topic_access/4,
-  state_can_expire/0, expiry_timestamp/1,
+  expiry_timestamp/1,
   get/1, init/0]).
 
 init() ->
@@ -39,8 +39,6 @@ check_resource_access(#auth_user{}, #resource{}, _Permission, AuthzContext) ->
 check_topic_access(#auth_user{}, #resource{}, _Permission, TopicContext) ->
   ets:insert(?MODULE, {topic_access, TopicContext}),
   true.
-
-state_can_expire() -> false.
 
 expiry_timestamp(_) ->
     never.
