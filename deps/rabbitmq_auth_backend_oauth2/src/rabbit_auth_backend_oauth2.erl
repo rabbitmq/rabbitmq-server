@@ -14,7 +14,7 @@
 -export([description/0]).
 -export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/4,
-         check_topic_access/4, check_token/1, state_can_expire/0, update_state/2,
+         check_topic_access/4, check_token/1, update_state/2,
          expiry_timestamp/1]).
 
 % for testing
@@ -103,8 +103,6 @@ check_topic_access(#auth_user{impl = DecodedTokenFun},
             Scopes = get_expanded_scopes(Token, Resource),
             rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes)
         end).
-
-state_can_expire() -> true.
 
 update_state(AuthUser, NewToken) ->
   case check_token(NewToken) of
