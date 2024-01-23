@@ -1672,8 +1672,7 @@ online(Q) when ?is_amqqueue(Q) ->
                   is_pid(Pid)].
 
 format(Q, Ctx) when ?is_amqqueue(Q) ->
-    %% TODO: this should really just be voters
-    Nodes = lists:sort(get_nodes(Q)),
+    Voters = lists:sort(get_voters(Q)),
     Running = case Ctx of
                   #{running_nodes := Running0} ->
                       Running0;
@@ -1681,25 +1680,28 @@ format(Q, Ctx) when ?is_amqqueue(Q) ->
                       %% WARN: slow
                       rabbit_nodes:list_running()
               end,
-    Online = [N || N <- Nodes, lists:member(N, Running)],
+    OnlineVoters = [N || N <- Voters, lists:member(N, Running)],
     {_, LeaderNode} = amqqueue:get_pid(Q),
-    State = case is_minority(Nodes, Online) of
-                true when length(Online) == 0 ->
+    State = case is_minority(Voters, OnlineVoters) of
+                true when length(OnlineVoters) == 0 ->
                     down;
                 true ->
                     minority;
                 false ->
-                    case lists:member(LeaderNode, Online) of
+                    case lists:member(LeaderNode, OnlineVoters) of
                         true ->
                             running;
                         false ->
                             down
                     end
             end,
+    Nodes = lists:sort(get_nodes(Q)),
+    Online = [N || N <- Nodes, lists:member(N, Running)],
     [{type, quorum},
      {state, State},
      {node, LeaderNode},
      {members, Nodes},
+     {voters, Voters},
      {leader, LeaderNode},
      {online, Online}].
 
@@ -1782,6 +1784,14 @@ make_mutable_config(Q) ->
 get_nodes(Q) when ?is_amqqueue(Q) ->
     #{nodes := Nodes} = amqqueue:get_type_state(Q),
     Nodes.
+
+get_voters(Q) when ?amqqueue_is_quorum(Q) ->
+    Leader = amqqueue:get_pid(Q),
+    case ra_server_proc:local_state_query(Leader, voters, 5000) of
+       {ok, Vs, _} -> [Node || {_RaName, Node} <- Vs];
+       _ -> []
+    end.
+
 
 get_connected_nodes(Q) when ?is_amqqueue(Q) ->
     ErlangNodes = [node() | nodes()],
@@ -1907,6 +1917,9 @@ force_all_queues_shrink_member_to_current_member() ->
     rabbit_log:warning("Disaster recovery procedure: shrinking finished"),
     ok.
 
+is_minority([], _) ->
+    %% Leader couldn't list voters.
+    true;
 is_minority(All, Up) ->
     MinQuorum = length(All) div 2 + 1,
     length(Up) < MinQuorum.
