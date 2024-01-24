@@ -232,15 +232,16 @@ update_state(User = #user{authz_backends = Backends0}, NewState) ->
     %% backends is in reverse order from the original list.
     Backends = lists:foldl(
                 fun({Module, Impl}, {ok, Acc}) ->
-                        case Module:state_can_expire() of
-                          true  ->
-                            case Module:update_state(auth_user(User, Impl), NewState) of
+                        AuthUser = auth_user(User, Impl),
+                        case Module:expiry_timestamp(AuthUser) of
+                          never ->
+                            {ok, [{Module, Impl} | Acc]};
+                          _  ->
+                            case Module:update_state(AuthUser, NewState) of
                               {ok, #auth_user{impl = Impl1}} ->
                                 {ok, [{Module, Impl1} | Acc]};
                               Else -> Else
-                            end;
-                          false ->
-                            {ok, [{Module, Impl} | Acc]}
+                            end
                         end;
                    (_, {error, _} = Err)      -> Err;
                    (_, {refused, _, _} = Err) -> Err
@@ -254,8 +255,8 @@ update_state(User = #user{authz_backends = Backends0}, NewState) ->
 
 %% Returns true if any of the backends support credential expiration,
 %% otherwise returns false.
-permission_cache_can_expire(#user{authz_backends = Backends}) ->
-    lists:any(fun ({Module, _State}) -> Module:state_can_expire() end, Backends).
+permission_cache_can_expire(User) ->
+    expiry_timestamp(User) =/= never.
 
 -spec expiry_timestamp(User :: rabbit_types:user()) -> integer() | never.
 expiry_timestamp(User = #user{authz_backends = Modules}) ->
