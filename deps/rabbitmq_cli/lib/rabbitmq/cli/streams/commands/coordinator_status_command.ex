@@ -34,8 +34,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.CoordinatorStatusCommand do
   end
 
   def usage_additional do
-    [
-    ]
+    []
   end
 
   def usage_doc_guides() do
