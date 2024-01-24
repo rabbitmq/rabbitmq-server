@@ -190,6 +190,13 @@ init_per_group(cluster_size_3_parallel = Group, Config) ->
         _ ->
             init_per_group1(Group, Config)
     end;
+init_per_group(unclustered_size_3_4 = Group, Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "not mixed versions compatible"};
+        _ ->
+            init_per_group1(Group, Config)
+    end;
 init_per_group(Group, Config) ->
     init_per_group1(Group, Config).
 
