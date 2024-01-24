@@ -295,10 +295,7 @@ members_using_mnesia() ->
     rabbit_mnesia:members().
 
 members_using_khepri() ->
-    case rabbit_khepri:locally_known_nodes() of
-        []      -> [node()];
-        Members -> Members
-    end.
+    rabbit_khepri:locally_known_nodes().
 
 -spec disc_members() -> Members when
       Members :: [node()].
