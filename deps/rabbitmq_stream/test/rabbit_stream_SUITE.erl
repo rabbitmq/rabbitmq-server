@@ -778,22 +778,24 @@ store_offset_requires_read_access(Config) ->
     Port = get_port(T, Config),
     Opts = get_opts(T),
     {ok, S} = T:connect("localhost", Port, Opts),
-    C = rabbit_stream_core:init(0),
-    test_peer_properties(T, S, C),
-    test_authenticate(T, S, C, Username),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(T, S, C0),
+    C2 = test_authenticate(T, S, C1, Username),
     Stream = atom_to_binary(?FUNCTION_NAME, utf8),
-    test_create_stream(T, S, Stream, C),
+    C3 = test_create_stream(T, S, Stream, C2),
 
-    test_subscribe(T, S, 1, Stream, C),
+    C4 = test_subscribe(T, S, 1, Stream, C3),
     %% store_offset should work because the subscription is still active
     Reference = <<"foo">>,
     ok = store_offset(T, S, Reference, Stream, 42),
-    ?assertMatch({42, _}, query_expected_offset(T, S, C, Reference, Stream, 42)),
+    {O42, C5} = query_expected_offset(T, S, C4, Reference, Stream, 42),
+    ?assertEqual(42, O42),
 
-    test_unsubscribe(T, S, 1, C),
+    C6 = test_unsubscribe(T, S, 1, C5),
     %% store_offset should still work because the user has read access to the stream
     ok = store_offset(T, S, Reference, Stream, 43),
-    ?assertMatch({43, _}, query_expected_offset(T, S, C, Reference, Stream, 43)),
+    {O43, C7} = query_expected_offset(T, S, C6, Reference, Stream, 43),
+    ?assertEqual(43, O43),
 
     %% no read access anymore
     rabbit_ct_broker_helpers:set_permissions(Config, Username, <<"/">>,
@@ -804,10 +806,11 @@ store_offset_requires_read_access(Config) ->
     %% providing read access back to be able to query_offset
     rabbit_ct_broker_helpers:set_full_permissions(Config, Username, <<"/">>),
     %% we never get the offset from the last query_offset attempt
-    ?assertMatch({timeout, _}, query_expected_offset(T, S, C, Reference, Stream, 44)),
+    {Timeout, C8} = query_expected_offset(T, S, C7, Reference, Stream, 44),
+    ?assertMatch(timeout, Timeout),
 
-    test_delete_stream(T, S, Stream, C, false),
-    test_close(T, S, C),
+    C9 = test_delete_stream(T, S, Stream, C8, true),
+    test_close(T, S, C9),
     closed = wait_for_socket_close(T, S, 10),
     ok.
 
