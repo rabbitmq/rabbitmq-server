@@ -41,10 +41,11 @@ is_authorized(ReqData, Context) ->
 
 node0(ReqData) ->
     Node = list_to_atom(binary_to_list(rabbit_mgmt_util:id(node, ReqData))),
-    [Data] = node_data(Node, ReqData),
-    augment(ReqData, Node, Data).
+    augment(ReqData, Node, node_data(Node, ReqData)).
 
-augment(ReqData, Node, Data) ->
+augment(_ReqData, _Node, not_found) ->
+    not_found;
+augment(ReqData, Node, [Data]) ->
     lists:foldl(fun (Key, DataN) -> augment(Key, ReqData, Node, DataN) end,
                 Data, [memory, binary]).
 
@@ -61,8 +62,12 @@ augment(Key, ReqData, Node, Data) ->
 node_data(Node, ReqData) ->
     S = rabbit_db_cluster:cli_cluster_status(),
     Nodes = proplists:get_value(nodes, S),
+    node_data(S, Node, ReqData, find_type(Node, Nodes)).
+
+node_data(_S, _Node, _ReqData, not_found) ->
+    not_found;
+node_data(S, Node, ReqData, Type) ->
     Running = proplists:get_value(running_nodes, S),
-    Type = find_type(Node, Nodes),
     Basic = [[{name, Node}, {running, lists:member(Node, Running)}, {type, Type}, {being_drained, rabbit_maintenance:is_being_drained_local_read(Node)}]],
     case rabbit_mgmt_util:disable_stats(ReqData) of
         false ->
@@ -71,6 +76,8 @@ node_data(Node, ReqData) ->
             Basic
     end.
 
+find_type(_Node, []) ->
+    not_found;
 find_type(Node, [{Type, Nodes} | Rest]) ->
     case lists:member(Node, Nodes) of
         true -> Type;
