@@ -506,6 +506,7 @@ handle_tick(QName,
     spawn(
       fun() ->
               try
+                  {ok, Q} = rabbit_amqqueue:lookup(QName),
                   Reductions = reductions(Name),
                   rabbit_core_metrics:queue_stats(QName, NumReadyMsgs,
                                                   NumCheckedOut, NumMessages,
@@ -540,16 +541,17 @@ handle_tick(QName,
                            {leader, node()}
                            | infos(QName, Keys)],
                   rabbit_core_metrics:queue_stats(QName, Infos),
-                  ok = repair_leader_record(QName, Self),
+                  ok = repair_leader_record(Q, Self),
                   ExpectedNodes = rabbit_nodes:list_members(),
                   case Nodes -- ExpectedNodes of
+                      [] ->
+                          ok;
                       Stale when length(ExpectedNodes) > 0 ->
                           %% rabbit_nodes:list_members/0 returns [] when there
                           %% is an error so we need to handle that case
                           rabbit_log:debug("~ts: stale nodes detected. Purging ~w",
                                            [rabbit_misc:rs(QName), Stale]),
                           %% pipeline purge command
-                          {ok, Q} = rabbit_amqqueue:lookup(QName),
                           ok = ra:pipeline_command(amqqueue:get_pid(Q),
                                                    rabbit_fifo:make_purge_nodes(Stale)),
 
@@ -565,14 +567,14 @@ handle_tick(QName,
               end
       end).
 
-repair_leader_record(QName, Self) ->
-    {ok, Q} = rabbit_amqqueue:lookup(QName),
+repair_leader_record(Q, Self) ->
     Node = node(),
     case amqqueue:get_pid(Q) of
         {_, Node} ->
             %% it's ok - we don't need to do anything
             ok;
         _ ->
+            QName = amqqueue:get_name(Q),
             rabbit_log:debug("~ts: repairing leader record",
                              [rabbit_misc:rs(QName)]),
             {_, Name} = erlang:process_info(Self, registered_name),
