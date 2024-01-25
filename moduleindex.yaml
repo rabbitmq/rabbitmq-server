@@ -1038,6 +1038,7 @@ rabbitmq_management:
 - rabbit_mgmt_hsts
 - rabbit_mgmt_load_definitions
 - rabbit_mgmt_login
+- rabbit_mgmt_nodes
 - rabbit_mgmt_oauth_bootstrap
 - rabbit_mgmt_reset_handler
 - rabbit_mgmt_stats
