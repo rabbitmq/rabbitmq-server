@@ -145,11 +145,7 @@ enable_ff(Config) ->
             %% on the node we want to subscibe from before proceeding
             rabbit_ct_helpers:await_condition(
               fun() ->
-                      rabbit_ct_broker_helpers:rpc(Config, 2, ?MODULE,
-                                                   has_local_member,
-                                                   [#resource{kind = queue,
-                                                              virtual_host = <<"/">>,
-                                                              name = QName}])
+                      queue_utils:has_local_stream_member(Config, 2, QName, <<"/">>)
               end, 60000),
             ok;
         _ ->
@@ -259,17 +255,3 @@ get_global_counters(Config) ->
 qos(Ch, Prefetch) ->
     ?assertMatch(#'basic.qos_ok'{},
                  amqp_channel:call(Ch, #'basic.qos'{prefetch_count = Prefetch})).
-
-has_local_member(QName) ->
-    case rabbit_amqqueue:lookup(QName) of
-        {ok, Q} ->
-            #{name := StreamId} = amqqueue:get_type_state(Q),
-            case rabbit_stream_coordinator:local_pid(StreamId) of
-                {ok, Pid} ->
-                    is_process_alive(Pid);
-                _ ->
-                    false
-            end;
-        _Err ->
-            false
-    end.

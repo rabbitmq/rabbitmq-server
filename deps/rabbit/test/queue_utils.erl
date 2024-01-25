@@ -13,7 +13,9 @@
          dirty_query/3,
          ra_name/1,
          fifo_machines_use_same_version/1,
-         fifo_machines_use_same_version/2
+         fifo_machines_use_same_version/2,
+         has_local_stream_member/4,
+         has_local_stream_member_rpc/1
         ]).
 
 wait_for_messages_ready(Servers, QName, Ready) ->
@@ -161,3 +163,23 @@ fifo_machines_use_same_version(Config, Nodenames)
               rabbit_fifo, version, []))
      || Nodename <- Nodenames],
     lists:all(fun(V) -> V =:= MachineAVersion end, OtherMachinesVersions).
+
+has_local_stream_member(Config, Node, QName, VHost) ->
+    QRes = rabbit_misc:r(VHost, queue, QName),
+    rabbit_ct_broker_helpers:rpc(Config, Node, ?MODULE,
+                                 has_local_stream_member_rpc,
+                                 [QRes]).
+
+has_local_stream_member_rpc(QName) ->
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} ->
+            #{name := StreamId} = amqqueue:get_type_state(Q),
+            case rabbit_stream_coordinator:local_pid(StreamId) of
+                {ok, Pid} ->
+                    is_process_alive(Pid);
+                _ ->
+                    false
+            end;
+        _Err ->
+            false
+    end.
