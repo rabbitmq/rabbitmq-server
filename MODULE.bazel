@@ -195,14 +195,14 @@ erlang_package.hex_package(
     version = "1.0.1",
 )
 
-erlang_package.hex_package(
+erlang_package.git_package(
     name = "cowboy",
     build_file = "@rabbitmq-server//bazel:BUILD.cowboy",
     patch_cmds = [
         "rm ebin/cowboy.app",
     ],
-    sha256 = "3afdccb7183cc6f143cb14d3cf51fa00e53db9ec80cdcd525482f5e99bc41d6b",
-    version = "2.10.0",
+    repository = "ninenines/cowboy",
+    branch = "master",
 )
 
 erlang_package.hex_package(
