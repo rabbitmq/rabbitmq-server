@@ -26,7 +26,7 @@ content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {node_exists(ReqData, get_node(ReqData)), ReqData, Context}.
+    {rabbit_mgmt_nodes:node_exists(ReqData), ReqData, Context}.
 
 to_json(ReqData, {Mode, Context}) ->
     rabbit_mgmt_util:reply(augment(Mode, ReqData), ReqData, {Mode, Context}).
