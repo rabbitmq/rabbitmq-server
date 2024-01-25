@@ -539,7 +539,7 @@ handle_tick(QName,
                            {single_active_consumer_tag, SacTag},
                            {single_active_consumer_pid, SacPid},
                            {leader, node()}
-                           | infos(QName, Keys)],
+                           | info(Q, Keys)],
                   rabbit_core_metrics:queue_stats(QName, Infos),
                   ok = repair_leader_record(Q, Self),
                   ExpectedNodes = rabbit_nodes:list_members(),
