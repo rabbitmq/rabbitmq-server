@@ -26,10 +26,7 @@ content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {case node0(ReqData) of
-         not_found -> false;
-         _         -> true
-     end, ReqData, Context}.
+    {rabbit_mgmt_nodes:node_exists(ReqData), ReqData, Context}.
 
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply(node0(ReqData), ReqData, Context).
