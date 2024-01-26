@@ -233,7 +233,6 @@ add_delivery_count_header(Msg, Count) ->
             Msg
     end.
 
-
 %% @doc Settle a message. Permanently removes message from the queue.
 %% @param ConsumerTag the tag uniquely identifying the consumer.
 %% @param MsgIds the message ids received with the {@link rabbit_fifo:delivery/0.}
@@ -812,9 +811,9 @@ get_missing_deliveries(State, From, To, ConsumerTag) ->
     end.
 
 pick_server(#state{leader = undefined,
-                   cfg = #cfg{servers = [N | _]}}) ->
-    %% TODO: pick random rather that first?
-    N;
+		   cfg = #cfg{servers = Servers}}) ->
+    Random = rand:uniform(length(Servers)),
+    lists:nth(Random, Servers);
 pick_server(#state{leader = Leader}) ->
     Leader.
 
@@ -872,13 +871,8 @@ add_command(Cid, return, MsgIds, Acc) ->
 add_command(Cid, discard, MsgIds, Acc) ->
     [rabbit_fifo:make_discard(Cid, MsgIds) | Acc].
 
-set_timer(QName, #state{leader = Leader0,
-                        cfg = #cfg{servers = [Server | _]}} = State) ->
-    Leader = case Leader0 of
-                 undefined -> Server;
-                 _ ->
-                     Leader0
-             end,
+set_timer(QName, State) ->
+    Leader = pick_server(State),
     Ref = erlang:send_after(?TIMER_TIME, self(),
                             {'$gen_cast',
                              {queue_event, QName, {Leader, timeout}}}),
