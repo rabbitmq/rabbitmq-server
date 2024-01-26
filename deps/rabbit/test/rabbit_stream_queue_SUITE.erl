@@ -190,13 +190,6 @@ init_per_group(cluster_size_3_parallel = Group, Config) ->
         _ ->
             init_per_group1(Group, Config)
     end;
-init_per_group(unclustered_size_3_4 = Group, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "not mixed versions compatible"};
-        _ ->
-            init_per_group1(Group, Config)
-    end;
 init_per_group(Group, Config) ->
     init_per_group1(Group, Config).
 
@@ -665,8 +658,12 @@ grow_then_shrink_coordinator_cluster(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
+    ok = rabbit_control_helper:command(stop_app, Server1),
     ok = rabbit_control_helper:command(join_cluster, Server1, [atom_to_list(Server0)], []),
+    ok = rabbit_control_helper:command(start_app, Server1),
+    ok = rabbit_control_helper:command(stop_app, Server2),
     ok = rabbit_control_helper:command(join_cluster, Server2, [atom_to_list(Server0)], []),
+    ok = rabbit_control_helper:command(start_app, Server2),
 
     rabbit_ct_helpers:await_condition(
       fun() ->
