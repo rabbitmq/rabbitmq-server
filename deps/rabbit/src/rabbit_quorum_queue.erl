@@ -1039,6 +1039,7 @@ status(Vhost, QueueName) ->
                           {<<"Term">>, Term},
                           {<<"Machine Version">>, MacVer}
                          ];
+<<<<<<< HEAD
                      {error, Err} ->
                          [{<<"Node Name">>, N},
                           {<<"Raft State">>, Err},
@@ -1048,6 +1049,45 @@ status(Vhost, QueueName) ->
                           {<<"Term">>, <<>>},
                           {<<"Machine Version">>, <<>>}
                          ]
+=======
+                     {error, _} ->
+                         %% try the old method
+                         case get_sys_status(ServerId) of
+                             {ok, Sys} ->
+                                 {_, M} = lists:keyfind(ra_server_state, 1, Sys),
+                                 {_, RaftState} = lists:keyfind(raft_state, 1, Sys),
+                                 #{commit_index := Commit,
+                                   machine_version := MacVer,
+                                   current_term := Term,
+                                   last_applied := LastApplied,
+                                   log := #{last_index := Last,
+                                            last_written_index_term := {LastWritten, _},
+                                            snapshot_index := SnapIdx}} = M,
+                                 [{<<"Node Name">>, N},
+                                  {<<"Raft State">>, RaftState},
+                                  {<<"Membership">>, voter},
+                                  {<<"Last Log Index">>, Last},
+                                  {<<"Last Written">>, LastWritten},
+                                  {<<"Last Applied">>, LastApplied},
+                                  {<<"Commit Index">>, Commit},
+                                  {<<"Snapshot Index">>, SnapIdx},
+                                  {<<"Term">>, Term},
+                                  {<<"Machine Version">>, MacVer}
+                                 ];
+                             {error, Err} ->
+                                 [{<<"Node Name">>, N},
+                                  {<<"Raft State">>, Err},
+                                  {<<"Membership">>, <<>>},
+                                  {<<"LastLog Index">>, <<>>},
+                                  {<<"Last Written">>, <<>>},
+                                  {<<"Last Applied">>, <<>>},
+                                  {<<"Commit Index">>, <<>>},
+                                  {<<"Snapshot Index">>, <<>>},
+                                  {<<"Term">>, <<>>},
+                                  {<<"Machine Version">>, <<>>}
+                                 ]
+                         end
+>>>>>>> 733d0048de (Fix error handling in rabbit_quorum_queue:status/2)
                  end
              end || N <- Nodes];
         {ok, _Q} ->
