@@ -462,10 +462,16 @@ find_queue_info(Config, Node, Keys) ->
 
 find_queue_info(Name, Config, Node, Keys) ->
     QName = rabbit_misc:r(<<"/">>, queue, Name),
-    Infos = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_amqqueue, info_all,
-                                             [<<"/">>, [name] ++ Keys]),
-    [Info] = [Props || Props <- Infos, lists:member({name, QName}, Props)],
-    Info.
+    rabbit_ct_broker_helpers:rpc(Config, Node, ?MODULE, find_queue_info_rpc,
+                                 [QName, [name | Keys]]).
+
+find_queue_info_rpc(QName, Infos) ->
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} ->
+            rabbit_amqqueue:info(Q, Infos);
+        _ ->
+            []
+    end.
 
 delete_queue(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
