@@ -540,6 +540,9 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "message_containers_SUITE",
     size = "medium",
+    additional_beam = [
+        ":test_queue_utils_beam",
+    ],
 )
 
 rabbitmq_integration_suite(
@@ -675,6 +678,9 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "queue_type_SUITE",
     size = "medium",
+    additional_beam = [
+        ":test_queue_utils_beam",
+    ],
 )
 
 rabbitmq_integration_suite(
@@ -829,7 +835,7 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_queue_utils_beam",
     ],
-    shard_count = 21,
+    shard_count = 22,
     deps = [
         "@proper//:erlang_app",
     ],

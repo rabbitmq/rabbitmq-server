@@ -295,10 +295,16 @@ members_using_mnesia() ->
     rabbit_mnesia:members().
 
 members_using_khepri() ->
-    case rabbit_khepri:locally_known_nodes() of
-        []      -> [node()];
-        Members -> Members
-    end.
+    %% This function returns the empty list when it encounters an error
+    %% trying to query khepri for it's members. As this function does not
+    %% return ok | error this is the only way for callers to detect this.
+    %% rabbit_mnesia:members/0 however _will_ still return at least the
+    %% current node making it impossible to detect the situation where
+    %% the current cluster members may not be correct. It is unlikely we
+    %% ever reach that as the mnesia cluster file probably always exists.
+    %% For khepri however it is a lot more likely to encounter an error
+    %% so we need to allow callers to be more defensive in this case.
+    rabbit_khepri:locally_known_nodes().
 
 -spec disc_members() -> Members when
       Members :: [node()].
