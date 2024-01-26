@@ -1101,7 +1101,7 @@ status(Vhost, QueueName) ->
                           {<<"Term">>, Term},
                           {<<"Machine Version">>, MacVer}
                          ];
-                     {error, Err} ->
+                     {error, _} ->
                          %% try the old method
                          case get_sys_status(ServerId) of
                              {ok, Sys} ->
