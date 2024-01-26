@@ -343,6 +343,7 @@ nodes_test(Config) ->
     assert_list([DiscNode], http_get(Config, "/nodes")),
     assert_list([DiscNode], http_get(Config, "/nodes", "monitor", "monitor", ?OK)),
     http_get(Config, "/nodes", "user", "user", ?NOT_AUTHORISED),
+    http_get(Config, "/nodes/does-not-exist", ?NOT_FOUND),
     [Node] = http_get(Config, "/nodes"),
     Path = "/nodes/" ++ binary_to_list(maps:get(name, Node)),
     assert_item(DiscNode, http_get(Config, Path, ?OK)),
