@@ -28,8 +28,8 @@ start_local_rabbitmq() {
   MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
   MOUNT_ADVANCED_CONFIG="/etc/rabbitmq/advanced.config"
 
-  RABBITMQ_TEST_DIR="${RABBITMQ_CONFIG_DIR}"
-  ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_RABBITMQ_CONF
+  RABBITMQ_TEST_DIR="${RABBITMQ_CONFIG_DIR}" ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_RABBITMQ_CONF
+
   print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_RABBITMQ_CONF"
   ${BIN_DIR}/gen-advanced-config ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_ADVANCED_CONFIG
   RESULT=$?
