@@ -7,9 +7,11 @@
 defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNewQuorumQueueReplicasHaveFinishedInitialSyncCommand do
   @moduledoc """
   Exits with a non-zero code if there are quorum queues
-  that run promotable replicas on the current node.
+  that run "non-voter" (not yet done with their initial sync, promotable to voters)
+  replicas on the current node.
 
-  This command is used to verify if a new cluster member has synchronized.
+  This command is used to verify if a new cluster node hosts only
+  fully synchronized.
   """
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
