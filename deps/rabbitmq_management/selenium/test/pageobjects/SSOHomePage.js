@@ -8,7 +8,7 @@ const OAUTH2_LOGIN_BUTTON = By.css('div#outer div#login button#login')
 const SELECT_RESOURCES = By.css('div#outer div#login select#oauth2-resource')
 const WARNING = By.css('div#outer div#login div#login-status p.warning')
 
-const SECTION_LOGIN_WITH_OAUTH = By.css('div#login-with-oauth2')
+const SECTION_LOGIN_WITH_OAUTH = By.css('div#outer div#login div#login-with-oauth2')
 const SECTION_LOGIN_WITH_BASIC_AUTH = By.css('div#login-with-basic-auth')
 const BASIC_AUTH_LOGIN_BUTTON = By.css('form#basic-auth-form input[type=submit]')
 
@@ -70,14 +70,15 @@ module.exports = class SSOHomePage extends BasePage {
 
   async isOAuth2SectionVisible() {
     try {
-      return Promise.resolve(this.isDiplayed(SECTION_LOGIN_WITH_OAUTH))
+      return Promise.resolve(this.isDisplayed(SECTION_LOGIN_WITH_OAUTH))
     } catch (e) {
+      console.log(e)
       return Promise.resolve(false)
     }
   }
   async isBasicAuthSectionVisible() {
     try {
-      return Promise.resolve(this.isDiplayed(SECTION_LOGIN_WITH_BASIC_AUTH))
+      return Promise.resolve(this.isDisplayed(SECTION_LOGIN_WITH_BASIC_AUTH))
     } catch (e) {
       return Promise.resolve(false)
     }

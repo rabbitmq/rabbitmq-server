@@ -8,6 +8,7 @@ authnz-mgt/oauth-with-keycloak.sh
 authnz-mgt/oauth-with-uaa-and-mgt-prefix.sh
 authnz-mgt/oauth-with-uaa-down.sh
 authnz-mgt/oauth-with-uaa.sh
+authnz-mgt/oauth-with-multi-oauth-plus-basic-auth.sh
 mgt/vhosts.sh
 mgt/definitions.sh
 mgt/exchanges.sh
