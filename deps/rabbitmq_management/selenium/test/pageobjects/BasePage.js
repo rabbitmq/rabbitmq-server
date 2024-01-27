@@ -133,7 +133,12 @@ module.exports = class BasePage {
   }
 
   async isDisplayed(locator) {
-    return this.driver.findElement(locator).isDisplayed()
+    try {
+      element = await this.driver.findElement(locator)
+      return Promise.resolve(element.isDisplayed())
+    }catch(e) {
+      return Promise.resolve(false)
+    }
   }
 
   async waitForLocated (locator) {

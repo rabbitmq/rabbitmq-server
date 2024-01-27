@@ -9,7 +9,7 @@ const SELECT_RESOURCES = By.css('div#outer div#login select#oauth2-resource')
 const WARNING = By.css('div#outer div#login div#login-status p.warning')
 
 const SECTION_LOGIN_WITH_OAUTH = By.css('div#outer div#login div#login-with-oauth2')
-const SECTION_LOGIN_WITH_BASIC_AUTH = By.css('div#login-with-basic-auth')
+const SECTION_LOGIN_WITH_BASIC_AUTH = By.css('div#outer div#login-status div#login-with-basic-auth')
 const BASIC_AUTH_LOGIN_BUTTON = By.css('form#basic-auth-form input[type=submit]')
 
 const BASIC_AUTH_LOGIN_FORM = By.css('form#basic-auth-form')
@@ -80,6 +80,7 @@ module.exports = class SSOHomePage extends BasePage {
     try {
       return Promise.resolve(this.isDisplayed(SECTION_LOGIN_WITH_BASIC_AUTH))
     } catch (e) {
+      console.log(e)
       return Promise.resolve(false)
     }
   }
