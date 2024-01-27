@@ -18,10 +18,16 @@ describe('A user which accesses any protected URL without a session where basic 
   })
 
   it('should be presented with a login button to log in using OAuth 2.0', async function () {
-    result = await homePage.isOAuth2SectionVisible()
-    console.log("result : " + result)
-    assert.ok(result)
+    assert.ok(await homePage.isOAuth2SectionVisible())
     assert.equal(await homePage.getLoginButton(), 'Click here to log in')
+  })
+
+  it('there should be two OAuth resources to choose from', async function () {
+    resources = await homePage.getOAuthResourceOptions()
+    assert.ok(resources.find((resource) =>
+      resource.value == "rabbit_dev" && resource.text == "RabbitMQ Development"))
+    assert.ok(resources.find((resource) =>
+      resource.value == "rabbit_prod" && resource.text == "RabbitMQ Production"))
   })
 
 
