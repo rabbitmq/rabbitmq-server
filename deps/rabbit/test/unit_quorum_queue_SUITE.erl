@@ -5,6 +5,7 @@
 all() ->
     [
      all_replica_states_includes_nonvoters,
+     filter_nonvoters,
      filter_quorum_critical_accounts_nonvoters
     ].
 
@@ -25,6 +26,24 @@ filter_quorum_critical_accounts_nonvoters(_Config) ->
     Qs = rabbit_quorum_queue:filter_quorum_critical(Qs, Ss, test@leader),
     [Q2] = rabbit_quorum_queue:filter_quorum_critical(Qs, Ss, test@follower1),
     [Q1] = rabbit_quorum_queue:filter_quorum_critical(Qs, Ss, test@follower2),
+    ok.
+
+filter_nonvoters(_Config) ->
+    Qs = [_, _, _, Q4] =
+           [amqqueue:new(rabbit_misc:r(<<"/">>, queue, <<"q1">>),
+                        {q1, test@leader},
+                        false, false, none, [], undefined, #{}),
+            amqqueue:new(rabbit_misc:r(<<"/">>, queue, <<"q2">>),
+                        {q2, test@leader},
+                        false, false, none, [], undefined, #{}),
+            amqqueue:new(rabbit_misc:r(<<"/">>, queue, <<"q3">>),
+                        {q3, test@leader},
+                        false, false, none, [], undefined, #{}),
+            amqqueue:new(rabbit_misc:r(<<"/">>, queue, <<"q4">>),
+                        {q4, test@leader},
+                        false, false, none, [], undefined, #{})],
+    Ss = #{q1 => leader, q2 => follower, q3 => non_voter, q4 => promotable},
+    [Q4] = rabbit_quorum_queue:filter_promotable(Qs, Ss),
     ok.
 
 all_replica_states_includes_nonvoters(_Config) ->
