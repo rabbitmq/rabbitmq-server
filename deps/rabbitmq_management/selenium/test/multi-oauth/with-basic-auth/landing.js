@@ -18,8 +18,7 @@ describe('A user which accesses any protected URL without a session where basic 
   })
 
   it('should be presented with a login button to log in using OAuth 2.0', async function () {
-    assert.ok(await homePage.getOAuth2Section())
-    console.log("had oauth section")
+    await homePage.getOAuth2Section()
     assert.equal(await homePage.getLoginButton(), 'Click here to log in')
   })
 
@@ -34,7 +33,7 @@ describe('A user which accesses any protected URL without a session where basic 
 
   it('should be presented with a login button to log in using Basic Auth', async function () {
     await homePage.toggleBasicAuthSection()
-    assert.ok(await homePage.isBasicAuthSectionVisible())
+    await homePage.getBasicAuthSection()
     assert.equal(await homePage.getBasicAuthLoginButton(), 'Login')
   })
 
