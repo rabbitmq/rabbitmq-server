@@ -133,12 +133,13 @@ module.exports = class BasePage {
   }
 
   async isDisplayed(locator) {
-    try {
-      element = await this.driver.findElement(locator)
-      return Promise.resolve(element.isDisplayed())
-    }catch(e) {
-      return Promise.resolve(false)
-    }
+      try {
+        return this.driver.wait(until.elementIsVisible(element), this.timeout / 2,
+          'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
+          this.polling / 2)
+      }catch(error) {
+          return Promise.resolve(false)
+      }
   }
 
   async waitForLocated (locator) {
@@ -162,6 +163,7 @@ module.exports = class BasePage {
       throw error
     }
   }
+
 
   async waitForDisplayed (locator) {
     return this.waitForVisible(await this.waitForLocated(locator))
