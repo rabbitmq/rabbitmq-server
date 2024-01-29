@@ -403,13 +403,13 @@ function update_warnings() {
     }
     var l1 = '<p class="warning">';
     if (needs_enable) {
-        l1 += '<span>&#9888;</span> All stable feature flags must be enabled after completing an upgrade. <a href="#/feature-flags">[Learn more]</a>';
+        l1 += '<span>&#9888;</span> All stable feature flags must be enabled after completing an upgrade. <a href="https://www.rabbitmq.com/feature-flags.html">[Learn more]</a>';
     }
     if (needs_deprecate) {
         if (needs_enable) {
             l1 += '<br/>'
         }
-        l1 += '<span>&#9888;</span> Deprecated features are being used. <a href="#/feature-flags">[Learn more]</a>'
+        l1 += '<span>&#9888;</span> Deprecated features are being used. <a href="https://www.rabbitmq.com/feature-flags.html">[Learn more]</a>'
     }
     l1 += '</p>';
     if (needs_enable || needs_deprecate) {
