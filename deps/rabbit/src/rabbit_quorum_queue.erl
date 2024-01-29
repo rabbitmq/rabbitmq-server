@@ -131,6 +131,7 @@
 -define(MEMBER_CHANGE_TIMEOUT, 20_000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
 % -define(UNLIMITED_PREFETCH_COUNT, 2000). %% something large for ra
+-define(MIN_CHECKPOINT_INTERVAL, 8192). %% the ra default is 16384
 
 %%----------- QQ policies ---------------------------------------------------
 
@@ -1777,9 +1778,14 @@ make_ra_conf(Q, ServerId, Membership) ->
                                       ?TICK_TIMEOUT),
     SnapshotInterval = application:get_env(rabbit, quorum_snapshot_interval,
                                            ?SNAPSHOT_INTERVAL),
-    make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership).
+    CheckpointInterval = application:get_env(rabbit,
+                                             quorum_min_checkpoint_interval,
+                                             ?MIN_CHECKPOINT_INTERVAL),
+    make_ra_conf(Q, ServerId, TickTimeout,
+                 SnapshotInterval, CheckpointInterval, Membership).
 
-make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership) ->
+make_ra_conf(Q, ServerId, TickTimeout,
+             SnapshotInterval, CheckpointInterval, Membership) ->
     QName = amqqueue:get_name(Q),
     RaMachine = ra_machine(Q),
     [{ClusterName, _} | _] = Members = members(Q),
@@ -1794,7 +1800,9 @@ make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership) ->
                                   metrics_key => QName,
                                   initial_members => Members,
                                   log_init_args => #{uid => UId,
-                                                     snapshot_interval => SnapshotInterval},
+                                                     snapshot_interval => SnapshotInterval,
+                                                     min_checkpoint_interval =>
+                                                     CheckpointInterval},
                                   tick_timeout => TickTimeout,
                                   machine => RaMachine,
                                   ra_event_formatter => Formatter}).
