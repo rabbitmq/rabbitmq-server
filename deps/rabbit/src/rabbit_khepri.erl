@@ -276,7 +276,7 @@ wait_for_leader(Timeout, Retries) ->
     rabbit_log:info("Waiting for Khepri leader for ~tp ms, ~tp retries left",
                     [Timeout, Retries - 1]),
     Options = #{timeout => Timeout,
-                favor => compromise},
+                favor => low_latency},
     case khepri:exists(?STORE_ID, [], Options) of
         Exists when is_boolean(Exists) ->
             rabbit_log:info("Khepri leader elected"),
@@ -858,20 +858,24 @@ cas(Path, Pattern, Data) ->
       ?STORE_ID, Path, Pattern, Data, ?DEFAULT_COMMAND_OPTIONS).
 
 fold(Path, Pred, Acc) ->
-    khepri:fold(?STORE_ID, Path, Pred, Acc).
+    khepri:fold(?STORE_ID, Path, Pred, Acc, #{favor => low_latency}).
 
 fold(Path, Pred, Acc, Options) ->
-    khepri:fold(?STORE_ID, Path, Pred, Acc, Options).
+    Options1 = Options#{favor => low_latency},
+    khepri:fold(?STORE_ID, Path, Pred, Acc, Options1).
 
-foreach(Path, Pred) -> khepri:foreach(?STORE_ID, Path, Pred).
+foreach(Path, Pred) ->
+    khepri:foreach(?STORE_ID, Path, Pred, #{favor => low_latency}).
 
-filter(Path, Pred) -> khepri:filter(?STORE_ID, Path, Pred).
+filter(Path, Pred) ->
+    khepri:filter(?STORE_ID, Path, Pred, #{favor => low_latency}).
 
 get(Path) ->
     khepri:get(?STORE_ID, Path, #{favor => low_latency}).
 
 get(Path, Options) ->
-    khepri:get(?STORE_ID, Path, Options).
+    Options1 = Options#{favor => low_latency},
+    khepri:get(?STORE_ID, Path, Options1).
 
 get_many(PathPattern) ->
     khepri:get_many(?STORE_ID, PathPattern, #{favor => low_latency}).
@@ -882,14 +886,19 @@ adv_get(Path) ->
 match(Path) ->
     match(Path, #{}).
 
-match(Path, Options) -> khepri:get_many(?STORE_ID, Path, Options).
+match(Path, Options) ->
+    Options1 = Options#{favor => low_latency},
+    khepri:get_many(?STORE_ID, Path, Options1).
 
 exists(Path) -> khepri:exists(?STORE_ID, Path, #{favor => low_latency}).
 
-list(Path) -> khepri:get_many(?STORE_ID, Path ++ [?KHEPRI_WILDCARD_STAR]).
+list(Path) ->
+    khepri:get_many(
+      ?STORE_ID, Path ++ [?KHEPRI_WILDCARD_STAR], #{favor => low_latency}).
 
 list_child_nodes(Path) ->
-    Options = #{props_to_return => [child_names]},
+    Options = #{props_to_return => [child_names],
+                favor => low_latency},
     case khepri_adv:get_many(?STORE_ID, Path, Options) of
         {ok, Result} ->
             case maps:values(Result) of
@@ -903,7 +912,8 @@ list_child_nodes(Path) ->
     end.
 
 count_children(Path) ->
-    Options = #{props_to_return => [child_list_length]},
+    Options = #{props_to_return => [child_list_length],
+               favor => low_latency},
     case khepri_adv:get_many(?STORE_ID, Path, Options) of
         {ok, Map} ->
             lists:sum([L || #{child_list_length := L} <- maps:values(Map)]);
