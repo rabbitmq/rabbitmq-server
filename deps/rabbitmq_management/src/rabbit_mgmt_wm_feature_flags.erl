@@ -36,8 +36,7 @@ to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply_list(feature_flags(), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
-    {Res, Req2, Context2} = rabbit_mgmt_util:is_authorized_admin(ReqData, Context),
-    {Res, Req2, Context2}.
+    rabbit_mgmt_util:is_authorized(ReqData, Context).
 
 %%--------------------------------------------------------------------
 
