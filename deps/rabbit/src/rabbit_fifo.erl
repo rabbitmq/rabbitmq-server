@@ -71,7 +71,6 @@
          is_v4/0,
 
          %% misc
-         dehydrate_state/1,
          normalize/1,
          get_msg_header/1,
          get_header/2,
@@ -321,10 +320,9 @@ apply(#{index := Idx} = Meta,
                                                                Messages),
                                    enqueue_count = EnqCount + 1},
             State2 = update_or_remove_con(Meta, ConsumerKey, Con, State1),
-            {State, Ret, Effs} = checkout(Meta, State0, State2, []),
-            update_smallest_raft_index(Idx, Ret,
-                                       maybe_store_release_cursor(Idx,  State),
-                                       Effs);
+            {State3, Ret, Effs0} = checkout(Meta, State0, State2, []),
+            {State, Effs} = maybe_checkpoint(Idx, State3, Effs0),
+            update_smallest_raft_index(Idx, Ret, State, Effs);
         _ ->
             {State00, ok, []}
     end;
@@ -1606,8 +1604,9 @@ apply_enqueue(#{index := RaftIdx,
               Seq, RawMsg, Size, State0) ->
     case maybe_enqueue(RaftIdx, Ts, From, Seq, RawMsg, Size, [], State0) of
         {ok, State1, Effects1} ->
-            {State, ok, Effects} = checkout(Meta, State0, State1, Effects1),
-            {maybe_store_release_cursor(RaftIdx, State), ok, Effects};
+            {State2, ok, Effects2} = checkout(Meta, State0, State1, Effects1),
+            {State, Effects} = maybe_checkpoint(RaftIdx, State2, Effects2),
+            {State, ok, Effects};
         {out_of_sequence, State, Effects} ->
             {State, not_enqueued, Effects};
         {duplicate, State, Effects} ->
@@ -1656,16 +1655,15 @@ update_expiry_header(RaCmdTs, TTL, Header) ->
 update_expiry_header(ExpiryTs, Header) ->
     update_header(expiry, fun(Ts) -> Ts end, ExpiryTs, Header).
 
-maybe_store_release_cursor(RaftIdx,
-                           #?STATE{cfg = #cfg{release_cursor_interval =
-                                              {Base, C}} = Cfg,
-                                   enqueue_count = EC,
-                                   release_cursors = Cursors0} = State0)
+maybe_checkpoint(RaftIdx,
+                 #?STATE{cfg = #cfg{release_cursor_interval = {Base, C}} = Cfg,
+                         enqueue_count = EC} = State0,
+                 Effects0)
   when EC >= C ->
     case messages_total(State0) of
         0 ->
             %% message must have been immediately dropped
-            State0#?STATE{enqueue_count = 0};
+            {State0#?STATE{enqueue_count = 0}, Effects0};
         Total ->
             Interval = case Base of
                            0 -> 0;
@@ -1674,14 +1672,11 @@ maybe_store_release_cursor(RaftIdx,
                        end,
             State = State0#?STATE{cfg = Cfg#cfg{release_cursor_interval =
                                                  {Base, Interval}}},
-            Dehydrated = dehydrate_state(State),
-            Cursor = {release_cursor, RaftIdx, Dehydrated},
-            Cursors = lqueue:in(Cursor, Cursors0),
-            State#?STATE{enqueue_count = 0,
-                         release_cursors = Cursors}
+            Effects = Effects0 ++ [{checkpoint, RaftIdx, State}],
+            {State#?STATE{enqueue_count = 0}, Effects}
     end;
-maybe_store_release_cursor(_RaftIdx, State) ->
-    State.
+maybe_checkpoint(_RaftIdx, State, Effects) ->
+    {State, Effects}.
 
 maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg,
               {_MetaSize, BodySize},
@@ -1853,10 +1848,8 @@ update_smallest_raft_index(Idx, State, Effects) ->
     update_smallest_raft_index(Idx, ok, State, Effects).
 
 update_smallest_raft_index(IncomingRaftIdx, Reply,
-                           #?STATE{cfg = Cfg,
-                                   release_cursors = Cursors0} = State0,
-                           Effects) ->
-    % Total = messages_total(State0),
+                           #?STATE{cfg = Cfg} = State0,
+                           Effects0) ->
     %% TODO: optimise
     case smallest_raft_index(State0) of
         undefined ->
@@ -1867,35 +1860,15 @@ update_smallest_raft_index(IncomingRaftIdx, Reply,
             #cfg{release_cursor_interval = {Base, _}} = Cfg,
             RCI = {Base, Base},
             State = State0#?STATE{cfg = Cfg#cfg{release_cursor_interval = RCI},
-                                  release_cursors = lqueue:new(),
                                   enqueue_count = 0},
-            {State, Reply, Effects ++ [{release_cursor, IncomingRaftIdx, State}]};
-        % undefined ->
-        %     {State0, Reply, Effects};
+            Effects = Effects0 ++ [{release_cursor, IncomingRaftIdx, State}],
+            {State, Reply, Effects};
         Smallest when is_integer(Smallest) ->
-            case find_next_cursor(Smallest, Cursors0) of
-                empty ->
-                    {State0, Reply, Effects};
-                {Cursor, Cursors} ->
-                    %% we can emit a release cursor when we've passed the smallest
-                    %% release cursor available.
-                    {State0#?STATE{release_cursors = Cursors}, Reply,
-                     Effects ++ [Cursor]}
-            end
-    end.
-
-find_next_cursor(Idx, Cursors) ->
-    find_next_cursor(Idx, Cursors, empty).
-
-find_next_cursor(Smallest, Cursors0, Potential) ->
-    case lqueue:out(Cursors0) of
-        {{value, {_, Idx, _} = Cursor}, Cursors} when Idx < Smallest ->
-            %% we found one but it may not be the largest one
-            find_next_cursor(Smallest, Cursors, Cursor);
-        _ when Potential == empty ->
-            empty;
-        _ ->
-            {Potential, Cursors0}
+            %% Promote a checkpoint smaller than `Smallest'. `Smallest' is the
+            %% oldest message that must remain in the log, so we can only
+            %% promote an existing checkpoint smaller than `Smallest'.
+            Effects = Effects0 ++ [{release_cursor, Smallest - 1}],
+            {State0, Reply, Effects}
     end.
 
 update_msg_header(Key, Fun, Def, ?MSG(Idx, Header)) ->
@@ -2425,17 +2398,6 @@ included_credit({credited, _}) ->
     0;
 included_credit(credited) ->
     0.
-%% creates a dehydrated version of the current state to be cached and
-%% potentially used to for a snaphot at a later point
-dehydrate_state(#?STATE{cfg = #cfg{},
-                         dlx = DlxState} = State) ->
-    % no messages are kept in memory, no need to
-    % overly mutate the current state apart from removing indexes and cursors
-    State#?STATE{ra_indexes = rabbit_fifo_index:empty(),
-                  release_cursors = lqueue:new(),
-                  enqueue_count = 0,
-                  msg_cache = undefined,
-                  dlx = rabbit_fifo_dlx:dehydrate(DlxState)}.
 
 %% make the state suitable for equality comparison
 normalize(#?STATE{ra_indexes = _Indexes,

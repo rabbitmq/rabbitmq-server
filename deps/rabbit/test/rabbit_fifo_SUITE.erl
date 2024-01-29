@@ -441,7 +441,7 @@ checkout_enq_settle_test(Config) ->
     {_, Effects} = settle(Config, CKey, 4, NextMsgId, State3),
     % the release cursor is the smallest raft index that does not
     % contribute to the state of the application
-    ?ASSERT_EFF({release_cursor, 2, _}, Effects),
+    ?ASSERT_EFF({release_cursor, 2}, Effects),
     ok.
 
 duplicate_enqueue_test(Config) ->
@@ -2546,7 +2546,7 @@ expire_message_should_emit_release_cursor_test(Config) ->
     {_S, ok, Effs} = apply(meta(Config, ?LINE, 101, {notify, 2, self()}),
                            rabbit_fifo:make_enqueue(self(), 2, Msg),
                            S1),
-    ?ASSERT_EFF({release_cursor, _, _}, Effs),
+    ?ASSERT_EFF({release_cursor, _}, Effs),
     ok.
 
 header_test(_) ->
