@@ -131,6 +131,22 @@ module.exports = class BasePage {
     }
     return table_model
   }
+  async isPopupWarningDisplayed() {
+    let element = "form-popup-warn"
+    return this.driver.wait(until.elementIsVisible(element), this.timeout / 2,
+      'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
+      this.polling / 2).then(function onWarningVisible(e) {
+          return Promise.resolve(true)
+      }, function onError(e) {
+          return Promise.resolve(false)
+      })
+  }
+  async getPopupWarning() {
+    let element = "form-popup-warn"
+    return this.driver.wait(until.elementIsVisible(element), this.timeout,
+      'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
+      this.polling)
+  }
 
   async isDisplayed(locator) {
       try {
