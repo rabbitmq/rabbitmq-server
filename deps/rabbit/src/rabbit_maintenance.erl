@@ -9,6 +9,13 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+%% FIXME: Ra consistent queries are currently fragile in the sense that the
+%% query function may run on a remote node and the function reference or MFA
+%% may not be valid on that node. That's why consistent queries in this module
+%% are in fact local queries when Khepri is enabled.
+%%
+%% See `rabbit_db_maintenance:get_consistent_in_khepri/1'.
+
 -export([
     is_enabled/0,
     drain/0,
