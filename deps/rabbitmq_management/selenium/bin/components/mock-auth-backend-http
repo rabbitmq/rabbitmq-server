@@ -1,4 +1,4 @@
-
+#!/usr/bin/env bash
 
 init_mock-auth-backend-http() {
   AUTH_BACKEND_HTTP_BASEURL=${AUTH_BACKEND_HTTP_BASEURL:-http://localhost:8888}
@@ -19,7 +19,7 @@ start_mock-auth-backend-http() {
     --name mock-auth-backend-http \
     --net ${DOCKER_NETWORK} \
     --publish 8888:1080 \
-    --env MOCKSERVER_INITIALIZATION_JSON_PATH="/config/expectationInitialiser.json" \
+    --env MOCKSERVER_INITIALIZATION_JSON_PATH="/config/defaultExpectations.json" \
     -v ${AUTH_BACKEND_HTTP_DIR}:/config \
     mockserver/mockserver
 

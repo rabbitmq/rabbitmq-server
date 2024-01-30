@@ -1,4 +1,4 @@
-
+#!/usr/bin/env bash
 
 init_mock-auth-backend-ldap() {
   AUTH_BACKEND_LDAP_DIR=${TEST_CONFIG_DIR}/mock-auth-backend-ldap
