@@ -1,7 +1,6 @@
 const assert = require('assert')
-const { getURLForProtocol, tokenFor } = require('../utils')
+const { getURLForProtocol, tokenFor, openIdConfiguration } = require('../utils')
 const { reset, expectUser, expectVhost, expectResource, allow, verifyAll } = require('../mock_http_backend')
-const { token } = require('../oauth_provider')
 const {execSync} = require('child_process')
 
 const profiles = process.env.PROFILES || ""
@@ -29,13 +28,16 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
       let oauthProviderUrl = process.env.OAUTH_PROVIDER_URL
       let oauthClientId = process.env.OAUTH_CLIENT_ID
       let oauthClientSecret = process.env.OAUTH_CLIENT_SECRET
-      password = tokenFor(oauthClientId, oauthClientSecret, oauthProviderUrl)
+      console.log("oauthProviderUrl  : " + oauthProviderUrl)
+      let openIdConfig = openIdConfiguration(oauthProviderUrl)
+      console.log("Obtained token_endpoint : " + openIdConfig.token_endpoint)
+      password = tokenFor(oauthClientId, oauthClientSecret, openIdConfig.token_endpoint)
       console.log("Obtained access token : " + password)
     }
   })
 
   it('can open an AMQP 1.0 connection', function () {
-    execSync("npm run amqp10_roundtriptest")
+    execSync("npm run amqp10_roundtriptest -- " + username + " " + password)
 
   })
 

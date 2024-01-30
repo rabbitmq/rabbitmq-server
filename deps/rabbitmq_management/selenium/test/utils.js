@@ -104,6 +104,16 @@ module.exports = {
       default: new Error("Unsupported ipd " + preferredIdp)
     }
   },
+  openIdConfiguration: (url) => {
+    const req = new XMLHttpRequest()
+    req.open('GET', url + "/.well-known/openid-configuration", false)
+    req.send()
+    if (req.status == 200) return JSON.parse(req.responseText)
+    else {
+      console.error(req.responseText)
+      throw new Error(req.responseText)
+    }
+  },
 
   tokenFor: (client_id, client_secret, url = uaaUrl) => {
     const req = new XMLHttpRequest()
