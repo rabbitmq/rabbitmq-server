@@ -1,4 +1,4 @@
-name: Test Authentication/Authorization backends
+name: Test Authentication/Authorization backends via mutiple messaging protocols
 on:
   push:
     branches:
