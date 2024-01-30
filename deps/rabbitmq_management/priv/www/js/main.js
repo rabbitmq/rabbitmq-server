@@ -389,30 +389,30 @@ function update_navigation() {
 
 function update_warnings() {
     feature_flags = JSON.parse(sync_get('/feature-flags'));
-    var needs_enable = false;
+    var needs_enabling = false;
     for (var i = 0; i < feature_flags.length; i++) {
          var feature_flag = feature_flags[i];
          if (feature_flag.state == "disabled" && feature_flag.stability != "experimental") {
-             needs_enable = true;
+             needs_enabling = true;
          }
     }
     deprecated_features = JSON.parse(sync_get('/deprecated-features/used'));
-    var needs_deprecate = false;
+    var needs_deprecating = false;
     if (deprecated_features.length > 0) {
-        needs_deprecate = true;
+        needs_deprecating = true;
     }
     var l1 = '<p class="warning">';
-    if (needs_enable) {
-        l1 += '<span>&#9888;</span> All stable feature flags must be enabled after completing an upgrade. <a href="#/feature-flags">[Learn more]</a>';
+    if (needs_enabling) {
+        l1 += '<span>&#9888;</span> All stable feature flags must be enabled after completing an upgrade. <a href="https://www.rabbitmq.com/feature-flags.html">[Learn more]</a>';
     }
-    if (needs_deprecate) {
-        if (needs_enable) {
+    if (needs_deprecating) {
+        if (needs_enabling) {
             l1 += '<br/>'
         }
-        l1 += '<span>&#9888;</span> Deprecated features are being used. <a href="#/feature-flags">[Learn more]</a>'
+        l1 += '<span>&#9888;</span> Deprecated features are being used. <a href="https://www.rabbitmq.com/feature-flags.html">[Learn more]</a>'
     }
     l1 += '</p>';
-    if (needs_enable || needs_deprecate) {
+    if (needs_enabling || needs_deprecating) {
       $('#main').addClass('with-warnings');
       $('#rhs').addClass('with-warnings');
       replace_content('warnings', l1);
