@@ -295,8 +295,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "khepri",
     build_file = "@rabbitmq-server//bazel:BUILD.khepri",
-    sha256 = "da618ec76abd188620c8fbdc16cb8eb94b09055a657c488da7fab160d49abcbe",
-    version = "0.10.1",
+    sha256 = "0f90ad4d163493abf8bc03ab161a8c65795fe5578fe16a5a1d27846185e68aaf",
+    version = "0.11.0",
 )
 
 erlang_package.git_package(

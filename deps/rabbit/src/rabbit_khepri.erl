@@ -524,9 +524,14 @@ ensure_ra_system_started() ->
 %% cluster.
 %%
 %% The membership is as it is known to the Ra leader in the cluster.
+%%
+%% The returned list is empty if there was an error.
 
 members() ->
-    khepri_cluster:members(?RA_CLUSTER_NAME).
+    case khepri_cluster:members(?RA_CLUSTER_NAME) of
+        {ok, Members}    -> Members;
+        {error, _Reason} -> []
+    end.
 
 -spec locally_known_members() -> Members when
       Members :: [ra:server_id()].
@@ -536,18 +541,28 @@ members() ->
 %% The membership is as it is known to the local Ra server and may be
 %% inconsistent compared to the "official" membership as seen by the Ra
 %% leader.
+%%
+%% The returned list is empty if there was an error.
 
 locally_known_members() ->
-    khepri_cluster:locally_known_members(?RA_CLUSTER_NAME).
+    case khepri_cluster:locally_known_members(?RA_CLUSTER_NAME) of
+        {ok, Members}    -> Members;
+        {error, _Reason} -> []
+    end.
 
 -spec nodes() -> Nodes when
       Nodes :: [node()].
 %% @doc Returns the list of Erlang nodes that are part of the cluster.
 %%
 %% The membership is as it is known to the Ra leader in the cluster.
+%%
+%% The returned list is empty if there was an error.
 
 nodes() ->
-    khepri_cluster:nodes(?RA_CLUSTER_NAME).
+    case khepri_cluster:nodes(?RA_CLUSTER_NAME) of
+        {ok, Nodes}      -> Nodes;
+        {error, _Reason} -> []
+    end.
 
 -spec locally_known_nodes() -> Nodes when
       Nodes :: [node()].
@@ -556,9 +571,14 @@ nodes() ->
 %% The membership is as it is known to the local Ra server and may be
 %% inconsistent compared to the "official" membership as seen by the Ra
 %% leader.
+%%
+%% The returned list is empty if there was an error.
 
 locally_known_nodes() ->
-    khepri_cluster:locally_known_nodes(?RA_CLUSTER_NAME).
+    case khepri_cluster:locally_known_nodes(?RA_CLUSTER_NAME) of
+        {ok, Nodes}      -> Nodes;
+        {error, _Reason} -> []
+    end.
 
 -spec get_ra_cluster_name() -> RaClusterName when
       RaClusterName :: ra:cluster_name().
