@@ -1,6 +1,7 @@
 const assert = require('assert')
-const { getURLForProtocol, tokenFor } = require('../utils')
+const { getURLForProtocol, tokenFor, openIdConfiguration } = require('../utils')
 const { reset, expectUser, expectVhost, expectResource, allow, verifyAll } = require('../mock_http_backend')
+const mqtt = require('mqtt');
 
 const profiles = process.env.PROFILES || ""
 var backends = ""
@@ -28,7 +29,9 @@ describe('Having MQTT protocol enbled and the following auth_backends: ' + backe
       let oauthProviderUrl = process.env.OAUTH_PROVIDER_URL
       let oauthClientId = process.env.OAUTH_CLIENT_ID
       let oauthClientSecret = process.env.OAUTH_CLIENT_SECRET
-      password = tokenFor(oauthClientId, oauthClientSecret, oauthProviderUrl)
+      let openIdConfig = openIdConfiguration(oauthProviderUrl)
+      console.log("Obtained token_endpoint : " + openIdConfig.token_endpoint)
+      password = tokenFor(oauthClientId, oauthClientSecret, openIdConfig.token_endpoint)
       console.log("Obtained access token : " + password)
     }
     mqttOptions = {

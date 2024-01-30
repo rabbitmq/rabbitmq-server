@@ -236,6 +236,7 @@ wait_for_url_docker() {
   done
 }
 
+
 test() {
   kill_container_if_exist mocha
   begin "Running tests with env variables:"
@@ -258,6 +259,10 @@ test() {
   print "> FAKEPORTAL_URL: ${FAKEPORTAL_URL}"
   mocha_test_tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))
 
+  print "> OAUTH_NODE_EXTRA_CA_CERTS: ${OAUTH_NODE_EXTRA_CA_CERTS}"
+  MOUNT_NODE_EXTRA_CA_CERTS=${TEST_DIR}/${OAUTH_NODE_EXTRA_CA_CERTS}
+  print "> MOUNT_NODE_EXTRA_CA_CERTS: ${MOUNT_NODE_EXTRA_CA_CERTS}"
+
   docker run \
     --rm \
     --name mocha \
@@ -271,6 +276,8 @@ test() {
     --env SELENIUM_POLLING=${SELENIUM_POLLING} \
     --env PROFILES="${PROFILES}" \
     --env ENV_FILE="/code/.env" \
+    --env NODE_EXTRA_CA_CERTS=/nodejs/ca.pem \
+    -v ${MOUNT_NODE_EXTRA_CA_CERTS}:/nodejs/ca.pem \
     -v ${TEST_DIR}:/code/test \
     -v ${SCREENS}:/screens \
     -v ${ENV_FILE}:/code/.env \
@@ -419,12 +426,16 @@ test_local() {
   print "> RABBITMQ_URL: ${RABBITMQ_URL}"
   print "> UAA_URL: ${UAA_URL}"
   print "> FAKE_PORTAL_URL: ${FAKE_PORTAL_URL}"
+  print "> OAUTH_NODE_EXTRA_CA_CERTS: ${OAUTH_NODE_EXTRA_CA_CERTS}"
+  MOUNT_NODE_EXTRA_CA_CERTS=${TEST_DIR}/${OAUTH_NODE_EXTRA_CA_CERTS}
+  print "> MOUNT_NODE_EXTRA_CA_CERTS: ${MOUNT_NODE_EXTRA_CA_CERTS}"
 
   export RUN_LOCAL=true
   export SCREENSHOTS_DIR=${SCREENS}
 
   export PROFILES
   export ENV_FILE
+  export NODE_EXTRA_CA_CERTS=$MOUNT_NODE_EXTRA_CA_CERTS
   npm test $TEST_CASES_DIR/$1
 
 }
