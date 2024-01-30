@@ -1,11 +1,11 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown } = require('../../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, assertAllOptions } = require('../../utils')
 
 const SSOHomePage = require('../../pageobjects/SSOHomePage')
 
-describe('A user which accesses any protected URL without a session where basic auth is enabled', function () {
+describe('Given two oauth resources and basic auth enabled, an unauthenticated user', function () {
   let homePage
   let captureScreen
 
@@ -24,10 +24,10 @@ describe('A user which accesses any protected URL without a session where basic 
 
   it('there should be two OAuth resources to choose from', async function () {
     resources = await homePage.getOAuthResourceOptions()
-    assert.ok(resources.find((resource) =>
-      resource.value == "rabbit_dev" && resource.text == "RabbitMQ Development"))
-    assert.ok(resources.find((resource) =>
-      resource.value == "rabbit_prod" && resource.text == "RabbitMQ Production"))
+    assertAllOptions([
+      { value : "rabbit_dev", text : "RabbitMQ Development" },
+      { value : "rabbit_prod", text : "RabbitMQ Production" }
+      ], resources)
   })
 
 
