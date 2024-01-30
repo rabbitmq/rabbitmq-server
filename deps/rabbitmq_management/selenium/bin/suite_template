@@ -215,7 +215,7 @@ wait_for_url_local() {
   counter=0
   until (curl -L -f -v $url >/dev/null 2>&1)
   do
-    print "Waiting for $url to start"
+    print "Waiting for $url to start (local)"
     sleep 5
     [[ counter -eq $max_retry ]] && print "Failed!" && exit 1
     print "Trying again. Try #$counter"
@@ -228,7 +228,7 @@ wait_for_url_docker() {
   counter=0
   until (docker run --net ${DOCKER_NETWORK} --rm curlimages/curl:7.85.0 -L -f -v $url >/dev/null 2>&1)
   do
-    print "Waiting for $url to start"
+    print "Waiting for $url to start (docker)"
     sleep 5
     [[ counter -eq $max_retry ]] && print "Failed!" && exit 1
     print "Trying again. Try #$counter"
