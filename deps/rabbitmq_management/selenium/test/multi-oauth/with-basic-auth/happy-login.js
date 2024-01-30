@@ -6,7 +6,7 @@ const { buildDriver, goToHome, captureScreensFor, teardown, idpLoginPage } = req
 const SSOHomePage = require('../../pageobjects/SSOHomePage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
 
-describe('An user with administrator tag', function () {
+describe('Given two oauth resources and basic auth enabled', function () {
   let homePage
   let idpLogin
   let overview
@@ -21,17 +21,7 @@ describe('An user with administrator tag', function () {
     captureScreen = captureScreensFor(driver, __filename)
   })
 
-  it('can log in with RabbitMQ Development OAuth 2.0 resource', async function () {
-    await homePage.chooseOauthResource("RabbitMQ Development")
-    await homePage.clickToLogin()
-    await idpLogin.login('dev_user', 'dev_user')
-    if (!await overview.isLoaded()) {
-      throw new Error('Failed to login')
-    }
-    await overview.logout()
-  })
-/*
-  it('can log in with Basic Auth', async function () {
+  it('guest registered in internal db can log in with Basic Auth', async function () {
     await homePage.toggleBasicAuthSection()
     await homePage.basicAuthLogin('guest', 'guest')
     if (!await overview.isLoaded()) {
@@ -39,7 +29,7 @@ describe('An user with administrator tag', function () {
     }
     await overview.logout()
   })
-*/
+
   after(async function () {
     await teardown(driver, this, captureScreen)
   })

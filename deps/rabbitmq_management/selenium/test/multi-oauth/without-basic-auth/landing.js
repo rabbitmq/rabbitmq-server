@@ -1,11 +1,12 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown } = require('../../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, assertAllOptions } = require('../../utils')
 
 const SSOHomePage = require('../../pageobjects/SSOHomePage')
 
-describe('A user which accesses any protected URL without a session where basic auth is disabled', function () {
+
+describe('Given three oauth resources but only two enabled, an unauthenticated user', function () {
   let homePage
   let captureScreen
 
@@ -17,13 +18,25 @@ describe('A user which accesses any protected URL without a session where basic 
     await homePage.isLoaded()
   })
 
+  it('should be presented with a login button to log in using OAuth 2.0', async function () {
+    await homePage.getOAuth2Section()
+    assert.equal(await homePage.getLoginButton(), 'Click here to log in')
+  })
+
+  it('there should be two OAuth resources to choose from', async function () {
+    resources = await homePage.getOAuthResourceOptions()
+    assertAllOptions([
+      { value : "rabbit_dev", text : "RabbitMQ Development" },
+      { value : "rabbit_prod", text : "RabbitMQ Production" }
+      ], resources)
+  })
+
   it('should not be presented with a login button to log in using Basic Auth', async function () {
     assert.ok(!await homePage.isBasicAuthSectionVisible())
   })
 
   it('should not have a warning message', async function () {
-    const visible = await homePage.isWarningVisible()
-    assert.ok(!visible)
+    assert.ok(!await homePage.isWarningVisible())
   })
 
 

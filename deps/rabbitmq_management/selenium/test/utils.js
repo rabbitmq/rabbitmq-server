@@ -6,6 +6,7 @@ const { By, Key, until, Builder, logging, Capabilities } = require('selenium-web
 require('chromedriver')
 const UAALoginPage = require('./pageobjects/UAALoginPage')
 const KeycloakLoginPage = require('./pageobjects/KeycloakLoginPage')
+const assert = require('assert')
 
 const uaaUrl = process.env.UAA_URL || 'http://localhost:8080'
 const baseUrl = process.env.RABBITMQ_URL || 'http://localhost:15672/'
@@ -121,6 +122,15 @@ module.exports = {
     else {
       console.error(req.responseText)
       throw new Error(req.responseText)
+    }
+  },
+
+  assertAllOptions: (expectedOptions, actualOptions) => {
+    assert.equal(expectedOptions.length, actualOptions.length)
+    for (let i = 0; i < expectedOptions.length; i++) {
+      assert.ok(actualOptions.find((actualOption) =>
+        actualOption.value == expectedOptions[i].value
+          && actualOption.text == expectedOptions[i].text))
     }
   },
 
