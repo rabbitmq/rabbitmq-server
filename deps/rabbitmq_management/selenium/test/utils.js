@@ -105,9 +105,8 @@ module.exports = {
     }
   },
 
-  tokenFor: (client_id, client_secret) => {
+  tokenFor: (client_id, client_secret, url = uaaUrl) => {
     const req = new XMLHttpRequest()
-    const url = uaaUrl + '/oauth/token'
     const params = 'client_id=' + client_id +
       '&client_secret=' + client_secret +
       '&grant_type=client_credentials' +
