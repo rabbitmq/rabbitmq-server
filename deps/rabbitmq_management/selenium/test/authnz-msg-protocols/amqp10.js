@@ -1,6 +1,7 @@
 const assert = require('assert')
-const { getURLForProtocol } = require('../utils')
+const { getURLForProtocol, tokenFor } = require('../utils')
 const { reset, expectUser, expectVhost, expectResource, allow, verifyAll } = require('../mock_http_backend')
+const { token } = require('../oauth_provider')
 const {execSync} = require('child_process')
 
 const profiles = process.env.PROFILES || ""
@@ -24,6 +25,12 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
       expectations.push(expectResource({ "username": username, "vhost": "/", "resource": "queue", "name": "my-queue", "permission":"configure", "tags":""}, "allow"))
       expectations.push(expectResource({ "username": username, "vhost": "/", "resource": "queue", "name": "my-queue", "permission":"read", "tags":""}, "allow"))
       expectations.push(expectResource({ "username": username, "vhost": "/", "resource": "exchange", "name": "amq.default", "permission":"write", "tags":""}, "allow"))
+    }else if (backends.includes("oauth") && username.includes("oauth")) {
+      let oauthProviderUrl = process.env.OAUTH_PROVIDER_URL
+      let oauthClientId = process.env.OAUTH_CLIENT_ID
+      let oauthClientSecret = process.env.OAUTH_CLIENT_SECRET
+      password = tokenFor(oauthClientId, oauthClientSecret, oauthProviderUrl)
+      console.log("Obtained access token : " + password)
     }
   })
 

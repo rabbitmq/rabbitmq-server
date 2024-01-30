@@ -1,7 +1,6 @@
 const assert = require('assert')
-const { getURLForProtocol } = require('../utils')
+const { getURLForProtocol, tokenFor } = require('../utils')
 const { reset, expectUser, expectVhost, expectResource, allow, verifyAll } = require('../mock_http_backend')
-const mqtt    = require('mqtt');
 
 const profiles = process.env.PROFILES || ""
 var backends = ""
@@ -20,6 +19,18 @@ describe('Having MQTT protocol enbled and the following auth_backends: ' + backe
   let password = process.env.RABBITMQ_AMQP_PASSWORD
 
   before(function () {
+    if (backends.includes("http") && username.includes("http")) {
+      reset()
+      expectations.push(expectUser({ "username": username, "password": password, "client_id": client_id, "vhost": "/" }, "allow"))
+      expectations.push(expectVhost({ "username": username, "vhost": "/"}, "allow"))
+      expectations.push(expectResource({ "username": username, "vhost": "/", "resource": "queue", "name": "mqtt-will-selenium-client", "permission":"configure", "tags":"", "client_id" : client_id }, "allow"))
+    } else if (backends.includes("oauth") && username.includes("oauth")) {
+      let oauthProviderUrl = process.env.OAUTH_PROVIDER_URL
+      let oauthClientId = process.env.OAUTH_CLIENT_ID
+      let oauthClientSecret = process.env.OAUTH_CLIENT_SECRET
+      password = tokenFor(oauthClientId, oauthClientSecret, oauthProviderUrl)
+      console.log("Obtained access token : " + password)
+    }
     mqttOptions = {
       clientId: client_id,
       protocolId: 'MQTT',
@@ -29,12 +40,6 @@ describe('Having MQTT protocol enbled and the following auth_backends: ' + backe
       reconnectPeriod: '1000',
       username: username,
       password: password,
-    }
-    if (backends.includes("http") && username.includes("http")) {
-      reset()
-      expectations.push(expectUser({ "username": username, "password": password, "client_id": client_id, "vhost": "/" }, "allow"))
-      expectations.push(expectVhost({ "username": username, "vhost": "/"}, "allow"))
-      expectations.push(expectResource({ "username": username, "vhost": "/", "resource": "queue", "name": "mqtt-will-selenium-client", "permission":"configure", "tags":"", "client_id" : client_id }, "allow"))
     }
   })
 
