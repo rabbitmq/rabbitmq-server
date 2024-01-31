@@ -191,7 +191,6 @@ process_connect(
         ok ?= check_node_connection_limit(),
         ok ?= check_vhost_exists(VHost, Username2, PeerIp),
         ok ?= check_vhost_alive(VHost),
-        ok ?= check_vhost_connection_limit(VHost),
         {ok, User = #user{username = Username}} ?= check_user_login(VHost, Username2, Password,
                                                                     ClientId, PeerIp, ConnName0),
         ok ?= check_user_connection_limit(Username),
@@ -1048,16 +1047,6 @@ check_vhost_exists(VHost, Username, PeerIp) ->
             auth_attempt_failed(PeerIp, Username),
             ?LOG_ERROR("MQTT connection failed: virtual host '~s' does not exist", [VHost]),
             {error, ?RC_BAD_USER_NAME_OR_PASSWORD}
-    end.
-
-check_vhost_connection_limit(VHost) ->
-    case rabbit_vhost_limit:is_over_connection_limit(VHost) of
-        false ->
-            ok;
-        {true, Limit} ->
-            ?LOG_ERROR("MQTT connection failed: connection limit ~p is reached for vhost '~s'",
-                       [Limit, VHost]),
-            {error, ?RC_QUOTA_EXCEEDED}
     end.
 
 check_vhost_alive(VHost) ->
