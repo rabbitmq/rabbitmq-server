@@ -49,7 +49,7 @@ bazel_dep(
 
 bazel_dep(
     name = "rabbitmq_ra",
-    version = "2.7.1",
+    version = "2.7.3",
     repo_name = "ra",
 )
 
@@ -295,15 +295,15 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "khepri",
     build_file = "@rabbitmq-server//bazel:BUILD.khepri",
-    sha256 = "da618ec76abd188620c8fbdc16cb8eb94b09055a657c488da7fab160d49abcbe",
-    version = "0.10.1",
+    sha256 = "0f90ad4d163493abf8bc03ab161a8c65795fe5578fe16a5a1d27846185e68aaf",
+    version = "0.11.0",
 )
 
-erlang_package.git_package(
+erlang_package.hex_package(
     name = "khepri_mnesia_migration",
     build_file = "@rabbitmq-server//bazel:BUILD.khepri_mnesia_migration",
-    commit = "56d7d123cc3e9dce309582b4d45ea58f3580ee71",
-    repository = "rabbitmq/khepri_mnesia_migration",
+    sha256 = "996f7db1f094a3d5e72ff9e3a2db4fd1895872a1fcbc223b91671bcbc047b03b",
+    version = "0.3.0",
 )
 
 erlang_package.hex_package(
@@ -338,8 +338,8 @@ erlang_package.hex_package(
     name = "ra_alt",
     build_file = "@rabbitmq-server//bazel:BUILD.ra",
     pkg = "ra",
-    sha256 = "20ba906dc4feb824f07facca227b5a4f9bf7435eb21f469028112313a64a8490",
-    version = "2.7.1",
+    sha256 = "6f2b912a779f4efa4deea762b65192ed6e87111c7d98cbbe8a29576964739147",
+    version = "2.7.3",
 )
 
 erlang_package.git_package(
