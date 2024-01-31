@@ -2783,12 +2783,12 @@ evaluate_consumer_timeout1(PA = #pending_ack{delivered_at = Time},
 handle_consumer_timed_out(Timeout,#pending_ack{delivery_tag = DeliveryTag, tag = ConsumerTag, queue = QName},
 			  State = #ch{cfg = #conf{channel = Channel}}) ->
     rabbit_log_channel:warning("Consumer '~ts' on channel ~w and ~ts has timed out "
-			       "waiting for ~ts delivery acknowledgement. Timeout used: ~tp ms. "
+			       "waiting for a consumer acknowledgement of a delivery with delivery tag = ~b. Timeout used: ~tp ms. "
 			       "This timeout value can be configured, see consumers doc guide to learn more",
 			       [ConsumerTag,
                     Channel,
                     rabbit_misc:rs(QName),
-                rabbit_data_coercion:to_binary(DeliveryTag), Timeout]),
+                    DeliveryTag, Timeout]),
     Ex = rabbit_misc:amqp_error(precondition_failed,
 				"delivery acknowledgement on channel ~w timed out. "
 				"Timeout value used: ~tp ms. "
