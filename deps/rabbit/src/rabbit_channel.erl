@@ -824,8 +824,10 @@ terminate(_Reason,
                   rabbit_global_counters:consumer_deleted(amqp091)
           end, CM),
     rabbit_core_metrics:channel_closed(self()),
+    CMSize = maps:size(CM),
     rabbit_event:notify(channel_closed, [{pid, self()},
-                                         {user_who_performed_action, Username}]),
+                                         {user_who_performed_action, Username},
+                                         {consumer_count, CMSize}]),
     case rabbit_confirms:size(State#ch.unconfirmed) of
         0 -> ok;
         NumConfirms ->
@@ -2860,4 +2862,3 @@ maybe_decrease_global_publishers(#ch{publishing_mode = true}) ->
 
 is_global_qos_permitted() ->
     rabbit_deprecated_features:is_permitted(global_qos).
-
