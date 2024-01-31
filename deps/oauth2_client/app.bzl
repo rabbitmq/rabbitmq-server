@@ -51,7 +51,7 @@ def all_srcs(name = "all_srcs"):
     filegroup(
         name = "srcs",
         srcs = [
-            "src/oauth2_client.erl",            
+            "src/oauth2_client.erl",
         ],
     )
     filegroup(
@@ -68,6 +68,7 @@ def all_srcs(name = "all_srcs"):
             "LICENSE-MPL-RabbitMQ",
         ],
     )
+
 
 def test_suite_beam_files(name = "test_suite_beam_files"):
     erlang_bytecode(
@@ -86,5 +87,4 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         hdrs = ["include/oauth2_client.hrl"],
         app_name = "rabbitmq_oauth2_client",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
     )
