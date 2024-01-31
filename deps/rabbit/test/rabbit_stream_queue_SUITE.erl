@@ -1381,6 +1381,13 @@ recover_coordinator(Config, Node) ->
 
 get_stream_coordinator_leader(Config) ->
     Node = hd(rabbit_ct_broker_helpers:get_node_configs(Config, nodename)),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Ret = rabbit_ct_broker_helpers:rpc(
+                      Config, Node, ra_leaderboard, lookup_leader,
+                      [rabbit_stream_coordinator]),
+              is_tuple(Ret)
+      end),
     rabbit_ct_broker_helpers:rpc(Config, Node, ra_leaderboard,
                                  lookup_leader, [rabbit_stream_coordinator]).
 
