@@ -173,14 +173,14 @@ init_per_group(with_issuer, Config) ->
   {ok, _} = application:ensure_all_started(inets),
   {ok, _} = application:ensure_all_started(ssl),
   application:ensure_all_started(cowboy),
-	CertsDir = ?config(rmq_certsdir, Config),
-	CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
+  CertsDir = ?config(rmq_certsdir, Config),
+  CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
   SslOptions = ssl_options(verify_peer, false, CaCertFile),
 
-	HttpOauthServerExpectations = get_openid_configuration_expectations(),
-	ListOfExpectations = maps:values(proplists:to_map(HttpOauthServerExpectations)),
+  HttpOauthServerExpectations = get_openid_configuration_expectations(),
+  ListOfExpectations = maps:values(proplists:to_map(HttpOauthServerExpectations)),
 
-	start_https_oauth_server(?AUTH_PORT, CertsDir, ListOfExpectations),
+  start_https_oauth_server(?AUTH_PORT, CertsDir, ListOfExpectations),
   application:set_env(rabbitmq_auth_backend_oauth2, use_global_locks, false),
   application:set_env(rabbitmq_auth_backend_oauth2, issuer, build_url_to_oauth_provider(<<"/">>)),
   application:set_env(rabbitmq_auth_backend_oauth2, key_config, SslOptions),
@@ -624,7 +624,7 @@ get_oauth_provider_should_return_oauth_provider_A_with_all_discovered_endpoints(
   ?assertEqual(build_url_to_oauth_provider(<<"/A">>), OAuthProvider#oauth_provider.issuer).
 
 get_openid_configuration_expectations() ->
-	 [ {get_root_openid_configuration,
+   [ {get_root_openid_configuration,
 
       #{request => #{
          method => <<"GET">>,
@@ -672,36 +672,36 @@ get_openid_configuration_expectations() ->
         ]
       }
       }
-	].
+  ].
 
 start_https_oauth_server(Port, CertsDir, Expectations) when is_list(Expectations) ->
-	Dispatch = cowboy_router:compile([
-		{'_', [{Path, oauth2_http_mock, Expected} || #{request := #{path := Path}} = Expected <- Expectations ]}
-	]),
-	ct:log("start_https_oauth_server (port:~p) with expectation list : ~p -> dispatch: ~p", [Port, Expectations, Dispatch]),
-	{ok, Pid} = cowboy:start_tls(
+  Dispatch = cowboy_router:compile([
+    {'_', [{Path, oauth2_http_mock, Expected} || #{request := #{path := Path}} = Expected <- Expectations ]}
+  ]),
+  ct:log("start_https_oauth_server (port:~p) with expectation list : ~p -> dispatch: ~p", [Port, Expectations, Dispatch]),
+  {ok, Pid} = cowboy:start_tls(
       mock_http_auth_listener,
-				[{port, Port},
-				 {certfile, filename:join([CertsDir, "server", "cert.pem"])},
-				 {keyfile, filename:join([CertsDir, "server", "key.pem"])}
-				],
-				#{env => #{dispatch => Dispatch}}),
+        [{port, Port},
+         {certfile, filename:join([CertsDir, "server", "cert.pem"])},
+         {keyfile, filename:join([CertsDir, "server", "key.pem"])}
+        ],
+        #{env => #{dispatch => Dispatch}}),
   ct:log("Started on Port ~p and pid ~p", [ranch:get_port(mock_http_auth_listener), Pid]).
 
 build_url_to_oauth_provider(Path) ->
-	uri_string:recompose(#{scheme => "https",
-												 host => "localhost",
-												 port => rabbit_data_coercion:to_integer(?AUTH_PORT),
-												 path => Path}).
+  uri_string:recompose(#{scheme => "https",
+                         host => "localhost",
+                         port => rabbit_data_coercion:to_integer(?AUTH_PORT),
+                         path => Path}).
 
 stop_http_auth_server() ->
   cowboy:stop_listener(mock_http_auth_listener).
 
 -spec ssl_options(ssl:verify_type(), boolean(), file:filename()) -> list().
 ssl_options(PeerVerification, FailIfNoPeerCert, CaCertFile) ->
-	[{verify, PeerVerification},
-	  {depth, 10},
-	  {fail_if_no_peer_cert, FailIfNoPeerCert},
-	  {crl_check, false},
-	  {crl_cache, {ssl_crl_cache, {internal, [{http, 10000}]}}},
-		{cacertfile, CaCertFile}].
+  [{verify, PeerVerification},
+    {depth, 10},
+    {fail_if_no_peer_cert, FailIfNoPeerCert},
+    {crl_check, false},
+    {crl_cache, {ssl_crl_cache, {internal, [{http, 10000}]}}},
+    {cacertfile, CaCertFile}].

@@ -36,7 +36,7 @@ groups() ->
                        test_successful_connection_with_simple_strings_for_aud_and_scope,
                        test_successful_token_refresh,
                        test_successful_connection_without_verify_aud,
-                       mqtt                      
+                       mqtt
                       ]},
      {basic_unhappy_path, [], [
                        test_failed_connection_with_expired_token,
