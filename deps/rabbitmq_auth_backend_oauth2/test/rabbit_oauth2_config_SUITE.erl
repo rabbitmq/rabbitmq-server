@@ -20,7 +20,6 @@
 
 all() ->
     [
-      %  {group, with_rabbitmq_node},
         {group, with_resource_server_id},
         {group, without_resource_server_id},
         {group, with_resource_servers},
