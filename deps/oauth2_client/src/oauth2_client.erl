@@ -5,7 +5,6 @@
         ]).
 
 -include("oauth2_client.hrl").
--define(APP, auth_aouth2).
 
 -spec get_access_token(oauth_provider_id() | oauth_provider(), access_token_request()) ->
   {ok, successful_access_token_response()} | {error, unsuccessful_access_token_response() | any()}.
