@@ -76,7 +76,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
      "Error: cannot cluster node with itself: #{node_name}"}
   end
 
-  def output({:error, {:node_type_unsupported, db, node_type}}, %{node: node_name}) do
+  def output({:error, {:node_type_unsupported, db, node_type}}, %{node: _node_name}) do
     {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
      "Error: `#{node_type}` node type is unsupported by the #{db} by database engine"}
   end
