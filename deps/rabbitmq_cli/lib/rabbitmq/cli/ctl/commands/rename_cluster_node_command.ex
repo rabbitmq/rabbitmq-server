@@ -6,8 +6,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
   require Integer
-  alias RabbitMQ.CLI.Core.{DocGuide, Validators}
-  import RabbitMQ.CLI.Core.DataCoercion
+  alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -21,6 +20,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
     :ok
   end
 
+<<<<<<< HEAD
   def validate_execution_environment(args, opts) do
     Validators.chain(
       [
@@ -43,6 +43,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
       _, reason ->
         {:rename_failed, reason}
     end
+=======
+  def run(_nodes, %{node: _node_name}) do
+    :ok
+>>>>>>> c285651636 (Resolve elixirc warnings)
   end
 
   use RabbitMQ.CLI.DefaultOutput

@@ -5,7 +5,7 @@
 ## Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
-  alias RabbitMQ.CLI.Core.{Config, DocGuide, Helpers}
+  alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
