@@ -72,7 +72,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
         {:error,
          "RabbitMQ on node #{node_to_remove} must be stopped with 'rabbitmqctl -n #{node_to_remove} stop_app' before it can be removed"}
 
-      {:error, {:failed_to_remove_node, ^atom_name, unavailable}} ->
+      {:error, {:failed_to_remove_node, ^atom_name, :unavailable}} ->
         {:error, "Node #{node_to_remove} must be running before it can be removed"}
 
       {:error, _} = error ->

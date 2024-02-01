@@ -5,8 +5,6 @@
 ## Copyright (c) 2022 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.MetadataStoreStatusCommand do
-  alias RabbitMQ.CLI.Core.DocGuide
-
   @behaviour RabbitMQ.CLI.CommandBehaviour
   def scopes(), do: [:diagnostics]
 

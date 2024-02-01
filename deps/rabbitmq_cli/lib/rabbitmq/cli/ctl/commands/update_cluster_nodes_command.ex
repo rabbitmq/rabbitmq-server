@@ -5,7 +5,7 @@
 ## Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.UpdateClusterNodesCommand do
-  alias RabbitMQ.CLI.Core.{Config, DocGuide, Helpers}
+  alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 

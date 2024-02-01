@@ -83,7 +83,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddUserCommand do
 
   def run(
         [username, base64_encoded_password_hash],
-        %{node: node_name, pre_hashed_password: true} = opts
+        %{node: node_name, pre_hashed_password: true}
       ) do
     case Base.decode64(base64_encoded_password_hash) do
       {:ok, password_hash} ->

@@ -6,8 +6,7 @@
 
 defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
   require Integer
-  alias RabbitMQ.CLI.Core.{DocGuide, Validators}
-  import RabbitMQ.CLI.Core.DataCoercion
+  alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -21,7 +20,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
     :ok
   end
 
-  def run(nodes, %{node: node_name}) do
+  def run(_nodes, %{node: _node_name}) do
     :ok
   end
 

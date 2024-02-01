@@ -47,6 +47,6 @@ defmodule RabbitMQ.CLI.Queues.Commands.CoordinatorStatusCommand do
 
   def description(), do: "Displays raft status of the stream coordinator"
 
-  def banner([], %{node: node_name}),
+  def banner([], %{node: _node_name}),
     do: "Status of stream coordinator ..."
 end
