@@ -44,8 +44,8 @@ handle_cast({event, #event{type  = connection_closed, props = Props}},
 handle_cast({event, #event{type  = channel_closed, props = Props}},
             State = #state{basic_i = BIntervals}) ->
     Pid = pget(pid, Props),
-    CMCount = pget(consumer_count, Props),
-    remove_channel(Pid, CMCount, BIntervals),
+    ConsumerCount = pget(consumer_count, Props),
+    remove_channel(Pid, ConsumerCount, BIntervals),
     {noreply, State};
 handle_cast({event, #event{type  = consumer_deleted, props = Props}}, State) ->
     remove_consumer(Props),
@@ -85,13 +85,13 @@ remove_connection(Id, BIntervals) ->
     delete_samples(connection_stats_coarse_conn_stats, Id, BIntervals),
     ok.
 
-remove_channel(Id, CMCount, BIntervals) ->
+remove_channel(Id, ConsumerCount, BIntervals) ->
     ets:delete(channel_created_stats, Id),
     ets:delete(channel_stats, Id),
     delete_samples(channel_process_stats, Id, BIntervals),
     delete_samples(channel_stats_fine_stats, Id, BIntervals),
     delete_samples(channel_stats_deliver_stats, Id, BIntervals),
-    index_delete(consumer_stats, {channel, CMCount}, Id),
+    index_delete(consumer_stats, {channel, ConsumerCount}, Id),
     index_delete(channel_exchange_stats_fine_stats, channel, Id),
     index_delete(channel_queue_stats_deliver_stats, channel, Id),
     ok.
@@ -139,8 +139,12 @@ delete_samples(Table, Id, Intervals) ->
     [ets:delete(Table, {Id, I}) || I <- Intervals],
     ok.
 
-index_delete(consumer_stats = Table, {channel = Type, Count}, Id) ->
-    case Count > ?LARGE_CONSUMER_COUNT of
+index_delete(consumer_stats = Table, {channel = Type, ConsumerCount}, Id) ->
+    %% In case of very large amount of consumers on a single channel,
+    %% we use the more memoroy costly bulk operation `ets:match_delete` to reduce
+    %% CPU load. For the more common case, few consumers per channel, we loop
+    %% through the consumers and remove them one by one
+    case ConsumerCount > ?LARGE_CONSUMER_COUNT of
         true ->
             IndexTable = rabbit_mgmt_metrics_collector:index_table(Table, Type),
             MatchPattern = {'_', Id, '_'},

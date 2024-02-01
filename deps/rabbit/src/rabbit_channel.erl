@@ -831,10 +831,9 @@ terminate(_Reason,
                   rabbit_global_counters:consumer_deleted(amqp091)
           end, CM),
     rabbit_core_metrics:channel_closed(self()),
-    CMSize = maps:size(CM),
     rabbit_event:notify(channel_closed, [{pid, self()},
                                          {user_who_performed_action, Username},
-                                         {consumer_count, CMSize}]),
+                                         {consumer_count, maps:size(CM)}]),
     case rabbit_confirms:size(State#ch.unconfirmed) of
         0 -> ok;
         NumConfirms ->
