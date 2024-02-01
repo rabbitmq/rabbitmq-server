@@ -104,16 +104,10 @@ child_exists(Name) ->
               mirrored_supervisor:which_children(?SUPERVISOR)).
 
 adjust({clear_upstream, VHost, UpstreamName}) ->
-    _ = [rabbit_federation_link_sup:adjust(Pid, X, {clear_upstream, UpstreamName}) ||
+    _ = [rabbit_federation_link_sup:adjust(Pid, exchange_record_from_child_id(Id), {clear_upstream, UpstreamName}) ||
             {Id, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR),
-            case Id of
-                {_, #exchange{name = Name} = X} ->
-                    Name#resource.virtual_host == VHost;
-                #exchange{name = Name} = X ->
-                    %% Old child id format, pre 3.13.0
-                    Name#resource.virtual_host == VHost
-            end
-                ],
+            virtual_host_name_from_child_id(Id) =:= VHost
+        ],
     ok;
 adjust(Reason) ->
     _ = [case Id of
@@ -176,3 +170,13 @@ simple_id(#exchange{name = #resource{virtual_host = VHost, name = Name}}) ->
 old_id(X = #exchange{policy = Policy}) ->
     X1 = rabbit_exchange:immutable(X),
     X1#exchange{policy = Policy}.
+
+exchange_record_from_child_id({_, #exchange{} = XR}) ->
+    XR;
+exchange_record_from_child_id(#exchange{} = XR) ->
+    XR.
+
+virtual_host_name_from_child_id({_, #exchange{name = Res}}) ->
+    Res#resource.virtual_host;
+virtual_host_name_from_child_id(#exchange{name = Res}) ->
+    Res#resource.virtual_host.
