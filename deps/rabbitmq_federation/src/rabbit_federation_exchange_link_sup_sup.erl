@@ -17,6 +17,7 @@
 
 -export([start_link/0, start_child/1, adjust/1, stop_child/1]).
 -export([init/1]).
+-export([id_to_khepri_path/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -49,12 +50,12 @@ start_child(X) ->
 
 adjust({clear_upstream, VHost, UpstreamName}) ->
     _ = [rabbit_federation_link_sup:adjust(Pid, X, {clear_upstream, UpstreamName}) ||
-            {{_, #exchange{name = Name} = X}, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR),
+            {#exchange{name = Name} = X, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR),
             Name#resource.virtual_host == VHost],
     ok;
 adjust(Reason) ->
     _ = [rabbit_federation_link_sup:adjust(Pid, X, Reason) ||
-            {{_, X}, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
+            {X, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
     ok.
 
 stop_child(X) ->
@@ -77,7 +78,9 @@ init([]) ->
 %% See comment in rabbit_federation_queue_link_sup_sup:id/1
 id(X = #exchange{policy = Policy}) ->
     X1 = rabbit_exchange:immutable(X),
-    {simple_id(X), X1#exchange{policy = Policy}}.
+    X2 = X1#exchange{policy = Policy},
+    X2.
 
-simple_id(#exchange{name = #resource{virtual_host = VHost, name = Name}}) ->
+id_to_khepri_path(
+  #exchange{name = #resource{virtual_host = VHost, name = Name}}) ->
     [exchange, VHost, Name].
