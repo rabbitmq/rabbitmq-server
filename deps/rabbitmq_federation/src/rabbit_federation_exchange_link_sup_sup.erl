@@ -96,7 +96,7 @@ start_child(X) ->
 
 child_exists(Name) ->
     Id = id(Name),
-    %% older format, pre 3.13.0
+    %% older format, pre-3.13.0
     OldId = old_id(Name),
     lists:any(fun ({ChildId, _, _, _}) ->
                       ChildId =:= Id orelse ChildId =:= OldId
@@ -110,14 +110,9 @@ adjust({clear_upstream, VHost, UpstreamName}) ->
         ],
     ok;
 adjust(Reason) ->
-    _ = [case Id of
-             {_, #exchange{} = X} ->
-                 rabbit_federation_link_sup:adjust(Pid, X, Reason);
-             #exchange{} = X ->
-                 %% Old child id format, pre 3.13.0
-                 rabbit_federation_link_sup:adjust(Pid, X, Reason)
-         end
-         || {Id, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
+    _ = [rabbit_federation_link_sup:adjust(Pid, exchange_record_from_child_id(Id), Reason) ||
+            {Id, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)
+        ],
     ok.
 
 stop_child(X) ->
@@ -127,10 +122,10 @@ stop_child(X) ->
             {error, not_found} = Error ->
                 case rabbit_khepri:is_enabled() of
                     true ->
-                    %% Old id format is not supported by and cannot exist in Khepri
+                        %% Old id format is not supported by Khepri and cannot exist there
                         Error;
                     false ->
-                        %% try old format, pre 3.13.0
+                        %% try old format, pre-3.13.0
                         stop_and_delete_child(old_id(X))
                 end
         end,
@@ -171,8 +166,10 @@ old_id(X = #exchange{policy = Policy}) ->
     X1 = rabbit_exchange:immutable(X),
     X1#exchange{policy = Policy}.
 
+%% New child id format, introduced in 3.13.0 for Khepri
 exchange_record_from_child_id({_, #exchange{} = XR}) ->
     XR;
+%% Old child id format, pre-3.13.0
 exchange_record_from_child_id(#exchange{} = XR) ->
     XR.
 
