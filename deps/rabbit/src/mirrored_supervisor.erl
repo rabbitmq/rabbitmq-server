@@ -137,7 +137,11 @@
 -type startlink_err() :: {'already_started', pid()} | 'shutdown' | term().
 -type startlink_ret() :: {'ok', pid()} | 'ignore' | {'error', startlink_err()}.
 
--type group_name() :: any().
+-type group_name() :: module().
+-type child_id() :: term(). %% supervisor:child_id() is not exported.
+
+-export_type([group_name/0,
+              child_id/0]).
 
 -spec start_link(GroupName, Module, Args) -> startlink_ret() when
       GroupName :: group_name(),
