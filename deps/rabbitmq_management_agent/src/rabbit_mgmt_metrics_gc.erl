@@ -141,10 +141,15 @@ delete_samples(Table, Id, Intervals) ->
     ok.
 
 index_delete(consumer_stats = Table, {channel = Type, ConsumerCount}, Id) ->
-    %% In case of very large amount of consumers on a single channel,
-    %% we use the more memoroy costly bulk operation `ets:match_delete` to reduce
-    %% CPU load. For the more common case, few consumers per channel, we loop
-    %% through the consumers and remove them one by one
+    %% This uses two different deletion strategies depending on how many
+    %% consumers a channel had. Most of the time there are many channels
+    %% with a few (or even just one) consumers. For this common case, `ets:delete/2` is optimal
+    %% since it avoids table scans.
+    %%
+    %% In the rather extreme scenario where only a handful of channels have a very large
+    %% (e.g. tens of thousands) of consumers, `ets:match_delete/2` becomes a more efficient option.
+    %%
+    %% See rabbitmq-server/rabbitmq#10451, rabbitmq-server/rabbitmq#9356.
     case ConsumerCount > ?LARGE_CONSUMER_COUNT of
         true ->
             IndexTable = rabbit_mgmt_metrics_collector:index_table(Table, Type),
