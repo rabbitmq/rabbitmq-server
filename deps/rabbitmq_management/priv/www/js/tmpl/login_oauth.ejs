@@ -31,7 +31,9 @@
             <label for="oauth2-resource">Resource:</label>
             <select id="oauth2-resource">
                 <% for (var i = 0; i < resource_servers.length; i++) { %>
-                   <option value="<%= fmt_string(resource_servers[i].id) %>"><%= resource_servers[i].label %></option>
+                   <option value="<%= fmt_string(resource_servers[i].id) %>">
+                     <%= fmt_string(resource_servers[i].label != null ? resource_servers[i].label : resource_servers[i].id) %>
+                   </option>
                 <% } %>
             </select>
             <br></br>

@@ -14,6 +14,7 @@ const hostname = process.env.RABBITMQ_HOSTNAME || 'localhost'
 const runLocal = String(process.env.RUN_LOCAL).toLowerCase() != 'false'
 const seleniumUrl = process.env.SELENIUM_URL || 'http://selenium:4444'
 const screenshotsDir = process.env.SCREENSHOTS_DIR || '/screens'
+const profiles = process.env.PROFILES || ''
 
 class CaptureScreenshot {
   driver
@@ -37,6 +38,10 @@ class CaptureScreenshot {
 module.exports = {
   log: (message) => {
     console.log(new Date() + " " + message)
+  },
+
+  hasProfile: (profile) => {
+    return profiles.includes(profile)
   },
 
   buildDriver: (caps) => {

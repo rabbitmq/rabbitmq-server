@@ -10,6 +10,7 @@ authnz-mgt/oauth-with-uaa-down.sh
 authnz-mgt/oauth-with-uaa.sh
 authnz-mgt/multi-oauth-with-basic-auth.sh
 authnz-mgt/multi-oauth-without-basic-auth.sh
+authnz-mgt/multi-oauth-without-basic-auth-and-resource-label-and-scopes.sh
 mgt/vhosts.sh
 mgt/definitions.sh
 mgt/exchanges.sh
