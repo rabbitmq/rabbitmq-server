@@ -109,10 +109,10 @@ rabbitmqctl_compile_warnings_as_errors_test(
         "lib/**/*.ex",
         "test/**/*.exs",
     ]),
-    data = glob(["test/fixtures/**/*"]),
     archives = [
         "@hex//:archive",
     ],
+    data = glob(["test/fixtures/**/*"]),
     source_deps = {
         "@amqp//:sources": "amqp",
         "@csv//:sources": "csv",
@@ -120,13 +120,6 @@ rabbitmqctl_compile_warnings_as_errors_test(
         "@temp//:sources": "temp",
         "@x509//:sources": "x509",
     },
-    deps = [
-        "//deps/amqp_client:erlang_app",
-        "//deps/rabbit:erlang_app",
-        "//deps/rabbit_common:erlang_app",
-        "@observer_cli//:erlang_app",
-        "@stdout_formatter//:erlang_app",
-    ],
     target_compatible_with = select({
         "@platforms//os:macos": [
             "@platforms//os:macos",
@@ -137,6 +130,13 @@ rabbitmqctl_compile_warnings_as_errors_test(
             "@elixir_config//:elixir_1_15",
         ],
     }),
+    deps = [
+        "//deps/amqp_client:erlang_app",
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+        "@observer_cli//:erlang_app",
+        "@stdout_formatter//:erlang_app",
+    ],
 )
 
 test_suite(
