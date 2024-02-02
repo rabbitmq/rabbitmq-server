@@ -1137,7 +1137,7 @@
         "userinfo.token.claim" : "false"
       }
     } ],
-    "defaultClientScopes" : [ "web-origins", "acr", "rabbitmq.tag:administrator", "profile", "roles", "email" ],
+    "defaultClientScopes" : [ "web-origins", "acr", "rabbitmq.tag:administrator", "rabbitmq.tag:management", "profile", "roles", "email" ],
     "optionalClientScopes" : [ "address", "phone", "offline_access", "microprofile-jwt" ]
   }, {
     "id" : "a57c9f6a-8b64-47dc-af53-d6ccc2d4aa60",
