@@ -107,6 +107,14 @@ epmd_port() ->
     end.
 
 ensure_epmd() ->
+    case net_adm:names() of
+        {ok, _Names} ->
+            ok;
+        _ ->
+            start_epmd()
+    end.
+
+start_epmd() ->
     Exe = rabbit_runtime:get_erl_path(),
     ID = rabbit_misc:random(1000000000),
     Port = open_port(
