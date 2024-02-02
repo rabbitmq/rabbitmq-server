@@ -928,7 +928,7 @@ clear_in_mnesia() ->
     ok.
 
 clear_in_khepri() ->
-    Path = rabbit_db_binding:khepri_routes_path(),
+    Path = khepri_routes_path(),
     case rabbit_khepri:delete(Path) of
         ok -> ok;
         Error -> throw(Error)

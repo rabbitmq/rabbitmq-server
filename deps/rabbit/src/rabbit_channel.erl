@@ -1274,8 +1274,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         {ok, Message0} ->
             Message = rabbit_message_interceptor:intercept(Message0),
             QNames = rabbit_exchange:route(Exchange, Message, #{return_binding_keys => true}),
-            [rabbit_channel:deliver_reply(RK, Message) ||
-             {virtual_reply_queue, RK} <- QNames],
+            [deliver_reply(RK, Message) || {virtual_reply_queue, RK} <- QNames],
             Queues = rabbit_amqqueue:lookup_many(QNames),
             rabbit_trace:tap_in(Message, QNames, ConnName, ChannelNum,
                                 Username, TraceState),

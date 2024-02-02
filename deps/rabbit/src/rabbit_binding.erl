@@ -308,13 +308,13 @@ group_bindings_fold(Fun, Acc, [B = #binding{source = SrcName} | Bs],
 
 -spec group_bindings_fold(Fun, Name, Deletions, [Binding], [Binding], OnlyDurable)
                          -> Ret when
-      Fun :: fun((Name, [Binding], Deletions, OnlyDurable) ->
-                        Deletions),
-      Name :: rabbit_exchange:name(),
-      Deletions :: rabbit_binding:deletions(),
-      Binding :: rabbit_types:binding(),
+      Fun         :: fun((Name, [Binding], Deletions, OnlyDurable) ->
+				Deletions),
+      Name        :: rabbit_exchange:name(),
+      Deletions   :: deletions(),
+      Binding     :: rabbit_types:binding(),
       OnlyDurable :: boolean(),
-      Ret :: Deletions.
+      Ret         :: Deletions.
 group_bindings_fold(
   Fun, SrcName, Acc, [B = #binding{source = SrcName} | Bs], Bindings,
   OnlyDurable) ->

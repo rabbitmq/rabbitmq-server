@@ -169,6 +169,6 @@ merge_metadata(VHost, Value) ->
     NewMeta = maps:merge(Meta0, Value),
     VHost#vhost{metadata = NewMeta}.
 
--spec is_tagged_with(vhost:vhost(), tag()) -> boolean().
+-spec is_tagged_with(vhost(), tag()) -> boolean().
 is_tagged_with(VHost, Tag) ->
     lists:member(Tag, get_tags(VHost)).

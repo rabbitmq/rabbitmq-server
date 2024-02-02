@@ -1129,7 +1129,7 @@ handle_aux(_RaState, {call, _From}, oldest_entry_timestamp,
     end;
 handle_aux(_RaState, {call, _From}, {peek, Pos}, Aux0,
            Log0, MacState) ->
-    case rabbit_fifo:query_peek(Pos, MacState) of
+    case query_peek(Pos, MacState) of
         {ok, ?MSG(Idx, Header)} ->
             %% need to re-hydrate from the log
             {{_, _, {_, _, Cmd, _}}, Log} = ra_log:fetch(Idx, Log0),

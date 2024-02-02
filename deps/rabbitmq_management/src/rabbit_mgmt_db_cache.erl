@@ -34,10 +34,10 @@
 
 -define(DEFAULT_MULT, 5).
 -define(DEFAULT_TIMEOUT, 60000).
--define(CHILD(Key), {rabbit_mgmt_db_cache:process_name(Key),
+-define(CHILD(Key), {process_name(Key),
                      {rabbit_mgmt_db_cache, start_link, [Key]},
-                                     permanent, 5000, worker,
-                                     [rabbit_mgmt_db_cache]}).
+		     permanent, 5000, worker,
+		     [rabbit_mgmt_db_cache]}).
 -define(RESET_STATE(State), State#state{data = none, args = []}).
 
 %% Implements an adaptive cache that times the value generating fun

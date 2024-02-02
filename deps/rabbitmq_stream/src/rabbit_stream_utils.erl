@@ -159,7 +159,7 @@ auth_mechanism_to_module(TypeBin, Sock) ->
             {error, not_found};
         T ->
             case {lists:member(TypeBin,
-                               rabbit_stream_utils:auth_mechanisms(Sock)),
+                               auth_mechanisms(Sock)),
                   rabbit_registry:lookup_module(auth_mechanism, T)}
             of
                 {true, {ok, Module}} ->

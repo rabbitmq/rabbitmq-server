@@ -266,7 +266,7 @@ handle_upstream_down(shutdown, {Upstream, UParams, XName}, State) ->
     rabbit_federation_link_util:connection_error(
       remote, {upstream_channel_down, shutdown}, Upstream, UParams, XName, State);
 handle_upstream_down({shutdown, Reason}, {Upstream, UParams, XName}, State) ->
-    rabbit_federation_link_util:connection_error(
+    connection_error(
       remote, {upstream_channel_down, Reason}, Upstream, UParams, XName, State);
 
 handle_upstream_down(Reason, _Args, State) ->
