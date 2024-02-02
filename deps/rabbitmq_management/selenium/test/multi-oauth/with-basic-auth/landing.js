@@ -1,7 +1,7 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown, assertAllOptions } = require('../../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, assertAllOptions, hasProfile } = require('../../utils')
 
 const SSOHomePage = require('../../pageobjects/SSOHomePage')
 
@@ -24,10 +24,17 @@ describe('Given two oauth resources and basic auth enabled, an unauthenticated u
 
   it('there should be two OAuth resources to choose from', async function () {
     resources = await homePage.getOAuthResourceOptions()
-    assertAllOptions([
-      { value : "rabbit_dev", text : "RabbitMQ Development" },
-      { value : "rabbit_prod", text : "RabbitMQ Production" }
-      ], resources)
+    if (hasProfile("with-resource-label")) {
+      assertAllOptions([
+        { value : "rabbit_dev", text : "RabbitMQ Development" },
+        { value : "rabbit_prod", text : "RabbitMQ Production" }
+        ], resources)
+    }else {
+      assertAllOptions([
+        { value : "rabbit_dev", text : "rabbit_dev" },
+        { value : "rabbit_prod", text : "rabbit_prod" }
+        ], resources)
+    }
   })
 
 
