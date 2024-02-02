@@ -11,6 +11,7 @@ defmodule RabbitMQCtl.MixfileBase do
     [
       app: :rabbitmqctl,
 <<<<<<< HEAD
+<<<<<<< HEAD
       version: "3.11.19",
 =======
 <<<<<<< HEAD
@@ -19,8 +20,10 @@ defmodule RabbitMQCtl.MixfileBase do
       elixir: ">= 1.13.4 and < 1.16.0",
 =======
       version: "3.13.0-dev",
+=======
+      version: "3.12.13",
+>>>>>>> 2b66fa7e66 (Resolve a conflict #10458 #10460)
       elixir: ">= 1.13.4 and < 1.17.0",
->>>>>>> 70ac0cf3c5 (bump elixir to 1.17)
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
       escript: [main_module: RabbitMQCtl, emu_args: "-hidden", path: "escript/rabbitmqctl"],
