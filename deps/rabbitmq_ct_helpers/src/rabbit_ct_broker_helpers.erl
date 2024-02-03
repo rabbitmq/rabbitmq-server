@@ -1329,7 +1329,7 @@ rabbitmqctl_list(Config, Node, Args) ->
 
 rabbitmq_queues(Config, Node, Args) ->
     RabbitmqQueues = ?config(rabbitmq_queues_cmd, Config),
-    NodeConfig = rabbit_ct_broker_helpers:get_node_config(Config, Node),
+    NodeConfig = get_node_config(Config, Node),
     Nodename = ?config(nodename, NodeConfig),
     Env0 = [
       {"RABBITMQ_SCRIPTS_DIR", filename:dirname(RabbitmqQueues)},
@@ -1930,38 +1930,38 @@ await_os_pid_death(Pid) ->
     end.
 
 reset_node(Config, Node) ->
-    Name = rabbit_ct_broker_helpers:get_node_config(Config, Node, nodename),
+    Name = get_node_config(Config, Node, nodename),
     rabbit_control_helper:command(reset, Name).
 
 force_reset_node(Config, Node) ->
-    Name = rabbit_ct_broker_helpers:get_node_config(Config, Node, nodename),
+    Name = get_node_config(Config, Node, nodename),
     rabbit_control_helper:command(force_reset, Name).
 
 forget_cluster_node(Config, Node, NodeToForget) ->
     forget_cluster_node(Config, Node, NodeToForget, []).
 forget_cluster_node(Config, Node, NodeToForget, Opts) ->
-    Name = rabbit_ct_broker_helpers:get_node_config(Config, Node, nodename),
+    Name = get_node_config(Config, Node, nodename),
     NameToForget =
-        rabbit_ct_broker_helpers:get_node_config(Config, NodeToForget, nodename),
+        get_node_config(Config, NodeToForget, nodename),
     rabbit_control_helper:command(forget_cluster_node, Name, [NameToForget], Opts).
 
 is_feature_flag_enabled(Config, FeatureName) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    rabbit_ct_broker_helpers:rpc(
+    Node = get_node_config(Config, 0, nodename),
+    rpc(
       Config, Node, rabbit_feature_flags, is_enabled, [FeatureName]).
 
 is_feature_flag_supported(Config, FeatureName) ->
-    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Nodes = get_node_configs(Config, nodename),
     is_feature_flag_supported(Config, Nodes, FeatureName).
 
 is_feature_flag_supported(Config, [Node1 | _] = _Nodes, FeatureName) ->
-    rabbit_ct_broker_helpers:rpc(
+    rpc(
       Config, Node1,
       rabbit_feature_flags, is_supported,
       [[FeatureName], 60000]).
 
 enable_feature_flag(Config, FeatureName) ->
-    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Nodes = get_node_configs(Config, nodename),
     enable_feature_flag(Config, Nodes, FeatureName).
 
 enable_feature_flag(Config, Nodes, FeatureName) ->
@@ -1971,7 +1971,7 @@ enable_feature_flag(Config, Nodes, FeatureName) ->
             %% feature flags on the first one of the list is not enough
             lists:foldl(
               fun(N, ok) ->
-                      case rabbit_ct_broker_helpers:rpc(
+                      case rpc(
                              Config, N, rabbit_feature_flags, enable, [FeatureName]) of
                           {error, unsupported} ->
                               {skip,
@@ -1992,24 +1992,24 @@ enable_feature_flag(Config, Nodes, FeatureName) ->
     end.
 
 mark_as_being_drained(Config, Node) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, mark_as_being_drained, []).
+    rpc(Config, Node, rabbit_maintenance, mark_as_being_drained, []).
 unmark_as_being_drained(Config, Node) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, unmark_as_being_drained, []).
+    rpc(Config, Node, rabbit_maintenance, unmark_as_being_drained, []).
 
 drain_node(Config, Node) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, drain, []).
+    rpc(Config, Node, rabbit_maintenance, drain, []).
 revive_node(Config, Node) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, revive, []).
+    rpc(Config, Node, rabbit_maintenance, revive, []).
 
 is_being_drained_consistent_read(Config, Node) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, is_being_drained_consistent_read, [Node]).
+    rpc(Config, Node, rabbit_maintenance, is_being_drained_consistent_read, [Node]).
 is_being_drained_local_read(Config, Node) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, is_being_drained_local_read, [Node]).
+    rpc(Config, Node, rabbit_maintenance, is_being_drained_local_read, [Node]).
 
 is_being_drained_consistent_read(Config, TargetNode, NodeToCheck) ->
-    rabbit_ct_broker_helpers:rpc(Config, TargetNode, rabbit_maintenance, is_being_drained_consistent_read, [NodeToCheck]).
+    rpc(Config, TargetNode, rabbit_maintenance, is_being_drained_consistent_read, [NodeToCheck]).
 is_being_drained_local_read(Config, TargetNode, NodeToCheck) ->
-    rabbit_ct_broker_helpers:rpc(Config, TargetNode, rabbit_maintenance, is_being_drained_local_read, [NodeToCheck]).
+    rpc(Config, TargetNode, rabbit_maintenance, is_being_drained_local_read, [NodeToCheck]).
 
 %% From a given list of gen_tcp client connections, return the list of
 %% connection handler PID in RabbitMQ.

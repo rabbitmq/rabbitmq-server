@@ -84,7 +84,7 @@ list(VHost) ->
 -spec is_over_connection_limit(vhost:name()) -> {true, non_neg_integer()} | false.
 
 is_over_connection_limit(VirtualHost) ->
-    case rabbit_vhost_limit:connection_limit(VirtualHost) of
+    case connection_limit(VirtualHost) of
         %% no limit configured
         undefined                                            -> false;
         %% with limit = 0, no connections are allowed

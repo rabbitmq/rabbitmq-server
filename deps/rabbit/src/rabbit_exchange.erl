@@ -220,7 +220,7 @@ list() ->
 count() ->
     rabbit_db_exchange:count().
 
--spec list_names() -> [rabbit_exchange:name()].
+-spec list_names() -> [name()].
 
 list_names() ->
     rabbit_db_exchange:list().

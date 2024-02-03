@@ -698,8 +698,8 @@ put_user(User, Version, ActingUser) ->
                     throw({error, both_password_and_password_hash_are_provided});
                 %% clear password, update tags if needed
                 _ ->
-                    rabbit_auth_backend_internal:set_tags(Username, Tags, ActingUser),
-                    rabbit_auth_backend_internal:clear_password(Username, ActingUser)
+                    set_tags(Username, Tags, ActingUser),
+                    clear_password(Username, ActingUser)
             end;
         false ->
             case {HasPassword, HasPasswordHash} of
@@ -732,13 +732,13 @@ update_user_password_hash(Username, PasswordHash, Tags, Limits, User, Version) -
 
     Hash = rabbit_misc:b64decode_or_throw(PasswordHash),
     ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
-    rabbit_auth_backend_internal:update_user_with_hash(
+    update_user_with_hash(
       Username, Hash, HashingAlgorithm, ConvertedTags, Limits).
 
 create_user_with_password(_PassedCredentialValidation = true,  Username, Password, Tags, undefined, Limits, ActingUser) ->
-    ok = rabbit_auth_backend_internal:add_user(Username, Password, ActingUser, Limits, Tags);
+    ok = add_user(Username, Password, ActingUser, Limits, Tags);
 create_user_with_password(_PassedCredentialValidation = true,  Username, Password, Tags, PreconfiguredPermissions, Limits, ActingUser) ->
-    ok = rabbit_auth_backend_internal:add_user(Username, Password, ActingUser, Limits, Tags),
+    ok = add_user(Username, Password, ActingUser, Limits, Tags),
     preconfigure_permissions(Username, PreconfiguredPermissions, ActingUser);
 create_user_with_password(_PassedCredentialValidation = false, _Username, _Password, _Tags, _, _, _) ->
     %% we don't log here because
@@ -751,14 +751,14 @@ create_user_with_password_hash(Username, PasswordHash, Tags, User, Version, Prec
     HashingAlgorithm = hashing_algorithm(User, Version),
     Hash             = rabbit_misc:b64decode_or_throw(PasswordHash),
 
-    rabbit_auth_backend_internal:add_user_sans_validation(Username, Hash, HashingAlgorithm, Tags, Limits, ActingUser),
+    add_user_sans_validation(Username, Hash, HashingAlgorithm, Tags, Limits, ActingUser),
     preconfigure_permissions(Username, PreconfiguredPermissions, ActingUser).
 
 preconfigure_permissions(_Username, undefined, _ActingUser) ->
     ok;
 preconfigure_permissions(Username, Map, ActingUser) when is_map(Map) ->
     _ = maps:map(fun(VHost, M) ->
-                     rabbit_auth_backend_internal:set_permissions(Username, VHost,
+                     set_permissions(Username, VHost,
                                                   maps:get(<<"configure">>, M),
                                                   maps:get(<<"write">>,     M),
                                                   maps:get(<<"read">>,      M),

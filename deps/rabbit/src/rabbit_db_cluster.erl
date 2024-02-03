@@ -78,7 +78,7 @@ can_join_using_khepri(RemoteNode) ->
 
 -spec join(RemoteNode, NodeType) -> Ret when
       RemoteNode :: node(),
-      NodeType :: rabbit_db_cluster:node_type(),
+      NodeType :: node_type(),
       Ret :: Ok | Error,
       Ok :: ok | {ok, already_member},
       Error :: {error, {inconsistent_cluster, string()}}.
@@ -254,7 +254,7 @@ forget_member_using_khepri(Node, false = _RemoveWhenOffline) ->
 %% -------------------------------------------------------------------
 
 -spec change_node_type(NodeType) -> ok when
-      NodeType :: rabbit_db_cluster:node_type().
+      NodeType :: node_type().
 %% @doc Changes the node type to `NodeType'.
 %%
 %% Node types may not all be valid with all databases.
@@ -320,7 +320,7 @@ disc_members_using_mnesia() ->
     rabbit_mnesia:cluster_nodes(disc).
 
 -spec node_type() -> NodeType when
-      NodeType :: rabbit_db_cluster:node_type().
+      NodeType :: node_type().
 %% @doc Returns the type of this node, `disc' or `ram'.
 %%
 %% Node types may not all be relevant with all databases.
@@ -373,7 +373,7 @@ check_consistency_using_khepri() ->
     rabbit_khepri:check_cluster_consistency().
 
 -spec cli_cluster_status() -> ClusterStatus when
-      ClusterStatus :: [{nodes, [{rabbit_db_cluster:node_type(), [node()]}]} |
+      ClusterStatus :: [{nodes, [{node_type(), [node()]}]} |
                         {running_nodes, [node()]} |
                         {partitions, [{node(), [node()]}]}].
 %% @doc Returns information from the cluster for the `cluster_status' CLI
