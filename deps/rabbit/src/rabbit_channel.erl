@@ -2856,9 +2856,3 @@ maybe_decrease_global_publishers(#ch{publishing_mode = false}) ->
     ok;
 maybe_decrease_global_publishers(#ch{publishing_mode = true}) ->
     rabbit_global_counters:publisher_deleted(amqp091).
-<<<<<<< HEAD
-=======
-
-is_global_qos_permitted() ->
-    rabbit_deprecated_features:is_permitted(global_qos).
->>>>>>> a2ff5a0b7b (Check consumer size for clean strats)
