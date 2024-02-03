@@ -462,7 +462,7 @@ cluster_status(WhichNodes) ->
     end.
 
 members() ->
-    case rabbit_mnesia:is_running() andalso rabbit_table:is_present() of
+    case is_running() andalso rabbit_table:is_present() of
         true ->
             %% If Mnesia is running locally and some tables exist, we can know
             %% the database was initialized and we can query the list of

@@ -284,7 +284,7 @@ check() ->
     VHosts = rabbit_vhost:list_names(),
     lists:filter(
       fun(V) ->
-              case rabbit_vhost_sup_sup:get_vhost_sup(V) of
+              case get_vhost_sup(V) of
                   {ok, Sup} ->
                       MsgStores = [Pid || {Name, Pid, _, _} <- supervisor:which_children(Sup),
                                          lists:member(Name, [msg_store_persistent,

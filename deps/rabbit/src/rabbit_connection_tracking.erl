@@ -108,7 +108,7 @@ handle_cast({vhost_deleted, Details}) ->
             delete_tracked_connection_vhost_entry, [VHost]),
     rabbit_log_connection:info("Closing all connections in vhost '~ts' because it's being deleted", [VHost]),
     shutdown_tracked_items(
-        rabbit_connection_tracking:list(VHost),
+        list(VHost),
         rabbit_misc:format("vhost '~ts' is deleted", [VHost]));
 %% Note: under normal circumstances this will be called immediately
 %% after the vhost_deleted above. Therefore we should be careful about
@@ -120,7 +120,7 @@ handle_cast({vhost_down, Details}) ->
                                " because the vhost is stopping",
                                [VHost, Node]),
     shutdown_tracked_items(
-        rabbit_connection_tracking:list_on_node(Node, VHost),
+        list_on_node(Node, VHost),
         rabbit_misc:format("vhost '~ts' is down", [VHost]));
 handle_cast({user_deleted, Details}) ->
     Username = pget(name, Details),
@@ -129,7 +129,7 @@ handle_cast({user_deleted, Details}) ->
             delete_tracked_connection_user_entry, [Username]),
     rabbit_log_connection:info("Closing all connections for user '~ts' because the user is being deleted", [Username]),
     shutdown_tracked_items(
-        rabbit_connection_tracking:list_of_user(Username),
+        list_of_user(Username),
         rabbit_misc:format("user '~ts' is deleted", [Username])).
 
 -spec register_tracked(rabbit_types:tracked_connection()) -> ok.

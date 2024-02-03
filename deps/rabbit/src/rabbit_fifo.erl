@@ -4,8 +4,6 @@
 %%
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
-%% before post gc 1M msg: 203MB, after recovery + gc: 203MB
-
 -module(rabbit_fifo).
 
 -behaviour(ra_machine).
@@ -1129,7 +1127,7 @@ handle_aux(_RaState, {call, _From}, oldest_entry_timestamp,
     end;
 handle_aux(_RaState, {call, _From}, {peek, Pos}, Aux0,
            Log0, MacState) ->
-    case rabbit_fifo:query_peek(Pos, MacState) of
+    case query_peek(Pos, MacState) of
         {ok, ?MSG(Idx, Header)} ->
             %% need to re-hydrate from the log
             {{_, _, {_, _, Cmd, _}}, Log} = ra_log:fetch(Idx, Log0),
