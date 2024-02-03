@@ -832,7 +832,8 @@ terminate(_Reason,
           end, CM),
     rabbit_core_metrics:channel_closed(self()),
     rabbit_event:notify(channel_closed, [{pid, self()},
-                                         {user_who_performed_action, Username}]),
+                                         {user_who_performed_action, Username},
+                                         {consumer_count, maps:size(CM)}]),
     case rabbit_confirms:size(State#ch.unconfirmed) of
         0 -> ok;
         NumConfirms ->
