@@ -916,7 +916,7 @@ deep_pget([], P, _) ->
     P;
 
 deep_pget([K|Ks], P, D) ->
-    case rabbit_misc:pget(K, P, D) of
+    case pget(K, P, D) of
         D -> D;
         Pn -> deep_pget(Ks, Pn, D)
     end.

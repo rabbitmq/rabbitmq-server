@@ -109,7 +109,7 @@
                   host     :: rabbit_net:hostname(),
                   port     :: rabbit_net:ip_port()}).
 
--type rabbit_amqqueue_name() :: rabbit_types:r('queue').
+-type rabbit_amqqueue_name() :: r('queue').
 
 -type(binding_source() :: exchange_name()).
 -type(binding_destination() :: rabbit_amqqueue_name() | exchange_name()).
