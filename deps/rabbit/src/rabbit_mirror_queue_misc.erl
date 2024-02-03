@@ -551,7 +551,7 @@ stop_all_slaves(Reason, SPids, QName, GM, WaitTimeout) ->
                     {'DOWN', MRef, process, _Pid, _Info} ->
                         Acc
                 after WaitTimeout ->
-                        rabbit_mirror_queue_misc:log_warning(
+                        log_warning(
                           QName, "Missing 'DOWN' message from ~tp in"
                           " node ~tp", [Pid, node(Pid)]),
                         [Pid | Acc]
@@ -582,7 +582,7 @@ remove_all_slaves_in_mnesia(QName, PendingSlavePids) ->
         %% ensure old incarnations are stopped using
         %% the pending mirror pids.
         Q3 = amqqueue:set_slave_pids_pending_shutdown(Q2, PendingSlavePids),
-        rabbit_mirror_queue_misc:store_updated_slaves(Q3)
+        store_updated_slaves(Q3)
     end).
 
 remove_all_slaves_in_khepri(QName, PendingSlavePids) ->
