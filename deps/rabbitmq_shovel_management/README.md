@@ -73,7 +73,7 @@ curl -u guest:guest -v -X PUT -H 'Content-Type: application/json' -d @./shovel.j
 #### `GET /api/parameters/shovel/{vhost}/{name}`
 Shows the configurtion parameters for a shovel.
 
-**Example** 
+**Example**
 
 ```bash
 curl -u guest:guest -v http://localhost:15672/api/parameters/shovel/%2F/my-shovel
@@ -83,7 +83,7 @@ curl -u guest:guest -v http://localhost:15672/api/parameters/shovel/%2F/my-shove
 
 Deletes a shovel.
 
-**Example** 
+**Example**
 
 ```bash
 curl -u guest:guest -v -X DELETE http://localhost:15672/api/parameters/shovel/%2F/my-shovel
@@ -93,4 +93,4 @@ curl -u guest:guest -v -X DELETE http://localhost:15672/api/parameters/shovel/%2
 
 Released under [the same license as RabbitMQ](https://www.rabbitmq.com/mpl.html).
 
-2007-2018 (c) 2007-2020 VMware, Inc. or its affiliates.
+2007-2018 (c) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.

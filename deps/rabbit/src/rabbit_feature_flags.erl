@@ -6,7 +6,7 @@
 %%
 
 %% @author The RabbitMQ team
-%% @copyright 2018-2023 VMware, Inc. or its affiliates.
+%% @copyright 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 %% @doc
 %% This module offers a framework to declare capabilities a RabbitMQ node
