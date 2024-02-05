@@ -23,12 +23,6 @@
          check_consistency/0,
          cli_cluster_status/0]).
 
-%% These two functions are not supported by Khepri and probably
-%% shouldn't be part of this API in the future, but currently
-%% they're needed here so they can fail when invoked using Khepri.
--export([rename/2,
-         update_cluster_nodes/1]).
-
 -type node_type() :: disc_node_type() | ram_node_type().
 -type disc_node_type() :: disc.
 -type ram_node_type() :: ram.
@@ -84,7 +78,7 @@ can_join_using_khepri(RemoteNode) ->
 
 -spec join(RemoteNode, NodeType) -> Ret when
       RemoteNode :: node(),
-      NodeType :: rabbit_db_cluster:node_type(),
+      NodeType :: node_type(),
       Ret :: Ok | Error,
       Ok :: ok | {ok, already_member},
       Error :: {error, {inconsistent_cluster, string()}}.
@@ -260,7 +254,7 @@ forget_member_using_khepri(Node, false = _RemoveWhenOffline) ->
 %% -------------------------------------------------------------------
 
 -spec change_node_type(NodeType) -> ok when
-      NodeType :: rabbit_db_cluster:node_type().
+      NodeType :: node_type().
 %% @doc Changes the node type to `NodeType'.
 %%
 %% Node types may not all be valid with all databases.
@@ -301,10 +295,16 @@ members_using_mnesia() ->
     rabbit_mnesia:members().
 
 members_using_khepri() ->
-    case rabbit_khepri:locally_known_nodes() of
-        []      -> [node()];
-        Members -> Members
-    end.
+    %% This function returns the empty list when it encounters an error
+    %% trying to query khepri for it's members. As this function does not
+    %% return ok | error this is the only way for callers to detect this.
+    %% rabbit_mnesia:members/0 however _will_ still return at least the
+    %% current node making it impossible to detect the situation where
+    %% the current cluster members may not be correct. It is unlikely we
+    %% ever reach that as the mnesia cluster file probably always exists.
+    %% For khepri however it is a lot more likely to encounter an error
+    %% so we need to allow callers to be more defensive in this case.
+    rabbit_khepri:locally_known_nodes().
 
 -spec disc_members() -> Members when
       Members :: [node()].
@@ -320,7 +320,7 @@ disc_members_using_mnesia() ->
     rabbit_mnesia:cluster_nodes(disc).
 
 -spec node_type() -> NodeType when
-      NodeType :: rabbit_db_cluster:node_type().
+      NodeType :: node_type().
 %% @doc Returns the type of this node, `disc' or `ram'.
 %%
 %% Node types may not all be relevant with all databases.
@@ -373,7 +373,7 @@ check_consistency_using_khepri() ->
     rabbit_khepri:check_cluster_consistency().
 
 -spec cli_cluster_status() -> ClusterStatus when
-      ClusterStatus :: [{nodes, [{rabbit_db_cluster:node_type(), [node()]}]} |
+      ClusterStatus :: [{nodes, [{node_type(), [node()]}]} |
                         {running_nodes, [node()]} |
                         {partitions, [{node(), [node()]}]}].
 %% @doc Returns information from the cluster for the `cluster_status' CLI
@@ -390,15 +390,3 @@ cli_cluster_status_using_mnesia() ->
 
 cli_cluster_status_using_khepri() ->
     rabbit_khepri:cli_cluster_status().
-
-rename(Node, NodeMapList) ->
-    case rabbit_khepri:is_enabled() of
-        true  -> {error, not_supported};
-        false -> rabbit_mnesia_rename:rename(Node, NodeMapList)
-    end.
-
-update_cluster_nodes(DiscoveryNode) ->
-    case rabbit_khepri:is_enabled() of
-        true  -> {error, not_supported};
-        false -> rabbit_mnesia:update_cluster_nodes(DiscoveryNode)
-    end.

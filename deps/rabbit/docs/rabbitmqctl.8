@@ -463,124 +463,6 @@ is part of, as a ram node:
 To learn more, see the
 .Lk https://www.rabbitmq.com/clustering.html "RabbitMQ Clustering guide".
 .\" ------------------------------------------------------------------
-.It Cm rename_cluster_node Ar oldnode1 Ar newnode1 Op Ar oldnode2 Ar newnode2 ...
-.Pp
-Supports renaming of cluster nodes in the local database.
-.Pp
-This subcommand causes
-.Nm
-to temporarily become the node in order to make the change.
-The local cluster node must therefore be completely stopped; other nodes
-can be online or offline.
-.Pp
-This subcommand takes an even number of arguments, in pairs representing
-the old and new names for nodes.
-You must specify the old and new names for this node and for any other
-nodes that are stopped and being renamed at the same time.
-.Pp
-It is possible to stop all nodes and rename them all simultaneously (in
-which case old and new names for all nodes must be given to every node)
-or stop and rename nodes one at a time (in which case each node only
-needs to be told how its own name is changing).
-.Pp
-For example, this command will rename the node
-.Qq rabbit@misshelpful
-to the node
-.Qq rabbit@cordelia
-.sp
-.Dl rabbitmqctl rename_cluster_node rabbit@misshelpful rabbit@cordelia
-.Pp
-Note that this command only changes the local database.
-It may also be necessary to rename the local database directories
-and configure the new node name.
-For example:
-.sp
-.Bl -enum -compact
-.It
-Stop the node:
-.sp
-.Dl rabbitmqctl stop rabbit@misshelpful
-.sp
-.It
-Rename the node in the local database:
-.sp
-.Dl rabbitmqctl rename_cluster_node rabbit@misshelpful rabbit@cordelia
-.sp
-.It
-Rename the local database directories (note, you do not need to do this
-if you have set the RABBITMQ_MNESIA_DIR environment variable):
-.sp
-.Bd -literal -offset indent -compact
-mv \\
-  /var/lib/rabbitmq/mnesia/rabbit\\@misshelpful \\
-  /var/lib/rabbitmq/mnesia/rabbit\\@cordelia
-mv \\
-  /var/lib/rabbitmq/mnesia/rabbit\\@misshelpful-rename \\
-  /var/lib/rabbitmq/mnesia/rabbit\\@cordelia-rename
-mv \\
-  /var/lib/rabbitmq/mnesia/rabbit\\@misshelpful-plugins-expand \\
-  /var/lib/rabbitmq/mnesia/rabbit\\@cordelia-plugins-expand
-.Ed
-.sp
-.It
-If node name is configured e.g. using
-.Ar /etc/rabbitmq/rabbitmq-env.conf
-, it also needs to be updated there.
-.sp
-.It
-Start the node when ready
-.El
-.\" ------------------------------------------------------------------
-.It Cm update_cluster_nodes Ar clusternode
-.Bl -tag -width Ds
-.It Ar clusternode
-The node to consult for up-to-date information.
-.El
-.Pp
-Instructs an already clustered node to contact
-.Ar clusternode
-to cluster when booting up.
-This is different from
-.Cm join_cluster
-since it does not join any cluster - it checks that the node is already
-in a cluster with
-.Ar clusternode .
-.Pp
-The need for this command is motivated by the fact that clusters can
-change while a node is offline.
-Consider a situation where node
-.Va rabbit@A
-and
-.Va rabbit@B
-are clustered.
-.Va rabbit@A
-goes down,
-.Va rabbit@C
-clusters with
-.Va rabbit@B ,
-and then
-.Va rabbit@B
-leaves the cluster.
-When
-.Va rabbit@A
-starts back up, it'll try to contact
-.Va rabbit@B ,
-but this will fail since
-.Va rabbit@B
-is not in the cluster anymore.
-The following command will rename node
-.Va rabbit@B
-to
-.Va rabbit@C
-on node
-.Va rabbitA
-.sp
-.Dl update_cluster_nodes -n Va rabbit@A Va rabbit@B Va rabbit@C
-.Pp
-To learn more, see the
-.Lk https://www.rabbitmq.com/clustering.html "RabbitMQ Clustering guide"
-.El
-.\" ------------------------------------------------------------------
 .\" ## Classic Mirrored Queues
 .\" ------------------------------------------------------------------
 .Ss Replication
@@ -598,7 +480,7 @@ The queue will block while synchronisation takes place (all publishers
 and consumers using the queue will block or temporarily see no activity).
 This command can only be used with mirrored queues.
 To learn more, see the
-.Lk https://www.rabbitmq.com/ha.html "RabbitMQ Mirroring guide"
+.Lk https://www.rabbitmq.com/ha.html "RabbitMQ Classic Queue Mirroring guide"
 .Pp
 Note that queues with unsynchronised replicas and active consumers
 will become synchronised eventually (assuming that consumers make progress).

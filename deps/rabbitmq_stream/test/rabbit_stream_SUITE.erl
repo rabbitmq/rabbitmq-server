@@ -11,7 +11,8 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2020-2024 Broadcom. All Rights Reserved.
+%% The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_stream_SUITE).
@@ -27,6 +28,7 @@
 -compile(export_all).
 
 -import(rabbit_stream_core, [frame/1]).
+-import(rabbit_ct_broker_helpers, [rpc/5]).
 
 -define(WAIT, 5000).
 
@@ -55,7 +57,10 @@ groups() ->
        max_segment_size_bytes_validation,
        close_connection_on_consumer_update_timeout,
        set_filter_size,
-       vhost_queue_limit
+       vhost_queue_limit,
+       connection_should_be_closed_on_token_expiry,
+       should_receive_metadata_update_after_update_secret,
+       store_offset_requires_read_access
       ]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
@@ -162,6 +167,11 @@ init_per_testcase(vhost_queue_limit = TestCase, Config) ->
                                               [<<"/">>]),
     ok = rabbit_ct_broker_helpers:set_vhost_limit(Config, 0, <<"/">>, max_queues, QueueCount + 5),
     rabbit_ct_helpers:testcase_started(Config, TestCase);
+
+init_per_testcase(store_offset_requires_read_access = TestCase, Config) ->
+  ok = rabbit_ct_broker_helpers:add_user(Config, <<"test">>),
+  rabbit_ct_helpers:testcase_started(Config, TestCase);
+
 init_per_testcase(TestCase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, TestCase).
 
@@ -193,6 +203,9 @@ end_per_testcase(vhost_queue_limit = TestCase, Config) ->
                                      rabbit_vhost_limit,
                                      clear,
                                      [<<"/">>, <<"guest">>]),
+    rabbit_ct_helpers:testcase_finished(Config, TestCase);
+end_per_testcase(store_offset_requires_read_access = TestCase, Config) ->
+    ok = rabbit_ct_broker_helpers:delete_user(Config, <<"test">>),
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 end_per_testcase(TestCase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, TestCase).
@@ -688,6 +701,146 @@ vhost_queue_limit(Config) ->
 
     ok.
 
+connection_should_be_closed_on_token_expiry(Config) ->
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    Mod = rabbit_access_control,
+    ok = rpc(Config, 0, meck, new, [Mod, [no_link, passthrough]]),
+    ok = rpc(Config, 0, meck, expect, [Mod, check_user_loopback, 2, ok]),
+    ok = rpc(Config, 0, meck, expect, [Mod, check_vhost_access, 4, ok]),
+    ok = rpc(Config, 0, meck, expect, [Mod, permission_cache_can_expire, 1, true]),
+    Expiry = os:system_time(seconds) + 2,
+    ok = rpc(Config, 0, meck, expect, [Mod, expiry_timestamp, 1, Expiry]),
+
+    T = gen_tcp,
+    Port = get_port(T, Config),
+    Opts = get_opts(T),
+    {ok, S} = T:connect("localhost", Port, Opts),
+    C = rabbit_stream_core:init(0),
+    test_peer_properties(T, S, C),
+    test_authenticate(T, S, C),
+    closed = wait_for_socket_close(T, S, 10),
+    ok = rpc(Config, 0, meck, unload, [Mod]).
+
+should_receive_metadata_update_after_update_secret(Config) ->
+    T = gen_tcp,
+    Port = get_port(T, Config),
+    Opts = get_opts(T),
+    {ok, S} = T:connect("localhost", Port, Opts),
+    C = rabbit_stream_core:init(0),
+    test_peer_properties(T, S, C),
+    test_authenticate(T, S, C),
+
+    Prefix = atom_to_binary(?FUNCTION_NAME, utf8),
+    PublishStream = <<Prefix/binary, <<"-publish">>/binary>>,
+    test_create_stream(T, S, PublishStream, C),
+    ConsumeStream = <<Prefix/binary, <<"-consume">>/binary>>,
+    test_create_stream(T, S, ConsumeStream, C),
+
+    test_declare_publisher(T, S, 1, PublishStream, C),
+    test_subscribe(T, S, 1, ConsumeStream, C),
+
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    Mod = rabbit_stream_utils,
+    ok = rpc(Config, 0, meck, new, [Mod, [no_link, passthrough]]),
+    ok = rpc(Config, 0, meck, expect, [Mod, check_write_permitted, 2, error]),
+    ok = rpc(Config, 0, meck, expect, [Mod, check_read_permitted, 3, error]),
+
+    C01 = expect_successful_authentication(try_authenticate(T, S, C, <<"PLAIN">>, <<"guest">>, <<"guest">>)),
+
+    {Meta1, C02} = receive_commands(T, S, C01),
+    {metadata_update, Stream1, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE} = Meta1,
+    {Meta2, C03} = receive_commands(T, S, C02),
+    {metadata_update, Stream2, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE} = Meta2,
+    ImpactedStreams = #{Stream1 => ok, Stream2 => ok},
+    ?assert(maps:is_key(PublishStream, ImpactedStreams)),
+    ?assert(maps:is_key(ConsumeStream, ImpactedStreams)),
+
+    test_close(T, S, C03),
+    closed = wait_for_socket_close(T, S, 10),
+
+    ok = rpc(Config, 0, meck, unload, [Mod]),
+
+    {ok, S2} = T:connect("localhost", Port, Opts),
+    C2 = rabbit_stream_core:init(0),
+    test_peer_properties(T, S2, C2),
+    test_authenticate(T, S2, C2),
+    test_delete_stream(T, S2, PublishStream, C2, false),
+    test_delete_stream(T, S2, ConsumeStream, C2, false),
+    test_close(T, S2, C2),
+    closed = wait_for_socket_close(T, S2, 10),
+    ok.
+
+store_offset_requires_read_access(Config) ->
+    Username = <<"test">>,
+    rabbit_ct_broker_helpers:set_full_permissions(Config, Username, <<"/">>),
+
+    T = gen_tcp,
+    Port = get_port(T, Config),
+    Opts = get_opts(T),
+    {ok, S} = T:connect("localhost", Port, Opts),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(T, S, C0),
+    C2 = test_authenticate(T, S, C1, Username),
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    C3 = test_create_stream(T, S, Stream, C2),
+
+    C4 = test_subscribe(T, S, 1, Stream, C3),
+    %% store_offset should work because the subscription is still active
+    Reference = <<"foo">>,
+    ok = store_offset(T, S, Reference, Stream, 42),
+    {O42, C5} = query_expected_offset(T, S, C4, Reference, Stream, 42),
+    ?assertEqual(42, O42),
+
+    C6 = test_unsubscribe(T, S, 1, C5),
+    %% store_offset should still work because the user has read access to the stream
+    ok = store_offset(T, S, Reference, Stream, 43),
+    {O43, C7} = query_expected_offset(T, S, C6, Reference, Stream, 43),
+    ?assertEqual(43, O43),
+
+    %% no read access anymore
+    rabbit_ct_broker_helpers:set_permissions(Config, Username, <<"/">>,
+                                             <<".*">>, <<".*">>, <<"foobar">>),
+    %% this store_offset request will not work because no read access
+    ok = store_offset(T, S, Reference, Stream, 44),
+
+    %% providing read access back to be able to query_offset
+    rabbit_ct_broker_helpers:set_full_permissions(Config, Username, <<"/">>),
+    %% we never get the offset from the last query_offset attempt
+    {Timeout, C8} = query_expected_offset(T, S, C7, Reference, Stream, 44),
+    ?assertMatch(timeout, Timeout),
+
+    C9 = test_delete_stream(T, S, Stream, C8, true),
+    test_close(T, S, C9),
+    closed = wait_for_socket_close(T, S, 10),
+    ok.
+
+store_offset(Transport, S, Reference, Stream, Offset) ->
+    StoreFrame = rabbit_stream_core:frame({store_offset, Reference, Stream, Offset}),
+    ok = Transport:send(S, StoreFrame).
+
+query_expected_offset(T, S, C, Reference, Stream, Expected) ->
+    query_expected_offset(T, S, C, Reference, Stream, Expected, 10).
+
+query_expected_offset(_, _, C, _, _, _, 0) ->
+    {timeout, C};
+query_expected_offset(T, S, C0, Reference, Stream, Expected, Count) ->
+    case query_offset(T, S, C0, Reference, Stream) of
+        {Expected, _} = R ->
+            R;
+        {_, C1} ->
+            timer:sleep(100),
+            query_expected_offset(T, S, C1, Reference, Stream, Expected, Count - 1)
+    end.
+
+query_offset(T, S, C0, Reference, Stream) ->
+    QueryFrame = request({query_offset, Reference, Stream}),
+    ok = T:send(S, QueryFrame),
+
+    {Cmd, C1} = receive_commands(T, S, C0),
+    {response, 1, {query_offset, _, Offset}} = Cmd,
+
+    {Offset, C1}.
+
 consumer_count(Config) ->
     ets_count(Config, ?TABLE_CONSUMER).
 
@@ -838,7 +991,12 @@ test_peer_properties(Transport, S, C0) ->
     C.
 
 test_authenticate(Transport, S, C0) ->
-  tune(Transport, S, test_plain_sasl_authenticate(Transport, S, sasl_handshake(Transport, S, C0))).
+  tune(Transport, S,
+       test_plain_sasl_authenticate(Transport, S, sasl_handshake(Transport, S, C0), <<"guest">>)).
+
+test_authenticate(Transport, S, C0, Username) ->
+  tune(Transport, S,
+       test_plain_sasl_authenticate(Transport, S, sasl_handshake(Transport, S, C0), Username)).
 
 sasl_handshake(Transport, S, C0) ->
     SaslHandshakeFrame = request(sasl_handshake),
@@ -854,11 +1012,8 @@ sasl_handshake(Transport, S, C0) ->
     end,
     C1.
 
-test_plain_sasl_authenticate(Transport, S, C1) ->
-  expect_successful_authentication(plain_sasl_authenticate(Transport, S, C1)).
-
-plain_sasl_authenticate(Transport, S, C1) ->
-    plain_sasl_authenticate(Transport, S, C1, <<"guest">>, <<"guest">>).
+test_plain_sasl_authenticate(Transport, S, C1, Username) ->
+  expect_successful_authentication(plain_sasl_authenticate(Transport, S, C1, Username, Username)).
 
 plain_sasl_authenticate(Transport, S, C1, Username, Password) ->
     Null = 0,

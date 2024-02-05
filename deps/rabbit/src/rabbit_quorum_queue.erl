@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_quorum_queue).
@@ -55,7 +55,8 @@
          file_handle_other_reservation/0]).
 -export([file_handle_release_reservation/0]).
 -export([list_with_minimum_quorum/0,
-         filter_quorum_critical/1,
+         list_with_local_promotable/0,
+         list_with_local_promotable_for_cli/0,
          filter_quorum_critical/3,
          all_replica_states/0]).
 -export([capabilities/0]).
@@ -77,8 +78,13 @@
 -export([force_shrink_member_to_current_member/2,
          force_all_queues_shrink_member_to_current_member/0]).
 
+-ifdef(TEST).
+-export([filter_promotable/2]).
+-endif.
+
 -import(rabbit_queue_type_util, [args_policy_lookup/3,
-                                 qname_to_internal_name/1]).
+                                 qname_to_internal_name/1,
+                                 erpc_call/5]).
 
 -include_lib("stdlib/include/qlc.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -88,6 +94,8 @@
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(),
                  mc:state()}.
 -type membership() :: voter | non_voter | promotable.  %% see ra_membership() in Ra.
+-type replica_states() :: #{atom() => replica_state()}.
+-type replica_state() :: leader | follower | non_voter | promotable.
 
 -define(RA_SYSTEM, quorum_queues).
 -define(RA_WAL_NAME, ra_log_wal).
@@ -404,35 +412,37 @@ all_replica_states() ->
 
 -spec list_with_minimum_quorum() -> [amqqueue:amqqueue()].
 list_with_minimum_quorum() ->
-    filter_quorum_critical(
-      rabbit_amqqueue:list_local_quorum_queues()).
-
--spec filter_quorum_critical([amqqueue:amqqueue()]) -> [amqqueue:amqqueue()].
-filter_quorum_critical(Queues) ->
-    %% Example map of QQ replica states:
-    %%    #{rabbit@warp10 =>
-    %%      #{'%2F_qq.636' => leader,'%2F_qq.243' => leader,
-    %%        '%2F_qq.1939' => leader,'%2F_qq.1150' => leader,
-    %%        '%2F_qq.1109' => leader,'%2F_qq.1654' => leader,
-    %%        '%2F_qq.1679' => leader,'%2F_qq.1003' => leader,
-    %%        '%2F_qq.1593' => leader,'%2F_qq.1765' => leader,
-    %%        '%2F_qq.933' => leader,'%2F_qq.38' => leader,
-    %%        '%2F_qq.1357' => leader,'%2F_qq.1345' => leader,
-    %%        '%2F_qq.1694' => leader,'%2F_qq.994' => leader,
-    %%        '%2F_qq.490' => leader,'%2F_qq.1704' => leader,
-    %%        '%2F_qq.58' => leader,'%2F_qq.564' => leader,
-    %%        '%2F_qq.683' => leader,'%2F_qq.386' => leader,
-    %%        '%2F_qq.753' => leader,'%2F_qq.6' => leader,
-    %%        '%2F_qq.1590' => leader,'%2F_qq.1363' => leader,
-    %%        '%2F_qq.882' => leader,'%2F_qq.1161' => leader,...}}
-    ReplicaStates = maps:from_list(
-                        rabbit_misc:append_rpc_all_nodes(rabbit_nodes:list_running(),
-                            ?MODULE, all_replica_states, [])),
+    Queues = rabbit_amqqueue:list_local_quorum_queues(),
+    ReplicaStates = get_replica_states(rabbit_nodes:list_running()),
     filter_quorum_critical(Queues, ReplicaStates, node()).
 
--spec filter_quorum_critical([amqqueue:amqqueue()], #{node() => #{atom() => atom()}}, node()) ->
-    [amqqueue:amqqueue()].
+-spec list_with_local_promotable() -> [amqqueue:amqqueue()].
+list_with_local_promotable() ->
+    Queues = rabbit_amqqueue:list_local_quorum_queues(),
+    #{node() := ReplicaStates} = get_replica_states([node()]),
+    filter_promotable(Queues, ReplicaStates).
 
+-spec list_with_local_promotable_for_cli() -> [#{binary() => any()}].
+list_with_local_promotable_for_cli() ->
+    Qs = list_with_local_promotable(),
+    lists:map(fun amqqueue:to_printable/1, Qs).
+
+-spec get_replica_states([node()]) -> #{node() => replica_states()}.
+get_replica_states(Nodes) ->
+    maps:from_list(
+      rabbit_misc:append_rpc_all_nodes(Nodes, ?MODULE, all_replica_states, [])).
+
+-spec filter_promotable([amqqueue:amqqueue()], replica_states()) ->
+    [amqqueue:amqqueue()].
+filter_promotable(Queues, ReplicaStates) ->
+    lists:filter(fun (Q) ->
+                    {RaName, _Node} = amqqueue:get_pid(Q),
+                    State = maps:get(RaName, ReplicaStates),
+                    State == promotable
+                 end, Queues).
+
+-spec filter_quorum_critical([amqqueue:amqqueue()], #{node() => replica_states()}, node()) ->
+    [amqqueue:amqqueue()].
 filter_quorum_critical(Queues, ReplicaStates, Self) ->
     lists:filter(fun (Q) ->
                     MemberNodes = get_nodes(Q),
@@ -505,6 +515,7 @@ handle_tick(QName,
     spawn(
       fun() ->
               try
+                  {ok, Q} = rabbit_amqqueue:lookup(QName),
                   Reductions = reductions(Name),
                   rabbit_core_metrics:queue_stats(QName, NumReadyMsgs,
                                                   NumCheckedOut, NumMessages,
@@ -537,21 +548,24 @@ handle_tick(QName,
                            {single_active_consumer_tag, SacTag},
                            {single_active_consumer_pid, SacPid},
                            {leader, node()}
-                           | infos(QName, Keys)],
+                           | info(Q, Keys)],
                   rabbit_core_metrics:queue_stats(QName, Infos),
-                  ok = repair_leader_record(QName, Self),
+                  ok = repair_leader_record(Q, Self),
                   ExpectedNodes = rabbit_nodes:list_members(),
                   case Nodes -- ExpectedNodes of
                       [] ->
                           ok;
-                      Stale ->
+                      Stale when length(ExpectedNodes) > 0 ->
+                          %% rabbit_nodes:list_members/0 returns [] when there
+                          %% is an error so we need to handle that case
                           rabbit_log:debug("~ts: stale nodes detected. Purging ~w",
                                            [rabbit_misc:rs(QName), Stale]),
                           %% pipeline purge command
-                          {ok, Q} = rabbit_amqqueue:lookup(QName),
                           ok = ra:pipeline_command(amqqueue:get_pid(Q),
                                                    rabbit_fifo:make_purge_nodes(Stale)),
 
+                          ok;
+                      _ ->
                           ok
                   end
               catch
@@ -562,14 +576,14 @@ handle_tick(QName,
               end
       end).
 
-repair_leader_record(QName, Self) ->
-    {ok, Q} = rabbit_amqqueue:lookup(QName),
+repair_leader_record(Q, Self) ->
     Node = node(),
     case amqqueue:get_pid(Q) of
         {_, Node} ->
             %% it's ok - we don't need to do anything
             ok;
         _ ->
+            QName = amqqueue:get_name(Q),
             rabbit_log:debug("~ts: repairing leader record",
                              [rabbit_misc:rs(QName)]),
             {_, Name} = erlang:process_info(Self, registered_name),
@@ -1096,7 +1110,7 @@ status(Vhost, QueueName) ->
                           {<<"Term">>, Term},
                           {<<"Machine Version">>, MacVer}
                          ];
-                     {error, Err} ->
+                     {error, _} ->
                          %% try the old method
                          case get_sys_status(ServerId) of
                              {ok, Sys} ->
@@ -1647,8 +1661,8 @@ peek(Pos, Q) when ?is_amqqueue(Q) andalso ?amqqueue_is_quorum(Q) ->
                        _ -> 0
                     end,
             Msg = mc:set_annotation(<<"x-delivery-count">>, Count, Msg0),
-            XName = mc:get_annotation(exchange, Msg),
-            RoutingKeys = mc:get_annotation(routing_keys, Msg),
+            XName = mc:exchange(Msg),
+            RoutingKeys = mc:routing_keys(Msg),
             AmqpLegacyMsg = mc:prepare(read, mc:convert(mc_amqpl, Msg)),
             Content = mc:protocol_state(AmqpLegacyMsg),
             {ok, rabbit_basic:peek_fmt_message(XName, RoutingKeys, Content)};
@@ -1838,31 +1852,6 @@ notify_decorators(QName, F, A) ->
             ok;
         {error, not_found} ->
             ok
-    end.
-
-erpc_call(Node, M, F, A, _Timeout)
-  when Node =:= node()  ->
-    %% Only timeout 'infinity' optimises the local call in OTP 23-25 avoiding a new process being spawned:
-    %% https://github.com/erlang/otp/blob/47f121af8ee55a0dbe2a8c9ab85031ba052bad6b/lib/kernel/src/erpc.erl#L121
-    try erpc:call(Node, M, F, A, infinity) of
-        Result ->
-            Result
-    catch
-        error:Err ->
-            {error, Err}
-    end;
-erpc_call(Node, M, F, A, Timeout) ->
-    case lists:member(Node, nodes()) of
-        true ->
-            try erpc:call(Node, M, F, A, Timeout) of
-                Result ->
-                    Result
-            catch
-                error:Err ->
-                    {error, Err}
-            end;
-        false ->
-            {error, noconnection}
     end.
 
 is_stateful() -> true.

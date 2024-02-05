@@ -131,14 +131,26 @@ end_per_testcase(Testcase, Config) ->
 enable_ff(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QueueType = ?config(queue_type, Config),
     QName = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QName, 0, 0},
-                 declare(Ch, QName, [{<<"x-queue-type">>, longstr,
-                                      ?config(queue_type, Config)}])),
+                 declare(Ch, QName,
+                         [{<<"x-queue-type">>, longstr, QueueType}])),
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
 
-    timer:sleep(100),
+    case QueueType of
+        <<"stream">> ->
+            %% if it is a stream we need to wait until there is a local member
+            %% on the node we want to subscibe from before proceeding
+            rabbit_ct_helpers:await_condition(
+              fun() ->
+                      queue_utils:has_local_stream_member(Config, 2, QName, <<"/">>)
+              end, 60000),
+            ok;
+        _ ->
+            ok
+    end,
 
     ConsumerTag1 = <<"ctag1">>,
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, 2),

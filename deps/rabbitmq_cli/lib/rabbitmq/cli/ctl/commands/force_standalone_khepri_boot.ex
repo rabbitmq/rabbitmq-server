@@ -5,14 +5,14 @@
 ## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForceStandaloneKhepriBootCommand do
-  alias RabbitMQ.CLI.Core.{Config, DocGuide}
+  alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   use RabbitMQ.CLI.Core.MergesNoDefaults
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
-  def run([], %{node: node_name} = opts) do
+  def run([], %{node: node_name}) do
     ret =
       :rabbit_misc.rpc_call(node_name, :rabbit_khepri, :force_shrink_member_to_current_member, [])
 

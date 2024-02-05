@@ -26,7 +26,7 @@ content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {node_exists(ReqData, get_node(ReqData)), ReqData, Context}.
+    {rabbit_mgmt_nodes:node_exists(ReqData), ReqData, Context}.
 
 to_json(ReqData, {Mode, Context}) ->
     rabbit_mgmt_util:reply(augment(Mode, ReqData), ReqData, {Mode, Context}).
@@ -39,16 +39,9 @@ is_authorized(ReqData, {Mode, Context}) ->
 get_node(ReqData) ->
     list_to_atom(binary_to_list(rabbit_mgmt_util:id(node, ReqData))).
 
-node_exists(ReqData, Node) ->
-    case [N || N <- rabbit_mgmt_wm_nodes:all_nodes(ReqData),
-               proplists:get_value(name, N) == Node] of
-        [] -> false;
-        [_] -> true
-    end.
-
 augment(Mode, ReqData) ->
     Node = get_node(ReqData),
-    case node_exists(ReqData, Node) of
+    case rabbit_mgmt_nodes:node_exists(ReqData) of
         false ->
             not_found;
         true ->

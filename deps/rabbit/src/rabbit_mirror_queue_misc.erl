@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2010-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mirror_queue_misc).
@@ -551,7 +551,7 @@ stop_all_slaves(Reason, SPids, QName, GM, WaitTimeout) ->
                     {'DOWN', MRef, process, _Pid, _Info} ->
                         Acc
                 after WaitTimeout ->
-                        rabbit_mirror_queue_misc:log_warning(
+                        log_warning(
                           QName, "Missing 'DOWN' message from ~tp in"
                           " node ~tp", [Pid, node(Pid)]),
                         [Pid | Acc]
@@ -582,7 +582,7 @@ remove_all_slaves_in_mnesia(QName, PendingSlavePids) ->
         %% ensure old incarnations are stopped using
         %% the pending mirror pids.
         Q3 = amqqueue:set_slave_pids_pending_shutdown(Q2, PendingSlavePids),
-        rabbit_mirror_queue_misc:store_updated_slaves(Q3)
+        store_updated_slaves(Q3)
     end).
 
 remove_all_slaves_in_khepri(QName, PendingSlavePids) ->

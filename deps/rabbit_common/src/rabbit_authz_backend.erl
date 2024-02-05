@@ -67,9 +67,6 @@
     rabbit_types:topic_access_context()) ->
     boolean() | {'error', any()}.
 
-%% Returns true for backends that support state or credential expiration (e.g. use JWTs).
--callback state_can_expire() -> boolean().
-
 %% Updates backend state that has expired.
 %%
 %% Possible responses:
@@ -84,5 +81,15 @@
     {'ok', rabbit_types:auth_user()} |
     {'refused', string(), [any()]} |
     {'error', any()}.
+
+%% Get expiry timestamp for the user.
+%%
+%% Possible responses:
+%% never
+%%     The user token/credentials never expire.
+%% Timestamp
+%%     The expiry time (POSIX) in seconds of the token/credentials.
+-callback expiry_timestamp(AuthUser :: rabbit_types:auth_user()) ->
+    integer() | never.
 
 -optional_callbacks([update_state/2]).

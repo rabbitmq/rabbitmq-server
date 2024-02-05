@@ -37,8 +37,6 @@
          filtering_supported/0,
          check_super_stream_management_permitted/4]).
 
--define(MAX_PERMISSION_CACHE_SIZE, 12).
-
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
 
@@ -174,32 +172,15 @@ auth_mechanism_to_module(TypeBin, Sock) ->
     end.
 
 check_resource_access(User, Resource, Perm, Context) ->
-    V = {Resource, Context, Perm},
-
-    Cache =
-        case get(permission_cache) of
-            undefined ->
-                [];
-            Other ->
-                Other
-        end,
-    case lists:member(V, Cache) of
-        true ->
-            ok;
-        false ->
-            try
-                rabbit_access_control:check_resource_access(User,
-                                                            Resource,
-                                                            Perm,
-                                                            Context),
-                CacheTail =
-                    lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE - 1),
-                put(permission_cache, [V | CacheTail]),
-                ok
-            catch
-                exit:_ ->
-                    error
-            end
+    try
+        rabbit_access_control:check_resource_access(User,
+                                                    Resource,
+                                                    Perm,
+                                                    Context),
+        ok
+    catch
+        exit:_ ->
+            error
     end.
 
 check_configure_permitted(Resource, User) ->

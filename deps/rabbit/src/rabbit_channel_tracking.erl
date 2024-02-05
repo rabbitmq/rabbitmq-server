@@ -25,6 +25,7 @@
          shutdown_tracked_items/2]).
 
 -export([list/0, list_of_user/1, list_on_node/1,
+         channel_count_on_node/1,
          tracked_channel_table_name_for/1,
          tracked_channel_per_user_table_name_for/1,
          ensure_tracked_tables_for_this_node/0,
@@ -185,8 +186,18 @@ list_on_node(Node) ->
             []
     end.
 
--spec tracked_channel_table_name_for(node()) -> atom().
+channel_count_on_node(Node) when Node == node() ->
+    ets:info(?TRACKED_CHANNEL_TABLE, size);
+channel_count_on_node(Node) ->
+    case rabbit_misc:rpc_call(Node, ?MODULE, ?FUNCTION_NAME, [Node]) of
+        Int when is_integer(Int) ->
+            Int;
+        _ ->
+            0
+    end.
 
+
+-spec tracked_channel_table_name_for(node()) -> atom().
 tracked_channel_table_name_for(Node) ->
     list_to_atom(rabbit_misc:format("tracked_channel_on_node_~ts", [Node])).
 
@@ -220,8 +231,8 @@ get_tracked_channels_by_connection_pid(ConnPid) ->
 
 get_tracked_channel_by_id(ChId) ->
     rabbit_tracking:match_tracked_items(
-        ?TRACKED_CHANNEL_TABLE,
-        #tracked_channel{id = ChId, _ = '_'}).
+      ?TRACKED_CHANNEL_TABLE,
+      #tracked_channel{id = ChId, _ = '_'}).
 
 delete_tracked_channel_user_entry(Username) ->
     rabbit_tracking:delete_tracked_entry(

@@ -11,6 +11,7 @@
 
 -export([format_ra_event/2]).
 
+%% machine callbacks
 -export([init/1,
          apply/3,
          state_enter/2,
@@ -19,43 +20,57 @@
          tick/2,
          version/0,
          which_module/1,
-         overview/1]).
+         overview/1,
+         policy_changed/1]).
 
--export([recover/0,
+%% coordinator API
+-export([process_command/1,
+         recover/0,
          stop/0,
-         add_replica/2,
-         delete_replica/2,
-         register_listener/1,
-         register_local_member_listener/1]).
+         transfer_leadership/1,
+         forget_node/1,
+         status/0,
+         member_overview/0
+        ]).
 
+%% stream API
 -export([new_stream/2,
          restart_stream/1,
          restart_stream/2,
          delete_stream/2,
-         transfer_leadership/1]).
-
--export([policy_changed/1]).
+         add_replica/2,
+         delete_replica/2,
+         register_listener/1,
+         register_local_member_listener/1
+        ]).
 
 -export([local_pid/1,
          writer_pid/1,
          members/1,
          stream_overview/1]).
+
+%% machine queries
 -export([query_local_pid/3,
          query_writer_pid/2,
          query_members/2,
          query_stream_overview/2]).
 
 
--export([log_overview/1]).
--export([replay/1]).
+-export([log_overview/1,
+         key_metrics_rpc/1
+         ]).
 
 %% for SAC coordinator
--export([process_command/1,
-         sac_state/1]).
+-export([sac_state/1]).
 
 %% for testing and debugging
 -export([eval_listeners/3,
+         replay/1,
          state/0]).
+
+-import(rabbit_queue_type_util, [
+                                 erpc_call/5
+                                ]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "Restart stream coordinator"},
@@ -390,23 +405,32 @@ process_command([Server | Servers], Cmd) ->
             process_command(Servers, Cmd);
         {error, noproc} ->
             process_command(Servers, Cmd);
+        {error, nodedown} ->
+            process_command(Servers, Cmd);
         Reply ->
             Reply
     end.
 
 ensure_coordinator_started() ->
     Local = {?MODULE, node()},
-    AllNodes = all_coord_members(),
+    ExpectedMembers = expected_coord_members(),
     case whereis(?MODULE) of
         undefined ->
             global:set_lock(?STREAM_COORDINATOR_STARTUP),
             Nodes = case ra:restart_server(?RA_SYSTEM, Local) of
                         {error, Reason} when Reason == not_started orelse
                                              Reason == name_not_registered ->
-                            OtherNodes = all_coord_members() -- [Local],
+                            OtherNodes = ExpectedMembers -- [Local],
+                            %% this could potentially be slow if some expected
+                            %% members are on nodes that have recently terminated
+                            %% and have left a dangling TCP connection
+                            %% I suspect this very rarely happens as the local coordinator
+                            %% server is started in recover/0
                             case lists:filter(
                                    fun({_, N}) ->
-                                           erpc:call(N, erlang, whereis, [?MODULE]) =/= undefined
+                                           is_pid(erpc_call(N, erlang,
+                                                            whereis, [?MODULE],
+                                                            1000))
                                    end, OtherNodes) of
                                 [] ->
                                     start_coordinator_cluster();
@@ -414,16 +438,28 @@ ensure_coordinator_started() ->
                                     OtherNodes
                             end;
                         ok ->
-                            AllNodes;
+                            %% TODO: it may be better to do a leader call
+                            %% here as the local member may not have caught up
+                            %% yet
+                            locally_known_members();
                         {error, {already_started, _}} ->
-                            AllNodes;
+                            locally_known_members();
                         _ ->
-                            AllNodes
+                            locally_known_members()
                     end,
             global:del_lock(?STREAM_COORDINATOR_STARTUP),
             Nodes;
         _ ->
-            AllNodes
+            locally_known_members()
+    end.
+
+locally_known_members() ->
+    %% TODO: use ra_leaderboard and fallback if leaderboard not populated
+    case ra:members({local, {?MODULE, node()}}) of
+        {_, Members, _} ->
+            Members;
+        Err ->
+            exit({error_fetching_locally_known_coordinator_members, Err})
     end.
 
 start_coordinator_cluster() ->
@@ -440,9 +476,13 @@ start_coordinator_cluster() ->
             []
     end.
 
-all_coord_members() ->
-    Nodes = rabbit_nodes:list_running() -- [node()],
-    [{?MODULE, Node} || Node <- [node() | Nodes]].
+expected_coord_members() ->
+    Nodes = rabbit_nodes:list_members(),
+    [{?MODULE, Node} || Node <- Nodes].
+
+reachable_coord_members() ->
+    Nodes = rabbit_nodes:list_reachable(),
+    [{?MODULE, Node} || Node <- Nodes].
 
 version() -> 4.
 
@@ -681,61 +721,127 @@ all_member_nodes(Streams) ->
 tick(_Ts, _State) ->
     [{aux, maybe_resize_coordinator_cluster}].
 
+members() ->
+    %% TODO: this can be replaced with a ra_leaderboard
+    %% lookup after Ra 2.7.3_
+    LocalServerId = {?MODULE, node()},
+    case whereis(?MODULE) of
+        undefined ->
+            %% no local member running, we need to try the cluster
+            OtherMembers = lists:delete(LocalServerId, reachable_coord_members()),
+            case ra:members(OtherMembers) of
+                {_, Members, Leader} ->
+                    {ok, Members, Leader};
+                Err ->
+                    Err
+            end;
+        _Pid ->
+            case ra:members({local, LocalServerId}) of
+                {_, Members, Leader} ->
+                    {ok, Members, Leader};
+                Err ->
+                    Err
+            end
+    end.
+
 maybe_resize_coordinator_cluster() ->
     spawn(fun() ->
-                  case ra:members({?MODULE, node()}) of
-                      {_, Members, _} ->
+                  RabbitIsRunning = rabbit:is_running(),
+                  case members() of
+                      {ok, Members, Leader} when RabbitIsRunning ->
                           MemberNodes = [Node || {_, Node} <- Members],
-                          Running = rabbit_nodes:list_running(),
-                          All = rabbit_nodes:list_members(),
-                          case Running -- MemberNodes of
+                          %% TODO: in the future replace with
+                          %% rabbit_presence:list_present/0
+                          Present = rabbit_nodes:list_running(),
+                          RabbitNodes = rabbit_nodes:list_members(),
+                          AddableNodes = [N || N <- RabbitNodes,
+                                               lists:member(N, Present)],
+                          case AddableNodes -- MemberNodes of
                               [] ->
                                   ok;
-                              New ->
+                              [New | _] ->
+                                  %% any remaining members will be added
+                                  %% next tick
                                   rabbit_log:info("~ts: New rabbit node(s) detected, "
                                                   "adding : ~w",
                                                   [?MODULE, New]),
-                                  add_members(Members, New)
+                                  add_member(Members, New)
                           end,
-                          case MemberNodes -- All of
+                          case MemberNodes -- RabbitNodes of
                               [] ->
                                   ok;
-                              Old ->
+                              [Old | _]  ->
+                                  %% this ought to be rather rare as the stream
+                                  %% coordinator member is now removed as part
+                                  %% of the forget_cluster_node command
                                   rabbit_log:info("~ts: Rabbit node(s) removed from the cluster, "
                                                   "deleting: ~w", [?MODULE, Old]),
-                                  remove_members(Members, Old)
+                                  remove_member(Leader, Members, Old)
                           end;
                       _ ->
                           ok
                   end
           end).
 
-add_members(_, []) ->
-    ok;
-add_members(Members, [Node | Nodes]) ->
+add_member(Members, Node) ->
     Conf = make_ra_conf(Node, [N || {_, N} <- Members]),
+    ServerId = {?MODULE, Node},
     case ra:start_server(?RA_SYSTEM, Conf) of
         ok ->
-            case ra:add_member(Members, {?MODULE, Node}) of
-                {ok, NewMembers, _} ->
-                    add_members(NewMembers, Nodes);
-                _ ->
-                    add_members(Members, Nodes)
+            case ra:add_member(Members, ServerId) of
+                {ok, _, _} ->
+                    ok;
+                {error, Err} ->
+                    rabbit_log:warning("~ts: Failed to add member, reason ~w"
+                                       "deleting started server on ~w",
+                                       [?MODULE, Err, Node]),
+                    case ra:force_delete_server(?RA_SYSTEM, ServerId) of
+                        ok ->
+                            ok;
+                        Err ->
+                            rabbit_log:warning("~ts: Failed to delete server "
+                                               "on ~w, reason ~w",
+                                               [?MODULE, Node, Err]),
+                            ok
+                    end
+            end;
+        {error, {already_started, _}} ->
+            case lists:member(ServerId, Members) of
+                true ->
+                    %% this feels like an unlikely scenario but best to handle
+                    %% it just in case
+                    ok;
+                false ->
+                    %% there is a server running but is not a member of the
+                    %% stream coordinator cluster
+                    %% In this case it needs to be deleted
+                    rabbit_log:warning("~ts: server already running on ~w but not
+                                       part of cluster, "
+                                       "deleting started server",
+                                       [?MODULE, Node]),
+                    case ra:force_delete_server(?RA_SYSTEM, ServerId) of
+                        ok ->
+                            ok;
+                        Err ->
+                            rabbit_log:warning("~ts: Failed to delete server "
+                                               "on ~w, reason ~w",
+                                               [?MODULE, Node, Err]),
+                            ok
+                    end
             end;
         Error ->
-            rabbit_log:warning("Stream coordinator failed to start on node ~ts : ~W",
+            rabbit_log:warning("Stream coordinator server failed to start on node ~ts : ~W",
                                [Node, Error, 10]),
-            add_members(Members, Nodes)
+            ok
     end.
 
-remove_members(_, []) ->
-    ok;
-remove_members(Members, [Node | Nodes]) ->
-    case ra:remove_member(Members, {?MODULE, Node}) of
-        {ok, NewMembers, _} ->
-            remove_members(NewMembers, Nodes);
-        _ ->
-            remove_members(Members, Nodes)
+remove_member(Leader, Members, Node) ->
+    ToRemove = {?MODULE, Node},
+    case lists:member(ToRemove, Members) of
+        true ->
+            ra:leave_and_delete_server(?RA_SYSTEM, Leader, ToRemove);
+        false ->
+            ok
     end.
 
 -record(aux, {actions = #{} ::
@@ -2101,6 +2207,107 @@ transfer_leadership([Destination | _] = _TransferCandidates) ->
         undefined ->
             {ok, undefined}
     end.
+
+-spec forget_node(node()) -> ok | {error, term()}.
+forget_node(Node) when is_atom(Node) ->
+    case ra_directory:uid_of(?RA_SYSTEM, ?MODULE) of
+        undefined ->
+            %% if there is no local stream coordinator registered it is likely that the
+            %% system does not use streams at all and we just return ok
+            %% here. The alternative would be to do a cluster wide rpc here
+            %% to check but given there is a fallback
+            ok;
+        _ ->
+            IsRunning = rabbit_nodes:is_running(Node),
+            ExpectedMembers = expected_coord_members(),
+            ToRemove = {?MODULE, Node},
+            case ra:members(ExpectedMembers) of
+                {ok, Members, Leader} ->
+                    case lists:member(ToRemove, Members) of
+                        true ->
+                            case ra:remove_member(Leader, ToRemove) of
+                                {ok, _, _} when IsRunning ->
+                                    _ = ra:force_delete_server(?RA_SYSTEM, ToRemove),
+                                    ok;
+                                {ok, _, _} ->
+                                    ok;
+                                {error, _} = Err ->
+                                    Err
+                            end;
+                        false ->
+                            ok
+                    end;
+                Err ->
+                    Err
+            end
+    end.
+
+
+-spec member_overview() ->
+    {ok, map()} | {error, term()}.
+member_overview() ->
+    case whereis(?MODULE) of
+        undefined ->
+            {error, local_stream_coordinator_not_running};
+        _ ->
+            case ra:member_overview({?MODULE, node()}) of
+                {ok, Result, _} ->
+                    {ok, maps:remove(system_config, Result)};
+                Err ->
+                    Err
+            end
+    end.
+
+-spec status() ->
+    [[{binary(), term()}]] | {error, term()}.
+status() ->
+    case members() of
+        {ok, Members, _} ->
+            [begin
+                 case erpc_call(N, ?MODULE, key_metrics_rpc, [ServerId], ?RPC_TIMEOUT) of
+                     #{state := RaftState,
+                       membership := Membership,
+                       commit_index := Commit,
+                       term := Term,
+                       last_index := Last,
+                       last_applied := LastApplied,
+                       last_written_index := LastWritten,
+                       snapshot_index := SnapIdx,
+                       machine_version := MacVer} ->
+                         [{<<"Node Name">>, N},
+                          {<<"Raft State">>, RaftState},
+                          {<<"Membership">>, Membership},
+                          {<<"Last Log Index">>, Last},
+                          {<<"Last Written">>, LastWritten},
+                          {<<"Last Applied">>, LastApplied},
+                          {<<"Commit Index">>, Commit},
+                          {<<"Snapshot Index">>, SnapIdx},
+                          {<<"Term">>, Term},
+                          {<<"Machine Version">>, MacVer}
+                         ];
+                     {error, Err} ->
+                         [{<<"Node Name">>, N},
+                          {<<"Raft State">>, Err},
+                          {<<"Membership">>, <<>>},
+                          {<<"LastLog Index">>, <<>>},
+                          {<<"Last Written">>, <<>>},
+                          {<<"Last Applied">>, <<>>},
+                          {<<"Commit Index">>, <<>>},
+                          {<<"Snapshot Index">>, <<>>},
+                          {<<"Term">>, <<>>},
+                          {<<"Machine Version">>, <<>>}
+                         ]
+                 end
+             end || {_, N} = ServerId <- Members];
+        {error, {no_more_servers_to_try, _}} ->
+            {error, coordinator_not_started_or_available};
+        Err ->
+            Err
+    end.
+
+key_metrics_rpc(ServerId) ->
+    Metrics = ra:key_metrics(ServerId),
+    Metrics#{machine_version => rabbit_fifo:version()}.
 
 maps_to_list(M) ->
     lists:sort(maps:to_list(M)).

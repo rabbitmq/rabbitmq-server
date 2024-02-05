@@ -744,7 +744,7 @@ test() ->
     amqp_channel:call(Chan,
                   #'exchange.declare'{
                     exchange = <<"e">>, type = <<"x-consistent-hash">>,
-                    arguments = {<<"hash-property">>, longstr, <<"message_id">>}                    
+                    arguments = {<<"hash-property">>, longstr, <<"message_id">>}
                   }),
     [amqp_channel:call(Chan, #'queue.declare'{queue = Q}) || Q <- Queues],
     [amqp_channel:call(Chan, #'queue.bind'{queue = Q,
@@ -835,7 +835,7 @@ The state of the hash space is distributed across all cluster nodes.
 
 ## Copyright and License
 
-(c) 2013-2020 VMware, Inc. or its affiliates.
+(c) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 Released under the Mozilla Public License 2.0, same as RabbitMQ.
 See [LICENSE](./LICENSE) for details.

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(per_vhost_connection_limit_SUITE).
@@ -50,10 +50,7 @@ groups() ->
                          {cluster_size_1_network, [], ClusterSize1Tests},
                          {cluster_size_3_network, [], ClusterSize3Tests},
                          {cluster_size_1_direct, [], ClusterSize1Tests},
-                         {cluster_size_3_direct, [], ClusterSize3Tests},
-                         {cluster_rename, [], [
-                                               vhost_limit_after_node_renamed
-                                              ]}
+                         {cluster_size_3_direct, [], ClusterSize3Tests}
                         ]},
      {khepri_store, [], [
                          {cluster_size_1_network, [], ClusterSize1Tests},
@@ -105,29 +102,19 @@ init_per_group(cluster_size_1_direct, Config) ->
     init_per_multinode_group(cluster_size_1_direct, Config1, 1);
 init_per_group(cluster_size_3_direct, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, direct}]),
-    init_per_multinode_group(cluster_size_3_direct, Config1, 3);
+    init_per_multinode_group(cluster_size_3_direct, Config1, 3).
 
-init_per_group(cluster_rename, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, direct}]),
-    init_per_multinode_group(cluster_rename, Config1, 2).
-
-init_per_multinode_group(Group, Config, NodeCount) ->
+init_per_multinode_group(_Group, Config, NodeCount) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
                                                     {rmq_nodes_count, NodeCount},
                                                     {rmq_nodename_suffix, Suffix}
       ]),
-    case Group of
-        cluster_rename ->
-            % The broker is managed by {init,end}_per_testcase().
-            Config1;
-        _ ->
-            rabbit_ct_helpers:run_steps(Config1,
-              rabbit_ct_broker_helpers:setup_steps() ++
-              rabbit_ct_client_helpers:setup_steps())
-    end.
+    rabbit_ct_helpers:run_steps(Config1,
+    rabbit_ct_broker_helpers:setup_steps() ++
+    rabbit_ct_client_helpers:setup_steps()).
 
-end_per_group(Group, Config) when Group == cluster_rename; Group == mnesia_store;
+end_per_group(Group, Config) when Group == mnesia_store;
                                   Group == khepri_store; Group == khepri_migration ->
     % The broker is managed by {init,end}_per_testcase().
     Config;
@@ -136,21 +123,10 @@ end_per_group(_Group, Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(vhost_limit_after_node_renamed = Testcase, Config) ->
-    rabbit_ct_helpers:testcase_started(Config, Testcase),
-    rabbit_ct_helpers:run_steps(Config,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps());
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config.
 
-end_per_testcase(vhost_limit_after_node_renamed = Testcase, Config) ->
-    Config1 = ?config(save_config, Config),
-    rabbit_ct_helpers:run_steps(Config1,
-      rabbit_ct_client_helpers:teardown_steps() ++
-      rabbit_ct_broker_helpers:teardown_steps()),
-    rabbit_ct_helpers:testcase_finished(Config1, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -673,45 +649,6 @@ cluster_multiple_vhosts_zero_limit(Config) ->
 
     set_vhost_connection_limit(Config, VHost1, -1),
     set_vhost_connection_limit(Config, VHost2, -1).
-
-vhost_limit_after_node_renamed(Config) ->
-    A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-
-    %% Make sure the maintenance mode states Mnesia table is replicated
-    %% everywhere. We do this here, just in case mixed-version testing is
-    %% against a version of RabbitMQ that doesn't have the fix yet.
-    %%
-    %% See https://github.com/rabbitmq/rabbitmq-server/pull/9005.
-    B = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
-    rabbit_ct_broker_helpers:rpc(
-      Config, B,
-      rabbit_table, ensure_table_copy,
-      [rabbit_node_maintenance_states, B, ram_copies]),
-
-    VHost = <<"/renaming_node">>,
-    set_up_vhost(Config, VHost),
-    set_vhost_connection_limit(Config, VHost, 2),
-
-    ?assertEqual(0, count_connections_in(Config, VHost)),
-
-    [Conn1, Conn2, {error, not_allowed}] = open_connections(Config,
-      [{0, VHost}, {1, VHost}, {0, VHost}]),
-    ?awaitMatch(2, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
-    close_connections([Conn1, Conn2]),
-
-    Config1 = cluster_rename_SUITE:stop_rename_start(Config, A, [A, 'new-A']),
-
-    ?awaitMatch(0, count_connections_in(Config1, VHost), ?AWAIT, ?INTERVAL),
-
-    [Conn3, Conn4] = open_connections(Config1, [{0, VHost}, {1, VHost}]),
-    ?awaitMatch(2, count_connections_in(Config1, VHost), ?AWAIT, ?INTERVAL),
-    [{error, not_allowed}, {error, not_allowed}]
-        = open_connections(Config1, [{0, VHost}, {1, VHost}]),
-    ?awaitMatch(2, count_connections_in(Config1, VHost), ?AWAIT, ?INTERVAL),
-    close_connections([Conn3, Conn4]),
-
-    set_vhost_connection_limit(Config1, VHost,  -1),
-    {save_config, Config1}.
 
 from_mnesia_to_khepri(Config) ->
     VHost = <<"/">>,

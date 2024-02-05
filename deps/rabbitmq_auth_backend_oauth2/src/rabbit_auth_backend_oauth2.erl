@@ -14,7 +14,8 @@
 -export([description/0]).
 -export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/4,
-         check_topic_access/4, check_token/1, state_can_expire/0, update_state/2]).
+         check_topic_access/4, check_token/1, update_state/2,
+         expiry_timestamp/1]).
 
 % for testing
 -export([post_process_payload/1, get_expanded_scopes/2]).
@@ -103,8 +104,6 @@ check_topic_access(#auth_user{impl = DecodedTokenFun},
             rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes)
         end).
 
-state_can_expire() -> true.
-
 update_state(AuthUser, NewToken) ->
   case check_token(NewToken) of
       %% avoid logging the token
@@ -119,6 +118,14 @@ update_state(AuthUser, NewToken) ->
           {ok, AuthUser#auth_user{tags = Tags,
                                   impl = fun() -> DecodedToken end}}
   end.
+
+expiry_timestamp(#auth_user{impl = DecodedTokenFun}) ->
+    case DecodedTokenFun() of
+        #{<<"exp">> := Exp} when is_integer(Exp) ->
+            Exp;
+        _ ->
+            never
+    end.
 
 %%--------------------------------------------------------------------
 

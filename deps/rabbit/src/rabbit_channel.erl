@@ -688,8 +688,8 @@ handle_cast({deliver_reply, Key, Msg},
                         next_tag = DeliveryTag,
                         reply_consumer = {ConsumerTag, _Suffix, Key}}) ->
     Content = mc:protocol_state(mc:convert(mc_amqpl, Msg)),
-    ExchName = mc:get_annotation(exchange, Msg),
-    [RoutingKey | _] = mc:get_annotation(routing_keys, Msg),
+    ExchName = mc:exchange(Msg),
+    [RoutingKey | _] = mc:routing_keys(Msg),
     ok = rabbit_writer:send_command(
            WriterPid,
            #'basic.deliver'{consumer_tag = ConsumerTag,
@@ -825,7 +825,8 @@ terminate(_Reason,
           end, CM),
     rabbit_core_metrics:channel_closed(self()),
     rabbit_event:notify(channel_closed, [{pid, self()},
-                                         {user_who_performed_action, Username}]),
+                                         {user_who_performed_action, Username},
+                                         {consumer_count, maps:size(CM)}]),
     case rabbit_confirms:size(State#ch.unconfirmed) of
         0 -> ok;
         NumConfirms ->
@@ -1264,7 +1265,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                 Opts = maps_put_truthy(flow, Flow, #{correlation => SeqNo, mandatory => Mandatory}),
                 {Opts, State0#ch{publish_seqno = SeqNo + 1}}
         end,
-    % rabbit_feature_flags:is_enabled(message_containers),
+
     case mc_amqpl:message(ExchangeName,
                           RoutingKey,
                           DecodedContent) of
@@ -2125,8 +2126,7 @@ notify_limiter(Limiter, Acked) ->
 
 deliver_to_queues({Message, _Options, _RoutedToQueues} = Delivery,
                   #ch{cfg = #conf{virtual_host = VHost}} = State) ->
-    XNameBin = mc:get_annotation(exchange, Message),
-    XName = rabbit_misc:r(VHost, exchange,  XNameBin),
+    XName = rabbit_misc:r(VHost, exchange, mc:exchange(Message)),
     deliver_to_queues(XName, Delivery, State).
 
 deliver_to_queues(XName,
@@ -2192,7 +2192,7 @@ process_routing_mandatory(_Mandatory = true,
                   false ->
                       Content0
               end,
-    [RoutingKey | _] = mc:get_annotation(routing_keys, Msg),
+    [RoutingKey | _] = mc:routing_keys(Msg),
     ok = basic_return(Content, RoutingKey, XName#resource.name, State, no_route);
 process_routing_mandatory(_Mandatory = false,
                           _RoutedToQs = [],
@@ -2673,14 +2673,14 @@ handle_deliver0(ConsumerTag, AckRequired,
                                        writer_gc_threshold = GCThreshold},
                            next_tag   = DeliveryTag,
                            queue_states = Qs}) ->
-    [RoutingKey | _] = mc:get_annotation(routing_keys, MsgCont0),
-    ExchangeNameBin = mc:get_annotation(exchange, MsgCont0),
+    Exchange = mc:exchange(MsgCont0),
+    [RoutingKey | _] = mc:routing_keys(MsgCont0),
     MsgCont = mc:convert(mc_amqpl, MsgCont0),
     Content = mc:protocol_state(MsgCont),
     Deliver = #'basic.deliver'{consumer_tag = ConsumerTag,
                                delivery_tag = DeliveryTag,
                                redelivered  = Redelivered,
-                               exchange     = ExchangeNameBin,
+                               exchange     = Exchange,
                                routing_key  = RoutingKey},
     {ok, QueueType} = rabbit_queue_type:module(QName, Qs),
     case QueueType of
@@ -2699,15 +2699,15 @@ handle_deliver0(ConsumerTag, AckRequired,
 handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount,
                  Msg0 = {_QName, _QPid, _MsgId, Redelivered, MsgCont0},
                  QueueType, State) ->
-    [RoutingKey | _] = mc:get_annotation(routing_keys, MsgCont0),
-    ExchangeName = mc:get_annotation(exchange, MsgCont0),
+    Exchange = mc:exchange(MsgCont0),
+    [RoutingKey | _] = mc:routing_keys(MsgCont0),
     MsgCont = mc:convert(mc_amqpl, MsgCont0),
     Content = mc:protocol_state(MsgCont),
     ok = rabbit_writer:send_command(
            WriterPid,
            #'basic.get_ok'{delivery_tag  = DeliveryTag,
                            redelivered   = Redelivered,
-                           exchange      = ExchangeName,
+                           exchange      = Exchange,
                            routing_key   = RoutingKey,
                            message_count = MessageCount},
            Content),
@@ -2781,13 +2781,15 @@ evaluate_consumer_timeout1(PA = #pending_ack{delivered_at = Time},
             {noreply, State}
     end.
 
-handle_consumer_timed_out(Timeout,#pending_ack{delivery_tag = DeliveryTag},
+handle_consumer_timed_out(Timeout,#pending_ack{delivery_tag = DeliveryTag, tag = ConsumerTag, queue = QName},
 			  State = #ch{cfg = #conf{channel = Channel}}) ->
-    rabbit_log_channel:warning("Consumer ~ts on channel ~w has timed out "
-			       "waiting for delivery acknowledgement. Timeout used: ~tp ms. "
+    rabbit_log_channel:warning("Consumer '~ts' on channel ~w and ~ts has timed out "
+			       "waiting for a consumer acknowledgement of a delivery with delivery tag = ~b. Timeout used: ~tp ms. "
 			       "This timeout value can be configured, see consumers doc guide to learn more",
-			       [rabbit_data_coercion:to_binary(DeliveryTag),
-				Channel, Timeout]),
+			       [ConsumerTag,
+                    Channel,
+                    rabbit_misc:rs(QName),
+                    DeliveryTag, Timeout]),
     Ex = rabbit_misc:amqp_error(precondition_failed,
 				"delivery acknowledgement on channel ~w timed out. "
 				"Timeout value used: ~tp ms. "
@@ -2859,4 +2861,3 @@ maybe_decrease_global_publishers(#ch{publishing_mode = true}) ->
 
 is_global_qos_permitted() ->
     rabbit_deprecated_features:is_permitted(global_qos).
-

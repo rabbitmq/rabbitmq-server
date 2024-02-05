@@ -43,7 +43,8 @@ all() ->
      {group, cluster_size_3_parallel_5},
      {group, unclustered_size_3_1},
      {group, unclustered_size_3_2},
-     {group, unclustered_size_3_3}
+     {group, unclustered_size_3_3},
+     {group, unclustered_size_3_4}
     ].
 
 groups() ->
@@ -102,7 +103,8 @@ groups() ->
      {cluster_size_3_parallel_5, [parallel], all_tests_4()},
      {unclustered_size_3_1, [], [add_replica]},
      {unclustered_size_3_2, [], [consume_without_local_replica]},
-     {unclustered_size_3_3, [], [grow_coordinator_cluster]}
+     {unclustered_size_3_3, [], [grow_coordinator_cluster]},
+     {unclustered_size_3_4, [], [grow_then_shrink_coordinator_cluster]}
     ].
 
 all_tests_1() ->
@@ -213,12 +215,14 @@ init_per_group1(Group, Config) ->
                       cluster_size_3_2 -> 3;
                       unclustered_size_3_1 -> 3;
                       unclustered_size_3_2 -> 3;
-                      unclustered_size_3_3 -> 3
+                      unclustered_size_3_3 -> 3;
+                      unclustered_size_3_4 -> 3
                   end,
     Clustered = case Group of
                     unclustered_size_3_1 -> false;
                     unclustered_size_3_2 -> false;
                     unclustered_size_3_3 -> false;
+                    unclustered_size_3_4 -> false;
                     _ -> true
                 end,
     Config1 = rabbit_ct_helpers:set_config(Config,
@@ -227,7 +231,14 @@ init_per_group1(Group, Config) ->
                                             {tcp_ports_base},
                                             {rmq_nodes_clustered, Clustered}]),
     Config1b = rabbit_ct_helpers:set_config(Config1, [{net_ticktime, 10}]),
-    Ret = rabbit_ct_helpers:run_steps(Config1b,
+    Config1c = case Group of
+                   unclustered_size_3_4 ->
+                       rabbit_ct_helpers:merge_app_env(
+                         Config1b, {rabbit, [{stream_tick_interval, 5000}]});
+                   _ ->
+                       Config1b
+               end,
+    Ret = rabbit_ct_helpers:run_steps(Config1c,
                                       [fun merge_app_env/1 ] ++
                                       rabbit_ct_broker_helpers:setup_steps()),
     case Ret of
@@ -447,12 +458,20 @@ find_queue_info(Config, Keys) ->
     find_queue_info(Config, 0, Keys).
 
 find_queue_info(Config, Node, Keys) ->
-    Name = ?config(queue_name, Config),
+    find_queue_info(?config(queue_name, Config), Config, Node, Keys).
+
+find_queue_info(Name, Config, Node, Keys) ->
     QName = rabbit_misc:r(<<"/">>, queue, Name),
-    Infos = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_amqqueue, info_all,
-                                             [<<"/">>, [name] ++ Keys]),
-    [Info] = [Props || Props <- Infos, lists:member({name, QName}, Props)],
-    Info.
+    rabbit_ct_broker_helpers:rpc(Config, Node, ?MODULE, find_queue_info_rpc,
+                                 [QName, [name | Keys]]).
+
+find_queue_info_rpc(QName, Infos) ->
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} ->
+            rabbit_amqqueue:info(Q, Infos);
+        _ ->
+            []
+    end.
 
 delete_queue(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -636,6 +655,50 @@ delete_last_replica(Config) ->
     %% It's still here
     check_leader_and_replicas(Config, [Server0]),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+grow_then_shrink_coordinator_cluster(Config) ->
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Q = ?config(queue_name, Config),
+
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    ok = rabbit_control_helper:command(stop_app, Server1),
+    ok = rabbit_control_helper:command(join_cluster, Server1, [atom_to_list(Server0)], []),
+    ok = rabbit_control_helper:command(start_app, Server1),
+    ok = rabbit_control_helper:command(stop_app, Server2),
+    ok = rabbit_control_helper:command(join_cluster, Server2, [atom_to_list(Server0)], []),
+    ok = rabbit_control_helper:command(start_app, Server2),
+
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              case rpc:call(Server0, ra, members,
+                            [{rabbit_stream_coordinator, Server0}]) of
+                  {_, Members, _} ->
+                      Nodes = lists:sort([N || {_, N} <- Members]),
+                      lists:sort([Server0, Server1, Server2]) == Nodes;
+                  _ ->
+                      false
+              end
+      end, 60000),
+
+    ok = rabbit_control_helper:command(stop_app, Server1),
+    ok = rabbit_control_helper:command(forget_cluster_node, Server0, [atom_to_list(Server1)], []),
+    ok = rabbit_control_helper:command(stop_app, Server2),
+    ok = rabbit_control_helper:command(forget_cluster_node, Server0, [atom_to_list(Server2)], []),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              case rpc:call(Server0, ra, members,
+                            [{rabbit_stream_coordinator, Server0}]) of
+                  {_, Members, _} ->
+                      Nodes = lists:sort([N || {_, N} <- Members]),
+                      lists:sort([Server0]) == Nodes;
+                  _ ->
+                      false
+              end
+      end, 60000),
+    ok.
 
 grow_coordinator_cluster(Config) ->
     [Server0, Server1, _Server2] =
@@ -891,12 +954,13 @@ recover(Config) ->
     %% Such a slow test, let's select a single random permutation and trust that over enough
     %% ci rounds any failure will eventually show up
 
+    flush(),
     ct:pal("recover: running stop start for permutation ~w", [Servers]),
     [rabbit_ct_broker_helpers:stop_node(Config, S) || S <- Servers],
     [rabbit_ct_broker_helpers:async_start_node(Config, S) || S <- lists:reverse(Servers)],
     [ok = rabbit_ct_broker_helpers:wait_for_async_start_node(S) || S <- lists:reverse(Servers)],
 
-    ct:pal("recover: running stop waiting for messages ~w", [Servers]),
+    ct:pal("recover: post stop / start, waiting for messages ~w", [Servers]),
     check_leader_and_replicas(Config, Servers0),
     queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]], 60),
 
@@ -1317,6 +1381,13 @@ recover_coordinator(Config, Node) ->
 
 get_stream_coordinator_leader(Config) ->
     Node = hd(rabbit_ct_broker_helpers:get_node_configs(Config, nodename)),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Ret = rabbit_ct_broker_helpers:rpc(
+                      Config, Node, ra_leaderboard, lookup_leader,
+                      [rabbit_stream_coordinator]),
+              is_tuple(Ret)
+      end),
     rabbit_ct_broker_helpers:rpc(Config, Node, ra_leaderboard,
                                  lookup_leader, [rabbit_stream_coordinator]).
 
@@ -2087,27 +2158,30 @@ leader_locator_client_local(Config) ->
     ?assertMatch(#'queue.delete_ok'{},
                  delete(Config, Server1, Q)),
 
+    Q2 = <<Q/binary, "-2">>,
     %% Try second node
-    ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Config, Server2, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+    ?assertEqual({'queue.declare_ok', Q2, 0, 0},
+                 declare(Config, Server2, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                               {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
 
     ?assertMatch(Server2, proplists:get_value(leader,
-                                              find_queue_info(Config, [leader]))),
+                                              find_queue_info(Q2, Config, 0, [leader]))),
 
-    ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server2, Q)),
+    ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server2, Q2)),
 
+
+    Q3 = <<Q/binary, "-3">>,
     %% Try third node
-    ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Config, Server3, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+    ?assertEqual({'queue.declare_ok', Q3, 0, 0},
+                 declare(Config, Server3, Q3, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                               {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
 
 
     ?assertEqual(Server3, proplists:get_value(leader,
-                                              find_queue_info(Config, [leader]))),
+                                              find_queue_info(Q3, Config, 0, [leader]))),
 
-    ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server3, Q)),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+    ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server3, Q3)),
+    ok.
 
 leader_locator_balanced(Config) ->
     [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -2145,9 +2219,12 @@ leader_locator_balanced_maintenance(Config) ->
                  declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                               {<<"x-queue-leader-locator">>, longstr, <<"balanced">>}])),
 
-    Info = find_queue_info(Config, [leader]),
-    Leader = proplists:get_value(leader, Info),
-    ?assert(lists:member(Leader, [Server1, Server2])),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Info = find_queue_info(Config, [leader]),
+              Leader = proplists:get_value(leader, Info),
+              lists:member(Leader, [Server1, Server2])
+      end, 60000),
 
     true = rabbit_ct_broker_helpers:unmark_as_being_drained(Config, Server3),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
@@ -2590,10 +2667,15 @@ check_leader_and_replicas(Config, Members) ->
 check_leader_and_replicas(Config, Members, Tag) ->
     rabbit_ct_helpers:await_condition(
       fun() ->
-              Info = find_queue_info(Config, [leader, Tag]),
-              ct:pal("~ts members ~w ~tp", [?FUNCTION_NAME, Members, Info]),
-              lists:member(proplists:get_value(leader, Info), Members)
-                  andalso (lists:sort(Members) == lists:sort(proplists:get_value(Tag, Info)))
+              case find_queue_info(Config, [leader, Tag]) of
+                  [] ->
+                      false;
+                  Info ->
+                      ct:pal("~ts members ~w ~tp", [?FUNCTION_NAME, Members, Info]),
+                      lists:member(proplists:get_value(leader, Info), Members)
+                          andalso (lists:sort(Members) ==
+                                   lists:sort(proplists:get_value(Tag, Info)))
+              end
       end, 60_000).
 
 check_members(Config, ExpectedMembers) ->

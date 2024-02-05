@@ -33,6 +33,7 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
+-include_lib("rabbit/include/mc.hrl").
 -include("rabbit_mqtt.hrl").
 -include("rabbit_mqtt_packet.hrl").
 
@@ -1549,8 +1550,8 @@ publish_to_queues(
                     conn_name = ConnName,
                     trace_state = TraceState},
          auth_state = #auth_state{user = #user{username = Username}}} = State) ->
-    Anns = #{exchange => ExchangeNameBin,
-             routing_keys => [mqtt_to_amqp(Topic)]},
+    Anns = #{?ANN_EXCHANGE => ExchangeNameBin,
+             ?ANN_ROUTING_KEYS => [mqtt_to_amqp(Topic)]},
     Msg0 = mc:init(mc_mqtt, MqttMsg, Anns, mc_env()),
     Msg = rabbit_message_interceptor:intercept(Msg0),
     case rabbit_exchange:lookup(ExchangeName) of
@@ -1767,13 +1768,13 @@ maybe_send_will(
                                  kind = exchange,
                                  name = ?DEFAULT_EXCHANGE_NAME},
             #resource{name = QNameBin} = amqqueue:get_name(Q),
-            Anns0 = #{exchange => ?DEFAULT_EXCHANGE_NAME,
-                      routing_keys => [QNameBin],
+            Anns0 = #{?ANN_EXCHANGE => ?DEFAULT_EXCHANGE_NAME,
+                      ?ANN_ROUTING_KEYS => [QNameBin],
                       ttl => Ttl,
                       %% Persist message regardless of Will QoS since there is no noticable
                       %% performance benefit if that single message is transient. This ensures that
                       %% delayed Will Messages are not lost after a broker restart.
-                      durable => true},
+                      ?ANN_DURABLE => true},
             Anns = case Props of
                        #{'Message-Expiry-Interval' := MEI} ->
                            Anns0#{dead_letter_ttl => timer:seconds(MEI)};
@@ -2551,7 +2552,7 @@ compat(McMqtt, #state{cfg = #cfg{exchange = XName}}) ->
             McMqtt;
         false = FFState ->
             #mqtt_msg{qos = Qos} = mc:protocol_state(McMqtt),
-            [RoutingKey] = mc:get_annotation(routing_keys, McMqtt),
+            [RoutingKey] = mc:routing_keys(McMqtt),
             McLegacy = mc:convert(mc_amqpl, McMqtt),
             Content = mc:protocol_state(McLegacy),
             {ok, BasicMsg} = mc_amqpl:message(XName, RoutingKey, Content, #{}, FFState),

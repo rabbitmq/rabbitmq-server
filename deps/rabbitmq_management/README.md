@@ -18,4 +18,4 @@ it has to be [enabled](https://www.rabbitmq.com/plugins.html#basics) before it c
 
 ## Copyright
 
-(c) 2007-2020 VMware, Inc. or its affiliates.
+(c) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
