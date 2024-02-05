@@ -38,7 +38,7 @@
 -define(RESPONSE_TOKEN_ENDPOINT, <<"token_endpoint">>).
 -define(RESPONSE_AUTHORIZATION_ENDPOINT, <<"authorization_endpoint">>).
 -define(RESPONSE_JWKS_URI, <<"jwks_uri">>).
--define(RESPONSE_SSL_OPTIONS, <<"ssl_options">>).
+-define(RESPONSE_TLS_OPTIONS, <<"ssl_options">>).
 
 %% The closest we have to a type import in Erlang
 -type option(T) :: rabbit_types:option(T).
