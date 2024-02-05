@@ -242,17 +242,11 @@ filter_undefined_props(PropList) ->
       _ -> Acc
     end end, [], PropList).
 
-intersection(S1, S2) -> intersection(S1, S2, []).
-is_element(H, [H|_])   -> true;
-is_element(H, [_|Set]) -> is_element(H, Set);
-is_element(_, [])      -> false.
-
-intersection([], _, S) -> S;
-intersection([H|T], S1, S) ->
-    case is_element(H,S1) of
-        true  -> intersection(T, S1, [H|S]);
-        false -> intersection(T, S1, S)
-    end.
+-spec intersection(list(), list()) -> list().
+intersection(L1, L2) ->
+  S1 = sets:from_list(L1),
+  S2 = sets:from_list(L2),
+  lists:usort(sets:to_list(sets:intersection(S1, S2))).
 
 find_missing_attributes(#oauth_provider{} = OAuthProvider, RequiredAttributes) ->
   PropList = oauth_provider_to_proplists(OAuthProvider),
