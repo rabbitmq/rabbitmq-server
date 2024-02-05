@@ -1,3 +1,9 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%%
 -module(oauth2_client).
 -export([get_access_token/2,
         refresh_access_token/2,
@@ -258,12 +264,13 @@ lookup_oauth_provider_from_keyconfig() ->
   TokenEndpoint = application:get_env(rabbitmq_auth_backend_oauth2, token_endpoint, undefined),
   Map = maps:from_list(application:get_env(rabbitmq_auth_backend_oauth2, key_config, [])),
   #oauth_provider{
-    issuer=Issuer,
-    jwks_uri=maps:get(jwks_url, Map, undefined), %% jwks_url not uri . _url is the legacy name
-    token_endpoint=TokenEndpoint,
-    ssl_options=extract_ssl_options_as_list(Map)
+    issuer = Issuer,
+    jwks_uri = maps:get(jwks_url, Map, undefined), %% jwks_url not uri . _url is the legacy name
+    token_endpoint = TokenEndpoint,
+    ssl_options = extract_ssl_options_as_list(Map)
   }.
 
+-spec extract_ssl_options_as_list(#{atom() => any()}) -> proplists:proplist().
 extract_ssl_options_as_list(Map) ->
   Verify = case maps:get(cacertfile, Map, undefined) of
     undefined -> verify_none;
@@ -357,36 +364,36 @@ decode_body(MimeType, Body) ->
     end.
 
 
-map_to_successful_access_token_response(Json) ->
+map_to_successful_access_token_response(Map) ->
   #successful_access_token_response{
-    access_token=maps:get(?RESPONSE_ACCESS_TOKEN, Json),
-    token_type=maps:get(?RESPONSE_TOKEN_TYPE, Json, undefined),
-    refresh_token=maps:get(?RESPONSE_REFRESH_TOKEN, Json, undefined),
-    expires_in=maps:get(?RESPONSE_EXPIRES_IN, Json, undefined)
+    access_token = maps:get(?RESPONSE_ACCESS_TOKEN, Map),
+    token_type = maps:get(?RESPONSE_TOKEN_TYPE, Map, undefined),
+    refresh_token = maps:get(?RESPONSE_REFRESH_TOKEN, Map, undefined),
+    expires_in = maps:get(?RESPONSE_EXPIRES_IN, Map, undefined)
   }.
 
-map_to_unsuccessful_access_token_response(Json) ->
+map_to_unsuccessful_access_token_response(Map) ->
   #unsuccessful_access_token_response{
-    error=maps:get(?RESPONSE_ERROR, Json),
-    error_description=maps:get(?RESPONSE_ERROR_DESCRIPTION, Json, undefined)
+    error = maps:get(?RESPONSE_ERROR, Map),
+    error_description = maps:get(?RESPONSE_ERROR_DESCRIPTION, Map, undefined)
   }.
 
 
 map_to_oauth_provider(Map) when is_map(Map) ->
   #oauth_provider{
-    issuer=maps:get(?RESPONSE_ISSUER, Map),
-    token_endpoint=maps:get(?RESPONSE_TOKEN_ENDPOINT, Map, undefined),
-    authorization_endpoint=maps:get(?RESPONSE_AUTHORIZATION_ENDPOINT, Map, undefined),
-    jwks_uri=maps:get(?RESPONSE_JWKS_URI, Map, undefined)
+    issuer = maps:get(?RESPONSE_ISSUER, Map),
+    token_endpoint = maps:get(?RESPONSE_TOKEN_ENDPOINT, Map, undefined),
+    authorization_endpoint = maps:get(?RESPONSE_AUTHORIZATION_ENDPOINT, Map, undefined),
+    jwks_uri = maps:get(?RESPONSE_JWKS_URI, Map, undefined)
   };
 
 map_to_oauth_provider(PropList) when is_list(PropList) ->
   #oauth_provider{
-    issuer=proplists:get_value(issuer, PropList),
-    token_endpoint=proplists:get_value(token_endpoint, PropList),
-    authorization_endpoint=proplists:get_value(authorization_endpoint, PropList, undefined),
-    jwks_uri=proplists:get_value(jwks_uri, PropList, undefined),
-    ssl_options=map_ssl_options(proplists:get_value(ssl_options, PropList, undefined))
+    issuer = proplists:get_value(issuer, PropList),
+    token_endpoint = proplists:get_value(token_endpoint, PropList),
+    authorization_endpoint = proplists:get_value(authorization_endpoint, PropList, undefined),
+    jwks_uri = proplists:get_value(jwks_uri, PropList, undefined),
+    ssl_options = map_ssl_options(proplists:get_value(ssl_options, PropList, undefined))
     }.
 
 map_ssl_options(undefined) ->
