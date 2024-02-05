@@ -40,13 +40,15 @@
 -define(RESPONSE_JWKS_URI, <<"jwks_uri">>).
 -define(RESPONSE_SSL_OPTIONS, <<"ssl_options">>).
 
+%% The closest we have to a type import in Erlang
+-type option(T) :: rabbit_types:option(T).
 
 -record(oauth_provider, {
-  issuer :: uri_string:uri_string() | undefined,
-  token_endpoint :: uri_string:uri_string() | undefined,
-  authorization_endpoint :: uri_string:uri_string() | undefined,
-  jwks_uri :: uri_string:uri_string() | undefined,
-  ssl_options :: list() | undefined
+  issuer :: option(uri_string:uri_string()),
+  token_endpoint :: option(uri_string:uri_string()),
+  authorization_endpoint :: option(uri_string:uri_string()),
+  jwks_uri :: option(uri_string:uri_string()),
+  ssl_options :: option(list())
   }).
 
 -type oauth_provider() :: #oauth_provider{}.
@@ -56,7 +58,7 @@
   client_id :: string() | binary(),
   client_secret :: string() | binary(),
   scope :: string() | binary() | undefined,
-  timeout :: integer() | undefined
+  timeout :: option(integer())
   }).
 
 -type access_token_request() :: #access_token_request{}.
@@ -64,8 +66,8 @@
 -record(successful_access_token_response, {
   access_token :: binary(),
   token_type :: binary(),
-  refresh_token :: binary() | undefined,
-  expires_in :: integer() | undefined
+  refresh_token :: option(binary()),
+  expires_in :: option(integer())
 }).
 
 -type successful_access_token_response() :: #successful_access_token_response{}.
@@ -82,7 +84,7 @@
   client_secret :: string() | binary(),
   scope :: string() | binary() | undefined,
   refresh_token :: binary(),
-  timeout :: integer() | undefined
+  timeout :: option(integer())
   }).
 
 -type refresh_token_request() :: #refresh_token_request{}.
