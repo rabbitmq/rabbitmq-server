@@ -11,7 +11,7 @@ This plugin ships with RabbitMQ, there is no need to
 install it separately.
 
 
-## Documentation        
+## Documentation
 
 See [RabbitMQ shovel plugin](https://www.rabbitmq.com/shovel.html) on rabbitmq.com.
 
@@ -20,4 +20,4 @@ See [RabbitMQ shovel plugin](https://www.rabbitmq.com/shovel.html) on rabbitmq.c
 
 Released under [the same license as RabbitMQ](https://www.rabbitmq.com/mpl.html).
 
-2007-2020 (c) 2007-2020 VMware, Inc. or its affiliates.
+2007-2020 (c) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.

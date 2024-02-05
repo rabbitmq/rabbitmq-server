@@ -20,7 +20,7 @@
         <developer>
             <email>rabbitmq-core@groups.vmware.com</email>
             <name>Team RabbitMQ</name>
-            <organization>VMware, Inc. or its affiliates.</organization>
+            <organization>Broadcom, Inc. or its affiliates.</organization>
             <organizationUrl>https://rabbitmq.com</organizationUrl>
         </developer>
     </developers>

@@ -2,7 +2,7 @@
 %% from rabbitmq-autocluster by Gavin Roy.
 %%
 %% Copyright (c) 2014-2015 AWeber Communications
-%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates
+%% Copyright (c) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %% All rights reserved.
 %%
 %% Redistribution and use in source and binary forms, with or without modification,

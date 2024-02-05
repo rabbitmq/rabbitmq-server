@@ -220,6 +220,6 @@ The default values are `rabbit_auth_cache_ets` and `[]`, respectively.
 
 ## License and Copyright
 
-(c) 2016-2020 VMware, Inc. or its affiliates.
+(c) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 Released under the Mozilla Public License 2.0, same as RabbitMQ.
