@@ -249,6 +249,12 @@ init_per_group1(Group, Config) ->
                          Config2, stream_queue),
             case EnableFF of
                 ok ->
+                    if Clustered ->
+                           rabbit_ct_broker_helpers:enable_feature_flag(
+                             Config2, stream_update_config_command);
+                       true ->
+                           ok
+                    end,
                     ok = rabbit_ct_broker_helpers:rpc(
                            Config2, 0, application, set_env,
                            [rabbit, channel_tick_interval, 100]),
