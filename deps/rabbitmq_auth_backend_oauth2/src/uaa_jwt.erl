@@ -33,21 +33,21 @@ add_signing_key(KeyId, Type, Value) ->
 update_jwks_signing_keys(ResourceServerId) ->
     case rabbit_oauth2_config:get_oauth_provider_for_resource_server_id(ResourceServerId, [jwks_uri]) of
         {error, _} = Error ->
-            rabbit_log:error("Failed to obtain JWKS URL for resource-server-id ~p ", [ResourceServerId]),
+            rabbit_log:error("Failed to obtain a JWKS URL for resource-server-id '~tp'", [ResourceServerId]),
             Error;
         {ok, #oauth_provider{jwks_uri = JwksUrl, ssl_options = SslOptions}} ->
-            rabbit_log:debug("Downloading keys from ~p (ssl_options: ~p)", [JwksUrl, SslOptions]),
+            rabbit_log:debug("OAuth 2 JWT: downloading keys from ~tp (TLS options: ~p)", [JwksUrl, SslOptions]),
             case uaa_jwks:get(JwksUrl, SslOptions) of
                 {ok, {_, _, JwksBody}} ->
                     KeyList = maps:get(<<"keys">>, jose:decode(erlang:iolist_to_binary(JwksBody)), []),
                     Keys = maps:from_list(lists:map(fun(Key) -> {maps:get(<<"kid">>, Key, undefined), {json, Key}} end, KeyList)),
-                    rabbit_log:debug("Downloaded keys ~p", [Keys]),
+                    rabbit_log:debug("OAuth 2 JWT: downloaded keys ~tp", [Keys]),
                     case rabbit_oauth2_config:replace_signing_keys(ResourceServerId, Keys) of
                       {error, _} = Err -> Err;
                       _ -> ok
                     end;
                 {error, _} = Err ->
-                    rabbit_log:error("Error Downloadings keys ~p", [Err]),
+                    rabbit_log:error("OAuth 2 JWT: failed to download keys: ~tp", [Err]),
                     Err
             end
     end.
@@ -58,10 +58,10 @@ decode_and_verify(Token) ->
     {error, _} = Err ->
         Err;
     ResourceServerId ->
-      rabbit_log:debug("Resolved resource_server_id : ~p", [ResourceServerId]),
+      rabbit_log:debug("OAuth 2 JWT: resolved resource_server_id: '~tp'", [ResourceServerId]),
       case uaa_jwt_jwt:get_key_id(ResourceServerId, Token) of
         {ok, KeyId} ->
-            rabbit_log:debug("Resolved signing_key_id : ~p", [KeyId]),
+            rabbit_log:debug("OAuth 2 JWT: signing_key_id : '~tp'", [KeyId]),
             case get_jwk(KeyId, ResourceServerId) of
               {ok, JWK} ->
                   case uaa_jwt_jwt:decode_and_verify(ResourceServerId, JWK, Token) of
@@ -85,7 +85,7 @@ get_jwk(KeyId, ResourceServerId, AllowUpdateJwks) ->
         undefined ->
             if
                 AllowUpdateJwks ->
-                    rabbit_log:debug("Signing key ~p not found. Downloading it .. ", [KeyId]),
+                    rabbit_log:debug("OAuth 2 JWT: signing key '~tp' not found. Downloading it... ", [KeyId]),
                     case update_jwks_signing_keys(ResourceServerId) of
                         ok ->
                             get_jwk(KeyId, ResourceServerId, false);
@@ -95,11 +95,11 @@ get_jwk(KeyId, ResourceServerId, AllowUpdateJwks) ->
                             Err
                     end;
                 true            ->
-                    rabbit_log:debug("Signing key ~p not found. Download not allowed ", [KeyId]),
+                    rabbit_log:debug("OAuth 2 JWT: signing key '~tp' not found. Downloading is not allowed", [KeyId]),
                     {error, key_not_found}
             end;
         {Type, Value} ->
-            rabbit_log:debug("Signing key found : ~p, ~p ", [Type, Value]),
+            rabbit_log:debug("OAuth 2 JWT: signing key found: '~tp', '~tp'", [Type, Value]),
             case Type of
                 json     -> uaa_jwt_jwk:make_jwk(Value);
                 pem      -> uaa_jwt_jwk:from_pem(Value);
