@@ -51,24 +51,24 @@ update_uaa_jwt_signing_keys(UaaEnv0, SigningKeys) ->
     UaaEnv1 = proplists:delete(signing_keys, UaaEnv0),
     UaaEnv2 = [{signing_keys, SigningKeys} | UaaEnv1],
     Result = application:set_env(?APP, key_config, UaaEnv2),
-    rabbit_log:debug("replaced key_config fron ~p to ~p (Result:~p)", [UaaEnv0, UaaEnv2, Result]),
+    rabbit_log:debug("UWW JWT signing key update: replaced original key_config of ~tp with ~tp (result: ~tp)", [UaaEnv0, UaaEnv2, Result]),
     Result.
 
 -spec update_jwks_signing_keys() -> ok | {error, term()}.
 update_jwks_signing_keys() ->
     UaaEnv = application:get_env(?APP, key_config, []),
-    rabbit_log:debug("update_jwks_signing_keys key_config: ~p ...",[UaaEnv]),
+    rabbit_log:debug("About to update jwks signing keys, key_config: ~p",[UaaEnv]),
     case proplists:get_value(jwks_url, UaaEnv) of
         undefined ->
           case oauth2_client:get_oauth_provider([jwks_uri]) of
             {error, {missing_oauth_provider_attributes, [issuer]}} -> {error, key_not_found};
             {error, _} = Error -> Error;
             {ok, #oauth_provider{jwks_uri = JwksUrl, ssl_options = SslOptions}} ->
-              rabbit_log:debug("Using jwks_url ~p retrieve signing keys", [JwksUrl]),
+              rabbit_log:debug("Using jwks_url '~ts' to retrieve signing keys", [JwksUrl]),
               retrieve_signing_keys(JwksUrl, UaaEnv, SslOptions)
           end;
         JwksUrl ->
-          rabbit_log:debug("Using configured jwks_url ~p to retrieve signing keys",[JwksUrl]),
+          rabbit_log:debug("Using configured jwks_url '~ts' to retrieve signing keys",[JwksUrl]),
           retrieve_signing_keys(JwksUrl, UaaEnv, uaa_jwks:ssl_options())
     end.
 retrieve_signing_keys(JwksUrl, UaaEnv, SslOptions) ->

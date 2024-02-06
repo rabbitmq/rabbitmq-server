@@ -263,8 +263,8 @@
     AuthBackends  = [{Name, {list_to_atom(Key), list_to_binary(V)}} || {["auth_oauth2","oauth_providers", Name, Key], V} <- Settings ],
     SslOptions  = [{Name, {ssl_options, {list_to_atom(Key), V}}} || {["auth_oauth2","oauth_providers", Name, "ssl_options", Key], V} <- Settings ],
 
-    KeyFun = fun({Name,_}) -> list_to_binary(Name) end,
-    ValueFun = fun({_,V}) -> V end,
+    KeyFun = fun({Name, _}) -> list_to_binary(Name) end,
+    ValueFun = fun({_, V}) -> V end,
     NewGroup = maps:groups_from_list(KeyFun, ValueFun, AuthBackends ++ SslOptions),
 
     ListOrSingleFun = fun(K, List) ->
@@ -279,7 +279,7 @@
     end,
     GroupKeyConfigFun = fun(K, List) ->
         ListKeys = proplists:get_keys(List),
-        [ {K,ListOrSingleFun(K,List)} || K <- ListKeys ]
+        [ {K, ListOrSingleFun(K, List)} || K <- ListKeys ]
      end,
     maps:map(GroupKeyConfigFun, NewGroup)
 
