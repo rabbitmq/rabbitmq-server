@@ -390,6 +390,11 @@ set_message_properties(Props, Msg) ->
                 #{content_encoding => to_binary(Ct)}, M);
          (delivery_mode, 2, M) ->
               amqp10_msg:set_headers(#{durable => true}, M);
+         (delivery_mode, 1, M) ->
+              % by default the durable flag is false
+              M;
+         (priority, P, M) when is_integer(P) ->
+                amqp10_msg:set_headers(#{priority => P}, M);
          (correlation_id, Ct, M) ->
               amqp10_msg:set_properties(#{correlation_id => to_binary(Ct)}, M);
          (reply_to, Ct, M) ->
