@@ -148,3 +148,11 @@
                          post_enable =>
                          {rabbit_khepri, khepri_db_migration_post_enable}}
      }}).
+
+-rabbit_feature_flag(
+   {stream_update_config_command,
+    #{desc          => "A new internal command that is used to update streams as "
+                        "part of a policy.",
+      stability     => stable,
+      depends_on    => [stream_queue]
+     }}).
