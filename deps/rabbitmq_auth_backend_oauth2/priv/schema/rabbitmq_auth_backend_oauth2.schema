@@ -266,12 +266,12 @@
     Https  = [{Name, {https, {list_to_atom(Key), V}}} || {["auth_oauth2","oauth_providers", Name, "https", Key], V} <- Settings ],
 
     %% Aggregate all options for one provider
-    KeyFun = fun({Name,_}) -> list_to_binary(Name) end,
-    ValueFun = fun({_,V}) -> V end,
+    KeyFun = fun({Name, _}) -> list_to_binary(Name) end,
+    ValueFun = fun({_, V}) -> V end,
     ProviderNameToListOfSettings = maps:groups_from_list(KeyFun, ValueFun, AuthBackends),
-    ProviderNameToListOfHttpsSettings = maps:groups_from_list(KeyFun, fun({_,{https,V}}) -> V end, Https),
+    ProviderNameToListOfHttpsSettings = maps:groups_from_list(KeyFun, fun({_, {https, V}}) -> V end, Https),
     ProviderNameToListWithHttps = maps:map(fun(K1,L1) -> [{https, L1}] end, ProviderNameToListOfHttpsSettings),
-    NewGroup = maps:merge_with(fun(K,V1,V2) -> V1++V2 end, ProviderNameToListOfSettings, ProviderNameToListWithHttps),
+    NewGroup = maps:merge_with(fun(K, V1, V2) -> V1 ++ V2 end, ProviderNameToListOfSettings, ProviderNameToListWithHttps),
 
     ListOrSingleFun = fun(K, List) ->
       case K of
@@ -285,7 +285,7 @@
     end,
     GroupKeyConfigFun = fun(K, List) ->
         ListKeys = proplists:get_keys(List),
-        [ {K,ListOrSingleFun(K,List)} || K <- ListKeys ]
+        [{K, ListOrSingleFun(K, List)} || K <- ListKeys]
      end,
     maps:map(GroupKeyConfigFun, NewGroup)
 
