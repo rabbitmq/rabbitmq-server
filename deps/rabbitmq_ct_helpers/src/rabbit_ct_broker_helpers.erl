@@ -1269,31 +1269,28 @@ rabbitmqctl(Config, Node, Args, Timeout) ->
                                _ ->
                                    CanUseSecondary
                            end,
+    WithPlugins0 = rabbit_ct_helpers:get_config(Config,
+      broker_with_plugins),
+    WithPlugins = case is_list(WithPlugins0) of
+        true  -> lists:nth(I + 1, WithPlugins0);
+        false -> WithPlugins0
+    end,
     Rabbitmqctl = case UseSecondaryUmbrella of
                       true ->
                           case BazelRunSecCmd of
                               undefined ->
-                                  SrcDir = ?config(
-                                              secondary_rabbit_srcdir,
-                                              Config),
-                                  SecDepsDir = ?config(
-                                                  secondary_erlang_mk_depsdir,
-                                                  Config),
-                                  SecNewScriptsDir = filename:join(
-                                                       [SecDepsDir,
-                                                        SrcDir,
-                                                        "sbin"]),
-                                  SecOldScriptsDir = filename:join(
-                                                       [SecDepsDir,
-                                                        "rabbit",
-                                                        "scripts"]),
-                                  SecNewScriptsDirExists = filelib:is_dir(
-                                                             SecNewScriptsDir),
-                                  SecScriptsDir =
-                                  case SecNewScriptsDirExists of
-                                      true  -> SecNewScriptsDir;
-                                      false -> SecOldScriptsDir
-                                  end,
+                                  SrcDir = case WithPlugins of
+                                               false ->
+                                                   ?config(
+                                                      secondary_rabbit_srcdir,
+                                                      Config);
+                                               _ ->
+                                                   ?config(
+                                                      secondary_current_srcdir,
+                                                      Config)
+                                           end,
+                                  SecScriptsDir = filename:join(
+                                                    [SrcDir, "sbin"]),
                                   rabbit_misc:format(
                                     "~ts/rabbitmqctl", [SecScriptsDir]);
                               _ ->
