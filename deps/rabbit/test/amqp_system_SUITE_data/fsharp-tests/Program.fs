@@ -374,6 +374,7 @@ module Test =
              "/exchange/amq.fanout",  "/exchange/amq.fanout/",  "",  true
              "/exchange/amq.direct",  "/exchange/amq.direct/",  "",  true
              "/exchange/amq.direct",  "/exchange/amq.direct/a", "a", true
+             "/queue",  "/queue/b", "b", true
 
              (* FIXME: The following three tests rely on the queue "test"
               * created by previous tests in this function. *)
