@@ -2042,6 +2042,10 @@ ensure_terminus(target, {topic, _bindingkey}, _, _, _) ->
 ensure_terminus(source, {topic, _BindingKey}, Vhost, User, Durability) ->
     %% exchange amq.topic exists
     declare_queue(generate_queue_name(), Vhost, User, Durability);
+ensure_terminus(target, {queue, undefined}, _, _, _) ->
+    %% Target "/queue" means publish to default exchange with message subject as routing key.
+    %% Default exchange exists.
+    undefined;
 ensure_terminus(_, {queue, QNameList}, Vhost, User, Durability) ->
     declare_queue(list_to_binary(QNameList), Vhost, User, Durability);
 ensure_terminus(_, {amqqueue, QNameList}, Vhost, _, _) ->
