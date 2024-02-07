@@ -1747,7 +1747,12 @@ handle_frame_post_auth(Transport,
                                internal_sequence = InternalSequence + 1},
                              State}
                     end;
-                {_, _} ->
+                {PublisherIdTaken, ReferenceTaken} ->
+                    rabbit_log:warning("Error while declaring publisher ~tp for stream '~ts', "
+                                       "with reference '~ts'. ID already taken: ~tp. "
+                                       "Reference already taken: ~tp.",
+                                       [PublisherId, Stream, WriterRef,
+                                        PublisherIdTaken, ReferenceTaken]),
                     response(Transport,
                              Connection0,
                              declare_publisher,
