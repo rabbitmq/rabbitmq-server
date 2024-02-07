@@ -123,9 +123,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args, Username) ->
                     rabbit_event:notify(exchange_created, info(Exchange)),
                     Exchange;
                 {existing, Exchange} ->
-                    Exchange;
-                Err ->
-                    Err
+                    Exchange
             end;
         _ ->
             rabbit_log:warning("ignoring exchange.declare for exchange ~tp,

@@ -52,6 +52,7 @@
 -export_type([
               amqp10_ctor/0,
               amqp10_type/0,
+              amqp10_prim/0,
               amqp10_described/0
              ]).
 

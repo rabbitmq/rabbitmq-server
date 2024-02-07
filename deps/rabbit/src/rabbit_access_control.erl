@@ -189,7 +189,7 @@ check_resource_access(User = #user{username       = Username,
               check_access(
                 fun() -> Module:check_resource_access(
                            auth_user(User, Impl), Resource, Permission, Context) end,
-                Module, "~s access to ~s refused for user '~s'",
+                Module, "~s access to ~ts refused for user '~ts'",
                 [Permission, rabbit_misc:rs(Resource), Username]);
          (_, Else) -> Else
       end, ok, Modules).
@@ -202,7 +202,7 @@ check_topic_access(User = #user{username = Username,
             check_access(
                 fun() -> Module:check_topic_access(
                     auth_user(User, Impl), Resource, Permission, Context) end,
-                Module, "~s access to topic '~s' in exchange ~s refused for user '~s'",
+                Module, "~s access to topic '~ts' in exchange ~ts refused for user '~ts'",
                 [Permission, maps:get(routing_key, Context), rabbit_misc:rs(Resource), Username]);
             (_, Else) -> Else
         end, ok, Modules).
