@@ -1089,8 +1089,14 @@ stop_rabbitmq_nodes(Config) ->
     case FindCrashes of
         true ->
             %% TODO: Make the ignore list configurable.
-            IgnoredCrashes = ["** force_vhost_failure"],
-            find_crashes_in_logs(NodeConfigs, IgnoredCrashes);
+            IgnoredCrashes0 = ["** force_vhost_failure"],
+            case rabbit_ct_helpers:get_config(Config, ignored_crashes) of
+                undefined ->
+                    find_crashes_in_logs(NodeConfigs, IgnoredCrashes0);
+                IgnoredCrashes1 ->
+                    find_crashes_in_logs(
+                      NodeConfigs, IgnoredCrashes0 ++ IgnoredCrashes1)
+            end;
         false ->
             ok
     end,
@@ -1172,7 +1178,11 @@ capture_gen_server_termination(
     Ret = re:run(Line, Prefix ++ "( .*|\\*.*|)$", ReOpts),
     case Ret of
         {match, [Suffix]} ->
-            case lists:member(Suffix, IgnoredCrashes) of
+            Ignore = lists:any(
+                       fun(IgnoredCrash) ->
+                               string:find(Suffix, IgnoredCrash) =/= nomatch
+                       end, IgnoredCrashes),
+            case Ignore of
                 false ->
                     capture_gen_server_termination(
                       Rest, Prefix, [Line | Acc], Count, IgnoredCrashes);
