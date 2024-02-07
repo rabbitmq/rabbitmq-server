@@ -544,6 +544,7 @@ rabbit:
 - rabbit_access_control
 - rabbit_alarm
 - rabbit_amqp1_0
+- rabbit_amqp_management
 - rabbit_amqp_reader
 - rabbit_amqp_session
 - rabbit_amqp_session_sup
@@ -823,6 +824,8 @@ rabbit_common:
 - worker_pool
 - worker_pool_sup
 - worker_pool_worker
+rabbitmq_amqp_client:
+- rabbitmq_amqp_client
 rabbitmq_amqp1_0:
 - rabbitmq_amqp1_0_noop
 rabbitmq_auth_backend_cache:

@@ -26,7 +26,8 @@
          message/4,
          message/5,
          from_basic_message/1,
-         to_091/2
+         to_091/2,
+         from_091/2
         ]).
 
 -import(rabbit_misc,

@@ -100,14 +100,16 @@ symbolify(FieldName) when is_atom(FieldName) ->
 
 %% A sequence comes as an arbitrary list of values; it's not a
 %% composite type.
-decode({described, Descriptor, {list, Fields}}) ->
+decode({described, Descriptor, {list, Fields} = Type}) ->
     case amqp10_framing0:record_for(Descriptor) of
         #'v1_0.amqp_sequence'{} ->
             #'v1_0.amqp_sequence'{content = [decode(F) || F <- Fields]};
+        #'v1_0.amqp_value'{} ->
+            #'v1_0.amqp_value'{content = Type};
         Else ->
             fill_from_list(Else, Fields)
     end;
-decode({described, Descriptor, {map, Fields}}) ->
+decode({described, Descriptor, {map, Fields} = Type}) ->
     case amqp10_framing0:record_for(Descriptor) of
         #'v1_0.application_properties'{} ->
             #'v1_0.application_properties'{content = decode_map(Fields)};
@@ -117,13 +119,15 @@ decode({described, Descriptor, {map, Fields}}) ->
             #'v1_0.message_annotations'{content = decode_map(Fields)};
         #'v1_0.footer'{} ->
             #'v1_0.footer'{content = decode_map(Fields)};
+        #'v1_0.amqp_value'{} ->
+            #'v1_0.amqp_value'{content = Type};
         Else ->
             fill_from_map(Else, Fields)
     end;
-decode({described, Descriptor, {binary, Field}}) ->
+decode({described, Descriptor, {binary, Field} = Type}) ->
     case amqp10_framing0:record_for(Descriptor) of
         #'v1_0.amqp_value'{} ->
-            #'v1_0.amqp_value'{content = {binary, Field}};
+            #'v1_0.amqp_value'{content = Type};
         #'v1_0.data'{} ->
             #'v1_0.data'{content = Field}
     end;

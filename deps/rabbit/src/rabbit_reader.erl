@@ -231,7 +231,7 @@ server_properties(Protocol) ->
     NormalizedConfigServerProps =
         [{<<"capabilities">>, table, server_capabilities(Protocol)} |
          [case X of
-              {KeyAtom, Value} -> {list_to_binary(atom_to_list(KeyAtom)),
+              {KeyAtom, Value} -> {atom_to_binary(KeyAtom),
                                    longstr,
                                    maybe_list_to_binary(Value)};
               {BinKey, Type, Value} -> {BinKey, Type, Value}

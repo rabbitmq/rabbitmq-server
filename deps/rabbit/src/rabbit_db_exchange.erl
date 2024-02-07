@@ -358,7 +358,7 @@ update_in_khepri_tx(Name, Fun) ->
 
 -spec create_or_get(Exchange) -> Ret when
       Exchange :: rabbit_types:exchange(),
-      Ret :: {new, Exchange} | {existing, Exchange} | {error, any()}.
+      Ret :: {new, Exchange} | {existing, Exchange}.
 %% @doc Writes an exchange record if it doesn't exist already or returns
 %% the existing one.
 %%

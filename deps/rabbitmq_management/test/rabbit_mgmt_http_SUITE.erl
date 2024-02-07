@@ -979,7 +979,7 @@ connections_test_amqp(Config) ->
                    auth_mechanism := <<"PLAIN">>,
                    protocol := <<"AMQP 1-0">>,
                    client_properties := #{version := _,
-                                          product := <<"AMQP 1.0 client from the RabbitMQ Project">>,
+                                          product := <<"AMQP 1.0 client">>,
                                           platform := _}},
                  Connection1),
     ConnectionName = maps:get(name, Connection1),
