@@ -236,7 +236,17 @@ delete_replica(StreamId, Node) ->
 
 policy_changed(Q) when ?is_amqqueue(Q) ->
     StreamId = maps:get(name, amqqueue:get_type_state(Q)),
-    process_command({policy_changed, StreamId, #{queue => Q}}).
+    case rabbit_feature_flags:is_enabled(stream_update_config_command) of
+        true ->
+            %% there are the only two configuration keys that are safe to
+            %% update
+            Conf = maps:with([filter_size,
+                              retention],
+                             rabbit_stream_queue:update_stream_conf(Q, #{})),
+            process_command({update_config, StreamId, Conf});
+        false ->
+            process_command({policy_changed, StreamId, #{queue => Q}})
+    end.
 
 sac_state(#?MODULE{single_active_consumer = SacState}) ->
     SacState.
@@ -1601,12 +1611,13 @@ update_stream0(#{system_time := _Ts} = _Meta,
                         M
                 end, Members0),
     Stream0#stream{members = Members};
-update_stream0(#{system_time := _Ts},
-               {policy_changed, _StreamId, #{queue := Q}},
-               #stream{conf = Conf0,
-                       members = _Members0} = Stream0) ->
+update_stream0(_Meta, {policy_changed, _StreamId, #{queue := Q}},
+               #stream{conf = Conf0} = Stream0) ->
     Conf = rabbit_stream_queue:update_stream_conf(Q, Conf0),
     Stream0#stream{conf = Conf};
+update_stream0(_Meta, {update_config, _StreamId, Conf},
+               #stream{conf = Conf0} = Stream0) ->
+    Stream0#stream{conf = maps:merge(Conf0, Conf)};
 update_stream0(_Meta, _Cmd, undefined) ->
     undefined.
 
