@@ -2,6 +2,13 @@
 
 KEYCLOAK_DOCKER_IMAGE=quay.io/keycloak/keycloak:20.0
 
+ensure_keycloak() {
+  if docker ps | grep keycloak &> /dev/null; then
+     print "keycloak already running ..."
+ else
+   start_keycloak
+ fi
+}
 init_keycloak() {
   KEYCLOAK_CONFIG_PATH=${KEYCLOAK_CONFIG_PATH:-oauth/keycloak}
   KEYCLOAK_CONFIG_DIR=$(realpath ${TEST_DIR}/${KEYCLOAK_CONFIG_PATH})

@@ -1,4 +1,12 @@
 
+ensure_fakeportal() {
+  if docker ps | grep fakeportal &> /dev/null; then
+     print "fakeportal already running ..."
+ else
+   start_fakeportal
+ fi
+}
+
 init_fakeportal() {
   FAKEPORTAL_URL=${FAKEPORTAL_URL:-http://fakeportal:3000}
   FAKEPORTAL_DIR=${SCRIPT}/../fakeportal

@@ -2,6 +2,13 @@
 
 UAA_DOCKER_IMAGE=cloudfoundry/uaa:75.21.0
 
+ensure_uaa() {
+  if docker ps | grep uaa &> /dev/null; then
+     print "uaa already running ..."
+ else
+   start_uaa
+ fi
+}
 init_uaa() {
   UAA_CONFIG_PATH=${UAA_CONFIG_PATH:-oauth/uaa}
   UAA_CONFIG_DIR=$(realpath ${TEST_DIR}/${UAA_CONFIG_PATH})

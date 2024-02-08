@@ -1,6 +1,13 @@
 
 HTTPD_DOCKER_IMAGE=httpd:latest
 
+ensure_proxy() {
+  if docker ps | grep proxy &> /dev/null; then
+     print "proxy already running ..."
+ else
+   start_proxy
+ fi
+}
 init_proxy() {
   HTTPD_CONFIG_DIR=${TEST_CONFIG_DIR}/httpd-proxy
   PUBLIC_RABBITMQ_HOST=${PUBLIC_RABBITMQ_HOST:-proxy:9090}

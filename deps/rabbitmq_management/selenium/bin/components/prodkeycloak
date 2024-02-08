@@ -2,6 +2,13 @@
 
 KEYCLOAK_DOCKER_IMAGE=quay.io/keycloak/keycloak:20.0
 
+ensure_prodkeycloak() {
+  if docker ps | grep prodkeycloak &> /dev/null; then
+     print "prodkeycloak already running ..."
+ else
+   start_prodkeycloak
+ fi
+}
 init_prodkeycloak() {
   PRODKEYCLOAK_CONFIG_PATH=${PRODKEYCLOAK_CONFIG_PATH:-multi-oauth/prodkeycloak}
   PRODKEYCLOAK_CONFIG_DIR=$(realpath ${TEST_DIR}/${PRODKEYCLOAK_CONFIG_PATH})

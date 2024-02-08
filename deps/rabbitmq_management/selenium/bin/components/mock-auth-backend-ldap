@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 
+ensure_mock-auth-backend-ldap() {
+  if docker ps | grep mock-auth-backend-ldap &> /dev/null; then
+     print "mock-auth-backend-ldap already running ..."
+ else
+   start_mock-auth-backend-ldap
+ fi
+}
 init_mock-auth-backend-ldap() {
   AUTH_BACKEND_LDAP_DIR=${TEST_CONFIG_DIR}/mock-auth-backend-ldap
 

@@ -48,6 +48,9 @@ parse_arguments() {
     elif [[ "$1" == "start-others" ]]
       then
       echo "start-others"
+    elif [[ "$1" == "ensure-others" ]]
+      then
+      echo "ensure-others"
     elif [[ "$1" == "stop-others" ]]
       then
       echo "stop-others"
@@ -345,6 +348,9 @@ run_local_with() {
   elif [[ "$COMMAND" == "start-others" ]]
   then
     start_local_others
+  elif [[ "$COMMAND" == "ensure-others" ]]
+  then
+    ensure_local_others
   elif [[ "$COMMAND" == "stop-others" ]]
   then
     teardown_local_others
@@ -398,6 +404,13 @@ start_local_others() {
     start_components
   fi
 }
+ensure_local_others() {
+  if [[ $REQUIRED_COMPONENTS == "" ]]; then
+    print "There are no other components"
+  else
+    ensure_components
+  fi
+}
 teardown_local_others() {
   if [[ $REQUIRED_COMPONENTS == "" ]]; then
     print "There are no other components"
@@ -439,7 +452,13 @@ test_local() {
   npm test $TEST_CASES_DIR/$1
 
 }
-
+ensure_components() {
+  for i in "${REQUIRED_COMPONENTS[@]}"
+  do
+    start="ensure_$i"
+    $start
+  done
+}
 start_components() {
   for i in "${REQUIRED_COMPONENTS[@]}"
   do
