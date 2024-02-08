@@ -79,7 +79,7 @@
           %% queue_name_bin is only set if the link target address refers to a queue.
           queue_name_bin :: undefined | rabbit_misc:resource_name(),
           delivery_count :: sequence_no(),
-          credit = 0 :: non_neg_integer(),
+          credit :: non_neg_integer(),
           %% TRANSFER delivery IDs published to queues but not yet confirmed by queues
           incoming_unconfirmed_map = #{} :: #{delivery_number() =>
                                               {#{rabbit_amqqueue:name() := ok},
@@ -707,7 +707,8 @@ handle_control(#'v1_0.attach'{role = ?SEND_ROLE,
                               source = Source,
                               snd_settle_mode = SndSettleMode,
                               target = Target,
-                              initial_delivery_count = ?UINT(DeliveryCount)} = Attach,
+                              initial_delivery_count = DeliveryCount = ?UINT(DeliveryCountInt)
+                             } = Attach,
                State0 = #state{incoming_links = IncomingLinks0,
                                cfg = #cfg{vhost = Vhost,
                                           user = User}}) ->
@@ -718,7 +719,7 @@ handle_control(#'v1_0.attach'{role = ?SEND_ROLE,
                               exchange = XName,
                               routing_key = RoutingKey,
                               queue_name_bin = QNameBin,
-                              delivery_count = DeliveryCount,
+                              delivery_count = DeliveryCountInt,
                               credit = ?LINK_CREDIT_RCV},
             _Outcomes = outcomes(Source),
             OutputHandle = output_handle(InputHandle),
@@ -731,14 +732,10 @@ handle_control(#'v1_0.attach'{role = ?SEND_ROLE,
                        target = Target,
                        %% We are the receiver.
                        role = ?RECV_ROLE,
-                       %% "ignored if the role is receiver"
-                       initial_delivery_count = undefined,
                        max_message_size = {ulong, persistent_term:get(max_message_size)}},
-            Flow = #'v1_0.flow'{
-                      handle = OutputHandle,
-                      link_credit = ?UINT(?LINK_CREDIT_RCV),
-                      drain = false,
-                      echo = false},
+            Flow = #'v1_0.flow'{handle = OutputHandle,
+                                delivery_count = DeliveryCount,
+                                link_credit = ?UINT(?LINK_CREDIT_RCV)},
             %%TODO check that handle is not present in either incoming_links or outgoing_links:
             %%"The handle MUST NOT be used for other open links. An attempt to attach
             %% using a handle which is already associated with a link MUST be responded to
