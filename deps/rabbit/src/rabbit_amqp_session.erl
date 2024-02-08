@@ -1592,10 +1592,9 @@ incoming_link_transfer(
                _ -> Anns0#{?ANN_ROUTING_KEYS => [LinkRKey]}
            end,
     Mc0 = mc:init(mc_amqp, Sections, Anns),
-    Mc = rabbit_message_interceptor:intercept(Mc0),
+    Mc1 = rabbit_message_interceptor:intercept(Mc0),
+    {Mc, RoutingKey} = ensure_routing_key(Mc1),
     check_user_id(Mc, User),
-    RoutingKeys = mc:routing_keys(Mc),
-    RoutingKey = routing_key(RoutingKeys, XName),
     messages_received(Settled),
     case rabbit_exchange:lookup(XName) of
         {ok, Exchange} ->
@@ -1640,6 +1639,20 @@ incoming_link_transfer(
             Disposition = released(DeliveryId),
             Detach = detach(HandleInt, Link0, ?V_1_0_AMQP_ERROR_RESOURCE_DELETED),
             {error, [Disposition, Detach]}
+    end.
+
+ensure_routing_key(Mc) ->
+    case mc:routing_keys(Mc) of
+        [RoutingKey] ->
+            {Mc, RoutingKey};
+        [] ->
+            %% Set the default routing key of AMQP 0.9.1 'basic.publish'{}.
+            %% For example, when the client attached to target /exchange/amq.fanout and sends a
+            %% message without setting a 'subject' in the message properties, the routing key is
+            %% ignored during routing, but receiving code paths still expect some routing key to be set.
+            DefaultRoutingKey = <<"">>,
+            Mc1 = mc:set_annotation(?ANN_ROUTING_KEYS, [DefaultRoutingKey], Mc),
+            {Mc1, DefaultRoutingKey}
     end.
 
 process_routing_confirm([], _SenderSettles = true, _, U) ->
@@ -2158,13 +2171,6 @@ remove_link_from_outgoing_unsettled_map(Ctag, Map)
                  (_, _, Acc) ->
                       Acc
               end, {Map, []}, Map).
-
-routing_key([RoutingKey], _XName) ->
-    RoutingKey;
-routing_key([], XName) ->
-    protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                   "Publishing to ~ts failed since no routing key was provided",
-                   [rabbit_misc:rs(XName)]).
 
 messages_received(Settled) ->
     rabbit_global_counters:messages_received(?PROTOCOL, 1),
