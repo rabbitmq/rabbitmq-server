@@ -4,9 +4,16 @@
 
   <!-- begin login status -->
     <div id="login-status">
-<% if (typeof message == 'string') { %>
-        <p class="warning"><%=fmt_string(message)%> </p>
-<% } %>
+<% if (Array.isArray(warnings)) {
+    if (warnings.length > 1) { %>
+        <% for (var i = 0; i < warnings.length; i++) { %>
+        <p class="warning">OAuth resource(s) are not available. <%=fmt_string(warnings[i])%> </p>
+        <% } %>
+
+    <% } else if (warnings.length == 1) { %>
+      <p class="warning"><%=fmt_string(warnings[0])%> </p>
+<% } } %>
+
 <% if (typeof errorCode == 'number' && errorCode == 401) { %>
         <button id="logout" onclick="oauth_initiateLogout()">Click here to logout</button>
 <%} %>
@@ -16,7 +23,7 @@
   <!-- end login status -->
 <% if ((typeof resource_servers == 'object' && resource_servers.length == 1) && oauth_disable_basic_auth) { %>
     <button id="login" onclick="oauth_initiateLogin('<%=resource_servers[0].id%>')">Click here to log in</button>
-<% } else if (typeof resource_servers == 'object') { %>
+<% } else if (typeof resource_servers == 'object' && resource_servers.length >= 1) { %>
 
       <b>Login with :</b>
       <p></p>
