@@ -11,6 +11,7 @@
         ]).
 
 -include("oauth2_client.hrl").
+-include_lib("public_key/include/public_key.hrl").
 
 -spec get_access_token(oauth_provider_id() | oauth_provider(), access_token_request()) ->
   {ok, successful_access_token_response()} | {error, unsuccessful_access_token_response() | any()}.
@@ -269,10 +270,19 @@ lookup_oauth_provider_from_keyconfig() ->
 
 -spec extract_ssl_options_as_list(#{atom() => any()}) -> proplists:proplist().
 extract_ssl_options_as_list(Map) ->
-  Verify = case maps:get(cacertfile, Map, undefined) of
-    undefined -> verify_none;
-    _ -> maps:get(peer_verification, Map, verify_peer)
+  Verify = case maps:get(peer_verification, Map, verify_peer) of
+    verify_peer ->
+      case maps:get(cacertfile, Map, undefined) of
+        undefined ->
+          case public_key:cacerts_get() of
+            [] -> verify_none;
+            _ -> verify_peer
+          end;
+        _ -> verify_peer
+      end;
+    verify_none -> verify_none
   end,
+
   [ {verify, Verify},
     {cacertfile, maps:get(cacertfile, Map, "")},
     {depth, maps:get(depth, Map, 10)},
