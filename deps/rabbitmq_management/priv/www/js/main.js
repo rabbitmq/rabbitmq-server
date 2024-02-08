@@ -18,10 +18,64 @@ function startWithLoginPage() {
   replace_content('outer', format('login', {}));
   start_app_login();
 }
+function removeDuplicates(array){
+  let output = []
+  for(let item of array) {
+    if(!output.includes(item)) {
+      output.push(item)
+    }
+  }
+  return output
+}
+
 function startWithOAuthLogin () {
   store_pref("oauth-return-to", window.location.hash);
 
   if (!oauth.logged_in) {
+
+    // Find out how many distinct oauthServers are configured
+    oauthServers = removeDuplicates(oauth.resource_servers.filter((resource) => resource.sp_initiated))
+    if (oauthServers.length > 0) {   // some resources are sp_initiated but there could be idp_initiated too
+      Promise.allSettled(oauthServers.map(oauthServer =>
+        fetch(readiness_url(oauthServer)).then(res => res.json())))
+        .then(results => {
+          let notReadyServers = []
+          for (let i = 0; i < results.length; i++) {
+            switch (results[i].status) {
+              case "fulfilled":
+                try {
+                  validate_openid_configuration(results[i].value)
+                }catch(e) {
+                  console.log("Unable to connect to " + oauthServers[i].oauth_provider_url + ". " + e)
+                  notReadyServers.push({
+                    "oauth_provider_url" : oauthServers[i].oauth_provider_url,
+                    "error" : "Unable to download OpenId Connect Configuration from " + readiness_url(oauthServers[i])
+                    })
+                }
+                break;
+              case "rejected":
+                console.log(results[i])
+                notReadyServers.push({
+                  "oauth_provider_url" : oauthServers[i].oauth_provider_url,
+                  "error" : readiness_url(oauthServers[i]) + " is not reachable"
+                })
+              }
+          }
+          notReadyOauthProviderUrls = notReadyServers.map(s => s.oauth_provider_url)
+          console.log("Available resources : " + oauth.resource_servers)
+          console.log("notReadyOauthProviderUrls : " + notReadyOauthProviderUrls)
+          oauth.resource_servers = oauth.resource_servers.filter((resource) =>
+            !notReadyOauthProviderUrls.includes(resource.oauth_provider_url))
+          console.log("Available resources : " + oauth.resource_servers)
+          render_login_oauth(notReadyServers.map(s => s.error))
+          start_app_login()
+
+        })
+    }else { // there are only idp_initiated resources
+      render_login_oauth()
+      start_app_login()
+    }
+/*
 
     if (oauth.resource_servers.length == 1 && oauth.resource_servers[0].sp_initiated) {
       get(readiness_url(oauth.resource_servers[0]), 'application/json', function (req) {
@@ -58,18 +112,25 @@ function startWithOAuthLogin () {
       render_login_oauth()
       start_app_login()
     }
-
+*/
   } else {
     start_app_login()
   }
 }
-function render_login_oauth(message) {
-  replace_content('outer', format('login_oauth', {
-      'message' : message,
-      'resource_servers' : oauth.resource_servers,
-      'errorCode' : message != null ? (message == "Not authorized" ? 401 : 400) : undefined,
-      'oauth_disable_basic_auth' : oauth.oauth_disable_basic_auth
-    }))
+function render_login_oauth(messages) {
+  let formatData = {}
+  formatData.warnings = []
+  formatData.resource_servers = oauth.resource_servers
+  formatData.oauth_disable_basic_auth = oauth.oauth_disable_basic_auth
+
+  if (Array.isArray(messages)) {
+    formatData.warnings = messages
+  } else if (typeof messages == "string") {
+    formatData.warnings = [messages]
+    formatData.errorCode = messages ? (messages == "Not authorized" ? 401 : 400) : undefined
+  }
+  replace_content('outer', format('login_oauth', formatData))
+
   setup_visibility()
   $('#login').off('click', 'div.section h2, div.section-hidden h2');
   $('#login').on('click', 'div.section h2, div.section-hidden h2', function() {
@@ -1347,13 +1408,14 @@ function get(url, accept, callback) {
   var req = new XMLHttpRequest();
   req.open("GET", url);
   req.setRequestHeader("Accept", accept);
-  req.send();
 
   req.onreadystatechange = function() {
     if (req.readyState == XMLHttpRequest.DONE) {
       callback(req);
     }
   };
+  req.send();
+
 }
 
 function sync_get(path) {
