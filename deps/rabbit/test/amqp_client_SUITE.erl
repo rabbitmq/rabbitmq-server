@@ -61,7 +61,6 @@ groups() ->
        link_target_classic_queue_deleted,
        link_target_quorum_queue_deleted,
        target_queues_deleted_accepted,
-       no_routing_key,
        events,
        sync_get_unsettled_classic_queue,
        sync_get_unsettled_quorum_queue,
@@ -320,9 +319,8 @@ sender_settle_mode_unsettled_fanout(Config) ->
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
-    Address = <<"/exchange/amq.fanout/ignored">>,
-    {ok, Sender} = amqp10_client:attach_sender_link(
-                     Session, <<"test-sender">>, Address, unsettled),
+    Address = <<"/exchange/amq.fanout">>,
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"test-sender">>, Address, unsettled),
     ok = wait_for_credit(Sender),
 
     %% Send many messages aync.
@@ -796,7 +794,7 @@ multiple_sessions(Config) ->
     ok = rabbit_ct_client_helpers:close_channel(Ch),
 
     %% Send on each session.
-    TargetAddr = <<"/exchange/amq.fanout/ignored">>,
+    TargetAddr = <<"/exchange/amq.fanout">>,
     {ok, Sender1} = amqp10_client:attach_sender_link_sync(
                       Session1, <<"sender link 1">>, TargetAddr, settled, configuration),
     ok = wait_for_credit(Sender1),
@@ -1086,30 +1084,6 @@ rabbit_queue_type_deliver_to_q1(Qs, Msg, Opts, QTypeState) ->
                       end, Qs),
     1 = length(Q1),
     meck:passthrough([Q1, Msg, Opts, QTypeState]).
-
-%% Set routing key neither in target address nor in message subject.
-no_routing_key(Config) ->
-    OpnConf = connection_config(Config),
-    {ok, Connection} = amqp10_client:open_connection(OpnConf),
-    {ok, Session} = amqp10_client:begin_session_sync(Connection),
-    Address = <<"/exchange/amq.direct">>,
-    {ok, Sender} = amqp10_client:attach_sender_link(
-                     Session, <<"test-sender">>, Address),
-    ok = wait_for_credit(Sender),
-    Msg = amqp10_msg:new(<<0>>, <<1>>, true),
-    ok = amqp10_client:send_msg(Sender, Msg),
-    receive
-        {amqp10_event,
-         {session, Session,
-          {ended,
-           #'v1_0.error'{
-              condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
-              description = {utf8, <<"Publishing to exchange 'amq.direct' in vhost '/' "
-                                     "failed since no routing key was provided">>}}}}} -> ok
-    after 5000 -> flush(missing_ended),
-                  ct:fail("did not receive expected error")
-    end,
-    ok = amqp10_client:close_connection(Connection).
 
 events(Config) ->
     ok = event_recorder:start(Config),
@@ -2085,7 +2059,7 @@ last_queue_confirms(Config) ->
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
 
-    AddressFanout = <<"/exchange/amq.fanout/ignored">>,
+    AddressFanout = <<"/exchange/amq.fanout">>,
     {ok, SenderFanout} = amqp10_client:attach_sender_link(
                            Session, <<"sender-1">>, AddressFanout, unsettled),
     ok = wait_for_credit(SenderFanout),
@@ -2160,7 +2134,7 @@ target_queue_deleted(Config) ->
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
 
-    Address = <<"/exchange/amq.fanout/ignored">>,
+    Address = <<"/exchange/amq.fanout">>,
     {ok, Sender} = amqp10_client:attach_sender_link(
                      Session, <<"sender">>, Address, unsettled),
     ok = wait_for_credit(Sender),
