@@ -1,5 +1,13 @@
 
 
+ensure_fakeproxy() {
+  if docker ps | grep fakeproxy &> /dev/null; then
+     print "fakeproxy already running ..."
+ else
+   start_fakeproxy
+ fi
+}
+
 init_fakeproxy() {
   FAKEPROXY_URL=${FAKEPROXY_URL:-http://fakeproxy:9090}
   FAKEPROXY_DIR=${SCRIPT}/../fakeportal
