@@ -114,9 +114,9 @@ http_file(
 
 http_file(
     name = "otp_src_26_2",
-    downloaded_file_path = "OTP-26.2.1.tar.gz",
-    sha256 = "d99eab3af908b41dd4d7df38f0b02a447579326dd6604f641bbe9f2789b5656b",
-    urls = ["https://github.com/erlang/otp/archive/OTP-26.2.1.tar.gz"],
+    downloaded_file_path = "OTP-26.2.2.tar.gz",
+    sha256 = "93c09aa8814018c23d218ac68b2bcdba188e12086223fbfa08af5cc70edd7ee1",
+    urls = ["https://github.com/erlang/otp/archive/OTP-26.2.2.tar.gz"],
 )
 
 new_git_repository(
