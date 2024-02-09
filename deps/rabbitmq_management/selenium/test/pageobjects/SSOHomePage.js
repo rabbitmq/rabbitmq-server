@@ -101,7 +101,14 @@ module.exports = class SSOHomePage extends BasePage {
       return Promise.resolve(false)
     }
   }
-
+  async getWarnings() {
+    try
+    {
+      return driver.findElements(WARNING)
+    } catch (NoSuchElement) {
+      return Promise.resolve([])
+    }
+  }
   async getWarning () {
     return this.getText(WARNING)
   }
