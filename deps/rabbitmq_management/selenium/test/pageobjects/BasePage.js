@@ -108,7 +108,7 @@ module.exports = class BasePage {
   }
 
   async getSelectableVhosts() {
-    let table_model = await this.getSelectableOptions(SELECT_VHOSTS)
+    const table_model = await this.getSelectableOptions(SELECT_VHOSTS)
     let new_table_model = []
     for (let i = 0; i < table_model.length; i++) {
       new_table_model.push(await table_model[i].text)
@@ -118,8 +118,8 @@ module.exports = class BasePage {
 
 
   async getTable(locator, firstNColumns) {
-    let table = await this.waitForDisplayed(locator)
-    let rows = await table.findElements(By.css('tbody tr'))
+    const table = await this.waitForDisplayed(locator)
+    const rows = await table.findElements(By.css('tbody tr'))
     let table_model = []
     for (let row of rows) {
       let columns = await row.findElements(By.css('td'))
@@ -132,7 +132,7 @@ module.exports = class BasePage {
     return table_model
   }
   async isPopupWarningDisplayed() {
-    let element = "form-popup-warn"
+    const element = "form-popup-warn"
     return this.driver.wait(until.elementIsVisible(element), this.timeout / 2,
       'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
       this.polling / 2).then(function onWarningVisible(e) {
@@ -142,7 +142,7 @@ module.exports = class BasePage {
       })
   }
   async getPopupWarning() {
-    let element = "form-popup-warn"
+    const element = "form-popup-warn"
     return this.driver.wait(until.elementIsVisible(element), this.timeout,
       'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
       this.polling)
@@ -219,14 +219,14 @@ module.exports = class BasePage {
 
   async chooseFile (locator, file) {
     const element = await this.waitForDisplayed(locator)
-    var remote = require('selenium-webdriver/remote');
+    const remote = require('selenium-webdriver/remote');
     driver.setFileDetector(new remote.FileDetector);
     return element.sendKeys(file)
   }
   async acceptAlert () {
     await this.driver.wait(until.alertIsPresent(), this.timeout);
     await this.driver.sleep(250)
-    let alert = await this.driver.switchTo().alert();
+    const alert = await this.driver.switchTo().alert();
     await this.driver.sleep(250)
     return alert.accept();
   }
