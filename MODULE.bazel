@@ -49,7 +49,7 @@ bazel_dep(
 
 bazel_dep(
     name = "rabbitmq_ra",
-    version = "2.7.3",
+    version = "2.9.1",
     repo_name = "ra",
 )
 
@@ -338,8 +338,8 @@ erlang_package.hex_package(
     name = "ra_alt",
     build_file = "@rabbitmq-server//bazel:BUILD.ra",
     pkg = "ra",
-    sha256 = "6f2b912a779f4efa4deea762b65192ed6e87111c7d98cbbe8a29576964739147",
-    version = "2.7.3",
+    sha256 = "ee7f63461e9b1734e99a7d38cb601803dc0868f015672d795857fa329287288c",
+    version = "2.9.1",
 )
 
 erlang_package.git_package(
