@@ -5,7 +5,7 @@ const { buildDriver, goToHome, teardown, captureScreensFor } = require('../../ut
 
 const SSOHomePage = require('../../pageobjects/SSOHomePage')
 
-describe('When UAA is down', function () {
+describe('When basic authentication is enabled but UAA is down', function () {
   let driver
   let homePage
   let captureScreen
@@ -20,14 +20,14 @@ describe('When UAA is down', function () {
   it('should display warning message that UAA is down', async function () {
     await homePage.isLoaded()
     const message = await homePage.getWarning()
-    assert.equal(true, message.startsWith('OAuth resource not available'))
+    assert.equal(true, message.startsWith('OAuth resource is not available'))
     assert.equal(true, message.endsWith(' not reachable'))
   })
 
-  it('should not be presented with a login button to log in', async function () {
+  it('should not be presented oauth2 section', async function () {
     await homePage.isLoaded()
-    if (await homePage.getLoginButton()) {
-      throw new Error('Login buttton is present')
+    if (await homePage.isOAuth2SectionVisible()) {
+      throw new Error('OAuth2 section should not be present')
     }
   })
 

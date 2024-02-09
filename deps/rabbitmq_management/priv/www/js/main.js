@@ -27,6 +27,14 @@ function removeDuplicates(array){
   }
   return output
 }
+function warningMessageOAuthResource(oauthResource, reason) {
+  return "OAuth resource <b>" + (oauthResource["label"] != null ? oauthResource.label : oauthResource.id) +
+    "</b> not available. OpenId Discovery endpoint " + readiness_url(oauthResource) + reason
+}
+function warningMessageOAuthResources(commonProviderURL, oauthResources, reason) {
+  return "OAuth resources [ <b>" + oauthResources.map(resource => resource["label"] != null ? resource.label : resource.id).join("</b>,<b>")
+    + "</b>] not available. OpenId Discovery endpoint " + commonProviderURL + reason
+}
 
 function startWithOAuthLogin () {
   store_pref("oauth-return-to", window.location.hash);
@@ -34,12 +42,15 @@ function startWithOAuthLogin () {
   if (!oauth.logged_in) {
 
     // Find out how many distinct oauthServers are configured
-    oauthServers = removeDuplicates(oauth.resource_servers.filter((resource) => resource.sp_initiated))
+    let oauthServers = removeDuplicates(oauth.resource_servers.filter((resource) => resource.sp_initiated))
+    oauthServers.forEach(function(entry) { console.log(readiness_url(entry)) })
     if (oauthServers.length > 0) {   // some resources are sp_initiated but there could be idp_initiated too
-      Promise.allSettled(oauthServers.map(oauthServer =>
-        fetch(readiness_url(oauthServer)).then(res => res.json())))
+      Promise.allSettled(oauthServers.map(oauthServer => fetch(readiness_url(oauthServer)).then(res => res.json())))
         .then(results => {
+          results.forEach(function(entry) { console.log(entry) })
           let notReadyServers = []
+          let notCompliantServers = []
+
           for (let i = 0; i < results.length; i++) {
             switch (results[i].status) {
               case "fulfilled":
@@ -47,27 +58,42 @@ function startWithOAuthLogin () {
                   validate_openid_configuration(results[i].value)
                 }catch(e) {
                   console.log("Unable to connect to " + oauthServers[i].oauth_provider_url + ". " + e)
-                  notReadyServers.push({
-                    "oauth_provider_url" : oauthServers[i].oauth_provider_url,
-                    "error" : "Unable to download OpenId Connect Configuration from " + readiness_url(oauthServers[i])
-                    })
+                  notCompliantServers.push(oauthServers[i].oauth_provider_url)
                 }
-                break;
+                break
               case "rejected":
-                console.log(results[i])
-                notReadyServers.push({
-                  "oauth_provider_url" : oauthServers[i].oauth_provider_url,
-                  "error" : readiness_url(oauthServers[i]) + " is not reachable"
-                })
-              }
+                notReadyServers.push(oauthServers[i].oauth_provider_url)
+                break
+            }
           }
-          notReadyOauthProviderUrls = notReadyServers.map(s => s.oauth_provider_url)
-          console.log("Available resources : " + oauth.resource_servers)
-          console.log("notReadyOauthProviderUrls : " + notReadyOauthProviderUrls)
+          const spOauthServers = oauth.resource_servers.filter((resource) => resource.sp_initiated)
+          const groupByProviderURL = spOauthServers.reduce((group, oauthServer) => {
+            const { oauth_provider_url } = oauthServer;
+            group[oauth_provider_url] = group[oauth_provider_url] ?? [];
+            group[oauth_provider_url].push(oauthServer);
+            return group;
+          }, {})
+          let warnings = []
+          for(var url in groupByProviderURL){
+            console.log(url + ': ' + groupByProviderURL[url]);
+            const notReadyResources = groupByProviderURL[url].filter((oauthserver) => notReadyServers.includes(oauthserver.oauth_provider_url))
+            const notCompliantResources = groupByProviderURL[url].filter((oauthserver) => notCompliantServers.includes(oauthserver.oauth_provider_url))
+            if (notReadyResources.length == 1) {
+              warnings.push(warningMessageOAuthResource(notReadyResources[0], " not reachable"))
+            }else if (notReadyResources.length > 1) {
+              warnings.push(warningMessageOAuthResources(url, notReadyResources, " not reachable"))
+            }
+            if (notCompliantResources.length == 1) {
+              warnings.push(warningMessageOAuthResource(notCompliantResources[0], " not compliant"))
+            }else if (notCompliantResources.length > 1) {
+              warnings.push(warningMessageOAuthResources(url, notCompliantResources, " not compliant"))
+            }
+          }
+          console.log("warnings:" + warnings)
+          oauth.declared_resource_servers_count = oauth.resource_servers.length
           oauth.resource_servers = oauth.resource_servers.filter((resource) =>
-            !notReadyOauthProviderUrls.includes(resource.oauth_provider_url))
-          console.log("Available resources : " + oauth.resource_servers)
-          render_login_oauth(notReadyServers.map(s => s.error))
+            !notReadyServers.includes(resource.oauth_provider_url) && !notCompliantServers.includes(resource.oauth_provider_url))
+          render_login_oauth(warnings)
           start_app_login()
 
         })
@@ -75,44 +101,6 @@ function startWithOAuthLogin () {
       render_login_oauth()
       start_app_login()
     }
-/*
-
-    if (oauth.resource_servers.length == 1 && oauth.resource_servers[0].sp_initiated) {
-      get(readiness_url(oauth.resource_servers[0]), 'application/json', function (req) {
-        if (req.status !== 200) {
-          let message = 'Unable to retrieve OpenID configuration from ' + oauth.resource_servers[0].oauth_provider_url + '. '
-          switch(req.status) {
-            case 0:
-              message += 'Reason: ' + oauth.resource_servers[0].oauth_provider_url + " not reachable"
-              break
-            case 404:
-              message += 'Reason: ' + readiness_url(oauth.resource_servers[0]) + " return 404"
-              break
-            default:
-              message += 'Reason: ' + req.statusText
-          }
-          console.log(message)
-          renderWarningMessageInLoginStatus(message)
-
-        } else {
-          try {
-            validate_openid_configuration(JSON.parse(req.responseText))
-            render_login_oauth()
-            start_app_login()
-          }catch(e) {
-            let message = 'Unable to retrieve OpenID configuration from ' + readiness_url(oauth.resource_servers[0]) +
-              '. Reason: ' + e.message
-            console.log(message)
-            renderWarningMessageInLoginStatus(message)
-          }
-        }
-      })
-    } else {
-      console.log("Rendering login with " +  JSON.stringify(oauth.resource_servers))
-      render_login_oauth()
-      start_app_login()
-    }
-*/
   } else {
     start_app_login()
   }
@@ -121,13 +109,14 @@ function render_login_oauth(messages) {
   let formatData = {}
   formatData.warnings = []
   formatData.resource_servers = oauth.resource_servers
+  formatData.declared_resource_servers_count = oauth.declared_resource_servers_count
   formatData.oauth_disable_basic_auth = oauth.oauth_disable_basic_auth
 
   if (Array.isArray(messages)) {
     formatData.warnings = messages
   } else if (typeof messages == "string") {
     formatData.warnings = [messages]
-    formatData.errorCode = messages ? (messages == "Not authorized" ? 401 : 400) : undefined
+    formatData.notAuthorized = messages == "Not authorized"
   }
   replace_content('outer', format('login_oauth', formatData))
 

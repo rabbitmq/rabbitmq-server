@@ -2,9 +2,9 @@
 
 SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-TEST_CASES_PATH=/oauth/with-sp-initiated
+TEST_CASES_PATH=/oauth/with-basic-auth-idp-down
 TEST_CONFIG_PATH=/oauth
-PROFILES="uaa uaa-oauth-provider uaa-mgt-oauth-provider tls"
+PROFILES="uaa uaa-oauth-provider uaa-mgt-oauth-provider tls enable-basic-auth"
 
 source $SCRIPT/../../bin/suite_template $@
-runWith uaa
+run

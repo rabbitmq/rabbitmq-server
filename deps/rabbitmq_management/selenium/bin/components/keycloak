@@ -46,4 +46,7 @@ start_keycloak() {
 
   wait_for_oidc_endpoint keycloak $KEYCLOAK_URL $MOUNT_KEYCLOAK_CONF_DIR/ca_certificate.pem
   end "Keycloak is ready"
+
+  print "If you modify keycloak configuration. Make sure to run the following command to export the configuration."
+  print "docker exec -it keycloak /opt/keycloak/bin/kc.sh export --users realm_file --realm test --dir /opt/keycloak/data/import/"
 }
