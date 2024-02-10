@@ -43,8 +43,11 @@ fixture_jwk() ->
   fixture_jwk(<<"token-key">>).
 
 fixture_jwk(TokenKey) ->
+    fixture_jwk(TokenKey, <<"dG9rZW5rZXk">>).
+  
+fixture_jwk(TokenKey, K) ->
     #{<<"alg">> => <<"HS256">>,
-      <<"k">> => <<"dG9rZW5rZXk">>,
+      <<"k">> => K,
       <<"kid">> => TokenKey,
       <<"kty">> => <<"oct">>,
       <<"use">> => <<"sig">>,
