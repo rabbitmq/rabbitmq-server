@@ -150,10 +150,13 @@ module.exports = class BasePage {
 
   async isDisplayed(locator) {
       try {
+        element = await driver.findElement(locator)
+        console.log("element:"+element)
         return this.driver.wait(until.elementIsVisible(element), this.timeout / 2,
           'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
           this.polling / 2)
       }catch(error) {
+          console.log("isDisplayed(" + locator + "). Error:" + error)
           return Promise.resolve(false)
       }
   }
