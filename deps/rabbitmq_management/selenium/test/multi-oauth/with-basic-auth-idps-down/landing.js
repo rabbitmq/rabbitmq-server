@@ -22,12 +22,12 @@ describe('When basic authentication is enabled but both Idps are down', function
     const warnings = await homePage.getWarnings()
 
     assert.equal(2, warnings.length)
-    const warning0 = warnings[0].getText()
+    const warning0 = await warnings[0].getText()
     assert.equal(true, warning0.startsWith("OAuth resource RabbitMQ Development not available"))
     assert.equal(true, warning0.endsWith("not reachable"))
-    const warning1 = warnings[1].getText()
-    assert.equal(true, warnings1.startsWith("OAuth resource RabbitMQ Production not available"))
-    assert.equal(true, warnings1.endsWith("not reachable"))
+    const warning1 = await warnings[1].getText()
+    assert.equal(true, warning1.startsWith("OAuth resource RabbitMQ Production not available"))
+    assert.equal(true, warning1.endsWith("not reachable"))
 
   })
 
