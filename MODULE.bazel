@@ -100,15 +100,12 @@ erlang_config.internal_erlang_from_github_release(
     version = "26.1.2",
 )
 
-<<<<<<< HEAD
-=======
 erlang_config.internal_erlang_from_github_release(
     name = "26_2",
     sha256 = "d537ff4ac5d8c1cb507aedaf7198fc1f155ea8aa65a8d83edb35c2802763cc28",
     version = "26.2.2",
 )
 
->>>>>>> 0e275eead4 (Adopt otp 26.2.2)
 erlang_config.internal_erlang_from_http_archive(
     name = "git_master",
     strip_prefix = "otp-master",

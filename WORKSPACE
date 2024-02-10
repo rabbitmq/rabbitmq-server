@@ -112,8 +112,6 @@ http_file(
     urls = ["https://github.com/erlang/otp/archive/OTP-26.1.2.tar.gz"],
 )
 
-<<<<<<< HEAD
-=======
 http_file(
     name = "otp_src_26_2",
     downloaded_file_path = "OTP-26.2.2.tar.gz",
@@ -121,7 +119,6 @@ http_file(
     urls = ["https://github.com/erlang/otp/archive/OTP-26.2.2.tar.gz"],
 )
 
->>>>>>> 0e275eead4 (Adopt otp 26.2.2)
 new_git_repository(
     name = "bats",
     build_file = "@//:BUILD.bats",
