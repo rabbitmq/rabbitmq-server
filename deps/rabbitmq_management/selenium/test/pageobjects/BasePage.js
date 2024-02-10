@@ -156,7 +156,6 @@ module.exports = class BasePage {
           'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
           this.polling / 2)
       }catch(error) {
-          console.log("isDisplayed(" + locator + "). Error:" + error)
           return Promise.resolve(false)
       }
   }
