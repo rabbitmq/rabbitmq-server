@@ -54,31 +54,26 @@ update_jwks_signing_keys(ResourceServerId) ->
 
 -spec decode_and_verify(binary()) -> {boolean(), binary(), map()} | {error, term()}.
 decode_and_verify(Token) ->
-  case uaa_jwt_jwt:resolve_resource_server_id(Token) of
-    {error, _} = Err ->
-        Err;
-    ResourceServerId ->
-      rabbit_log:debug("OAuth 2 JWT: resolved resource_server_id: '~tp'", [ResourceServerId]),
-      case uaa_jwt_jwt:get_key_id(ResourceServerId, Token) of
-        {ok, KeyId} ->
-            rabbit_log:debug("OAuth 2 JWT: signing_key_id : '~tp'", [KeyId]),
-            case get_jwk(KeyId, ResourceServerId) of
-              {ok, JWK} ->
-                  case uaa_jwt_jwt:decode_and_verify(ResourceServerId, JWK, Token) of
-                    {true, Payload} ->
-                      ct:log("Valid signature"),
-                      {true, ResourceServerId, Payload};
-                    Other ->
-                      ct:log("Invalid signature ~p", [Other]),
-                      Other
-                  end;
-              {error, _} = Err ->
-                  Err
-            end;
+    case uaa_jwt_jwt:resolve_resource_server_id(Token) of
         {error, _} = Err ->
-          Err
-      end
-  end.
+            Err;
+        ResourceServerId ->
+            rabbit_log:debug("OAuth 2 JWT: resolved resource_server_id: '~tp'", [ResourceServerId]),
+            case uaa_jwt_jwt:get_key_id(ResourceServerId, Token) of
+                {ok, KeyId} ->
+                    rabbit_log:debug("OAuth 2 JWT: signing_key_id : '~tp'", [KeyId]),
+                    case get_jwk(KeyId, ResourceServerId) of
+                        {ok, JWK} ->
+                            case uaa_jwt_jwt:decode_and_verify(ResourceServerId, JWK, Token) of
+                                {true, Payload} -> {true, ResourceServerId, Payload};
+                                {false, Payload} -> {false, ResourceServerId, Payload}
+                            end;
+                        {error, _} = Err ->
+                            Err
+                    end;
+                {error, _} = Err -> Err
+          end
+    end.
 
 -spec get_jwk(binary(), binary()) -> {ok, map()} | {error, term()}.
 get_jwk(KeyId, ResourceServerId) ->

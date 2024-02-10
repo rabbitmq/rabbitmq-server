@@ -184,7 +184,7 @@ check_token(Token) ->
         {true, TargetResourceServerId, Payload} ->
           Payload0 = post_process_payload(TargetResourceServerId, Payload),
           validate_payload(TargetResourceServerId, Payload0);
-        _ -> {refused, signature_invalid}
+        {false, _, _} -> {refused, signature_invalid}
     end.
 
 post_process_payload(ResourceServerId, Payload) when is_map(Payload) ->
