@@ -108,6 +108,7 @@ function startWithOAuthLogin () {
 function render_login_oauth(messages) {
   let formatData = {}
   formatData.warnings = []
+  formatData.notAuthorized = false
   formatData.resource_servers = oauth.resource_servers
   formatData.declared_resource_servers_count = oauth.declared_resource_servers_count
   formatData.oauth_disable_basic_auth = oauth.oauth_disable_basic_auth
@@ -117,6 +118,7 @@ function render_login_oauth(messages) {
   } else if (typeof messages == "string") {
     formatData.warnings = [messages]
     formatData.notAuthorized = messages == "Not authorized"
+    console.log("Single error message")
   }
   replace_content('outer', format('login_oauth', formatData))
 

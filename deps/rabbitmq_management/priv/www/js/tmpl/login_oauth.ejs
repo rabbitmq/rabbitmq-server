@@ -7,13 +7,14 @@
         <p class="warning"><%=warnings[i]%> </p>
         <% } %>
     <% } %>
-    <% if (typeof notAuthorized == 'object' && notAuthorized) { %>
+    <% if (notAuthorized) { %>
         <button id="logout" onclick="oauth_initiateLogout()">Click here to logout</button>
     <% } %>
   </div>
-<% if ((typeof resource_servers == 'object' && resource_servers.length == 1) && oauth_disable_basic_auth) { %>
-    <button id="login" onclick="oauth_initiateLogin('<%=resource_servers[0].id%>')">Click here to log in</button>
-<% } else if (typeof resource_servers == 'object' && resource_servers.length >= 1) { %>
+<% if (!notAuthorized) { %>
+    <% if ((typeof resource_servers == 'object' && resource_servers.length == 1) && oauth_disable_basic_auth) { %>
+        <button id="login" onclick="oauth_initiateLogin('<%=resource_servers[0].id%>')">Click here to log in</button>
+    <% } else if (typeof resource_servers == 'object' && resource_servers.length >= 1) { %>
 
     <b>Login with :</b>
     <p/>
@@ -43,6 +44,7 @@
     </div>
     <!-- end login with oauth2  -->
 <% } %>
+
   <!-- begin login with basic auth   -->
   <% if (!oauth_disable_basic_auth) { %>
   <div class="section-hidden" id="login-with-basic-auth">
@@ -70,5 +72,6 @@
   </div>
   <% } %>
   <!-- end login with basic auth  -->
+<% } %>
 
 </div> <!-- login -->
