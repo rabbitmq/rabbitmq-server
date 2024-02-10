@@ -232,15 +232,22 @@ has_additional_scopes_key(TopResourceServerId, ResourceServerId) when ResourceSe
     _ -> true
   end.
 
--spec get_additional_scopes_key() -> binary() | undefined.
-get_additional_scopes_key() -> application:get_env(?APP, extra_scopes_source, undefined).
+-spec get_additional_scopes_key() -> {ok, binary()} | {error, not_found}.
+get_additional_scopes_key() ->
+  case application:get_env(?APP, extra_scopes_source, undefined) of
+    undefined -> {error, not_found};
+    ScopeKey -> {ok, ScopeKey}
+  end.
 
--spec get_additional_scopes_key(binary()) -> binary()  | undefined .
+-spec get_additional_scopes_key(binary()) -> {ok, binary()} | {error, not_found}.
 get_additional_scopes_key(ResourceServerId) -> get_additional_scopes_key(get_default_resource_server_id(), ResourceServerId).
 get_additional_scopes_key(TopResourceServerId, ResourceServerId) when ResourceServerId =:= TopResourceServerId -> get_additional_scopes_key();
 get_additional_scopes_key(TopResourceServerId, ResourceServerId) when ResourceServerId =/= TopResourceServerId ->
-  proplists:get_value(extra_scopes_source, maps:get(ResourceServerId, application:get_env(?APP, resource_servers, #{}), []),
-    get_additional_scopes_key()).
+  case proplists:get_value(extra_scopes_source, maps:get(ResourceServerId, application:get_env(?APP, resource_servers, #{}), [])) of
+    undefined -> get_additional_scopes_key();
+    <<>> -> get_additional_scopes_key();
+    ScopeKey -> {ok, ScopeKey}
+  end.
 
 
 -spec get_scope_prefix() -> binary().

@@ -511,13 +511,13 @@ get_key_config(_Config) ->
   ?assertEqual(<<"https://oauth-for-rabbitmq1">>, proplists:get_value(jwks_url, KeyConfig)).
 
 get_additional_scopes_key(_Config) ->
-  ?assertEqual(<<"roles">>, rabbit_oauth2_config:get_additional_scopes_key()),
-  ?assertEqual(<<"extra-scope-1">>, rabbit_oauth2_config:get_additional_scopes_key(<<"rabbitmq1">> )),
+  ?assertEqual({ok, <<"roles">>}, rabbit_oauth2_config:get_additional_scopes_key()),
+  ?assertEqual({ok, <<"extra-scope-1">>}, rabbit_oauth2_config:get_additional_scopes_key(<<"rabbitmq1">> )),
   ?assertEqual(rabbit_oauth2_config:get_additional_scopes_key(), rabbit_oauth2_config:get_additional_scopes_key(<<"rabbitmq2">>)),
-  ?assertEqual(<<"roles">>, rabbit_oauth2_config:get_additional_scopes_key(?RABBITMQ)).
+  ?assertEqual({ok, <<"roles">>}, rabbit_oauth2_config:get_additional_scopes_key(?RABBITMQ)).
 
 get_additional_scopes_key_when_not_defined(_Config) ->
-  ?assertEqual(undefined, rabbit_oauth2_config:get_additional_scopes_key()),
+  ?assertEqual({error, not_found}, rabbit_oauth2_config:get_additional_scopes_key()),
   ?assertEqual(rabbit_oauth2_config:get_additional_scopes_key(), rabbit_oauth2_config:get_additional_scopes_key(<<"rabbitmq2">>)).
 
 is_verify_aud(_Config) ->
