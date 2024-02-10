@@ -124,7 +124,7 @@ expiry_timestamp(#auth_user{impl = DecodedTokenFun}) ->
 authenticate(_, AuthProps0) ->
     AuthProps = to_map(AuthProps0),
     Token     = token_from_context(AuthProps),
-    
+
     case check_token(Token) of
         %% avoid logging the token
         {error, _} = E  -> E;
@@ -247,10 +247,10 @@ post_process_payload_with_scope_alias_in_extra_scopes_source(ResourceServerId, P
     ExtraScopesField = rabbit_oauth2_config:get_additional_scopes_key(ResourceServerId),
     case ExtraScopesField of
         %% nothing to inject
-        undefined -> Payload;
-        _         ->
+        {error, not_found} -> Payload;
+        {ok, ExtraScopes} ->
             ScopeMappings = rabbit_oauth2_config:get_scope_aliases(ResourceServerId),
-            post_process_payload_with_scope_alias_field_named(Payload, ExtraScopesField, ScopeMappings)
+            post_process_payload_with_scope_alias_field_named(Payload, ExtraScopes, ScopeMappings)
     end.
 
 
@@ -281,38 +281,42 @@ post_process_payload_with_scope_alias_field_named(Payload, FieldName, ScopeAlias
 
 -spec does_include_complex_claim_field(ResourceServerId :: binary(), Payload :: map()) -> boolean().
 does_include_complex_claim_field(ResourceServerId, Payload) when is_map(Payload) ->
-  case rabbit_oauth2_config:has_additional_scopes_key(ResourceServerId) of
-    true -> maps:is_key(rabbit_oauth2_config:get_additional_scopes_key(ResourceServerId), Payload);
-    false -> false
+  case rabbit_oauth2_config:get_additional_scopes_key(ResourceServerId) of
+    {ok, ScopeKey} -> maps:is_key(ScopeKey, Payload);
+    {error, not_found} -> false
   end.
 
 -spec post_process_payload_with_complex_claim(ResourceServerId :: binary(), Payload :: map()) -> map().
 post_process_payload_with_complex_claim(ResourceServerId, Payload) ->
-    ComplexClaim =   maps:get(rabbit_oauth2_config:get_additional_scopes_key(ResourceServerId), Payload),
-    AdditionalScopes =
-        case ComplexClaim of
-            L when is_list(L) -> L;
-            M when is_map(M) ->
-                case maps:get(ResourceServerId, M, undefined) of
-                    undefined           -> [];
-                    Ks when is_list(Ks) ->
-                        [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- Ks];
-                    ClaimBin when is_binary(ClaimBin) ->
-                        UnprefixedClaims = binary:split(ClaimBin, <<" ">>, [global, trim_all]),
-                        [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- UnprefixedClaims];
-                    _ -> []
-                    end;
-            Bin when is_binary(Bin) ->
-                binary:split(Bin, <<" ">>, [global, trim_all]);
-            _ -> []
-            end,
+    case rabbit_oauth2_config:get_additional_scopes_key(ResourceServerId) of
+      {ok, ScopesKey} ->
+        ComplexClaim = maps:get(ScopesKey, Payload),
+        AdditionalScopes =
+            case ComplexClaim of
+                L when is_list(L) -> L;
+                M when is_map(M) ->
+                    case maps:get(ResourceServerId, M, undefined) of
+                        undefined           -> [];
+                        Ks when is_list(Ks) ->
+                            [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- Ks];
+                        ClaimBin when is_binary(ClaimBin) ->
+                            UnprefixedClaims = binary:split(ClaimBin, <<" ">>, [global, trim_all]),
+                            [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- UnprefixedClaims];
+                        _ -> []
+                        end;
+                Bin when is_binary(Bin) ->
+                    binary:split(Bin, <<" ">>, [global, trim_all]);
+                _ -> []
+                end,
 
-    case AdditionalScopes of
-        [] -> Payload;
-        _  ->
-            ExistingScopes = maps:get(?SCOPE_JWT_FIELD, Payload, []),
-            maps:put(?SCOPE_JWT_FIELD, AdditionalScopes ++ ExistingScopes, Payload)
-        end.
+        case AdditionalScopes of
+            [] -> Payload;
+            _  ->
+                ExistingScopes = maps:get(?SCOPE_JWT_FIELD, Payload, []),
+                maps:put(?SCOPE_JWT_FIELD, AdditionalScopes ++ ExistingScopes, Payload)
+            end;
+      {error, not_found} -> Payload
+    end.
 
 -spec post_process_payload_in_keycloak_format(Payload :: map()) -> map().
 %% keycloak token format: https://github.com/rabbitmq/rabbitmq-auth-backend-oauth2/issues/36
