@@ -25,7 +25,7 @@ ssl_options(KeyConfig) ->
     end.
 
 cacertfile(KeyConfig) ->
-  case proplists:get_value(cacertfile, KeyConfig) of
-    undefined -> [];
-    CaCertFile -> [{cacertfile, CaCertFile}]
-  end.
+    case proplists:get_value(cacertfile, KeyConfig) of
+        undefined -> [];
+        CaCertFile -> [{cacertfile, CaCertFile}]
+    end.
