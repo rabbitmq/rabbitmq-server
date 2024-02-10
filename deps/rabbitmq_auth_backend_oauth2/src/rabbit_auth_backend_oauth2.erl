@@ -4,6 +4,7 @@
 %%
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
+
 -module(rabbit_auth_backend_oauth2).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -74,7 +75,7 @@ check_vhost_access(#auth_user{impl = DecodedTokenFun},
     with_decoded_token(DecodedTokenFun(),
         fun(_Token) ->
             DecodedToken = DecodedTokenFun(),
-            Scopes      = get_scopes(DecodedToken),
+            Scopes = get_scopes(DecodedToken),
             ScopeString = rabbit_oauth2_scope:concat_scopes(Scopes, ","),
             rabbit_log:debug("Matching virtual host '~ts' against the following scopes: ~ts", [VHost, ScopeString]),
             rabbit_oauth2_scope:vhost_access(VHost, Scopes)
@@ -182,8 +183,8 @@ check_token(Token) ->
           {refused, {error, Reason}};
         {true, TargetResourceServerId, Payload} ->
           Payload0 = post_process_payload(TargetResourceServerId, Payload),
-          validate_payload(TargetResourceServerId, Payload0)
-%        _ -> {refused, signature_invalid}
+          validate_payload(TargetResourceServerId, Payload0);
+        _ -> {refused, signature_invalid}
     end.
 
 post_process_payload(ResourceServerId, Payload) when is_map(Payload) ->

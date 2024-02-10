@@ -29,6 +29,7 @@ all() ->
         test_restricted_vhost_access_with_a_valid_token,
         test_insufficient_permissions_in_a_valid_token,
         test_token_expiration,
+        test_invalid_signature,
         test_incorrect_kid,
         test_post_process_token_payload,
         test_post_process_token_payload_keycloak,
@@ -1093,6 +1094,18 @@ test_insufficient_permissions_in_a_valid_token(_) ->
     assert_resource_access_denied(User, VHost, <<"bar">>, write),
     assert_topic_access_refused(User, VHost, <<"bar">>, read, #{routing_key => <<"foo/#">>}).
 
+test_invalid_signature(_) ->
+    Username = <<"username">>,
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    WrongJwk = ?UTIL_MOD:fixture_jwk("wrong", <<"GawgguFyGrWKav7AX4VKUg">>),
+    UaaEnv = [{signing_keys, #{<<"token-key">> => {map, WrongJwk}}}],
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
+    application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+    TokenData =  ?UTIL_MOD:token_with_sub(?UTIL_MOD:expirable_token(), Username),
+    Token     = ?UTIL_MOD:sign_token_hs(TokenData, Jwk),
+    ?assertMatch({refused, _, [signature_invalid]},
+                 rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}])).
+
 test_token_expiration(_) ->
     VHost = <<"vhost">>,
     Username = <<"username">>,
@@ -1124,7 +1137,6 @@ test_incorrect_kid(_) ->
     AltKid   = <<"other-token-key">>,
     Username = <<"username">>,
     Jwk      = ?UTIL_MOD:fixture_jwk(),
-    Jwk1     = Jwk#{<<"kid">> := AltKid},
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
     Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk, AltKid),
     ?assertMatch({refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [{error,{missing_oauth_provider_attributes, [issuer]}}]},

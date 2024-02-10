@@ -65,8 +65,12 @@ decode_and_verify(Token) ->
             case get_jwk(KeyId, ResourceServerId) of
               {ok, JWK} ->
                   case uaa_jwt_jwt:decode_and_verify(ResourceServerId, JWK, Token) of
-                    {true, Payload} -> {true, ResourceServerId, Payload};
-                    Other -> Other
+                    {true, Payload} ->
+                      ct:log("Valid signature"),
+                      {true, ResourceServerId, Payload};
+                    Other ->
+                      ct:log("Invalid signature ~p", [Other]),
+                      Other
                   end;
               {error, _} = Err ->
                   Err

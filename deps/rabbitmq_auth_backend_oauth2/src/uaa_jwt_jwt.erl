@@ -23,10 +23,8 @@ decode_and_verify(ResourceServerId, Jwk, Token) ->
     KeyConfig = rabbit_oauth2_config:get_key_config(ResourceServerId),
     Verify =
         case proplists:get_value(algorithms, KeyConfig) of
-            undefined ->
-                jose_jwt:verify(Jwk, Token);
-            Algs ->
-                jose_jwt:verify_strict(Jwk, Algs, Token)
+            undefined -> jose_jwt:verify(Jwk, Token);
+            Algs -> jose_jwt:verify_strict(Jwk, Algs, Token)
         end,
     case Verify of
         {true, #jose_jwt{fields = Fields}, _}  -> {true, Fields};
