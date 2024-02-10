@@ -76,6 +76,12 @@ To run a suite with a particular docker image you do it like this:
 cd deps/rabbitmq_management/selenium
 RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:3.11.0-rc.2.51.g4f3e539.dirty suites/authnz-mgt/oauth-with-uaa-with-mgt-prefix.sh
 ```
+or like this if you built the docker image using bazel:
+```
+cd deps/rabbitmq_management/selenium
+RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq suites/authnz-mgt/oauth-with-uaa-with-mgt-prefix.sh
+```
+
 
 ## Run tests interactively using your local chrome browser
 
