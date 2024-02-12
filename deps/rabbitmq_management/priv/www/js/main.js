@@ -28,8 +28,8 @@ function removeDuplicates(array){
   return output
 }
 function warningMessageOAuthResource(oauthResource, reason) {
-  return "OAuth resource <b>" + (oauthResource["label"] != null ? oauthResource.label : oauthResource.id) +
-    "</b> not available. OpenId Discovery endpoint " + readiness_url(oauthResource) + reason
+  return "OAuth resource [<b>" + (oauthResource["label"] != null ? oauthResource.label : oauthResource.id) +
+    "</b>] not available. OpenId Discovery endpoint " + readiness_url(oauthResource) + reason
 }
 function warningMessageOAuthResources(commonProviderURL, oauthResources, reason) {
   return "OAuth resources [ <b>" + oauthResources.map(resource => resource["label"] != null ? resource.label : resource.id).join("</b>,<b>")
