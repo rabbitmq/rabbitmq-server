@@ -20,7 +20,7 @@ describe('When basic authentication is enabled but UAA is down', function () {
   it('should display warning message that UAA is down', async function () {
     await homePage.isLoaded()
     const message = await homePage.getWarning()
-    assert.equal(true, message.startsWith('OAuth resource is not available'))
+    assert.equal(true, message.startsWith('OAuth resource [rabbitmq] not available'))
     assert.equal(true, message.endsWith(' not reachable'))
   })
 
