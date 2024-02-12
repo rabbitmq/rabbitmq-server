@@ -60,7 +60,8 @@ groups() ->
        vhost_queue_limit,
        connection_should_be_closed_on_token_expiry,
        should_receive_metadata_update_after_update_secret,
-       store_offset_requires_read_access
+       store_offset_requires_read_access,
+       offset_lag_calculation
       ]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
@@ -814,6 +815,116 @@ store_offset_requires_read_access(Config) ->
     closed = wait_for_socket_close(T, S, 10),
     ok.
 
+offset_lag_calculation(Config) ->
+    FunctionName = atom_to_binary(?FUNCTION_NAME, utf8),
+    T = gen_tcp,
+    Port = get_port(T, Config),
+    Opts = get_opts(T),
+    {ok, S} = T:connect("localhost", Port, Opts),
+    C = rabbit_stream_core:init(0),
+    ConnectionName = FunctionName,
+    test_peer_properties(T, S, #{<<"connection_name">> => ConnectionName}, C),
+    test_authenticate(T, S, C),
+
+    Stream = FunctionName,
+    test_create_stream(T, S, Stream, C),
+
+    SubId = 1,
+    TheFuture = os:system_time(millisecond) + 60 * 60 * 1_000,
+    lists:foreach(fun(OffsetSpec) ->
+                          test_subscribe(T, S, SubId, Stream,
+                                         OffsetSpec, 10, #{},
+                                         ?RESPONSE_CODE_OK, C),
+                          ConsumerInfo = consumer_offset_info(Config, ConnectionName),
+                          ?assertEqual({0, 0}, ConsumerInfo),
+                          test_unsubscribe(T, S, SubId, C)
+                  end, [first, last, next, 0, 1_000, {timestamp, TheFuture}]),
+
+
+    PublisherId = 1,
+    test_declare_publisher(T, S, PublisherId, Stream, C),
+    MessageCount = 10,
+    Body = <<"hello">>,
+    lists:foreach(fun(_) ->
+                          test_publish_confirm(T, S, PublisherId, Body, C)
+                  end, lists:seq(1, MessageCount - 1)),
+    %% to make sure to have 2 chunks
+    timer:sleep(200),
+    test_publish_confirm(T, S, PublisherId, Body, C),
+    test_delete_publisher(T, S, PublisherId, C),
+
+    NextOffset = MessageCount,
+    lists:foreach(fun({OffsetSpec, ReceiveDeliver, CheckFun}) ->
+                          test_subscribe(T, S, SubId, Stream,
+                                         OffsetSpec, 1, #{},
+                                         ?RESPONSE_CODE_OK, C),
+                          case ReceiveDeliver of
+                              true ->
+                                  {{deliver, SubId, _}, _} = receive_commands(T, S, C);
+                              _ ->
+                                  ok
+                          end,
+                          {Offset, Lag} = consumer_offset_info(Config, ConnectionName),
+                          CheckFun(Offset, Lag),
+                          test_unsubscribe(T, S, SubId, C)
+                  end, [{first, true,
+                         fun(Offset, Lag) ->
+                                 ?assert(Offset >= 0, "first, at least one chunk consumed"),
+                                 ?assert(Lag > 0, "first, not all messages consumed")
+                         end},
+                        {last, true,
+                         fun(Offset, _Lag) ->
+                                 ?assert(Offset > 0, "offset expected for last")
+                         end},
+                        {next, false,
+                         fun(Offset, Lag) ->
+                                 ?assertEqual(NextOffset, Offset, "next, offset should be at the end of the stream"),
+                                 ?assert(Lag =:= 0, "next, offset lag should be 0")
+                         end},
+                        {0, true,
+                         fun(Offset, Lag) ->
+                                 ?assert(Offset >= 0, "offset spec = 0, at least one chunk consumed"),
+                                 ?assert(Lag > 0, "offset spec = 0, not all messages consumed")
+                         end},
+                        {1_000, false,
+                         fun(Offset, Lag) ->
+                                 ?assertEqual(NextOffset, Offset, "offset spec = 1000, offset should be at the end of the stream"),
+                                 ?assert(Lag =:= 0, "offset spec = 1000, offset lag should be 0")
+                         end},
+                        {{timestamp, TheFuture}, false,
+                         fun(Offset, Lag) ->
+                                 ?assertEqual(NextOffset, Offset, "offset spec in future, offset should be at the end of the stream"),
+                                 ?assert(Lag =:= 0, "offset spec in future , offset lag should be 0")
+                         end}]),
+
+    test_delete_stream(T, S, Stream, C, false),
+    test_close(T, S, C),
+
+    ok.
+
+consumer_offset_info(Config, ConnectionName) ->
+    [[{offset, Offset},
+      {offset_lag, Lag}]] = rpc(Config, 0, ?MODULE,
+                                list_consumer_info, [ConnectionName, [offset, offset_lag]]),
+    {Offset, Lag}.
+
+list_consumer_info(ConnectionName, Infos) ->
+    Pids = rabbit_stream:list(<<"/">>),
+    [ConnPid] = lists:filter(fun(ConnectionPid) ->
+                                     ConnectionPid ! {infos, self()},
+                                     receive
+                                         {ConnectionPid,
+                                          #{<<"connection_name">> := ConnectionName}} ->
+                                             true;
+                                         {ConnectionPid, _ClientProperties} ->
+                                             false
+                                     after 1000 ->
+                                               false
+                                     end
+                             end,
+                             Pids),
+    rabbit_stream_reader:consumers_info(ConnPid, Infos).
+
 store_offset(Transport, S, Reference, Stream, Offset) ->
     StoreFrame = rabbit_stream_core:frame({store_offset, Reference, Stream, Offset}),
     ok = Transport:send(S, StoreFrame).
@@ -983,7 +1094,10 @@ test_server(Transport, Stream, Config) ->
     ok.
 
 test_peer_properties(Transport, S, C0) ->
-    PeerPropertiesFrame = request({peer_properties, #{}}),
+    test_peer_properties(Transport, S, #{}, C0).
+
+test_peer_properties(Transport, S, Properties, C0) ->
+    PeerPropertiesFrame = request({peer_properties, Properties}),
     ok = Transport:send(S, PeerPropertiesFrame),
     {Cmd, C} = receive_commands(Transport, S, C0),
     ?assertMatch({response, 1, {peer_properties, ?RESPONSE_CODE_OK, _}},
@@ -1133,6 +1247,13 @@ test_publish_confirm(Transport, S, publish_v2 = PublishCmd, PublisherId,
     end,
     C.
 
+test_delete_publisher(Transport, Socket, PublisherId, C0) ->
+    Frame = request({delete_publisher, PublisherId}),
+    ok = Transport:send(Socket, Frame),
+    {Cmd, C} = receive_commands(Transport, Socket, C0),
+    ?assertMatch({response, 1, {delete_publisher, ?RESPONSE_CODE_OK}}, Cmd),
+    C.
+
 test_subscribe(Transport, S, SubscriptionId, Stream, C0) ->
     test_subscribe(Transport,
                    S,
@@ -1149,7 +1270,21 @@ test_subscribe(Transport,
                SubscriptionProperties,
                ExpectedResponseCode,
                C0) ->
-    SubscribeFrame = request({subscribe, SubscriptionId, Stream, 0, 10, SubscriptionProperties}),
+    test_subscribe(Transport, S, SubscriptionId, Stream, 0, 10,
+                   SubscriptionProperties,
+                   ExpectedResponseCode, C0).
+
+test_subscribe(Transport,
+               S,
+               SubscriptionId,
+               Stream,
+               OffsetSpec,
+               Credit,
+               SubscriptionProperties,
+               ExpectedResponseCode,
+               C0) ->
+    SubscribeFrame = request({subscribe, SubscriptionId, Stream,
+                              OffsetSpec, Credit, SubscriptionProperties}),
     ok = Transport:send(S, SubscribeFrame),
     {Cmd, C} = receive_commands(Transport, S, C0),
     ?assertMatch({response, 1, {subscribe, ExpectedResponseCode}}, Cmd),

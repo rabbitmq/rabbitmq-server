@@ -3908,16 +3908,21 @@ consumer_i(messages_consumed,
                          #consumer_configuration{counters = Counters}}) ->
     messages_consumed(Counters);
 consumer_i(offset,
-           #consumer{configuration =
-                         #consumer_configuration{counters = Counters}}) ->
-    consumer_offset(Counters);
+           #consumer{configuration = #consumer_configuration{counters = Counters},
+                     last_listener_offset = LLO}) ->
+    rabbit_stream_utils:consumer_offset(consumer_offset(Counters),
+                                        messages_consumed(Counters),
+                                        LLO);
 consumer_i(offset_lag, #consumer{log = undefined}) ->
     0;
 consumer_i(offset_lag,
-           #consumer{configuration =
-                         #consumer_configuration{counters = Counters},
+           #consumer{configuration = #consumer_configuration{counters = Counters},
+                     last_listener_offset = LLO,
                      log = Log}) ->
-    stream_stored_offset(Log) - consumer_offset(Counters);
+    rabbit_stream_utils:offset_lag(stream_stored_offset(Log),
+                                   consumer_offset(Counters),
+                                   messages_consumed(Counters),
+                                   LLO);
 consumer_i(connection_pid, _) ->
     self();
 consumer_i(node, _) ->
