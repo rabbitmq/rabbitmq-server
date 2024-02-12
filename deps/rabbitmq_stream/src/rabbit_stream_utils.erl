@@ -35,7 +35,9 @@
          filter_spec/1,
          command_versions/0,
          filtering_supported/0,
-         check_super_stream_management_permitted/4]).
+         check_super_stream_management_permitted/4,
+         offset_lag/4,
+         consumer_offset/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
@@ -330,3 +332,26 @@ q(VirtualHost, Name) ->
 
 e(VirtualHost, Name) ->
     rabbit_misc:r(VirtualHost, exchange, Name).
+
+-spec consumer_offset(ConsumerOffsetFromCounter :: integer(),
+                      MessageConsumed :: non_neg_integer(),
+                      LastListenerOffset :: integer() | undefined) -> integer().
+consumer_offset(0, 0, undefined) ->
+    0;
+consumer_offset(0, 0, LastListenerOffset) when LastListenerOffset > 0 ->
+    %% consumer at "next" waiting for messages most likely
+    LastListenerOffset;
+consumer_offset(ConsumerOffsetFromCounter, _, _) ->
+    ConsumerOffsetFromCounter.
+
+-spec offset_lag(CommittedOffset :: integer(),
+                 ConsumerOffsetFromCounter :: integer(),
+                 MessageConsumed :: non_neg_integer(),
+                 LastListenerOffset :: integer() | undefined) -> integer().
+offset_lag(-1, _, _, _) ->
+    0;
+offset_lag(_, 0, 0, LastListenerOffset) when LastListenerOffset > 0 ->
+    %% consumer waiting for messages at the end of the stream, most likely
+    0;
+offset_lag(CommittedOffset, ConsumerOffset, _, _) ->
+    CommittedOffset - ConsumerOffset.
