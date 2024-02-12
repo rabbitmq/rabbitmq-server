@@ -295,15 +295,15 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "khepri",
     build_file = "@rabbitmq-server//bazel:BUILD.khepri",
-    sha256 = "0f90ad4d163493abf8bc03ab161a8c65795fe5578fe16a5a1d27846185e68aaf",
-    version = "0.11.0",
+    sha256 = "2e4186e84ac73e7bfc513d821b8d10c58d59432b92c2d424d0ecaa9883653526",
+    version = "0.12.0",
 )
 
 erlang_package.hex_package(
     name = "khepri_mnesia_migration",
     build_file = "@rabbitmq-server//bazel:BUILD.khepri_mnesia_migration",
-    sha256 = "996f7db1f094a3d5e72ff9e3a2db4fd1895872a1fcbc223b91671bcbc047b03b",
-    version = "0.3.0",
+    sha256 = "007568909c726057a6e06fb110a7309bf8bbdb9d233f09987da9388048726cbd",
+    version = "0.4.0",
 )
 
 erlang_package.hex_package(
