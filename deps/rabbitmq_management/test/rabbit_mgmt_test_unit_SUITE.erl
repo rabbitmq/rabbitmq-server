@@ -37,6 +37,22 @@ init_per_group(_, Config) ->
 end_per_group(_, Config) ->
     Config.
 
+init_per_testcase(_, Config) ->
+  case application:get_all_env(rabbitmq_management) of
+    {error, _} = Error -> Error;
+    Env ->
+      lists:foreach(fun({Key,_Value})->
+          application:unset_env(rabbitmq_management, Key) end, Env),
+      case application:get_all_env(rabbitmq_auth_backend_oauth2) of
+        {error, _} = Error -> Error;
+        Env2 -> lists:foreach(fun({Key,_Value})->
+            application:unset_env(rabbitmq_auth_backend_oauth2, Key) end, Env2)
+      end
+  end,
+  Config.
+
+
+
 %% -------------------------------------------------------------------
 %% Test cases.
 %% -------------------------------------------------------------------

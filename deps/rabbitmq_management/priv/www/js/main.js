@@ -18,31 +18,119 @@ function startWithLoginPage() {
   replace_content('outer', format('login', {}));
   start_app_login();
 }
+function removeDuplicates(array){
+  let output = []
+  for(let item of array) {
+    if(!output.includes(item)) {
+      output.push(item)
+    }
+  }
+  return output
+}
+function warningMessageOAuthResource(oauthResource, reason) {
+  return "OAuth resource [<b>" + (oauthResource["label"] != null ? oauthResource.label : oauthResource.id) +
+    "</b>] not available. OpenId Discovery endpoint " + readiness_url(oauthResource) + reason
+}
+function warningMessageOAuthResources(commonProviderURL, oauthResources, reason) {
+  return "OAuth resources [ <b>" + oauthResources.map(resource => resource["label"] != null ? resource.label : resource.id).join("</b>,<b>")
+    + "</b>] not available. OpenId Discovery endpoint " + commonProviderURL + reason
+}
+
 function startWithOAuthLogin () {
   store_pref("oauth-return-to", window.location.hash);
 
   if (!oauth.logged_in) {
-    if (oauth.sp_initiated) {
-      get(oauth.readiness_url, 'application/json', function (req) {
-        if (req.status !== 200) {
-          renderWarningMessageInLoginStatus(oauth.authority + ' does not appear to be a running OAuth2.0 instance or may not have a trusted SSL certificate')
-        } else {
-          replace_content('outer', format('login_oauth', {}))
+
+    // Find out how many distinct oauthServers are configured
+    let oauthServers = removeDuplicates(oauth.resource_servers.filter((resource) => resource.sp_initiated))
+    oauthServers.forEach(function(entry) { console.log(readiness_url(entry)) })
+    if (oauthServers.length > 0) {   // some resources are sp_initiated but there could be idp_initiated too
+      Promise.allSettled(oauthServers.map(oauthServer => fetch(readiness_url(oauthServer)).then(res => res.json())))
+        .then(results => {
+          results.forEach(function(entry) { console.log(entry) })
+          let notReadyServers = []
+          let notCompliantServers = []
+
+          for (let i = 0; i < results.length; i++) {
+            switch (results[i].status) {
+              case "fulfilled":
+                try {
+                  validate_openid_configuration(results[i].value)
+                }catch(e) {
+                  console.log("Unable to connect to " + oauthServers[i].oauth_provider_url + ". " + e)
+                  notCompliantServers.push(oauthServers[i].oauth_provider_url)
+                }
+                break
+              case "rejected":
+                notReadyServers.push(oauthServers[i].oauth_provider_url)
+                break
+            }
+          }
+          const spOauthServers = oauth.resource_servers.filter((resource) => resource.sp_initiated)
+          const groupByProviderURL = spOauthServers.reduce((group, oauthServer) => {
+            const { oauth_provider_url } = oauthServer;
+            group[oauth_provider_url] = group[oauth_provider_url] ?? [];
+            group[oauth_provider_url].push(oauthServer);
+            return group;
+          }, {})
+          let warnings = []
+          for(var url in groupByProviderURL){
+            console.log(url + ': ' + groupByProviderURL[url]);
+            const notReadyResources = groupByProviderURL[url].filter((oauthserver) => notReadyServers.includes(oauthserver.oauth_provider_url))
+            const notCompliantResources = groupByProviderURL[url].filter((oauthserver) => notCompliantServers.includes(oauthserver.oauth_provider_url))
+            if (notReadyResources.length == 1) {
+              warnings.push(warningMessageOAuthResource(notReadyResources[0], " not reachable"))
+            }else if (notReadyResources.length > 1) {
+              warnings.push(warningMessageOAuthResources(url, notReadyResources, " not reachable"))
+            }
+            if (notCompliantResources.length == 1) {
+              warnings.push(warningMessageOAuthResource(notCompliantResources[0], " not compliant"))
+            }else if (notCompliantResources.length > 1) {
+              warnings.push(warningMessageOAuthResources(url, notCompliantResources, " not compliant"))
+            }
+          }
+          console.log("warnings:" + warnings)
+          oauth.declared_resource_servers_count = oauth.resource_servers.length
+          oauth.resource_servers = oauth.resource_servers.filter((resource) =>
+            !notReadyServers.includes(resource.oauth_provider_url) && !notCompliantServers.includes(resource.oauth_provider_url))
+          render_login_oauth(warnings)
           start_app_login()
-        }
-      })
-    } else {
-      replace_content('outer', format('login_oauth', {}))
+
+        })
+    }else { // there are only idp_initiated resources
+      render_login_oauth()
       start_app_login()
     }
   } else {
     start_app_login()
   }
 }
+function render_login_oauth(messages) {
+  let formatData = {}
+  formatData.warnings = []
+  formatData.notAuthorized = false
+  formatData.resource_servers = oauth.resource_servers
+  formatData.declared_resource_servers_count = oauth.declared_resource_servers_count
+  formatData.oauth_disable_basic_auth = oauth.oauth_disable_basic_auth
 
-function renderWarningMessageInLoginStatus (message) {
-  replace_content('outer', format('login_oauth', {}))
-  replace_content('login-status', '<p class="warning">' + message + '</p> <button id="loginWindow" onclick="oauth_initiateLogin()">Click here to log in</button>')
+  if (Array.isArray(messages)) {
+    formatData.warnings = messages
+  } else if (typeof messages == "string") {
+    formatData.warnings = [messages]
+    formatData.notAuthorized = messages == "Not authorized"
+    console.log("Single error message")
+  }
+  replace_content('outer', format('login_oauth', formatData))
+
+  setup_visibility()
+  $('#login').off('click', 'div.section h2, div.section-hidden h2');
+  $('#login').on('click', 'div.section h2, div.section-hidden h2', function() {
+          toggle_visibility($(this));
+      });
+
+}
+function renderWarningMessageInLoginStatus(message) {
+  render_login_oauth(message)
 }
 
 
@@ -72,7 +160,7 @@ function start_app_login () {
   app = new Sammy.Application(function () {
     this.get('/', function () {})
     this.get('#/', function () {})
-    if (!oauth.enabled) {
+    if (!oauth.enabled || !oauth.oauth_disable_basic_auth) {
       this.put('#/login', function() {
         set_basic_auth(this.params['username'], this.params['password'])
         check_login()
@@ -1311,13 +1399,14 @@ function get(url, accept, callback) {
   var req = new XMLHttpRequest();
   req.open("GET", url);
   req.setRequestHeader("Accept", accept);
-  req.send();
 
   req.onreadystatechange = function() {
     if (req.readyState == XMLHttpRequest.DONE) {
       callback(req);
     }
   };
+  req.send();
+
 }
 
 function sync_get(path) {

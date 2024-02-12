@@ -89,6 +89,7 @@ rabbitmq_app(
         "@cowboy//:erlang_app",
         "@cowlib//:erlang_app",
         "@ranch//:erlang_app",
+        "//deps/oauth2_client:erlang_app",
     ],
 )
 
@@ -204,6 +205,11 @@ rabbitmq_integration_suite(
 
 rabbitmq_suite(
     name = "rabbit_mgmt_test_unit_SUITE",
+    size = "small",
+)
+
+rabbitmq_suite(
+    name = "rabbit_mgmt_wm_auth_SUITE",
     size = "small",
 )
 

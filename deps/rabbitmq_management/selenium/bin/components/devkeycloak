@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+
+KEYCLOAK_DOCKER_IMAGE=quay.io/keycloak/keycloak:20.0
+
+init_devkeycloak() {
+  DEVKEYCLOAK_CONFIG_PATH=${DEVKEYCLOAK_CONFIG_PATH:-multi-oauth/devkeycloak}
+  DEVKEYCLOAK_CONFIG_DIR=$(realpath ${TEST_DIR}/${DEVKEYCLOAK_CONFIG_PATH})
+
+  print "> DEVKEYCLOAK_CONFIG_DIR: ${DEVKEYCLOAK_CONFIG_DIR}"
+  print "> DEVKEYCLOAK_URL: ${DEVKEYCLOAK_URL}"
+  print "> DEVKEYCLOAK_DOCKER_IMAGE: ${KEYCLOAK_DOCKER_IMAGE}"
+}
+ensure_devkeycloak() {
+  if docker ps | grep devkeycloak &> /dev/null; then
+     print "devkeycloak already running ..."
+ else
+   start_devkeycloak
+ fi
+}
+
+start_devkeycloak() {
+  begin "Starting devkeycloak ..."
+
+  init_devkeycloak
+  kill_container_if_exist devkeycloak
+
+  MOUNT_DEVKEYCLOAK_CONF_DIR=$CONF_DIR/devkeycloak
+
+  mkdir -p $MOUNT_DEVKEYCLOAK_CONF_DIR
+  ${BIN_DIR}/gen-keycloak-json ${DEVKEYCLOAK_CONFIG_DIR} "dev-realm" $ENV_FILE $MOUNT_DEVKEYCLOAK_CONF_DIR/dev-realm.json
+  print "> EFFECTIVE DEVKEYCLOAK_CONFIG_FILE: $MOUNT_DEVKEYCLOAK_CONF_DIR/dev-realm.json"
+  cp ${DEVKEYCLOAK_CONFIG_DIR}/*.pem $MOUNT_DEVKEYCLOAK_CONF_DIR
+
+  docker run \
+		--detach \
+		--name devkeycloak \
+    --net ${DOCKER_NETWORK} \
+		--publish 8082:8080 \
+    --publish 8442:8442 \
+		--env KEYCLOAK_ADMIN=admin \
+		--env KEYCLOAK_ADMIN_PASSWORD=admin \
+		--mount type=bind,source=${MOUNT_DEVKEYCLOAK_CONF_DIR},target=/opt/keycloak/data/import/ \
+		${KEYCLOAK_DOCKER_IMAGE} start-dev --import-realm \
+    --https-certificate-file=/opt/keycloak/data/import/server_devkeycloak_certificate.pem \
+    --https-certificate-key-file=/opt/keycloak/data/import/server_devkeycloak_key.pem \
+    --hostname=devkeycloak --hostname-admin=devkeycloak --https-port=8442
+
+  wait_for_oidc_endpoint devkeycloak $DEVKEYCLOAK_URL $MOUNT_DEVKEYCLOAK_CONF_DIR/ca_certificate.pem
+  end "devkeycloak is ready"
+  print " Note: If you modify devkeycloak configuration. Make sure to run the following command to export the configuration."
+  print " docker exec -it devkeycloak /opt/keycloak/bin/kc.sh export --users realm_file --realm test --dir /opt/keycloak/data/import/"
+
+}

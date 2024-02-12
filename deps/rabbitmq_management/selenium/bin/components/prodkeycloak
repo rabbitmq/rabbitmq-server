@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+
+KEYCLOAK_DOCKER_IMAGE=quay.io/keycloak/keycloak:20.0
+
+ensure_prodkeycloak() {
+  if docker ps | grep prodkeycloak &> /dev/null; then
+     print "prodkeycloak already running ..."
+ else
+   start_prodkeycloak
+ fi
+}
+init_prodkeycloak() {
+  PRODKEYCLOAK_CONFIG_PATH=${PRODKEYCLOAK_CONFIG_PATH:-multi-oauth/prodkeycloak}
+  PRODKEYCLOAK_CONFIG_DIR=$(realpath ${TEST_DIR}/${PRODKEYCLOAK_CONFIG_PATH})
+
+  print "> PRODKEYCLOAK_CONFIG_DIR: ${PRODKEYCLOAK_CONFIG_DIR}"
+  print "> PRODKEYCLOAK_URL: ${PRODKEYCLOAK_URL}"
+  print "> KEYCLOAK_DOCKER_IMAGE: ${KEYCLOAK_DOCKER_IMAGE}"
+}
+start_prodkeycloak() {
+  begin "Starting prodkeycloak ..."
+
+  init_prodkeycloak
+  kill_container_if_exist prodkeycloak
+
+  MOUNT_PRODKEYCLOAK_CONF_DIR=$CONF_DIR/prodkeycloak
+
+  mkdir -p $MOUNT_PRODKEYCLOAK_CONF_DIR
+  ${BIN_DIR}/gen-keycloak-json ${PRODKEYCLOAK_CONFIG_DIR} "prod-realm" $ENV_FILE $MOUNT_PRODKEYCLOAK_CONF_DIR/prod-realm.json
+  print "> EFFECTIVE PRODKEYCLOAK_CONFIG_FILE: $MOUNT_PRODKEYCLOAK_CONF_DIR/prod-realm.json"
+  cp ${PRODKEYCLOAK_CONFIG_DIR}/*.pem $MOUNT_PRODKEYCLOAK_CONF_DIR
+
+  docker run \
+		--detach \
+		--name prodkeycloak \
+    --net ${DOCKER_NETWORK} \
+		--publish 8081:8080 \
+    --publish 8443:8443 \
+		--env KEYCLOAK_ADMIN=admin \
+		--env KEYCLOAK_ADMIN_PASSWORD=admin \
+		--mount type=bind,source=${MOUNT_PRODKEYCLOAK_CONF_DIR},target=/opt/keycloak/data/import/ \
+		${KEYCLOAK_DOCKER_IMAGE} start-dev --import-realm \
+    --https-certificate-file=/opt/keycloak/data/import/server_prodkeycloak_certificate.pem \
+    --https-certificate-key-file=/opt/keycloak/data/import/server_prodkeycloak_key.pem \
+    --hostname=prodkeycloak --hostname-admin=prodkeycloak --https-port=8443
+
+  wait_for_oidc_endpoint prodkeycloak $PRODKEYCLOAK_URL $MOUNT_PRODKEYCLOAK_CONF_DIR/ca_certificate.pem
+  end "prodkeycloak is ready"
+  print " Note: If you modify prodkeycloak configuration. Make sure to run the following command to export the configuration."
+  print " docker exec -it prodkeycloak /opt/keycloak/bin/kc.sh export --users realm_file --realm test --dir /opt/keycloak/data/import/"
+
+}
