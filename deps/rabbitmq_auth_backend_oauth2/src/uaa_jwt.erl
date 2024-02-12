@@ -33,7 +33,7 @@ add_signing_key(KeyId, Type, Value) ->
 update_jwks_signing_keys(ResourceServerId) ->
     case rabbit_oauth2_config:get_oauth_provider_for_resource_server_id(ResourceServerId, [jwks_uri]) of
         {error, _} = Error ->
-            rabbit_log:error("Failed to obtain a JWKS URL for resource-server-id '~tp'", [ResourceServerId]),
+            rabbit_log:error("Failed to obtain a JWKS URL for resource_server_id '~tp'", [ResourceServerId]),
             Error;
         {ok, #oauth_provider{jwks_uri = JwksUrl, ssl_options = SslOptions}} ->
             rabbit_log:debug("OAuth 2 JWT: downloading keys from ~tp (TLS options: ~p)", [JwksUrl, SslOptions]),
