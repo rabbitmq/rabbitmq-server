@@ -481,7 +481,6 @@ neotoma:
 - neotoma_parse
 oauth2_client:
 - oauth2_client
-- oauth2_client_app
 observer_cli:
 - observer_cli
 - observer_cli_application
@@ -958,6 +957,7 @@ rabbitmq_auth_backend_ldap:
 - rabbit_auth_backend_ldap_util
 - rabbit_log_ldap
 rabbitmq_auth_backend_oauth2:
+- Elixir.RabbitMQ.CLI.Ctl.Commands.AddSigningKeyCommand
 - Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand
 - rabbit_auth_backend_oauth2
 - rabbit_auth_backend_oauth2_app
