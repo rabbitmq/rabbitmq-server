@@ -172,6 +172,9 @@ rabbitmq_integration_suite(
     deps = [
         "@khepri//:erlang_app",
     ],
+    # FIXME: As of this writing, there is a bug in Khepri that makes this
+    # testsuite unstable.
+    flaky = True,
 )
 
 rabbitmq_integration_suite(
