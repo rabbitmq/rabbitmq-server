@@ -1089,8 +1089,14 @@ stop_rabbitmq_nodes(Config) ->
     case FindCrashes of
         true ->
             %% TODO: Make the ignore list configurable.
-            IgnoredCrashes = ["** force_vhost_failure"],
-            find_crashes_in_logs(NodeConfigs, IgnoredCrashes);
+            IgnoredCrashes0 = ["** force_vhost_failure"],
+            case rabbit_ct_helpers:get_config(Config, ignored_crashes) of
+                undefined ->
+                    find_crashes_in_logs(NodeConfigs, IgnoredCrashes0);
+                IgnoredCrashes1 ->
+                    find_crashes_in_logs(
+                      NodeConfigs, IgnoredCrashes0 ++ IgnoredCrashes1)
+            end;
         false ->
             ok
     end,
@@ -1172,7 +1178,11 @@ capture_gen_server_termination(
     Ret = re:run(Line, Prefix ++ "( .*|\\*.*|)$", ReOpts),
     case Ret of
         {match, [Suffix]} ->
-            case lists:member(Suffix, IgnoredCrashes) of
+            Ignore = lists:any(
+                       fun(IgnoredCrash) ->
+                               string:find(Suffix, IgnoredCrash) =/= nomatch
+                       end, IgnoredCrashes),
+            case Ignore of
                 false ->
                     capture_gen_server_termination(
                       Rest, Prefix, [Line | Acc], Count, IgnoredCrashes);
@@ -1259,31 +1269,28 @@ rabbitmqctl(Config, Node, Args, Timeout) ->
                                _ ->
                                    CanUseSecondary
                            end,
+    WithPlugins0 = rabbit_ct_helpers:get_config(Config,
+      broker_with_plugins),
+    WithPlugins = case is_list(WithPlugins0) of
+        true  -> lists:nth(I + 1, WithPlugins0);
+        false -> WithPlugins0
+    end,
     Rabbitmqctl = case UseSecondaryUmbrella of
                       true ->
                           case BazelRunSecCmd of
                               undefined ->
-                                  SrcDir = ?config(
-                                              secondary_rabbit_srcdir,
-                                              Config),
-                                  SecDepsDir = ?config(
-                                                  secondary_erlang_mk_depsdir,
-                                                  Config),
-                                  SecNewScriptsDir = filename:join(
-                                                       [SecDepsDir,
-                                                        SrcDir,
-                                                        "sbin"]),
-                                  SecOldScriptsDir = filename:join(
-                                                       [SecDepsDir,
-                                                        "rabbit",
-                                                        "scripts"]),
-                                  SecNewScriptsDirExists = filelib:is_dir(
-                                                             SecNewScriptsDir),
-                                  SecScriptsDir =
-                                  case SecNewScriptsDirExists of
-                                      true  -> SecNewScriptsDir;
-                                      false -> SecOldScriptsDir
-                                  end,
+                                  SrcDir = case WithPlugins of
+                                               false ->
+                                                   ?config(
+                                                      secondary_rabbit_srcdir,
+                                                      Config);
+                                               _ ->
+                                                   ?config(
+                                                      secondary_current_srcdir,
+                                                      Config)
+                                           end,
+                                  SecScriptsDir = filename:join(
+                                                    [SrcDir, "sbin"]),
                                   rabbit_misc:format(
                                     "~ts/rabbitmqctl", [SecScriptsDir]);
                               _ ->

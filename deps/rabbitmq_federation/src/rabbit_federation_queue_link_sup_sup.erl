@@ -8,10 +8,8 @@
 -module(rabbit_federation_queue_link_sup_sup).
 
 -behaviour(mirrored_supervisor).
--behaviour(rabbit_mnesia_to_khepri_record_converter).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit/include/mirrored_supervisor.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
 -define(SUPERVISOR, ?MODULE).
 
@@ -20,39 +18,7 @@
 
 -export([start_link/0, start_child/1, adjust/1, stop_child/1]).
 -export([init/1]).
-
-%% Khepri paths don't support tuples or records, so the key part of the
-%% #mirrored_sup_childspec{} used by some plugins must be  transformed in a
-%% valid Khepri path during the migration from Mnesia to Khepri.
-%% `rabbit_db_msup_m2k_converter` iterates over all declared converters, which
-%% must implement `rabbit_mnesia_to_khepri_record_converter` behaviour callbacks.
-%%
-%% This mechanism could be reused by any other rabbit_db_*_m2k_converter
-
--rabbit_mnesia_records_to_khepri_db(
-   [
-    {rabbit_db_msup_m2k_converter, ?MODULE}
-   ]).
-
--export([upgrade_record/2, upgrade_key/2]).
-
--spec upgrade_record(Table, Record) -> Record when
-      Table :: mnesia_to_khepri:mnesia_table(),
-      Record :: tuple().
-upgrade_record(mirrored_sup_childspec,
-               #mirrored_sup_childspec{key = {?MODULE, Q}} = Record)
-  when ?is_amqqueue(Q) ->
-    Record#mirrored_sup_childspec{key = {?MODULE, id(Q)}};
-upgrade_record(_Table, Record) ->
-    Record.
-
--spec upgrade_key(Table, Key) -> Key when
-      Table :: mnesia_to_khepri:mnesia_table(),
-      Key :: any().
-upgrade_key(mirrored_sup_childspec, {?MODULE, Q}) when ?is_amqqueue(Q) ->
-    {?MODULE, id(Q)};
-upgrade_key(_Table, Key) ->
-    Key.
+-export([id_to_khepri_path/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -86,12 +52,12 @@ start_child(Q) ->
 
 adjust({clear_upstream, VHost, UpstreamName}) ->
     _ = [rabbit_federation_link_sup:adjust(Pid, Q, {clear_upstream, UpstreamName}) ||
-            {{_, Q}, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR),
+            {Q, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR),
             ?amqqueue_vhost_equals(Q, VHost)],
     ok;
 adjust(Reason) ->
     _ = [rabbit_federation_link_sup:adjust(Pid, Q, Reason) ||
-            {{_, Q}, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
+            {Q, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
     ok.
 
 stop_child(Q) ->
@@ -123,8 +89,9 @@ init([]) ->
 id(Q) when ?is_amqqueue(Q) ->
     Policy = amqqueue:get_policy(Q),
     Q1 = amqqueue:set_immutable(Q),
-    {simple_id(Q), amqqueue:set_policy(Q1, Policy)}.
+    Q2 = amqqueue:set_policy(Q1, Policy),
+    Q2.
 
-simple_id(Q) when ?is_amqqueue(Q) ->
-    #resource{virtual_host = VHost, name = Name} = amqqueue:get_name(Q),
+id_to_khepri_path(Id) when ?is_amqqueue(Id) ->
+    #resource{virtual_host = VHost, name = Name} = amqqueue:get_name(Id),
     [queue, VHost, Name].

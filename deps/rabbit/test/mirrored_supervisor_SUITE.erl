@@ -331,7 +331,7 @@ childspec(Id) ->
     {id(Id), {?SERVER, start_link, [Id]}, transient, 16#ffffffff, worker, [?MODULE]}.
 
 id(Id) ->
-    {[Id], Id}.
+    Id.
 
 pid_of(Id) ->
     {received, Pid, ping} = call(Id, ping),
