@@ -1950,7 +1950,7 @@ source_filters_to_consumer_args([<<"rabbitmq:stream-filter">> = H | T], KVList, 
 source_filters_to_consumer_args([<<"rabbitmq:stream-match-unfiltered">> = H | T], KVList, Acc) ->
     Key = {symbol, H},
     Arg = case keyfind_unpack_described(Key, KVList) of
-              {_, {boolean, MU}} ->
+              {_, MU} when is_boolean(MU) ->
                   [{<<"x-stream-match-unfiltered">>, bool, MU}];
               _ ->
                   []

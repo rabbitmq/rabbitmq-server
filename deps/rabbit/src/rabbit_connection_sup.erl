@@ -7,7 +7,7 @@
 
 -module(rabbit_connection_sup).
 
-%% Supervisor for a (network) AMQP 0-9-1 client connection.
+%% Supervisor for a (network) AMQP client connection.
 %%
 %% Supervises
 %%
@@ -21,7 +21,7 @@
 
 -export([start_link/3,
          reader/1,
-         start_connection_helper_sup/2
+         remove_connection_helper_sup/2
         ]).
 
 -export([init/1]).
@@ -35,12 +35,48 @@
 
 start_link(Ref, _Transport, _Opts) ->
     {ok, SupPid} = supervisor:start_link(?MODULE, []),
+    %% We need to get channels in the hierarchy here so they get shut
+    %% down after the reader, so the reader gets a chance to terminate
+    %% them cleanly. But for 1.0 readers we can't start the real
+    %% ch_sup_sup (because we don't know if we will be 0-9-1 or 1.0) -
+    %% so we add another supervisor into the hierarchy.
+    %%
+    %% This supervisor also acts as an intermediary for heartbeaters and
+    %% the queue collector process, since these must not be siblings of the
+    %% reader due to the potential for deadlock if they are added/restarted
+    %% whilst the supervision tree is shutting down.
+    ChildSpec = #{restart => transient,
+                  significant => true,
+                  shutdown => infinity,
+                  type => supervisor},
+    {ok, HelperSup091} =
+        supervisor:start_child(
+          SupPid,
+          ChildSpec#{
+            id => helper_sup_amqp_091,
+            start => {rabbit_connection_helper_sup, start_link,
+                      [#{strategy => one_for_one,
+                         intensity => 10,
+                         period => 10,
+                         auto_shutdown => any_significant}]}}
+         ),
+    {ok, HelperSup10} =
+        supervisor:start_child(
+          SupPid,
+          ChildSpec#{
+            id => helper_sup_amqp_10,
+            start => {rabbit_connection_helper_sup, start_link,
+                      [#{strategy => one_for_all,
+                         intensity => 0,
+                         period => 1,
+                         auto_shutdown => any_significant}]}}
+         ),
     {ok, ReaderPid} =
         supervisor:start_child(
             SupPid,
             #{
                 id => reader,
-                start => {rabbit_reader, start_link, [Ref]},
+                start => {rabbit_reader, start_link, [{HelperSup091, HelperSup10}, Ref]},
                 restart => transient,
                 significant => true,
                 shutdown => ?WORKER_WAIT,
@@ -51,23 +87,13 @@ start_link(Ref, _Transport, _Opts) ->
     {ok, SupPid, ReaderPid}.
 
 -spec reader(pid()) -> pid().
-
 reader(Pid) ->
     hd(rabbit_misc:find_child(Pid, reader)).
 
--spec start_connection_helper_sup(pid(), supervisor:sup_flags()) ->
-    supervisor:startchild_ret().
-start_connection_helper_sup(ConnectionSupPid, ConnectionHelperSupFlags) ->
-    supervisor:start_child(
-      ConnectionSupPid,
-      #{
-        id => helper_sup,
-        start => {rabbit_connection_helper_sup, start_link, [ConnectionHelperSupFlags]},
-        restart => transient,
-        significant => true,
-        shutdown => infinity,
-        type => supervisor
-       }).
+-spec remove_connection_helper_sup(pid(), helper_sup_amqp_091 | helper_sup_amqp_10) -> ok.
+remove_connection_helper_sup(ConnectionSupPid, ConnectionHelperId) ->
+    ok = supervisor:terminate_child(ConnectionSupPid, ConnectionHelperId),
+    ok = supervisor:delete_child(ConnectionSupPid, ConnectionHelperId).
 
 %%--------------------------------------------------------------------------
 
