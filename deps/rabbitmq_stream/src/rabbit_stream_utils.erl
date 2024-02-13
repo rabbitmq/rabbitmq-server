@@ -349,6 +349,7 @@ consumer_offset(ConsumerOffsetFromCounter, _, _) ->
                  MessageConsumed :: non_neg_integer(),
                  LastListenerOffset :: integer() | undefined) -> integer().
 offset_lag(-1, _, _, _) ->
+    %% -1 is for an empty stream, so no lag
     0;
 offset_lag(_, 0, 0, LastListenerOffset) when LastListenerOffset > 0 ->
     %% consumer waiting for messages at the end of the stream, most likely
