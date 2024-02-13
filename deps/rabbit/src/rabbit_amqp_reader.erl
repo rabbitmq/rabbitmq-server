@@ -78,9 +78,9 @@
 %%--------------------------------------------------------------------------
 
 unpack_from_0_9_1(
-  {Sock,RecvLen, PendingRecv, Buf, BufLen, ProxySocket,
+  {Sock,RecvLen, PendingRecv, SupPid, Buf, BufLen, ProxySocket,
    ConnectionName, Host, PeerHost, Port, PeerPort, ConnectedAt},
-  Parent, ConnectionHelperSupPid, HandshakeTimeout) ->
+  Parent, HandshakeTimeout) ->
     #v1{parent              = Parent,
         sock                = Sock,
         callback            = handshake,
@@ -88,7 +88,7 @@ unpack_from_0_9_1(
         pending_recv        = PendingRecv,
         connection_state    = pre_init,
         heartbeater         = none,
-        helper_sup          = ConnectionHelperSupPid,
+        helper_sup          = SupPid,
         buf                 = Buf,
         buf_len             = BufLen,
         proxy_socket        = ProxySocket,
@@ -612,13 +612,8 @@ handle_input(Callback, Data, _State) ->
 init(Mode, PackedState) ->
     {ok, HandshakeTimeout} = application:get_env(rabbit, handshake_timeout),
     {parent, Parent} = erlang:process_info(self(), parent),
-    ConnectionHelperSupFlags = #{strategy => one_for_all,
-                                 intensity => 0,
-                                 period => 1,
-                                 auto_shutdown => any_significant},
-    {ok, ConnectionHelperSupPid} = rabbit_connection_sup:start_connection_helper_sup(
-                                     Parent, ConnectionHelperSupFlags),
-    State0 = unpack_from_0_9_1(PackedState, Parent, ConnectionHelperSupPid, HandshakeTimeout),
+    ok = rabbit_connection_sup:remove_connection_helper_sup(Parent, helper_sup_amqp_091),
+    State0 = unpack_from_0_9_1(PackedState, Parent, HandshakeTimeout),
     State = start_1_0_connection(Mode, State0),
     %% By invoking recvloop here we become 1.0.
     recvloop(sys:debug_options([]), State).
@@ -1036,7 +1031,7 @@ socket_info(Get, Select, #v1{sock = Sock}) ->
 
 ignore_maintenance({map, Properties}) ->
     lists:member(
-      {{symbol, <<"ignore-maintenance">>}, {boolean, true}},
+      {{symbol, <<"ignore-maintenance">>}, true},
       Properties);
 ignore_maintenance(_) ->
     false.
