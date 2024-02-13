@@ -43,12 +43,12 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([start_link/1, info_keys/0, info/1, info/2, force_event_refresh/2,
+-export([start_link/2, info_keys/0, info/1, info/2, force_event_refresh/2,
          shutdown/2]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
--export([init/2, mainloop/4, recvloop/4]).
+-export([init/3, mainloop/4, recvloop/4]).
 
 -export([conserve_resources/3, server_properties/1]).
 
@@ -78,7 +78,9 @@
           %% pre_init | securing | running | blocking | blocked | closing | closed | {become, F}
           connection_state,
           %% see comment in rabbit_connection_sup:start_link/0
-          helper_sup,
+          helper_sup :: {HelperSupAmqp091 :: pid(),
+                         HelperSupAmqp10 :: pid()} % pre version negotiation
+                        | pid(), % post version negotiation
           %% takes care of cleaning up exclusive queues,
           %% see rabbit_queue_collector
           queue_collector,
@@ -145,10 +147,10 @@
 
 %%--------------------------------------------------------------------------
 
--spec start_link(ranch:ref()) ->
+-spec start_link({pid(), pid()}, ranch:ref()) ->
     rabbit_types:ok(pid()).
-start_link(Ref) ->
-    Pid = proc_lib:spawn_link(?MODULE, init, [self(), Ref]),
+start_link(HelperSups, Ref) ->
+    Pid = proc_lib:spawn_link(?MODULE, init, [self(), HelperSups, Ref]),
     {ok, Pid}.
 
 -spec shutdown(pid(), string()) -> 'ok'.
@@ -156,14 +158,14 @@ start_link(Ref) ->
 shutdown(Pid, Explanation) ->
     gen_server:call(Pid, {shutdown, Explanation}, infinity).
 
--spec init(pid(), ranch:ref()) ->
+-spec init(pid(), {pid(), pid()}, ranch:ref()) ->
     no_return().
-init(Parent, Ref) ->
+init(Parent, HelperSups, Ref) ->
     ?LG_PROCESS_TYPE(reader),
     {ok, Sock} = rabbit_networking:handshake(Ref,
         application:get_env(rabbit, proxy_protocol, false)),
     Deb = sys:debug_options([]),
-    start_connection(Parent, Ref, Deb, Sock).
+    start_connection(Parent, HelperSups, Ref, Deb, Sock).
 
 -spec system_continue(_,_,{[binary()], non_neg_integer(), #v1{}}) -> any().
 
@@ -290,10 +292,10 @@ socket_op(Sock, Fun) ->
                            exit(normal)
     end.
 
--spec start_connection(pid(), ranch:ref(), any(), rabbit_net:socket()) ->
+-spec start_connection(pid(), {pid(), pid()}, ranch:ref(), any(), rabbit_net:socket()) ->
           no_return().
 
-start_connection(Parent, RanchRef, Deb, Sock) ->
+start_connection(Parent, HelperSups, RanchRef, Deb, Sock) ->
     process_flag(trap_exit, true),
     RealSocket = rabbit_net:unwrap_socket(Sock),
     Name = case rabbit_net:connection_string(Sock, inbound) of
@@ -336,7 +338,7 @@ start_connection(Parent, RanchRef, Deb, Sock) ->
                 pending_recv        = false,
                 connection_state    = pre_init,
                 queue_collector     = undefined,  %% started on tune-ok
-                helper_sup          = none,
+                helper_sup          = HelperSups,
                 heartbeater         = none,
                 channel_sup_sup_pid = none,
                 channel_count       = 0,
@@ -1104,13 +1106,9 @@ start_091_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
                      Protocol,
                      #v1{parent = Parent,
                          sock = Sock,
+                         helper_sup = {HelperSup091, _HelperSup10},
                          connection = Connection} = State0) ->
-    ConnectionHelperSupFlags = #{strategy => one_for_one,
-                                 intensity => 10,
-                                 period => 10,
-                                 auto_shutdown => any_significant},
-    {ok, ConnectionHelperSupPid} = rabbit_connection_sup:start_connection_helper_sup(
-                                     Parent, ConnectionHelperSupFlags),
+    ok = rabbit_connection_sup:remove_connection_helper_sup(Parent, helper_sup_amqp_10),
     rabbit_networking:register_connection(self()),
     Start = #'connection.start'{
                version_major = ProtocolMajor,
@@ -1123,7 +1121,7 @@ start_091_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
                                      timeout_sec = ?NORMAL_TIMEOUT,
                                      protocol = Protocol},
                       connection_state = starting,
-                      helper_sup = ConnectionHelperSupPid},
+                      helper_sup = HelperSup091},
     switch_callback(State, frame_header, 7).
 
 -spec refuse_connection(rabbit_net:socket(), any()) -> no_return().
@@ -1647,6 +1645,7 @@ become_10(Id, State = #v1{sock = Sock}) ->
 pack_for_1_0(Buf, BufLen, #v1{sock         = Sock,
                               recv_len     = RecvLen,
                               pending_recv = PendingRecv,
+                              helper_sup = {_HelperSup091, HelperSup10},
                               proxy_socket = ProxySocket,
                               connection = #connection{
                                               name = Name,
@@ -1655,7 +1654,7 @@ pack_for_1_0(Buf, BufLen, #v1{sock         = Sock,
                                               port = Port,
                                               peer_port = PeerPort,
                                               connected_at = ConnectedAt}}) ->
-    {Sock, RecvLen, PendingRecv, Buf, BufLen, ProxySocket,
+    {Sock, RecvLen, PendingRecv, HelperSup10, Buf, BufLen, ProxySocket,
      Name, Host, PeerHost, Port, PeerPort, ConnectedAt}.
 
 respond_and_close(State, Channel, Protocol, Reason, LogErr) ->
