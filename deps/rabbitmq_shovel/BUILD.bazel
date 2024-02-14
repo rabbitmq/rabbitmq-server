@@ -169,12 +169,12 @@ rabbitmq_integration_suite(
     additional_beam = [
         "test/shovel_test_utils.beam",
     ],
-    deps = [
-        "@khepri//:erlang_app",
-    ],
     # FIXME: As of this writing, there is a bug in Khepri that makes this
     # testsuite unstable.
     flaky = True,
+    deps = [
+        "@khepri//:erlang_app",
+    ],
 )
 
 rabbitmq_integration_suite(
