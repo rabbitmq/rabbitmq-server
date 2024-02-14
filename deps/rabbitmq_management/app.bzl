@@ -124,10 +124,10 @@ def all_beam_files(name = "all_beam_files"):
         erlc_opts = "//:erlc_opts",
         deps = [
             "//deps/amqp_client:erlang_app",
+            "//deps/oauth2_client:erlang_app",
             "//deps/rabbit:erlang_app",
             "//deps/rabbit_common:erlang_app",
             "//deps/rabbitmq_management_agent:erlang_app",
-            "//deps/oauth2_client:erlang_app",
         ],
     )
 
@@ -257,10 +257,10 @@ def all_test_beam_files(name = "all_test_beam_files"):
         erlc_opts = "//:test_erlc_opts",
         deps = [
             "//deps/amqp_client:erlang_app",
+            "//deps/oauth2_client:erlang_app",
             "//deps/rabbit:erlang_app",
             "//deps/rabbit_common:erlang_app",
             "//deps/rabbitmq_management_agent:erlang_app",
-            "//deps/oauth2_client:erlang_app",
         ],
     )
 
