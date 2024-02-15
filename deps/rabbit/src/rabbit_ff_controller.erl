@@ -361,12 +361,12 @@ notify_waiting_controllers(#?MODULE{notify = Notify}) ->
               Acc
       end, ok, Notify).
 
-notify_waiting_controller({ControlerPid, _} = From) ->
-    ControlerNode = node(ControlerPid),
+notify_waiting_controller({ControllerPid, _} = From) ->
+    ControllerNode = node(ControllerPid),
     ?LOG_DEBUG(
        "Feature flags: controller's task finished; notify waiting controller "
        "on node ~tp",
-       [ControlerNode],
+       [ControllerNode],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     gen_statem:reply(From, done).
 
@@ -1082,7 +1082,7 @@ running_nodes() ->
     lists:usort([node() | rabbit_nodes:list_running()]).
 -else.
 all_nodes() ->
-    AllNodes = case rabbit_feature_flags:get_overriden_nodes() of
+    AllNodes = case rabbit_feature_flags:get_overridden_nodes() of
                    undefined ->
                        rabbit_nodes:list_members();
                    Nodes ->
@@ -1092,7 +1092,7 @@ all_nodes() ->
     lists:sort(AllNodes).
 
 running_nodes() ->
-    RemoteNodes = case rabbit_feature_flags:get_overriden_running_nodes() of
+    RemoteNodes = case rabbit_feature_flags:get_overridden_running_nodes() of
                       undefined -> rabbit_nodes:list_running();
                       Nodes     -> Nodes
                   end,
@@ -1205,7 +1205,7 @@ merge_feature_flags(FeatureFlagsA, FeatureFlagsB) ->
               %% case, `rabbit_feature_flags:get_stability/1' will consider it
               %% stable. However in the former case, we must consider it
               %% experimental otherwise it would default to be stable would
-              %% superceed an experimental level, even though all nodes agree
+              %% supersede an experimental level, even though all nodes agree
               %% on that level, because `rabbit_feature_flags:get_stability/1'
               %% would return stable as well.
               UnknownProps = #{stability => experimental},

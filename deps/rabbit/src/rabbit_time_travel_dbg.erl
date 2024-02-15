@@ -13,7 +13,7 @@
 %% of applications. Then update the code where you need to
 %% obtain events, such as a crash. Wrapping the crash in
 %% a try/catch and adding rabbit_time_travel_dbg:print()
-%% will print up to 1000 events before the crash occured,
+%% will print up to 1000 events before the crash occurred,
 %% allowing you to easily figure out what happened.
 
 -module(rabbit_time_travel_dbg).

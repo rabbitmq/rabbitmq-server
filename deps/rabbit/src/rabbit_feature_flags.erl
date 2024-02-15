@@ -128,8 +128,8 @@
 -ifdef(TEST).
 -export([override_nodes/1,
          override_running_nodes/1,
-         get_overriden_nodes/0, %% Called remotely.
-         get_overriden_running_nodes/0]).
+         get_overridden_nodes/0, %% Called remotely.
+         get_overridden_running_nodes/0]).
 -endif.
 
 -type feature_flag_modattr() :: {feature_name(), feature_props()}.
@@ -654,7 +654,7 @@ is_disabled(FeatureName, Blocking) ->
 -spec info() -> ok.
 %% @doc
 %% Displays a table on stdout summing up the supported feature flags,
-%% their state and various informations about them.
+%% their state and various information about them.
 
 info() ->
     info(#{}).
@@ -664,7 +664,7 @@ info() ->
              verbose => non_neg_integer()}) -> ok.
 %% @doc
 %% Displays a table on stdout summing up the supported feature flags,
-%% their state and various informations about them.
+%% their state and various information about them.
 %%
 %% Supported options are:
 %% <ul>
@@ -1243,13 +1243,13 @@ running_remote_nodes() ->
 override_nodes(Nodes) ->
     persistent_term:put(?PT_OVERRIDDEN_NODES, Nodes).
 
-get_overriden_nodes() ->
+get_overridden_nodes() ->
     persistent_term:get(?PT_OVERRIDDEN_NODES, undefined).
 
 override_running_nodes(Nodes) ->
     persistent_term:put(?PT_OVERRIDDEN_RUNNING_NODES, Nodes).
 
-get_overriden_running_nodes() ->
+get_overridden_running_nodes() ->
     persistent_term:get(?PT_OVERRIDDEN_RUNNING_NODES, undefined).
 -endif.
 

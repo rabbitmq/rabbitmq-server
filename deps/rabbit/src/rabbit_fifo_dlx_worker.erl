@@ -351,7 +351,7 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
     case TargetQs of
         [] ->
             %% We can't deliver this message since there is no target queue we can route to.
-            %% We buffer this message and retry to send every settle_timeout milliseonds.
+            %% We buffer this message and retry to send every settle_timeout milliseconds.
             State3#state{next_out_seq = OutSeq + 1,
                          pendings = maps:put(OutSeq, Pend0, Pendings)};
         _ ->

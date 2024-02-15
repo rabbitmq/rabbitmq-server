@@ -1679,7 +1679,7 @@ delete_with(QueueName, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive) whe
             rabbit_misc:protocol_error(Type, Reason, ReasonArgs)
     end.
 
-%% delete_crashed* INCLUDED FOR BACKWARDS COMPATBILITY REASONS
+%% delete_crashed* INCLUDED FOR BACKWARDS COMPATIBILITY REASONS
 delete_crashed(Q) when ?amqqueue_is_classic(Q) ->
     rabbit_classic_queue:delete_crashed(Q).
 

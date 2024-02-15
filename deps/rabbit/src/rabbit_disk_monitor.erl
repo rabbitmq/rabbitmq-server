@@ -350,9 +350,9 @@ parse_free_unix(Str) ->
     case string:tokens(Str, "\n") of
         [_, S | _] -> case string:tokens(S, " \t") of
                           [_, _, _, Free | _] -> list_to_integer(Free) * 1024;
-                          _                   -> exit({unparseable, Str})
+                          _                   -> exit({unparsable, Str})
                       end;
-        _          -> exit({unparseable, Str})
+        _          -> exit({unparsable, Str})
     end.
 
 win32_get_drive_letter([DriveLetter, $:, $/ | _]) when (DriveLetter >= $a andalso DriveLetter =< $z) ->
@@ -387,7 +387,7 @@ win32_get_disk_free_dir(Dir) ->
     RawDir = "\\\\?\\" ++ string:replace(Dir, "/", "\\", all),
     case run_os_cmd("dir /-C /W \"" ++ RawDir ++ "\"") of
         {error, Error} ->
-            exit({unparseable, Error});
+            exit({unparsable, Error});
         CommandResult ->
             LastLine0 = lists:last(string:tokens(CommandResult, "\r\n")),
             LastLine1 = lists:reverse(LastLine0),

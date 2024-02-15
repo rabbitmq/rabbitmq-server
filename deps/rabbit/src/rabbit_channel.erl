@@ -111,7 +111,7 @@
           max_message_size,
           consumer_timeout,
           authz_context,
-          %% defines how ofter gc will be executed
+          %% defines how often gc will be executed
           writer_gc_threshold,
           %% true with AMQP 1.0 to include the publishing sequence
           %% in the return callback, false otherwise
@@ -739,7 +739,7 @@ handle_info({bump_credit, Msg}, State) ->
     %% our channel was being blocked by this process, and no other
     %% process is blocking our channel, then this channel will be
     %% unblocked. This means that any credit that was deferred will be
-    %% sent to rabbit_reader processs that might be blocked by this
+    %% sent to rabbit_reader process that might be blocked by this
     %% particular channel.
     credit_flow:handle_bump_msg(Msg),
     noreply(State);

@@ -442,7 +442,7 @@ set_ERL_CRASH_DUMP_envvar(Context) ->
 %%
 %% The precedence is:
 %% <ol>
-%% <li>the $RABBITMQ_LOG_BASE variable if overriden in the environment</li>
+%% <li>the $RABBITMQ_LOG_BASE variable if overridden in the environment</li>
 %% <li>the value of `log_root' in the application environment</li>
 %% <li>the default value</li>
 %% </ol>
@@ -608,7 +608,7 @@ compute_implicitly_enabled_output(Props) ->
     SyslogEnabled,
 
     FileProps = proplists:get_value(file, Props4, []),
-    case is_output_explicitely_enabled(FileProps) of
+    case is_output_explicitly_enabled(FileProps) of
         true ->
             Props4;
         false ->
@@ -631,7 +631,7 @@ compute_implicitly_enabled_output(PropName, Props) ->
 
 compute_implicitly_enabled_output1(SubProps) ->
     %% We consider the output enabled or disabled if:
-    %%     * it is explicitely marked as such, or
+    %%     * it is explicitly marked as such, or
     %%     * the level is set to a log level (enabled) or `none' (disabled)
     Enabled = proplists:get_value(
                 enabled, SubProps,
@@ -639,9 +639,9 @@ compute_implicitly_enabled_output1(SubProps) ->
     {Enabled,
      lists:keystore(enabled, 1, SubProps, {enabled, Enabled})}.
 
-is_output_explicitely_enabled(FileProps) ->
+is_output_explicitly_enabled(FileProps) ->
     %% We consider the output enabled or disabled if:
-    %%     * the file is explicitely set, or
+    %%     * the file is explicitly set, or
     %%     * the level is set to a log level (enabled) or `none' (disabled)
     File = proplists:get_value(file, FileProps),
     Level = proplists:get_value(level, FileProps),
@@ -1066,13 +1066,13 @@ log_file_var_to_output(Filename) ->
 
 keep_log_level_from_equivalent_output(
   #{module := Mod, config := #{type := Type}} = Output,
-  [#{module := Mod, config := #{type := Type}} = OverridenOutput | _])
+  [#{module := Mod, config := #{type := Type}} = OverriddenOutput | _])
   when ?IS_STD_H_COMPAT(Mod) ->
-    keep_log_level_from_equivalent_output1(Output, OverridenOutput);
+    keep_log_level_from_equivalent_output1(Output, OverriddenOutput);
 keep_log_level_from_equivalent_output(
   #{module := Mod} = Output,
-  [#{module := Mod} = OverridenOutput | _]) ->
-    keep_log_level_from_equivalent_output1(Output, OverridenOutput);
+  [#{module := Mod} = OverriddenOutput | _]) ->
+    keep_log_level_from_equivalent_output1(Output, OverriddenOutput);
 keep_log_level_from_equivalent_output(Output, [_ | Rest]) ->
     keep_log_level_from_equivalent_output(Output, Rest);
 keep_log_level_from_equivalent_output(Output, []) ->
@@ -1310,7 +1310,7 @@ create_handler_key(
 
 %% The difference between a global handler and a category handler is the value
 %% of `filter_default'. In a global hanler, if a message was not stopped or
-%% explicitely accepted by a filter, the message is logged. In a category
+%% explicitly accepted by a filter, the message is logged. In a category
 %% handler, it is dropped.
 
 create_handler_conf(Output, global, Config) ->

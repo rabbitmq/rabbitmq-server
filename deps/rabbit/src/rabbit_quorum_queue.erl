@@ -855,7 +855,7 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
 
     {CreditMode, Credit, Drain} = parse_credit_args(Prefetch0, Args),
     %% if the mode is credited we should send a separate credit command
-    %% after checkout and give 0 credits initally
+    %% after checkout and give 0 credits initially
     Prefetch = case CreditMode of
                    credited -> 0;
                    simple_prefetch -> Prefetch0

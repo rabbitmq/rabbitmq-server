@@ -330,7 +330,7 @@ check_discovered_nodes_list_validity(DiscoveredNodes, BadNodeType)
 %% the returned list.
 %%
 %% These properties are then used to sort the list of nodes according to the
-%% following criterias:
+%% following criteria:
 %% <ol>
 %% <li>Nodes are sorted by cluster size, from the bigger to the smaller.</li>
 %% <li>For nodes with the same cluster size, nodes are sorted by start time,
@@ -717,7 +717,7 @@ is_node_db_ready(Node, ProxyGroupLeader) ->
       SortedNodesAndProps :: [node_and_props()].
 %% @doc Sorts the list of nodes according to their properties.
 %%
-%% See {@link query_node_props/1} for an explanation of the criterias used to
+%% See {@link query_node_props/1} for an explanation of the criteria used to
 %% sort the list.
 %%
 %% @see query_node_props/1.
@@ -754,7 +754,7 @@ sort_nodes_and_props(NodesAndProps) ->
 %%
 %% It is possible that we queried the backend early enough that it doesn't yet
 %% know about the nodes that should form a cluster. To reduce the chance of a
-%% list of nodes which makes little sense, we checks two criterias:
+%% list of nodes which makes little sense, we checks two criteria:
 %% <ul>
 %% <li>We want that this node is part of the list.</li>
 %% <li>If we have a cluster size hint and the expected size is greater than 1,
@@ -778,7 +778,7 @@ can_use_discovered_nodes(DiscoveredNodes, NodesAndProps)
             ok;
         false ->
             ?LOG_DEBUG(
-               "Peer discovery: not satisfyied with discovered peers: the "
+               "Peer discovery: not satisfied with discovered peers: the "
                "list does not contain this node",
                #{domain => ?RMQLOG_DOMAIN_PEER_DISC})
     end,
@@ -795,7 +795,7 @@ can_use_discovered_nodes(DiscoveredNodes, NodesAndProps)
             ok;
         false ->
             ?LOG_DEBUG(
-               "Peer discovery: not satisfyied with discovered peers: the "
+               "Peer discovery: not satisfied with discovered peers: the "
                "list should contain at least two nodes with a configured "
                "cluster size hint of ~b nodes",
                [ClusterSizeHint],

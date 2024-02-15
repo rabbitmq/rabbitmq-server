@@ -102,7 +102,7 @@ stop_and_delete_vhost(VHost) ->
     ok = rabbit_vhost:delete_storage(VHost),
     StopResult.
 
-%% We take an optimistic approach whan stopping a remote VHost supervisor.
+%% We take an optimistic approach when stopping a remote VHost supervisor.
 stop_and_delete_vhost(VHost, Node) when Node == node(self()) ->
     stop_and_delete_vhost(VHost);
 stop_and_delete_vhost(VHost, Node) ->

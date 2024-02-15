@@ -221,7 +221,7 @@
 %% which will compact the file. This keeps utilisation high.
 %%
 %% The discovery is done periodically on files that had messages
-%% acked and removed. We delibirately do this lazily in order to
+%% acked and removed. We deliberately do this lazily in order to
 %% prevent doing GC on files which are soon to be emptied (and
 %% hence deleted).
 %%
@@ -1103,7 +1103,7 @@ write_action({true, #msg_location { file = File }}, _MsgId, State) ->
 write_action({false, not_found}, _MsgId, State) ->
     {write, State};
 %% @todo This clause is probably fairly costly when large fan-out is used
-%%       with both producers and consumers more or less catched up.
+%%       with both producers and consumers more or less caught up.
 %%       We probably should only increment the refcount for the current file?
 %%       We know it's not locked, it has a valid total size, etc.
 %%       We have to look up the index anyway so we know the file

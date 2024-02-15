@@ -1457,7 +1457,7 @@ activate_next_consumer(#?MODULE{consumers = Cons,
                                    undefined ->
                                        NextConsumer;
                                    Existing ->
-                                       %% there was an exisiting non-active consumer
+                                       %% there was an existing non-active consumer
                                        %% just update the existing cancelled consumer
                                        %% with the new config
                                        Existing#consumer{cfg =  NextCCfg}
@@ -2055,7 +2055,7 @@ reply_log_effect(RaftIdx, MsgId, Header, Ready, From) ->
      end}.
 
 checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
-    %% Before checking out any messsage to any consumer,
+    %% Before checking out any message to any consumer,
     %% first remove all expired messages from the head of the queue.
     {ExpiredMsg, #?MODULE{service_queue = SQ0,
                           messages = Messages0,
@@ -2154,7 +2154,7 @@ timer_effect(RaCmdTs, State, Effects) ->
             ?MSG(_, ?TUPLE(Size, Expiry))
               when is_integer(Size), is_integer(Expiry) ->
                 %% Next message contains 'expiry' header.
-                %% (Re)set timer so that mesage will be dropped or dead-lettered on time.
+                %% (Re)set timer so that message will be dropped or dead-lettered on time.
                 max(0, Expiry - RaCmdTs);
             ?MSG(_, #{expiry := Expiry})
               when is_integer(Expiry) ->
@@ -2288,7 +2288,7 @@ maybe_queue_consumer(ConsumerId, #consumer{credit = Credit} = Con,
     end.
 
 %% creates a dehydrated version of the current state to be cached and
-%% potentially used to for a snaphot at a later point
+%% potentially used to for a snapshot at a later point
 dehydrate_state(#?MODULE{cfg = #cfg{},
                          dlx = DlxState} = State) ->
     % no messages are kept in memory, no need to
