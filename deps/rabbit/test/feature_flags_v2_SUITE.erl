@@ -356,7 +356,7 @@ mf_wait_and_count_runs_v2_post_enable(#{enabled := Enabled}) ->
     ok.
 
 mf_crash_on_joining_node(_Args) ->
-    case rabbit_feature_flags:get_overriden_nodes() of
+    case rabbit_feature_flags:get_overridden_nodes() of
         [_, _, _] -> throw(crash_on_joining_node);
         _         -> ok
     end.
