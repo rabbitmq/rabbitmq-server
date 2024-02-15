@@ -19,8 +19,8 @@
 -type(method_name() :: rabbit_framing:amqp_method_name()).
 -type(original_method() :: rabbit_framing:amqp_method_record()).
 -type(processed_method() :: rabbit_framing:amqp_method_record()).
--type(original_content() :: rabbit_types:maybe(rabbit_types:content())).
--type(processed_content() :: rabbit_types:maybe(rabbit_types:content())).
+-type(original_content() :: rabbit_types:opt(rabbit_types:content())).
+-type(processed_content() :: rabbit_types:opt(rabbit_types:content())).
 -type(interceptor_state() :: term()).
 
 -callback description() -> [proplists:property()].

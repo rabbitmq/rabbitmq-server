@@ -15,19 +15,19 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
--type maybe(T) :: T | undefined.
+-type perhaps(T) :: T | undefined.
 -type amqp10_data() :: #'v1_0.data'{} |
                        [#'v1_0.amqp_sequence'{} | #'v1_0.data'{}] |
                        #'v1_0.amqp_value'{}.
 -record(msg,
         {
-         % header :: maybe(#'v1_0.header'{}),
-         % delivery_annotations :: maybe(#'v1_0.delivery_annotations'{}),
-         message_annotations :: maybe(#'v1_0.message_annotations'{}) | iodata(),
-         properties :: maybe(#'v1_0.properties'{}) | iodata(),
-         application_properties :: maybe(#'v1_0.application_properties'{}) | iodata(),
-         data :: maybe(amqp10_data()) | iodata()
-         % footer :: maybe(#'v1_0.footer'{})
+         % header :: perhaps(#'v1_0.header'{}),
+         % delivery_annotations :: perhaps(#'v1_0.delivery_annotations'{}),
+         message_annotations :: perhaps(#'v1_0.message_annotations'{}) | iodata(),
+         properties :: perhaps(#'v1_0.properties'{}) | iodata(),
+         application_properties :: perhaps(#'v1_0.application_properties'{}) | iodata(),
+         data :: perhaps(amqp10_data()) | iodata()
+         % footer :: perhaps(#'v1_0.footer'{})
          }).
 
 %% holds static or rarely changing fields

@@ -196,7 +196,7 @@ find_recoverable_queues() ->
               boolean(),
               boolean(),
               rabbit_framing:amqp_table(),
-              rabbit_types:maybe(pid()),
+              rabbit_types:opt(pid()),
               rabbit_types:username()) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
     {'new', amqqueue:amqqueue(), rabbit_fifo_client:state()} |
@@ -214,7 +214,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
               boolean(),
               boolean(),
               rabbit_framing:amqp_table(),
-              rabbit_types:maybe(pid()),
+              rabbit_types:opt(pid()),
               rabbit_types:username(),
               node() | {'ignore_location', node()}) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
@@ -679,7 +679,7 @@ priv_absent(QueueName, QPid, _IsDurable, alive) ->
 
 -spec assert_equivalence
         (amqqueue:amqqueue(), boolean(), boolean(),
-         rabbit_framing:amqp_table(), rabbit_types:maybe(pid())) ->
+         rabbit_framing:amqp_table(), rabbit_types:opt(pid())) ->
             'ok' | rabbit_types:channel_exit() | rabbit_types:connection_exit().
 
 assert_equivalence(Q, DurableDeclare, AutoDeleteDeclare, Args1, Owner) ->

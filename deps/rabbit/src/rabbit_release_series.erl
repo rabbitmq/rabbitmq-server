@@ -15,7 +15,7 @@
   readable_support_status/0
 ]).
 
--spec eol_date() -> rabbit_types:maybe(calendar:date()).
+-spec eol_date() -> rabbit_types:opt(calendar:date()).
 eol_date() ->
   case application:get_env(rabbit, ?EOL_DATE_KEY) of
     undefined                  -> none;
