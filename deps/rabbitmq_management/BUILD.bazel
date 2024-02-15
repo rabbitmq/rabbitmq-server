@@ -89,6 +89,7 @@ rabbitmq_app(
         "//deps/rabbitmq_web_dispatch:erlang_app",
         "@cowboy//:erlang_app",
         "@cowlib//:erlang_app",
+        "@rabbitmq_oauth2_client//:erlang_app",
         "@ranch//:erlang_app",
     ],
 )
