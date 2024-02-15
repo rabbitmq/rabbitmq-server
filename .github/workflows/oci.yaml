@@ -34,9 +34,9 @@ jobs:
       matrix:
         include:
           - image_tag_suffix: otp-min-bazel
-            otp_version_id: 26_1
-          - image_tag_suffix: otp-max-bazel
             otp_version_id: 26_2
+          - image_tag_suffix: otp-max-bazel
+            otp_version_id: 27
     steps:
       - name: Checkout
         uses: actions/checkout@v4
