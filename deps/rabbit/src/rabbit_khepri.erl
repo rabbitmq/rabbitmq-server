@@ -59,7 +59,7 @@
 %% executed. If the migration runs concurrently, whether it started before or
 %% during the execution of the Mnesia-specific anonymous function, {@link
 %% handle_fallback/1} will watch for "no exists" table exceptions from Mnesia
-%% and will retry the Mnesia functino or run the Khepri function accordingly.
+%% and will retry the Mnesia function or run the Khepri function accordingly.
 %% The Mnesia function must be idempotent because it can be executed multiple
 %% times.
 %%

@@ -129,7 +129,7 @@ parse_amqp091_empty_maps(_Config) ->
          {<<"src-queue">>, <<"a-src-queue">>},
          {<<"dest-queue">>, <<"a-dest-queue">>}
         ],
-    test_parse_amqp091_with_blank_proprties(Params).
+    test_parse_amqp091_with_blank_properties(Params).
 
 parse_amqp091_empty_proplists(_Config) ->
     Params =
@@ -147,7 +147,7 @@ parse_amqp091_empty_proplists(_Config) ->
          {<<"src-queue">>, <<"a-src-queue">>},
          {<<"dest-queue">>, <<"a-dest-queue">>}
         ],
-    test_parse_amqp091_with_blank_proprties(Params).
+    test_parse_amqp091_with_blank_properties(Params).
 
 
 test_parse_amqp091(Params) ->
@@ -176,7 +176,7 @@ test_parse_amqp091(Params) ->
     assert_amqp901_headers(ActualHeaders),
     ok.
 
-test_parse_amqp091_with_blank_proprties(Params) ->
+test_parse_amqp091_with_blank_properties(Params) ->
     ObfuscatedParams = rabbit_shovel_parameters:obfuscate_uris_in_definition(Params),
     {ok, Result} = rabbit_shovel_parameters:parse({"vhost", "name"},
                                                   "my-cluster", ObfuscatedParams),

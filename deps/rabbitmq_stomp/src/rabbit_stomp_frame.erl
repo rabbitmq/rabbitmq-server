@@ -133,7 +133,7 @@ unescape(?COLON_ESC, Fun) -> Fun(?COLON);
 unescape(?CR_ESC,    Fun) -> Fun(?CR);
 unescape(Ch,        _Fun) -> {error, {bad_escape, [?BSL, Ch]}}.
 
-%% insert header unless aleady seen
+%% insert header unless already seen
 insert_header(Headers, Name, Value) ->
     case lists:keymember(Name, 1, Headers) of
         true  -> Headers; % first header only

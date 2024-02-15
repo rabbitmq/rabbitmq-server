@@ -1594,7 +1594,7 @@ delete_declare0(Config) ->
     %% pill before terminating itself.
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
-            %% when in mixed versions the QQ may not be able to apply the posion
+            %% when in mixed versions the QQ may not be able to apply the poison
             %% pill for all nodes so need to wait longer for forced delete to
             %% happen
             timer:sleep(10000);
@@ -1874,7 +1874,7 @@ delete_member_not_running(Config) ->
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    %% it should be possible to delete members that are not online (e.g. decomissioned)
+    %% it should be possible to delete members that are not online (e.g. decommissioned)
     ?assertEqual(ok,
                  rpc:call(Server, rabbit_quorum_queue, delete_member,
                           [<<"/">>, QQ, 'rabbit@burrow'])).
@@ -2418,7 +2418,7 @@ subscribe_redelivery_limit_with_dead_letter(Config) ->
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
-    DLX = <<"subcribe_redelivery_limit_with_dead_letter_dlx">>,
+    DLX = <<"subscribe_redelivery_limit_with_dead_letter_dlx">>,
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                   {<<"x-delivery-limit">>, long, 1},
@@ -2900,7 +2900,7 @@ message_ttl(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                   {<<"x-message-ttl">>, long, 2000}])),
 
-    %% Checking for messages that are short-lived could cause intermitent
+    %% Checking for messages that are short-lived could cause intermittent
     %% failures, as these could have expired before the check takes
     %% place. Thus, we're goig to split this testcase in two:
     %% 1. Check that messages published with ttl reach the queue

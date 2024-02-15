@@ -53,7 +53,7 @@ edit(Options) ->
                                "It will be overwritten by the plugin.", [Val]),
             ok
     end,
-    %% Only enter those options neccessary for this application.
+    %% Only enter those options necessary for this application.
     lists:keymerge(1, required_options(),
         [{verify_fun, {delegate(), continue}},
          {partial_chain, fun partial_chain/1} | Options]).

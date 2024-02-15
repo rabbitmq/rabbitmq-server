@@ -774,7 +774,7 @@ Paho.MQTT = (function (global) {
 		// Messages we have sent and are expecting a response for, indexed by their respective message ids. 
 		this._sentMessages = {};
 
-		// Messages we have received and acknowleged and are expecting a confirm message for
+		// Messages we have received and acknowledged and are expecting a confirm message for
 		// indexed by their respective message ids. 
 		this._receivedMessages = {};
 
@@ -935,7 +935,7 @@ Paho.MQTT = (function (global) {
 
 		// Run the disconnected call back as soon as the message has been sent,
 		// in case of a failure later on in the disconnect processing.
-		// as a consequence, the _disconected call back may be run several times.
+		// as a consequence, the _disconnected call back may be run several times.
 		this._notify_msg_sent[wireMessage] = scope(this._disconnected, this);
 
 		this._schedule_message(wireMessage);
@@ -1389,7 +1389,7 @@ Paho.MQTT = (function (global) {
 				break;
 
 			default:
-				throw Error("Invaild qos="+wireMmessage.payloadMessage.qos);
+				throw Error("Invalid qos="+wireMmessage.payloadMessage.qos);
 		};
 	};
 
@@ -1695,7 +1695,7 @@ Paho.MQTT = (function (global) {
 		 * </ol>
 		 * @config {Array} [hosts] If present this contains either a set of hostnames or fully qualified
 		 * WebSocket URIs (ws://example.com:1883/mqtt), that are tried in order in place 
-		 * of the host and port paramater on the construtor. The hosts are tried one at at time in order until
+		 * of the host and port parameter on the constructor. The hosts are tried one at at time in order until
 		 * one of then succeeds.
 		 * @config {Array} [ports] If present the set of ports matching the hosts. If hosts contains URIs, this property
 		 * is not used.
@@ -1826,7 +1826,7 @@ Paho.MQTT = (function (global) {
 		 *                                  <li>errorMessage - text describing the error.      
 		 *                                  </ol>
 		 * @param {number} subscribeOptions.timeout - which, if present, determines the number of
-		 *                                  seconds after which the onFailure calback is called.
+		 *                                  seconds after which the onFailure callback is called.
 		 *                                  The presence of a timeout does not prevent the onSuccess
 		 *                                  callback from being called when the subscribe completes.         
 		 * @throws {InvalidState} if the client is not in connected state.

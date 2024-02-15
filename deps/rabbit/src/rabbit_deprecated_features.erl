@@ -260,7 +260,7 @@
 %%
 %% Calling this function automatically logs a warning or an error to let the
 %% user know they are using something that is or will be removed. For a given
-%% deprecated feature, automatic warning is limited to one occurence per day.
+%% deprecated feature, automatic warning is limited to one occurrence per day.
 %%
 %% @param FeatureName the name of the deprecated feature.
 %%

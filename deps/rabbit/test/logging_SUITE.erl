@@ -41,7 +41,7 @@
          formatting_as_json_using_epoch_secs_timestamps_works/1,
          renaming_json_fields_works/1,
          removing_specific_json_fields_works/1,
-         removing_non_mentionned_json_fields_works/1,
+         removing_non_mentioned_json_fields_works/1,
          configuring_verbosity_works/1,
 
          logging_to_stdout_configured_in_env_works/1,
@@ -86,7 +86,7 @@ groups() ->
        formatting_as_json_using_epoch_secs_timestamps_works,
        renaming_json_fields_works,
        removing_specific_json_fields_works,
-       removing_non_mentionned_json_fields_works,
+       removing_non_mentioned_json_fields_works,
        configuring_verbosity_works]},
 
      {console_output, [],
@@ -811,7 +811,7 @@ removing_specific_json_fields_works(Config) ->
          string := <<"string">>},
        Term).
 
-removing_non_mentionned_json_fields_works(Config) ->
+removing_non_mentioned_json_fields_works(Config) ->
     Context = default_context(Config),
     FieldMap = [{integer, integer},
                 {msg, msg},

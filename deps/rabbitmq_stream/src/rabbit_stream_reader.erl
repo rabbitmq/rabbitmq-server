@@ -1937,7 +1937,7 @@ handle_frame_post_auth(Transport,
                          SubscriptionId, _, _, _, Properties}} = Request) ->
     case rabbit_stream_utils:filter_defined(Properties) of
         true ->
-            rabbit_log:warning("Cannot create subcription ~tp, it defines a filter "
+            rabbit_log:warning("Cannot create subscription ~tp, it defines a filter "
                                "and filtering is not active",
                                [SubscriptionId]),
             response(Transport,
@@ -2031,7 +2031,7 @@ handle_frame_post_auth(Transport,
                             case {Sac, ConsumerName}
                             of
                                 {true, undefined} ->
-                                    rabbit_log:warning("Cannot create subcription ~tp, a single active "
+                                    rabbit_log:warning("Cannot create subscription ~tp, a single active "
                                                        "consumer must have a name",
                                                        [SubscriptionId]),
                                     response(Transport,

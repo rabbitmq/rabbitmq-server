@@ -1135,7 +1135,7 @@ catch_no_such_user_or_vhost(Fun, Replacement) ->
         Replacement()
     end.
 
-%% this retains the old, buggy, pre 23.1 behavour of lists:sublist/3 where an
+%% this retains the old, buggy, pre 23.1 behaviour of lists:sublist/3 where an
 %% error is thrown when the request is out of range
 sublist(List, S, L) when is_integer(L), L >= 0 ->
     lists:sublist(lists:nthtail(S-1, List), L).

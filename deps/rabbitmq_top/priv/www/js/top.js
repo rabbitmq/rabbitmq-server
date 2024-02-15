@@ -67,7 +67,7 @@ function link_pid(name) {
 // rabbitmq-top, however, wants to sort things in descending order by default
 // because otherwise it is useless on initial page load.
 //
-// Thsi discrepancy means that either in the management UI or in the top
+// This discrepancy means that either in the management UI or in the top
 // tables the sorting indicator (a triangle) will be reversed.
 //
 // Changing the global variables has side effects, so we

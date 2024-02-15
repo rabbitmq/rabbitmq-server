@@ -49,7 +49,7 @@
 
 -define(APP, rabbitmq_web_stomp).
 
-%% cowboy_sub_protcol
+%% cowboy_sub_protocol
 upgrade(Req, Env, Handler, HandlerState) ->
     upgrade(Req, Env, Handler, HandlerState, #{}).
 

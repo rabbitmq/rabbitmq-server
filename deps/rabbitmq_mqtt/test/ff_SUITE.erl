@@ -109,7 +109,7 @@ rabbit_mqtt_qos0_queue(Config) ->
     ?assertEqual(ok,
                  rabbit_ct_broker_helpers:enable_feature_flag(Config, FeatureFlag)),
 
-    %% Queue type does not chanage for existing connection.
+    %% Queue type does not change for existing connection.
     ?assertEqual(1,
                  length(rpc(Config, 0, rabbit_amqqueue, list_by_type, [rabbit_classic_queue]))),
     ok = emqtt:publish(C1, Topic, Msg, qos0),

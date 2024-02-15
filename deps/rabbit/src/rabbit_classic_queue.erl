@@ -337,7 +337,7 @@ handle_event(QName, {down, Pid, Info}, #?STATE{monitored = Monitored,
             {ok, State#?STATE{unconfirmed = Unconfirmed}, Actions};
         true ->
             %% any abnormal exit should be considered a full reject of the
-            %% oustanding message ids - If the message didn't get to all
+            %% outstanding message ids - If the message didn't get to all
             %% mirrors we have to assume it will never get there
             MsgIds = maps:fold(
                           fun (SeqNo, Status, Acc) ->

@@ -57,7 +57,7 @@ count_connections(Config) ->
     %% AMQP default port.
     IPv4Count = try
         %% Count IPv4 connections. On some platforms, the IPv6 listener
-        %% implicitely listens to IPv4 connections too so the IPv4
+        %% implicitly listens to IPv4 connections too so the IPv4
         %% listener doesn't exist. Thus this try/catch. This is the case
         %% with Linux where net.ipv6.bindv6only is disabled (default in
         %% most cases).

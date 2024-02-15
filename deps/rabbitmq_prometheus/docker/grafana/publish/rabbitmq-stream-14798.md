@@ -1,6 +1,6 @@
 # RabbitMQ-Stream
 
-The stream protocol has been introduced in RabbitMQ 3.9.0, and is meant to be used in conjuction with Streams.
+The stream protocol has been introduced in RabbitMQ 3.9.0, and is meant to be used in conjunction with Streams.
 
 Streams are a new persistent and replicated data structure which models an append-only log with non-destructive consumer semantics.
 

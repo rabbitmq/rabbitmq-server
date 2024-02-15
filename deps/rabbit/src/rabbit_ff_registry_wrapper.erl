@@ -43,7 +43,7 @@
 %% @doc
 %% Returns the properties of a feature flag.
 %%
-%% Only the informations stored in the local registry is used to answer
+%% Only the information stored in the local registry is used to answer
 %% this call.
 %%
 %% @param FeatureName The name of the feature flag.
@@ -64,7 +64,7 @@ get(FeatureName) ->
 %% @doc
 %% Lists all, enabled or disabled feature flags, depending on the argument.
 %%
-%% Only the informations stored in the local registry is used to answer
+%% Only the information stored in the local registry is used to answer
 %% this call.
 %%
 %% @param Which The group of feature flags to return: `all', `enabled' or
@@ -85,7 +85,7 @@ list(Which) ->
 %% @doc
 %% Returns the states of supported feature flags.
 %%
-%% Only the informations stored in the local registry is used to answer
+%% Only the information stored in the local registry is used to answer
 %% this call.
 %%
 %% @returns A map of feature flag states.
@@ -105,7 +105,7 @@ states() ->
 %% @doc
 %% Returns if a feature flag is supported.
 %%
-%% Only the informations stored in the local registry is used to answer
+%% Only the information stored in the local registry is used to answer
 %% this call.
 %%
 %% @param FeatureName The name of the feature flag to be checked.
@@ -127,7 +127,7 @@ is_supported(FeatureName) ->
 %% @doc
 %% Returns if a feature flag is enabled or if its state is changing.
 %%
-%% Only the informations stored in the local registry is used to answer
+%% Only the information stored in the local registry is used to answer
 %% this call.
 %%
 %% @param FeatureName The name of the feature flag to be checked.

@@ -4,7 +4,7 @@
 ##
 ## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
-defmodule DisbleAuthAttemptSourceTrackingCommandTest do
+defmodule DisableAuthAttemptSourceTrackingCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 

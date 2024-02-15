@@ -121,7 +121,7 @@ await_quorum_plus_one_stream_coordinator(Config) ->
     %% no queues/streams beyond this point
 
     ok = rabbit_ct_broker_helpers:stop_node(Config, B),
-    %% this should fail because the corrdinator has only 2 running nodes
+    %% this should fail because the coordinator has only 2 running nodes
     ?assertNot(await_quorum_plus_one(Config, 0)),
 
     ok = rabbit_ct_broker_helpers:start_node(Config, B),

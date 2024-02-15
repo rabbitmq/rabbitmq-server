@@ -78,7 +78,7 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
                         ReqData0, Context);
                   {error, E} ->
                       rabbit_mgmt_util:internal_server_error(
-                        "Error occured while adding vhost", E,
+                        "Error occurred while adding vhost", E,
                         ReqData0, Context);
                   {'EXIT', {vhost_limit_exceeded,
                       Explanation}} ->

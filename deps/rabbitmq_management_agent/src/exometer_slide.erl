@@ -158,8 +158,8 @@ add_element(TS, Evt, #slide{last = Last, size = Sz, incremental = true,
                             buf1 = Buf1} = Slide) ->
     N1 = N+1,
     Total = add_to_total(Evt, Total0),
-    %% Total could be the same as the last sample, by adding and substracting
-    %% the same amout to the totals. That is not strictly a drop, but should
+    %% Total could be the same as the last sample, by adding and subtracting
+    %% the same amount to the totals. That is not strictly a drop, but should
     %% generate new samples.
     %% I.e. 0, 0, -14, 14 (total = 0, samples = 14, -14, 0, drop)
     case {is_zeros(Evt), Buf1} of

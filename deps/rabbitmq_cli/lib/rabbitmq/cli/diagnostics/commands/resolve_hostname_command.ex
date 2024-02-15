@@ -6,7 +6,7 @@
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.ResolveHostnameCommand do
   @moduledoc """
-  Resolves a hostname to one or more addresses of a given IP address family (IPv4 ot IPv6).
+  Resolves a hostname to one or more addresses of a given IP address family (IPv4 or IPv6).
   This command is not meant to compete with `dig` but rather provide a way
   to perform basic resolution tests that take Erlang's inetrc file into account.
   """

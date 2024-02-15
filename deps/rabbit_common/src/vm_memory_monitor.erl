@@ -90,7 +90,7 @@ get_total_memory() ->
                     ParsedTotal;
                 {error, parse_error} ->
                     rabbit_log:warning(
-                      "The override value for the total memmory available is "
+                      "The override value for the total memory available is "
                       "not a valid value: ~tp, getting total from the system.",
                       [Value]),
                     get_total_memory_from_os()

@@ -60,7 +60,7 @@ To use this plugin
 
 The following section describes plugin configuration using UAA
 as example identity provider. In case you use another supported provider, please
-go over the contentes below and also an example for your service provider:
+go over the contents below and also an example for your service provider:
 
  * [Keycloak](https://github.com/rabbitmq/rabbitmq-oauth2-tutorial/blob/rich_auth_request/use-cases/keycloak.md)
  * [Microsoft AD on Azure](https://github.com/rabbitmq/rabbitmq-oauth2-tutorial/blob/rich_auth_request/use-cases/azure.md)

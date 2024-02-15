@@ -267,7 +267,7 @@ RUN rabbitmq-plugins enable --offline rabbitmq_management && \
 # extract "rabbitmqadmin" from inside the "rabbitmq_management-X.Y.Z.ez" plugin zipfile
 # see https://github.com/docker-library/rabbitmq/issues/207
 # RabbitMQ 3.9 onwards uses uncompressed plugins by default, in which case extraction is
-# unnecesary
+# unnecessary
 RUN set -eux; \
 	if [ -s /plugins/rabbitmq_management-*.ez ]; then \
 		erl -noinput -eval ' \

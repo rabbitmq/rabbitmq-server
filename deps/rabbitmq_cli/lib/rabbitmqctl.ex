@@ -634,7 +634,7 @@ defmodule RabbitMQCtl do
   ## :cli - default rabbitmqctl node name
   ## :none - do not start a distribution (e.g. offline command)
   ## {:fun, fun} - run a custom function to enable distribution.
-  ## custom mode is usefult for commands which should have specific node name.
+  ## custom mode is useful for commands which should have specific node name.
   ## Runs code if distribution is successful, or not needed.
   @spec maybe_with_distribution(module(), options(), (-> command_result())) :: command_result()
   defp maybe_with_distribution(command, options, code) do

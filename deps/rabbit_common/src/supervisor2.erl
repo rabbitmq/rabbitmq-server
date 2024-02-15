@@ -896,7 +896,7 @@ restart(Child, State) ->
             case restart(NState#state.strategy, Child, NState) of
                 {{try_again, TryAgainId}, NState2} ->
                     %% Leaving control back to gen_server before
-                    %% trying again. This way other incoming requsts
+                    %% trying again. This way other incoming requests
                     %% for the supervisor can be handled - e.g. a
                     %% shutdown request for the supervisor or the
                     %% child.
@@ -1547,7 +1547,7 @@ child_to_spec(#child{id = Id,
 %%% Add a new restart and calculate if the max restart
 %%% intensity has been reached (in that case the supervisor
 %%% shall terminate).
-%%% All restarts occured inside the period amount of seconds
+%%% All restarts occurred inside the period amount of seconds
 %%% are kept in the #state.restarts list.
 %%% Returns: {ok, State'} | {terminate, State'}
 %%% ------------------------------------------------------

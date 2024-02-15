@@ -29,7 +29,7 @@ guess_number_of_cpu_cores() ->
 -spec gc_all_processes() -> ok.
 gc_all_processes() ->
   %% Run GC asynchronously. We don't care for completion notifications, so
-  %% don't use the asynchonous execution option.
+  %% don't use the asynchronous execution option.
   spawn(fun() -> [erlang:garbage_collect(P, []) || P <- erlang:processes()] end),
   ok.
 

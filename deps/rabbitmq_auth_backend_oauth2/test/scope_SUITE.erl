@@ -23,7 +23,7 @@ all() ->
 
 variable_expansion(_Config) ->
     Scenarios = [
-      { "Emtpy Scopes",
+      { "Empty Scopes",
         #{
            <<"client_id">> => <<"some_client">>,
            <<"scope">> => []

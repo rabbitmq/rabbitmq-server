@@ -43,7 +43,7 @@ dist:
 # web-manpages are not used by generic-unix but by `make release` in the
 # Umbrella. Those manpages are copied to www.rabbitmq.com
 #
-# We explicitely set $HOME as a Make variable below because some package
+# We explicitly set $HOME as a Make variable below because some package
 # builders do that, as part of cleaning the build environment. It
 # exercises our hack to convince mix(1) to work offline because that
 # hack depends on `$HOME`. A Make variable on the command line takes

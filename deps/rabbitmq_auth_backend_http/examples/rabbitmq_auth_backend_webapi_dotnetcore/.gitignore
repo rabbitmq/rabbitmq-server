@@ -316,7 +316,7 @@ node_modules/
 **/*.Server/ModelManifest.xml
 _Pvt_Extensions
 
-# Paket dependency manager
+# Packet dependency manager
 .paket/paket.exe
 paket-files/
 

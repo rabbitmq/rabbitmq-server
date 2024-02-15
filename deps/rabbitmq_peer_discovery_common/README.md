@@ -1,6 +1,6 @@
 # RabbitMQ Peer Discovery Commons
 
-This library is similar in purpose to [rabbit-common](https://github.com/rabbitmq/rabbitmq-common) but focusses exclusively
+This library is similar in purpose to [rabbit-common](https://github.com/rabbitmq/rabbitmq-common) but focuses exclusively
 on [RabbitMQ peer discovery backends](https://www.rabbitmq.com/cluster-formation.html) (available as [a plugin](https://github.com/rabbitmq/rabbitmq-autocluster) for 3.6.x releases).
 
 It is not supposed to be enabled, disabled or used directly by the users, only as a

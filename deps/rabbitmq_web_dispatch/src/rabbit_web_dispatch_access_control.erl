@@ -100,7 +100,7 @@ is_authorized1(ReqData, Context, ErrorMsg, Fun, AuthConfig) ->
             end;
         {bearer, Token} ->
             % Username is only used in case is_authorized is not able to parse the token
-            % and extact the username from it
+            % and extract the username from it
             Username = AuthConfig#auth_settings.oauth_client_id,
             is_authorized(ReqData, Context, Username, Token, ErrorMsg, Fun, AuthConfig);
         _ ->

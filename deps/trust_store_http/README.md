@@ -8,7 +8,7 @@ in its test suite and as an example.
 
  * `/`: serves a list of certificates in JSON. The format is `{"certificates":[{"id": <id>, "path": <path>}, ...]}`
  * `/certs/<file_name>`: access for PEM encoded certificate files
- * `/invlid`: serves invalid JSON, to be used in integration tests
+ * `/invalid`: serves invalid JSON, to be used in integration tests
 
 ```
 <id> = <file_name>:<file_modification_date>

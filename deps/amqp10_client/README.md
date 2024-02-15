@@ -124,7 +124,7 @@ When the connection is closed an event is issued as such:
 {amqp10_event, {connection, ConnectionPid, {closed, Why}}}
 ```
 
-`Why` could be `normal` or contain a description of an error that occured
+`Why` could be `normal` or contain a description of an error that occurred
 and resulted in the closure of the connection.
 
 Likewise sessions and links have similar events using a similar format.

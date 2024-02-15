@@ -67,7 +67,7 @@ do_run() ->
     %% Erlang distribution is configured.
     assert_mnesia_is_stopped(),
 
-    %% Get informations to setup logging.
+    %% Get information to setup logging.
     Context0 = rabbit_env:get_context_before_logging_init(),
     ?assertMatch(#{}, Context0),
 

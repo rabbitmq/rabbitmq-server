@@ -437,7 +437,7 @@ stream(Config) ->
     ?assertEqual(#{<<"rabbit🐇"/utf8>> => <<"carrot🥕"/utf8>>,
                    <<"key">> => <<"val">>},
                  amqp10_msg:application_properties(Msg)),
-    %% We excpet the body to be a single AMQP 1.0 value section where the value is a string
+    %% We except the body to be a single AMQP 1.0 value section where the value is a string
     %% because we set the MQTT 5.0 Payload-Format-Indicator.
     ?assertEqual({'v1_0.amqp_value', {utf8, Payload}},
                  amqp10_msg:body(Msg)).

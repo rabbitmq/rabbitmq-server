@@ -96,7 +96,7 @@ DEFAULT_ELIXIR_VERSION = "1.13.4"
 DEFAULT_ELIXIR_SHA256 = "95daf2dd3052e6ca7d4d849457eaaba09de52d65ca38d6933c65bc1cdf6b8579"
 
 # Generates the @elixir_config repository, which contains erlang
-# toolchains and platform defintions
+# toolchains and platform definitions
 def elixir_config(
         rabbitmq_server_workspace = "@rabbitmq-server",
         internal_elixir_configs = []):

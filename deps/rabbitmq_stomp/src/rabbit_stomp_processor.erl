@@ -494,7 +494,7 @@ cancel_subscription({ok, ConsumerTag, Description}, Frame,
             end
     end.
 
-%% Server-initiated cancelations will pass an undefined instead of a
+%% Server-initiated cancellations will pass an undefined instead of a
 %% STOMP frame. In this case we know that the queue was deleted and
 %% thus we don't have to clean it up.
 tidy_canceled_subscription(ConsumerTag, _Subscription,
@@ -502,7 +502,7 @@ tidy_canceled_subscription(ConsumerTag, _Subscription,
     Subs1 = maps:remove(ConsumerTag, Subs),
     ok(State#proc_state{subscriptions = Subs1});
 
-%% Client-initiated cancelations will pass an actual frame
+%% Client-initiated cancellations will pass an actual frame
 tidy_canceled_subscription(ConsumerTag, #subscription{dest_hdr = DestHdr},
                            Frame, State = #proc_state{subscriptions = Subs}) ->
     Subs1 = maps:remove(ConsumerTag, Subs),

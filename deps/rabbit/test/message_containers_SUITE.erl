@@ -142,7 +142,7 @@ enable_ff(Config) ->
     case QueueType of
         <<"stream">> ->
             %% if it is a stream we need to wait until there is a local member
-            %% on the node we want to subscibe from before proceeding
+            %% on the node we want to subscribe from before proceeding
             rabbit_ct_helpers:await_condition(
               fun() ->
                       queue_utils:has_local_stream_member(Config, 2, QName, <<"/">>)

@@ -20,7 +20,7 @@ server releases. It is organized in the following way:
     make packages PROJECT_VERSION=3.13.0-rc.3
     ```
 
-* To create all suported packages from an existing source archive:
+* To create all supported packages from an existing source archive:
 
     ```
     make -C packaging SOURCE_DIST_FILE=/path/to/rabbitmq-server-3.13.0-rc.3.tar.xz

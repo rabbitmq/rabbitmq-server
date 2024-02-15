@@ -1205,7 +1205,7 @@ merge_feature_flags(FeatureFlagsA, FeatureFlagsB) ->
               %% case, `rabbit_feature_flags:get_stability/1' will consider it
               %% stable. However in the former case, we must consider it
               %% experimental otherwise it would default to be stable would
-              %% superceed an experimental level, even though all nodes agree
+              %% supersede an experimental level, even though all nodes agree
               %% on that level, because `rabbit_feature_flags:get_stability/1'
               %% would return stable as well.
               UnknownProps = #{stability => experimental},

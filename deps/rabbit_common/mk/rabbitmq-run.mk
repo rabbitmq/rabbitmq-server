@@ -360,7 +360,7 @@ stop-node:
 	  while ps -p "$$pid" >/dev/null 2>&1; do sleep 1; done \
 	  ) || :
 
-# " <-- To please Vim syntax hilighting.
+# " <-- To please Vim syntax highlighting.
 
 # --------------------------------------------------------------------
 # Start a RabbitMQ cluster in the background.

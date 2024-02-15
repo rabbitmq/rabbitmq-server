@@ -155,7 +155,7 @@ end_per_testcase(_, Config) ->
 -define(DEFAULT_SCOPE_PREFIX, <<"rabbitmq.">>).
 
 test_post_process_token_payload(_) ->
-    ArgumentsExpections = [
+    ArgumentsExpectations = [
         {{[<<"rabbitmq">>, <<"hare">>], [<<"read">>, <<"write">>, <<"configure">>]},
          {[<<"rabbitmq">>, <<"hare">>], [<<"read">>, <<"write">>, <<"configure">>]}},
         {{<<"rabbitmq hare">>, <<"read write configure">>},
@@ -168,7 +168,7 @@ test_post_process_token_payload(_) ->
             Payload = post_process_token_payload(Aud, Scope),
             ?assertEqual(ExpectedAud, maps:get(<<"aud">>, Payload)),
             ?assertEqual(ExpectedScope, maps:get(<<"scope">>, Payload))
-        end, ArgumentsExpections).
+        end, ArgumentsExpectations).
 
 post_process_token_payload(Audience, Scopes) ->
     Jwk = ?UTIL_MOD:fixture_jwk(),
@@ -248,7 +248,7 @@ test_post_process_payload_rich_auth_request_using_regular_expression_with_cluste
 
   Pairs = [
 
-  { "should filter out those permisions whose locations do not refer to cluster : {resource_server_id}",
+  { "should filter out those permissions whose locations do not refer to cluster : {resource_server_id}",
     [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
         <<"locations">> => [<<"cluster:rabbitmq-test">>],
         <<"actions">> => [<<"read">>]
@@ -307,7 +307,7 @@ test_post_process_payload_rich_auth_request(_) ->
     ],
     [ <<"rabbitmq.tag:management">>, <<"rabbitmq.tag:administrator">> ]
   },
-  { "should filter out those permisions whose type does not match <resource_server_type>",
+  { "should filter out those permissions whose type does not match <resource_server_type>",
     [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
         <<"locations">> => [<<"cluster:rabbitmq">>],
         <<"actions">> => [<<"read">>]
@@ -319,7 +319,7 @@ test_post_process_payload_rich_auth_request(_) ->
     ],
     [<<"rabbitmq.read:*/*/*">> ]
   },
-  { "should filter out those permisions whose type is the empty string",
+  { "should filter out those permissions whose type is the empty string",
     [
       #{<<"type">> => <<>>,
         <<"locations">> => [<<"cluster:rabbitmq">>],
@@ -328,7 +328,7 @@ test_post_process_payload_rich_auth_request(_) ->
     ],
     [ ]
   },
-  { "should filter out those permisions with empty string action",
+  { "should filter out those permissions with empty string action",
     [
       #{<<"type">> => ?RESOURCE_SERVER_TYPE,
         <<"locations">> => [<<"cluster:rabbitmq">>],
@@ -337,7 +337,7 @@ test_post_process_payload_rich_auth_request(_) ->
     ],
     [ ]
   },
-  { "should filter out those permisions whose locations do not refer to cluster : {resource_server_id}",
+  { "should filter out those permissions whose locations do not refer to cluster : {resource_server_id}",
     [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
         <<"locations">> => [<<"cluster:rabbitmq">>],
         <<"actions">> => [<<"read">>]
@@ -349,7 +349,7 @@ test_post_process_payload_rich_auth_request(_) ->
     ],
     [<<"rabbitmq.read:*/*/*">> ]
   },
-  { "should filter out those permisions whose locations' regexpr do not match the cluster : {resource_server_id} ",
+  { "should filter out those permissions whose locations' regexpr do not match the cluster : {resource_server_id} ",
     [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
         <<"locations">> => [<<"cluster:rabbit*">>],
         <<"actions">> => [<<"read">>]

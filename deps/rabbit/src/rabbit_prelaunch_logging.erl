@@ -442,7 +442,7 @@ set_ERL_CRASH_DUMP_envvar(Context) ->
 %%
 %% The precedence is:
 %% <ol>
-%% <li>the $RABBITMQ_LOG_BASE variable if overriden in the environment</li>
+%% <li>the $RABBITMQ_LOG_BASE variable if overridden in the environment</li>
 %% <li>the value of `log_root' in the application environment</li>
 %% <li>the default value</li>
 %% </ol>
@@ -631,7 +631,7 @@ compute_implicitly_enabled_output(PropName, Props) ->
 
 compute_implicitly_enabled_output1(SubProps) ->
     %% We consider the output enabled or disabled if:
-    %%     * it is explicitely marked as such, or
+    %%     * it is explicitly marked as such, or
     %%     * the level is set to a log level (enabled) or `none' (disabled)
     Enabled = proplists:get_value(
                 enabled, SubProps,
@@ -641,7 +641,7 @@ compute_implicitly_enabled_output1(SubProps) ->
 
 is_output_explicitely_enabled(FileProps) ->
     %% We consider the output enabled or disabled if:
-    %%     * the file is explicitely set, or
+    %%     * the file is explicitly set, or
     %%     * the level is set to a log level (enabled) or `none' (disabled)
     File = proplists:get_value(file, FileProps),
     Level = proplists:get_value(level, FileProps),
@@ -1310,7 +1310,7 @@ create_handler_key(
 
 %% The difference between a global handler and a category handler is the value
 %% of `filter_default'. In a global hanler, if a message was not stopped or
-%% explicitely accepted by a filter, the message is logged. In a category
+%% explicitly accepted by a filter, the message is logged. In a category
 %% handler, it is dropped.
 
 create_handler_conf(Output, global, Config) ->

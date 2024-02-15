@@ -9,7 +9,7 @@
 
 -behaviour(supervisor).
 
-%% supervsior callback
+%% supervisors callback
 -export([init/1]).
 
 %% API

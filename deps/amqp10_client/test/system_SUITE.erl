@@ -715,7 +715,7 @@ await_disposition(DeliveryTag) ->
         {amqp10_disposition, {accepted, DeliveryTag}} -> ok
     after 3000 ->
               flush(),
-              exit(dispostion_timeout)
+              exit(disposition_timeout)
     end.
 
 await_link(Who, What, Err) ->

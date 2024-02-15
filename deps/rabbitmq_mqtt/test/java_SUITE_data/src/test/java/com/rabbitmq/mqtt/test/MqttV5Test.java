@@ -192,11 +192,11 @@ public class MqttV5Test implements MqttCallback {
       out.write(bytes, 0, bytes.length);
 
       int offset = 0;
-      int chunckSize = 1024;
+      int chunkSize = 1024;
       while (offset < pl.length) {
-        int length = Math.min(chunckSize, pl.length - offset);
+        int length = Math.min(chunkSize, pl.length - offset);
         out.write(pl, offset, length);
-        offset += chunckSize;
+        offset += chunkSize;
       }
       // ---8<---
 

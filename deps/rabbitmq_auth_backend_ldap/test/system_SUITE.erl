@@ -634,7 +634,7 @@ other_bind_anon_env() ->
     [{other_bind, anon}].
 
 other_bind_broken_env() ->
-    [{other_bind, {"cn=admin,dc=rabbitmq,dc=com", "admi"}}].
+    [{other_bind, {"cn=admin,dc=rabbitmq,dc=com", "admin"}}].
 
 tag_queries_subst_env() ->
     [{tag_queries, [{administrator, {constant, false}},
@@ -880,7 +880,7 @@ logging_envs() ->
      {2, {good, display_bind_creds_env()}},
      {3, {bad,  scrub_bind_single_cred_env()}},
      {4, {bad,  scrub_bind_creds_no_equals_env()}},
-     {5, {bad,  scrub_bind_creds_no_seperator_env()}}].
+     {5, {bad,  scrub_bind_creds_no_separator_env()}}].
 
 scrub_bind_creds_env() ->
     [{log,         network},
@@ -898,7 +898,7 @@ scrub_bind_creds_no_equals_env() ->
     [{log,         network},
      {other_bind,  {"cn*admin,dc>rabbitmq,dc&com", "admin"}}].
 
-scrub_bind_creds_no_seperator_env() ->
+scrub_bind_creds_no_separator_env() ->
     [{log,         network},
      {other_bind,  {"cn=admindc=rabbitmqdc&com", "admin"}}].
 

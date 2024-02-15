@@ -136,7 +136,7 @@ gen_server_call_test_() ->
   {
     foreach,
     fun () ->
-      % We explicitely set a few defaults, in case the caller has
+      % We explicitly set a few defaults, in case the caller has
       % something in ~/.aws.
       os:putenv("AWS_DEFAULT_REGION", "us-west-3"),
       os:putenv("AWS_ACCESS_KEY_ID", "Sésame"),

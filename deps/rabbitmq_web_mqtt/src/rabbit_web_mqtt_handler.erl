@@ -52,7 +52,7 @@
 -define(CLOSE_PROTOCOL_ERROR, 1002).
 -define(CLOSE_UNACCEPTABLE_DATA_TYPE, 1003).
 
-%% cowboy_sub_protcol
+%% cowboy_sub_protocol
 upgrade(Req, Env, Handler, HandlerState) ->
     upgrade(Req, Env, Handler, HandlerState, #{}).
 

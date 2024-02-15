@@ -24,6 +24,6 @@ res = Net::HTTP.start(uri.hostname, uri.port) { |http|
   http.request(req)
 }
 
-raise "Could not connect to managment API." unless res.is_a?(Net::HTTPSuccess)
+raise "Could not connect to management API." unless res.is_a?(Net::HTTPSuccess)
 puts "Connected via Management Plugin API!"
 puts res.body

@@ -74,7 +74,7 @@ auth_fun({Username, Password}, VHost, ExtraAuthProps) ->
 
 %% Infos is a PropList which contains the content of the Proplist #amqp_adapter_info.additional_info
 %% among other credentials such as protocol, ssl information, etc.
-%% #amqp_adapter_info.additional_info may carry a credential called `authz_bakends` which has the
+%% #amqp_adapter_info.additional_info may carry a credential called `authz_backends` which has the
 %% content of the #user.authz_backends attribute. This means that we are propagating the outcome
 %% from the first successful authentication for the current user when opening an internal
 %% amqp connection. This is particularly relevant for protocol plugins such as AMQP 1.0 where

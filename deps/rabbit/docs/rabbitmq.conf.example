@@ -550,7 +550,7 @@
 
 ## To permit or deny a deprecated feature when it is in its
 ## `permitted_by_default` or `denied_by_default` deprecation phase, the
-## default state can be overriden from the configuration.
+## default state can be overridden from the configuration.
 ##
 ## When a deprecated feature is permitted by default (first phase of the
 ## deprecation period), it means the feature is available by default and can
@@ -615,7 +615,7 @@
 ##
 # proxy_protocol = false
 
-## Overriden product name and version.
+## Overridden product name and version.
 ## They are set to "RabbitMQ" and the release version by default.
 # product.name = RabbitMQ
 # product.version = 1.2.3
@@ -1070,7 +1070,7 @@
 # auth_ldap.ssl_options.keyfile = /path/to/client_key.pem
 
 ## Sets Server Name Indication for LDAP connections.
-## If an LDAP server host is availble via multiple domain names, set this value
+## If an LDAP server host is available via multiple domain names, set this value
 ## to the preferred domain name target LDAP server
 # auth_ldap.ssl_options.sni = ldap.identity.eng.megacorp.local
 

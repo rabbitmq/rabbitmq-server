@@ -83,7 +83,7 @@ force_stats() ->
 
 node(Config) ->
     [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    % force multipe stats refreshes
+    % force multiple stats refreshes
     [ rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, force_stats, [])
       || _ <- lists:seq(0, 10)],
     [_] = read_table_rpc(Config, node_persister_metrics),

@@ -21,7 +21,7 @@ defmodule SchemaInfoCommandTest do
     }
   end
 
-  test "merge_defaults: adds all keys if none specificed", context do
+  test "merge_defaults: adds all keys if none specified", context do
     default_keys = ~w(name cookie active_replicas user_properties)
 
     {keys, _} = @command.merge_defaults([], context[:opts])

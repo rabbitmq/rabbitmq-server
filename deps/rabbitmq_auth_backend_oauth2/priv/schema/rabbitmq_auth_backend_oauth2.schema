@@ -87,7 +87,7 @@
 %% used to determine the user's identity, a.k.a username.
 %% RabbitMQ appends `sub` and `client_id` claims.
 %% e.g. RabbitMQ first looks for username claim. If it is not present, it looks for user_name
-%% and so forth. If it cannot find any, it defauls to unknown.
+%% and so forth. If it cannot find any, it defaults to unknown.
 %% {preferred_username_claims, [<<"username">>, <<"user_name">>, <<"email">> ]},
 
 {mapping,
@@ -137,7 +137,7 @@
                 {ok, Bin} ->
                     string:trim(Bin, trailing, "\n");
                 _ ->
-                    %% this throws and makes Cuttlefish treak the key as invalid
+                    %% this throws and makes Cuttlefish treat the key as invalid
                     cuttlefish:invalid("file does not exist or cannot be read by the node")
             end
         end,

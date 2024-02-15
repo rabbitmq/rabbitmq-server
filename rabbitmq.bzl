@@ -174,7 +174,7 @@ def rabbitmq_suite(
         runtime_deps = [],
         **kwargs):
     app_name = native.package_name().rpartition("/")[-1]
-    # suite_name exists in the underying ct_test macro, but we don't
+    # suite_name exists in the underlying ct_test macro, but we don't
     # want to use the arg in rabbitmq-server, for the sake of clarity
     if suite_name != None:
         fail("rabbitmq_suite cannot be called with a suite_name attr")
@@ -222,7 +222,7 @@ def rabbitmq_integration_suite(
         runtime_deps = [],
         **kwargs):
     app_name = native.package_name().rpartition("/")[-1]
-    # suite_name exists in the underying ct_test macro, but we don't
+    # suite_name exists in the underlying ct_test macro, but we don't
     # want to use the arg in rabbitmq-server, for the sake of clarity
     if suite_name != None:
         fail("rabbitmq_integration_suite cannot be called with a suite_name attr")

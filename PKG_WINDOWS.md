@@ -21,7 +21,7 @@ mailing list.
 
 ## Initial Steps
 
-Bring up the VM and go through the process of updating Windows and (optionall)
+Bring up the VM and go through the process of updating Windows and (optionally)
 VirtualBox tools. You'll notice that the evaluation license is expired. Re-arm
 it by running this command via an administrative prompt:
 

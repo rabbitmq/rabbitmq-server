@@ -23,7 +23,7 @@ all() ->
     ].
 
 
-%% replicate eunit like test resultion
+%% replicate eunit like test resolution
 all_tests() ->
     [F || {F, _} <- ?MODULE:module_info(functions),
           re:run(atom_to_list(F), "_test$") /= nomatch].
@@ -960,7 +960,7 @@ single_active_consumer_all_disconnected_test(_) ->
     %% assert the consumer fails over to the consumer on n2
     ?assertMatch(#{C2 := #consumer{status = up}}, State2#?STATE.consumers),
     {State3, _, _} = apply(meta(6), {down, C2Pid, noconnection}, State2),
-    %% assert these no active consumer after both nodes are maked as down
+    %% assert these no active consumer after both nodes are made as down
     ?assertMatch([], maps:to_list(State3#?STATE.consumers)),
     %% n2 comes back
     {State4, _, _} = apply(meta(7), {nodeup, node(C2Pid)}, State3),

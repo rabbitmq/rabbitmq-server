@@ -424,7 +424,7 @@ do_match(S1, S2) ->
             R
     end.
 
-%% In some cases when fetching regular expressions, LDAP evalution()
+%% In some cases when fetching regular expressions, LDAP evaluation()
 %% returns a list of strings, so we need to wrap guards around that.
 %% If a list of strings is returned, loop and match versus each element.
 do_match_multi(S1, []) ->

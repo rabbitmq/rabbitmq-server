@@ -1133,11 +1133,11 @@ plain_sasl_authenticate(Transport, S, C1, Username, Password) ->
     Null = 0,
     sasl_authenticate(Transport, S, C1, <<"PLAIN">>, <<Null:8, Username/binary, Null:8, Password/binary>>).
 
-expect_successful_authentication({SaslAuth, C2} = _SaslReponse) ->
+expect_successful_authentication({SaslAuth, C2} = _SaslResponse) ->
     ?assertEqual({response, 2, {sasl_authenticate, ?RESPONSE_CODE_OK}},
                  SaslAuth),
     C2.
-expect_unsuccessful_authentication({SaslAuth, C2} = _SaslReponse, ExpectedError) ->
+expect_unsuccessful_authentication({SaslAuth, C2} = _SaslResponse, ExpectedError) ->
     ?assertEqual({response, 2, {sasl_authenticate, ExpectedError}},
                  SaslAuth),
     C2.

@@ -85,8 +85,8 @@ connection_fails(Config) ->
     Protocol = ?config(protocol, Config),
     WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
     {ok, _} = rfc6455_client:open(WS),
-    ok = raw_send(WS, "CONNECT", [{"login", "uncorrect_$55"}, {"passcode", "uncorrect_$88"}]),
-    {<<"ERROR">>, _, <<"Access refused for user 'uncorrect_$55'">>} = raw_recv(WS),
+    ok = raw_send(WS, "CONNECT", [{"login", "incorrect_$55"}, {"passcode", "incorrect_$88"}]),
+    {<<"ERROR">>, _, <<"Access refused for user 'incorrect_$55'">>} = raw_recv(WS),
     {close, _} = rfc6455_client:close(WS),
     ok.
 

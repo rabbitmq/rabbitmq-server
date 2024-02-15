@@ -654,7 +654,7 @@ is_disabled(FeatureName, Blocking) ->
 -spec info() -> ok.
 %% @doc
 %% Displays a table on stdout summing up the supported feature flags,
-%% their state and various informations about them.
+%% their state and various information about them.
 
 info() ->
     info(#{}).
@@ -664,7 +664,7 @@ info() ->
              verbose => non_neg_integer()}) -> ok.
 %% @doc
 %% Displays a table on stdout summing up the supported feature flags,
-%% their state and various informations about them.
+%% their state and various information about them.
 %%
 %% Supported options are:
 %% <ul>

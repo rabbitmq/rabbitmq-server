@@ -386,7 +386,7 @@ process_received_bytes(Bytes, State = #state{socket = Socket,
             ?LOG_ERROR("MQTT detected a packet error on connection ~ts: ~tp", [ConnName, Error]),
             {stop, {shutdown, Error}, State}
     catch _:Reason:Stacktrace ->
-              ?LOG_ERROR("Unparseable MQTT packet received from connection ~ts", [ConnName]),
+              ?LOG_ERROR("Unparsable MQTT packet received from connection ~ts", [ConnName]),
               ?LOG_DEBUG("MQTT cannot parse a packet on connection '~ts', reason: ~tp, "
                          "stacktrace: ~tp, payload (first 100 bytes): ~tp",
                          [ConnName, Reason, Stacktrace, rabbit_mqtt_util:truncate_binary(Bytes, 100)]),

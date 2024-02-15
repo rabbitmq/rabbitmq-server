@@ -31,7 +31,7 @@ defmodule ListBindingsCommandTest do
     }
   end
 
-  test "merge_defaults: adds all keys if none specificed", context do
+  test "merge_defaults: adds all keys if none specified", context do
     default_keys =
       ~w(source_name source_kind destination_name destination_kind routing_key arguments)
 

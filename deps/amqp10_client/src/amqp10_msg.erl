@@ -250,7 +250,7 @@ body_bin(#amqp10_msg{body = #'v1_0.amqp_value'{} = Body}) ->
 %% as soon as sent and no disposition will be issued by the receiver.
 %% Settled=false will delay settlement until a disposition has been received.
 %% A disposition will be notified to the sender by a message of the
-%% following stucture:
+%% following structure:
 %% {amqp10_disposition, {accepted | rejected, DeliveryTag}}
 -spec new(delivery_tag(), amqp10_body() | binary(), boolean()) -> amqp10_msg().
 new(DeliveryTag, Body, Settled) when is_binary(Body) ->
@@ -292,7 +292,7 @@ set_handle(Handle, #amqp10_msg{transfer = T} = Msg) ->
 %% as soon as sent and no disposition will be issued by the receiver.
 %% Settled=false will delay settlement until a disposition has been received.
 %% A disposition will be notified to the sender by a message of the
-%% following stucture:
+%% following structure:
 %% {amqp10_disposition, {accepted | rejected, DeliveryTag}}
 -spec set_settled(boolean(), amqp10_msg()) -> amqp10_msg().
 set_settled(Settled, #amqp10_msg{transfer = T} = Msg) ->

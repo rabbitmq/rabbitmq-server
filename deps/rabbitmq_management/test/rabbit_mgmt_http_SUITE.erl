@@ -1122,7 +1122,7 @@ crashed_queues_test(Config) ->
     passed.
 
 quorum_queues_test(Config) ->
-    %% Test in a loop that no metrics are left behing after deleting a queue
+    %% Test in a loop that no metrics are left behind after deleting a queue
     quorum_queues_test_loop(Config, 5).
 
 quorum_queues_test_loop(_Config, 0) ->

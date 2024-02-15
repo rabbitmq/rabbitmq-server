@@ -570,7 +570,7 @@ init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes, Retry) ->
 record_node_type(NodeType) ->
     %% We record the node type in the Mnesia directory. Not that we care about
     %% the content of this file, but we need to create a file in the Mnesia
-    %% directory fo `is_virgin_node()' to work even with ram nodes.
+    %% directory for `is_virgin_node()' to work even with ram nodes.
     MnesiaDir = dir(),
     Filename = filename:join(MnesiaDir, "node-type.txt"),
     rabbit_file:write_term_file(Filename, [NodeType]).

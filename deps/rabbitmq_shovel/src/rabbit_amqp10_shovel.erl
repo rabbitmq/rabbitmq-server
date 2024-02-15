@@ -406,7 +406,7 @@ set_message_properties(Props, Msg) ->
          (user_id, Ct, M) ->
               amqp10_msg:set_properties(#{user_id => Ct}, M);
          (headers, Headers0, M) when is_list(Headers0) ->
-              %% AMPQ 0.9.1 are added as applicatin properties
+              %% AMPQ 0.9.1 are added as application properties
               %% TODO: filter headers to make safe
               Headers = lists:foldl(
                           fun ({K, _T, V}, Acc) ->

@@ -1065,7 +1065,7 @@ add_replica(_) ->
     ok.
 
 delete_replica(_) ->
-    %% TOOD: replica and leader needs to be tested
+    %% TODO: replica and leader needs to be tested
     E = 1,
     StreamId = atom_to_list(?FUNCTION_NAME),
     LeaderPid = fake_pid(n1),
@@ -1311,7 +1311,7 @@ delete_replica_2(_) ->
     ok.
 
 delete_replica_leader(_) ->
-    %% TOOD: replica and leader needs to be tested
+    %% TODO: replica and leader needs to be tested
     E = 1,
     StreamId = atom_to_list(?FUNCTION_NAME),
     LeaderPid = fake_pid(n1),

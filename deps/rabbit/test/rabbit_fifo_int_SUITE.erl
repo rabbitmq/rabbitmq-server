@@ -106,7 +106,7 @@ basics(Config) ->
                                  case rabbit_fifo_client:handle_ra_event(ClusterName, From, Evt, S0) of
                                      {ok, S1,
                                       [{deliver, C, true,
-                                        [{_Qname, _QRef, MsgId, _SomBool, _Msg}]}]} ->
+                                        [{_Qname, _QRef, MsgId, _SomeBool, _Msg}]}]} ->
                                          {S, _A} = rabbit_fifo_client:F(C, [MsgId], S1),
                                          %% settle applied event
                                          process_ra_event(ClusterName, S, ?RA_EVENT_TIMEOUT);
@@ -428,7 +428,7 @@ lost_delivery(Config) ->
     end,
     % send another message
     {ok, F4, []} = rabbit_fifo_client:enqueue(ClusterName, m2, F3),
-    %% this hsould trigger the fifo client to fetch any missing messages
+    %% this should trigger the fifo client to fetch any missing messages
     %% from the server
     {_, _, _F5} = process_ra_events(
                     receive_ra_events(1, 1), ClusterName, F4, [], [],
@@ -604,7 +604,7 @@ receive_ra_events(Applied, Deliveries, Acc) ->
             exit({missing_events, Applied, Deliveries, Acc})
     end.
 
-%% Flusing the mailbox to later check that deliveries hasn't been received
+%% Flushing the mailbox to later check that deliveries hasn't been received
 receive_ra_events() ->
     receive_ra_events([]).
 

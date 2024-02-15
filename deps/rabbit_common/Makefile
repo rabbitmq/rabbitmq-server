@@ -2,7 +2,7 @@ PROJECT = rabbit_common
 PROJECT_DESCRIPTION = Modules shared by rabbitmq-server and rabbitmq-erlang-client
 
 define PROJECT_APP_EXTRA_KEYS
-%% Hex.pm package informations.
+%% Hex.pm package information.
 	{licenses, ["MPL-2.0"]},
 	{links, [
 	    {"Website", "https://www.rabbitmq.com/"},

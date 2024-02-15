@@ -71,7 +71,7 @@ curl -u guest:guest -v -X PUT -H 'Content-Type: application/json' -d @./shovel.j
 *Note* Either `dest_queue` OR `dest_exchange` can be specified in the `value` stanza of the JSON, but not both.
 
 #### `GET /api/parameters/shovel/{vhost}/{name}`
-Shows the configurtion parameters for a shovel.
+Shows the configuration parameters for a shovel.
 
 **Example**
 

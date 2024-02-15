@@ -205,7 +205,7 @@ multiple_downstreams(Config) ->
       end, upstream_downstream(Config) ++ [q(<<"fed.downstream2">>, Args)]).
 
 message_flow(Config) ->
-    %% TODO: specifc source / target here
+    %% TODO: specific source / target here
     Args = ?config(source_queue_args, Config),
     with_ch(Config,
       fun (Ch) ->

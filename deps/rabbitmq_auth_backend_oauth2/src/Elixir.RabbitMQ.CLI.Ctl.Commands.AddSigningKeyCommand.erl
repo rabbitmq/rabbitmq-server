@@ -63,7 +63,7 @@ validate_json(Json) ->
                 {error, {fields_missing_for_kty, Kty}} ->
                     {validation_failure,
                      {bad_argument,
-                      <<"Key fields are missing fot kty \"", Kty/binary, "\"">>}};
+                      <<"Key fields are missing for kty \"", Kty/binary, "\"">>}};
                 {error, unknown_kty} ->
                     {validation_failure,
                      {bad_argument, <<"\"kty\" field is invalid">>}};

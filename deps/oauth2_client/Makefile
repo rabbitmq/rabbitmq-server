@@ -3,7 +3,7 @@ PROJECT_DESCRIPTION = OAuth2 client from the RabbitMQ Project
 PROJECT_MOD = oauth2_client_app
 
 define PROJECT_APP_EXTRA_KEYS
-%% Hex.pm package informations.
+%% Hex.pm package information.
 	{licenses, ["MPL-2.0"]},
 	{links, [
 	    {"Website", "https://www.rabbitmq.com/"},

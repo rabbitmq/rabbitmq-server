@@ -198,7 +198,7 @@ validation_success_for_AMQP_client(Config) ->
 validation_success_for_AMQP_client1(Config) ->
     %% This test intentionally doesn't whitelist any certificates.
     %% Both the client and the server use certificate/key pairs signed by
-    %% the same root CA. This exercises a verify_fun clause that no ther tests hit.
+    %% the same root CA. This exercises a verify_fun clause that no other tests hit.
     %% Note that when this test is executed together with the HTTP provider group
     %% it runs into unexpected interference and fails, even if TLS app PEM cache is force
     %% cleared. That's why originally each group was made to use a separate node.
@@ -215,7 +215,7 @@ validation_success_for_AMQP_client1(Config) ->
                                                      {cert, Certificate2},
                                                      {key, Key2} | cfg()], 1, 1),
 
-    %% Then: a client presenting a certifcate rooted at the same
+    %% Then: a client presenting a certificate rooted at the same
     %% authority connects successfully.
     {ok, Con} = amqp_connection:start(#amqp_params_network{host = Host,
                                                            port = Port,
@@ -271,7 +271,7 @@ validation_failure_for_AMQP_client1(Config) ->
         closed -> ok;
 
         %% ssl:setopts/2 hangs indefinitely on occasion
-        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occasionally
     end,
 
     %% Clean: server TLS/TCP.
@@ -390,7 +390,7 @@ validate_longer_chain1(Config) ->
                                                                            {versions, ['tlsv1.2']}]}),
 
     % %% When: a client connects and present `CertInter` and `RootCA` but NOT `CertTrusted`
-    % %% Then: the connection is not succcessful
+    % %% Then: the connection is not successful
     {error, Error1} = amqp_connection:start(
                #amqp_params_network{host = Host,
                                     port = Port,
@@ -410,12 +410,12 @@ validate_longer_chain1(Config) ->
         closed -> ok;
 
         %% ssl:setopts/2 hangs indefinitely on occasion
-        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occasionally
     end,
 
     %% When: a client connects and present `CertUntrusted` and `RootCA` and `CertInter`
-    %% Then: the connection is not succcessful
-    %% TODO: for some reason this returns `bad certifice` rather than `unknown ca`
+    %% Then: the connection is not successful
+    %% TODO: for some reason this returns `bad certificate` rather than `unknown ca`
     {error, Error2} = amqp_connection:start(
                #amqp_params_network{host = Host,
                                     port = Port,
@@ -435,7 +435,7 @@ validate_longer_chain1(Config) ->
         closed -> ok;
 
         %% ssl:setopts/2 hangs indefinitely on occasion
-        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occasionally
     end,
 
     %% Clean: client & server TLS/TCP
@@ -484,7 +484,7 @@ validate_chain_without_whitelisted1(Config) ->
         closed -> ok;
 
         %% ssl:setopts/2 hangs indefinitely on occasion
-        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occasionally
     end,
 
     ok = rabbit_networking:stop_tcp_listener(Port).
@@ -572,7 +572,7 @@ removed_certificate_denied_from_AMQP_client1(Config) ->
         closed -> ok;
 
         %% ssl:setopts/2 hangs indefinitely on occasion
-        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occasionally
     end,
 
     %% Clean: server TLS/TCP
@@ -625,7 +625,7 @@ whitelist_directory_DELTA(Config) ->
 
 whitelist_directory_DELTA1(Config) ->
     %% Given: a certificate `Root` which Rabbit can use as a
-    %% root certificate to validate agianst AND three
+    %% root certificate to validate against AND three
     %% certificates which clients can present (the first two
     %% of which are whitelisted).
     Port = port(Config),
@@ -681,7 +681,7 @@ whitelist_directory_DELTA1(Config) ->
         closed -> ok;
 
         %% ssl:setopts/2 hangs indefinitely on occasion
-        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occasionally
     end,
 
     {ok, Conn2} = amqp_connection:start(#amqp_params_network{host = Host,
@@ -750,11 +750,11 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
         closed -> ok;
 
         %% ssl:setopts/2 hangs indefinitely on occasion
-        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occassionally
+        {timeout, {gen_server,call,[_,post_init|_]}} -> ssl_setopts_hangs_occasionally
     end,
     ok = amqp_connection:close(Con),
 
-    %% When: a whitelisted certicate is replaced with one with the same name
+    %% When: a whitelisted certificate is replaced with one with the same name
     ok = whitelist(Config, "bart", CertUpdated),
 
     wait_for_trust_store_refresh(),

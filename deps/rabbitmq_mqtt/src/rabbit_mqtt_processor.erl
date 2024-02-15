@@ -740,7 +740,7 @@ init_trace(VHost, ConnName0) ->
                        ConnName0;
                    false ->
                        %% Tracing does not need connection name.
-                       %% Use less memmory by setting to undefined.
+                       %% Use less memory by setting to undefined.
                        undefined
                end,
     {TraceState, ConnName}.
@@ -1771,7 +1771,7 @@ maybe_send_will(
             Anns0 = #{?ANN_EXCHANGE => ?DEFAULT_EXCHANGE_NAME,
                       ?ANN_ROUTING_KEYS => [QNameBin],
                       ttl => Ttl,
-                      %% Persist message regardless of Will QoS since there is no noticable
+                      %% Persist message regardless of Will QoS since there is no noticeable
                       %% performance benefit if that single message is transient. This ensures that
                       %% delayed Will Messages are not lost after a broker restart.
                       ?ANN_DURABLE => true},

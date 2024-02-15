@@ -27,7 +27,7 @@ all() ->
     ].
 
 
-%% replicate eunit like test resultion
+%% replicate eunit like test resolution
 all_tests() ->
     [F || {F, 1} <- ?MODULE:module_info(functions),
           re:run(atom_to_list(F), "_test$") /= nomatch].
@@ -815,7 +815,7 @@ single_active_consumer_revive_test(C) ->
     ?assertEqual(1, rabbit_fifo:query_messages_checked_out(S6b)),
     ?assertEqual(1, rabbit_fifo:query_messages_total(S6b)),
     %%
-    %% TOOD: test this but without the fallback consumer
+    %% TODO: test this but without the fallback consumer
     %%
     %%
     %%
@@ -1133,7 +1133,7 @@ single_active_consumer_all_disconnected_test(C) ->
     %% assert the consumer fails over to the consumer on n2
     ?assertMatch(#{C2 := #consumer{status = up}}, State2#rabbit_fifo.consumers),
     {State3, _, _} = apply(meta(C, 6), {down, C2Pid, noconnection}, State2),
-    %% assert these no active consumer after both nodes are maked as down
+    %% assert these no active consumer after both nodes are made as down
     ?assertMatch([], maps:to_list(State3#rabbit_fifo.consumers)),
     %% n2 comes back
     {State4, _, _} = apply(meta(C, 7), {nodeup, node(C2Pid)}, State3),
@@ -1448,7 +1448,7 @@ register_enqueuer_test(C) ->
     {State1, ok, [_]} = apply(meta(C, 1), make_register_enqueuer(Pid1), State0),
 
     {State2, ok, _} = apply(meta(C, 2), rabbit_fifo:make_enqueue(Pid1, 1, one), State1),
-    %% register another enqueuer shoudl be ok
+    %% register another enqueuer should be ok
     Pid2 = test_util:fake_pid(node()),
     {State3, ok, [_]} = apply(meta(C, 3), make_register_enqueuer(Pid2), State2),
 

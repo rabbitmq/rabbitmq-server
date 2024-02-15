@@ -387,7 +387,7 @@ load_imdsv2_token_test_() ->
         end},
       {"fail to get imdsv2 token - PUT request is not valid",
         fun() ->
-          meck:expect(httpc, request, 4, {error, {{protocol, 400, messge}, headers, "Missing or Invalid Parameters – The PUT request is not valid."}}),
+          meck:expect(httpc, request, 4, {error, {{protocol, 400, message}, headers, "Missing or Invalid Parameters – The PUT request is not valid."}}),
           ?assertEqual(undefined, rabbitmq_aws_config:load_imdsv2_token())
         end},
       {"successfully get imdsv2 token from instance metadata service",

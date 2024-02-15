@@ -117,7 +117,7 @@ handle_info({gen_event_EXIT, rabbit_sysmon_handler, _}, State) ->
     %%
     %% Our handler should never crash, but it did indeed crash.  If
     %% there's a pathological condition somewhere that's generating
-    %% lots of unforseen things that crash core's custom handler, we
+    %% lots of unforeseen things that crash core's custom handler, we
     %% could make things worse by jumping back into the exploding
     %% volcano.  Wait a little bit before jumping back.  Besides, the
     %% system_monitor data is nice but is not critical: there is no

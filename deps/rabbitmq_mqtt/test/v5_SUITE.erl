@@ -983,7 +983,7 @@ subscription_options_modify(Config) ->
 %% Non‑shared Subscription’s Topic Filter for the current Session, then it MUST replace that
 %% existing Subscription with a new Subscription [MQTT-3.8.4-3]. The Topic Filter in the new
 %% Subscription will be identical to that in the previous Subscription, although its
-%% Subscription Options could be different. [...] Applicaton Messages MUST NOT be lost due
+%% Subscription Options could be different. [...] Application Messages MUST NOT be lost due
 %% to replacing the Subscription [MQTT-3.8.4-4]." [v5 3.8.4]
 %%
 %% This test ensures that messages are not lost when replacing a QoS 1 subscription.

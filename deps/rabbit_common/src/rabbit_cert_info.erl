@@ -273,7 +273,7 @@ utf8_list_from(S) ->
 
 %% The Erlang SSL implementation invents its own representation for
 %% non-ascii strings - looking like [97,{0,0,3,187}] (that's LATIN
-%% SMALL LETTER A followed by GREEK SMALL LETTER LAMDA). We convert
+%% SMALL LETTER A followed by GREEK SMALL LETTER LAMBDA). We convert
 %% this into a list of unicode characters, which we can tell
 %% unicode:characters_to_binary is utf32.
 

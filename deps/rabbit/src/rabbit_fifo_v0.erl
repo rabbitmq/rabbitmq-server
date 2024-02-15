@@ -45,7 +45,7 @@
          dehydrate_state/1,
          normalize/1,
          normalize_for_v1/1,
-         %% getters for coversions
+         %% getters for conversions
          get_field/2,
          get_cfg_field/2,
 
@@ -1436,7 +1436,7 @@ append_log_effects(Effects0, AccMap) ->
               end, Effects0, AccMap).
 
 %% next message is determined as follows:
-%% First we check if there are are prefex returns
+%% First we check if there are are prefix returns
 %% Then we check if there are current returns
 %% then we check prefix msgs
 %% then we check current messages
@@ -1673,7 +1673,7 @@ convert_prefix_msgs(State) ->
     State.
 
 %% creates a dehydrated version of the current state to be cached and
-%% potentially used to for a snaphot at a later point
+%% potentially used to for a snapshot at a later point
 dehydrate_state(#?STATE{messages = Messages,
                          consumers = Consumers,
                          returns = Returns,

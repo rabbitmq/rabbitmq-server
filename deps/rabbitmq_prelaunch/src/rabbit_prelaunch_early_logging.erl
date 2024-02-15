@@ -412,7 +412,7 @@ translate_colors_conf(_, _) ->
 translate_json_formatter_conf(Var, Conf, GenericConfig) ->
     %% log.*.formatter.json.field_map
     %% It indicates several things:
-    %%   - the order of fields; non-mentionned fields go unordered at the end
+    %%   - the order of fields; non-mentioned fields go unordered at the end
     %%     of the JSON object
     %%   - if fields should be renamed
     %%   - if fields should be removed from the final object
@@ -443,7 +443,7 @@ translate_json_formatter_conf(Var, Conf, GenericConfig) ->
 %%
 %% `gl:-' means the `gl' field should be dropped.
 %%
-%% `*:-' means all non-mentionned fields should be dropped.
+%% `*:-' means all non-mentioned fields should be dropped.
 %%
 %% The order of fields in the pattern is important: it tells the order of
 %% fields in the final JSON object.
@@ -481,7 +481,7 @@ parse_json_field_mapping([], Mapping) ->
                              end,
                              Mapping),
     Renames = lists:reverse(Renames0),
-    %% If all non-mentionned fields are to be removed, only the `{$REST,
+    %% If all non-mentioned fields are to be removed, only the `{$REST,
     %% false}' entry is useful.
     Removes = case lists:member({'$REST', false}, Removes0) of
                   true  -> [{'$REST', false}];
@@ -497,7 +497,7 @@ parse_json_field_mapping([], Mapping) ->
 %%
 %% `debug:2' means that the verbosity of the debug level is 2.
 %%
-%% `*:0' means that the verbosity of all non-mentionned levels is 0.
+%% `*:0' means that the verbosity of all non-mentioned levels is 0.
 
 parse_json_verbosity_mapping("") ->
     #{};

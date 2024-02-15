@@ -528,7 +528,7 @@ amqp_amqpl(_Config) ->
     ?assertMatch(#'P_basic'{expiration = <<"20000">>}, Props),
 
     ?assertMatch({_, longstr, <<"apple">>}, header(<<"x-stream-filter">>, HL)),
-    %% these are not coverted as not x- headers
+    %% these are not converted as not x- headers
     ?assertEqual(undefined, header(<<"list">>, HL)),
     ?assertEqual(undefined, header(<<"map">>, HL)),
     ?assertMatch({_ ,array, [{longstr,<<"l">>}]}, header(<<"x-list">>, HL)),
@@ -644,7 +644,7 @@ amqp_to_amqpl_data_body(_Config) ->
 amqp_amqpl_amqp_bodies(_Config) ->
     Props = #'P_basic'{type = <<"amqp-1.0">>},
     Bodies = [
-              #'v1_0.data'{content = <<"helo world">>},
+              #'v1_0.data'{content = <<"hello world">>},
               [#'v1_0.data'{content = <<"hello">>},
                #'v1_0.data'{content = <<"brave">>},
                #'v1_0.data'{content = <<"new">>},

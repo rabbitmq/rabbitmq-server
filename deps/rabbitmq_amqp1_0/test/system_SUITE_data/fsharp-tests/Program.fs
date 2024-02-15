@@ -433,7 +433,7 @@ module Test =
             with
             | :? Amqp.AmqpException as ae ->
                 assertEqual (ae.Error.Condition) (Symbol cond)
-            | _ -> failwith "invalid expection thrown"
+            | _ -> failwith "invalid exception thrown"
 
     let authFailure uri =
         try

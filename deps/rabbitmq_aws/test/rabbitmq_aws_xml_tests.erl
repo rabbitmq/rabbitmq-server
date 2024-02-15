@@ -32,7 +32,7 @@ parse_test_() ->
       Expectation = [{"test", [{"values", [{"example", "value"}, {"example", "value2"}]}]}],
       ?assertEqual(Expectation, rabbitmq_aws_xml:parse(Response))
      end},
-    {"small snippert", fun() ->
+    {"small snippet", fun() ->
       Response = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<test>value</test>",
       Expectation = [{"test", "value"}],
       ?assertEqual(Expectation, rabbitmq_aws_xml:parse(Response))

@@ -147,7 +147,7 @@ auto_grow_drained_node(Config) ->
     ?assertEqual(1, length(Members)),
 
     add_server_to_cluster(Server1, Server0),
-    %% mark server1 as drained, which should mean the node is not a candiate
+    %% mark server1 as drained, which should mean the node is not a candidate
     %% for qq membership
     rabbit_ct_broker_helpers:mark_as_being_drained(Config, Server1),
     rabbit_ct_helpers:await_condition(
@@ -155,7 +155,7 @@ auto_grow_drained_node(Config) ->
         10000),
     add_server_to_cluster(Server2, Server0),
     timer:sleep(5000),
-    %% We have 3 nodes, but one is drained, so it will not be concidered.
+    %% We have 3 nodes, but one is drained, so it will not be considered.
     {ok, Members1, _} = ra:members({queue_utils:ra_name(QQ), Server0}),
     ?assertEqual(1, length(Members1)),
 

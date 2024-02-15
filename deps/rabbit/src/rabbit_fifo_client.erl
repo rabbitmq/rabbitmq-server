@@ -475,10 +475,10 @@ update_machine_state(Server, Conf) ->
             Err
     end.
 
-%% @doc Handles incoming `ra_events'. Events carry both internal "bookeeping"
+%% @doc Handles incoming `ra_events'. Events carry both internal "bookkeeping"
 %% events emitted by the `ra' leader as well as `rabbit_fifo' emitted events such
 %% as message deliveries. All ra events need to be handled by {@module}
-%% to ensure bookeeping, resends and flow control is correctly handled.
+%% to ensure bookkeeping, resends and flow control is correctly handled.
 %%
 %% If the `ra_event' contains a `rabbit_fifo' generated message it will be returned
 %% for further processing.
@@ -537,7 +537,7 @@ handle_ra_event(QName, From, {applied, Seqs},
                       %% Corrs is returned in the wrong order here.
                       %% The wrong order does not matter much because the channel sorts the
                       %% sequence numbers before confirming to the client. But rabbit_fifo_client
-                      %% is sequence numer agnostic: it handles any correlation terms.
+                      %% is sequence number agnostic: it handles any correlation terms.
                       [{settled, QName, Corrs}
                        | lists:reverse(Actions0)]
               end,

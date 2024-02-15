@@ -929,7 +929,7 @@ start(normal, []) ->
         %%
         %% We register the app process under the name `rabbit`. This is
         %% checked by `is_running(Node)` on a remote node. The process
-        %% is also monitord by rabbit_node_monitor.
+        %% is also monitored by rabbit_node_monitor.
         %%
         %% The process name must be registered *before* running the boot
         %% steps: that's when rabbit_node_monitor will set the process
@@ -1596,7 +1596,7 @@ base_product_version() ->
     rabbit_misc:version().
 
 motd_file() ->
-    %% Precendence is:
+    %% Precedence is:
     %%   1. The environment variable;
     %%   2. The `motd_file` configuration parameter;
     %%   3. The default value.

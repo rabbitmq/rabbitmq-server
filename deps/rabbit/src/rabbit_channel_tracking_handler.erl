@@ -11,7 +11,7 @@
 %% on its local node. Similar to the rabbit_connection_tracking_handler,
 %% the primary goal here is to decouple channel tracking from rabbit_reader
 %% and isolate channel tracking to its own process to avoid blocking connection
-%% creation events. Additionaly, creation events are also non-blocking in that
+%% creation events. Additionally, creation events are also non-blocking in that
 %% they spawn a short-live process for updating the tracking tables in realtime.
 %%
 %% Events from other nodes are ignored.

@@ -95,7 +95,7 @@ init([]) ->
 %% which is initialized from the #user.authz_backends attribute. In other words, we
 %% propagate the outcome from the first authentication attempt to the subsequent attempts.
 
-%% See rabbit_direct.erl to see how `authz_bakends` is propagated from
+%% See rabbit_direct.erl to see how `authz_backends` is propagated from
 % amqp_adapter_info.additional_info to the rabbit_access_control module
 
 adapter_info(User, Sock, UniqueId) ->

@@ -25,7 +25,7 @@ APP_ENV = """[
 	    {writer_gc_threshold, 1000000000}
 	  ]"""
 
-APP_EXTRA_KEYS = """%% Hex.pm package informations.
+APP_EXTRA_KEYS = """%% Hex.pm package information.
 	{licenses, ["MPL-2.0"]},
 	{links, [
 	    {"Website", "https://www.rabbitmq.com/"},

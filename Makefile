@@ -266,7 +266,7 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) sort -r < "$@.git-times.txt" | head -n 1 > "$@.git-time.txt"
 # Mix Hex component requires a cache file, otherwise it refuses to build
 # offline... That cache is an ETS table with all the applications we
-# depend on, plus some versioning informations and checksums. There
+# depend on, plus some versioning information and checksums. There
 # are two problems with that: the table contains a date (`last_update`
 # field) and `ets:tab2file()` produces a different file each time it's
 # called.

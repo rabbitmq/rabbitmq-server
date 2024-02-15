@@ -974,7 +974,7 @@ recover(Config) ->
     Perm1 = permute(Servers0),
     Servers1 = lists:nth(rand:uniform(length(Perm1)), Perm1),
 
-    ct:pal("recover: running app stop start for permuation ~w", [Servers1]),
+    ct:pal("recover: running app stop start for permutation ~w", [Servers1]),
     [rabbit_control_helper:command(stop_app, S) || S <- Servers1],
     [rabbit_control_helper:async_command(start_app, S, [], [])
      || S <- lists:reverse(Servers1)],
@@ -2018,7 +2018,7 @@ leader_failover_dedupe(Config) ->
     PermNodes = permute(
                   rabbit_ct_broker_helpers:get_node_configs(Config, nodename)),
     %% pick a random node order for this test
-    %% realle we should run all permuations
+    %% realle we should run all permutations
     Nodes = lists:nth(rand:uniform(length(PermNodes)), PermNodes),
     ct:pal("~ts running with nodes ~w", [?FUNCTION_NAME, Nodes]),
     [_Server1, DownNode, PubNode] = Nodes,

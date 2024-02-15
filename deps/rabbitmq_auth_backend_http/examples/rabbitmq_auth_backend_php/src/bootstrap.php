@@ -18,7 +18,7 @@ use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
 
 /**
- * You must can edit the following users and theyre roles (tags)
+ * You must can edit the following users and their roles (tags)
  */
 $userProvider = new InMemoryUserProvider(array(
     //Admin user
@@ -52,7 +52,7 @@ $userProvider = new InMemoryUserProvider(array(
 /**
  * You can edit the user permissions here
  *
- * $permissions = arrray(
+ * $permissions = array(
  *     '{USERNAME}' => array(
  *         '{VHOST}' => array(
  *             'ip' => '{REGEX_IP}',
