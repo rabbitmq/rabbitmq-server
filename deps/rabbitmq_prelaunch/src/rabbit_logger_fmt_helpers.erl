@@ -115,7 +115,7 @@ level_4letter_lc_name(debug)     -> "dbug";
 level_4letter_lc_name(info)      -> "info";
 level_4letter_lc_name(notice)    -> "noti";
 level_4letter_lc_name(warning)   -> "warn";
-level_4letter_lc_name(error)     -> "error";
+level_4letter_lc_name(error)     -> "erro";
 level_4letter_lc_name(critical)  -> "crit";
 level_4letter_lc_name(alert)     -> "alrt";
 level_4letter_lc_name(emergency) -> "emgc".
