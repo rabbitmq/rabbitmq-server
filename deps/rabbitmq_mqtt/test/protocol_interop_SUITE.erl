@@ -220,7 +220,9 @@ amqp(Config) ->
               #{correlation_id => Correlation,
                 content_type => ContentType},
               Msg2a),
-    Msg2 = amqp10_msg:set_headers(#{durable => true}, Msg2b),
+    %% Use the 2 byte AMQP boolean encoding, see AMQP §1.6.2
+    True = {boolean, true},
+    Msg2 = amqp10_msg:set_headers(#{durable => True}, Msg2b),
     ok = amqp10_client:send_msg(Sender, Msg2),
     receive {amqp10_disposition, {accepted, DTag}} -> ok
     after 1000 -> ct:fail(settled_timeout)

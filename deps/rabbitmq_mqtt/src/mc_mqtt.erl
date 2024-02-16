@@ -542,13 +542,9 @@ amqp_to_utf8_string({T, Val})
   when T =:= double;
        T =:= float ->
     float_to_binary(Val);
-amqp_to_utf8_string(Val)
-  when Val =:= true;
-       Val =:= {boolean, true} ->
+amqp_to_utf8_string(true) ->
     <<"true">>;
-amqp_to_utf8_string(Val)
-  when Val =:= false;
-       Val =:= {boolean, false} ->
+amqp_to_utf8_string(false) ->
     <<"false">>;
 amqp_to_utf8_string({T, _Val})
   when T =:= map;
