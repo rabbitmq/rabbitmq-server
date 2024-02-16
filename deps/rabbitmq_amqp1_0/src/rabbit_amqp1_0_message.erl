@@ -154,7 +154,8 @@ translate_header(Header10, Props) ->
     Props#'P_basic'{
       delivery_mode = case Header10#'v1_0.header'.durable of
                           true -> 2;
-                          _    -> 1
+                          {boolean, true} -> 2;
+                          _ -> 1
                       end,
       priority = unwrap(Header10#'v1_0.header'.priority),
       expiration = to_expiration(Header10#'v1_0.header'.ttl),
