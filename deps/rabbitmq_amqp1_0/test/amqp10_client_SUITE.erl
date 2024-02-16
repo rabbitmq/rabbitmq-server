@@ -139,7 +139,10 @@ reliable_send_receive(Config, Outcome) ->
     %% create an unsettled message,
     %% link will be in "mixed" mode by default
     Msg1 = amqp10_msg:new(DTag1, <<"body-1">>, false),
-    ok = amqp10_client:send_msg(Sender, Msg1),
+    %% Use the 2 byte AMQP boolean encoding, see AMQP §1.6.2
+    True = {boolean, true},
+    Msg2 = amqp10_msg:set_headers(#{durable => True}, Msg1),
+    ok = amqp10_client:send_msg(Sender, Msg2),
     ok = wait_for_settlement(DTag1),
 
     ok = amqp10_client:detach_link(Sender),
@@ -154,8 +157,8 @@ reliable_send_receive(Config, Outcome) ->
                                                         Address,
                                                         unsettled),
     {ok, Msg} = amqp10_client:get_msg(Receiver),
-
     ct:pal("got ~p", [amqp10_msg:body(Msg)]),
+    ?assertEqual(true, amqp10_msg:header(durable, Msg)),
 
     ok = amqp10_client:settle_msg(Receiver, Msg, Outcome),
 
