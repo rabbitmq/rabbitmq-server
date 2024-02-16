@@ -313,8 +313,9 @@ application_properties_as_simple_map(#msg{application_properties = Content},
                     ({{utf8, K}, {_T, V}}, Acc)
                       when ?SIMPLE_VALUE(V) ->
                         Acc#{K => V};
-                    ({{utf8, K}, undefined}, Acc) ->
-                        Acc#{K => undefined};
+                    ({{utf8, K}, V}, Acc)
+                      when V =:= undefined orelse is_boolean(V) ->
+                        Acc#{K => V};
                     (_, Acc)->
                         Acc
                 end, M, Content).
