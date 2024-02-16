@@ -219,7 +219,7 @@ amqp_to_mqtt_amqp_value_section_boolean(_Config) ->
     ?assertEqual(#{'Payload-Format-Indicator' => 1}, Props1),
     ?assertEqual(<<"true">>, iolist_to_binary(Payload1)),
 
-    Val2 = amqp_value({boolean, false}),
+    Val2 = amqp_value(false),
     #mqtt_msg{props = Props2,
               payload = Payload2} = amqp_to_mqtt([Val2]),
     ?assertEqual(#{'Payload-Format-Indicator' => 1}, Props2),
@@ -460,7 +460,7 @@ amqp_mqtt(_Config) ->
           thead(float, 6.0),
           thead(timestamp, 7000),
           thead(byte, 128),
-          thead(boolean, true),
+          {{utf8, <<"boolean1">>}, true},
           {{utf8, <<"boolean2">>}, false},
           {utf8(<<"null">>), null}
          ],
@@ -493,7 +493,7 @@ amqp_mqtt(_Config) ->
                                  <<"6.00000000000000000000e+00">>},
                                 {<<"timestamp">>,<<"7">>},
                                 {<<"byte">>,<<"128">>},
-                                {<<"boolean">>,<<"true">>},
+                                {<<"boolean1">>,<<"true">>},
                                 {<<"boolean2">>,<<"false">>},
                                 {<<"null">>,<<>>}],
                            'Correlation-Data' := CorrIdOut

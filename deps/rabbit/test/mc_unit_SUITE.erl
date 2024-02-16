@@ -333,7 +333,7 @@ amqpl_amqp_bin_amqpl(_Config) ->
 
     ?assertEqual({long, 99}, Get(<<"a-stream-offset">>, AP10)),
     ?assertEqual({utf8, <<"a string">>}, Get(<<"a-string">>, AP10)),
-    ?assertEqual({boolean, false}, Get(<<"a-bool">>, AP10)),
+    ?assertEqual(false, Get(<<"a-bool">>, AP10)),
     ?assertEqual({ubyte, 1}, Get(<<"a-unsignedbyte">>, AP10)),
     ?assertEqual({ushort, 1}, Get(<<"a-unsignedshort">>, AP10)),
     ?assertEqual({uint, 1}, Get(<<"a-unsignedint">>, AP10)),

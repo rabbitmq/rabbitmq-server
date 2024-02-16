@@ -322,19 +322,20 @@ amqp10_app_props_to_amqp091_headers(CurrentHeaders, AppPropsBin) ->
             end,
             lists:foldl(fun(Prop, Acc) -> 
                             case Prop of 
-                                {{utf8, Key}, {ValueType, Value}} -> 
-                                    case type10_to_type091(Key, ValueType, Value) of 
+                                {{utf8, Key}, TypeVal} ->
+                                    case type10_to_type091(Key, TypeVal) of
                                         undefined -> Acc;
                                         Typed -> [Typed |Acc]
                                     end;
-                                _ -> Acc
+                                _ ->
+                                    Acc
                             end
                          end, Hs, AppProps);
         _ -> CurrentHeaders
     end.
-type10_to_type091(Key, Type, Value) -> 
+type10_to_type091(Key, TypeVal) ->
     try
-        rabbit_msg_record:to_091(Key, {Type, Value})
+        rabbit_msg_record:to_091(Key, TypeVal)
     catch
         _:function_clause -> undefined
     end.
