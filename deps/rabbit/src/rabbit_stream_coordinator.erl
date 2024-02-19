@@ -1049,7 +1049,7 @@ phase_delete_member(StreamId, #{node := Node} = Arg, Conf) ->
     fun() ->
             case rabbit_nodes:is_member(Node) of
                 true ->
-                    try osiris_server_sup:delete_child(Node, Conf) of
+                    try osiris:delete_member(Node, Conf) of
                         ok ->
                             rabbit_log:info("~ts: Member deleted for ~ts : on node ~ts",
                                             [?MODULE, StreamId, Node]),
@@ -1071,10 +1071,9 @@ phase_delete_member(StreamId, #{node := Node} = Arg, Conf) ->
             end
     end.
 
-phase_stop_member(StreamId, #{node := Node,
-                              epoch := Epoch} = Arg0, Conf) ->
+phase_stop_member(StreamId, #{node := Node, epoch := Epoch} = Arg0, Conf) ->
     fun() ->
-            try osiris_server_sup:stop_child(Node, StreamId) of
+            try osiris:stop_member(Node, Conf) of
                 ok ->
                     %% get tail
                     try get_replica_tail(Node, Conf) of
@@ -1108,10 +1107,9 @@ phase_stop_member(StreamId, #{node := Node,
             end
     end.
 
-phase_start_writer(StreamId, #{epoch := Epoch,
-                               node := Node} = Args0, Conf) ->
+phase_start_writer(StreamId, #{epoch := Epoch, node := Node} = Args0, Conf) ->
     fun() ->
-            try osiris_writer:start(Conf) of
+            try osiris:start_writer(Conf) of
                 {ok, Pid} ->
                     Args = Args0#{epoch => Epoch, pid => Pid},
                     rabbit_log:info("~ts: started writer ~ts on ~w in ~b",
@@ -2018,7 +2016,6 @@ make_writer_conf(Node, #stream{epoch = Epoch,
           nodes => Nodes,
           replica_nodes => lists:delete(Node, Nodes),
           epoch => Epoch}.
-
 
 find_leader(Members) ->
     case lists:partition(
