@@ -184,5 +184,8 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         hdrs = ["src/rabbit_stream_reader.hrl"],
         app_name = "rabbitmq_stream",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app", "//deps/rabbitmq_stream_common:erlang_app"],
+        deps = [
+            "//deps/rabbit_common:erlang_app",  #keep
+            "//deps/rabbitmq_stream_common:erlang_app",
+        ],
     )
