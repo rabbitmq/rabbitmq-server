@@ -20,4 +20,5 @@
 
 -record(link_ref, {role :: sender | receiver,
                    session :: pid(),
+                   %% locally chosen output handle
                    link_handle :: non_neg_integer()}).

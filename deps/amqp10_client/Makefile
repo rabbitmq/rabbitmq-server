@@ -51,9 +51,6 @@ include erlang.mk
 HEX_TARBALL_FILES += rabbitmq-components.mk \
 		     git-revisions.txt
 
-# Dialyze the tests.
-DIALYZER_OPTS += --src -r test
-
 # --------------------------------------------------------------------
 # ActiveMQ for the testsuite.
 # --------------------------------------------------------------------

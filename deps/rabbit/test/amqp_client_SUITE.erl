@@ -492,7 +492,7 @@ receiver_settle_mode_first(Config) ->
     ?assertEqual(DeliveryIdMsg9, serial_number_increment(DeliveryIdMsg8)),
     Last1 = serial_number_increment(serial_number_increment(DeliveryIdMsg9)),
     ok = amqp10_client_session:disposition(
-           Session, receiver, DeliveryIdMsg8, Last1, true, accepted),
+           Receiver, DeliveryIdMsg8, Last1, true, accepted),
     assert_messages(QName, 8, 7, Config),
 
     %% 2. Ack a range smaller than the number of unacked messages where all delivery IDs
@@ -501,7 +501,7 @@ receiver_settle_mode_first(Config) ->
     DeliveryIdMsg4 = amqp10_msg:delivery_id(Msg4),
     DeliveryIdMsg6 = amqp10_msg:delivery_id(Msg6),
     ok = amqp10_client_session:disposition(
-           Session, receiver, DeliveryIdMsg4, DeliveryIdMsg6, true, accepted),
+           Receiver, DeliveryIdMsg4, DeliveryIdMsg6, true, accepted),
     assert_messages(QName, 5, 4, Config),
 
     %% 3. Ack a range larger than the number of unacked messages where all delivery IDs
@@ -509,7 +509,7 @@ receiver_settle_mode_first(Config) ->
     DeliveryIdMsg2 = amqp10_msg:delivery_id(Msg2),
     DeliveryIdMsg7 = amqp10_msg:delivery_id(Msg7),
     ok = amqp10_client_session:disposition(
-           Session, receiver, DeliveryIdMsg2, DeliveryIdMsg7, true, accepted),
+           Receiver, DeliveryIdMsg2, DeliveryIdMsg7, true, accepted),
     assert_messages(QName, 2, 1, Config),
 
     %% Consume the last message.
@@ -523,16 +523,16 @@ receiver_settle_mode_first(Config) ->
     DeliveryIdMsg10 = amqp10_msg:delivery_id(Msg10),
     Last2 = serial_number_increment(DeliveryIdMsg10),
     ok = amqp10_client_session:disposition(
-           Session, receiver, DeliveryIdMsg1, Last2, true, accepted),
+           Receiver, DeliveryIdMsg1, Last2, true, accepted),
     assert_messages(QName, 0, 0, Config),
 
     %% 5. Ack single delivery ID when there are no unacked messages.
     ok = amqp10_client_session:disposition(
-           Session, receiver, DeliveryIdMsg1, DeliveryIdMsg1, true, accepted),
+           Receiver, DeliveryIdMsg1, DeliveryIdMsg1, true, accepted),
 
     %% 6. Ack multiple delivery IDs when there are no unacked messages.
     ok = amqp10_client_session:disposition(
-           Session, receiver, DeliveryIdMsg1, DeliveryIdMsg6, true, accepted),
+           Receiver, DeliveryIdMsg1, DeliveryIdMsg6, true, accepted),
     assert_messages(QName, 0, 0, Config),
 
     ok = amqp10_client:detach_link(Receiver),
@@ -684,7 +684,7 @@ amqp_stream_amqpl(Config) ->
          #amqp_msg{props = #'P_basic'{type = <<"amqp-1.0">>}}} ->
             ok
     after 5000 ->
-              exit(basic_deliver_timeout)
+              ct:fail(basic_deliver_timeout)
     end,
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     ok = rabbit_ct_client_helpers:close_channel(Ch).
@@ -1736,7 +1736,7 @@ detach_requeues(Config) ->
 
     %% Receiver2 accepts all 4 messages.
     ok = amqp10_client_session:disposition(
-           Session, receiver,
+           Receiver2,
            amqp10_msg:delivery_id(Msg2),
            amqp10_msg:delivery_id(Msg3b),
            true, accepted),
@@ -2328,28 +2328,19 @@ async_notify(SenderSettleMode, QType, Config) ->
     end,
 
     %% Initially, grant 10 credits to the sending queue.
-    %% Whenever credits drops below 5, renew back to 10.
+    %% Whenever the sum of credits and number of unsettled messages drops below 5, renew back to 10.
     ok = amqp10_client:flow_link_credit(Receiver, 10, 5),
 
     %% We should receive all messages.
-    Msgs = receive_messages(Receiver, NumMsgs),
+    Accept = case SenderSettleMode of
+                 settled -> false;
+                 unsettled -> true
+             end,
+    Msgs = receive_all_messages(Receiver, Accept),
     FirstMsg = hd(Msgs),
     LastMsg = lists:last(Msgs),
     ?assertEqual([<<"1">>], amqp10_msg:body(FirstMsg)),
     ?assertEqual([integer_to_binary(NumMsgs)], amqp10_msg:body(LastMsg)),
-
-    case SenderSettleMode of
-        settled ->
-            ok;
-        unsettled ->
-            ok = amqp10_client_session:disposition(
-                   Session,
-                   receiver,
-                   amqp10_msg:delivery_id(FirstMsg),
-                   amqp10_msg:delivery_id(LastMsg),
-                   true,
-                   accepted)
-    end,
 
     %% No further messages should be delivered.
     receive Unexpected -> ct:fail({received_unexpected_message, Unexpected})
@@ -2503,8 +2494,7 @@ queue_and_client_different_nodes(QueueLeaderNode, ClientNode, QueueType, Config)
     ?assertEqual([<<"1">>], amqp10_msg:body(FirstMsg)),
     ?assertEqual([integer_to_binary(NumMsgs)], amqp10_msg:body(LastMsg)),
     ok = amqp10_client_session:disposition(
-           Session,
-           receiver,
+           Receiver,
            amqp10_msg:delivery_id(FirstMsg),
            amqp10_msg:delivery_id(LastMsg),
            true,
@@ -2803,7 +2793,7 @@ stream_filtering(Config) ->
                             #{<<"rabbitmq:stream-offset-spec">> => <<"first">>,
                               <<"rabbitmq:stream-filter">> => <<"apple">>}),
     ok = amqp10_client:flow_link_credit(AppleReceiver, 100, 10),
-    AppleMessages = receive_all_messages(AppleReceiver, []),
+    AppleMessages = receive_all_messages(AppleReceiver, true),
     %% we should get less than all the waves combined
     ?assert(length(AppleMessages) < WaveCount * 3),
     %% client-side filtering
@@ -2824,7 +2814,7 @@ stream_filtering(Config) ->
                                   #{<<"rabbitmq:stream-offset-spec">> => <<"first">>,
                                     <<"rabbitmq:stream-filter">> => [<<"apple">>, <<"orange">>]}),
     ok = amqp10_client:flow_link_credit(AppleOrangeReceiver, 100, 10),
-    AppleOrangeMessages = receive_all_messages(AppleOrangeReceiver, []),
+    AppleOrangeMessages = receive_all_messages(AppleOrangeReceiver, true),
     %% we should get less than all the waves combined
     ?assert(length(AppleOrangeMessages) < WaveCount * 3),
     %% client-side filtering
@@ -2848,7 +2838,7 @@ stream_filtering(Config) ->
                                         <<"rabbitmq:stream-match-unfiltered">> => {boolean, true}}),
     ok = amqp10_client:flow_link_credit(AppleUnfilteredReceiver, 100, 10),
 
-    AppleUnfilteredMessages = receive_all_messages(AppleUnfilteredReceiver, []),
+    AppleUnfilteredMessages = receive_all_messages(AppleUnfilteredReceiver, true),
     %% we should get less than all the waves combined
     ?assert(length(AppleUnfilteredMessages) < WaveCount * 3),
     %% client-side filtering
@@ -3351,10 +3341,16 @@ classic_priority_queue(Config) ->
 %% internal
 %%
 
-receive_all_messages(Receiver, Acc) ->
+receive_all_messages(Receiver, Accept) ->
+    receive_all_messages0(Receiver, Accept, []).
+
+receive_all_messages0(Receiver, Accept, Acc) ->
     receive {amqp10_msg, Receiver, Msg} ->
-                ok = amqp10_client:accept_msg(Receiver, Msg),
-                receive_all_messages(Receiver, [Msg | Acc])
+                case Accept of
+                    true -> ok = amqp10_client:accept_msg(Receiver, Msg);
+                    false -> ok
+                end,
+                receive_all_messages0(Receiver, Accept, [Msg | Acc])
     after 500 ->
               lists:reverse(Acc)
     end.
@@ -3501,7 +3497,7 @@ receive_messages0(Receiver, N, Acc) ->
         {amqp10_msg, Receiver, Msg} -> 
             receive_messages0(Receiver, N - 1, [Msg | Acc])
     after 5000  ->
-              exit({timeout, {num_received, length(Acc)}, {num_missing, N}})
+              ct:fail({timeout, {num_received, length(Acc)}, {num_missing, N}})
     end.
 
 count_received_messages(Receiver) ->

@@ -3,6 +3,23 @@ accept:
 - accept_header
 - accept_neg
 - accept_parser
+amqp10_client:
+- amqp10_client
+- amqp10_client_app
+- amqp10_client_connection
+- amqp10_client_connection_sup
+- amqp10_client_frame_reader
+- amqp10_client_session
+- amqp10_client_sessions_sup
+- amqp10_client_sup
+- amqp10_client_types
+- amqp10_msg
+amqp10_common:
+- amqp10_binary_generator
+- amqp10_binary_parser
+- amqp10_framing
+- amqp10_framing0
+- serial_number
 amqp_client:
 - amqp_auth_mechanisms
 - amqp_channel
@@ -28,23 +45,6 @@ amqp_client:
 - amqp_util
 - rabbit_routing_util
 - uri_parser
-amqp10_client:
-- amqp10_client
-- amqp10_client_app
-- amqp10_client_connection
-- amqp10_client_connection_sup
-- amqp10_client_frame_reader
-- amqp10_client_session
-- amqp10_client_sessions_sup
-- amqp10_client_sup
-- amqp10_client_types
-- amqp10_msg
-amqp10_common:
-- amqp10_binary_generator
-- amqp10_binary_parser
-- amqp10_framing
-- amqp10_framing0
-- serial_number
 aten:
 - aten
 - aten_app
