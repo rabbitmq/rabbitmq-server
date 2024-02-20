@@ -121,8 +121,8 @@ credit_api_v2(Config) ->
                      filter => #{}},
     {ok, QQReceiver1} = amqp10_client:attach_link(Session, QQAttachArgs),
 
-    ok = consume_and_accept(10, CQReceiver1, Session),
-    ok = consume_and_accept(10, QQReceiver1, Session),
+    ok = consume_and_accept(10, CQReceiver1),
+    ok = consume_and_accept(10, QQReceiver1),
 
     ?assertEqual(ok,
                  rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FUNCTION_NAME)),
@@ -133,12 +133,12 @@ credit_api_v2(Config) ->
                           Session, <<"cq receiver 2">>, CQAddr, unsettled),
     {ok, QQReceiver2} = amqp10_client:attach_receiver_link(
                           Session, <<"qq receiver 2">>, QQAddr, unsettled),
-    ok = consume_and_accept(10, CQReceiver2, Session),
-    ok = consume_and_accept(10, QQReceiver2, Session),
+    ok = consume_and_accept(10, CQReceiver2),
+    ok = consume_and_accept(10, QQReceiver2),
 
     %% Consume via with credit API v1
-    ok = consume_and_accept(10, CQReceiver1, Session),
-    ok = consume_and_accept(10, QQReceiver1, Session),
+    ok = consume_and_accept(10, CQReceiver1),
+    ok = consume_and_accept(10, QQReceiver1),
 
     %% Detach the credit API v1 links and attach with the same output handle.
     ok = detach_sync(CQReceiver1),
@@ -147,8 +147,8 @@ credit_api_v2(Config) ->
     {ok, QQReceiver3} = amqp10_client:attach_link(Session, QQAttachArgs),
 
     %% The new links should use credit API v2
-    ok = consume_and_accept(10, CQReceiver3, Session),
-    ok = consume_and_accept(10, QQReceiver3, Session),
+    ok = consume_and_accept(10, CQReceiver3),
+    ok = consume_and_accept(10, QQReceiver3),
 
     flush(pre_drain),
     %% Draining should also work.
@@ -181,12 +181,11 @@ credit_api_v2(Config) ->
     after 5000 -> ct:fail(missing_closed)
     end.
 
-consume_and_accept(NumMsgs, Receiver, Session) ->
+consume_and_accept(NumMsgs, Receiver) ->
     ok = amqp10_client:flow_link_credit(Receiver, NumMsgs, never),
     Msgs = receive_messages(Receiver, NumMsgs),
     ok = amqp10_client_session:disposition(
-           Session,
-           receiver,
+           Receiver,
            amqp10_msg:delivery_id(hd(Msgs)),
            amqp10_msg:delivery_id(lists:last(Msgs)),
            true,

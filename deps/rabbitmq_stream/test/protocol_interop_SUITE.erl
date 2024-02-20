@@ -178,8 +178,7 @@ amqp_credit_multiple_grants(Config) ->
 
     %% Let's ack all of them.
     ok = amqp10_client_session:disposition(
-           Session,
-           receiver,
+           Receiver,
            amqp10_msg:delivery_id(M1),
            amqp10_msg:delivery_id(M4),
            true,
@@ -226,8 +225,7 @@ amqp_credit_multiple_grants(Config) ->
 
     %% Let's ack them all.
     ok = amqp10_client_session:disposition(
-           Session,
-           receiver,
+           Receiver,
            amqp10_msg:delivery_id(M5),
            amqp10_msg:delivery_id(M11),
            true,
