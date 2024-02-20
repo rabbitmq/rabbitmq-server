@@ -1,0 +1,132 @@
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode", "erlc_opts")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlc_opts(
+    name = "erlc_opts",
+    values = select({
+        "@rules_erlang//:debug_build": [
+            "+debug_info",
+        ],
+        "//conditions:default": [
+            "+debug_info",
+            "+deterministic",
+        ],
+    }),
+    visibility = [":__subpackages__"],
+)
+
+erlang_bytecode(
+    name = "other_beam",
+    srcs = [
+        "src/osiris.erl",
+        "src/osiris_app.erl",
+        "src/osiris_bench.erl",
+        "src/osiris_bloom.erl",
+        "src/osiris_counters.erl",
+        "src/osiris_ets.erl",
+        "src/osiris_log.erl",
+        "src/osiris_log_shared.erl",
+        "src/osiris_replica.erl",
+        "src/osiris_replica_reader.erl",
+        "src/osiris_replica_reader_sup.erl",
+        "src/osiris_retention.erl",
+        "src/osiris_server_sup.erl",
+        "src/osiris_sup.erl",
+        "src/osiris_tracking.erl",
+        "src/osiris_util.erl",
+        "src/osiris_writer.erl",
+    ],
+    hdrs = [":public_and_private_hdrs"],
+    app_name = "osiris",
+    dest = "ebin",
+    erlc_opts = "//:erlc_opts",
+    deps = [
+        "@gen_batch_server//:erlang_app",
+    ],
+)
+
+filegroup(
+    name = "beam_files",
+    srcs = [":other_beam"],
+)
+
+filegroup(
+    name = "srcs",
+    srcs = [
+        "src/osiris.erl",
+        "src/osiris_app.erl",
+        "src/osiris_bench.erl",
+        "src/osiris_bloom.erl",
+        "src/osiris_counters.erl",
+        "src/osiris_ets.erl",
+        "src/osiris_log.erl",
+        "src/osiris_log_shared.erl",
+        "src/osiris_replica.erl",
+        "src/osiris_replica_reader.erl",
+        "src/osiris_replica_reader_sup.erl",
+        "src/osiris_retention.erl",
+        "src/osiris_server_sup.erl",
+        "src/osiris_sup.erl",
+        "src/osiris_tracking.erl",
+        "src/osiris_util.erl",
+        "src/osiris_writer.erl",
+    ],
+)
+
+filegroup(
+    name = "private_hdrs",
+    srcs = [
+        "src/osiris.hrl",
+        "src/osiris_peer_shim.hrl",
+    ],
+)
+
+filegroup(name = "public_hdrs")
+
+filegroup(name = "priv")
+
+filegroup(
+    name = "license_files",
+    srcs = [
+        "LICENSE",
+        "LICENSE-APACHE2",
+        "LICENSE-MPL-RabbitMQ",
+    ],
+)
+
+filegroup(
+    name = "public_and_private_hdrs",
+    srcs = [
+        ":private_hdrs",
+        ":public_hdrs",
+    ],
+)
+
+filegroup(
+    name = "all_srcs",
+    srcs = [
+        ":public_and_private_hdrs",
+        ":srcs",
+    ],
+)
+
+erlang_app(
+    name = "erlang_app",
+    srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
+    app_name = "osiris",
+    app_version = "1.7.2",
+    beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
+    deps = [
+        "@gen_batch_server//:erlang_app",
+        "@seshat//:erlang_app",
+    ],
+)
+
+alias(
+    name = "osiris",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
+)
