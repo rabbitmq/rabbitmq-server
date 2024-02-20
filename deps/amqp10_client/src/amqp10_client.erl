@@ -301,16 +301,19 @@ attach_link(Session, AttachArgs) ->
 %% This is asynchronous and will notify completion of the attach request to the
 %% caller using an amqp10_event of the following format:
 %% {amqp10_event, {link, LinkRef, {detached, Why}}}
--spec detach_link(link_ref()) -> _.
+-spec detach_link(link_ref()) -> ok | {error, term()}.
 detach_link(#link_ref{link_handle = Handle, session = Session}) ->
     amqp10_client_session:detach(Session, Handle).
 
-%% @doc Grant credit to a sender.
-%% The amqp10_client will automatically grant Credit to the sender when
-%% the remaining link credit falls below the value of RenewWhenBelow.
-%% If RenewWhenBelow is 'never' the client will never grant more credit. Instead
-%% the caller will be notified when the link_credit reaches 0 with an
-%% amqp10_event of the following format:
+%% @doc Grant Credit to a sender.
+%%
+%% In addition, if RenewWhenBelow is an integer, the amqp10_client will automatically grant more
+%% Credit to the sender when the sum of the remaining link credit and the number of unsettled
+%% messages falls below the value of RenewWhenBelow.
+%% `Credit + RenewWhenBelow - 1` is the maximum number of in-flight unsettled messages.
+%%
+%% If RenewWhenBelow is `never` the amqp10_client will never grant more credit. Instead the caller
+%% will be notified when the link_credit reaches 0 with an amqp10_event of the following format:
 %% {amqp10_event, {link, LinkRef, credit_exhausted}}
 -spec flow_link_credit(link_ref(), Credit :: non_neg_integer(),
                        RenewWhenBelow :: never | pos_integer()) -> ok.
@@ -323,10 +326,16 @@ flow_link_credit(Ref, Credit, RenewWhenBelow) ->
 flow_link_credit(#link_ref{role = receiver, session = Session,
                            link_handle = Handle},
                  Credit, RenewWhenBelow, Drain)
-  when RenewWhenBelow =:= never orelse
+  when
+      %% Drain together with auto renewal doesn't make sense, so disallow it in the API.
+      ((Drain) andalso RenewWhenBelow =:= never
+       orelse not(Drain))
+      andalso
+      %% Check that the RenewWhenBelow value make sense.
+      (RenewWhenBelow =:= never orelse
        is_integer(RenewWhenBelow) andalso
        RenewWhenBelow > 0 andalso
-       RenewWhenBelow =< Credit ->
+       RenewWhenBelow =< Credit) ->
     Flow = #'v1_0.flow'{link_credit = {uint, Credit},
                         drain = Drain},
     ok = amqp10_client_session:flow(Session, Handle, Flow, RenewWhenBelow).
@@ -359,11 +368,10 @@ accept_msg(LinkRef, Msg) ->
 %% the chosen delivery state.
 -spec settle_msg(link_ref(), amqp10_msg:amqp10_msg(),
                  amqp10_client_types:delivery_state()) -> ok.
-settle_msg(#link_ref{role = receiver,
-                     session = Session}, Msg, Settlement) ->
+settle_msg(LinkRef, Msg, Settlement) ->
     DeliveryId = amqp10_msg:delivery_id(Msg),
-    amqp10_client_session:disposition(Session, receiver, DeliveryId,
-                                      DeliveryId, true, Settlement).
+    amqp10_client_session:disposition(LinkRef, DeliveryId, DeliveryId, true, Settlement).
+
 %% @doc Get a single message from a link.
 %% Flows a single link credit then awaits delivery or timeout.
 -spec get_msg(link_ref()) -> {ok, amqp10_msg:amqp10_msg()} | {error, timeout}.

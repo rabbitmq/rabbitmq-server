@@ -514,16 +514,17 @@ subscribe(Config) ->
                                                         <<"sub-receiver">>,
                                                         QueueName, unsettled),
     ok = amqp10_client:flow_link_credit(Receiver, 10, never),
+    [begin
+         receive {amqp10_msg, Receiver, Msg} ->
+                     ok = amqp10_client:accept_msg(Receiver, Msg)
+         after 2000 -> ct:fail(timeout)
+         end
+     end || _ <- lists:seq(1, 10)],
+    ok = assert_no_message(Receiver),
 
-    _ = receive_messages(Receiver, 10),
-    % assert no further messages are delivered
-    timeout = receive_one(Receiver),
-    receive
-        {amqp10_event, {link, Receiver, credit_exhausted}} ->
-            ok
-    after 5000 ->
-              flush(),
-              exit(credit_exhausted_assert)
+    receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
+    after 5000 -> flush(),
+                  exit(credit_exhausted_assert)
     end,
 
     ok = amqp10_client:end_session(Session),
@@ -539,16 +540,121 @@ subscribe_with_auto_flow(Config) ->
                                                          <<"sub-sender">>,
                                                          QueueName),
     await_link(Sender, credited, link_credit_timeout),
-    _ = publish_messages(Sender, <<"banana">>, 10),
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
-                                                        <<"sub-receiver">>,
-                                                        QueueName, unsettled),
-    ok = amqp10_client:flow_link_credit(Receiver, 5, 2),
 
-    _ = receive_messages(Receiver, 10),
+    _ = publish_messages(Sender, <<"banana">>, 20),
+    %% Use sender settle mode 'settled'.
+    {ok, R1} = amqp10_client:attach_receiver_link(
+                 Session, <<"sub-receiver-1">>, QueueName, settled),
+    await_link(R1, attached, attached_timeout),
+    ok = amqp10_client:flow_link_credit(R1, 5, 2),
+    ?assertEqual(20, count_received_messages(R1)),
+    ok = amqp10_client:detach_link(R1),
 
-    % assert no further messages are delivered
-    timeout = receive_one(Receiver),
+    _ = publish_messages(Sender, <<"banana">>, 30),
+    %% Use sender settle mode 'unsettled'.
+    %% This should require us to manually settle message in order to receive more messages.
+    {ok, R2} = amqp10_client:attach_receiver_link(Session, <<"sub-receiver-2">>, QueueName, unsettled),
+    await_link(R2, attached, attached_timeout),
+    ok = amqp10_client:flow_link_credit(R2, 5, 2),
+    %% We should receive exactly 5 messages.
+    [M1, _M2, M3, M4, M5] = receive_messages(R2, 5),
+    ok = assert_no_message(R2),
+
+    %% Even when we accept the first 3 messages, the number of unsettled messages has not yet fallen below 2.
+    %% Therefore, the client should not yet grant more credits to the sender.
+    ok = amqp10_client_session:disposition(
+           R2, amqp10_msg:delivery_id(M1), amqp10_msg:delivery_id(M3), true, accepted),
+    ok = assert_no_message(R2),
+
+    %% When we accept 1 more message (the order in which we accept shouldn't matter, here we accept M5 before M4),
+    %% the number of unsettled messages now falls below 2 (since only M4 is left unsettled).
+    %% Therefore, the client should grant 5 credits to the sender.
+    %% Therefore, we should receive 5 more messages.
+    ok = amqp10_client:accept_msg(R2, M5),
+    [_M6, _M7, _M8, _M9, M10] = receive_messages(R2, 5),
+    ok = assert_no_message(R2),
+
+    %% It shouldn't matter how we settle messages, therefore we use 'rejected' this time.
+    %% Settling all in flight messages should cause us to receive exactly 5 more messages.
+    ok = amqp10_client_session:disposition(
+           R2, amqp10_msg:delivery_id(M4), amqp10_msg:delivery_id(M10), true, rejected),
+    [M11, _M12, _M13, _M14, M15] = receive_messages(R2, 5),
+    ok = assert_no_message(R2),
+
+    %% Dynamically decrease link credit.
+    %% Since we explicitly tell to grant 3 new credits now, we expect to receive 3 more messages.
+    ok = amqp10_client:flow_link_credit(R2, 3, 3),
+    [M16, _M17, M18] = receive_messages(R2, 3),
+    ok = assert_no_message(R2),
+
+    ok = amqp10_client_session:disposition(
+           R2, amqp10_msg:delivery_id(M11), amqp10_msg:delivery_id(M15), true, accepted),
+    %% However, the RenewWhenBelow=3 still refers to all unsettled messages.
+    %% Right now we have 3 messages (M16, M17, M18) unsettled.
+    ok = assert_no_message(R2),
+
+    %% Settling 1 out of these 3 messages causes RenewWhenBelow to fall below 3 resulting
+    %% in 3 new messages to be received.
+    ok = amqp10_client:accept_msg(R2, M18),
+    [_M19, _M20, _M21] = receive_messages(R2, 3),
+    ok = assert_no_message(R2),
+
+    ok = amqp10_client:flow_link_credit(R2, 3, never, true),
+    [_M22, _M23, M24] = receive_messages(R2, 3),
+    ok = assert_no_message(R2),
+
+    %% Since RenewWhenBelow = never, we expect to receive no new messages despite settling.
+    ok = amqp10_client_session:disposition(
+           R2, amqp10_msg:delivery_id(M16), amqp10_msg:delivery_id(M24), true, rejected),
+    ok = assert_no_message(R2),
+
+    ok = amqp10_client:flow_link_credit(R2, 2, never, false),
+    [M25, _M26] = receive_messages(R2, 2),
+    ok = assert_no_message(R2),
+
+    ok = amqp10_client:flow_link_credit(R2, 3, 3),
+    [_M27, _M28, M29] = receive_messages(R2, 3),
+    ok = assert_no_message(R2),
+
+    ok = amqp10_client_session:disposition(
+           R2, amqp10_msg:delivery_id(M25), amqp10_msg:delivery_id(M29), true, accepted),
+    [M30] = receive_messages(R2, 1),
+    ok = assert_no_message(R2),
+    ok = amqp10_client:accept_msg(R2, M30),
+    %% The sender queue is empty now.
+    ok = assert_no_message(R2),
+
+    ok = amqp10_client:flow_link_credit(R2, 3, 1),
+    _ = publish_messages(Sender, <<"banana">>, 1),
+    [M31] = receive_messages(R2, 1),
+    ok = amqp10_client:accept_msg(R2, M31),
+
+    %% Since function flow_link_credit/3 documents
+    %%     "if RenewWhenBelow is an integer, the amqp10_client will automatically grant more
+    %%     Credit to the sender when the sum of the remaining link credit and the number of
+    %%     unsettled messages falls below the value of RenewWhenBelow."
+    %% our expectation is that the amqp10_client has not renewed credit since the sum of
+    %% remaining link credit (2) and unsettled messages (0) is 2.
+    %%
+    %% Therefore, when we publish another 3 messages, we expect to only receive only 2 messages!
+    _ = publish_messages(Sender, <<"banana">>, 5),
+    [M32, M33] = receive_messages(R2, 2),
+    ok = assert_no_message(R2),
+
+    %% When we accept both messages, the sum of the remaining link credit (0) and unsettled messages (0)
+    %% falls below RenewWhenBelow=1 causing the amqp10_client to grant 3 new credits.
+    ok = amqp10_client:accept_msg(R2, M32),
+    ok = assert_no_message(R2),
+    ok = amqp10_client:accept_msg(R2, M33),
+
+    [M35, M36, M37] = receive_messages(R2, 3),
+    ok = amqp10_client:accept_msg(R2, M35),
+    ok = amqp10_client:accept_msg(R2, M36),
+    ok = amqp10_client:accept_msg(R2, M37),
+    %% The sender queue is empty now.
+    ok = assert_no_message(R2),
+
+    ok = amqp10_client:detach_link(R2),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
 
@@ -703,38 +809,6 @@ incoming_heartbeat(Config) ->
 %%% HELPERS
 %%%
 
-receive_messages(Receiver, Num) ->
-    [begin
-         ct:pal("receive_messages ~tp", [T]),
-         ok = receive_one(Receiver)
-     end || T <- lists:seq(1, Num)].
-
-publish_messages(Sender, Data, Num) ->
-    [begin
-        Tag = integer_to_binary(T),
-        Msg = amqp10_msg:new(Tag, Data, false),
-        ok = amqp10_client:send_msg(Sender, Msg),
-        ok = await_disposition(Tag)
-     end || T <- lists:seq(1, Num)].
-
-receive_one(Receiver) ->
-    receive
-        {amqp10_msg, Receiver0, Msg}
-          when Receiver0 =:= Receiver ->
-            amqp10_client:accept_msg(Receiver, Msg)
-    after 2000 ->
-          timeout
-    end.
-
-await_disposition(DeliveryTag) ->
-    receive
-        {amqp10_disposition, {accepted, DeliveryTag0}}
-          when DeliveryTag0 =:= DeliveryTag -> ok
-    after 3000 ->
-              flush(),
-              exit(dispostion_timeout)
-    end.
-
 await_link(Who, What, Err) ->
     receive
         {amqp10_event, {link, Who0, What0}}
@@ -747,6 +821,52 @@ await_link(Who, What, Err) ->
     after 5000 ->
               flush(),
               exit(Err)
+    end.
+
+publish_messages(Sender, Data, Num) ->
+    [begin
+        Tag = integer_to_binary(T),
+        Msg = amqp10_msg:new(Tag, Data, false),
+        ok = amqp10_client:send_msg(Sender, Msg),
+        ok = await_disposition(Tag)
+     end || T <- lists:seq(1, Num)].
+
+await_disposition(DeliveryTag) ->
+    receive
+        {amqp10_disposition, {accepted, DeliveryTag0}}
+          when DeliveryTag0 =:= DeliveryTag -> ok
+    after 3000 ->
+              flush(),
+              ct:fail(dispostion_timeout)
+    end.
+
+count_received_messages(Receiver) ->
+    count_received_messages0(Receiver, 0).
+
+count_received_messages0(Receiver, Count) ->
+    receive
+        {amqp10_msg, Receiver, _Msg} ->
+            count_received_messages0(Receiver, Count + 1)
+    after 200 ->
+              Count
+    end.
+
+receive_messages(Receiver, N) ->
+    receive_messages0(Receiver, N, []).
+
+receive_messages0(_Receiver, 0, Acc) ->
+    lists:reverse(Acc);
+receive_messages0(Receiver, N, Acc) ->
+    receive
+        {amqp10_msg, Receiver, Msg} ->
+            receive_messages0(Receiver, N - 1, [Msg | Acc])
+    after 5000  ->
+              ct:fail({timeout, {num_received, length(Acc)}, {num_missing, N}})
+    end.
+
+assert_no_message(Receiver) ->
+    receive {amqp10_msg, Receiver, Msg} -> ct:fail({unexpected_message, Msg})
+    after 50 -> ok
     end.
 
 to_bin(X) when is_list(X) ->

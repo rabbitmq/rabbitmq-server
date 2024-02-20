@@ -21,7 +21,7 @@
          detach/2,
          transfer/3,
          flow/4,
-         disposition/6
+         disposition/5
         ]).
 
 %% Private API
@@ -131,8 +131,9 @@
          available = 0 :: non_neg_integer(),
          drain = false :: boolean(),
          partial_transfers :: undefined | {#'v1_0.transfer'{}, [binary()]},
-         auto_flow :: never | {auto, RenewWhenBelow :: pos_integer(), Credit :: pos_integer()}
-         }).
+         auto_flow :: never | {auto, RenewWhenBelow :: pos_integer(), Credit :: pos_integer()},
+         incoming_unsettled = #{} :: #{delivery_number() => ok}
+        }).
 
 -record(state,
         {channel :: pos_integer(),
@@ -155,7 +156,6 @@
          connection_config :: amqp10_client_connection:connection_config(),
          outgoing_delivery_id = ?INITIAL_OUTGOING_DELIVERY_ID :: delivery_number(),
          outgoing_unsettled = #{} :: #{delivery_number() => {amqp10_msg:delivery_tag(), Notify :: pid()}},
-         incoming_unsettled = #{} :: #{delivery_number() => output_handle()},
          notify :: pid()
         }).
 
@@ -204,12 +204,16 @@ transfer(Session, Amqp10Msg, Timeout) ->
 flow(Session, Handle, Flow, RenewWhenBelow) ->
     gen_statem:cast(Session, {flow_link, Handle, Flow, RenewWhenBelow}).
 
--spec disposition(pid(), link_role(), delivery_number(), delivery_number(), boolean(),
+%% Sending a disposition on a sender link (with receiver-settle-mode = second)
+%% is currently unsupported.
+-spec disposition(link_ref(), delivery_number(), delivery_number(), boolean(),
                   amqp10_client_types:delivery_state()) -> ok.
-disposition(Session, Role, First, Last, Settled, DeliveryState) ->
-    gen_statem:call(Session, {disposition, Role, First, Last, Settled,
+disposition(#link_ref{role = receiver,
+                      session = Session,
+                      link_handle = Handle},
+            First, Last, Settled, DeliveryState) ->
+    gen_statem:call(Session, {disposition, Handle, First, Last, Settled,
                               DeliveryState}, ?TIMEOUT).
-
 
 
 %% -------------------------------------------------------------------
@@ -277,7 +281,7 @@ mapped(cast, 'end', State) ->
     send_end(State),
     {next_state, end_sent, State};
 mapped(cast, {flow_link, OutHandle, Flow0, RenewWhenBelow}, State0) ->
-    State = send_flow_link(fun send/2, OutHandle, Flow0, RenewWhenBelow, State0),
+    State = send_flow_link(OutHandle, Flow0, RenewWhenBelow, State0),
     {keep_state, State};
 mapped(cast, {flow_session, Flow0 = #'v1_0.flow'{incoming_window = {uint, IncomingWindow}}},
        #state{next_incoming_id = NII,
@@ -367,45 +371,43 @@ mapped(cast, {#'v1_0.transfer'{handle = {uint, InHandle},
     State = book_partial_transfer_received(
               State0#state{links = Links#{OutHandle => Link1}}),
     {keep_state, State};
-mapped(cast, {#'v1_0.transfer'{handle = {uint, InHandle},
-                               delivery_id = MaybeDeliveryId,
-                               settled = Settled} = Transfer0, Payload0},
-       #state{incoming_unsettled = Unsettled0} = State0) ->
-
+mapped(cast, {Transfer0 = #'v1_0.transfer'{handle = {uint, InHandle}},
+              Payload0}, State0) ->
     {ok, #link{target = {pid, TargetPid},
-               output_handle = OutHandle,
-               ref = LinkRef} = Link0} =
-        find_link_by_input_handle(InHandle, State0),
+               ref = LinkRef,
+               incoming_unsettled = Unsettled
+              } = Link0} = find_link_by_input_handle(InHandle, State0),
 
-    {Transfer, Payload, Link1} = complete_partial_transfer(Transfer0, Payload0, Link0),
+    {Transfer = #'v1_0.transfer'{settled = Settled,
+                                 delivery_id = {uint, DeliveryId}},
+     Payload, Link1} = complete_partial_transfer(Transfer0, Payload0, Link0),
+
     Msg = decode_as_msg(Transfer, Payload),
-
-    % stash the DeliveryId - not sure for what yet
-    Unsettled = case MaybeDeliveryId of
-                    {uint, DeliveryId} when Settled =/= true ->
-                        Unsettled0#{DeliveryId => OutHandle};
-                    _ ->
-                        Unsettled0
-                end,
-
+    Link2 = case Settled of
+                true ->
+                    Link1;
+                _ ->
+                    %% "If not set on the first (or only) transfer for a (multi-transfer) delivery,
+                    %% then the settled flag MUST be interpreted as being false." [2.7.5]
+                    Link1#link{incoming_unsettled = Unsettled#{DeliveryId => ok}}
+            end,
     % link bookkeeping
     % notify when credit is exhausted (link_credit = 0)
     % detach the Link with a transfer-limit-exceeded error code if further
     % transfers are received
-    State1 = State0#state{incoming_unsettled = Unsettled},
-    case book_transfer_received(State1, Link1) of
-        {ok, Link2, State2} ->
+    case book_transfer_received(State0, Link2) of
+        {ok, Link3, State1} ->
             % deliver
             TargetPid ! {amqp10_msg, LinkRef, Msg},
-            State = auto_flow(Link2, State2),
+            State = auto_flow(Link3, State1),
             {keep_state, State};
-        {credit_exhausted, Link2, State} ->
+        {credit_exhausted, Link3, State} ->
             TargetPid ! {amqp10_msg, LinkRef, Msg},
-            notify_credit_exhausted(Link2),
+            notify_credit_exhausted(Link3),
             {keep_state, State};
-        {transfer_limit_exceeded, Link2, State} ->
-            logger:warning("transfer_limit_exceeded for link ~tp", [Link2]),
-            Link = detach_with_error_cond(Link2, State,
+        {transfer_limit_exceeded, Link3, State} ->
+            logger:warning("transfer_limit_exceeded for link ~tp", [Link3]),
+            Link = detach_with_error_cond(Link3, State,
                                            ?V_1_0_LINK_ERROR_TRANSFER_LIMIT_EXCEEDED),
             {keep_state, update_link(Link, State)}
     end;
@@ -501,12 +503,15 @@ mapped({call, From},
     end;
 
 mapped({call, From},
-       {disposition, Role, First, Last, Settled0, DeliveryState},
-       #state{incoming_unsettled = Unsettled0} = State0) ->
+       {disposition, OutputHandle, First, Last, Settled0, DeliveryState},
+       #state{links = Links} = State0) ->
+    #{OutputHandle := Link0 = #link{incoming_unsettled = Unsettled0}} = Links,
     Unsettled = serial_number:foldl(fun maps:remove/2, Unsettled0, First, Last),
-    State = State0#state{incoming_unsettled = Unsettled},
+    Link = Link0#link{incoming_unsettled = Unsettled},
+    State1 = State0#state{links = Links#{OutputHandle := Link}},
+    State = auto_flow(Link, State1),
     Disposition = #'v1_0.disposition'{
-                     role = translate_role(Role),
+                     role = translate_role(receiver),
                      first = {uint, First},
                      last = {uint, Last},
                      settled = Settled0,
@@ -599,7 +604,7 @@ send_transfer(Transfer0, Parts0, MaxMessageSize, #state{socket = Socket,
            {ok, length(Frames)}
     end.
 
-send_flow_link(Send, OutHandle,
+send_flow_link(OutHandle,
                #'v1_0.flow'{link_credit = {uint, Credit}} = Flow0, RenewWhenBelow,
                #state{links = Links,
                       next_incoming_id = NII,
@@ -625,7 +630,7 @@ send_flow_link(Send, OutHandle,
                    %% initial attach frame from the sender this field MUST NOT be set." [2.7.4]
                    delivery_count = maybe_uint(DeliveryCount),
                    available = uint(Available)},
-    ok = Send(Flow, State),
+    ok = send(Flow, State),
     State#state{links = Links#{OutHandle =>
                                Link#link{link_credit = Credit,
                                          auto_flow = AutoFlow}}}.
@@ -777,8 +782,9 @@ send_attach(Send, #{name := Name, role := Role} = Args, {FromPid, _},
                             max_message_size = MaxMessageSize},
     ok = Send(Attach, State),
 
+    LinkRef = make_link_ref(element(1, Role), self(), OutHandle),
     Link = #link{name = Name,
-                 ref = make_link_ref(element(1, Role), self(), OutHandle),
+                 ref = LinkRef,
                  output_handle = OutHandle,
                  state = attach_sent,
                  role = element(1, Role),
@@ -790,7 +796,7 @@ send_attach(Send, #{name := Name, role := Role} = Args, {FromPid, _},
 
     {State#state{links = Links#{OutHandle => Link},
                  next_link_handle = NextLinkHandle,
-                 link_index = LinkIndex#{Name => OutHandle}}, Link#link.ref}.
+                 link_index = LinkIndex#{Name => OutHandle}}, LinkRef}.
 
 -spec handle_session_flow(#'v1_0.flow'{}, #state{}) -> #state{}.
 handle_session_flow(#'v1_0.flow'{next_incoming_id = MaybeNII,
@@ -908,7 +914,6 @@ translate_delivery_state({modified,
 translate_delivery_state(released) -> #'v1_0.released'{};
 translate_delivery_state(received) -> #'v1_0.received'{}.
 
-translate_role(sender) -> false;
 translate_role(receiver) -> true.
 
 maybe_notify_link_credit(#link{role = sender,
@@ -987,9 +992,11 @@ book_transfer_received(#state{next_incoming_id = NID,
 
 auto_flow(#link{link_credit = LC,
                 auto_flow = {auto, RenewWhenBelow, Credit},
-                output_handle = OutHandle}, State)
-  when LC < RenewWhenBelow ->
-    send_flow_link(fun send/2, OutHandle,
+                output_handle = OutHandle,
+                incoming_unsettled = Unsettled},
+          State)
+  when LC + map_size(Unsettled) < RenewWhenBelow ->
+    send_flow_link(OutHandle,
                    #'v1_0.flow'{link_credit = {uint, Credit}},
                    RenewWhenBelow, State);
 auto_flow(_, State) ->
@@ -1045,7 +1052,8 @@ socket_send0({tcp, Socket}, Data) ->
 socket_send0({ssl, Socket}, Data) ->
     ssl:send(Socket, Data).
 
--spec make_link_ref(_, _, _) -> link_ref().
+-spec make_link_ref(link_role(), pid(), output_handle()) ->
+    link_ref().
 make_link_ref(Role, Session, Handle) ->
     #link_ref{role = Role, session = Session, link_handle = Handle}.
 
@@ -1100,7 +1108,6 @@ format_status(Status = #{data := Data0}) ->
            connection_config = ConnectionConfig,
            outgoing_delivery_id = OutgoingDeliveryId,
            outgoing_unsettled = OutgoingUnsettled,
-           incoming_unsettled = IncomingUnsettled,
            notify = Notify
           } = Data0,
     Links = maps:map(
@@ -1119,7 +1126,8 @@ format_status(Status = #{data := Data0}) ->
                         available = Available,
                         drain = Drain,
                         partial_transfers = PartialTransfers0,
-                        auto_flow = AutoFlow
+                        auto_flow = AutoFlow,
+                        incoming_unsettled = IncomingUnsettled
                        }) ->
                       PartialTransfers = case PartialTransfers0 of
                                              undefined ->
@@ -1141,7 +1149,9 @@ format_status(Status = #{data := Data0}) ->
                         available => Available,
                         drain => Drain,
                         partial_transfers => PartialTransfers,
-                        auto_flow => AutoFlow}
+                        auto_flow => AutoFlow,
+                        incoming_unsettled => maps:size(IncomingUnsettled)
+                       }
               end, Links0),
     Data = #{channel => Channel,
              remote_channel => RemoteChannel,
@@ -1160,7 +1170,6 @@ format_status(Status = #{data := Data0}) ->
              connection_config => maps:remove(sasl, ConnectionConfig),
              outgoing_delivery_id => OutgoingDeliveryId,
              outgoing_unsettled => maps:size(OutgoingUnsettled),
-             incoming_unsettled => maps:size(IncomingUnsettled),
              notify => Notify},
     Status#{data := Data}.
 
