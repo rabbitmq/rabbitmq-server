@@ -107,7 +107,7 @@ all_test_beam_files(name = "all_test_beam_files")
 test_suite_beam_files(name = "test_suite_beam_files")
 
 alias(
-    name = "rabbitmq_oauth2_client",
+    name = "oauth2_client",
     actual = ":erlang_app",
     visibility = ["//visibility:public"],
 )
@@ -126,9 +126,3 @@ rabbitmq_integration_suite(
 )
 
 assert_suites()
-
-alias(
-    name = "oauth2_client",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
-)
