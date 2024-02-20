@@ -1396,9 +1396,16 @@ is_match(Subj, E) ->
    nomatch /= re:run(Subj, E).
 
 file_handle_leader_reservation(QName) ->
-    {ok, Q} = rabbit_amqqueue:lookup(QName),
-    ClusterSize = length(get_nodes(Q)),
-    file_handle_cache:set_reservation(2 + ClusterSize).
+    try
+        {ok, Q} = rabbit_amqqueue:lookup(QName),
+        ClusterSize = length(get_nodes(Q)),
+        file_handle_cache:set_reservation(2 + ClusterSize)
+    catch Class:Err ->
+              rabbit_log:warning("~s:~s/~b failed with ~w ~w",
+                                 [?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY,
+                                  Class, Err])
+    end.
+
 
 file_handle_other_reservation() ->
     file_handle_cache:set_reservation(2).
