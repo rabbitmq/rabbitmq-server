@@ -302,6 +302,7 @@ erlang_package.hex_package(
     version = "1.7.3",
 )
 
+# bazel run gazelle-update-repos -- osiris@1.7.2=github.com/rabbitmq/osiris@v1.7.2
 erlang_package.git_package(
     name = "osiris",
     build_file = "@rabbitmq-server//bazel:BUILD.osiris",
