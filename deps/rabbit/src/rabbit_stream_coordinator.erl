@@ -20,7 +20,9 @@
          tick/2,
          version/0,
          which_module/1,
-         overview/1,
+         overview/1]).
+
+-export([update_config/2,
          policy_changed/1]).
 
 %% coordinator API
@@ -236,16 +238,38 @@ delete_replica(StreamId, Node) ->
 
 policy_changed(Q) when ?is_amqqueue(Q) ->
     StreamId = maps:get(name, amqqueue:get_type_state(Q)),
+    Config = rabbit_stream_queue:update_stream_conf(Q, #{}),
+    case update_config(Q, Config) of
+        {ok, ok, _} = Res ->
+            Res;
+        {error, feature_not_enabled} ->
+            %% backwards compatibility
+            %% TODO: remove in future
+            process_command({policy_changed, StreamId, #{queue => Q}});
+        Err ->
+            Err
+    end.
+
+-spec update_config(amqqueue:amqqueue(), #{atom() => term()}) ->
+    {ok, ok, ra:server_id()} | {error, not_supported | term()}.
+update_config(Q, Config)
+  when ?is_amqqueue(Q) andalso is_map(Config) ->
     case rabbit_feature_flags:is_enabled(stream_update_config_command) of
         true ->
-            %% there are the only two configuration keys that are safe to
+            %% there are the only a few configuration keys that are safe to
             %% update
-            Conf = maps:with([filter_size,
-                              retention],
-                             rabbit_stream_queue:update_stream_conf(Q, #{})),
-            process_command({update_config, StreamId, Conf});
+            StreamId = maps:get(name, amqqueue:get_type_state(Q)),
+            case maps:with([filter_size,
+                            retention,
+                            writer_mod,
+                            replica_mod], Config) of
+                Conf when map_size(Conf) > 0 ->
+                    process_command({update_config, StreamId, Conf});
+                _ ->
+                    {error, no_updatable_keys}
+            end;
         false ->
-            process_command({policy_changed, StreamId, #{queue => Q}})
+            {error, feature_not_enabled}
     end.
 
 sac_state(#?MODULE{single_active_consumer = SacState}) ->
@@ -1016,7 +1040,7 @@ phase_start_replica(StreamId, #{epoch := Epoch,
                 {error, already_present} ->
                     %% need to remove child record if this is the case
                     %% can it ever happen?
-                    _ = osiris_replica:stop(Node, Conf0),
+                    _ = osiris:stop_member(Node, Conf0),
                     send_action_failed(StreamId, starting, Args);
                 {error, {already_started, Pid}} ->
                     %% TODO: we need to check that the current epoch is the same
@@ -1073,7 +1097,7 @@ phase_delete_member(StreamId, #{node := Node} = Arg, Conf) ->
 
 phase_stop_member(StreamId, #{node := Node, epoch := Epoch} = Arg0, Conf) ->
     fun() ->
-            try osiris:stop_member(Node, Conf) of
+            try osiris_member:stop(Node, Conf) of
                 ok ->
                     %% get tail
                     try get_replica_tail(Node, Conf) of
@@ -1092,13 +1116,7 @@ phase_stop_member(StreamId, #{node := Node, epoch := Epoch} = Arg0, Conf) ->
                                                [?MODULE, StreamId, Node, Epoch, Err]),
                             maybe_sleep(Err),
                             send_action_failed(StreamId, stopping, Arg0)
-                    end;
-                Err ->
-                    rabbit_log:warning("~ts: failed to stop "
-                                       "member ~ts ~w Error: ~w",
-                                       [?MODULE, StreamId, Node, Err]),
-                    maybe_sleep(Err),
-                    send_action_failed(StreamId, stopping, Arg0)
+                    end
             catch _:Err ->
                       rabbit_log:warning("~ts: failed to stop member ~ts ~w Error: ~w",
                                          [?MODULE, StreamId, Node, Err]),
