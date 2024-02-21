@@ -1006,8 +1006,7 @@ phase_start_writer(StreamId, #{epoch := Epoch, node := Node} = Args0, Conf) ->
                                        [?MODULE, StreamId, Node, Epoch, Err]),
                     send_action_failed(StreamId, starting, Args0)
             catch _:Err:Stack ->
-                    rabbit_log:warning("~ts: failed to start writer ~ts on ~ts
-    in ~b Error: ~w ~n~p",
+                    rabbit_log:warning("~ts: failed to start writer ~ts on ~ts in ~b Error: ~w ~n~p",
                                        [?MODULE, StreamId, Node, Epoch, Err, Stack]),
                     send_action_failed(StreamId, starting, Args0)
             end
