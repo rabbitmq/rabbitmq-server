@@ -160,11 +160,9 @@ create_stream(Q0) ->
                            args_policy_lookup(<<"initial-cluster-size">>,
                                               fun policy_precedence/2, Q0)),
     {Leader, Followers} = rabbit_queue_location:select_leader_and_followers(Q0, InitialClusterSize),
-    WriterMod = application:get_env(rabbit, stream_writer_module, osiris_writer),
     Conf = maps:merge(Conf0, #{nodes => [Leader | Followers],
                                leader_node => Leader,
-                               replica_nodes => Followers,
-                               writer_mod => WriterMod}),
+                               replica_nodes => Followers}),
     Q1 = amqqueue:set_type_state(Q0, Conf),
     case rabbit_amqqueue:internal_declare(Q1, false) of
         {created, Q} ->
