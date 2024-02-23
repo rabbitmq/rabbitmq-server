@@ -903,6 +903,12 @@ handle_control({Txfr = #'v1_0.transfer'{handle = ?UINT(Handle)}, MsgPart},
                            "Unknown link handle: ~p", [Handle])
     end;
 
+%% Although the AMQP message format [3.2] requires a body, it is valid to send a transfer frame without payload.
+%% For example, when a large multi transfer message is streamed using the ProtonJ2 client, the client could send
+%% a final #'v1_0.transfer'{more=false} frame without a payload.
+handle_control(Txfr = #'v1_0.transfer'{}, State) ->
+    handle_control({Txfr, <<>>}, State);
+
 %% Flow control. These frames come with two pieces of information:
 %% the session window, and optionally, credit for a particular link.
 %% We'll deal with each of them separately.
