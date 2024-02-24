@@ -421,6 +421,9 @@ start_timer(State) ->
 interval(#state{alarmed      = true,
                 max_interval = MaxInterval}) ->
     MaxInterval;
+interval(#state{actual       = 'NaN',
+                max_interval = MaxInterval}) ->
+    MaxInterval;
 interval(#state{limit        = Limit,
                 actual       = Actual,
                 min_interval = MinInterval,
