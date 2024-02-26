@@ -1611,8 +1611,7 @@ incoming_link_transfer(
                                        "rcv-settle-mode second not supported", []);
                 false -> ok
             end,
-            Opts = #{correlation => {HandleInt, DeliveryId},
-                     flow => noflow},
+            Opts = #{correlation => {HandleInt, DeliveryId}},
             Qs0 = rabbit_amqqueue:lookup_many(QNames),
             Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
             case rabbit_queue_type:deliver(Qs, Mc, Opts, QStates0) of
