@@ -309,8 +309,6 @@ handle_call(Msg, _From, State) ->
 
 handle_info(timeout, State) ->
     noreply(State);
-handle_info({bump_credit, _IgnoreMsg}, State) ->
-    noreply(State);
 handle_info({{'DOWN', QName}, _MRef, process, QPid, Reason},
             #state{queue_states = QStates0,
                    stashed_eol = Eol} = State0) ->
@@ -1613,7 +1611,8 @@ incoming_link_transfer(
                                        "rcv-settle-mode second not supported", []);
                 false -> ok
             end,
-            Opts = #{correlation => {HandleInt, DeliveryId}},
+            Opts = #{correlation => {HandleInt, DeliveryId},
+                     flow => noflow},
             Qs0 = rabbit_amqqueue:lookup_many(QNames),
             Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
             case rabbit_queue_type:deliver(Qs, Mc, Opts, QStates0) of
