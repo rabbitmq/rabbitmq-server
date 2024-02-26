@@ -550,6 +550,6 @@ field will be ignored as long as the token provides a client ID.
 
 ## License and Copyright
 
-(c) 2016-2023 VMware, Inc. or its affiliates.
+(c) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 Released under the Mozilla Public License 2.0, same as RabbitMQ.

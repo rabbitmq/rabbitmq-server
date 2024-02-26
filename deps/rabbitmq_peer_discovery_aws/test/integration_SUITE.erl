@@ -128,6 +128,7 @@ register_tagged_task(Config) ->
     RabbitmqDefaultUser = ?config(rabbitmq_default_user, Config),
     RabbitmqDefaultPass = ?config(rabbitmq_default_pass, Config),
     RabbitmqConf = string:join([
+                                "log.console.level = debug",
                                 "default_user = " ++ RabbitmqDefaultUser,
                                 "default_pass = " ++ RabbitmqDefaultPass,
                                 "cluster_formation.peer_discovery_backend = aws",
@@ -141,6 +142,7 @@ register_autoscaled_task(Config) ->
     RabbitmqDefaultUser = ?config(rabbitmq_default_user, Config),
     RabbitmqDefaultPass = ?config(rabbitmq_default_pass, Config),
     RabbitmqConf = string:join([
+                                "log.console.level = debug",
                                 "default_user = " ++ RabbitmqDefaultUser,
                                 "default_pass = " ++ RabbitmqDefaultPass,
                                 "cluster_formation.peer_discovery_backend = aws",

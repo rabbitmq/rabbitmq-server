@@ -262,6 +262,9 @@ handle_downstream_down(Reason, _Args, State) ->
 
 %% If the upstream channel goes down for an intelligible reason, just
 %% log it and die quietly.
+handle_upstream_down(shutdown, {Upstream, UParams, XName}, State) ->
+    rabbit_federation_link_util:connection_error(
+      remote, {upstream_channel_down, shutdown}, Upstream, UParams, XName, State);
 handle_upstream_down({shutdown, Reason}, {Upstream, UParams, XName}, State) ->
     rabbit_federation_link_util:connection_error(
       remote, {upstream_channel_down, Reason}, Upstream, UParams, XName, State);

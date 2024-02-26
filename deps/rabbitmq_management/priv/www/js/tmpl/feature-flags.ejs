@@ -1,13 +1,13 @@
 <h1>Feature Flags</h1>
   <%
-       var needs_enable = false;
+       var needs_enabling = false;
        for (var i = 0; i < feature_flags.length; i++) {
          var feature_flag = feature_flags[i];
          if (feature_flag.state == "disabled" && feature_flag.stability != "experimental") {
-           needs_enable = true;
+           needs_enabling = true;
          }
        }
-  if (needs_enable) { %>
+  if (needs_enabling) { %>
      <p class="warning">
         All stable feature flags must be enabled after completing an upgrade. Without enabling all flags, upgrading to future minor or major versions of RabbitMQ may not be possible. <a href="https://www.rabbitmq.com/feature-flags.html">[Learn more]</a>
      </p>
@@ -48,7 +48,7 @@
               <p><span>&#9888;</span>Disabled!</p>
            <% } %>
            <% if (feature_flag.state == "disabled") { %>
-           <form action="#/feature-flags-enable" method="put" style="display: inline-block">
+           <form action="#/feature-flags-enable" method="put" style="display: inline-block" class="enable-feature-flag">
            <input type="hidden" name="name" value="<%= fmt_string(feature_flag.name) %>"/>
            <input type="submit" value="Enable" class="c"/>
            </form>

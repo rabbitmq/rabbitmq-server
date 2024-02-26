@@ -489,11 +489,10 @@ process_recovery_terms(Terms) ->
         PRef      -> {PRef, Terms}
     end.
 
-%% If queue-version is undefined, we assume v2 starting with RabbitMQ 3.13.0.
 queue_version(Q) ->
     Resolve = fun(_, ArgVal) -> ArgVal end,
     case rabbit_queue_type_util:args_policy_lookup(<<"queue-version">>, Resolve, Q) of
-        undefined -> rabbit_misc:get_env(rabbit, classic_queue_default_version, 2);
+        undefined -> rabbit_misc:get_env(rabbit, classic_queue_default_version, 1);
         Vsn when is_integer(Vsn) -> Vsn;
         Vsn -> binary_to_integer(Vsn)
     end.
@@ -1229,7 +1228,7 @@ oldest_message_received_timestamp(Q3, RPA) ->
     Timestamps =
         [Timestamp
          || HeadMsg <- HeadMsgs,
-            Timestamp <- [mc:get_annotation(rts, HeadMsg)],
+            Timestamp <- [mc:get_annotation(?ANN_RECEIVED_AT_TIMESTAMP, HeadMsg)],
             Timestamp /= undefined
         ],
 

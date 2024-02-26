@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_stream).
@@ -87,15 +87,19 @@ port() ->
     end.
 
 port_from_listener() ->
-    Listeners = rabbit_networking:node_listeners(node()),
-    Port =
+    try
+        Listeners = rabbit_networking:node_listeners(node()),
         lists:foldl(fun (#listener{port = Port, protocol = stream}, _Acc) ->
                             Port;
                         (_, Acc) ->
                             Acc
                     end,
-                    undefined, Listeners),
-    Port.
+                    undefined, Listeners)
+    catch error:Reason ->
+              %% can happen if a remote node calls and the current has not fully started yet
+              rabbit_log:info("Error while retrieving stream plugin port: ~tp", [Reason]),
+              {error, Reason}
+    end.
 
 tls_port() ->
     case application:get_env(rabbitmq_stream, advertised_tls_port,
@@ -108,16 +112,20 @@ tls_port() ->
     end.
 
 tls_port_from_listener() ->
-    Listeners = rabbit_networking:node_listeners(node()),
-    Port =
+    try
+        Listeners = rabbit_networking:node_listeners(node()),
         lists:foldl(fun (#listener{port = Port, protocol = 'stream/ssl'},
                          _Acc) ->
                             Port;
                         (_, Acc) ->
                             Acc
                     end,
-                    undefined, Listeners),
-    Port.
+                    undefined, Listeners)
+        catch error:Reason ->
+        %% can happen if a remote node calls and the current has not fully started yet
+        rabbit_log:info("Error while retrieving stream plugin port: ~tp", [Reason]),
+        {error, Reason}
+    end.
 
 stop(_State) ->
     ok.

@@ -3,12 +3,12 @@
   var used_deprecated_features_names = [];
   for (var i = 0; i < used_deprecated_features.length; i++) {
       used_deprecated_features_names.push(used_deprecated_features[i].name);
-  var needs_deprecate = false;
+  var needs_deprecating = false;
   if (used_deprecated_features.length > 0) {
-      needs_deprecate = true;
+      needs_deprecating = true;
   }
   }
-  if (needs_deprecate) { %>
+  if (needs_deprecating) { %>
      <p class="warning">
         Deprecated features are being used. While using deprecated features, upgrading to future minor or major versions of RabbitMQ may not be possible. <a href="https://www.rabbitmq.com/feature-flags.html">[Learn more]</a>
      </p>

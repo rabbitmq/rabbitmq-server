@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_core_ff).
@@ -147,4 +147,12 @@
                          {rabbit_khepri, khepri_db_migration_enable},
                          post_enable =>
                          {rabbit_khepri, khepri_db_migration_post_enable}}
+     }}).
+
+-rabbit_feature_flag(
+   {stream_update_config_command,
+    #{desc          => "A new internal command that is used to update streams as "
+                        "part of a policy.",
+      stability     => stable,
+      depends_on    => [stream_queue]
      }}).

@@ -8,9 +8,7 @@
 -module(rabbit_federation_exchange_link_sup_sup).
 
 -behaviour(mirrored_supervisor).
--behaviour(rabbit_mnesia_to_khepri_record_converter).
 
--include_lib("rabbit/include/mirrored_supervisor.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -define(SUPERVISOR, ?MODULE).
 
@@ -19,38 +17,7 @@
 
 -export([start_link/0, start_child/1, adjust/1, stop_child/1]).
 -export([init/1]).
-
-%% Khepri paths don't support tuples or records, so the key part of the
-%% #mirrored_sup_childspec{} used by some plugins must be  transformed in a
-%% valid Khepri path during the migration from Mnesia to Khepri.
-%% `rabbit_db_msup_m2k_converter` iterates over all declared converters, which
-%% must implement `rabbit_mnesia_to_khepri_record_converter` behaviour callbacks.
-%%
-%% This mechanism could be reused by any other rabbit_db_*_m2k_converter
-
--rabbit_mnesia_records_to_khepri_db(
-   [
-    {rabbit_db_msup_m2k_converter, ?MODULE}
-   ]).
-
--export([upgrade_record/2, upgrade_key/2]).
-
--spec upgrade_record(Table, Record) -> Record when
-      Table :: mnesia_to_khepri:mnesia_table(),
-      Record :: tuple().
-upgrade_record(mirrored_sup_childspec,
-               #mirrored_sup_childspec{key = {?MODULE, #exchange{} = Exchange}} = Record) ->
-    Record#mirrored_sup_childspec{key = {?MODULE, id(Exchange)}};
-upgrade_record(_Table, Record) ->
-    Record.
-
--spec upgrade_key(Table, Key) -> Key when
-      Table :: mnesia_to_khepri:mnesia_table(),
-      Key :: any().
-upgrade_key(mirrored_sup_childspec, {?MODULE, #exchange{} = Exchange}) ->
-    {?MODULE, id(Exchange)};
-upgrade_key(_Table, Key) ->
-    Key.
+-export([id_to_khepri_path/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -83,12 +50,12 @@ start_child(X) ->
 
 adjust({clear_upstream, VHost, UpstreamName}) ->
     _ = [rabbit_federation_link_sup:adjust(Pid, X, {clear_upstream, UpstreamName}) ||
-            {{_, #exchange{name = Name} = X}, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR),
+            {#exchange{name = Name} = X, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR),
             Name#resource.virtual_host == VHost],
     ok;
 adjust(Reason) ->
     _ = [rabbit_federation_link_sup:adjust(Pid, X, Reason) ||
-            {{_, X}, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
+            {X, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
     ok.
 
 stop_child(X) ->
@@ -111,7 +78,9 @@ init([]) ->
 %% See comment in rabbit_federation_queue_link_sup_sup:id/1
 id(X = #exchange{policy = Policy}) ->
     X1 = rabbit_exchange:immutable(X),
-    {simple_id(X), X1#exchange{policy = Policy}}.
+    X2 = X1#exchange{policy = Policy},
+    X2.
 
-simple_id(#exchange{name = #resource{virtual_host = VHost, name = Name}}) ->
+id_to_khepri_path(
+  #exchange{name = #resource{virtual_host = VHost, name = Name}}) ->
     [exchange, VHost, Name].

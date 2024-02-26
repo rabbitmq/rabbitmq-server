@@ -19,8 +19,7 @@ module.exports = class LimitsAdminTab extends AdminTab {
     await this.click(VIRTUAL_HOST_LIMITS_SECTION)
     try
     {
-      rows = driver.findElements(VIRTUAL_HOST_LIMITS_TABLE_ROWS)
-      return rows
+      return driver.findElements(VIRTUAL_HOST_LIMITS_TABLE_ROWS)
     } catch (NoSuchElement) {
       return Promise.resolve([])
     }
@@ -29,8 +28,7 @@ module.exports = class LimitsAdminTab extends AdminTab {
     await this.click(USER_LIMITS_SECTION)
     try
     {
-      rows = driver.findElements(VIRTUAL_HOST_LIMITS_TABLE_ROWS)
-      return rows
+      return driver.findElements(VIRTUAL_HOST_LIMITS_TABLE_ROWS)      
     } catch (NoSuchElement) {
       return Promise.resolve([])
     }

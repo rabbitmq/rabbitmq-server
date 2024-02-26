@@ -6,6 +6,7 @@
 %%
 
 -module(rabbit_stream_queue).
+-include("mc.hrl").
 
 -behaviour(rabbit_queue_type).
 
@@ -446,30 +447,30 @@ cancel(_Q, ConsumerTag, OkMsg, ActingUser, #stream_client{readers = Readers0,
 credit(QName, CTag, Credit, Drain, #stream_client{readers = Readers0,
                                                   name = Name,
                                                   local_pid = LocalPid} = State) ->
-    {Readers1, Msgs} = case Readers0 of
-                          #{CTag := #stream{credit = Credit0} = Str0} ->
-                              Str1 = Str0#stream{credit = Credit0 + Credit},
-                              {Str, Msgs0} = stream_entries(QName, Name, LocalPid, Str1),
-                              {Readers0#{CTag => Str}, Msgs0};
+    case Readers0 of
+        #{CTag := #stream{credit = Credit0} = Str0} ->
+            Str1 = Str0#stream{credit = Credit0 + Credit},
+            {Str, Msgs} = stream_entries(QName, Name, LocalPid, Str1),
+            Actions = case Msgs of
+                          [] ->
+                              [{send_credit_reply, 0}];
                           _ ->
-                              {Readers0, []}
+                              [{send_credit_reply, length(Msgs)},
+                               {deliver, CTag, true, Msgs}]
                       end,
-    {Readers, Actions} =
-        case Drain of
-            true ->
-                case Readers1 of
-                    #{CTag := #stream{credit = Credit1} = Str2} ->
-                        {Readers0#{CTag => Str2#stream{credit = 0}},
-                         [{send_drained, {CTag, Credit1}}]};
-                    _ ->
-                        {Readers1, []}
-                end;
-            false ->
-                {Readers1, []}
-        end,
-    {State#stream_client{readers = Readers},
-     [{send_credit_reply, length(Msgs)},
-      {deliver, CTag, true, Msgs}] ++ Actions}.
+            case Drain of
+                true ->
+                    Readers = Readers0#{CTag => Str#stream{credit = 0}},
+                    {State#stream_client{readers = Readers},
+                     %% send_drained needs to come after deliver
+                     Actions ++ [{send_drained, {CTag, Str#stream.credit}}]};
+                false ->
+                    Readers = Readers0#{CTag => Str},
+                    {State#stream_client{readers = Readers}, Actions}
+            end;
+        _ ->
+            {State, []}
+    end.
 
 deliver(QSs, Msg, Options) ->
     lists:foldl(
@@ -551,24 +552,30 @@ handle_event(QName, {osiris_offset, _From, _Offs},
              State = #stream_client{local_pid = LocalPid,
                                     readers = Readers0,
                                     name = Name}) ->
+    Ack = true,
     %% offset isn't actually needed as we use the atomic to read the
     %% current committed
-    {Readers, TagMsgs} = maps:fold(
-                           fun (Tag, Str0, {Acc, TM}) ->
-                                   {Str, Msgs} = stream_entries(QName, Name, LocalPid, Str0),
-                                   {Acc#{Tag => Str}, [{Tag, LocalPid, Msgs} | TM]}
-                           end, {#{}, []}, Readers0),
-    Ack = true,
-    Deliveries = [{deliver, Tag, Ack, OffsetMsg}
-                  || {Tag, _LeaderPid, OffsetMsg} <- TagMsgs],
+    {Readers, Deliveries} =
+        maps:fold(
+          fun (Tag, Str0, {Acc, TM}) ->
+                  case stream_entries(QName, Name, LocalPid, Str0) of
+                      {Str, []} ->
+                          {Acc#{Tag => Str}, TM};
+                      {Str, Msgs} ->
+                          {Acc#{Tag => Str},
+                           [{deliver, Tag, Ack, Msgs} | TM]}
+                  end
+          end, {#{}, []}, Readers0),
     {ok, State#stream_client{readers = Readers}, Deliveries};
 handle_event(_QName, {stream_leader_change, Pid}, State) ->
     {ok, update_leader_pid(Pid, State), []};
-handle_event(_QName, {stream_local_member_change, Pid}, #stream_client{local_pid = P} = State)
+handle_event(_QName, {stream_local_member_change, Pid},
+             #stream_client{local_pid = P} = State)
   when P == Pid ->
     {ok, State, []};
-handle_event(_QName, {stream_local_member_change, Pid}, State = #stream_client{name = QName,
-                                                                       readers = Readers0}) ->
+handle_event(_QName, {stream_local_member_change, Pid},
+             #stream_client{name = QName,
+                            readers = Readers0} = State) ->
     rabbit_log:debug("Local member change event for ~tp", [QName]),
     Readers1 = maps:fold(fun(T, #stream{log = Log0, reader_options = Options} = S0, Acc) ->
                                  Offset = osiris_log:next_offset(Log0),
@@ -980,7 +987,7 @@ delete_replica(VHost, Name, Node) ->
 
 delete_all_replicas(Node) ->
     rabbit_log:info("Asked to remove all stream replicas from node ~ts", [Node]),
-    Streams = rabbit_amqqueue:list_by_type(stream),
+    Streams = rabbit_amqqueue:list_stream_queues_on(Node),
     lists:map(fun(Q) ->
                       QName = amqqueue:get_name(Q),
                       rabbit_log:info("~ts: removing replica on node ~w",
@@ -1111,12 +1118,12 @@ binary_to_msg(#resource{kind = queue,
     %% If exchange or routing_keys annotation isn't present the data most likely came
     %% from the rabbitmq-stream plugin so we'll choose defaults that simulate use
     %% of the direct exchange.
-    Mc = case mc:get_annotation(exchange, Mc0) of
-             undefined -> mc:set_annotation(exchange, <<>>, Mc0);
+    Mc = case mc:exchange(Mc0) of
+             undefined -> mc:set_annotation(?ANN_EXCHANGE, <<>>, Mc0);
              _ -> Mc0
          end,
-    case mc:get_annotation(routing_keys, Mc) of
-        undefined -> mc:set_annotation(routing_keys, [QName], Mc);
+    case mc:routing_keys(Mc) of
+        [] -> mc:set_annotation(?ANN_ROUTING_KEYS, [QName], Mc);
         _ -> Mc
     end.
 

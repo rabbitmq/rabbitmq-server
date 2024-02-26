@@ -2,7 +2,7 @@
 %% from rabbitmq-autocluster by Gavin Roy.
 %%
 %% Copyright (c) 2014-2015 AWeber Communications
-%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates
+%% Copyright (c) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %% All rights reserved.
 %%
 %% Redistribution and use in source and binary forms, with or without modification,
@@ -32,7 +32,7 @@
 %%
 %% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2014-2015 AWeber Communications
-%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_peer_discovery_backend).

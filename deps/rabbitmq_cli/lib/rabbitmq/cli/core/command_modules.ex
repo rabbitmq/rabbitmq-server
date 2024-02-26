@@ -69,7 +69,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
           {:ok, enabled_plugins_file} = PluginsHelpers.enabled_plugins_file(opts)
           require Logger
 
-          Logger.warn(
+          Logger.warning(
             "Unable to read the enabled plugins file.\n" <>
               "  Reason: #{inspect(err)}\n" <>
               "  Commands provided by plugins will not be available.\n" <>

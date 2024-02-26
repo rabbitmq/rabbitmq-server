@@ -245,6 +245,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.WaitCommand do
       timeout,
       fn ->
         case :file.read_file(pid_file) do
+          {:ok, <<>>} ->
+            {:error, :loop}
+
           {:ok, bin} ->
             case Integer.parse(bin) do
               :error ->

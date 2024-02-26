@@ -904,7 +904,7 @@ create_channel(Channel,
                                    capabilities = Capabilities,
                                    user = #user{username = Username} = User}
                    } = State) ->
-    case rabbit_auth_backend_internal:is_over_channel_limit(Username) of
+    case is_over_limits(Username) of
         false ->
             {ok, _ChSupPid, {ChPid, AState}} =
                 rabbit_channel_sup_sup:start_channel(
@@ -915,11 +915,45 @@ create_channel(Channel,
             put({ch_pid, ChPid}, {Channel, MRef}),
             put({channel, Channel}, {ChPid, AState}),
             {ok, {ChPid, AState}, State#v1{channel_count = ChannelCount + 1}};
+        {true, Limit, Fmt} ->
+            {error, rabbit_misc:amqp_error(
+                      not_allowed,
+                      Fmt,
+                      [node(), Limit], 'none')}
+    end.
+
+is_over_limits(Username) ->
+    case rabbit_auth_backend_internal:is_over_channel_limit(Username) of
+        false ->
+            case is_over_node_channel_limit() of
+                false ->
+                    false;
+                {true, Limit} ->
+                    Fmt =
+                        "number of channels opened on node '~ts' has reached "
+                        "the maximum allowed limit of (~w)",
+                    {true, Limit, Fmt}
+            end;
         {true, Limit} ->
-            {error, rabbit_misc:amqp_error(not_allowed,
-                        "number of channels opened for user '~ts' has reached "
-                        "the maximum allowed user limit of (~w)",
-                        [Username, Limit], 'none')}
+            Fmt =
+                "number of channels opened for user '~ts' has reached "
+                "the maximum allowed user limit of (~w)",
+            {true, Limit, Fmt}
+    end.
+
+is_over_node_channel_limit() ->
+    case rabbit_misc:get_env(rabbit, channel_max_per_node, infinity) of
+        infinity ->
+            false;
+        NodeLimit ->
+            %% Only fetch this if a limit is set
+            CurrNodeChannels = rabbit_channel_tracking:channel_count_on_node(node()),
+            case CurrNodeChannels < NodeLimit of
+                true ->
+                    false;
+                false ->
+                    {true, NodeLimit}
+            end
     end.
 
 channel_cleanup(ChPid, State = #v1{channel_count = ChannelCount}) ->

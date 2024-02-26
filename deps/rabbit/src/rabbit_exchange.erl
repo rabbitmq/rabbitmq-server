@@ -220,7 +220,7 @@ list() ->
 count() ->
     rabbit_db_exchange:count().
 
--spec list_names() -> [rabbit_exchange:name()].
+-spec list_names() -> [name()].
 
 list_names() ->
     rabbit_db_exchange:list().
@@ -351,7 +351,7 @@ route(Exchange, Message) ->
 route(#exchange{name = #resource{name = ?DEFAULT_EXCHANGE_NAME,
                                  virtual_host = VHost}},
       Message, _Opts) ->
-    RKs0 = mc:get_annotation(routing_keys, Message),
+    RKs0 = mc:routing_keys(Message),
     RKs = lists:usort(RKs0),
     [begin
          case virtual_reply_queue(RK) of

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright © 2022-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_db_m2k_converter).
@@ -15,8 +15,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %% Functions for `rabbit_db_*_m2k_converter' modules to call.
--export([with_correlation_id/2,
-         get_sub_state/2]).
+-export([with_correlation_id/2]).
 
 %% `mnesia_to_khepri_converter' callbacks.
 -export([init_copy_to_khepri/4,
@@ -68,14 +67,6 @@ with_correlation_id(
         false ->
             run_async_fun(Fun, State0)
     end.
-
--spec get_sub_state(Module, State) -> Ret when
-      Module :: module(),
-      State :: state(),
-      Ret :: any().
-
-get_sub_state(Module, #?MODULE{sub_states = SubStates}) ->
-    maps:get(Module, SubStates).
 
 %% `mnesia_to_khepri_converter' callbacks
 

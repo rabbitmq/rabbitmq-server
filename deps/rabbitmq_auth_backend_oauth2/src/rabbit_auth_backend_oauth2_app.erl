@@ -23,4 +23,3 @@ stop(_State) ->
 
 init([]) ->
     {ok, {{one_for_one,3,10},[]}}.
-

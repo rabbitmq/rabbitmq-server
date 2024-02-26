@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 -module(transactions_SUITE).
 -compile(export_all).
@@ -21,7 +21,7 @@ groups() ->
     [
       {non_parallel_tests, [], [
                                 published_visible_after_commit,
-                                return_after_commit 
+                                return_after_commit
                                ]}
     ].
 
@@ -34,7 +34,7 @@ init_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
                                                     {rmq_nodename_suffix, ?MODULE}
                                                    ]),
-    rabbit_ct_helpers:run_setup_steps(Config1, 
+    rabbit_ct_helpers:run_setup_steps(Config1,
                                       rabbit_ct_broker_helpers:setup_steps() ++
                                       rabbit_ct_client_helpers:setup_steps()).
 

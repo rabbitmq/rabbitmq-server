@@ -39,7 +39,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
         :ok
 
       false ->
-        {:validation_failure, "unit '#{unit}' is not supported. Please use one of: bytes, mb, gb"}
+        {:validation_failure,
+         "unit '#{unit}' is not supported. Please use one of: bytes, mb, mib, gb, gib, tb, tib"}
     end
   end
 
@@ -212,7 +213,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
 
   def usage_additional() do
     [
-      ["--unit <bytes | mb | gb>", "byte multiple (bytes, megabytes, gigabytes) to use"],
+      [
+        "--unit <bytes | mb | mib | gb | gib>",
+        "byte multiple (bytes, megabytes, gigabytes) to use"
+      ],
       ["--formatter <json | erlang>", "alternative formatter (JSON, Erlang terms)"]
     ]
   end

@@ -4,7 +4,7 @@ SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 TEST_CASES_PATH=/oauth/with-sp-initiated
 TEST_CONFIG_PATH=/oauth
-PROFILES="keycloak jwks keycloak-oauth-provider"
+PROFILES="keycloak keycloak-oauth-provider keycloak-mgt-oauth-provider tls"
 
 source $SCRIPT/../../bin/suite_template $@
 runWith keycloak

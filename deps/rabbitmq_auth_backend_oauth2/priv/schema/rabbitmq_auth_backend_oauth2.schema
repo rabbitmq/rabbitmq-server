@@ -73,6 +73,7 @@
     list_to_binary(cuttlefish:conf_get("auth_oauth2.additional_scopes_key", Conf))
  end}.
 
+
 %% Configure the plugin to skip validation of the aud field
 %%
 %% {verify_aud, true},
@@ -98,8 +99,10 @@
  "rabbitmq_auth_backend_oauth2.preferred_username_claims",
  fun(Conf) ->
     Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.preferred_username_claims", Conf),
-    [list_to_binary(V) || {_, V} <- Settings]
+    [list_to_binary(V) || {_, V} <- lists:reverse(Settings)]
  end}.
+
+
 
 %% ID of the default signing key
 %%
@@ -144,6 +147,16 @@
                   end, Settings),
     maps:from_list(SigningKeys)
  end}.
+
+{mapping,
+ "auth_oauth2.issuer",
+ "rabbitmq_auth_backend_oauth2.issuer",
+ [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
+
+{mapping,
+ "auth_oauth2.token_endpoint",
+ "rabbitmq_auth_backend_oauth2.token_endpoint",
+ [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
 
 {mapping,
  "auth_oauth2.jwks_url",
@@ -192,4 +205,150 @@
  fun(Conf) ->
      Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.algorithms", Conf),
      [list_to_binary(V) || {_, V} <- Settings]
+ end}.
+
+
+%% This setting is only required when there are +1 auth_oauth2.oauth_providers
+%% If this setting is omitted, its default to the first oauth_provider
+
+{mapping,
+  "auth_oauth2.default_oauth_provider",
+  "rabbitmq_auth_backend_oauth2.default_oauth_provider",
+  [{datatype, string}]}.
+
+{mapping,
+  "auth_oauth2.oauth_providers.$name.issuer",
+  "rabbitmq_auth_backend_oauth2.oauth_providers",
+  [{datatype, string}, {validators, ["uri", "https_uri"]}]
+}.
+
+{mapping,
+  "auth_oauth2.oauth_providers.$name.token_endpoint",
+  "rabbitmq_auth_backend_oauth2.oauth_providers",
+  [{datatype, string}, {validators, ["uri", "https_uri"]}]
+}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.jwks_uri",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, string}, {validators, ["uri", "https_uri"]}]
+}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.https.verify",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, {enum, [verify_peer, verify_none]}}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.https.cacertfile",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, file}, {validators, ["file_accessible"]}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.https.depth",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, integer}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.https.hostname_verification",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, {enum, [wildcard, none]}}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.https.crl_check",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, {enum, [true, false, peer, best_effort]}}]}.
+
+{translation, "rabbitmq_auth_backend_oauth2.oauth_providers",
+ fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.oauth_providers", Conf),
+    AuthBackends  = [{Name, {list_to_atom(Key), list_to_binary(V)}} || {["auth_oauth2","oauth_providers", Name, Key], V} <- Settings ],
+    Https  = [{Name, {https, {list_to_atom(Key), V}}} || {["auth_oauth2","oauth_providers", Name, "https", Key], V} <- Settings ],
+
+    %% Aggregate all options for one provider
+    KeyFun = fun({Name, _}) -> list_to_binary(Name) end,
+    ValueFun = fun({_, V}) -> V end,
+    ProviderNameToListOfSettings = maps:groups_from_list(KeyFun, ValueFun, AuthBackends),
+    ProviderNameToListOfHttpsSettings = maps:groups_from_list(KeyFun, fun({_, {https, V}}) -> V end, Https),
+    ProviderNameToListWithHttps = maps:map(fun(K1,L1) -> [{https, L1}] end, ProviderNameToListOfHttpsSettings),
+    NewGroup = maps:merge_with(fun(K, V1, V2) -> V1 ++ V2 end, ProviderNameToListOfSettings, ProviderNameToListWithHttps),
+
+    ListOrSingleFun = fun(K, List) ->
+      case K of
+        ssl_options -> proplists:get_all_values(K, List);
+        _ ->
+          case proplists:lookup_all(K, List) of
+            [One] -> proplists:get_value(K, List);
+            [One|_] = V -> V
+          end
+      end
+    end,
+    GroupKeyConfigFun = fun(K, List) ->
+        ListKeys = proplists:get_keys(List),
+        [{K, ListOrSingleFun(K, List)} || K <- ListKeys]
+     end,
+    maps:map(GroupKeyConfigFun, NewGroup)
+
+ end}.
+
+{mapping,
+  "auth_oauth2.resource_servers.$name.id",
+  "rabbitmq_auth_backend_oauth2.resource_servers",
+  [{datatype, string}]
+}.
+
+{mapping,
+  "auth_oauth2.resource_servers.$name.scope_prefix",
+  "rabbitmq_auth_backend_oauth2.resource_servers",
+  [{datatype, string}]
+}.
+
+{mapping,
+  "auth_oauth2.resource_servers.$name.additional_scopes_key",
+  "rabbitmq_auth_backend_oauth2.resource_servers",
+  [{datatype, string}]
+}.
+
+{mapping,
+  "auth_oauth2.resource_servers.$name.resource_server_type",
+  "rabbitmq_auth_backend_oauth2.resource_servers",
+  [{datatype, string}]
+}.
+
+{mapping,
+  "auth_oauth2.resource_servers.$name.oauth_provider_id",
+  "rabbitmq_auth_backend_oauth2.resource_servers",
+  [{datatype, string}]
+}.
+
+{translation, "rabbitmq_auth_backend_oauth2.resource_servers",
+ fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.resource_servers", Conf),
+    AuthBackends  = [{Name, {list_to_atom(Key), list_to_binary(V)}} || {["auth_oauth2","resource_servers", Name, Key], V} <- Settings],
+    KeyFun = fun({Name,_}) -> list_to_binary(Name) end,
+    ValueFun = fun({_,V}) -> V end,
+    NewGroup = maps:groups_from_list(KeyFun, ValueFun, AuthBackends),
+    ListOrSingleFun = fun(K, List) ->
+      case K of
+        key_config -> proplists:get_all_values(K, List);
+        _ ->
+          case proplists:lookup_all(K, List) of
+            [One] -> proplists:get_value(K, List);
+            [One|_] = V -> V
+          end
+      end
+    end,
+    GroupKeyConfigFun = fun(K, List) ->
+        ListKeys = proplists:get_keys(List),
+        [ {K,ListOrSingleFun(K,List)} || K <- ListKeys ]
+     end,
+    NewGroupTwo = maps:map(GroupKeyConfigFun, NewGroup),
+    IndexByIdOrElseNameFun = fun(K, V, NewMap) ->
+      case proplists:get_value(id, V) of
+        undefined -> maps:put(K, V, NewMap);
+        ID -> maps:put(ID, V, NewMap)
+      end
+    end,
+    maps:fold(IndexByIdOrElseNameFun,#{}, NewGroupTwo)
+
  end}.

@@ -87,7 +87,7 @@ create_or_update1(_Config) ->
     passed.
 
 id(Id) ->
-    {[Id], Id}.
+    Id.
 
 find_mirror(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, find_mirror1, [Config]).

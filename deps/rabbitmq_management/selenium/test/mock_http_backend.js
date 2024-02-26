@@ -5,10 +5,8 @@ const baseURL = process.env.AUTH_BACKEND_HTTP_BASEURL || 'http://localhost:8888'
 function putReset() {
   const req = new XMLHttpRequest()
   const url = baseURL + '/mockserver/reset'
-//  console.log("Reset " + url)
   req.open('PUT', url, false)
   req.send()
-//  console.log("Result: " + req.status + " " + req.responseText)
   if (!wasSuccessful(req)) {
     console.error(req.responseText)
     throw new Error(req.responseText)
@@ -17,12 +15,10 @@ function putReset() {
 function putExpectation(expectation) {
   const req = new XMLHttpRequest()
   const url = baseURL + '/mockserver/expectation'
-//  console.log("Set expectation " + url + " expectation : " + JSON.stringify(expectation))
   req.open('PUT', url, false)
   req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
   req.setRequestHeader('Accept', 'application/json')
   req.send(JSON.stringify(expectation))
-//  console.log("Result: " + req.status + " " + req.responseText)
   if (!wasSuccessful(req)) {
     console.error(req.responseText)
     throw new Error(req.responseText)
@@ -34,14 +30,12 @@ function wasSuccessful(req) {
 function putVerify(expectation) {
   const req = new XMLHttpRequest()
   const url = baseURL + '/mockserver/verify'
-//  console.log("PUT " + url + " json " + JSON.stringify(expectation))
 
   req.open('PUT', url, false)
   req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
   req.setRequestHeader('Accept', 'application/json')
 
   req.send(JSON.stringify(expectation))
-//  console.log("Result: " + req.status + " " + req.responseText)
   if (!wasSuccessful(req)) {
     console.error(req.responseText)
     throw new Error(req.responseText)
@@ -57,7 +51,7 @@ module.exports = {
   allow: () => {
     return "allow"
   },
-  
+
   reset: () => {
     putReset()
   },

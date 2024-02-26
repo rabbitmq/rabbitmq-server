@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(amqqueue). %% Could become amqqueue_v2 in the future.
@@ -84,6 +84,7 @@
          reset_mirroring_and_decorators/1,
          set_immutable/1,
          qnode/1,
+         to_printable/1,
          macros/0]).
 
 -define(record_version, amqqueue_v2).
@@ -640,6 +641,14 @@ qnode(none) ->
     undefined;
 qnode({_, Node}) ->
     Node.
+
+-spec to_printable(amqqueue()) -> #{binary() => any()}.
+to_printable(#amqqueue{name = QName = #resource{name = Name},
+                       vhost = VHost, type = Type}) ->
+     #{<<"readable_name">> => rabbit_data_coercion:to_binary(rabbit_misc:rs(QName)),
+       <<"name">> => Name,
+       <<"virtual_host">> => VHost,
+       <<"type">> => Type}.
 
 % private
 

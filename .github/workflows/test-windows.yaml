@@ -21,7 +21,7 @@ jobs:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
     - name: CONFIGURE ERLANG
-      uses: erlef/setup-beam@v1.16
+      uses: erlef/setup-beam@v1.17
       with:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: ${{ matrix.elixir_version }}

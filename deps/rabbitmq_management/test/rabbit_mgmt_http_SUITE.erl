@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mgmt_http_SUITE).
@@ -343,6 +343,7 @@ nodes_test(Config) ->
     assert_list([DiscNode], http_get(Config, "/nodes")),
     assert_list([DiscNode], http_get(Config, "/nodes", "monitor", "monitor", ?OK)),
     http_get(Config, "/nodes", "user", "user", ?NOT_AUTHORISED),
+    http_get(Config, "/nodes/does-not-exist", ?NOT_FOUND),
     [Node] = http_get(Config, "/nodes"),
     Path = "/nodes/" ++ binary_to_list(maps:get(name, Node)),
     assert_item(DiscNode, http_get(Config, Path, ?OK)),
@@ -1065,21 +1066,21 @@ queues_test(Config) ->
                    auto_delete => false,
                    exclusive   => false,
                    arguments   => #{},
-                   storage_version => 2},
+                   storage_version => 1},
                  #{name        => <<"foo">>,
                    vhost       => <<"/">>,
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
                    arguments   => #{},
-                   storage_version => 2}], Queues),
+                   storage_version => 1}], Queues),
     assert_item(#{name        => <<"foo">>,
                   vhost       => <<"/">>,
                   durable     => true,
                   auto_delete => false,
                   exclusive   => false,
                   arguments   => #{},
-                  storage_version => 2}, Queue),
+                  storage_version => 1}, Queue),
 
     http_delete(Config, "/queues/%2F/foo", {group, '2xx'}),
     http_delete(Config, "/queues/%2F/baz", {group, '2xx'}),
@@ -2274,8 +2275,8 @@ queue_pagination_test(Config) ->
     ?assertEqual(1, maps:get(page, PageOfTwo)),
     ?assertEqual(2, maps:get(page_size, PageOfTwo)),
     ?assertEqual(2, maps:get(page_count, PageOfTwo)),
-    assert_list([#{name => <<"test0">>, vhost => <<"/">>, storage_version => 2},
-                 #{name => <<"test2_reg">>, vhost => <<"/">>, storage_version => 2}
+    assert_list([#{name => <<"test0">>, vhost => <<"/">>, storage_version => 1},
+                 #{name => <<"test2_reg">>, vhost => <<"/">>, storage_version => 1}
                 ], maps:get(items, PageOfTwo)),
 
     SortedByName = http_get(Config, "/queues?sort=name&page=1&page_size=2", ?OK),

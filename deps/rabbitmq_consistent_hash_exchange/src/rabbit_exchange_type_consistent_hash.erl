@@ -260,7 +260,7 @@ jump_consistent_hash_value(_B0, J0, NumberOfBuckets, SeedState0) ->
     jump_consistent_hash_value(B, J, NumberOfBuckets, SeedState).
 
 value_to_hash(undefined, Msg) ->
-    mc:get_annotation(routing_keys, Msg);
+    mc:routing_keys(Msg);
 value_to_hash({header, Header}, Msg0) ->
     maps:get(Header, mc:routing_headers(Msg0, [x_headers]));
 value_to_hash({property, Property}, Msg) ->

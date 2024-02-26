@@ -40,7 +40,7 @@ to_json(ReqData, {Mode, Context}) ->
     rabbit_mgmt_util:reply_list(deprecated_features(Mode), ReqData, Context).
 
 is_authorized(ReqData, {Mode, Context}) ->
-    {Res, Req2, Context2} = rabbit_mgmt_util:is_authorized_admin(ReqData, Context),
+    {Res, Req2, Context2} = rabbit_mgmt_util:is_authorized(ReqData, Context),
     {Res, Req2, {Mode, Context2}}.
 
 %%--------------------------------------------------------------------

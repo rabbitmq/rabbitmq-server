@@ -9,6 +9,7 @@
 -behaviour(mirrored_supervisor).
 
 -export([start_link/2, init/1]).
+-export([id_to_khepri_path/1]).
 
 -include("rabbit_shovel.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -30,5 +31,8 @@ init([Name, Config]) ->
                    [rabbit_shovel_worker]}],
     {ok, {{one_for_one, 1, ?MAX_WAIT}, ChildSpecs}}.
 
-id(Name) ->
-    {[Name], Name}.
+id(Name) when is_atom(Name) ->
+    Name.
+
+id_to_khepri_path(Name) when is_atom(Name) ->
+    [Name].

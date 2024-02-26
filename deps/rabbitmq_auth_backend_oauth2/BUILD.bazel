@@ -46,6 +46,7 @@ rabbitmq_app(
     license_files = [":license_files"],
     priv = [":priv"],
     deps = [
+        "//deps/oauth2_client:erlang_app",
         "//deps/rabbit:erlang_app",
         "@base64url//:erlang_app",
         "@cowlib//:erlang_app",
@@ -82,8 +83,10 @@ eunit(
     compiled_suites = [
         ":test_jwks_http_app_beam",
         ":test_jwks_http_handler_beam",
+        ":test_openid_http_handler_beam",
         ":test_jwks_http_sup_beam",
         ":test_rabbit_auth_backend_oauth2_test_util_beam",
+        ":test_oauth2_http_mock_beam",
     ],
     target = ":test_erlang_app",
 )
@@ -100,7 +103,22 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+    name = "add_signing_key_command_SUITE",
+    size = "small",
+)
+
+rabbitmq_integration_suite(
     name = "config_schema_SUITE",
+)
+
+rabbitmq_integration_suite(
+    name = "rabbit_oauth2_config_SUITE",
+    additional_beam = [
+        "test/oauth2_http_mock.beam",
+    ],
+    runtime_deps = [
+        "@cowboy//:erlang_app",
+    ],
 )
 
 rabbitmq_integration_suite(
@@ -109,6 +127,7 @@ rabbitmq_integration_suite(
         "test/rabbit_auth_backend_oauth2_test_util.beam",
         "test/jwks_http_app.beam",
         "test/jwks_http_handler.beam",
+        "test/openid_http_handler.beam",
         "test/jwks_http_sup.beam",
     ],
     deps = [
@@ -131,6 +150,7 @@ rabbitmq_integration_suite(
         "test/rabbit_auth_backend_oauth2_test_util.beam",
     ],
     runtime_deps = [
+        "//deps/oauth2_client:erlang_app",
         "@emqtt//:erlang_app",
     ],
 )

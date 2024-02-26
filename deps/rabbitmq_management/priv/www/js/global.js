@@ -207,9 +207,6 @@ var HELP = {
     'queue-max-age':
       'How long a message published to a stream queue can live before it is discarded.',
 
-    'queue-stream-max-segment-size-bytes':
-      'Total segment size for stream segments on disk.<br/>(Sets the x-stream-max-segment-size-bytes argument.)',
-
     'queue-stream-filter-size-bytes':
       'Size of the filter data attached to each stream chunk.<br/>(Sets the x-stream-filter-size-bytes argument.)',
 

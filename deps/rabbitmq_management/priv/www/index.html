@@ -37,7 +37,6 @@
               oauth_initiateLogout();
             } else {
               if (!status.loggedIn) {
-                replace_content('outer', format('login_oauth', {}));
                 clear_auth();
               } else {
                 oauth.logged_in = true;

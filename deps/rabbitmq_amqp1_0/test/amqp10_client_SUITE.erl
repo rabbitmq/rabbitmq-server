@@ -128,7 +128,10 @@ reliable_send_receive(Config, Outcome) ->
     %% create an unsettled message,
     %% link will be in "mixed" mode by default
     Msg1 = amqp10_msg:new(DTag1, <<"body-1">>, false),
-    ok = amqp10_client:send_msg(Sender, Msg1),
+    %% Use the 2 byte AMQP boolean encoding, see AMQP §1.6.2
+    True = {boolean, true},
+    Msg2 = amqp10_msg:set_headers(#{durable => True}, Msg1),
+    ok = amqp10_client:send_msg(Sender, Msg2),
     ok = wait_for_settlement(DTag1),
 
     ok = amqp10_client:detach_link(Sender),
@@ -143,8 +146,8 @@ reliable_send_receive(Config, Outcome) ->
                                                         Address,
                                                         unsettled),
     {ok, Msg} = amqp10_client:get_msg(Receiver),
-
     ct:pal("got ~p", [amqp10_msg:body(Msg)]),
+    ?assertEqual(true, amqp10_msg:header(durable, Msg)),
 
     ok = amqp10_client:settle_msg(Receiver, Msg, Outcome),
 
@@ -254,11 +257,13 @@ roundtrip_queue_with_drain(Config, QueueType, QName) when is_binary(QueueType) -
 
     wait_for_credit(Sender),
 
+    Dtag = <<"my-tag">>,
     % create a new message using a delivery-tag, body and indicate
     % it's settlement status (true meaning no disposition confirmation
     % will be sent by the receiver).
-    OutMsg = amqp10_msg:new(<<"my-tag">>, <<"my-body">>, true),
+    OutMsg = amqp10_msg:new(Dtag, <<"my-body">>, false),
     ok = amqp10_client:send_msg(Sender, OutMsg),
+    ok = wait_for_settlement(Dtag),
 
     flush("pre-receive"),
     % create a receiver link
@@ -286,14 +291,18 @@ roundtrip_queue_with_drain(Config, QueueType, QName) when is_binary(QueueType) -
             wait_for_accepts(1),
             ok
     after 2000 ->
+              flush("delivery_timeout"),
               exit(delivery_timeout)
     end,
-    OutMsg2 = amqp10_msg:new(<<"my-tag">>, <<"my-body2">>, true),
+    Dtag = <<"my-tag">>,
+    OutMsg2 = amqp10_msg:new(Dtag, <<"my-body2">>, false),
     ok = amqp10_client:send_msg(Sender, OutMsg2),
+    ok = wait_for_settlement(Dtag),
 
     %% no delivery should be made at this point
     receive
         {amqp10_msg, _, _} ->
+            flush("unexpected_delivery"),
             exit(unexpected_delivery)
     after 500 ->
               ok

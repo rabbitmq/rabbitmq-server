@@ -286,7 +286,7 @@ msg_size(Content) ->
     rabbit_writer:msg_size(Content).
 
 add_header(Name, Type, Value, #basic_message{content = Content0} = Msg) ->
-    Content = rabbit_basic:map_headers(
+    Content = map_headers(
                 fun(undefined) ->
                         rabbit_misc:set_table_value([], Name, Type, Value);
                    (Headers) ->

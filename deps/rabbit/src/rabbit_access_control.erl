@@ -12,7 +12,7 @@
 -export([check_user_pass_login/2, check_user_login/2, check_user_loopback/2,
          check_vhost_access/4, check_resource_access/4, check_topic_access/4]).
 
--export([permission_cache_can_expire/1, update_state/2]).
+-export([permission_cache_can_expire/1, update_state/2, expiry_timestamp/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -232,15 +232,16 @@ update_state(User = #user{authz_backends = Backends0}, NewState) ->
     %% backends is in reverse order from the original list.
     Backends = lists:foldl(
                 fun({Module, Impl}, {ok, Acc}) ->
-                        case Module:state_can_expire() of
-                          true  ->
-                            case Module:update_state(auth_user(User, Impl), NewState) of
+                        AuthUser = auth_user(User, Impl),
+                        case Module:expiry_timestamp(AuthUser) of
+                          never ->
+                            {ok, [{Module, Impl} | Acc]};
+                          _  ->
+                            case Module:update_state(AuthUser, NewState) of
                               {ok, #auth_user{impl = Impl1}} ->
                                 {ok, [{Module, Impl1} | Acc]};
                               Else -> Else
-                            end;
-                          false ->
-                            {ok, [{Module, Impl} | Acc]}
+                            end
                         end;
                    (_, {error, _} = Err)      -> Err;
                    (_, {refused, _, _} = Err) -> Err
@@ -254,5 +255,19 @@ update_state(User = #user{authz_backends = Backends0}, NewState) ->
 
 %% Returns true if any of the backends support credential expiration,
 %% otherwise returns false.
-permission_cache_can_expire(#user{authz_backends = Backends}) ->
-    lists:any(fun ({Module, _State}) -> Module:state_can_expire() end, Backends).
+permission_cache_can_expire(User) ->
+    expiry_timestamp(User) =/= never.
+
+-spec expiry_timestamp(User :: rabbit_types:user()) -> integer() | never.
+expiry_timestamp(User = #user{authz_backends = Modules}) ->
+    lists:foldl(fun({Module, Impl}, Ts0) ->
+                        case Module:expiry_timestamp(auth_user(User, Impl)) of
+                            Ts1 when is_integer(Ts0) andalso is_integer(Ts1)
+                                     andalso Ts1 > Ts0 ->
+                                Ts0;
+                            Ts1 when is_integer(Ts1) ->
+                                Ts1;
+                            _ ->
+                                Ts0
+                        end
+                end, never, Modules).

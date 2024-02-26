@@ -11,18 +11,42 @@ defmodule RabbitMQ.CLI.InformationUnit do
   @megabyte_bytes @kilobyte_bytes * 1000
   @gigabyte_bytes @megabyte_bytes * 1000
   @terabyte_bytes @gigabyte_bytes * 1000
+  @petabyte_bytes @terabyte_bytes * 1000
+
+  @kibibyte_bytes 1024
+  @mebibyte_bytes @kibibyte_bytes * 1024
+  @gibibyte_bytes @mebibyte_bytes * 1024
+  @tebibyte_bytes @gibibyte_bytes * 1024
+  @pebibyte_bytes @tebibyte_bytes * 1024
 
   def known_units() do
     MapSet.new([
       "bytes",
+      "k",
       "kb",
+      "ki",
+      "kib",
       "kilobytes",
+      "m",
       "mb",
+      "mi",
+      "mib",
       "megabytes",
+      "g",
       "gb",
+      "gi",
+      "gib",
       "gigabytes",
+      "t",
       "tb",
-      "terabytes"
+      "ti",
+      "tib",
+      "terabytes",
+      "p",
+      "pb",
+      "pi",
+      "pib",
+      "petabytes"
     ])
   end
 
@@ -50,23 +74,64 @@ defmodule RabbitMQ.CLI.InformationUnit do
     Float.round(bytes / @kilobyte_bytes, 4)
   end
 
+  defp do_convert(bytes, "k"), do: do_convert(bytes, "kb")
+
+  defp do_convert(bytes, "ki") do
+    Float.round(bytes / @kibibyte_bytes, 4)
+  end
+
+  defp do_convert(bytes, "kib"), do: do_convert(bytes, "ki")
   defp do_convert(bytes, "kilobytes"), do: do_convert(bytes, "kb")
 
   defp do_convert(bytes, "mb") do
     Float.round(bytes / @megabyte_bytes, 4)
   end
 
+  defp do_convert(bytes, "m"), do: do_convert(bytes, "mb")
+
+  defp do_convert(bytes, "mi") do
+    Float.round(bytes / @mebibyte_bytes, 4)
+  end
+
+  defp do_convert(bytes, "mib"), do: do_convert(bytes, "mi")
   defp do_convert(bytes, "megabytes"), do: do_convert(bytes, "mb")
 
   defp do_convert(bytes, "gb") do
     Float.round(bytes / @gigabyte_bytes, 4)
   end
 
+  defp do_convert(bytes, "g"), do: do_convert(bytes, "gb")
+
+  defp do_convert(bytes, "gi") do
+    Float.round(bytes / @gigabyte_bytes, 4)
+  end
+
+  defp do_convert(bytes, "gib"), do: do_convert(bytes, "gi")
   defp do_convert(bytes, "gigabytes"), do: do_convert(bytes, "gb")
 
   defp do_convert(bytes, "tb") do
     Float.round(bytes / @terabyte_bytes, 4)
   end
 
+  defp do_convert(bytes, "t"), do: do_convert(bytes, "tb")
+
+  defp do_convert(bytes, "ti") do
+    Float.round(bytes / @tebibyte_bytes, 4)
+  end
+
+  defp do_convert(bytes, "tib"), do: do_convert(bytes, "ti")
   defp do_convert(bytes, "terabytes"), do: do_convert(bytes, "tb")
+
+  defp do_convert(bytes, "pb") do
+    Float.round(bytes / @petabyte_bytes, 4)
+  end
+
+  defp do_convert(bytes, "p"), do: do_convert(bytes, "pb")
+
+  defp do_convert(bytes, "pi") do
+    Float.round(bytes / @pebibyte_bytes, 4)
+  end
+
+  defp do_convert(bytes, "pib"), do: do_convert(bytes, "pi")
+  defp do_convert(bytes, "petabytes"), do: do_convert(bytes, "pb")
 end

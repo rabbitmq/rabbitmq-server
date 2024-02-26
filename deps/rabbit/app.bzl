@@ -169,8 +169,6 @@ def all_beam_files(name = "all_beam_files"):
             "src/rabbit_mirror_queue_slave.erl",
             "src/rabbit_mirror_queue_sync.erl",
             "src/rabbit_mnesia.erl",
-            "src/rabbit_mnesia_rename.erl",
-            "src/rabbit_mnesia_to_khepri_record_converter.erl",
             "src/rabbit_msg_file.erl",
             "src/rabbit_msg_record.erl",
             "src/rabbit_msg_store.erl",
@@ -434,8 +432,6 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/rabbit_mirror_queue_slave.erl",
             "src/rabbit_mirror_queue_sync.erl",
             "src/rabbit_mnesia.erl",
-            "src/rabbit_mnesia_rename.erl",
-            "src/rabbit_mnesia_to_khepri_record_converter.erl",
             "src/rabbit_msg_file.erl",
             "src/rabbit_msg_record.erl",
             "src/rabbit_msg_store.erl",
@@ -545,7 +541,6 @@ def all_srcs(name = "all_srcs"):
             "include/gm_specs.hrl",
             "include/internal_user.hrl",
             "include/mc.hrl",
-            "include/mirrored_supervisor.hrl",
             "include/rabbit_global_counters.hrl",
             "include/vhost.hrl",
             "include/vhost_v2.hrl",
@@ -559,6 +554,7 @@ def all_srcs(name = "all_srcs"):
     filegroup(
         name = "private_hdrs",
         srcs = [
+            "src/mirrored_supervisor.hrl",
             "src/rabbit_feature_flags.hrl",
             "src/rabbit_fifo.hrl",
             "src/rabbit_fifo_dlx.hrl",
@@ -717,8 +713,6 @@ def all_srcs(name = "all_srcs"):
             "src/rabbit_mirror_queue_slave.erl",
             "src/rabbit_mirror_queue_sync.erl",
             "src/rabbit_mnesia.erl",
-            "src/rabbit_mnesia_rename.erl",
-            "src/rabbit_mnesia_to_khepri_record_converter.erl",
             "src/rabbit_msg_file.erl",
             "src/rabbit_msg_record.erl",
             "src/rabbit_msg_store.erl",
@@ -867,15 +861,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         deps = ["//deps/amqp_client:erlang_app"],
     )
 
-    erlang_bytecode(
-        name = "cluster_rename_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/cluster_rename_SUITE.erl"],
-        outs = ["test/cluster_rename_SUITE.beam"],
-        app_name = "rabbit",
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app"],
-    )
     erlang_bytecode(
         name = "clustering_management_SUITE_beam_files",
         testonly = True,
@@ -1440,6 +1425,15 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         hdrs = ["src/rabbit_stream_sac_coordinator.hrl"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
+    )
+    erlang_bytecode(
+        name = "rabbit_access_control_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/rabbit_access_control_SUITE.erl"],
+        outs = ["test/rabbit_access_control_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/rabbit_common:erlang_app"],
     )
     erlang_bytecode(
         name = "rabbitmq_queues_cli_integration_SUITE_beam_files",

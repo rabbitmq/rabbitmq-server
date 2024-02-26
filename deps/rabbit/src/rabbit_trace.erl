@@ -57,7 +57,7 @@ tap_in(Msg, QNames, ConnName, Username, State) ->
              rabbit_types:username(), state()) -> 'ok'.
 tap_in(_Msg, _QNames, _ConnName, _ChannelNum, _Username, none) -> ok;
 tap_in(Msg, QNames, ConnName, ChannelNum, Username, TraceX) ->
-    XName = mc:get_annotation(exchange, Msg),
+    XName = mc:exchange(Msg),
     #exchange{name = #resource{virtual_host = VHost}} = TraceX,
     RoutedQs = lists:map(fun(#resource{kind = queue, name = Name}) ->
                                  {longstr, Name};
@@ -140,12 +140,12 @@ vhosts_with_tracing_enabled() ->
 %%----------------------------------------------------------------------------
 
 trace(X, Msg0, RKPrefix, RKSuffix, Extra) ->
-    XName = mc:get_annotation(exchange, Msg0),
+    XName = mc:exchange(Msg0),
     case X of
         #exchange{name = #resource{name = XName}} ->
             ok;
         #exchange{name = SourceXName} ->
-            RoutingKeys = mc:get_annotation(routing_keys, Msg0),
+            RoutingKeys = mc:routing_keys(Msg0),
             %% for now convert into amqp legacy
             Msg = mc:prepare(read, mc:convert(mc_amqpl, Msg0)),
             %% check exchange name in case it is same as target

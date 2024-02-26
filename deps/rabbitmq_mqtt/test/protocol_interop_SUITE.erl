@@ -160,7 +160,8 @@ amqp(Config) ->
     {ok, Session1} = amqp10_client:begin_session(Connection1),
     ReceiverLinkName = <<"test-receiver">>,
     {ok, Receiver} = amqp10_client:attach_receiver_link(
-                       Session1, ReceiverLinkName, <<"/topic/topic.1">>, unsettled),
+                       Session1, ReceiverLinkName, <<"/topic/topic.1">>, unsettled,
+                       configuration),
 
     %% MQTT 5.0 to AMQP 1.0
     C = connect(ClientId, Config),
@@ -182,6 +183,7 @@ amqp(Config) ->
                               'Response-Topic' => MqttResponseTopic,
                               'User-Property' => UserProperty},
                             RequestPayload, [{qos, 1}]),
+
 
     %% As of 3.13, AMQP 1.0 is proxied via AMQP 0.9.1 and therefore the conversion from
     %% mc_mqtt to mc_amqpl takes place. We therefore lose MQTT User Property and Response Topic
@@ -218,7 +220,9 @@ amqp(Config) ->
               #{correlation_id => Correlation,
                 content_type => ContentType},
               Msg2a),
-    Msg2 = amqp10_msg:set_headers(#{durable => true}, Msg2b),
+    %% Use the 2 byte AMQP boolean encoding, see AMQP §1.6.2
+    True = {boolean, true},
+    Msg2 = amqp10_msg:set_headers(#{durable => True}, Msg2b),
     ok = amqp10_client:send_msg(Sender, Msg2),
     receive {amqp10_disposition, {accepted, DTag}} -> ok
     after 1000 -> ct:fail(settled_timeout)

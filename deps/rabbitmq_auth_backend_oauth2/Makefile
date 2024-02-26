@@ -6,9 +6,9 @@ BUILD_WITHOUT_QUIC=1
 export BUILD_WITHOUT_QUIC
 
 LOCAL_DEPS = inets public_key
-BUILD_DEPS = rabbit_common
+BUILD_DEPS = rabbit_common oauth2_client
 DEPS = rabbit cowlib jose base64url
-TEST_DEPS = cowboy rabbitmq_web_dispatch rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client rabbitmq_mqtt emqtt
+TEST_DEPS = cowboy rabbitmq_web_dispatch rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client rabbitmq_mqtt emqtt oauth2_client
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk

@@ -261,6 +261,12 @@ stream(Config) ->
 
     SubCh = rabbit_ct_client_helpers:open_channel(Config, 2),
     qos(SubCh, 10, false),
+    %% wait for local replica
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              queue_utils:has_local_stream_member(Config, 2, QName, <<"/">>)
+      end, 60000),
+
     try
         amqp_channel:subscribe(
           SubCh, #'basic.consume'{queue = QName,

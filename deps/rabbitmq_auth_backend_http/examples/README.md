@@ -9,7 +9,7 @@ different platforms and frameworks:
  * Java and Spring Boot
  * Kotlin and Spring Boot
  * C# and ASP.NET Web API
- * C# and ASP.NET Core 7
+ * C# and ASP.NET Core 8.0
  * PHP
 
 ## Python Example
@@ -124,15 +124,15 @@ Port number may vary but will likely be `62190`.
 
 When the example is hosted on IIS, port 80 will be used by default.
 
-## ASP.NET Core 7 Example
+## ASP.NET Core 8.0 Example
 
 `rabbitmq_auth_backend_webapi_dotnetcore` is a modification of the `rabbitmq_auth_backend_webapi_dotnet` example
-designed for ASP.NET Core 7. It's very similar to the original version but it also adds some static typing
+designed for ASP.NET Core 8.0. It's very similar to the original version but it also adds some static typing
 for requests and responses.
 
 ### Running the Example
 
-Open the solution file, `RabbitMqAuthBackendHttp.sln` in Visual Studio 2022 version 17.4 or later.
+Open the solution file, `RabbitMqAuthBackendHttp.sln` in Visual Studio 2022 version 17.8 or later.
 
 As with other examples, RabbitMQ [authentication and authorization backends](http://www.rabbitmq.com/access-control.html) must be configured
 to use this plugin and the endpoints provided by this example app.
@@ -151,8 +151,8 @@ Have a look at `AuthController`.
 
 This example was developed using
 
- * .NET SDK 7.0
- * Visual Studio 2022 version 17.4 or Visual Studio Code
+ * .NET SDK 8.0
+ * Visual Studio 2022 version 17.8 or Visual Studio Code
  * Windows 10
 
 It is possible to build and run service from Visual Studio using IIS or from Visual Studio or Visual Studio Code using cross-platform server Kestrel.

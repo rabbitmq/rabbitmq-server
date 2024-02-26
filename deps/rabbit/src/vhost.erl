@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(vhost).
@@ -169,6 +169,6 @@ merge_metadata(VHost, Value) ->
     NewMeta = maps:merge(Meta0, Value),
     VHost#vhost{metadata = NewMeta}.
 
--spec is_tagged_with(vhost:vhost(), tag()) -> boolean().
+-spec is_tagged_with(vhost(), tag()) -> boolean().
 is_tagged_with(VHost, Tag) ->
     lists:member(Tag, get_tags(VHost)).

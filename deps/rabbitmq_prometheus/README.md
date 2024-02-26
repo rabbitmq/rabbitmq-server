@@ -89,7 +89,7 @@ rabbitmqctl eval 'application:set_env(rabbitmq_prometheus, return_per_object_met
 
 As mentioned in the previous section, returning a lot of per-object metrics is quite computationally expensive process. One of the reasons is that `/metrics/per-object` returns every possible metric for every possible object - even if having them makes no sense in the day-to-day monitoring activity.
 
-That's why there is an additional endpoint that always return per-object metrics and allows one to explicitly query only the things that are relevant - `/metrics/detailed`. By default it doesn't return anything at all, but it's possible to specify required metric groups and virtual host filters in the GET-parameters. Scraping `/metrics/detailed?vhost=vhost-1&vhost=vhost-2&family=queue_coarse_metrics&family=queue_consumer_count`. will only return requested metrics (and not, for example, channel metrics that include erlang PID in labels). 
+That's why there is an additional endpoint that always return per-object metrics and allows one to explicitly query only the things that are relevant - `/metrics/detailed`. By default it doesn't return anything at all, but it's possible to specify required metric groups and virtual host filters in the GET-parameters. Scraping `/metrics/detailed?vhost=vhost-1&vhost=vhost-2&family=queue_coarse_metrics&family=queue_consumer_count`. will only return requested metrics (and not, for example, channel metrics that include erlang PID in labels).
 
 This endpoint supports the following parameters:
 
@@ -122,4 +122,4 @@ all              app              app-c_src        apps-ct          asciidoc    
 
 ## Copyright
 
-(c) 2007-2020 VMware, Inc. or its affiliates.
+(c) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.

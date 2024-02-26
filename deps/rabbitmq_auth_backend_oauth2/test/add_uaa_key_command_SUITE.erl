@@ -72,4 +72,3 @@ validate_pem_file_key(Config) ->
     CertsDir = ?config(rmq_certsdir, Config),
     Keyfile = filename:join([CertsDir, <<"client">>, <<"key.pem">>]),
     ok = ?COMMAND:validate([<<"foo">>], #{pem_file => Keyfile}).
-

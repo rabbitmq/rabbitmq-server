@@ -2,7 +2,7 @@ const { By, Key, until, Builder } = require('selenium-webdriver')
 
 const BasePage = require('./BasePage')
 
-const FORM = By.css('form')
+const FORM = By.css('div.content form')
 const USERNAME = By.css('input[name="username"]')
 const PASSWORD = By.css('input[name="password"]')
 

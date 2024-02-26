@@ -9,7 +9,7 @@
             "hence you are strongly discouraged from building clients ",
             "which use it."],
         "copyright": [
-            "Copyright (C) 2008-2020 VMware, Inc. or its affiliates.\n",
+            "Copyright (C) 2007-2024 Broadcom Inc. and its subsidiaries. All rights reserved.\n",
             "\n",
             "Permission is hereby granted, free of charge, to any person\n",
             "obtaining a copy of this file (the \"Software\"), to deal in the\n",

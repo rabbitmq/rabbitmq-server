@@ -29,6 +29,7 @@ def all_beam_files(name = "all_beam_files"):
             "src/rabbit_mgmt_hsts.erl",
             "src/rabbit_mgmt_load_definitions.erl",
             "src/rabbit_mgmt_login.erl",
+            "src/rabbit_mgmt_nodes.erl",
             "src/rabbit_mgmt_oauth_bootstrap.erl",
             "src/rabbit_mgmt_reset_handler.erl",
             "src/rabbit_mgmt_stats.erl",
@@ -123,6 +124,7 @@ def all_beam_files(name = "all_beam_files"):
         erlc_opts = "//:erlc_opts",
         deps = [
             "//deps/amqp_client:erlang_app",
+            "//deps/oauth2_client:erlang_app",
             "//deps/rabbit:erlang_app",
             "//deps/rabbit_common:erlang_app",
             "//deps/rabbitmq_management_agent:erlang_app",
@@ -160,6 +162,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/rabbit_mgmt_hsts.erl",
             "src/rabbit_mgmt_load_definitions.erl",
             "src/rabbit_mgmt_login.erl",
+            "src/rabbit_mgmt_nodes.erl",
             "src/rabbit_mgmt_oauth_bootstrap.erl",
             "src/rabbit_mgmt_reset_handler.erl",
             "src/rabbit_mgmt_stats.erl",
@@ -254,6 +257,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
         erlc_opts = "//:test_erlc_opts",
         deps = [
             "//deps/amqp_client:erlang_app",
+            "//deps/oauth2_client:erlang_app",
             "//deps/rabbit:erlang_app",
             "//deps/rabbit_common:erlang_app",
             "//deps/rabbitmq_management_agent:erlang_app",
@@ -381,6 +385,7 @@ def all_srcs(name = "all_srcs"):
             "src/rabbit_mgmt_hsts.erl",
             "src/rabbit_mgmt_load_definitions.erl",
             "src/rabbit_mgmt_login.erl",
+            "src/rabbit_mgmt_nodes.erl",
             "src/rabbit_mgmt_oauth_bootstrap.erl",
             "src/rabbit_mgmt_reset_handler.erl",
             "src/rabbit_mgmt_stats.erl",
@@ -596,6 +601,14 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbit_mgmt_test_unit_SUITE.erl"],
         outs = ["test/rabbit_mgmt_test_unit_SUITE.beam"],
+        app_name = "rabbitmq_management",
+        erlc_opts = "//:test_erlc_opts",
+    )
+    erlang_bytecode(
+        name = "rabbit_mgmt_wm_auth_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/rabbit_mgmt_wm_auth_SUITE.erl"],
+        outs = ["test/rabbit_mgmt_wm_auth_SUITE.beam"],
         app_name = "rabbitmq_management",
         erlc_opts = "//:test_erlc_opts",
     )

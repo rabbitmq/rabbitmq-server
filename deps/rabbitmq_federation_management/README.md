@@ -39,6 +39,6 @@ and see under the `./plugins` directory.
 
 ## Copyright and License
 
-(c) 2007-2020 VMware, Inc. or its affiliates.
+(c) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 See `LICENSE` for license information.

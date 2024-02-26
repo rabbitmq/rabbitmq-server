@@ -12,6 +12,7 @@
 !/deps/amqp_client/
 !/deps/amqp10_client/
 !/deps/amqp10_common/
+!/deps/oauth2_client/
 !/deps/rabbitmq_amqp1_0/
 !/deps/rabbitmq_auth_backend_cache/
 !/deps/rabbitmq_auth_backend_http/
@@ -36,6 +37,7 @@
 !/deps/rabbitmq_peer_discovery_consul/
 !/deps/rabbitmq_peer_discovery_etcd/
 !/deps/rabbitmq_peer_discovery_k8s/
+!/deps/rabbitmq_prelaunch/
 !/deps/rabbitmq_prometheus/
 !/deps/rabbitmq_random_exchange/
 !/deps/rabbitmq_recent_history_exchange/

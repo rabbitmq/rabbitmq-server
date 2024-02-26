@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_stream_utils).
@@ -35,9 +35,9 @@
          filter_spec/1,
          command_versions/0,
          filtering_supported/0,
-         check_super_stream_management_permitted/4]).
-
--define(MAX_PERMISSION_CACHE_SIZE, 12).
+         check_super_stream_management_permitted/4,
+         offset_lag/4,
+         consumer_offset/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
@@ -174,32 +174,15 @@ auth_mechanism_to_module(TypeBin, Sock) ->
     end.
 
 check_resource_access(User, Resource, Perm, Context) ->
-    V = {Resource, Context, Perm},
-
-    Cache =
-        case get(permission_cache) of
-            undefined ->
-                [];
-            Other ->
-                Other
-        end,
-    case lists:member(V, Cache) of
-        true ->
-            ok;
-        false ->
-            try
-                rabbit_access_control:check_resource_access(User,
-                                                            Resource,
-                                                            Perm,
-                                                            Context),
-                CacheTail =
-                    lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE - 1),
-                put(permission_cache, [V | CacheTail]),
-                ok
-            catch
-                exit:_ ->
-                    error
-            end
+    try
+        rabbit_access_control:check_resource_access(User,
+                                                    Resource,
+                                                    Perm,
+                                                    Context),
+        ok
+    catch
+        exit:_ ->
+            error
     end.
 
 check_configure_permitted(Resource, User) ->
@@ -349,3 +332,27 @@ q(VirtualHost, Name) ->
 
 e(VirtualHost, Name) ->
     rabbit_misc:r(VirtualHost, exchange, Name).
+
+-spec consumer_offset(ConsumerOffsetFromCounter :: integer(),
+                      MessageConsumed :: non_neg_integer(),
+                      LastListenerOffset :: integer() | undefined) -> integer().
+consumer_offset(0, 0, undefined) ->
+    0;
+consumer_offset(0, 0, LastListenerOffset) when LastListenerOffset > 0 ->
+    %% consumer at "next" waiting for messages most likely
+    LastListenerOffset;
+consumer_offset(ConsumerOffsetFromCounter, _, _) ->
+    ConsumerOffsetFromCounter.
+
+-spec offset_lag(CommittedOffset :: integer(),
+                 ConsumerOffsetFromCounter :: integer(),
+                 MessageConsumed :: non_neg_integer(),
+                 LastListenerOffset :: integer() | undefined) -> integer().
+offset_lag(-1, _, _, _) ->
+    %% -1 is for an empty stream, so no lag
+    0;
+offset_lag(_, 0, 0, LastListenerOffset) when LastListenerOffset > 0 ->
+    %% consumer waiting for messages at the end of the stream, most likely
+    0;
+offset_lag(CommittedOffset, ConsumerOffset, _, _) ->
+    CommittedOffset - ConsumerOffset.

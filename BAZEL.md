@@ -87,6 +87,10 @@ Note: This takes quite some time on a single machine.
 
 `bazel run gazelle`
 
+## Regenerate moduleindex.yaml
+
+`bazel run :moduleindex > moduleindex.yaml`
+
 ## Additional Useful Commands
 
 - Format all bazel files consistently (requires [buildifier](https://github.com/bazelbuild/buildtools/blob/master/buildifier/README.md)):

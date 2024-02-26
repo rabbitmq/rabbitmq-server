@@ -9,6 +9,7 @@
 %% now be configured to add such headers. This enables non-AMQP 0.9.1 protocols (that
 %% do not use rabbit_channel) to also add AMQP 0.9.1 headers to incoming messages.
 -module(rabbit_message_interceptor).
+-include("mc.hrl").
 
 -export([intercept/1]).
 
@@ -45,5 +46,5 @@ set_timestamp(Msg, Timestamp, Overwrite) ->
         {Ts, false} when is_integer(Ts) ->
             Msg;
         _ ->
-            mc:set_annotation(timestamp, Timestamp, Msg)
+            mc:set_annotation(?ANN_TIMESTAMP, Timestamp, Msg)
     end.
