@@ -276,6 +276,8 @@ get_sorts_param(ReqData, Def) ->
     case get_value_param(<<"sort">>, ReqData) of
         undefined ->
             Def;
+        [] ->
+            Def;
         S ->
             [S]
     end.
