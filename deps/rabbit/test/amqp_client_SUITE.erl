@@ -2478,11 +2478,10 @@ queue_and_client_different_nodes(QueueLeaderNode, ClientNode, QueueType, Config)
     end,
     flush(receiver_attached),
 
-    NumMsgs = 10,
-    [begin
-         Bin = integer_to_binary(N),
-         ok = amqp10_client:send_msg(Sender, amqp10_msg:new(Bin, Bin, true))
-     end || N <- lists:seq(1, NumMsgs)],
+    %% Let's test with many messages to make sure we're not
+    %% impacted by RabbitMQ internal credit based flow control.
+    NumMsgs = 1100,
+    ok = send_messages(Sender, NumMsgs, true),
 
     %% Grant credits to the sending queue.
     ok = amqp10_client:flow_link_credit(Receiver, NumMsgs, never),
@@ -2491,8 +2490,9 @@ queue_and_client_different_nodes(QueueLeaderNode, ClientNode, QueueType, Config)
     Msgs = receive_messages(Receiver, NumMsgs),
     FirstMsg = hd(Msgs),
     LastMsg = lists:last(Msgs),
-    ?assertEqual([<<"1">>], amqp10_msg:body(FirstMsg)),
-    ?assertEqual([integer_to_binary(NumMsgs)], amqp10_msg:body(LastMsg)),
+    ?assertEqual([integer_to_binary(NumMsgs)], amqp10_msg:body(FirstMsg)),
+    ?assertEqual([<<"1">>], amqp10_msg:body(LastMsg)),
+
     ok = amqp10_client_session:disposition(
            Receiver,
            amqp10_msg:delivery_id(FirstMsg),
