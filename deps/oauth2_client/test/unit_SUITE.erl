@@ -11,6 +11,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -include_lib("oauth2_client.hrl").
+-include_lib("public_key/include/public_key.hrl").
 
 -compile(export_all).
 
@@ -23,12 +24,41 @@ all() ->
 groups() ->
 [
   {ssl_options, [], [
-    no_ssl_options_set
+    no_ssl_options_triggers_verify_peer,
+    peer_verification_verify_none,
+    peer_verification_verify_peer_with_cacertfile
   ]}
 ].
 
-no_ssl_options_set(_) ->
-  Map = #{ },
-  ?assertEqual([
+no_ssl_options_triggers_verify_peer(_) ->
+  [
+    {verify, verify_peer},
+    {depth, 10},
+    {crl_check,false},
+    {fail_if_no_peer_cert,false},
+    {cacerts, _CaCerts}
+  ] = oauth2_client:extract_ssl_options_as_list(#{ }).
+
+peer_verification_verify_none(_) ->
+  [
     {verify, verify_none}
-  ], oauth2_client:extract_ssl_options_as_list(Map)).
+  ] = oauth2_client:extract_ssl_options_as_list(#{ peer_verification => verify_none }),
+  [
+    {verify, verify_none}
+  ] = oauth2_client:extract_ssl_options_as_list(#{
+    peer_verification => verify_none,
+    cacertfile => "/tmp"
+  }).
+
+
+peer_verification_verify_peer_with_cacertfile(_) ->
+  [
+    {verify, verify_peer},
+    {depth, 10},
+    {crl_check,false},
+    {fail_if_no_peer_cert,false},
+    {cacertfile, "/tmp"}
+  ] = oauth2_client:extract_ssl_options_as_list(#{
+    cacertfile => "/tmp",
+    peer_verification => verify_peer
+  }).
