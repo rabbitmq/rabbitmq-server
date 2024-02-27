@@ -232,10 +232,12 @@ deliver(FetchFun, QName, State, SingleActiveConsumerIsOn, ActiveConsumer) ->
 deliver(_FetchFun, _QName, false, State, true, none) ->
     {undelivered, false,
         State#state{use = update_use(State#state.use, inactive)}};
-deliver(FetchFun, QName, false, State = #state{consumers = Consumers}, true, SingleActiveConsumer) ->
+deliver(FetchFun, QName, false, State = #state{consumers = Consumers}, true,
+        SingleActiveConsumer) ->
     {ChPid, Consumer} = SingleActiveConsumer,
-    %% blocked (rate/prefetch limited) consumers are removed from the queue state, but not the exclusive_consumer field,
-    %% so we need to do this check to avoid adding the exclusive consumer to the channel record
+    %% blocked (rate/prefetch limited) consumers are removed from the queue state,
+    %% but not the exclusive_consumer field, so we need to do this check to
+    %% avoid adding the exclusive consumer to the channel record
     %% over and over
     case is_blocked(SingleActiveConsumer) of
         true ->
@@ -271,40 +273,46 @@ deliver(FetchFun, QName, ConsumersChanged,
 
 deliver_to_consumer(FetchFun, E = {ChPid, Consumer}, QName) ->
     C = lookup_ch(ChPid),
-    case is_ch_blocked(C) of
-        true  ->
-            block_consumer(C, E),
-            undelivered;
-        false ->
-            CTag = Consumer#consumer.tag,
-            LinkStates = C#cr.link_states,
-            case maps:find(CTag, LinkStates) of
-                {ok, #link_state{delivery_count = DeliveryCount0,
-                                 credit = Credit} = LinkState0}
-                  when Credit > 0 ->
+    ChBlocked = is_ch_blocked(C),
+    LinkStates = C#cr.link_states,
+    CTag = Consumer#consumer.tag,
+    case LinkStates of
+        #{CTag := #link_state{delivery_count = DeliveryCount0,
+                              credit = Credit} = LinkState0} ->
+            %% bypass credit flow for link credit consumers
+            %% as it is handled separately
+            case Credit > 0 of
+                true ->
                     DeliveryCount = case DeliveryCount0 of
-                                        credit_api_v1 -> DeliveryCount0;
-                                        _ -> serial_number:add(DeliveryCount0, 1)
+                                        credit_api_v1 ->
+                                            DeliveryCount0;
+                                        _ ->
+                                            serial_number:add(DeliveryCount0, 1)
                                     end,
                     LinkState = LinkState0#link_state{delivery_count = DeliveryCount,
                                                       credit = Credit - 1},
                     C1 = C#cr{link_states = maps:update(CTag, LinkState, LinkStates)},
                     {delivered, deliver_to_consumer(FetchFun, Consumer, C1, QName)};
-                {ok, _Exhausted} ->
+                false ->
                     block_consumer(C, E),
+                    undelivered
+            end;
+        _ when ChBlocked ->
+            %% not a link credit consumer, use credit flow
+            block_consumer(C, E),
+            undelivered;
+        _ ->
+            %% not a link credit consumer, use credit flow
+            case rabbit_limiter:can_send(C#cr.limiter,
+                                         Consumer#consumer.ack_required,
+                                         CTag) of
+                {suspend, Limiter} ->
+                    block_consumer(C#cr{limiter = Limiter}, E),
                     undelivered;
-                error ->
-                    case rabbit_limiter:can_send(C#cr.limiter,
-                                                 Consumer#consumer.ack_required,
-                                                 CTag) of
-                        {suspend, Limiter} ->
-                            block_consumer(C#cr{limiter = Limiter}, E),
-                            undelivered;
-                        {continue, Limiter} ->
-                            {delivered, deliver_to_consumer(
-                                          FetchFun, Consumer,
-                                          C#cr{limiter = Limiter}, QName)}
-                    end
+                {continue, Limiter} ->
+                    {delivered, deliver_to_consumer(
+                                  FetchFun, Consumer,
+                                  C#cr{limiter = Limiter}, QName)}
             end
     end.
 
@@ -466,9 +474,10 @@ drained(AdvancedDeliveryCount, ChPid, CTag) ->
     'unchanged' | {'unblocked', state()}.
 process_credit(DeliveryCountRcv, LinkCredit, ChPid, CTag, State) ->
     case lookup_ch(ChPid) of
-        #cr{link_states = LinkStates = #{CTag := LinkState = #link_state{delivery_count = DeliveryCountSnd,
-                                                                         credit = OldLinkCreditSnd}},
-            unsent_message_count = Count} = C0 ->
+        #cr{link_states = LinkStates = #{CTag := LinkState =
+                                             #link_state{delivery_count = DeliveryCountSnd,
+                                                         credit = OldLinkCreditSnd}},
+            unsent_message_count = _Count} = C0 ->
             LinkCreditSnd = case DeliveryCountSnd of
                                 credit_api_v1 ->
                                     %% LinkCredit refers to LinkCreditSnd
@@ -482,8 +491,7 @@ process_credit(DeliveryCountRcv, LinkCredit, ChPid, CTag, State) ->
                                       DeliveryCountSnd)
                             end,
             C = C0#cr{link_states = maps:update(CTag, LinkState#link_state{credit = LinkCreditSnd}, LinkStates)},
-            case Count >= ?UNSENT_MESSAGE_LIMIT orelse
-                 OldLinkCreditSnd > 0 orelse
+            case OldLinkCreditSnd > 0 orelse
                  LinkCreditSnd < 1 of
                 true ->
                     update_ch_record(C),
