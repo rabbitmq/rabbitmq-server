@@ -112,8 +112,6 @@
 -record(pending_transfer, {
           frames :: iolist(),
           queue_ack_required :: boolean(),
-          %% queue that sent us this message
-          queue_pid :: pid(),
           delivery_id :: delivery_number(),
           outgoing_unsettled :: #outgoing_unsettled{}
          }).
@@ -1011,9 +1009,8 @@ handle_control(#'v1_0.detach'{handle = Handle = ?UINT(HandleInt),
                          incoming_links = maps:remove(HandleInt, IncomingLinks),
                          outgoing_links = OutgoingLinks,
                          outgoing_unsettled_map = Unsettled},
-    ok = rabbit_amqp_writer:send_command(
-           WriterPid, Ch, #'v1_0.detach'{handle = Handle,
-                                         closed = Closed}),
+    rabbit_amqp_writer:send_command(WriterPid, Ch, #'v1_0.detach'{handle = Handle,
+                                                                  closed = Closed}),
     publisher_or_consumer_deleted(State, State0),
     {noreply, State};
 
@@ -1131,12 +1128,8 @@ send_pending(#state{remote_incoming_window = Space,
             send_pending(State0#state{outgoing_pending = Buf});
         {{value, #pending_transfer{frames = Frames} = Pending}, Buf1}
           when Space > 0 ->
-            SendFun = fun(Transfer, Sections) ->
-                              rabbit_amqp_writer:send_command(
-                                WriterPid, Ch, Transfer, Sections)
-                      end,
             {NumTransfersSent, Buf, State1} =
-                case send_frames(SendFun, Frames, Space) of
+                case send_frames(WriterPid, Ch, Frames, Space) of
                     {all, SpaceLeft} ->
                         {Space - SpaceLeft,
                          Buf1,
@@ -1154,13 +1147,13 @@ send_pending(#state{remote_incoming_window = Space,
             State0
     end.
 
-send_frames(_, [], Left) ->
+send_frames(_, _, [], Left) ->
     {all, Left};
-send_frames(_, Rest, 0) ->
+send_frames(_, _, Rest, 0) ->
     {some, Rest};
-send_frames(SendFun, [[Transfer, Sections] | Rest], Left) ->
-    ok = SendFun(Transfer, Sections),
-    send_frames(SendFun, Rest, Left - 1).
+send_frames(Writer, Ch, [[Transfer, Sections] | Rest], Left) ->
+    rabbit_amqp_writer:send_command(Writer, Ch, Transfer, Sections),
+    send_frames(Writer, Ch, Rest, Left - 1).
 
 record_outgoing_unsettled(#pending_transfer{queue_ack_required = true,
                                             delivery_id = DeliveryId,
@@ -1454,7 +1447,6 @@ handle_deliver(ConsumerTag, AckRequired,
             PendingTransfer = #pending_transfer{
                                  frames = Frames,
                                  queue_ack_required = AckRequired,
-                                 queue_pid = QPid,
                                  delivery_id = DeliveryId,
                                  outgoing_unsettled = Del},
             State#state{outgoing_pending = queue:in(PendingTransfer, Pending),
