@@ -166,8 +166,8 @@ all_tests() ->
      consumer_priorities,
      cancel_consumer_gh_3729,
      cancel_and_consume_with_same_tag,
-     validate_messages_on_queue
-
+     validate_messages_on_queue,
+     amqpl_headers
     ].
 
 memory_tests() ->
@@ -3331,6 +3331,38 @@ validate_messages_on_queue(Config) ->
     validate_queue(Ch, QQ, Messages),
 
     ok.
+
+amqpl_headers(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    Headers1Sent = undefined,
+    Headers2Sent = [],
+    [ok = amqp_channel:cast(
+            Ch,
+            #'basic.publish'{routing_key = QQ},
+            #amqp_msg{props = #'P_basic'{headers = HeadersSent,
+                                         delivery_mode = 2}}) ||
+     HeadersSent <- [Headers1Sent, Headers2Sent]],
+    RaName = ra_name(QQ),
+    wait_for_messages_ready(Servers, RaName, 2),
+
+    {#'basic.get_ok'{},
+     #amqp_msg{props = #'P_basic'{headers = Headers1Received}}
+    } = amqp_channel:call(Ch, #'basic.get'{queue = QQ}),
+
+    {#'basic.get_ok'{delivery_tag = DeliveryTag},
+     #amqp_msg{props = #'P_basic'{headers = Headers2Received}}
+    } = amqp_channel:call(Ch, #'basic.get'{queue = QQ}),
+
+    ?assertEqual(Headers1Sent, Headers1Received),
+    ?assertEqual(Headers2Sent, Headers2Received),
+
+    ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
+                                            multiple = true}).
 
 leader_locator_client_local(Config) ->
     [Server1 | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
