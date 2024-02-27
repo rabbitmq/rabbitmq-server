@@ -177,7 +177,7 @@ groups() ->
     ssl_connection_error,
     {group, with_all_oauth_provider_settings},
     {group, without_all_oauth_providers_settings}
-  ]}
+  ]} 
 ].
 
 init_per_suite(Config) ->
