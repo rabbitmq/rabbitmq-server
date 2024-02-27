@@ -103,10 +103,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
       Enum.join(Enum.concat([if_empty_str, if_unused_str]), "and ") <> "..."
   end
 
-  def usage(), do: "delete_queue <queue_name> [--if-empty|-e] [--if-unused|-u]"
+  def usage(), do: "delete_queue [--vhost <vhost>] <queue_name> [--if-empty|-e] [--if-unused|-u]"
 
   def usage_additional() do
     [
+      ["--vhost", "Virtual host name"],
       ["<queue_name>", "name of the queue to delete"],
       ["--if-empty", "delete the queue if it is empty (has no messages ready for delivery)"],
       ["--if-unused", "delete the queue only if it has no consumers"]
