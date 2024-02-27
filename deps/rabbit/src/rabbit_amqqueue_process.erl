@@ -1644,14 +1644,15 @@ handle_cast({credit, SessionPid, CTag, DeliveryCountRcv, Credit, Drain, Echo},
                q = Q} = State0) ->
     QName = amqqueue:get_name(Q),
     State = #q{backing_queue_state = PostBQS,
-               backing_queue = BQ} = case rabbit_queue_consumers:process_credit(
-                                            DeliveryCountRcv, Credit, SessionPid, CTag, Consumers0) of
-                                         unchanged ->
-                                             State0;
-                                         {unblocked, Consumers1} ->
-                                             State1 = State0#q{consumers = Consumers1},
-                                             run_message_queue(true, State1)
-                                     end,
+               backing_queue = BQ} =
+        case rabbit_queue_consumers:process_credit(
+               DeliveryCountRcv, Credit, SessionPid, CTag, Consumers0) of
+            unchanged ->
+                State0;
+            {unblocked, Consumers1} ->
+                State1 = State0#q{consumers = Consumers1},
+                run_message_queue(true, State1)
+        end,
     case rabbit_queue_consumers:get_link_state(SessionPid, CTag) of
         {credit_api_v1, PostCred}
           when Drain andalso

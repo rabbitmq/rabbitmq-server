@@ -1128,35 +1128,23 @@ send_pending(#state{remote_incoming_window = Space,
             Flow = session_flow_fields(Flow0, State0),
             rabbit_amqp_writer:send_command(WriterPid, Ch, Flow),
             send_pending(State0#state{outgoing_pending = Buf});
-        {{value, #pending_transfer{
-                    frames = Frames,
-                    queue_pid = QPid,
-                    outgoing_unsettled = #outgoing_unsettled{queue_name = QName}
-                   } = Pending}, Buf1}
+        {{value, #pending_transfer{frames = Frames} = Pending}, Buf1}
           when Space > 0 ->
-            SendFun = case rabbit_queue_type:module(QName, State0#state.queue_states) of
-                          {ok, rabbit_classic_queue} ->
-                              fun(Transfer, Sections) ->
-                                      rabbit_amqp_writer:send_command_and_notify(
-                                        WriterPid, Ch, QPid, self(), Transfer, Sections)
-                              end;
-                          {ok, _QType} ->
-                              fun(Transfer, Sections) ->
-                                      rabbit_amqp_writer:send_command(
-                                        WriterPid, Ch, Transfer, Sections)
-                              end
+            SendFun = fun(Transfer, Sections) ->
+                              rabbit_amqp_writer:send_command(
+                                WriterPid, Ch, Transfer, Sections)
                       end,
             {NumTransfersSent, Buf, State1} =
-            case send_frames(SendFun, Frames, Space) of
-                {all, SpaceLeft} ->
-                    {Space - SpaceLeft,
-                     Buf1,
-                     record_outgoing_unsettled(Pending, State0)};
-                {some, Rest} ->
-                    {Space,
-                     queue:in_r(Pending#pending_transfer{frames = Rest}, Buf1),
-                     State0}
-            end,
+                case send_frames(SendFun, Frames, Space) of
+                    {all, SpaceLeft} ->
+                        {Space - SpaceLeft,
+                         Buf1,
+                         record_outgoing_unsettled(Pending, State0)};
+                    {some, Rest} ->
+                        {Space,
+                         queue:in_r(Pending#pending_transfer{frames = Rest}, Buf1),
+                         State0}
+                end,
             State2 = session_flow_control_sent_transfers(NumTransfersSent, State1),
             State = State2#state{outgoing_pending = Buf},
             send_pending(State);
