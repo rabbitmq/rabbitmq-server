@@ -412,7 +412,7 @@ protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
                  end, Headers0, Anns),
     Headers = case Headers1 of
                   [] ->
-                      undefined;
+                      H00;
                   _ ->
                       %% Dedup
                       lists:usort(fun({Key1, _, _}, {Key2, _, _}) ->
