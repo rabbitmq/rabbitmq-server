@@ -289,16 +289,16 @@ cancel(Q, ConsumerTag, OkMsg, ActingUser, State) ->
 -spec settle(rabbit_amqqueue:name(), rabbit_queue_type:settle_op(),
              rabbit_types:ctag(), [non_neg_integer()], state()) ->
     {state(), rabbit_queue_type:actions()}.
-settle(_QName, complete, _CTag, MsgIds, State) ->
-    Pid = State#?STATE.pid,
-    delegate:invoke_no_result(Pid,
-                              {gen_server2, cast, [{ack, MsgIds, self()}]}),
-    {State, []};
-settle(_QName, Op, _CTag, MsgIds, State) ->
-    ChPid = self(),
-    ok = delegate:invoke_no_result(State#?STATE.pid,
-                                   {gen_server2, cast,
-                                    [{reject, Op == requeue, MsgIds, ChPid}]}),
+settle(_QName, Op, _CTag, MsgIds0, State = #?STATE{pid = Pid}) ->
+    %% Classic queues expect message IDs in sorted order.
+    MsgIds = lists:usort(MsgIds0),
+    Arg = case Op of
+              complete ->
+                  {ack, MsgIds, self()};
+              _ ->
+                  {reject, Op == requeue, MsgIds, self()}
+          end,
+    delegate:invoke_no_result(Pid, {gen_server2, cast, [Arg]}),
     {State, []}.
 
 credit_v1(_QName, Ctag, LinkCreditSnd, Drain, #?STATE{pid = QPid} = State) ->

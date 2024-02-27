@@ -983,7 +983,7 @@ handle_control(#'v1_0.detach'{handle = Handle = ?UINT(HandleInt),
                                   [] ->
                                       {QStates1, Unsettled0, OutgoingLinks1};
                                   _ ->
-                                      case rabbit_queue_type_settle(QName, requeue, Ctag, MsgIds, QStates1) of
+                                      case rabbit_queue_type:settle(QName, requeue, Ctag, MsgIds, QStates1) of
                                           {ok, QStates2, _Actions = []} ->
                                               {QStates2, Unsettled1, OutgoingLinks1};
                                           {protocol_error, _ErrorType, Reason, ReasonArgs} ->
@@ -1084,7 +1084,7 @@ handle_control(#'v1_0.disposition'{role = ?RECV_ROLE,
             {QStates, Actions} =
             maps:fold(
               fun({QName, Ctag}, MsgIds, {QS0, ActionsAcc}) ->
-                      case rabbit_queue_type_settle(QName, SettleOp, Ctag, MsgIds, QS0) of
+                      case rabbit_queue_type:settle(QName, SettleOp, Ctag, MsgIds, QS0) of
                           {ok, QS, Actions0} ->
                               messages_acknowledged(SettleOp, QName, QS, MsgIds),
                               {QS, ActionsAcc ++ Actions0};
@@ -1109,11 +1109,6 @@ handle_control(Frame, _State) ->
     protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                    "Unexpected frame ~tp",
                    [amqp10_framing:pprint(Frame)]).
-
-rabbit_queue_type_settle(QName, SettleOp, Ctag, MsgIds0, QStates) ->
-    %% Classic queues expect message IDs in sorted order.
-    MsgIds = lists:usort(MsgIds0),
-    rabbit_queue_type:settle(QName, SettleOp, Ctag, MsgIds, QStates).
 
 send_pending(#state{remote_incoming_window = Space,
                     outgoing_pending = Buf0,
@@ -1389,7 +1384,7 @@ handle_queue_actions(Actions, State) ->
       end, State, Actions).
 
 handle_deliver(ConsumerTag, AckRequired,
-               Msg = {QName, QPid, MsgId, Redelivered, Mc0},
+               Msg = {QName, _QPid, MsgId, Redelivered, Mc0},
                State = #state{outgoing_pending = Pending,
                               outgoing_delivery_id = DeliveryId,
                               outgoing_links = OutgoingLinks0,
