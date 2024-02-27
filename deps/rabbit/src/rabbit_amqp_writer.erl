@@ -98,6 +98,7 @@ init({Sock, MaxFrame, ReaderPid}) ->
                    reader = ReaderPid,
                    pending = [],
                    pending_size = 0},
+    process_flag(message_queue_data, off_heap),
     {ok, State}.
 
 handle_cast({send_command, ChannelNum, MethodRecord}, State0) ->
