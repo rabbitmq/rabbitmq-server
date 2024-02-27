@@ -7,7 +7,8 @@
 -module(oauth2_client).
 -export([get_access_token/2,
         refresh_access_token/2,
-        get_oauth_provider/1,get_oauth_provider/2
+        get_oauth_provider/1,get_oauth_provider/2,
+        extract_ssl_options_as_list/1
         ]).
 
 -include("oauth2_client.hrl").
@@ -270,31 +271,46 @@ lookup_oauth_provider_from_keyconfig() ->
 
 -spec extract_ssl_options_as_list(#{atom() => any()}) -> proplists:proplist().
 extract_ssl_options_as_list(Map) ->
-  Verify = case maps:get(peer_verification, Map, verify_peer) of
+  {Verify, CaCerts, CaCertFile} = case maps:get(peer_verification, Map, verify_peer) of
     verify_peer ->
       case maps:get(cacertfile, Map, undefined) of
         undefined ->
           case public_key:cacerts_get() of
-            [] -> verify_none;
-            _ -> verify_peer
+            [] -> {verify_none, undefined, undefined};
+            Certs -> {verify_peer, Certs, undefined}
           end;
-        _ -> verify_peer
+        CaCert -> {verify_peer, undefined, CaCert}
       end;
-    verify_none -> verify_none
+    verify_none -> {verify_none, undefined, undefined}
   end,
 
-  [ {verify, Verify},
-    {cacertfile, maps:get(cacertfile, Map, "")},
-    {depth, maps:get(depth, Map, 10)},
-    {crl_check, maps:get(crl_check, Map, false)},
-    {fail_if_no_peer_cert, maps:get(fail_if_no_peer_cert, Map, false)}
-  ] ++
-  case maps:get(hostname_verification, Map, none) of
+  [ {verify, Verify} ]
+    ++
+    case Verify of
+      verify_none -> [];
+      _ ->
+        [
+          {depth, maps:get(depth, Map, 10)},
+          {crl_check, maps:get(crl_check, Map, false)},
+          {fail_if_no_peer_cert, maps:get(fail_if_no_peer_cert, Map, false)}
+        ]
+    end
+    ++
+    case Verify of
+      verify_none -> [];
+      _ ->
+        case {CaCerts, CaCertFile} of
+          {_, undefined} -> [{cacerts, CaCerts}];
+          {undefined, _} -> [{cacertfile, CaCertFile}]
+        end
+    end
+    ++
+    case maps:get(hostname_verification, Map, none) of
       wildcard ->
           [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]}];
       none ->
           []
-  end.
+    end.
 
 lookup_oauth_provider_config(OAuth2ProviderId) ->
   case application:get_env(rabbitmq_auth_backend_oauth2, oauth_providers) of
