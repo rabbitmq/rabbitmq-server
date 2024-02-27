@@ -697,32 +697,32 @@ safe_relative_path_test() ->
 
 parse_qvalues_test() ->
     [] = parse_qvalues(""),
-    [{"identity", 0.0}] = parse_qvalues("identity;q=0"),
-    [{"identity", 0.0}] = parse_qvalues("identity ;q=0"),
-    [{"identity", 0.0}] = parse_qvalues(" identity; q =0 "),
-    [{"identity", 0.0}] = parse_qvalues("identity ; q = 0"),
-    [{"identity", 0.0}] = parse_qvalues("identity ; q= 0.0"),
-    [{"gzip", 1.0}, {"deflate", 1.0}, {"identity", 0.0}] = parse_qvalues(
+    [{"identity", +0.0}] = parse_qvalues("identity;q=0"),
+    [{"identity", +0.0}] = parse_qvalues("identity ;q=0"),
+    [{"identity", +0.0}] = parse_qvalues(" identity; q =0 "),
+    [{"identity", +0.0}] = parse_qvalues("identity ; q = 0"),
+    [{"identity", +0.0}] = parse_qvalues("identity ; q= 0.0"),
+    [{"gzip", 1.0}, {"deflate", 1.0}, {"identity", +0.0}] = parse_qvalues(
         "gzip,deflate,identity;q=0.0"
     ),
-    [{"deflate", 1.0}, {"gzip", 1.0}, {"identity", 0.0}] = parse_qvalues(
+    [{"deflate", 1.0}, {"gzip", 1.0}, {"identity", +0.0}] = parse_qvalues(
         "deflate,gzip,identity;q=0.0"
     ),
-    [{"gzip", 1.0}, {"deflate", 1.0}, {"gzip", 1.0}, {"identity", 0.0}] =
+    [{"gzip", 1.0}, {"deflate", 1.0}, {"gzip", 1.0}, {"identity", +0.0}] =
         parse_qvalues("gzip,deflate,gzip,identity;q=0"),
-    [{"gzip", 1.0}, {"deflate", 1.0}, {"identity", 0.0}] = parse_qvalues(
+    [{"gzip", 1.0}, {"deflate", 1.0}, {"identity", +0.0}] = parse_qvalues(
         "gzip, deflate , identity; q=0.0"
     ),
-    [{"gzip", 1.0}, {"deflate", 1.0}, {"identity", 0.0}] = parse_qvalues(
+    [{"gzip", 1.0}, {"deflate", 1.0}, {"identity", +0.0}] = parse_qvalues(
         "gzip; q=1, deflate;q=1.0, identity;q=0.0"
     ),
-    [{"gzip", 0.5}, {"deflate", 1.0}, {"identity", 0.0}] = parse_qvalues(
+    [{"gzip", 0.5}, {"deflate", 1.0}, {"identity", +0.0}] = parse_qvalues(
         "gzip; q=0.5, deflate;q=1.0, identity;q=0"
     ),
-    [{"gzip", 0.5}, {"deflate", 1.0}, {"identity", 0.0}] = parse_qvalues(
+    [{"gzip", 0.5}, {"deflate", 1.0}, {"identity", +0.0}] = parse_qvalues(
         "gzip; q=0.5, deflate , identity;q=0.0"
     ),
-    [{"gzip", 0.5}, {"deflate", 0.8}, {"identity", 0.0}] = parse_qvalues(
+    [{"gzip", 0.5}, {"deflate", 0.8}, {"identity", +0.0}] = parse_qvalues(
         "gzip; q=0.5, deflate;q=0.8, identity;q=0.0"
     ),
     [{"gzip", 0.5}, {"deflate", 1.0}, {"identity", 1.0}] = parse_qvalues(
