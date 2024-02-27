@@ -1,4 +1,5 @@
 -module(uaa_jwks).
+<<<<<<< HEAD
 -export([get/1, ssl_options/0]).
 
 -spec get(string() | binary()) -> {ok, term()} | {error, term()}.
@@ -30,3 +31,10 @@ cacertfile(UaaEnv) ->
     undefined -> [];
     CaCertFile -> [{cacertfile, CaCertFile}]
   end.
+=======
+-export([get/2]).
+
+-spec get(string() | binary(), term()) -> {ok, term()} | {error, term()}.
+get(JwksUrl, KeyConfig) ->
+    httpc:request(get, {JwksUrl, []}, [{ssl, ssl_options(KeyConfig)}, {timeout, 60000}], []).
+>>>>>>> 5e66d25b45 (Remove obsolete function)

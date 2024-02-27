@@ -49,8 +49,34 @@ all() ->
         test_successful_access_with_a_token_that_uses_single_scope_alias_in_extra_scope_source_field,
         test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_extra_scope_source_field,
         test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_extra_scope_source_field,
+<<<<<<< HEAD
         test_default_ssl_options,
         test_default_ssl_options_with_cacertfile
+=======
+        test_username_from,
+        {group, with_rabbitmq_node}
+    ].
+groups() ->
+    [
+      {with_rabbitmq_node, [], [
+          test_command_json,
+          test_command_pem,
+          test_command_pem_no_kid
+        ]
+      },
+      {with_resource_server_id, [], [
+          test_successful_access_with_a_token,
+          test_validate_payload_resource_server_id_mismatch,
+          test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field,
+          test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_scope_field,
+          test_successful_authorization_without_scopes,
+          test_successful_authentication_without_scopes,
+          test_successful_access_with_a_token_that_uses_single_scope_alias_in_extra_scope_source_field,
+          test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_extra_scope_source_field,
+          test_post_process_token_payload_complex_claims,
+          test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field_and_custom_scope_prefix
+      ]}
+>>>>>>> 5e66d25b45 (Remove obsolete function)
     ].
 
 init_per_suite(Config) ->
@@ -90,20 +116,12 @@ init_per_testcase(test_post_process_payload_rich_auth_request_using_regular_expr
   application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq-test">>),
   Config;
 
-init_per_testcase(test_default_ssl_options_with_cacertfile, Config) ->
-  application:set_env(rabbitmq_auth_backend_oauth2, key_config, [{ cacertfile, filename:join(["testca", "cacert.pem"]) }] ),
-  Config;
-
 init_per_testcase(_, Config) ->
   Config.
 
 end_per_testcase(test_post_process_token_payload_complex_claims, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, undefined),
   application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, undefined),
-  Config;
-
-end_per_testcase(test_default_ssl_options_with_cacertfile, Config) ->
-  application:set_env(rabbitmq_auth_backend_oauth2, key_config, undefined),
   Config;
 
 end_per_testcase(_, Config) ->
@@ -1354,6 +1372,7 @@ test_validate_payload_when_verify_aud_false(_) ->
                         <<"scope">> => [<<"bar">>, <<"other.third">>]}},
                  rabbit_auth_backend_oauth2:validate_payload(WithAudWithUnknownResourceId, ?RESOURCE_SERVER_ID, ?DEFAULT_SCOPE_PREFIX)).
 
+<<<<<<< HEAD
 test_default_ssl_options(_) ->
   ?assertEqual([
               {verify, verify_none},
@@ -1373,6 +1392,8 @@ test_default_ssl_options_with_cacertfile(_) ->
               {cacertfile, filename:join(["testca", "cacert.pem"])}
               ], uaa_jwks:ssl_options()).
 
+=======
+>>>>>>> 5e66d25b45 (Remove obsolete function)
 %%
 %% Helpers
 %%
