@@ -36,13 +36,18 @@ groups() ->
     [
      {machine_version_2, [shuffle], all_tests()},
      {machine_version_3, [shuffle], all_tests()},
-     {machine_version_conversion, [shuffle], [convert_v2_to_v3]}
+     {machine_version_4, [shuffle], all_tests()},
+     {machine_version_conversion, [shuffle],
+      [convert_v2_to_v3,
+       convert_v3_to_v4]}
     ].
 
 init_per_group(machine_version_2, Config) ->
     [{machine_version, 2} | Config];
 init_per_group(machine_version_3, Config) ->
     [{machine_version, 3} | Config];
+init_per_group(machine_version_4, Config) ->
+    [{machine_version, 4} | Config];
 init_per_group(machine_version_conversion, Config) ->
     Config.
 
@@ -91,7 +96,6 @@ enq_enq_checkout_test(C) ->
         apply(meta(C, 3),
               rabbit_fifo:make_checkout(Cid, {once, 2, simple_prefetch}, #{}),
               State2),
-    ct:pal("~tp", [Effects]),
     ?ASSERT_EFF({monitor, _, _}, Effects),
     ?ASSERT_EFF({log, [1,2], _Fun, _Local}, Effects),
     ok.
@@ -101,7 +105,7 @@ credit_enq_enq_checkout_settled_credit_v1_test(C) ->
     {State1, _} = enq(C, 1, 1, first, test_init(test)),
     {State2, _} = enq(C, 2, 2, second, State1),
     {State3, _, Effects} =
-        apply(meta(C, 3), rabbit_fifo:make_checkout(Cid, {auto, 1, credited}, #{}), State2),
+        apply(meta(C, 3), make_checkout(Cid, {auto, 1, credited}, #{}), State2),
     ?ASSERT_EFF({monitor, _, _}, Effects),
     ?ASSERT_EFF({log, [1], _Fun, _Local}, Effects),
     %% settle the delivery this should _not_ result in further messages being
@@ -1712,14 +1716,17 @@ meta(Config, Idx, Timestamp) ->
 
 enq(Config, Idx, MsgSeq, Msg, State) ->
     strip_reply(
-        rabbit_fifo:apply(meta(Config, Idx), rabbit_fifo:make_enqueue(self(), MsgSeq, Msg), State)).
+        rabbit_fifo:apply(meta(Config, Idx),
+                          rabbit_fifo:make_enqueue(self(), MsgSeq, Msg), State)).
 
 deq(Config, Idx, Cid, Settlement, Msg, State0) ->
     {State, _, Effs} =
         apply(meta(Config, Idx),
               rabbit_fifo:make_checkout(Cid, {dequeue, Settlement}, #{}),
               State0),
-    {value, {log, [_Idx], Fun}} = lists:search(fun(E) -> element(1, E) == log end, Effs),
+    {value, {log, [_Idx], Fun}} = lists:search(fun(E) ->
+                                                       element(1, E) == log
+                                               end, Effs),
     [{reply, _From,
       {wrap_reply, {dequeue, {MsgId, _}, _}}}] = Fun([Msg]),
 
@@ -1857,9 +1864,9 @@ convert_v2_to_v3(Config) ->
     Cid1 = {ctag1, self()},
     Cid2 = {ctag2, self()},
     MaxCredits = 20,
-    Entries = [{1, rabbit_fifo:make_checkout(Cid1, {auto, 10, credited}, #{})},
-               {2, rabbit_fifo:make_checkout(Cid2, {auto, MaxCredits, simple_prefetch},
-                                             #{prefetch => MaxCredits})}],
+    Entries = [{1, make_checkout(Cid1, {auto, 10, credited}, #{})},
+               {2, make_checkout(Cid2, {auto, MaxCredits, simple_prefetch},
+                                 #{prefetch => MaxCredits})}],
 
     %% run log in v2
     {State, _} = run_log(ConfigV2, test_init(?FUNCTION_NAME), Entries),
@@ -1870,6 +1877,36 @@ convert_v2_to_v3(Config) ->
 
     ?assertEqual(2, maps:size(Consumers)),
     ?assertMatch(#consumer{cfg = #consumer_cfg{credit_mode = {simple_prefetch, MaxCredits}}},
+                 maps:get(Cid2, Consumers)),
+    ok.
+
+convert_v3_to_v4(Config) ->
+    ConfigV3 = [{machine_version, 3} | Config],
+    ConfigV4 = [{machine_version, 4} | Config],
+
+    Cid1 = {ctag1, self()},
+    Cid2 = {ctag2, self()},
+    MaxCredits = 20,
+    Entries = [{1, make_checkout(Cid1, {auto, 10, credited}, #{})},
+               {2, make_checkout(Cid2, {auto, MaxCredits, simple_prefetch},
+                                 #{prefetch => MaxCredits})}],
+
+    %% run log in v3
+    Name = ?FUNCTION_NAME,
+    Init = rabbit_fifo_v3:init(
+             #{name => Name,
+               max_in_memory_length => 0,
+               queue_resource => rabbit_misc:r("/", queue, atom_to_binary(Name)),
+               release_cursor_interval => 0}),
+    {State, _} = run_log(ConfigV3, Init, Entries),
+
+    %% convert from v3 to v4
+    {#rabbit_fifo{consumers = Consumers}, ok, _} =
+    apply(meta(ConfigV4, 4), {machine_version, 3, 4}, State),
+
+    ?assertEqual(2, maps:size(Consumers)),
+    ?assertMatch(#consumer{cfg = #consumer_cfg{credit_mode =
+                                               {simple_prefetch, MaxCredits}}},
                  maps:get(Cid2, Consumers)),
     ok.
 
@@ -1892,7 +1929,7 @@ queue_ttl_test(C) ->
     [{aux, {handle_tick, [_, _, _]}}] = rabbit_fifo:tick(Now + 1000, S1),
     %% cancelling the consumer should then
     {S2, _, _} = apply(meta(C, 2, Now),
-                       rabbit_fifo:make_checkout(Cid, cancel, #{}), S1),
+                       make_checkout(Cid, cancel, #{}), S1),
     %% last_active should have been reset when consumer was cancelled
     %% last_active = 2500
     [{aux, {handle_tick, [_, _, _]}}] = rabbit_fifo:tick(Now + 1000, S2),
@@ -1913,7 +1950,7 @@ queue_ttl_test(C) ->
     %% dequeue should set last applied
     {S1Deq, {dequeue, empty}, _} =
         apply(meta(C, 2, Now),
-              rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}),
+              make_checkout(Cid, {dequeue, unsettled}, #{}),
               S0),
 
     [{aux, {handle_tick, [_, _, _]}}] = rabbit_fifo:tick(Now + 1000, S1Deq),
@@ -1926,7 +1963,7 @@ queue_ttl_test(C) ->
     Deq = {<<"deq1">>, self()},
     {E2, _, Effs2} =
         apply(meta(C, 3, Now),
-              rabbit_fifo:make_checkout(Deq, {dequeue, unsettled}, #{}),
+              make_checkout(Deq, {dequeue, unsettled}, #{}),
               E1),
 
     {log, [2], Fun2} = get_log_eff(Effs2),
@@ -1960,7 +1997,7 @@ queue_ttl_with_single_active_consumer_test(C) ->
     [{aux, {handle_tick, [_, _, _]}}] = rabbit_fifo:tick(Now + 1000, S1),
     %% cancelling the consumer should then
     {S2, _, _} = apply(meta(C, 2, Now),
-                       rabbit_fifo:make_checkout(Cid, cancel, #{}), S1),
+                       make_checkout(Cid, cancel, #{}), S1),
     %% last_active should have been reset when consumer was cancelled
     %% last_active = 2500
     [{aux, {handle_tick, [_, _, _]}}] = rabbit_fifo:tick(Now + 1000, S2),
@@ -1997,13 +2034,12 @@ checkout_priority_test(C) ->
     Args = [{<<"x-priority">>, long, 1}],
     {S1, _, _} =
         apply(meta(C, 3),
-              rabbit_fifo:make_checkout(Cid, {once, 2, simple_prefetch},
-                                        #{args => Args}),
+              make_checkout(Cid, {once, 2, simple_prefetch},
+                            #{args => Args}),
               test_init(test)),
     {S2, _, _} =
         apply(meta(C, 3),
-              rabbit_fifo:make_checkout(Cid2, {once, 2, simple_prefetch},
-                                        #{args => []}),
+              make_checkout(Cid2, {once, 2, simple_prefetch}, #{args => []}),
               S1),
     {S3, E3} = enq(C, 1, 1, first, S2),
     ct:pal("E3 ~tp ~tp", [E3, self()]),
@@ -2019,7 +2055,7 @@ empty_dequeue_should_emit_release_cursor_test(C) ->
     Cid = {<<"basic.get1">>, self()},
     {_State, {dequeue, empty}, Effects} =
         apply(meta(C, 2, 1234),
-              rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}),
+              make_checkout(Cid, {dequeue, unsettled}, #{}),
               State0),
 
     ?ASSERT_EFF({release_cursor, _, _}, Effects),
@@ -2114,14 +2150,14 @@ checkout_metadata_test(Config) ->
     {State1, {ok, #{next_msg_id := 0,
                     num_checked_out := 0}}, _} =
         apply(meta(Config, ?LINE),
-              rabbit_fifo:make_checkout(Cid, {auto, 1, simple_prefetch}, #{}),
+              make_checkout(Cid, {auto, 1, simple_prefetch}, #{}),
               State0),
     {State2, _, _} = apply(meta(Config, ?LINE),
-                           rabbit_fifo:make_checkout(Cid, cancel, #{}), State1),
+                           make_checkout(Cid, cancel, #{}), State1),
     {_State3, {ok, #{next_msg_id := 1,
                      num_checked_out := 1}}, _} =
         apply(meta(Config, ?LINE),
-              rabbit_fifo:make_checkout(Cid, {auto, 1, simple_prefetch}, #{}),
+              make_checkout(Cid, {auto, 1, simple_prefetch}, #{}),
               State2),
     ok.
 
