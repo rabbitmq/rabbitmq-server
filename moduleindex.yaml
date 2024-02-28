@@ -646,6 +646,7 @@ rabbit:
 - rabbit_fifo_index
 - rabbit_fifo_v0
 - rabbit_fifo_v1
+- rabbit_fifo_v3
 - rabbit_file
 - rabbit_global_counters
 - rabbit_guid

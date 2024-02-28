@@ -761,6 +761,9 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
             MRef = erlang:monitor(process, Leader),
             receive
                 {'DOWN', MRef, process, _, _} ->
+                    %% leader is down,
+                    %% force delete remaining members
+                    ok = force_delete_queue(lists:delete(Leader, Servers)),
                     ok
             after Timeout ->
                     erlang:demonitor(MRef, [flush]),

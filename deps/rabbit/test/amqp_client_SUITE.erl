@@ -2963,7 +2963,14 @@ quorum_queue_on_old_node(Config) ->
     queue_and_client_different_nodes(1, 0, <<"quorum">>, Config).
 
 quorum_queue_on_new_node(Config) ->
-    queue_and_client_different_nodes(0, 1, <<"quorum">>, Config).
+    Versions = rabbit_ct_broker_helpers:rpc_all(Config, rabbit_fifo, version, []),
+    case lists:usort(Versions) of
+        [_] ->
+            %% all are one version, go ahead with the test
+            queue_and_client_different_nodes(0, 1, <<"quorum">>, Config);
+        _ ->
+            {skip, "this test cannot pass with mixed QQ machine versions"}
+    end.
 
 %% In mixed version tests, run the queue leader with old code
 %% and queue client with new code, or vice versa.
