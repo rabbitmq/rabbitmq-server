@@ -10,6 +10,7 @@ authnz-mgt/oauth-idp-initiated-with-uaa-and-prefix.sh
 authnz-mgt/oauth-idp-initiated-with-uaa-via-proxy.sh
 authnz-mgt/oauth-idp-initiated-with-uaa.sh
 authnz-mgt/oauth-with-keycloak.sh
+authnz-mgt/oauth-with-keycloak-with-verify-none.sh
 authnz-mgt/oauth-with-uaa-and-mgt-prefix.sh
 authnz-mgt/oauth-with-uaa-down-but-with-basic-auth.sh
 authnz-mgt/oauth-with-uaa-down.sh
