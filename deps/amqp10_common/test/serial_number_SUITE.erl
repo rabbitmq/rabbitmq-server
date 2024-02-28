@@ -15,6 +15,7 @@
                         compare/2,
                         usort/1,
                         ranges/1,
+                        in_range/3,
                         diff/2,
                         foldl/4]).
 
@@ -22,6 +23,7 @@ all() -> [test_add,
           test_compare,
           test_usort,
           test_ranges,
+          test_in_range,
           test_diff,
           test_foldl].
 
@@ -95,6 +97,31 @@ test_ranges(_Config) ->
                  ranges([4294967294, 4294967295, 0, 1, 3, 4, 5, 10, 18, 19])),
     ?assertEqual([{4294967294, 1}, {3, 5}, {10, 10}, {18, 19}],
                  ranges([1, 10, 4294967294, 0, 3, 4, 5, 19, 18, 4294967295])).
+
+test_in_range(_Config) ->
+    ?assert(in_range(0, 0, 0)),
+    ?assert(in_range(0, 0, 1)),
+    ?assert(in_range(4294967295, 4294967295, 4294967295)),
+    ?assert(in_range(4294967295, 4294967295, 0)),
+    ?assert(in_range(0, 4294967295, 0)),
+    ?assert(in_range(4294967230, 4294967200, 1000)),
+    ?assert(in_range(88, 4294967200, 1000)),
+
+    ?assertNot(in_range(1, 0, 0)),
+    ?assertNot(in_range(4294967295, 0, 0)),
+    ?assertNot(in_range(0, 1, 1)),
+    ?assertNot(in_range(10, 1, 9)),
+    ?assertNot(in_range(1005, 4294967200, 1000)),
+    ?assertNot(in_range(4294967190, 4294967200, 1000)),
+
+    %% Pass wrong First and Last.
+    ?assertNot(in_range(1, 3, 2)),
+    ?assertNot(in_range(2, 3, 2)),
+    ?assertNot(in_range(3, 3, 2)),
+    ?assertNot(in_range(4, 3, 2)),
+
+    ?assertExit({undefined_serial_comparison, 0, 16#80000000},
+                in_range(0, 16#80000000, 16#80000000)).
 
 test_diff(_Config) ->
     ?assertEqual(0, diff(0, 0)),

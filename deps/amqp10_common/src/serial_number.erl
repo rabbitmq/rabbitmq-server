@@ -11,6 +11,7 @@
 -export([add/2,
          compare/2,
          ranges/1,
+         in_range/3,
          diff/2,
          foldl/4]).
 
@@ -84,6 +85,21 @@ ranges0([H | Rest], [{First, Last} | AccRest] = Acc0) ->
         _ ->
             Acc = [{H, H} | Acc0],
             ranges0(Rest, Acc)
+    end.
+
+-spec in_range(serial_number(), serial_number(), serial_number()) ->
+    boolean().
+in_range(S, First, Last) ->
+    case compare(S, First) of
+        less ->
+            false;
+        _ ->
+            case compare(S, Last) of
+                greater ->
+                    false;
+                _ ->
+                    true
+            end
     end.
 
 -define(SERIAL_DIFF_BOUND, 16#80000000).

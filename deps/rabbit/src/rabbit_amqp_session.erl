@@ -7,6 +7,8 @@
 
 -module(rabbit_amqp_session).
 
+-compile({inline, [maps_update_with/4]}).
+
 -behaviour(gen_server).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -1061,20 +1063,16 @@ handle_control(#'v1_0.disposition'{role = ?RECV_ROLE,
                                                consumer_tag = Ctag,
                                                msg_id = MsgId} = Unsettled,
                            {SettledAcc, UnsettledAcc}) ->
-                              DeliveryIdComparedToFirst = compare(DeliveryId, First),
-                              DeliveryIdComparedToLast = compare(DeliveryId, Last),
-                              if DeliveryIdComparedToFirst =:= less orelse
-                                 DeliveryIdComparedToLast =:= greater ->
-                                     %% Delivery ID is outside the DISPOSITION range.
-                                     {SettledAcc, UnsettledAcc#{DeliveryId => Unsettled}};
-                                 true ->
-                                     %% Delivery ID is inside the DISPOSITION range.
-                                     SettledAcc1 = maps:update_with(
-                                                     {QName, Ctag},
-                                                     fun(MsgIds) -> [MsgId | MsgIds] end,
-                                                     [MsgId],
-                                                     SettledAcc),
-                                     {SettledAcc1, UnsettledAcc}
+                              case serial_number:in_range(DeliveryId, First, Last) of
+                                  true ->
+                                      SettledAcc1 = maps_update_with(
+                                                      {QName, Ctag},
+                                                      fun(MsgIds) -> [MsgId | MsgIds] end,
+                                                      [MsgId],
+                                                      SettledAcc),
+                                      {SettledAcc1, UnsettledAcc};
+                                  false ->
+                                      {SettledAcc, UnsettledAcc#{DeliveryId => Unsettled}}
                               end
                       end,
                       {#{}, #{}}, UnsettledMap)
@@ -1209,19 +1207,19 @@ session_flow_control_sent_transfers(
     State#state{remote_incoming_window = RemoteIncomingWindow - NumTransfers,
                 next_outgoing_id = add(NextOutgoingId, NumTransfers)}.
 
-settle_delivery_id(Current, {Settled, Unsettled}) ->
+settle_delivery_id(Current, {Settled, Unsettled} = Acc) ->
     case maps:take(Current, Unsettled) of
         {#outgoing_unsettled{queue_name = QName,
                              consumer_tag = Ctag,
                              msg_id = MsgId}, Unsettled1} ->
-            Settled1 = maps:update_with(
+            Settled1 = maps_update_with(
                          {QName, Ctag},
                          fun(MsgIds) -> [MsgId | MsgIds] end,
                          [MsgId],
                          Settled),
             {Settled1, Unsettled1};
         error ->
-            {Settled, Unsettled}
+            Acc
     end.
 
 settle_op_from_outcome(#'v1_0.accepted'{}) ->
@@ -2274,6 +2272,14 @@ check_user_id(Mc, User) ->
             ok;
         {refused, Reason, Args} ->
             protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, Reason, Args)
+    end.
+
+maps_update_with(Key, Fun, Init, Map) ->
+    case Map of
+        #{Key := Value} ->
+            Map#{Key := Fun(Value)};
+        _ ->
+            Map#{Key => Init}
     end.
 
 format_status(
