@@ -125,7 +125,6 @@ rabbitmq_integration_suite(
     ],
 )
 
-
 rabbitmq_suite(
     name = "unit_SUITE",
     size = "small",
