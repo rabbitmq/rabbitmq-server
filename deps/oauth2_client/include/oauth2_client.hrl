@@ -66,7 +66,9 @@
 -record(successful_access_token_response, {
   access_token :: binary(),
   token_type :: binary(),
-  refresh_token :: option(binary()),
+  refresh_token :: option(binary()),    % A refresh token SHOULD NOT be included
+                                        % .. for client-credentials flow.
+                                        % https://www.rfc-editor.org/rfc/rfc6749#section-4.4.3
   expires_in :: option(integer())
 }).
 

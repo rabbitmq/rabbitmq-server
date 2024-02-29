@@ -6,7 +6,7 @@
 %%
 -module(jwt_helper).
 
--export([decode/1, get_expiration/1]).
+-export([decode/1, get_expiration_time/1]).
 
 -include_lib("jose/include/jose_jwt.hrl").
 
@@ -18,5 +18,5 @@ decode(Token) ->
         {error, {invalid_token, Type, Err, Stacktrace}}
     end.
 
-get_expiration(#{<<"exp">> := Exp}) when is_integer(Exp) -> {ok, Exp};
-get_expiration(#{}) -> {error, missing_exp_field}.
+get_expiration_time(#{<<"exp">> := Exp}) when is_integer(Exp) -> {ok, Exp};
+get_expiration_time(#{}) -> {error, missing_exp_field}.
