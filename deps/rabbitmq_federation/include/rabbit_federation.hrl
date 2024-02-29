@@ -16,7 +16,7 @@
                    message_ttl,
                    trust_user_id,
                    ack_mode,
-                   ha_policy,
+                   queue_type,
                    name,
                    bind_nowait,
                    resource_cleanup_mode,
