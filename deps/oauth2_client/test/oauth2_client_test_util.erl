@@ -66,6 +66,11 @@ expirable_token(Seconds) ->
     %% expiration is a timestamp with precision in seconds
     TokenPayload#{<<"exp">> := os:system_time(seconds) + Seconds}.
 
+expirable_token_with_expiration_time(ExpiresIn) ->
+    TokenPayload = fixture_token(),
+    %% expiration is a timestamp with precision in seconds
+    TokenPayload#{<<"exp">> := ExpiresIn}.
+
 expired_token() ->
     expired_token_with_scopes(full_permission_scopes()).
 
