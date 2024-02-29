@@ -2,8 +2,10 @@
 -export([get/2, ssl_options/1]).
 
 -spec get(string() | binary(), term()) -> {ok, term()} | {error, term()}.
-get(JwksUrl, KeyConfig) ->
-    httpc:request(get, {JwksUrl, []}, [{ssl, ssl_options(KeyConfig)}, {timeout, 60000}], []).
+get(JwksUrl, SslOptions) ->
+    Options = [{timeout, 60000}] ++ [{ssl, SslOptions}],
+    rabbit_log:debug("get signing keys using options ~p", Options),
+    httpc:request(get, {JwksUrl, []}, Options, []).
 
 -spec ssl_options(term()) -> list().
 ssl_options(KeyConfig) ->
