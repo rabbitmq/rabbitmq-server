@@ -31,34 +31,38 @@ groups() ->
 ].
 
 no_ssl_options_triggers_verify_peer(_) ->
-  [
+  ?assertMatch([
     {verify, verify_peer},
     {depth, 10},
     {crl_check,false},
     {fail_if_no_peer_cert,false},
     {cacerts, _CaCerts}
-  ] = oauth2_client:extract_ssl_options_as_list(#{ }).
+  ], oauth2_client:extract_ssl_options_as_list(#{})).
 
 peer_verification_verify_none(_) ->
-  [
+  Expected1 = [
     {verify, verify_none}
-  ] = oauth2_client:extract_ssl_options_as_list(#{ peer_verification => verify_none }),
-  [
+  ],
+  ?assertEqual(Expected1, oauth2_client:extract_ssl_options_as_list(#{peer_verification => verify_none})),
+
+  Expected2 = [
     {verify, verify_none}
-  ] = oauth2_client:extract_ssl_options_as_list(#{
+  ],
+  ?assertEqual(Expected2, oauth2_client:extract_ssl_options_as_list(#{
     peer_verification => verify_none,
     cacertfile => "/tmp"
-  }).
+  })).
 
 
 peer_verification_verify_peer_with_cacertfile(_) ->
-  [
+  Expected = [
     {verify, verify_peer},
     {depth, 10},
     {crl_check,false},
     {fail_if_no_peer_cert,false},
     {cacertfile, "/tmp"}
-  ] = oauth2_client:extract_ssl_options_as_list(#{
+  ],
+  ?assertEqual(Expected, oauth2_client:extract_ssl_options_as_list(#{
     cacertfile => "/tmp",
     peer_verification => verify_peer
-  }).
+  })).
