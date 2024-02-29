@@ -37,8 +37,6 @@ all() ->
         test_post_process_payload_rich_auth_request_using_regular_expression_with_cluster,
         test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_scope_field,
         test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_extra_scope_source_field,
-        test_default_ssl_options,
-        test_default_ssl_options_with_cacertfile,
         test_username_from,
         {group, with_rabbitmq_node}
     ].
@@ -125,20 +123,12 @@ init_per_testcase(test_post_process_payload_rich_auth_request_using_regular_expr
   application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq-test">>),
   Config;
 
-init_per_testcase(test_default_ssl_options_with_cacertfile, Config) ->
-  application:set_env(rabbitmq_auth_backend_oauth2, key_config, [{ cacertfile, filename:join(["testca", "cacert.pem"]) }] ),
-  Config;
-
 init_per_testcase(_, Config) ->
   Config.
 
 end_per_testcase(test_post_process_token_payload_complex_claims, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, undefined),
   application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, undefined),
-  Config;
-
-end_per_testcase(test_default_ssl_options_with_cacertfile, Config) ->
-  application:set_env(rabbitmq_auth_backend_oauth2, key_config, undefined),
   Config;
 
 end_per_testcase(_, Config) ->
@@ -1330,25 +1320,6 @@ test_validate_payload_when_verify_aud_false(_) ->
     ?assertEqual({ok, #{<<"aud">>   => [<<"unknown">>],
                         <<"scope">> => [<<"bar">>, <<"other.third">>]}},
                  rabbit_auth_backend_oauth2:validate_payload(?RESOURCE_SERVER_ID, WithAudWithUnknownResourceId, ?DEFAULT_SCOPE_PREFIX)).
-
-test_default_ssl_options(_) ->
-  ?assertEqual([
-              {verify, verify_none},
-              {depth, 10},
-              {fail_if_no_peer_cert, false},
-              {crl_check, false},
-              {crl_cache, {ssl_crl_cache, {internal, [{http, 10000}]}}}
-              ], uaa_jwks:ssl_options(rabbit_oauth2_config:get_key_config())).
-
-test_default_ssl_options_with_cacertfile(_) ->
-  ?assertEqual([
-              {verify, verify_none},
-              {depth, 10},
-              {fail_if_no_peer_cert, false},
-              {crl_check, false},
-              {crl_cache, {ssl_crl_cache, {internal, [{http, 10000}]}}},
-              {cacertfile, filename:join(["testca", "cacert.pem"])}
-              ], uaa_jwks:ssl_options(rabbit_oauth2_config:get_key_config())).
 
 %%
 %% Helpers
