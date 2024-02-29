@@ -7,7 +7,7 @@
 -module(oauth2_client).
 -export([get_access_token/2,
         refresh_access_token/2,
-        get_oauth_provider/1,get_oauth_provider/2,
+        get_oauth_provider/1, get_oauth_provider/2,
         extract_ssl_options_as_list/1
         ]).
 
