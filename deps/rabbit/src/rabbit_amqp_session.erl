@@ -945,17 +945,14 @@ handle_control(#'v1_0.flow'{handle = Handle} = Flow,
             end
     end;
 
-handle_control(#'v1_0.detach'{handle = Handle = ?UINT(HandleInt),
-                              closed = Closed},
+handle_control(Detach = #'v1_0.detach'{handle = ?UINT(HandleInt)},
                State0 = #state{queue_states = QStates0,
                                incoming_links = IncomingLinks,
                                outgoing_links = OutgoingLinks0,
                                outgoing_unsettled_map = Unsettled0,
                                cfg = #cfg{
-                                        writer_pid = WriterPid,
                                         vhost = Vhost,
-                                        user = #user{username = Username},
-                                        channel_num = Ch}}) ->
+                                        user = #user{username = Username}}}) ->
     Ctag = handle_to_ctag(HandleInt),
     %% TODO delete queue if closed flag is set to true? see 2.6.6
     %% TODO keep the state around depending on the lifetime
@@ -1011,8 +1008,7 @@ handle_control(#'v1_0.detach'{handle = Handle = ?UINT(HandleInt),
                          incoming_links = maps:remove(HandleInt, IncomingLinks),
                          outgoing_links = OutgoingLinks,
                          outgoing_unsettled_map = Unsettled},
-    rabbit_amqp_writer:send_command(WriterPid, Ch, #'v1_0.detach'{handle = Handle,
-                                                                  closed = Closed}),
+    maybe_detach_reply(Detach, State, State0),
     publisher_or_consumer_deleted(State, State0),
     {noreply, State};
 
@@ -2191,6 +2187,22 @@ publisher_or_consumer_deleted(
        true ->
            ok
     end.
+
+%% If we previously already sent a detach with an error condition, and the Detach we
+%% receive here is therefore the client's reply, do not reply again with a 3rd detach.
+maybe_detach_reply(Detach,
+                   #state{incoming_links = NewIncomingLinks,
+                          outgoing_links = NewOutgoingLinks,
+                          cfg = #cfg{writer_pid = WriterPid,
+                                     channel_num = Ch}},
+                   #state{incoming_links = OldIncomingLinks,
+                          outgoing_links = OldOutgoingLinks})
+  when map_size(NewIncomingLinks) < map_size(OldIncomingLinks) orelse
+       map_size(NewOutgoingLinks) < map_size(OldOutgoingLinks) ->
+    Reply = Detach#'v1_0.detach'{error = undefined},
+    rabbit_amqp_writer:send_command(WriterPid, Ch, Reply);
+maybe_detach_reply(_, _, _) ->
+    ok.
 
 check_internal_exchange(#exchange{internal = true,
                                   name = XName}) ->
