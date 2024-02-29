@@ -136,7 +136,7 @@ from_upstream_or_set(US, Name, U, XorQ) ->
               message_ttl     = bget('message-ttl',     US, U, none),
               trust_user_id   = bget('trust-user-id',   US, U, false),
               ack_mode        = to_atom(bget('ack-mode', US, U, <<"on-confirm">>)),
-              ha_policy       = bget('ha-policy',       US, U, none),
+              queue_type      = to_atom(bget('queue-type', US, U, <<"classic">>)),
               name            = Name,
               bind_nowait     = bget('bind-nowait',     US, U, false),
               resource_cleanup_mode = to_atom(bget('resource-cleanup-mode', US, U, <<"default">>)),

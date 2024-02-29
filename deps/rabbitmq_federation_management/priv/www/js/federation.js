@@ -75,8 +75,8 @@ HELP['federation-expires'] =
 HELP['federation-ttl'] =
     'Time in milliseconds that undelivered messages should be held upstream when there is a network outage or backlog. Leave this blank to mean "forever".';
 
-HELP['ha-policy'] =
-    'Determines the "x-ha-policy" argument for the upstream queue for a federated exchange. Default is "none", meaning the queue is not HA.';
+HELP['queue-type'] =
+    'Defines the queue type for the upstream queue for a federated exchange. Default is "classic". Set to "quorum" for high availability.';
 
 HELP['queue'] =
     'The name of the upstream queue. Default is to use the same name as the federated queue.';
