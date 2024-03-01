@@ -9,6 +9,7 @@
 
 -export([is_op_policy_updating_disabled/0,
          is_qq_replica_operations_disabled/0,
+         is_feature_flag_blocked/1,
          are_stats_enabled/0]).
 
 is_qq_replica_operations_disabled() ->
@@ -17,6 +18,13 @@ is_qq_replica_operations_disabled() ->
 is_op_policy_updating_disabled() ->
     case get_restriction([operator_policy_changes, disabled]) of
         true -> true;
+        _ -> false
+    end.
+
+-spec is_feature_flag_blocked(rabbit_feature_flags:feature_name()) -> {true, string()} | false.
+is_feature_flag_blocked(FeatureFlag) ->
+    case get_restriction([feature_flag_blocked, FeatureFlag]) of
+        Msg when is_list(Msg) -> {true, Msg};
         _ -> false
     end.
 

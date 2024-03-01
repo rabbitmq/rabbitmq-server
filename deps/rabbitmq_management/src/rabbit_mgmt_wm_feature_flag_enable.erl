@@ -13,7 +13,6 @@
 -export([variances/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -38,13 +37,18 @@ accept_content(ReqData, #context{} = Context) ->
     NameS = rabbit_mgmt_util:id(name, ReqData),
     try
         Name = list_to_existing_atom(binary_to_list(NameS)),
-        case rabbit_feature_flags:enable(Name) of
-            ok ->
-                {true, ReqData, Context};
-            {error, Reason1} ->
-                FormattedReason1 = rabbit_ff_extra:format_error(Reason1),
-                rabbit_mgmt_util:bad_request(
-                  list_to_binary(FormattedReason1), ReqData, Context)
+        case rabbit_mgmt_features:is_feature_flag_blocked(Name) of
+            {true, Message} ->
+                rabbit_mgmt_util:method_not_allowed(Message, ReqData, Context);
+            false ->
+                case rabbit_feature_flags:enable(Name) of
+                    ok ->
+                        {true, ReqData, Context};
+                    {error, Reason1} ->
+                        FormattedReason1 = rabbit_ff_extra:format_error(Reason1),
+                        rabbit_mgmt_util:bad_request(
+                          list_to_binary(FormattedReason1), ReqData, Context)
+                end
         end
     catch
         _:badarg ->

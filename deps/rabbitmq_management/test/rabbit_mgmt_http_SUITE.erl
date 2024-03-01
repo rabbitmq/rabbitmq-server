@@ -164,6 +164,7 @@ all_tests() -> [
     user_limit_set_test,
     config_environment_test,
     disabled_qq_replica_opers_test,
+    feature_flag_blocked_test,
     list_deprecated_features_test,
     list_used_deprecated_features_test
 ].
@@ -242,6 +243,21 @@ init_per_testcase(Testcase = disabled_qq_replica_opers_test, Config) ->
     rabbit_ct_broker_helpers:rpc_all(Config,
       application, set_env, [rabbitmq_management, restrictions, Restrictions]),
     rabbit_ct_helpers:testcase_started(Config, Testcase);
+init_per_testcase(Testcase = feature_flag_blocked_test, Config) ->
+    Desc = "This is an experimental feature",
+    DocUrl = "https://rabbitmq.com/",
+    FeatureFlags = #{Testcase =>
+                         #{provided_by => ?MODULE,
+                           desc => Desc,
+                           doc_url => DocUrl}},
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_feature_flags,
+                                      inject_test_feature_flags,
+                                      [FeatureFlags]),
+
+    Restrictions = [{feature_flag_blocked, [{Testcase, "This feature flag is blocked"}]}],
+    rabbit_ct_broker_helpers:rpc_all(Config,
+      application, set_env, [rabbitmq_management, restrictions, Restrictions]),
+    rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(queues_detailed_test, Config) ->
     IsEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
                   Config, detailed_queues_endpoint),
@@ -307,6 +323,13 @@ end_per_testcase0(disabled_operator_policy_test, Config) ->
     Config;
 end_per_testcase0(disabled_qq_replica_opers_test, Config) ->
     rpc(Config, application, unset_env, [rabbitmq_management, restrictions]),
+    Config;
+end_per_testcase0(feature_flag_blocked_test, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                 [rabbitmq_management, restrictions]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_feature_flags,
+                                      clear_injected_test_feature_flags,
+                                      []),
     Config;
 end_per_testcase0(Testcase, Config)
   when Testcase == list_deprecated_features_test;
@@ -3768,6 +3791,11 @@ disabled_qq_replica_opers_test(Config) ->
     http_delete(Config, "/queues/quorum/%2F/qq.whatever/replicas/delete", ?METHOD_NOT_ALLOWED, Body),
     http_post(Config, "/queues/quorum/replicas/on/" ++ Nodename ++ "/grow", Body, ?METHOD_NOT_ALLOWED),
     http_delete(Config, "/queues/quorum/replicas/on/" ++ Nodename ++ "/shrink", ?METHOD_NOT_ALLOWED),
+    passed.
+
+feature_flag_blocked_test(Config) ->
+    Body = "",
+    http_put(Config, "/feature-flags/" ++ atom_to_list(?FUNCTION_NAME) ++ "/enable", Body, ?METHOD_NOT_ALLOWED),
     passed.
 
 list_deprecated_features_test(Config) ->

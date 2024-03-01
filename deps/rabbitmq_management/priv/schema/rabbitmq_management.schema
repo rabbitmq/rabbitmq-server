@@ -646,3 +646,10 @@ end}.
     {datatype, {enum, [true, false]}},
     {include_default, false}
 ]}.
+
+%% Block enabling certain feature flags over API
+
+{mapping, "management.restrictions.feature_flag_blocked.$name", "rabbitmq_management.restrictions.feature_flag_blocked", [
+    {datatype, [string, {enum, [false]}]},
+    {include_default, false}
+]}.
