@@ -26,8 +26,8 @@ A couple of examples:
 
 ``` ini
 auth_mechanisms.1 = PLAIN
-auth_mechanisms.1 = AMQPLAIN
-auth_mechanisms.1 = EXTERNAL
+auth_mechanisms.2 = AMQPLAIN
+auth_mechanisms.3 = EXTERNAL
 ```
 
 to allow this mechanism in addition to the defaults, or:
