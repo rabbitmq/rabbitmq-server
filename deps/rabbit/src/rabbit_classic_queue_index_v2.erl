@@ -196,9 +196,10 @@ init_for_conversion(#resource{ virtual_host = VHost } = Name, OnSyncFun, OnSyncM
 
 init1(Name, Dir, OnSyncFun, OnSyncMsgFun) ->
     ensure_queue_name_stub_file(Name, Dir),
+    DirBin = rabbit_file:filename_to_binary(Dir),
     #qi{
         queue_name = Name,
-        dir = rabbit_file:filename_to_binary(Dir),
+        dir = << DirBin/binary, "/" >>,
         on_sync = OnSyncFun,
         on_sync_msg = OnSyncMsgFun
     }.
@@ -1277,8 +1278,8 @@ queue_name_to_dir_name(#resource { kind = queue,
     rabbit_misc:format("~.36B", [Num]).
 
 segment_file(Segment, #qi{ dir = Dir }) ->
-    filename:join(rabbit_file:binary_to_filename(Dir),
-                  integer_to_list(Segment) ++ ?SEGMENT_EXTENSION).
+    N = integer_to_binary(Segment),
+    <<Dir/binary, N/binary, ?SEGMENT_EXTENSION>>.
 
 highest_continuous_seq_id([SeqId|Tail], EndSeqId)
         when (1 + SeqId) =:= EndSeqId ->
