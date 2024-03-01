@@ -76,7 +76,7 @@
          }).
 
 -record(incoming_link, {
-          exchange :: rabbit_exchange:name(),
+          exchange :: rabbit_types:exchange() | rabbit_exchange:name(),
           routing_key :: undefined | rabbit_types:routing_key(),
           %% queue_name_bin is only set if the link target address refers to a queue.
           queue_name_bin :: undefined | rabbit_misc:resource_name(),
@@ -713,9 +713,9 @@ handle_control(#'v1_0.attach'{role = ?SEND_ROLE,
                                           user = User}}) ->
     ok = validate_attach(Attach),
     case ensure_target(Target, Vhost, User) of
-        {ok, XName, RoutingKey, QNameBin} ->
+        {ok, Exchange, RoutingKey, QNameBin} ->
             IncomingLink = #incoming_link{
-                              exchange = XName,
+                              exchange = Exchange,
                               routing_key = RoutingKey,
                               queue_name_bin = QNameBin,
                               delivery_count = DeliveryCountInt,
@@ -1529,7 +1529,7 @@ incoming_link_transfer(
                    rcv_settle_mode = RcvSettleMode,
                    handle = Handle = ?UINT(HandleInt)},
   MsgPart,
-  #incoming_link{exchange = XName = #resource{name = XNameBin},
+  #incoming_link{exchange = Exchange,
                  routing_key = LinkRKey,
                  delivery_count = DeliveryCount0,
                  incoming_unconfirmed_map = U0,
@@ -1560,20 +1560,20 @@ incoming_link_transfer(
     Sections = amqp10_framing:decode_bin(MsgBin),
     ?DEBUG("~s Inbound content:~n  ~tp",
            [?MODULE, [amqp10_framing:pprint(Section) || Section <- Sections]]),
-    Anns0 = #{?ANN_EXCHANGE => XNameBin},
-    Anns = case LinkRKey of
-               undefined -> Anns0;
-               _ -> Anns0#{?ANN_ROUTING_KEYS => [LinkRKey]}
-           end,
-    Mc0 = mc:init(mc_amqp, Sections, Anns),
-    Mc1 = rabbit_message_interceptor:intercept(Mc0),
-    {Mc, RoutingKey} = ensure_routing_key(Mc1),
-    check_user_id(Mc, User),
-    messages_received(Settled),
-    case rabbit_exchange:lookup(XName) of
-        {ok, Exchange} ->
-            check_write_permitted_on_topic(Exchange, User, RoutingKey),
-            QNames = rabbit_exchange:route(Exchange, Mc, #{return_binding_keys => true}),
+    case rabbit_exchange_lookup(Exchange) of
+        {ok, X = #exchange{name = #resource{name = XNameBin}}} ->
+            Anns0 = #{?ANN_EXCHANGE => XNameBin},
+            Anns = case LinkRKey of
+                       undefined -> Anns0;
+                       _ -> Anns0#{?ANN_ROUTING_KEYS => [LinkRKey]}
+                   end,
+            Mc0 = mc:init(mc_amqp, Sections, Anns),
+            Mc1 = rabbit_message_interceptor:intercept(Mc0),
+            {Mc, RoutingKey} = ensure_routing_key(Mc1),
+            check_user_id(Mc, User),
+            messages_received(Settled),
+            check_write_permitted_on_topic(X, User, RoutingKey),
+            QNames = rabbit_exchange:route(X, Mc, #{return_binding_keys => true}),
             rabbit_trace:tap_in(Mc, QNames, ConnName, ChannelNum, Username, Trace),
             case not Settled andalso
                  RcvSettleMode =:= ?V_1_0_RECEIVER_SETTLE_MODE_SECOND of
@@ -1614,6 +1614,11 @@ incoming_link_transfer(
             Detach = detach(HandleInt, Link0, ?V_1_0_AMQP_ERROR_RESOURCE_DELETED),
             {error, [Disposition, Detach]}
     end.
+
+rabbit_exchange_lookup(X = #exchange{}) ->
+    {ok, X};
+rabbit_exchange_lookup(XName = #resource{}) ->
+    rabbit_exchange:lookup(XName).
 
 ensure_routing_key(Mc) ->
     case mc:routing_keys(Mc) of
@@ -1688,16 +1693,25 @@ ensure_target(#'v1_0.target'{address = Address,
                 {ok, Dest} ->
                     QNameBin = ensure_terminus(target, Dest, Vhost, User, Durable),
                     {XNameList1, RK} = rabbit_routing_parser:parse_routing(Dest),
-                    XName = rabbit_misc:r(Vhost, exchange, list_to_binary(XNameList1)),
+                    XNameBin = list_to_binary(XNameList1),
+                    XName = rabbit_misc:r(Vhost, exchange, XNameBin),
                     {ok, X} = rabbit_exchange:lookup(XName),
                     check_internal_exchange(X),
                     check_write_permitted(XName, User),
+                    %% Pre-declared exchanges are protected against deletion and modification.
+                    %% Let's cache the whole #exchange{} record to save a
+                    %% rabbit_exchange:lookup(XName) call each time we receive a message.
+                    Exchange = case XNameBin of
+                                   <<>> -> X;
+                                   <<"amq.", _/binary>> -> X;
+                                   _ -> XName
+                               end,
                     RoutingKey = case RK of
                                      undefined -> undefined;
                                      []        -> undefined;
                                      _         -> list_to_binary(RK)
                                  end,
-                    {ok, XName, RoutingKey, QNameBin};
+                    {ok, Exchange, RoutingKey, QNameBin};
                 {error, _} = E ->
                     E
             end;
