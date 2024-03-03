@@ -2,7 +2,7 @@
 
 == What is this plugin?
 
-The plugin is a foundation [streaming support in RabbitMQ](https://www.rabbitmq.com/docs/streams).
+The plugin is a foundation https://www.rabbitmq.com/docs/streams[streaming support in RabbitMQ].
 
 == Licensing
 
