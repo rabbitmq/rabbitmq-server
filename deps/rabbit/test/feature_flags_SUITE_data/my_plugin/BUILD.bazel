@@ -4,13 +4,6 @@ load(
     "rabbitmq_app",
 )
 
-# gazelle:erlang_generate_beam_files_macro false
-# gazelle:erlang_always_generate_test_beam_files
-# gazelle:erlang_skip_rules assert_suites2,xref,plt,dialyze
-
-# gazelle:erlang_app_dep rabbit_common
-# gazelle:erlang_app_dep rabbit
-
 erlang_bytecode(
     name = "other_beam",
     srcs = [

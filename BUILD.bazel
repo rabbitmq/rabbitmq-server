@@ -4,8 +4,6 @@ load(
     "string_flag",
 )
 load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
-load("@bazel_gazelle//:def.bzl", "gazelle")
-load("@rules_erlang//gazelle:def.bzl", "GAZELLE_ERLANG_RUNTIME_DEPS")
 load("@rules_erlang//:erlang_bytecode2.bzl", "erlc_opts")
 load("@rules_erlang//:erlc_opts_file.bzl", "erlc_opts_file")
 load("@rules_erlang//:compile_many.bzl", "compile_many")
@@ -13,7 +11,6 @@ load("@rules_erlang//:erl_libs.bzl", "erl_libs")
 load("@rules_erlang//:dialyze.bzl", "DEFAULT_PLT_APPS", "plt")
 load("@rules_erlang//:shell.bzl", "shell")
 load("@rules_erlang//:erl_eval.bzl", "erl_eval")
-load("@rules_erlang//gazelle:moduleindex.bzl", "moduleindex")
 load("//bazel/elixir:iex_eval.bzl", "iex_eval")
 load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
@@ -33,87 +30,6 @@ exports_files([
     "scripts/bazel/rabbitmq-run.bat",
     "release-notes",
 ])
-
-# gazelle:exclude .github
-# gazelle:exclude .elixir_ls
-# gazelle:exclude .erlang.mk
-# gazelle:exclude bazel
-# gazelle:exclude bazel-out
-# gazelle:exclude deps/*/priv
-# gazelle:exclude deps/accept
-# gazelle:exclude deps/aten
-# gazelle:exclude deps/base64url
-# gazelle:exclude deps/cowboy
-# gazelle:exclude deps/cowlib
-# gazelle:exclude deps/credentials_obfuscation
-# gazelle:exclude deps/csv
-# gazelle:exclude deps/cth_styledout
-# gazelle:exclude deps/cuttlefish
-# gazelle:exclude deps/eetcd
-# gazelle:exclude deps/elvis_mk
-# gazelle:exclude deps/enough
-# gazelle:exclude deps/gen_batch_server
-# gazelle:exclude deps/getopt
-# gazelle:exclude deps/gun
-# gazelle:exclude deps/inet_tcp_proxy
-# gazelle:exclude deps/jose
-# gazelle:exclude deps/json
-# gazelle:exclude deps/meck
-# gazelle:exclude deps/observer_cli
-# gazelle:exclude deps/osiris
-# gazelle:exclude deps/prometheus
-# gazelle:exclude deps/proper
-# gazelle:exclude deps/quantile_estimator
-# gazelle:exclude deps/ra
-# gazelle:exclude deps/ranch
-# gazelle:exclude deps/recon
-# gazelle:exclude deps/redbug
-# gazelle:exclude deps/seshat
-# gazelle:exclude deps/stdout_formatter
-# gazelle:exclude deps/syslog
-# gazelle:exclude deps/sysmon_handler
-# gazelle:exclude deps/systemd
-# gazelle:exclude deps/thoas
-# gazelle:exclude deps/*/deps
-# gazelle:exclude deps/*/.erlang.mk
-# gazelle:exclude deps/rabbitmq_cli/_build
-# gazelle:exclude extra_deps
-# gazelle:exclude packaging
-# gazelle:exclude PACKAGES
-# gazelle:exclude plugins
-# gazelle:exclude release-notes
-# gazelle:exclude logs
-# gazelle:erlang_apps_dirs deps
-# gazelle:erlang_skip_rules test_erlang_app
-# gazelle:erlang_skip_rules ct_test
-# gazelle:erlang_generate_beam_files_macro
-# gazelle:erlang_generate_fewer_bytecode_rules
-# gazelle:erlang_app_dep_exclude rabbitmq_cli
-# gazelle:map_kind erlang_app rabbitmq_app //:rabbitmq.bzl
-# gazelle:map_kind assert_suites2 assert_suites //:rabbitmq.bzl
-
-# gazelle:erlang_module_source_lib Elixir.RabbitMQ.CLI.CommandBehaviour:rabbitmq_cli
-
-gazelle(
-    name = "gazelle",
-    data = GAZELLE_ERLANG_RUNTIME_DEPS,
-    extra_args = [
-        "--verbose",
-    ],
-    gazelle = "@rules_erlang//gazelle:gazelle_erlang_binary",
-)
-
-gazelle(
-    name = "gazelle-update-repos",
-    command = "update-repos",
-    data = GAZELLE_ERLANG_RUNTIME_DEPS,
-    extra_args = [
-        "--verbose",
-        "--build_files_dir=bazel",
-        "--recurse_with=gazelle-update-repos",
-    ],
-    gazelle = "@rules_erlang//gazelle:gazelle_erlang_binary",
-)
 
 bool_flag(
     name = "enable_test_build",
@@ -313,23 +229,6 @@ package_generic_unix(
 source_archive(
     name = "source_archive",
     plugins = PLUGINS,
-)
-
-moduleindex(
-    name = "moduleindex",
-    testonly = True,
-    apps = PLUGINS + [
-        "@ct_helper//:erlang_app",
-        "@emqtt//:erlang_app",
-        "@inet_tcp_proxy_dist//:erlang_app",
-        "@looking_glass//:erlang_app",
-        "@meck//:erlang_app",
-        "@proper//:erlang_app",
-        "//deps/rabbitmq_ct_client_helpers:erlang_app",
-        "//deps/rabbitmq_ct_helpers:erlang_app",
-        "//deps/trust_store_http:erlang_app",
-    ],
-    tags = ["manual"],
 )
 
 alias(

@@ -30,10 +30,6 @@ load("@rules_erlang//:internal_setup.bzl", "rules_erlang_internal_setup")
 
 rules_erlang_internal_setup(go_repository_default_config = "//:WORKSPACE")
 
-load("@rules_erlang//gazelle:deps.bzl", "gazelle_deps")
-
-gazelle_deps()
-
 http_archive(
     name = "io_bazel_rules_docker",
     sha256 = "b1e80761a8a8243d03ebca8845e9cc1ba6c82ce7c5179ce2b295cd36f7e394bf",

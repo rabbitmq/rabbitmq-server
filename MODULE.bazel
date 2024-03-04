@@ -25,11 +25,6 @@ bazel_dep(
     version = "0.0.9",
 )
 bazel_dep(
-    name = "gazelle",
-    version = "0.33.0",
-    repo_name = "bazel_gazelle",
-)
-bazel_dep(
     name = "rules_erlang",
     version = "3.15.0",
 )
