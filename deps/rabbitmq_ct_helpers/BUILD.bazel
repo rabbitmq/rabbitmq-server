@@ -19,7 +19,7 @@ rabbitmq_app(
         exclude = [".gitignore"],
     ),
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
         "@erlang_packages//inet_tcp_proxy_dist",
         "@erlang_packages//meck",
         "@erlang_packages//proper",

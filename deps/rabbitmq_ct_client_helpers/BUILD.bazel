@@ -11,14 +11,14 @@ rabbitmq_app(
     testonly = True,
     app_name = "rabbitmq_ct_client_helpers",
     deps = [
-        "//deps/amqp_client:erlang_app",
-        "//deps/rabbitmq_ct_helpers:test_erlang_app",
+        "//deps/amqp_client",
+        "//deps/rabbitmq_ct_helpers",
     ],
 )
 
 xref(
     name = "xref",
-    target = ":erlang_app",
+    target = ":test_erlang_app",
 )
 
 plt(
@@ -26,7 +26,7 @@ plt(
     apps = [
         "common_test",
     ],
-    for_target = ":erlang_app",
+    for_target = ":test_erlang_app",
     ignore_warnings = True,
     libs = ["//deps/rabbitmq_cli:elixir"],
     plt = "//:base_plt",
@@ -36,7 +36,7 @@ dialyze(
     name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":deps_plt",
-    target = ":erlang_app",
+    target = ":test_erlang_app",
 )
 
 assert_suites()
