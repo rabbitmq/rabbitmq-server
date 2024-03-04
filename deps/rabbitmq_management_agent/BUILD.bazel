@@ -81,7 +81,6 @@ rabbitmq_suite(
     name = "rabbit_mgmt_slide_SUITE",
     size = "small",
     deps = [
-        "//deps/rabbitmq_ct_helpers:erlang_app",
         "@erlang_packages//proper",
     ],
 )

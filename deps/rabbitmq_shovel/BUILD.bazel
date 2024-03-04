@@ -56,35 +56,6 @@ eunit(
 
 broker_for_integration_suites()
 
-# rabbitmq_home(
-#     name = "broker-for-tests-home",
-#     testonly = True,
-#     apps = [
-#         "rabbit",
-#         "rabbitmq_amqp1_0",
-#         "rabbitmq_shovel",
-#     ],
-#     erl_libs = [
-#         "@erlang_packages//:deps",
-#         "@erlang_packages//:test_deps",
-#         "//:test_early_apps",
-#         "//:rabbitmq_cli",
-#         "//:test_apps",
-#         "//:bazel_native_deps",
-#     ],
-#     # plugins = [
-#     #     "//deps/rabbit:erlang_app",
-#     #     "//deps/rabbitmq_amqp1_0:erlang_app",
-#     #     ":erlang_app",
-#     # ],
-# )
-
-# rabbitmq_run(
-#     name = "rabbitmq-for-tests-run",
-#     testonly = True,
-#     home = ":broker-for-tests-home",
-# )
-
 erlang_bytecode(
     name = "test_helpers",
     testonly = True,
@@ -100,7 +71,6 @@ erlang_bytecode(
     erlc_opts = "//:test_erlc_opts",
     deps = [
         ":test_erlang_app",
-        # "//deps/amqp_client",
     ],
 )
 
