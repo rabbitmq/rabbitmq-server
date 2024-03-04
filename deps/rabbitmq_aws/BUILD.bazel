@@ -5,50 +5,13 @@ load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
-    "rabbitmq_app",
+    rabbitmq_app = "rabbitmq_app2",
 )
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
-)
-
-APP_NAME = "rabbitmq_aws"
-
-APP_DESCRIPTION = "A minimalistic AWS API interface used by rabbitmq-autocluster (3.6.x) and other RabbitMQ plugins"
-
-APP_MODULE = "rabbitmq_aws_app"
-
-APP_REGISTERED = [
-    "rabbitmq_aws",
-]
-
-all_beam_files(name = "all_beam_files")
-
-all_test_beam_files(name = "all_test_beam_files")
-
-all_srcs(name = "all_srcs")
-
-test_suite_beam_files(name = "test_suite_beam_files")
-
-# gazelle:erlang_app_extra_app crypto
-# gazelle:erlang_app_extra_app inets
-# gazelle:erlang_app_extra_app public_key
-# gazelle:erlang_app_extra_app ssl
-# gazelle:erlang_app_extra_app xmerl
-# gazelle:erlang_app_dep_exclude rabbit_common
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode")
 
 rabbitmq_app(
     name = "erlang_app",
-    srcs = [":all_srcs"],
-    hdrs = [":public_hdrs"],
-    app_description = APP_DESCRIPTION,
-    app_module = APP_MODULE,
-    app_name = APP_NAME,
-    app_registered = APP_REGISTERED,
-    beam_files = [":beam_files"],
+    app_name = "rabbitmq_aws",
     extra_apps = [
         "crypto",
         "inets",
@@ -56,8 +19,6 @@ rabbitmq_app(
         "xmerl",
         "public_key",
     ],
-    license_files = [":license_files"],
-    priv = [":priv"],
 )
 
 xref(
@@ -85,18 +46,28 @@ dialyze(
     target = ":erlang_app",
 )
 
+erlang_bytecode(
+    name = "test_helpers",
+    testonly = True,
+    srcs = glob(
+        ["test/*.erl"],
+        exclude = ["test/*_SUITE.erl"],
+    ),
+    hdrs = glob([
+        "include/*.hrl",
+        "src/*.hrl",
+    ]),
+    dest = "test",
+    erlc_opts = "//:test_erlc_opts",
+    deps = [
+        ":test_erlang_app",
+    ],
+)
+
 eunit(
     name = "eunit",
     compiled_suites = [
-        ":test_rabbitmq_aws_all_tests_beam",
-        ":test_rabbitmq_aws_app_tests_beam",
-        ":test_rabbitmq_aws_config_tests_beam",
-        ":test_rabbitmq_aws_json_tests_beam",
-        ":test_rabbitmq_aws_sign_tests_beam",
-        ":test_rabbitmq_aws_sup_tests_beam",
-        ":test_rabbitmq_aws_tests_beam",
-        ":test_rabbitmq_aws_urilib_tests_beam",
-        ":test_rabbitmq_aws_xml_tests_beam",
+        ":test_helpers",
     ],
     data = [
         "test/test_aws_config.ini",
@@ -104,16 +75,10 @@ eunit(
     ],
     target = ":test_erlang_app",
     deps = [
-        "//deps/rabbit_common:erlang_app",  # keep
-        "@meck//:erlang_app",  # keep
-        "@thoas//:erlang_app",  # keep
+        "//deps/rabbit_common",
+        "@erlang_packages//meck",
+        "@erlang_packages//thoas",
     ],
 )
 
 assert_suites()
-
-alias(
-    name = "rabbitmq_aws",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
-)

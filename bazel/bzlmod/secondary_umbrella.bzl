@@ -6,12 +6,13 @@ cat << EOF > plugins/BUILD.bazel
 load("@rules_pkg//:pkg.bzl", "pkg_zip")
 
 pkg_zip(
-    name = "inet_tcp_proxy_ez",
-    package_dir = "inet_tcp_proxy/ebin",
+    name = "inet_tcp_proxy_dist_ez",
+    testonly = True,
+    package_dir = "inet_tcp_proxy_dist/ebin",
     srcs = [
-        "@inet_tcp_proxy_dist//:erlang_app",
+        "@erlang_packages//inet_tcp_proxy_dist",
     ],
-    package_file_name = "inet_tcp_proxy-0.1.0.ez",
+    package_file_name = "inet_tcp_proxy_dist-0.1.0.ez",
     visibility = ["//visibility:public"],
 )
 

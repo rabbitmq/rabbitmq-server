@@ -4,6 +4,7 @@ load("@//:rabbitmqctl.bzl", "rabbitmqctl")
 
 rabbitmq_package_generic_unix(
     name = "broker-home",
+    testonly = True,
     additional_files =
         glob(
             [
@@ -13,19 +14,21 @@ rabbitmq_package_generic_unix(
             exclude = ["sbin/rabbitmqctl"],
         ) + [
             "//plugins:standard_plugins",
-            "//plugins:inet_tcp_proxy_ez",
+            "//plugins:inet_tcp_proxy_dist_ez",
         ],
     rabbitmqctl = "sbin/rabbitmqctl",
 )
 
 rabbitmq_run(
     name = "rabbitmq-run",
+    testonly = True,
     home = ":broker-home",
     visibility = ["//visibility:public"],
 )
 
 rabbitmq_run_command(
     name = "broker",
+    testonly = True,
     rabbitmq_run = ":rabbitmq-run",
     subcommand = "run-broker",
 )

@@ -6,16 +6,10 @@ load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
-    "rabbitmq_app",
-    "rabbitmq_suite",
+    rabbitmq_app = "rabbitmq_app2",
+    rabbitmq_suite = "rabbitmq_suite2",
 )
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
-)
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode")
 
 py_binary(
     name = "codegen",
@@ -73,56 +67,9 @@ write_source_files(
     },
 )
 
-APP_EXTRA_KEYS = """
-%% Hex.pm package informations.
-	{licenses, ["MPL-2.0"]},
-	{links, [
-	    {"Website", "https://www.rabbitmq.com/"},
-	    {"GitHub", "https://github.com/rabbitmq/rabbitmq-common"}
-	  ]},
-	{build_tools, ["make", "rebar3"]},
-	{files, [
-	    "erlang.mk",
-	    "git-revisions.txt",
-	    "include",
-	    "LICENSE*",
-	    "Makefile",
-	    "rabbitmq-components.mk",
-	    "README",
-	    "README.md",
-	    "mk"
-	  ]}
-"""
-
-# gazelle:erlang_app_extra_app compiler
-# gazelle:erlang_app_extra_app crypto
-# gazelle:erlang_app_extra_app public_key
-# gazelle:erlang_app_extra_app sasl
-# gazelle:erlang_app_extra_app ssl
-# gazelle:erlang_app_extra_app syntax_tools
-# gazelle:erlang_app_extra_app tools
-# gazelle:erlang_app_extra_app xmerl
-# gazelle:erlang_app_extra_app runtime_tools
-# gazelle:erlang_app_extra_app os_mon
-
-# gazelle:erlang_app_dep_exclude ranch
-
-all_beam_files(name = "all_beam_files")
-
-all_test_beam_files(name = "all_test_beam_files")
-
-all_srcs(name = "all_srcs")
-
-test_suite_beam_files(name = "test_suite_beam_files")
-
 rabbitmq_app(
-    name = "erlang_app",
-    srcs = [":all_srcs"],
-    hdrs = [":public_hdrs"],
-    app_description = "Modules shared by rabbitmq-server and rabbitmq-erlang-client",
-    app_extra_keys = APP_EXTRA_KEYS,
     app_name = "rabbit_common",
-    beam_files = [":beam_files"],
+    extract_from = "early_apps",
     extra_apps = [
         "compiler",
         "crypto",
@@ -135,13 +82,11 @@ rabbitmq_app(
         "os_mon",
         "runtime_tools",
     ],
-    license_files = [":license_files"],
-    priv = [":priv"],
     deps = [
-        "@credentials_obfuscation//:erlang_app",
-        "@ranch//:erlang_app",  # keep
-        "@recon//:erlang_app",
-        "@thoas//:erlang_app",
+        "@erlang_packages//credentials_obfuscation",
+        "@erlang_packages//ranch",
+        "@erlang_packages//recon",
+        "@erlang_packages//thoas",
     ],
 )
 
@@ -167,20 +112,44 @@ dialyze(
     target = ":erlang_app",
 )
 
+erlang_bytecode(
+    name = "test_helpers",
+    hdrs = glob([
+        "include/*.hrl",
+        "src/*.hrl",
+    ]),
+    srcs = [
+        "test/gen_server2_test_server.erl",
+        "test/test_event_handler.erl",
+    ],
+    deps = [
+        ":test_erlang_app",
+    ],
+    dest = "test",
+    erlc_opts = "//:test_erlc_opts",
+    testonly = True,
+)
+
+eunit(
+    name = "eunit",
+    compiled_suites = [
+        ":test_helpers",
+    ],
+    target = ":test_erlang_app",
+)
+
 rabbitmq_suite(
     name = "rabbit_env_SUITE",
     size = "small",
     deps = [
-        "@proper//:erlang_app",
+        "@erlang_packages//proper",
     ],
 )
 
 rabbitmq_suite(
     name = "supervisor2_SUITE",
     size = "small",
-    additional_beam = [
-        "test/test_event_handler.beam",
-    ],
+    additional_beam = [":test_helpers"],
 )
 
 rabbitmq_suite(
@@ -196,12 +165,10 @@ rabbitmq_suite(
 rabbitmq_suite(
     name = "unit_SUITE",
     size = "medium",
-    additional_beam = [
-        "test/gen_server2_test_server.beam",
-    ],
+    additional_beam = [":test_helpers"],
     deps = [
-        "@credentials_obfuscation//:erlang_app",
-        "@proper//:erlang_app",
+        "@erlang_packages//credentials_obfuscation",
+        "@erlang_packages//proper",
     ],
 )
 
@@ -211,18 +178,3 @@ rabbitmq_suite(
 )
 
 assert_suites()
-
-alias(
-    name = "rabbit_common",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
-)
-
-eunit(
-    name = "eunit",
-    compiled_suites = [
-        ":test_gen_server2_test_server_beam",
-        ":test_test_event_handler_beam",
-    ],
-    target = ":test_erlang_app",
-)

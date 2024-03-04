@@ -12,5 +12,5 @@ BUILD_DEPS = rabbit_common
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 TEST_DEPS = meck
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+include rabbitmq-components.mk
+include erlang.mk

@@ -5,15 +5,8 @@ load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
-    "rabbitmq_app",
-    "rabbitmq_suite",
-)
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
+    rabbitmq_app = "rabbitmq_app2",
+    rabbitmq_suite = "rabbitmq_suite2",
 )
 
 py_binary(
@@ -50,44 +43,18 @@ genrule(
     tools = [":codegen"],
 )
 
-APP_EXTRA_KEYS = """%% Hex.pm package informations.
-    {licenses, ["MPL-2.0"]},
-    {links, [
-        {"Website", "https://www.rabbitmq.com/"},
-        {"GitHub", "https://github.com/rabbitmq/rabbitmq-server/tree/main/deps/amqp10_common"}
-    ]},
-    {build_tools, ["make", "rebar3"]},
-    {files, [
-        "erlang.mk",
-        "git-revisions.txt",
-        "include",
-        "LICENSE*",
-        "Makefile",
-        "rabbitmq-components.mk",
-        "README",
-        "README.md",
-        "src"
-    ]}
-"""
-
-all_beam_files(name = "all_beam_files")
-
-all_test_beam_files(name = "all_test_beam_files")
-
-all_srcs(name = "all_srcs")
-
-test_suite_beam_files(name = "test_suite_beam_files")
-
 rabbitmq_app(
-    name = "erlang_app",
-    srcs = [":all_srcs"],
-    hdrs = [":public_hdrs"],
-    app_description = "Modules shared by rabbitmq-amqp1.0 and rabbitmq-amqp1.0-client",
-    app_extra_keys = APP_EXTRA_KEYS,
     app_name = "amqp10_common",
-    beam_files = [":beam_files"],
-    license_files = [":license_files"],
-    priv = [":priv"],
+    public_hdrs = glob([
+        "include/**/*.hrl",
+    ]) + [
+        ":generated_headers",
+    ],
+    srcs = glob([
+        "src/**/*.erl",
+    ]) + [
+        ":generated_sources",
+    ],
 )
 
 xref(
@@ -122,12 +89,6 @@ rabbitmq_suite(
 )
 
 assert_suites()
-
-alias(
-    name = "amqp10_common",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
-)
 
 eunit(
     name = "eunit",

@@ -6,47 +6,17 @@ load(
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
-    "rabbitmq_app",
-    "rabbitmq_integration_suite",
+    rabbitmq_app = "rabbitmq_app2",
+    rabbitmq_integration_suite = "rabbitmq_integration_suite2",
 )
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
-)
-
-APP_NAME = "rabbitmq_peer_discovery_common"
-
-APP_DESCRIPTION = "Modules shared by various peer discovery backends"
-
-APP_MODULE = "rabbit_peer_discovery_common_app"
-
-all_beam_files(name = "all_beam_files")
-
-all_test_beam_files(name = "all_test_beam_files")
-
-all_srcs(name = "all_srcs")
-
-test_suite_beam_files(name = "test_suite_beam_files")
-
-# gazelle:erlang_app_extra_app inets
 
 rabbitmq_app(
     name = "erlang_app",
-    srcs = [":all_srcs"],
-    hdrs = [":public_hdrs"],
-    app_description = APP_DESCRIPTION,
-    app_module = APP_MODULE,
-    app_name = APP_NAME,
-    beam_files = [":beam_files"],
+    app_name = "rabbitmq_peer_discovery_common",
     extra_apps = ["inets"],
-    license_files = [":license_files"],
-    priv = [":priv"],
     deps = [
-        "//deps/rabbit:erlang_app",
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit",
+        "//deps/rabbit_common",
     ],
 )
 
@@ -81,9 +51,3 @@ rabbitmq_integration_suite(
 )
 
 assert_suites()
-
-alias(
-    name = "rabbitmq_peer_discovery_common",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
-)

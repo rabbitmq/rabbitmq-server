@@ -30,5 +30,5 @@ dep_emqtt = git https://github.com/rabbitmq/emqtt.git master
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+include rabbitmq-components.mk
+include erlang.mk

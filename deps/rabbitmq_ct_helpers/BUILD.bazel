@@ -6,87 +6,59 @@ load(
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
-    "rabbitmq_app",
-    "rabbitmq_integration_suite",
+    rabbitmq_app = "rabbitmq_app2",
+    rabbitmq_integration_suite = "rabbitmq_integration_suite2",
 )
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
-)
-
-all_beam_files(name = "all_beam_files")
-
-all_srcs(name = "all_srcs")
-
-all_test_beam_files(name = "all_test_beam_files")
-
-test_suite_beam_files(name = "test_suite_beam_files")
-
-# gazelle:erlang_app_testonly
-
-# gazelle:erlang_app_dep meck
-# gazelle:erlang_app_dep_exclude rabbit
-# gazelle:erlang_app_dep_exclude rabbitmq_prelaunch
-# gazelle:erlang_app_dep_exclude rabbitmq_management_agent
 
 rabbitmq_app(
     name = "erlang_app",
     testonly = True,
-    srcs = [":all_srcs"],
-    hdrs = [":public_hdrs"],
     app_name = "rabbitmq_ct_helpers",
-    beam_files = [":beam_files"],
-    license_files = [":license_files"],
-    priv = [":priv"],
+    priv = glob(
+        ["tools/**/*"],
+        exclude = [".gitignore"],
+    ),
     deps = [
         "//deps/rabbit_common:erlang_app",
-        "@meck//:erlang_app",
-        "@proper//:erlang_app",
+        "@erlang_packages//inet_tcp_proxy_dist",
+        "@erlang_packages//meck",
+        "@erlang_packages//proper",
     ],
-)
-
-alias(
-    name = "rabbitmq_ct_helpers",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
 )
 
 xref(
     name = "xref",
     additional_libs = [
-        "//deps/rabbitmq_cli:elixir",  # keep
-        "//deps/rabbitmq_cli:erlang_app",  # keep
-        "//deps/rabbit:erlang_app",  # keep
-        "//deps/rabbitmq_prelaunch:erlang_app",  # keep
-        "//deps/rabbitmq_management_agent:erlang_app",  # keep
-        "@proper//:erlang_app",  # keep
+        "//deps/rabbitmq_cli:elixir",
+        "//deps/rabbitmq_cli:erlang_app",
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbitmq_prelaunch:erlang_app",
+        "//deps/rabbitmq_management_agent:erlang_app",
+        "@erlang_packages//proper",
     ],
-    target = ":erlang_app",
+    target = ":test_erlang_app",
 )
 
 plt(
     name = "deps_plt",
     apps = [
-        "common_test",  # keep
-        "eunit",  # keep
-        "inets",  # keep
+        "common_test",
+        "eunit",
+        "inets",
     ],
-    for_target = ":erlang_app",
+    for_target = ":test_erlang_app",
     ignore_warnings = True,
     libs = [
-        "//deps/rabbitmq_cli:elixir",  # keep
+        "//deps/rabbitmq_cli:elixir",
     ],
     plt = "//:base_plt",
     deps = [
-        "//deps/rabbit:erlang_app",  # keep
-        "//deps/rabbitmq_cli:elixir",  # keep
-        "//deps/rabbitmq_cli:erlang_app",  # keep
-        "//deps/rabbitmq_management_agent:erlang_app",  # keep
-        "//deps/rabbitmq_prelaunch:erlang_app",  # keep
-        "@proper//:erlang_app",  # keep
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbitmq_cli:elixir",
+        "//deps/rabbitmq_cli:erlang_app",
+        "//deps/rabbitmq_management_agent:erlang_app",
+        "//deps/rabbitmq_prelaunch:erlang_app",
+        "@erlang_packages//proper",
     ],
 )
 
@@ -94,7 +66,7 @@ dialyze(
     name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":deps_plt",
-    target = ":erlang_app",
+    target = ":test_erlang_app",
     warnings_as_errors = False,
 )
 

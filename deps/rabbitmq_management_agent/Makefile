@@ -23,6 +23,6 @@ LOCAL_DEPS += xmerl ranch ssl crypto public_key
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
-include ../../rabbitmq-components.mk
+include rabbitmq-components.mk
 TEST_DEPS := $(filter-out rabbitmq_test,$(TEST_DEPS))
-include ../../erlang.mk
+include erlang.mk

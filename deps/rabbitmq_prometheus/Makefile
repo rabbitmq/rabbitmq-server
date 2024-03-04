@@ -23,8 +23,8 @@ RABBITMQ_CONFIG_FILE = $(CURDIR)/rabbitmq-disable-metrics-collector.conf
 export RABBITMQ_CONFIG_FILE
 endif
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+include rabbitmq-components.mk
+include erlang.mk
 
 .PHONY: readme
 readme: # Preview README & live reload on edit

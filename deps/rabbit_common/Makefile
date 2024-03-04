@@ -25,8 +25,8 @@ define HEX_TARBALL_EXTRA_METADATA
 }
 endef
 
-LOCAL_DEPS = compiler crypto public_key sasl ssl syntax_tools tools xmerl
-DEPS = thoas recon credentials_obfuscation
+LOCAL_DEPS = compiler crypto public_key sasl ssl syntax_tools tools xmerl os_mon runtime_tools
+DEPS = thoas ranch recon credentials_obfuscation
 
 # Variables and recipes in development.*.mk are meant to be used from
 # any Git clone. They are excluded from the files published to Hex.pm.

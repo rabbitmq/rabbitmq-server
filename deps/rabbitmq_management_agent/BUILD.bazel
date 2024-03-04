@@ -3,75 +3,28 @@ load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
-    "BROKER_VERSION_REQUIREMENTS_ANY",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
-    "rabbitmq_app",
-    "rabbitmq_integration_suite",
-    "rabbitmq_suite",
+    rabbitmq_app = "rabbitmq_app2",
+    rabbitmq_integration_suite = "rabbitmq_integration_suite2",
+    rabbitmq_suite = "rabbitmq_suite2",
 )
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
-)
-
-APP_ENV = """[
-	    {rates_mode,        basic},
-	    {sample_retention_policies,
-	     %% List of {MaxAgeInSeconds, SampleEveryNSeconds}
-	     [{global,   [{605, 5}, {3660, 60}, {29400, 600}, {86400, 1800}]},
-	      {basic,    [{605, 5}, {3600, 60}]},
-	      {detailed, [{605, 5}]}]}
-	  ]"""
-
-APP_NAME = "rabbitmq_management_agent"
-
-APP_DESCRIPTION = "RabbitMQ Management Agent"
-
-APP_MODULE = "rabbit_mgmt_agent_app"
-
-all_beam_files(name = "all_beam_files")
-
-all_test_beam_files(name = "all_test_beam_files")
-
-all_srcs(name = "all_srcs")
-
-test_suite_beam_files(name = "test_suite_beam_files")
-
-# gazelle:erlang_app_extra_app xmerl
-# gazelle:erlang_app_extra_app ssl
-# gazelle:erlang_app_extra_app crypto
-# gazelle:erlang_app_extra_app public_key
-
-# gazelle:erlang_app_dep ranch
 
 rabbitmq_app(
     name = "erlang_app",
-    srcs = [":all_srcs"],
-    hdrs = [":public_hdrs"],
-    app_description = APP_DESCRIPTION,
-    app_env = APP_ENV,
-    app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
-    app_module = APP_MODULE,
-    app_name = APP_NAME,
-    beam_files = [":beam_files"],
+    app_name = "rabbitmq_management_agent",
     extra_apps = [
         "crypto",
         "public_key",
         "ssl",
         "xmerl",
     ],
-    license_files = [":license_files"],
-    priv = [":priv"],
     deps = [
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
         "//deps/rabbitmq_web_dispatch:erlang_app",
-        "@ranch//:erlang_app",
+        "@erlang_packages//ranch",
     ],
 )
 
@@ -110,7 +63,7 @@ rabbitmq_suite(
     name = "exometer_slide_SUITE",
     size = "medium",
     deps = [
-        "@proper//:erlang_app",
+        "@erlang_packages//proper",
     ],
 )
 
@@ -129,14 +82,8 @@ rabbitmq_suite(
     size = "small",
     deps = [
         "//deps/rabbitmq_ct_helpers:erlang_app",
-        "@proper//:erlang_app",
+        "@erlang_packages//proper",
     ],
 )
 
 assert_suites()
-
-alias(
-    name = "rabbitmq_management_agent",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
-)

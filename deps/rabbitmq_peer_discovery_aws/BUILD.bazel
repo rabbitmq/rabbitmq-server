@@ -6,47 +6,21 @@ load(
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
-    "rabbitmq_app",
-    "rabbitmq_integration_suite",
-    "rabbitmq_suite",
+    rabbitmq_app = "rabbitmq_app2",
+    rabbitmq_integration_suite = "rabbitmq_integration_suite2",
+    rabbitmq_suite = "rabbitmq_suite2",
 )
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
-)
-
-APP_NAME = "rabbitmq_peer_discovery_aws"
-
-APP_DESCRIPTION = "AWS-based RabbitMQ peer discovery backend"
-
-all_beam_files(name = "all_beam_files")
-
-all_test_beam_files(name = "all_test_beam_files")
-
-all_srcs(name = "all_srcs")
-
-test_suite_beam_files(name = "test_suite_beam_files")
-
-# gazelle:erlang_app_extra_app inets
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode")
 
 rabbitmq_app(
     name = "erlang_app",
-    srcs = [":all_srcs"],
-    hdrs = [":public_hdrs"],
-    app_description = APP_DESCRIPTION,
-    app_name = APP_NAME,
-    beam_files = [":beam_files"],
+    app_name = "rabbitmq_peer_discovery_aws",
     extra_apps = ["inets"],
-    license_files = [":license_files"],
-    priv = [":priv"],
     deps = [
-        "//deps/rabbit:erlang_app",
-        "//deps/rabbit_common:erlang_app",
-        "//deps/rabbitmq_aws:erlang_app",
-        "//deps/rabbitmq_peer_discovery_common:erlang_app",
+        "//deps/rabbit",
+        "//deps/rabbit_common",
+        "//deps/rabbitmq_aws",
+        "//deps/rabbitmq_peer_discovery_common",
     ],
 )
 
@@ -71,11 +45,30 @@ dialyze(
 
 eunit(
     name = "eunit",
-    compiled_suites = [":test_aws_ecs_util_beam"],
+    compiled_suites = [":test_helpers"],
     target = ":test_erlang_app",
 )
 
 broker_for_integration_suites()
+
+erlang_bytecode(
+    name = "test_helpers",
+    testonly = True,
+    srcs = glob(
+        ["test/*.erl"],
+        exclude = ["test/*_SUITE.erl"],
+    ),
+    hdrs = glob([
+        "include/*.hrl",
+        "src/*.hrl",
+    ]),
+    dest = "test",
+    erlc_opts = "//:test_erlc_opts",
+    deps = [
+        ":test_erlang_app",
+        # "//deps/amqp_client",
+    ],
+)
 
 rabbitmq_integration_suite(
     name = "config_schema_SUITE",
@@ -91,14 +84,11 @@ rabbitmq_suite(
     name = "integration_SUITE",
     size = "large",
     additional_beam = [
-        "test/aws_ecs_util.beam",
+        ":test_helpers",
     ],
     tags = [
         "aws",
         "external",
-    ],
-    deps = [
-        "//deps/rabbitmq_ct_helpers:erlang_app",
     ],
 )
 
@@ -106,14 +96,8 @@ rabbitmq_suite(
     name = "unit_SUITE",
     size = "small",
     deps = [
-        "@meck//:erlang_app",
+        "@erlang_packages//meck",
     ],
 )
 
 assert_suites()
-
-alias(
-    name = "rabbitmq_peer_discovery_aws",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
-)

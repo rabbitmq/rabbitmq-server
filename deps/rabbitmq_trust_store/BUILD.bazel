@@ -7,61 +7,23 @@ load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
-    "rabbitmq_app",
-    "rabbitmq_integration_suite",
+    "broker_for_integration_suites",
+    rabbitmq_app = "rabbitmq_app2",
+    rabbitmq_integration_suite = "rabbitmq_integration_suite2",
 )
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
-)
-
-APP_NAME = "rabbitmq_trust_store"
-
-APP_DESCRIPTION = "Client X.509 certificates trust store"
-
-APP_MODULE = "rabbit_trust_store_app"
-
-APP_ENV = """[
-	    {default_refresh_interval, 30},
-	    {providers, [rabbit_trust_store_file_provider]}
-	  ]"""
-
-all_beam_files(name = "all_beam_files")
-
-all_test_beam_files(name = "all_test_beam_files")
-
-all_srcs(name = "all_srcs")
-
-test_suite_beam_files(name = "test_suite_beam_files")
-
-# gazelle:erlang_app_extra_app ssl
-# gazelle:erlang_app_extra_app crypto
-# gazelle:erlang_app_extra_app public_key
-# gazelle:erlang_app_extra_app inets
 
 rabbitmq_app(
     name = "erlang_app",
-    srcs = [":all_srcs"],
-    hdrs = [":public_hdrs"],
-    app_description = APP_DESCRIPTION,
-    app_env = APP_ENV,
-    app_module = APP_MODULE,
-    app_name = APP_NAME,
-    beam_files = [":beam_files"],
+    app_name = "rabbitmq_trust_store",
     extra_apps = [
         "crypto",
         "public_key",
         "ssl",
         "inets",
     ],
-    license_files = [":license_files"],
-    priv = [":priv"],
     deps = [
-        "//deps/rabbit:erlang_app",
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit",
+        "//deps/rabbit_common",
     ],
 )
 
@@ -89,22 +51,43 @@ eunit(
     target = ":test_erlang_app",
 )
 
-rabbitmq_home(
-    name = "broker-for-tests-home",
-    testonly = True,
-    plugins = [
-        "//deps/rabbit:erlang_app",
-        ":erlang_app",
-        "//deps/amqp_client:erlang_app",
-        "@ct_helper//:erlang_app",
+broker_for_integration_suites(
+    extra_plugins = [
+        "amqp_client",
+        "ct_helper",
     ],
 )
 
-rabbitmq_run(
-    name = "rabbitmq-for-tests-run",
-    testonly = True,
-    home = ":broker-for-tests-home",
-)
+# rabbitmq_home(
+#     name = "broker-for-tests-home",
+#     testonly = True,
+#     apps = [
+#         "rabbit",
+#         "rabbitmq_trust_store",
+#         "amqp_client",
+#         "ct_helper",
+#     ],
+#     erl_libs = [
+#         "@erlang_packages//:deps",
+#         "@erlang_packages//:test_deps",
+#         "//:test_early_apps",
+#         "//:rabbitmq_cli",
+#         "//:test_apps",
+#         "//:bazel_native_deps",
+#     ],
+#     # plugins = [
+#     #     "//deps/rabbit",
+#     #     ":erlang_app",
+#     #     "//deps/amqp_client",
+#     #     "@erlang_packages//ct_helper",
+#     # ],
+# )
+
+# rabbitmq_run(
+#     name = "rabbitmq-for-tests-run",
+#     testonly = True,
+#     home = ":broker-for-tests-home",
+# )
 
 rabbitmq_integration_suite(
     name = "config_schema_SUITE",
@@ -114,15 +97,9 @@ rabbitmq_integration_suite(
     name = "system_SUITE",
     flaky = True,
     runtime_deps = [
-        "//deps/trust_store_http:erlang_app",
-        "@ct_helper//:erlang_app",
+        "//deps/trust_store_http",
+        "@erlang_packages//ct_helper",
     ],
 )
 
 assert_suites()
-
-alias(
-    name = "rabbitmq_trust_store",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
-)

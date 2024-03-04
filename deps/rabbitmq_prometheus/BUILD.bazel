@@ -6,58 +6,21 @@ load(
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
-    "rabbitmq_app",
-    "rabbitmq_integration_suite",
+    rabbitmq_app = "rabbitmq_app2",
+    rabbitmq_integration_suite = "rabbitmq_integration_suite2",
 )
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
-)
-
-APP_NAME = "rabbitmq_prometheus"
-
-APP_MODULE = "rabbit_prometheus_app"
-
-APP_ENV = """[
-	    {return_per_object_metrics, false},
-	    {tcp_config, [{port, 15692}]},
-	    {ssl_config, []}
-]"""
-
-all_beam_files(name = "all_beam_files")
-
-all_test_beam_files(name = "all_test_beam_files")
-
-all_srcs(name = "all_srcs")
-
-test_suite_beam_files(name = "test_suite_beam_files")
-
-# gazelle:erlang_app_dep rabbitmq_management_agent
-# gazelle:erlang_app_dep_exclude amqp_client
-# gazelle:erlang_app_dep_exclude rabbit_common
 
 rabbitmq_app(
     name = "erlang_app",
-    srcs = [":all_srcs"],
-    hdrs = [":public_hdrs"],
-    app_description = "Prometheus metrics for RabbitMQ",
-    app_env = APP_ENV,
-    app_module = APP_MODULE,
-    app_name = APP_NAME,
-    beam_files = [":beam_files"],
-    license_files = [":license_files"],
-    priv = [":priv"],
+    app_name = "rabbitmq_prometheus",
     deps = [
-        "//deps/rabbit:erlang_app",
-        "//deps/rabbitmq_federation:erlang_app",
-        "//deps/rabbitmq_management_agent:erlang_app",
-        "//deps/rabbitmq_web_dispatch:erlang_app",
-        "@accept//:erlang_app",
-        "@cowboy//:erlang_app",
-        "@prometheus//:erlang_app",
+        "//deps/rabbit",
+        "//deps/rabbitmq_federation",
+        "//deps/rabbitmq_management_agent",
+        "//deps/rabbitmq_web_dispatch",
+        "@erlang_packages//accept",
+        "@erlang_packages//cowboy",
+        "@erlang_packages//prometheus",
     ],
 )
 
@@ -109,9 +72,3 @@ rabbitmq_integration_suite(
 )
 
 assert_suites()
-
-alias(
-    name = "rabbitmq_prometheus",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
-)

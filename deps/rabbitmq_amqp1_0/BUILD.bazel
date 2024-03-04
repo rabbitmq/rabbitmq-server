@@ -2,23 +2,19 @@ load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
-    "BROKER_VERSION_REQUIREMENTS_ANY",
     "assert_suites",
-    "rabbitmq_app",
-)
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
+    rabbitmq_app = "rabbitmq_app2",
 )
 
-APP_NAME = "rabbitmq_amqp1_0"
+# APP_ENV = """[
+# 	    {default_user, "guest"},
+# 	    {default_vhost, <<"/">>},
+# 	    {protocol_strict_mode, false}
+# 	  ]"""
 
-APP_DESCRIPTION = "Deprecated no-op AMQP 1.0 plugin"
+# APP_NAME = "rabbitmq_amqp1_0"
 
-all_beam_files(name = "all_beam_files")
+# APP_DESCRIPTION = "AMQP 1.0 support for RabbitMQ"
 
 all_test_beam_files(name = "all_test_beam_files")
 
@@ -26,29 +22,20 @@ test_suite_beam_files(name = "test_suite_beam_files")
 
 rabbitmq_app(
     name = "erlang_app",
-    srcs = [":all_srcs"],
-    hdrs = [":public_hdrs"],
-    app_description = APP_DESCRIPTION,
-    app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
-    app_name = APP_NAME,
-    beam_files = [":beam_files"],
-    license_files = [":license_files"],
-    priv = [":priv"],
+    app_name = "rabbitmq_amqp1_0",
     deps = [
-        "//deps/rabbit:erlang_app",  # keep
+        "//deps/amqp10_common",
+        "//deps/amqp_client",
+        "//deps/rabbit",
+        "//deps/rabbit_common",
     ],
-)
-
-all_srcs(name = "all_srcs")
-
-alias(
-    name = "rabbitmq_amqp1_0",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
 )
 
 xref(
     name = "xref",
+    additional_libs = [
+        "//deps/rabbitmq_cli:erlang_app",  # keep
+    ],
     target = ":erlang_app",
 )
 
@@ -62,6 +49,11 @@ dialyze(
     name = "dialyze",
     plt = ":deps_plt",
     target = ":erlang_app",
+)
+
+eunit(
+    name = "eunit",
+    target = ":test_erlang_app",
 )
 
 assert_suites()

@@ -6,51 +6,25 @@ load(
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
-    "rabbitmq_app",
-    "rabbitmq_integration_suite",
-    "rabbitmq_suite",
+    rabbitmq_app = "rabbitmq_app2",
+    rabbitmq_integration_suite = "rabbitmq_integration_suite2",
+    rabbitmq_suite = "rabbitmq_suite2",
 )
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
-)
-
-all_beam_files(name = "all_beam_files")
-
-all_test_beam_files(name = "all_test_beam_files")
-
-all_srcs(name = "all_srcs")
-
-test_suite_beam_files(name = "test_suite_beam_files")
-
-# gazelle:erlang_app_extra_app inets
-# gazelle:erlang_app_extra_app public_key
-
-# gazelle:erlang_app_dep rabbit
-# gazelle:erlang_app_dep_exclude rabbit_common
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode")
 
 rabbitmq_app(
     name = "erlang_app",
-    srcs = [":all_srcs"],
-    hdrs = [":public_hdrs"],
-    app_description = "OAuth 2 and JWT-based AuthN and AuthZ backend",
     app_name = "rabbitmq_auth_backend_oauth2",
-    beam_files = [":beam_files"],
     extra_apps = [
         "inets",
         "public_key",
     ],
-    license_files = [":license_files"],
-    priv = [":priv"],
     deps = [
-        "//deps/oauth2_client:erlang_app",
-        "//deps/rabbit:erlang_app",
-        "@base64url//:erlang_app",
-        "@cowlib//:erlang_app",
-        "@jose//:erlang_app",
+        "//deps/oauth2_client",
+        "//deps/rabbit",
+        "@erlang_packages//base64url",
+        "@erlang_packages//cowlib",
+        "@erlang_packages//jose",
     ],
 )
 
@@ -81,19 +55,33 @@ dialyze(
 eunit(
     name = "eunit",
     compiled_suites = [
-        ":test_jwks_http_app_beam",
-        ":test_jwks_http_handler_beam",
-        ":test_openid_http_handler_beam",
-        ":test_jwks_http_sup_beam",
-        ":test_rabbit_auth_backend_oauth2_test_util_beam",
-        ":test_oauth2_http_mock_beam",
+        ":test_helpers",
     ],
     target = ":test_erlang_app",
 )
 
 broker_for_integration_suites(
     extra_plugins = [
-        "//deps/rabbitmq_mqtt:erlang_app",
+        "rabbitmq_mqtt",
+    ],
+)
+
+erlang_bytecode(
+    name = "test_helpers",
+    testonly = True,
+    srcs = glob(
+        ["test/*.erl"],
+        exclude = ["test/*_SUITE.erl"],
+    ),
+    hdrs = glob([
+        "include/*.hrl",
+        "src/*.hrl",
+    ]),
+    dest = "test",
+    erlc_opts = "//:test_erlc_opts",
+    deps = [
+        ":test_erlang_app",
+        # "//deps/amqp_client",
     ],
 )
 
@@ -124,14 +112,10 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "jwks_SUITE",
     additional_beam = [
-        "test/rabbit_auth_backend_oauth2_test_util.beam",
-        "test/jwks_http_app.beam",
-        "test/jwks_http_handler.beam",
-        "test/openid_http_handler.beam",
-        "test/jwks_http_sup.beam",
+        ":test_helpers",
     ],
     deps = [
-        "@cowboy//:erlang_app",
+        "@erlang_packages//cowboy",
     ],
 )
 
@@ -139,7 +123,7 @@ rabbitmq_suite(
     name = "scope_SUITE",
     size = "medium",
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
     ],
 )
 
@@ -147,11 +131,11 @@ rabbitmq_integration_suite(
     name = "system_SUITE",
     size = "medium",
     additional_beam = [
-        "test/rabbit_auth_backend_oauth2_test_util.beam",
+        ":test_helpers",
     ],
     runtime_deps = [
-        "//deps/oauth2_client:erlang_app",
-        "@emqtt//:erlang_app",
+        "//deps/oauth2_client",
+        "@erlang_packages//emqtt",
     ],
 )
 
@@ -159,7 +143,7 @@ rabbitmq_integration_suite(
     name = "unit_SUITE",
     size = "medium",
     additional_beam = [
-        "test/rabbit_auth_backend_oauth2_test_util.beam",
+        ":test_helpers",
     ],
 )
 
@@ -169,9 +153,3 @@ rabbitmq_suite(
 )
 
 assert_suites()
-
-alias(
-    name = "rabbitmq_auth_backend_oauth2",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
-)

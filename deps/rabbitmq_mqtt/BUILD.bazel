@@ -3,89 +3,25 @@ load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
-    "BROKER_VERSION_REQUIREMENTS_ANY",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
-    "rabbitmq_app",
-    "rabbitmq_integration_suite",
-    "rabbitmq_suite",
+    rabbitmq_app = "rabbitmq_app2",
+    rabbitmq_integration_suite = "rabbitmq_integration_suite2",
+    rabbitmq_suite = "rabbitmq_suite2",
 )
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
-)
-
-APP_NAME = "rabbitmq_mqtt"
-
-APP_DESCRIPTION = "RabbitMQ MQTT Adapter"
-
-APP_MODULE = "rabbit_mqtt"
-
-APP_ENV = """[
-	    {default_user, <<"guest">>},
-	    {default_pass, <<"guest">>},
-	    {ssl_cert_login,false},
-	    %% To satisfy an unfortunate expectation from popular MQTT clients.
-	    {allow_anonymous, true},
-	    {vhost, <<"/">>},
-	    {exchange, <<"amq.topic">>},
-	    {max_session_expiry_interval_seconds, 86400}, %% 1 day
-	    {retained_message_store, rabbit_mqtt_retained_msg_store_dets},
-	    %% only used by DETS store
-	    {retained_message_store_dets_sync_interval, 2000},
-	    {prefetch, 10},
-	    {ssl_listeners, []},
-	    {tcp_listeners, [1883]},
-	    {num_tcp_acceptors, 10},
-	    {num_ssl_acceptors, 10},
-	    {tcp_listen_options, [{backlog,   128},
-	                          {nodelay,   true},
-	                          {send_timeout, 15000},
-	                          {send_timeout_close, true}
-	                         ]},
-	    {proxy_protocol, false},
-	    {sparkplug, false},
-	    {mailbox_soft_limit, 200},
-	    {max_packet_size_unauthenticated, 65536},
-	    %% 256 MB is upper limit defined by MQTT spec
-	    {max_packet_size_authenticated, 268435455},
-	    {topic_alias_maximum, 16}
-	  ]
-"""
-
-all_beam_files(name = "all_beam_files")
-
-all_test_beam_files(name = "all_test_beam_files")
-
-all_srcs(name = "all_srcs")
-
-test_suite_beam_files(name = "test_suite_beam_files")
-
-# gazelle:erlang_app_extra_app ssl
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode")
 
 rabbitmq_app(
     name = "erlang_app",
-    srcs = [":all_srcs"],
-    hdrs = [":public_hdrs"],
-    app_description = APP_DESCRIPTION,
-    app_env = APP_ENV,
-    app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
-    app_module = APP_MODULE,
-    app_name = APP_NAME,
-    beam_files = [":beam_files"],
+    app_name = "rabbitmq_mqtt",
     extra_apps = ["ssl"],
-    license_files = [":license_files"],
-    priv = [":priv"],
     deps = [
-        "//deps/amqp10_common:erlang_app",
-        "//deps/rabbit:erlang_app",
-        "//deps/rabbit_common:erlang_app",
+        "//deps/amqp10_common",
+        "//deps/rabbit",
+        "//deps/rabbit_common",
         "@ra//:erlang_app",
-        "@ranch//:erlang_app",
+        "@erlang_packages//ranch",
     ],
 )
 
@@ -116,33 +52,49 @@ dialyze(
 eunit(
     name = "eunit",
     compiled_suites = [
-        ":test_rabbit_auth_backend_mqtt_mock_beam",
-        ":test_event_recorder_beam",
-        ":test_util_beam",
+        ":test_helpers",
     ],
     target = ":test_erlang_app",
 )
 
 broker_for_integration_suites(
     extra_plugins = [
-        "//deps/rabbitmq_management:erlang_app",
-        "//deps/rabbitmq_web_mqtt:erlang_app",
-        "//deps/rabbitmq_consistent_hash_exchange:erlang_app",
-        "//deps/rabbitmq_stomp:erlang_app",
-        "//deps/rabbitmq_stream:erlang_app",
+        "rabbitmq_management",
+        "rabbitmq_web_mqtt",
+        "rabbitmq_consistent_hash_exchange",
+        "rabbitmq_stomp",
+        "rabbitmq_stream",
+    ],
+)
+
+erlang_bytecode(
+    name = "test_helpers",
+    testonly = True,
+    srcs = glob(
+        ["test/**/*.erl"],
+        exclude = ["test/*_SUITE.erl"],
+    ),
+    hdrs = glob([
+        "include/*.hrl",
+        "src/*.hrl",
+    ]),
+    dest = "test",
+    erlc_opts = "//:test_erlc_opts",
+    deps = [
+        ":test_erlang_app",
+        # "//deps/amqp_client",
     ],
 )
 
 rabbitmq_integration_suite(
     name = "auth_SUITE",
     additional_beam = [
-        "test/rabbit_auth_backend_mqtt_mock.beam",
-        "test/util.beam",
+        ":test_helpers",
     ],
     shard_count = 14,
     runtime_deps = [
-        "@emqtt//:erlang_app",
-        "@meck//:erlang_app",
+        "@erlang_packages//emqtt",
+        "@erlang_packages//meck",
     ],
 )
 
@@ -150,23 +102,23 @@ rabbitmq_integration_suite(
     name = "cluster_SUITE",
     size = "large",
     additional_beam = [
-        ":test_util_beam",
+        ":test_helpers",
     ],
     flaky = True,
     shard_count = 4,
     sharding_method = "case",
     runtime_deps = [
-        "@emqtt//:erlang_app",
+        "@erlang_packages//emqtt",
     ],
 )
 
 rabbitmq_integration_suite(
     name = "command_SUITE",
     additional_beam = [
-        ":test_util_beam",
+        ":test_helpers",
     ],
     runtime_deps = [
-        "@emqtt//:erlang_app",
+        "@erlang_packages//emqtt",
     ],
 )
 
@@ -181,17 +133,17 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "ff_SUITE",
     additional_beam = [
-        ":test_util_beam",
+        ":test_helpers",
     ],
     runtime_deps = [
-        "@emqtt//:erlang_app",
+        "@erlang_packages//emqtt",
     ],
 )
 
 rabbitmq_integration_suite(
     name = "java_SUITE",
     additional_beam = [
-        ":test_util_beam",
+        ":test_helpers",
     ],
     shard_count = 2,
     sharding_method = "group",
@@ -206,40 +158,38 @@ rabbitmq_suite(
     name = "processor_SUITE",
     size = "small",
     runtime_deps = [
-        "@meck//:erlang_app",
+        "@erlang_packages//meck",
     ],
     deps = [
-        "//deps/amqp_client:erlang_app",
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
     ],
 )
 
 rabbitmq_integration_suite(
     name = "proxy_protocol_SUITE",
     additional_beam = [
-        ":test_util_beam",
+        ":test_helpers",
     ],
 )
 
 rabbitmq_integration_suite(
     name = "reader_SUITE",
     additional_beam = [
-        ":test_util_beam",
-        ":test_event_recorder_beam",
+        ":test_helpers",
     ],
     runtime_deps = [
-        "@emqtt//:erlang_app",
+        "@erlang_packages//emqtt",
     ],
 )
 
 rabbitmq_integration_suite(
     name = "retainer_SUITE",
     additional_beam = [
-        ":test_util_beam",
+        ":test_helpers",
     ],
     shard_count = 6,
     runtime_deps = [
-        "@emqtt//:erlang_app",
+        "@erlang_packages//emqtt",
     ],
 )
 
@@ -247,15 +197,15 @@ rabbitmq_integration_suite(
     name = "shared_SUITE",
     size = "large",
     additional_beam = [
-        ":test_util_beam",
-        ":test_event_recorder_beam",
+        ":test_helpers",
     ],
     shard_count = 18,
     runtime_deps = [
-        "//deps/rabbitmq_management_agent:erlang_app",
-        "@emqtt//:erlang_app",
-        "@gun//:erlang_app",
-        "@meck//:erlang_app",
+        "//deps/rabbitmq_management_agent",
+        "@erlang_packages//cowlib",
+        "@erlang_packages//emqtt",
+        "@erlang_packages//gun",
+        "@erlang_packages//meck",
     ],
 )
 
@@ -263,12 +213,13 @@ rabbitmq_integration_suite(
     name = "v5_SUITE",
     size = "large",
     additional_beam = [
-        ":test_util_beam",
+        ":test_helpers",
     ],
     shard_count = 4,
     runtime_deps = [
-        "@emqtt//:erlang_app",
-        "@gun//:erlang_app",
+        "@erlang_packages//cowlib",
+        "@erlang_packages//emqtt",
+        "@erlang_packages//gun",
     ],
 )
 
@@ -276,28 +227,27 @@ rabbitmq_integration_suite(
     name = "protocol_interop_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_util_beam",
+        ":test_helpers",
+    ],
+    deps = [
+        "//deps/rabbitmq_stomp",
     ],
     runtime_deps = [
-        "//deps/amqp10_client:erlang_app",
-        "//deps/rabbitmq_stomp:erlang_app",
-        "//deps/rabbitmq_stream_common:erlang_app",
-        "@emqtt//:erlang_app",
+        "//deps/amqp10_client",
+        "//deps/rabbitmq_stream_common",
+        "@erlang_packages//emqtt",
     ],
 )
 
 rabbitmq_suite(
     name = "packet_prop_SUITE",
-    deps = [
-        "//deps/rabbitmq_ct_helpers:erlang_app",
-    ],
 )
 
 rabbitmq_suite(
     name = "rabbit_mqtt_confirms_SUITE",
     size = "small",
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
     ],
 )
 
@@ -313,15 +263,9 @@ rabbitmq_suite(
     name = "mc_mqtt_SUITE",
     size = "small",
     deps = [
-        "//deps/amqp10_common:erlang_app",
-        "//deps/rabbit:erlang_app",
+        "//deps/amqp10_common",
+        "//deps/rabbit",
     ],
 )
 
 assert_suites()
-
-alias(
-    name = "rabbitmq_mqtt",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
-)

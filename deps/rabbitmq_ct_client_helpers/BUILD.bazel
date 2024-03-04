@@ -4,47 +4,16 @@ load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
-    "rabbitmq_app",
+    rabbitmq_app = "rabbitmq_app2",
 )
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
-)
-
-# gazelle:erlang_app_testonly
-
-# gazelle:erlang_always_generate_test_beam_files
-
-all_beam_files(name = "all_beam_files")
-
-all_test_beam_files(name = "all_test_beam_files")
-
-all_srcs(name = "all_srcs")
-
-test_suite_beam_files(name = "test_suite_beam_files")
 
 rabbitmq_app(
-    name = "erlang_app",
     testonly = True,
-    srcs = [":all_srcs"],
-    hdrs = [":public_hdrs"],
     app_name = "rabbitmq_ct_client_helpers",
-    beam_files = [":beam_files"],
-    license_files = [":license_files"],
-    priv = [":priv"],
     deps = [
         "//deps/amqp_client:erlang_app",
-        "//deps/rabbitmq_ct_helpers:erlang_app",
+        "//deps/rabbitmq_ct_helpers:test_erlang_app",
     ],
-)
-
-alias(
-    name = "rabbitmq_ct_client_helpers",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
 )
 
 xref(
@@ -55,11 +24,11 @@ xref(
 plt(
     name = "deps_plt",
     apps = [
-        "common_test",  # keep
+        "common_test",
     ],
     for_target = ":erlang_app",
     ignore_warnings = True,
-    libs = ["//deps/rabbitmq_cli:elixir"],  # keep
+    libs = ["//deps/rabbitmq_cli:elixir"],
     plt = "//:base_plt",
 )
 

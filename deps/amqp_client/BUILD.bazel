@@ -7,80 +7,22 @@ load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
-    "rabbitmq_app",
-    "rabbitmq_integration_suite",
-    "rabbitmq_suite",
+    rabbitmq_app = "rabbitmq_app2",
+    rabbitmq_integration_suite = "rabbitmq_integration_suite2",
+    rabbitmq_suite = "rabbitmq_suite2",
 )
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
-)
-
-APP_ENV = """[
-	    {prefer_ipv6, false},
-	    {ssl_options, []},
-	    {writer_gc_threshold, 1000000000}
-	  ]"""
-
-APP_EXTRA_KEYS = """%% Hex.pm package informations.
-	{licenses, ["MPL-2.0"]},
-	{links, [
-	    {"Website", "https://www.rabbitmq.com/"},
-	    {"GitHub", "https://github.com/rabbitmq/rabbitmq-server/tree/main/deps/amqp_client"},
-	    {"User guide", "https://www.rabbitmq.com/erlang-client-user-guide.html"}
-	  ]},
-	{build_tools, ["make", "rebar3"]},
-	{files, [
-	    "erlang.mk",
-	    "git-revisions.txt",
-	    "include",
-	    "LICENSE*",
-	    "Makefile",
-	    "rabbitmq-components.mk",
-	    "README",
-	    "README.md",
-	    "src"
-	  ]}
-"""
-
-all_beam_files(name = "all_beam_files")
-
-all_test_beam_files(name = "all_test_beam_files")
-
-all_srcs(name = "all_srcs")
-
-test_suite_beam_files(name = "test_suite_beam_files")
-
-# gazelle:erlang_app_extra_app xmerl
-# gazelle:erlang_app_extra_app ssl
-# gazelle:erlang_app_extra_app public_key
 
 rabbitmq_app(
     name = "erlang_app",
-    srcs = [":all_srcs"],
-    hdrs = [":public_hdrs"],
-    app_description = "RabbitMQ AMQP Client",
-    app_env = APP_ENV,
-    app_extra_keys = APP_EXTRA_KEYS,
-    app_module = "amqp_client",
     app_name = "amqp_client",
-    app_registered = [
-        "amqp_sup",
-    ],
-    beam_files = [":beam_files"],
     extra_apps = [
         "xmerl",
         "public_key",
         "ssl",
     ],
-    license_files = [":license_files"],
-    priv = [":priv"],
     deps = [
         "//deps/rabbit_common:erlang_app",
-        "@credentials_obfuscation//:erlang_app",
+        "@erlang_packages//credentials_obfuscation",
     ],
 )
 
@@ -105,9 +47,14 @@ dialyze(
 
 rabbitmq_home(
     name = "broker-for-tests-home",
-    plugins = [
-        "//deps/rabbit:erlang_app",
+    erl_libs = [
+        "@erlang_packages//:deps",
+        "@erlang_packages//:test_deps",
+        "//:test_early_apps",
+        "//:rabbitmq_cli",
+        "//:test_apps", # this was using non-test rabbit before
     ],
+    apps = ["rabbit"],
 )
 
 rabbitmq_run(
@@ -119,7 +66,7 @@ rabbitmq_integration_suite(
     name = "system_SUITE",
     size = "large",
     deps = [
-        "@meck//:erlang_app",
+        "@erlang_packages//meck",
     ],
 )
 
@@ -133,12 +80,6 @@ rabbitmq_suite(
 )
 
 assert_suites()
-
-alias(
-    name = "amqp_client",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
-)
 
 eunit(
     name = "eunit",

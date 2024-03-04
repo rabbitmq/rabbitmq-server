@@ -1,5 +1,12 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+load("@rules_erlang//bzlmod:extensions.bzl", "resolve_local")
+load(
+    ":elixir_package.bzl",
+    "git_package",
+    "hex_package",
+    "log",
+)
 load(
     ":secondary_umbrella.bzl",
     fetch_secondary_umbrella = "secondary_umbrella",
@@ -92,6 +99,72 @@ elixir_config = module_extension(
         "external_elixir_from_path": external_elixir_from_path,
         "internal_elixir_from_http_archive": internal_elixir_from_http_archive,
         "internal_elixir_from_github_release": internal_elixir_from_github_release,
+    },
+)
+
+def _elixir_package(module_ctx):
+    packages = []
+    for mod in module_ctx.modules:
+        for dep in mod.tags.hex_package:
+            if dep.build_file != None and dep.build_file_content != "":
+                fail("build_file and build_file_content cannot be set simultaneously for", dep.name)
+            packages.append(hex_package(
+                module_ctx,
+                module = mod,
+                dep = dep,
+            ))
+        for dep in mod.tags.git_package:
+            if dep.build_file != None and dep.build_file_content != "":
+                fail("build_file and build_file_content cannot be set simultaneously for", dep.name)
+            packages.append(git_package(
+                module_ctx,
+                module = mod,
+                dep = dep,
+            ))
+
+    resolved = resolve_local(module_ctx, packages)
+
+    if len(resolved) > 0:
+        log(module_ctx, "Final package list:")
+    for p in resolved:
+        log(module_ctx, "    {}@{}".format(p.name, p.version))
+
+    for p in resolved:
+        p.f_fetch(p)
+
+hex_package_tag = tag_class(attrs = {
+    "name": attr.string(mandatory = True),
+    "pkg": attr.string(),
+    "version": attr.string(mandatory = True),
+    "sha256": attr.string(),
+    "build_file": attr.label(),
+    "build_file_content": attr.string(),
+    "patches": attr.label_list(),
+    "patch_args": attr.string_list(
+        default = ["-p0"],
+    ),
+    "patch_cmds": attr.string_list(),
+    "testonly": attr.bool(),
+})
+
+git_package_tag = tag_class(attrs = {
+    "name": attr.string(),
+    "remote": attr.string(),
+    "repository": attr.string(),
+    "branch": attr.string(),
+    "tag": attr.string(),
+    "commit": attr.string(),
+    "build_file": attr.label(),
+    "build_file_content": attr.string(),
+    "patch_cmds": attr.string_list(),
+    "testonly": attr.bool(),
+})
+
+elixir_package = module_extension(
+    implementation = _elixir_package,
+    tag_classes = {
+        "hex_package": hex_package_tag,
+        "git_package": git_package_tag,
     },
 )
 

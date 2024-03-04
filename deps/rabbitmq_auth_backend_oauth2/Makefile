@@ -18,5 +18,5 @@ dep_base64url = hex 1.0.1
 
 dep_emqtt = git https://github.com/rabbitmq/emqtt.git master
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+include rabbitmq-components.mk
+include erlang.mk

@@ -1,69 +1,26 @@
 load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
-load("//:rabbitmq_home.bzl", "rabbitmq_home")
-load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
     "//:rabbitmq.bzl",
-    "BROKER_VERSION_REQUIREMENTS_ANY",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
-    "rabbitmq_app",
-    "rabbitmq_integration_suite",
-    "rabbitmq_suite",
+    "broker_for_integration_suites",
+    rabbitmq_app = "rabbitmq_app2",
+    rabbitmq_integration_suite = "rabbitmq_integration_suite2",
+    rabbitmq_suite = "rabbitmq_suite2",
 )
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
-)
-
-APP_NAME = "rabbitmq_shovel"
-
-APP_DESCRIPTION = "Data Shovel for RabbitMQ"
-
-APP_MODULE = "rabbit_shovel"
-
-APP_ENV = """[
-	    {defaults, [
-	        {prefetch_count,     1000},
-	        {ack_mode,           on_confirm},
-	        {publish_fields,     []},
-	        {publish_properties, []},
-	        {reconnect_delay,    5}
-	      ]}
-	  ]"""
-
-all_beam_files(name = "all_beam_files")
-
-all_test_beam_files(name = "all_test_beam_files")
-
-all_srcs(name = "all_srcs")
-
-test_suite_beam_files(name = "test_suite_beam_files")
-
-# gazelle:erlang_app_extra_app crypto
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode")
 
 rabbitmq_app(
     name = "erlang_app",
-    srcs = [":all_srcs"],
-    hdrs = [":public_hdrs"],
-    app_description = APP_DESCRIPTION,
-    app_env = APP_ENV,
-    app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
-    app_module = APP_MODULE,
-    app_name = APP_NAME,
-    beam_files = [":beam_files"],
+    app_name = "rabbitmq_shovel",
     extra_apps = ["crypto"],
-    license_files = [":license_files"],
-    priv = [":priv"],
     deps = [
-        "//deps/amqp10_client:erlang_app",
-        "//deps/amqp_client:erlang_app",
-        "//deps/rabbit:erlang_app",
-        "//deps/rabbit_common:erlang_app",
+        "//deps/amqp10_client",
+        "//deps/amqp_client",
+        "//deps/rabbit",
+        "//deps/rabbit_common",
     ],
 )
 
@@ -97,23 +54,60 @@ eunit(
     target = ":test_erlang_app",
 )
 
-rabbitmq_home(
-    name = "broker-for-tests-home",
-    plugins = [
-        "//deps/rabbit:erlang_app",
-        ":erlang_app",
-    ],
-)
+broker_for_integration_suites()
 
-rabbitmq_run(
-    name = "rabbitmq-for-tests-run",
-    home = ":broker-for-tests-home",
+# rabbitmq_home(
+#     name = "broker-for-tests-home",
+#     testonly = True,
+#     apps = [
+#         "rabbit",
+#         "rabbitmq_amqp1_0",
+#         "rabbitmq_shovel",
+#     ],
+#     erl_libs = [
+#         "@erlang_packages//:deps",
+#         "@erlang_packages//:test_deps",
+#         "//:test_early_apps",
+#         "//:rabbitmq_cli",
+#         "//:test_apps",
+#         "//:bazel_native_deps",
+#     ],
+#     # plugins = [
+#     #     "//deps/rabbit:erlang_app",
+#     #     "//deps/rabbitmq_amqp1_0:erlang_app",
+#     #     ":erlang_app",
+#     # ],
+# )
+
+# rabbitmq_run(
+#     name = "rabbitmq-for-tests-run",
+#     testonly = True,
+#     home = ":broker-for-tests-home",
+# )
+
+erlang_bytecode(
+    name = "test_helpers",
+    testonly = True,
+    srcs = glob(
+        ["test/*.erl"],
+        exclude = ["test/*_SUITE.erl"],
+    ),
+    hdrs = glob([
+        "include/*.hrl",
+        "src/*.hrl",
+    ]),
+    dest = "test",
+    erlc_opts = "//:test_erlc_opts",
+    deps = [
+        ":test_erlang_app",
+        # "//deps/amqp_client",
+    ],
 )
 
 rabbitmq_integration_suite(
     name = "amqp10_dynamic_SUITE",
     additional_beam = [
-        "test/shovel_test_utils.beam",
+        ":test_helpers",
     ],
     flaky = True,
 )
@@ -122,8 +116,8 @@ rabbitmq_suite(
     name = "amqp10_shovel_SUITE",
     size = "small",
     deps = [
-        "//deps/amqp10_common:erlang_app",
-        "@meck//:erlang_app",
+        "//deps/amqp10_common",
+        "@erlang_packages//meck",
     ],
 )
 
@@ -150,7 +144,7 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "dynamic_SUITE",
     additional_beam = [
-        "test/shovel_test_utils.beam",
+        ":test_helpers",
     ],
     flaky = True,
 )
@@ -159,7 +153,7 @@ rabbitmq_suite(
     name = "parameters_SUITE",
     size = "medium",
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
     ],
 )
 
@@ -179,14 +173,8 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "shovel_status_command_SUITE",
     additional_beam = [
-        "test/shovel_test_utils.beam",
+        ":test_helpers",
     ],
 )
 
 assert_suites()
-
-alias(
-    name = "rabbitmq_shovel",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
-)

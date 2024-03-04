@@ -3,6 +3,7 @@ load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_erlang//:erlang_app_info.bzl", "ErlangAppInfo", "flat_deps")
 load("@rules_erlang//:util.bzl", "path_join")
 load("@rules_erlang//:ct.bzl", "additional_file_dest_relative_path")
+load("@rules_erlang//:extract_many.bzl", "extract_many_transitive")
 load(
     "@rules_erlang//tools:erlang_toolchain.bzl",
     "erlang_dirs",
@@ -113,132 +114,129 @@ def escript_dir(**kwargs):
         **kwargs
     )
 
-def _extract_version(lib_info):
-    for f in lib_info.beam:
-        if f.basename.endswith(".app"):
-            return "erl -eval '{ok, [{application, _, AppInfo}]} = file:consult(\"" + f.path + "\"), Version = proplists:get_value(vsn, AppInfo), io:fwrite(Version), halt().' -noshell"
-    if len(lib_info.beam) == 1 and lib_info.beam[0].is_directory:
-        return "erl -eval '{ok, [{application, _, AppInfo}]} = file:consult(\"" + lib_info.beam[0].path + "/" + lib_info.app_name + ".app\"), Version = proplists:get_value(vsn, AppInfo), io:fwrite(Version), halt().' -noshell"
-    fail("could not find .app file in", lib_info.beam)
+# def _extract_version(lib_info):
+#     for f in lib_info.beam:
+#         if f.basename.endswith(".app"):
+#             return "erl -eval '{ok, [{application, _, AppInfo}]} = file:consult(\"" + f.path + "\"), Version = proplists:get_value(vsn, AppInfo), io:fwrite(Version), halt().' -noshell"
+#     if len(lib_info.beam) == 1 and lib_info.beam[0].is_directory:
+#         return "erl -eval '{ok, [{application, _, AppInfo}]} = file:consult(\"" + lib_info.beam[0].path + "/" + lib_info.app_name + ".app\"), Version = proplists:get_value(vsn, AppInfo), io:fwrite(Version), halt().' -noshell"
+#     fail("could not find .app file in", lib_info.beam)
 
-def _versioned_plugins_dir_impl(ctx):
-    plugins = flat_deps(ctx.attr.plugins)
+# def _versioned_plugins_dir_impl(ctx):
 
-    plugins_dir = ctx.actions.declare_directory(path_join(ctx.label.name, "plugins"))
+#     versioned_plugins_dir = ctx.actions.declare_directory(path_join(ctx.label.name, "plugins"))
 
-    (erlang_home, _, runfiles) = erlang_dirs(ctx)
+#     (erlang_home, _, runfiles) = erlang_dirs(ctx)
 
-    inputs = runfiles.files.to_list()
+#     inputs = runfiles.files.to_list()
 
-    commands = [
-        "set -euo pipefail",
-        "",
-        maybe_install_erlang(ctx),
-    ]
+#     commands = [
+#         "set -euo pipefail",
+#         "",
+#         maybe_install_erlang(ctx),
+#     ]
 
-    commands.append(
-        "echo 'Put your EZs here and use rabbitmq-plugins to enable them.' > {plugins_dir}/README".format(
-            plugins_dir = plugins_dir.path,
-        )
-    )
+#     commands.append(
+#         "echo 'Put your EZs here and use rabbitmq-plugins to enable them.' > {plugins_dir}/README".format(
+#             plugins_dir = versioned_plugins_dir.path,
+#         )
+#     )
 
-    for plugin in plugins:
-        lib_info = plugin[ErlangAppInfo]
-        version = _extract_version(lib_info)
-        commands.append("PLUGIN_VERSION=$({erlang_home}/bin/{version})".format(
-            erlang_home = erlang_home,
-            version = version,
-        ))
+#     for plugin in plugins:
+#         lib_info = plugin[ErlangAppInfo]
+#         version = _extract_version(lib_info)
+#         commands.append("PLUGIN_VERSION=$({erlang_home}/bin/{version})".format(
+#             erlang_home = erlang_home,
+#             version = version,
+#         ))
 
-        commands.append(
-            "mkdir -p {plugins_dir}/{lib_name}-$PLUGIN_VERSION/include".format(
-                plugins_dir = plugins_dir.path,
-                lib_name = lib_info.app_name,
-            ),
-        )
-        for f in lib_info.include:
-            commands.append(
-                "cp {src} {plugins_dir}/{lib_name}-$PLUGIN_VERSION/include/{dest}".format(
-                    src = f.path,
-                    plugins_dir = plugins_dir.path,
-                    lib_name = lib_info.app_name,
-                    dest = f.basename,
-                ),
-            )
-        inputs.extend(lib_info.include)
+#         for f in lib_info.include:
+#             p = additional_file_dest_relative_path(plugin.label, f)
+#             commands.append(
+#                 "mkdir -p $(dirname {plugins_dir}/{lib_name}-$PLUGIN_VERSION/{dest}) && cp {src} {plugins_dir}/{lib_name}-$PLUGIN_VERSION/{dest}".format(
+#                     src = f.path,
+#                     plugins_dir = versioned_plugins_dir.path,
+#                     lib_name = lib_info.app_name,
+#                     dest = p,
+#                 ),
+#             )
+#         inputs.extend(lib_info.include)
 
-        commands.append(
-            "mkdir -p {plugins_dir}/{lib_name}-$PLUGIN_VERSION/ebin".format(
-                plugins_dir = plugins_dir.path,
-                lib_name = lib_info.app_name,
-            ),
-        )
-        for f in lib_info.beam:
-            if f.is_directory:
-                if f.basename != "ebin":
-                    fail("{} contains a directory in 'beam' that is not an ebin dir".format(lib_info.app_name))
-                commands.append(
-                    "cp -R {src} {plugins_dir}/{lib_name}-$PLUGIN_VERSION".format(
-                        src = f.path,
-                        plugins_dir = plugins_dir.path,
-                        lib_name = lib_info.app_name,
-                    ),
-                )
-            else:
-                commands.append(
-                    "cp {src} {plugins_dir}/{lib_name}-$PLUGIN_VERSION/ebin/{dest}".format(
-                        src = f.path,
-                        plugins_dir = plugins_dir.path,
-                        lib_name = lib_info.app_name,
-                        dest = f.basename,
-                    ),
-                )
-        inputs.extend(lib_info.beam)
+#         commands.append(
+#             "mkdir -p {plugins_dir}/{lib_name}-$PLUGIN_VERSION/ebin".format(
+#                 plugins_dir = versioned_plugins_dir.path,
+#                 lib_name = lib_info.app_name,
+#             ),
+#         )
+#         for f in lib_info.beam:
+#             if f.is_directory:
+#                 if f.basename != "ebin":
+#                     fail("{} contains a directory in 'beam' that is not an ebin dir".format(lib_info.app_name))
+#                 commands.append(
+#                     "cp -R {src} {plugins_dir}/{lib_name}-$PLUGIN_VERSION".format(
+#                         src = f.path,
+#                         plugins_dir = versioned_plugins_dir.path,
+#                         lib_name = lib_info.app_name,
+#                     ),
+#                 )
+#             else:
+#                 commands.append(
+#                     "cp {src} {plugins_dir}/{lib_name}-$PLUGIN_VERSION/ebin/{dest}".format(
+#                         src = f.path,
+#                         plugins_dir = versioned_plugins_dir.path,
+#                         lib_name = lib_info.app_name,
+#                         dest = f.basename,
+#                     ),
+#                 )
+#         inputs.extend(lib_info.beam)
 
-        for f in lib_info.priv:
-            p = additional_file_dest_relative_path(plugin.label, f)
-            commands.append(
-                "mkdir -p $(dirname {plugins_dir}/{lib_name}-$PLUGIN_VERSION/{dest}) && cp {src} {plugins_dir}/{lib_name}-$PLUGIN_VERSION/{dest}".format(
-                    src = f.path,
-                    plugins_dir = plugins_dir.path,
-                    lib_name = lib_info.app_name,
-                    dest = p,
-                ),
-            )
-        inputs.extend(lib_info.priv)
+#         for f in lib_info.priv:
+#             p = additional_file_dest_relative_path(plugin.label, f)
+#             commands.append(
+#                 "mkdir -p $(dirname {plugins_dir}/{lib_name}-$PLUGIN_VERSION/{dest}) && cp {src} {plugins_dir}/{lib_name}-$PLUGIN_VERSION/{dest}".format(
+#                     src = f.path,
+#                     plugins_dir = versioned_plugins_dir.path,
+#                     lib_name = lib_info.app_name,
+#                     dest = p,
+#                 ),
+#             )
+#         inputs.extend(lib_info.priv)
 
-        commands.append("")
+#         commands.append("")
 
-    ctx.actions.run_shell(
-        inputs = inputs,
-        outputs = [plugins_dir],
-        command = "\n".join(commands),
-    )
+#     ctx.actions.run_shell(
+#         inputs = inputs,
+#         outputs = [versioned_plugins_dir],
+#         command = "\n".join(commands),
+#     )
 
-    return [
-        DefaultInfo(
-            files = depset([plugins_dir]),
-        ),
-    ]
+#     return [
+#         DefaultInfo(
+#             files = depset([versioned_plugins_dir]),
+#         ),
+#     ]
 
-versioned_plugins_dir_private = rule(
-    implementation = _versioned_plugins_dir_impl,
-    attrs = RABBITMQ_HOME_ATTRS,
-    toolchains = ["@rules_erlang//tools:toolchain_type"],
-)
+# versioned_plugins_dir_private = rule(
+#     implementation = _versioned_plugins_dir_impl,
+#     attrs = RABBITMQ_HOME_ATTRS,
+#     toolchains = ["@rules_erlang//tools:toolchain_type"],
+# )
 
-def versioned_plugins_dir(**kwargs):
-    versioned_plugins_dir_private(
-        is_windows = select({
-            "@bazel_tools//src/conditions:host_windows": True,
-            "//conditions:default": False,
-        }),
-        **kwargs
-    )
+# def versioned_plugins_dir(**kwargs):
+#     versioned_plugins_dir_private(
+#         is_windows = select({
+#             "@bazel_tools//src/conditions:host_windows": True,
+#             "//conditions:default": False,
+#         }),
+#         **kwargs
+#     )
 
 def package_generic_unix(
         name = "package-generic-unix",
         extension = "tar.xz",
+        # plugins_dir = None,
+        erl_libs = None,
+        apps = None,
         plugins = None,
         extra_licenses = [],
         package_dir = "rabbitmq_server-{}".format(APP_VERSION)):
@@ -259,8 +257,25 @@ def package_generic_unix(
         visibility = ["//visibility:public"],
     )
 
+    extract_many_transitive(
+        name = "plugins",
+        erl_libs = erl_libs,
+        apps = apps,
+        out = "plugins.tar",
+        versioned_dirs = True,
+    )
+
+    pkg_tar(
+        name = "plugins-tar",
+        package_dir = "plugins",
+        deps = [
+            ":plugins",
+        ],
+    )
+
     sbin_dir(
         name = "sbin-dir",
+        plugins_dir = "plugins-tar",
     )
 
     pkg_files(
@@ -274,6 +289,7 @@ def package_generic_unix(
 
     escript_dir(
         name = "escript-dir",
+        plugins_dir = "plugins-tar",
     )
 
     pkg_files(
@@ -285,17 +301,18 @@ def package_generic_unix(
         prefix = "escript",
     )
 
-    versioned_plugins_dir(
-        name = "plugins-dir",
-        plugins = plugins,
-    )
+    # versioned_plugins_dir(
+    #     name = "plugins-dir",
+    #     plugins_dir = plugins_dir,
+    #     plugins = plugins,
+    # )
 
-    pkg_files(
-        name = "plugins-files",
-        srcs = [
-            ":plugins-dir",
-        ],
-    )
+    # pkg_files(
+    #     name = "plugins-files",
+    #     srcs = [
+    #         ":plugins-dir",
+    #     ],
+    # )
 
     pkg_tar(
         name = name,
@@ -305,12 +322,13 @@ def package_generic_unix(
         srcs = [
             ":escript-files",
             ":sbin-files",
-            ":plugins-files",
+            # ":plugins-files",
             ":license-files",
             Label("@rabbitmq-server//:release-notes-files"),
             Label("@rabbitmq-server//:scripts-files"),
         ],
         deps = [
+            ":plugins-tar",
             Label("@rabbitmq-server//deps/rabbit:manpages-dir"),
         ],
     )

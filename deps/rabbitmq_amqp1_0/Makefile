@@ -8,5 +8,5 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
 .DEFAULT_GOAL = all
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+include rabbitmq-components.mk
+include erlang.mk

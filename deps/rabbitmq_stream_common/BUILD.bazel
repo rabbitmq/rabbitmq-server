@@ -5,38 +5,13 @@ load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
-    "rabbitmq_app",
-    "rabbitmq_suite",
+    rabbitmq_app = "rabbitmq_app2",
+    rabbitmq_suite = "rabbitmq_suite2",
 )
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
-)
-
-APP_NAME = "rabbitmq_stream_common"
-
-APP_DESCRIPTION = "RabbitMQ Stream Common"
-
-all_beam_files(name = "all_beam_files")
-
-all_test_beam_files(name = "all_test_beam_files")
-
-all_srcs(name = "all_srcs")
-
-test_suite_beam_files(name = "test_suite_beam_files")
 
 rabbitmq_app(
     name = "erlang_app",
-    srcs = [":all_srcs"],
-    hdrs = [":public_hdrs"],
-    app_description = APP_DESCRIPTION,
-    app_name = APP_NAME,
-    beam_files = [":beam_files"],
-    license_files = [":license_files"],
-    priv = [":priv"],
+    app_name = "rabbitmq_stream_common",
 )
 
 xref(
@@ -71,9 +46,3 @@ rabbitmq_suite(
 )
 
 assert_suites()
-
-alias(
-    name = "rabbitmq_stream_common",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
-)

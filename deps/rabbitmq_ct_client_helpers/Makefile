@@ -6,5 +6,5 @@ DEPS = rabbit_common rabbitmq_ct_helpers amqp_client
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+include rabbitmq-components.mk
+include erlang.mk

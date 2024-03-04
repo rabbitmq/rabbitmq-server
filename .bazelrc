@@ -15,6 +15,9 @@ build --test_timeout=7200
 
 build --combined_report=lcov
 
+build --worker_verbose
+build --experimental_remote_mark_tool_inputs
+
 build:buildbuddy --bes_results_url=https://app.buildbuddy.io/invocation/
 build:buildbuddy --bes_backend=grpcs://remote.buildbuddy.io
 build:buildbuddy --remote_cache=grpcs://remote.buildbuddy.io
@@ -48,6 +51,8 @@ build:rbe --host_platform=//bazel/platforms:erlang_internal_platform
 
 build:rbe --host_cpu=k8
 build:rbe --cpu=k8
+
+build:rbe --extra_toolchains=@gmake_config//:rbe_toolchain
 
 build:rbe-24 --config=rbe
 build:rbe-24 --platforms=//bazel/platforms:erlang_linux_24_platform

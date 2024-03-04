@@ -13,6 +13,6 @@ TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
-include ../../rabbitmq-components.mk
+include rabbitmq-components.mk
 TEST_DEPS := $(filter-out rabbitmq_test,$(TEST_DEPS))
-include ../../erlang.mk
+include erlang.mk

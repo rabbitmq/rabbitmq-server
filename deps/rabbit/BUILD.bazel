@@ -7,28 +7,33 @@ load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
-    "rabbitmq_app",
-    "rabbitmq_integration_suite",
-    "rabbitmq_suite",
-    "without",
+    rabbitmq_app = "rabbitmq_app2",
+    rabbitmq_integration_suite = "rabbitmq_integration_suite2",
+    rabbitmq_suite = "rabbitmq_suite2",
 )
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
-)
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode")
 load(":bats.bzl", "bats")
 
 exports_files(glob([
     "scripts/**",
 ]) + ["INSTALL"])
 
-_APP_ENV = """[
-	    %% See https://www.rabbitmq.com/consumers.html#acknowledgement-timeout
-	    %% 30 minutes
-	    {consumer_timeout, 1800000},
+genrule(
+    name = "app_src",
+    srcs = [],
+    outs = ["src/rabbit.app.src"],
+    cmd = """set -euo pipefail
+
+cat << EOF > $@
+{application, 'rabbit', [
+	{description, "RabbitMQ"},
+	{vsn, "4.0.0"},
+	{modules, []},
+	{registered, [rabbit_sup,rabbit_amqqueue_sup,rabbit_direct_client_sup,rabbit_log,rabbit_node_monitor,rabbit_router]},
+	{applications, [kernel,stdlib,sasl,os_mon,inets,compiler,public_key,crypto,ssl,syntax_tools,xmerl,ranch,rabbit_common,rabbitmq_prelaunch,ra,sysmon_handler,stdout_formatter,recon,redbug,observer_cli,osiris,amqp10_common,syslog,systemd,seshat,khepri,khepri_mnesia_migration,gen_batch_server]},
+	{optional_applications, []},
+	{mod, {rabbit, []}},
+	{env, [
 	    {tcp_listeners, [5672]},
 	    {num_tcp_acceptors, 10},
 	    {ssl_listeners, []},
@@ -107,6 +112,9 @@ _APP_ENV = """[
 	    %% see rabbitmq-server#248
 	    %% and rabbitmq-server#667
 	    {channel_operation_timeout, 15000},
+	    %% See https://www.rabbitmq.com/consumers.html#acknowledgement-timeout
+	    %% 30 minutes
+	    {consumer_timeout, 1800000},
 
 	    %% see rabbitmq-server#486
 	    {autocluster,
@@ -131,7 +139,7 @@ _APP_ENV = """[
 	    {vhost_restart_strategy, continue},
 	    %% {global, prefetch count}
 	    {default_consumer_prefetch, {false, 0}},
-		%% interval at which the channel can perform periodic actions
+		  %% interval at which the channel can perform periodic actions
 	    {channel_tick_interval, 60000},
 	    %% Default max message size is 128 MB
 	    {max_message_size, 134217728},
@@ -140,65 +148,22 @@ _APP_ENV = """[
 	    %% interval at which connection/channel tracking executes post operations
 	    {tracking_execution_timeout, 15000},
 	    {stream_messages_soft_limit, 256},
-        {track_auth_attempt_source, false},
-        {credentials_obfuscation_fallback_secret, <<"nocookie">>},
-        {dead_letter_worker_consumer_prefetch, 32},
-        {dead_letter_worker_publisher_confirm_timeout, 180000},
-
-        %% EOL date for the current release series, if known/announced
-		{release_series_eol_date, none}
-	  ]
-"""
-
-APP_MODULE = "rabbit"
-
-APP_REGISTERED = [
-    "rabbit_amqqueue_sup",
-    "rabbit_direct_client_sup",
-    "rabbit_log",
-    "rabbit_node_monitor",
-    "rabbit_router",
-]
-
-all_beam_files(name = "all_beam_files")
-
-all_test_beam_files(name = "all_test_beam_files")
-
-all_srcs(name = "all_srcs")
-
-test_suite_beam_files(name = "test_suite_beam_files")
-
-# gazelle:erlang_apps_dirs apps
-
-# gazelle:erlang_app_extra_app sasl
-# gazelle:erlang_app_extra_app os_mon
-# gazelle:erlang_app_extra_app inets
-# gazelle:erlang_app_extra_app compiler
-# gazelle:erlang_app_extra_app crypto
-# gazelle:erlang_app_extra_app public_key
-# gazelle:erlang_app_extra_app ssl
-# gazelle:erlang_app_extra_app syntax_tools
-# gazelle:erlang_app_extra_app xmerl
-
-# gazelle:erlang_app_dep cuttlefish
-# gazelle:erlang_app_dep syslog
-# gazelle:erlang_app_dep observer_cli
-# gazelle:erlang_app_dep redbug
-# gazelle:erlang_app_dep sysmon_handler
-# gazelle:erlang_app_dep systemd
-
-# gazelle:erlang_app_dep_exclude looking_glass
+      {track_auth_attempt_source, false},
+			{credentials_obfuscation_fallback_secret, <<"nocookie">>},
+      {dead_letter_worker_consumer_prefetch, 32},
+      {dead_letter_worker_publisher_confirm_timeout, 180000},
+			%% EOL date for the current release series, if known/announced
+			{release_series_eol_date, none}
+	  ]}
+]}.
+EOF
+""",
+)
 
 rabbitmq_app(
     name = "erlang_app",
-    srcs = [":all_srcs"],
-    hdrs = [":public_hdrs"],
-    app_description = "RabbitMQ",
-    app_env = _APP_ENV,
-    app_module = APP_MODULE,
     app_name = "rabbit",
-    app_registered = APP_REGISTERED,
-    beam_files = [":beam_files"],
+    app_src = ":app_src",
     extra_apps = [
         "compiler",
         "inets",
@@ -210,27 +175,25 @@ rabbitmq_app(
         "xmerl",
         "crypto",
     ],
-    license_files = [":license_files"],
-    priv = [":priv"],
     deps = [
         "//deps/amqp10_common:erlang_app",
         "//deps/rabbit_common:erlang_app",
         "//deps/rabbitmq_prelaunch:erlang_app",
-        "@cuttlefish//:erlang_app",
-        "@gen_batch_server//:erlang_app",
-        "@khepri//:erlang_app",
-        "@khepri_mnesia_migration//:erlang_app",
-        "@observer_cli//:erlang_app",
+        # "@erlang_packages//cuttlefish",
+        "@erlang_packages//gen_batch_server",
+        "@erlang_packages//khepri",
+        "@erlang_packages//khepri_mnesia_migration",
+        "@erlang_packages//observer_cli",
+        "@erlang_packages//ranch",
+        "@erlang_packages//recon",
+        "@erlang_packages//redbug",
+        "@erlang_packages//stdout_formatter",
+        "@erlang_packages//syslog",
+        "@erlang_packages//sysmon_handler",
+        "@erlang_packages//systemd",
         "@osiris//:erlang_app",
         "@ra//:erlang_app",
-        "@ranch//:erlang_app",
-        "@recon//:erlang_app",
-        "@redbug//:erlang_app",
         "@seshat//:erlang_app",
-        "@stdout_formatter//:erlang_app",
-        "@syslog//:erlang_app",
-        "@sysmon_handler//:erlang_app",
-        "@systemd//:erlang_app",
     ],
 )
 
@@ -277,19 +240,52 @@ bats(
 rabbitmq_home(
     name = "broker-for-tests-home",
     testonly = True,
-    plugins = [
-        ":test_erlang_app",
-        "//deps/rabbitmq_ct_client_helpers:erlang_app",
-        "//deps/rabbitmq_amqp1_0:erlang_app",
-        "@inet_tcp_proxy_dist//:erlang_app",
-        "@meck//:erlang_app",
+    apps = [
+        "rabbit",
+        "rabbitmq_ct_client_helpers",
+        "rabbitmq_amqp1_0",
+        "inet_tcp_proxy_dist",
+        "meck",
     ],
+    erl_libs = [
+        "@erlang_packages//:deps",
+        "@erlang_packages//:test_deps",
+        "//:test_early_apps",
+        "//:rabbitmq_cli",
+        "//:test_apps",
+        "//:bazel_native_deps",
+    ],
+    # plugins = [
+    #     ":test_erlang_app",
+    #     "//deps/rabbitmq_ct_client_helpers:test_erlang_app",
+    #     "@erlang_packages//inet_tcp_proxy",
+    #     "@erlang_packages//meck",
+    # ],
 )
 
 rabbitmq_run(
     name = "rabbitmq-for-tests-run",
     testonly = True,
     home = ":broker-for-tests-home",
+)
+
+erlang_bytecode(
+    name = "test_helpers",
+    testonly = True,
+    srcs = glob(
+        ["test/*.erl"],
+        exclude = ["test/*_SUITE.erl"],
+    ),
+    hdrs = glob([
+        "include/*.hrl",
+        "src/*.hrl",
+    ]),
+    dest = "test",
+    erlc_opts = "//:test_erlc_opts",
+    deps = [
+        ":test_erlang_app",
+        "//deps/amqp_client",
+    ],
 )
 
 rabbitmq_suite(
@@ -306,8 +302,7 @@ rabbitmq_integration_suite(
     name = "channel_interceptor_SUITE",
     size = "medium",
     additional_beam = [
-        "test/dummy_interceptor.beam",
-        "test/failing_dummy_interceptor.beam",
+        ":test_helpers",
     ],
 )
 
@@ -315,7 +310,7 @@ rabbitmq_integration_suite(
     name = "channel_operation_timeout_SUITE",
     size = "medium",
     additional_beam = [
-        "test/channel_operation_timeout_test_queue.beam",
+        ":test_helpers",
     ],
 )
 
@@ -325,7 +320,7 @@ rabbitmq_integration_suite(
     shard_count = 6,
     sharding_method = "case",
     deps = [
-        "@proper//:erlang_app",
+        "@erlang_packages//proper",
     ],
 )
 
@@ -338,7 +333,7 @@ rabbitmq_integration_suite(
     name = "quorum_queue_member_reconciliation_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_queue_utils_beam",
+        ":test_helpers",
     ],
 )
 
@@ -346,7 +341,7 @@ rabbitmq_integration_suite(
     name = "clustering_management_SUITE",
     size = "large",
     additional_beam = [
-        ":test_clustering_utils_beam",
+        ":test_helpers",
     ],
     shard_count = 45,
     sharding_method = "case",
@@ -356,7 +351,7 @@ rabbitmq_integration_suite(
     name = "clustering_recovery_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_clustering_utils_beam",
+        ":test_helpers",
     ],
     shard_count = 8,
     sharding_method = "case",
@@ -379,7 +374,7 @@ rabbitmq_integration_suite(
     name = "consumer_timeout_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_queue_utils_beam",
+        ":test_helpers",
     ],
 )
 
@@ -392,7 +387,7 @@ rabbitmq_integration_suite(
     name = "dead_lettering_SUITE",
     size = "large",
     additional_beam = [
-        ":test_queue_utils_beam",
+        ":test_helpers",
     ],
     shard_count = 7,
 )
@@ -427,7 +422,7 @@ rabbitmq_integration_suite(
     shard_count = 20,
     sharding_method = "case",
     deps = [
-        "@proper//:erlang_app",
+        "@erlang_packages//proper",
     ],
 )
 
@@ -435,10 +430,10 @@ rabbitmq_integration_suite(
     name = "dynamic_qq_SUITE",
     size = "large",
     additional_beam = [
-        ":test_queue_utils_beam",
+        ":test_helpers",
     ],
     deps = [
-        "@proper//:erlang_app",
+        "@erlang_packages//proper",
     ],
 )
 
@@ -458,7 +453,7 @@ rabbitmq_integration_suite(
     name = "feature_flags_SUITE",
     size = "large",
     additional_beam = [
-        ":test_clustering_utils_beam",
+        ":test_helpers",
     ],
     flaky = True,
     shard_count = 5,
@@ -501,7 +496,7 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "logging_SUITE",
     runtime_deps = [
-        "@syslog//:erlang_app",
+        "@erlang_packages//syslog",
     ],
 )
 
@@ -509,7 +504,7 @@ rabbitmq_suite(
     name = "lqueue_SUITE",
     size = "small",
     deps = [
-        "@proper//:erlang_app",
+        "@erlang_packages//proper",
     ],
 )
 
@@ -517,7 +512,7 @@ rabbitmq_integration_suite(
     name = "maintenance_mode_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_queue_utils_beam",
+        ":test_helpers",
     ],
 )
 
@@ -525,8 +520,7 @@ rabbitmq_integration_suite(
     name = "many_node_ha_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_rabbit_ha_test_consumer_beam",
-        ":test_rabbit_ha_test_producer_beam",
+        ":test_helpers",
     ],
 )
 
@@ -557,7 +551,7 @@ rabbitmq_integration_suite(
     name = "metrics_SUITE",
     size = "medium",
     deps = [
-        "@proper//:erlang_app",
+        "@erlang_packages//proper",
     ],
 )
 
@@ -565,7 +559,7 @@ rabbitmq_integration_suite(
     name = "mirrored_supervisor_SUITE",
     size = "small",
     additional_beam = [
-        "test/mirrored_supervisor_SUITE_gs.beam",
+        ":test_helpers",
     ],
 )
 
@@ -659,7 +653,7 @@ rabbitmq_integration_suite(
     name = "publisher_confirms_parallel_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_queue_utils_beam",
+        ":test_helpers",
     ],
 )
 
@@ -678,7 +672,7 @@ rabbitmq_integration_suite(
     name = "queue_parallel_SUITE",
     size = "large",
     additional_beam = [
-        ":test_queue_utils_beam",
+        ":test_helpers",
     ],
     shard_count = 6,
 )
@@ -695,8 +689,7 @@ rabbitmq_integration_suite(
     name = "quorum_queue_SUITE",
     size = "large",
     additional_beam = [
-        ":test_queue_utils_beam",
-        ":test_clustering_utils_beam",
+        ":test_helpers",
     ],
     shard_count = 6,
 )
@@ -723,9 +716,9 @@ rabbitmq_suite(
     size = "medium",
     deps = [
         "//deps/rabbit_common:erlang_app",
-        "@aten//:erlang_app",
-        "@gen_batch_server//:erlang_app",
-        "@meck//:erlang_app",
+        "@erlang_packages//aten",
+        "@erlang_packages//gen_batch_server",
+        "@erlang_packages//meck",
         "@ra//:erlang_app",
     ],
 )
@@ -734,11 +727,11 @@ rabbitmq_suite(
     name = "rabbit_fifo_prop_SUITE",
     size = "large",
     additional_beam = [
-        ":test_test_util_beam",
+        ":test_helpers",
     ],
     deps = [
         "//deps/rabbit_common:erlang_app",
-        "@proper//:erlang_app",
+        "@erlang_packages//proper",
         "@ra//:erlang_app",
     ],
 )
@@ -755,12 +748,11 @@ rabbitmq_integration_suite(
     name = "rabbit_fifo_dlx_integration_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_test_util_beam",
-        ":test_queue_utils_beam",
+        ":test_helpers",
         ":quorum_queue_SUITE_beam_files",
     ],
     deps = [
-        "@proper//:erlang_app",
+        "@erlang_packages//proper",
         "@ra//:erlang_app",
     ],
 )
@@ -769,12 +761,12 @@ rabbitmq_suite(
     name = "rabbit_fifo_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_test_util_beam",
+        ":test_helpers",
         ":rabbit_fifo_v0_SUITE_beam_files",
     ],
     deps = [
         "//deps/rabbit_common:erlang_app",
-        "@meck//:erlang_app",
+        "@erlang_packages//meck",
         "@ra//:erlang_app",
     ],
 )
@@ -783,11 +775,11 @@ rabbitmq_suite(
     name = "rabbit_fifo_v0_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_test_util_beam",
+        ":test_helpers",
     ],
     deps = [
         "//deps/rabbit_common:erlang_app",
-        "@meck//:erlang_app",
+        "@erlang_packages//meck",
         "@ra//:erlang_app",
     ],
 )
@@ -820,7 +812,7 @@ rabbitmq_suite(
 rabbitmq_suite(
     name = "rabbit_stream_sac_coordinator_SUITE",
     runtime_deps = [
-        "@meck//:erlang_app",
+        "@erlang_packages//meck",
     ],
     deps = [
         "//deps/rabbit_common:erlang_app",
@@ -841,11 +833,11 @@ rabbitmq_integration_suite(
     name = "rabbit_stream_queue_SUITE",
     size = "large",
     additional_beam = [
-        ":test_queue_utils_beam",
+        ":test_helpers",
     ],
     shard_count = 22,
     deps = [
-        "@proper//:erlang_app",
+        "@erlang_packages//proper",
     ],
 )
 
@@ -878,8 +870,7 @@ rabbitmq_integration_suite(
     name = "simple_ha_SUITE",
     size = "large",
     additional_beam = [
-        ":test_rabbit_ha_test_consumer_beam",
-        ":test_rabbit_ha_test_producer_beam",
+        ":test_helpers",
     ],
     shard_count = 4,
 )
@@ -888,7 +879,7 @@ rabbitmq_integration_suite(
     name = "single_active_consumer_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_queue_utils_beam",
+        ":test_helpers",
     ],
 )
 
@@ -900,7 +891,7 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "term_to_binary_compat_prop_SUITE",
     deps = [
-        "@proper//:erlang_app",
+        "@erlang_packages//proper",
     ],
 )
 
@@ -918,8 +909,7 @@ rabbitmq_integration_suite(
     name = "unit_access_control_authn_authz_context_propagation_SUITE",
     size = "medium",
     additional_beam = [
-        "test/rabbit_auth_backend_context_propagation_mock.beam",
-        "test/rabbit_foo_protocol_connection_info.beam",
+        ":test_helpers",
     ],
 )
 
@@ -927,7 +917,7 @@ rabbitmq_integration_suite(
     name = "unit_access_control_credential_validation_SUITE",
     size = "medium",
     deps = [
-        "@proper//:erlang_app",
+        "@erlang_packages//proper",
     ],
 )
 
@@ -935,7 +925,7 @@ rabbitmq_integration_suite(
     name = "unit_access_control_SUITE",
     size = "medium",
     additional_beam = [
-        "test/rabbit_dummy_protocol_connection_info.beam",
+        ":test_helpers",
     ],
 )
 
@@ -966,7 +956,7 @@ rabbitmq_suite(
     name = "unit_cluster_formation_locking_mocks_SUITE",
     size = "small",
     deps = [
-        "@meck//:erlang_app",
+        "@erlang_packages//meck",
     ],
 )
 
@@ -974,7 +964,7 @@ rabbitmq_suite(
     name = "unit_cluster_formation_sort_nodes_SUITE",
     size = "small",
     deps = [
-        "@meck//:erlang_app",
+        "@erlang_packages//meck",
     ],
 )
 
@@ -992,7 +982,7 @@ rabbitmq_suite(
     deps = [
         "//deps/rabbit_common:test_erlang_app",
         "//deps/rabbitmq_prelaunch:test_erlang_app",
-        "@credentials_obfuscation//:erlang_app",
+        "@erlang_packages//credentials_obfuscation",
     ],
 )
 
@@ -1025,8 +1015,7 @@ rabbitmq_suite(
     name = "unit_gm_SUITE",
     size = "small",
     deps = [
-        "//deps/rabbitmq_ct_helpers:erlang_app",
-        "@meck//:erlang_app",
+        "@erlang_packages//meck",
     ],
 )
 
@@ -1080,7 +1069,7 @@ rabbitmq_integration_suite(
     name = "unit_stats_and_metrics_SUITE",
     size = "medium",
     additional_beam = [
-        "test/dummy_event_receiver.beam",
+        ":test_helpers",
     ],
 )
 
@@ -1088,7 +1077,7 @@ rabbitmq_suite(
     name = "unit_supervisor2_SUITE",
     size = "small",
     additional_beam = [
-        "test/dummy_supervisor2.beam",
+        ":test_helpers",
     ],
 )
 
@@ -1106,7 +1095,7 @@ rabbitmq_integration_suite(
     name = "vhost_SUITE",
     size = "medium",
     additional_beam = [
-        "test/test_rabbit_event_handler.beam",
+        ":test_helpers",
     ],
 )
 
@@ -1130,7 +1119,7 @@ rabbitmq_integration_suite(
     name = "direct_exchange_routing_v2_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_queue_utils_beam",
+        ":test_helpers",
     ],
 )
 
@@ -1138,7 +1127,7 @@ rabbitmq_integration_suite(
     name = "rabbit_direct_reply_to_prop_SUITE",
     size = "medium",
     deps = [
-        "@proper//:erlang_app",
+        "@erlang_packages//proper",
     ],
 )
 
@@ -1151,7 +1140,7 @@ rabbitmq_integration_suite(
     name = "exchanges_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_queue_utils_beam",
+        ":test_helpers",
     ],
 )
 
@@ -1199,7 +1188,7 @@ rabbitmq_integration_suite(
     name = "runtime_parameters_SUITE",
     size = "small",
     additional_beam = [
-        "test/dummy_runtime_parameters.beam",
+        ":test_helpers",
     ],
 )
 
@@ -1214,7 +1203,9 @@ rabbitmq_integration_suite(
     name = "metadata_store_phase1_SUITE",
     size = "small",
     deps = [
-        "@khepri//:erlang_app",
+        "@erlang_packages//aten",
+        "@erlang_packages//horus",
+        "@erlang_packages//khepri",
     ],
 )
 
@@ -1232,7 +1223,7 @@ rabbitmq_integration_suite(
     name = "cli_forget_cluster_node_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_clustering_utils_beam",
+        ":test_helpers",
     ],
 )
 
@@ -1240,7 +1231,7 @@ rabbitmq_integration_suite(
     name = "cluster_minority_SUITE",
     size = "large",
     additional_beam = [
-        ":test_clustering_utils_beam",
+        ":test_helpers",
     ],
 )
 
@@ -1361,32 +1352,10 @@ rm -dr web-manpages-tmp
     visibility = ["//visibility:public"],
 )
 
-alias(
-    name = "rabbit",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
-)
-
 eunit(
     name = "eunit",
     compiled_suites = [
-        ":test_channel_operation_timeout_test_queue_beam",
-        ":test_dummy_event_receiver_beam",
-        ":test_dummy_interceptor_beam",
-        ":test_dummy_runtime_parameters_beam",
-        ":test_dummy_supervisor2_beam",
-        ":test_failing_dummy_interceptor_beam",
-        ":test_mirrored_supervisor_SUITE_gs_beam",
-        ":test_queue_utils_beam",
-        ":test_rabbit_auth_backend_context_propagation_mock_beam",
-        ":test_rabbit_dummy_protocol_connection_info_beam",
-        ":test_rabbit_foo_protocol_connection_info_beam",
-        ":test_rabbit_ha_test_consumer_beam",
-        ":test_rabbit_ha_test_producer_beam",
-        ":test_test_util_beam",
-        ":test_test_rabbit_event_handler_beam",
-        ":test_clustering_utils_beam",
-        ":test_event_recorder_beam",
+        ":test_helpers",
     ],
     target = ":test_erlang_app",
     test_env = {
