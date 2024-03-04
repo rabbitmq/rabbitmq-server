@@ -1,7 +1,6 @@
 load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode")
 load(
     "//:rabbitmq.bzl",
-    "BROKER_VERSION_REQUIREMENTS_ANY",
     "rabbitmq_app",
 )
 
@@ -85,6 +84,8 @@ filegroup(
         ":srcs",
     ],
 )
+
+BROKER_VERSION_REQUIREMENTS_ANY = "{broker_version_requirements, []}"
 
 rabbitmq_app(
     name = "erlang_app",

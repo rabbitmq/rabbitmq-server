@@ -43,10 +43,6 @@ RABBITMQ_DIALYZER_OPTS = [
 
 APP_VERSION = "4.0.0"
 
-BROKER_VERSION_REQUIREMENTS_ANY = """
-	{broker_version_requirements, []}
-"""
-
 ALL_PLUGIN_NAMES = [
     "rabbit",
     "rabbitmq_amqp1_0",
@@ -91,10 +87,10 @@ ALL_PLUGINS = [
 ]
 
 LABELS_WITH_TEST_VERSIONS = [
-    "//deps/amqp10_common:erlang_app",
-    "//deps/rabbit_common:erlang_app",
-    "//deps/rabbitmq_prelaunch:erlang_app",
-    "//deps/rabbit:erlang_app",
+    "//deps/amqp10_common",
+    "//deps/rabbit_common",
+    "//deps/rabbitmq_prelaunch",
+    "//deps/rabbit",
 ]
 
 def all_plugins(rabbitmq_workspace = "@rabbitmq-server"):
@@ -107,7 +103,7 @@ def with_test_versions(deps):
     r = []
     for d in deps:
         if d in LABELS_WITH_TEST_VERSIONS:
-            r.append(d.replace(":erlang_app", ":test_erlang_app"))
+            r.append(d + ":test_erlang_app")
         else:
             r.append(d)
     return r
@@ -177,7 +173,6 @@ def rabbitmq_app2(
         name = "erlang_app",
         app_name = None,
         extract_from = "apps",
-        # app_version = APP_VERSION,
         app_src = None,
         extra_apps = [],
         public_hdrs = None,
@@ -197,6 +192,9 @@ def rabbitmq_app2(
                 ],
                 exclude = ["BUILD.bazel"],
             ),
+            make_vars = {
+                "PROJECT_VERSION": APP_VERSION,
+            },
             out = "src/%s.app.src" % app_name,
             testonly = testonly,
         )
