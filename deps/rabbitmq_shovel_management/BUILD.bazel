@@ -51,26 +51,6 @@ eunit(
 
 broker_for_integration_suites()
 
-# rabbitmq_home(
-#     name = "broker-for-tests-home",
-#     testonly = True,
-#     apps = [
-#         "rabbit",
-#         "rabbitmq_amqp1_0",
-#         "rabbitmq_shovel_management",
-#     ],
-#     plugins = [
-#         "//deps/rabbit:erlang_app",
-#         "//deps/rabbitmq_amqp1_0:erlang_app",
-#         ":erlang_app",
-#     ],
-# )
-
-# rabbitmq_run(
-#     name = "rabbitmq-for-tests-run",
-#     home = ":broker-for-tests-home",
-# )
-
 rabbitmq_integration_suite(
     name = "http_SUITE",
 )
@@ -80,7 +60,7 @@ rabbitmq_suite(
     deps = [
         "//deps/rabbit_common:erlang_app",
         "//deps/rabbitmq_management_agent:erlang_app",
-        "@meck//:erlang_app",
+        "@erlang_packages//meck",
     ],
 )
 
@@ -89,7 +69,7 @@ rabbitmq_suite(
     deps = [
         "//deps/rabbit_common:erlang_app",
         "//deps/rabbitmq_shovel:erlang_app",
-        "@meck//:erlang_app",
+        "@erlang_packages//meck",
     ],
 )
 

@@ -543,7 +543,7 @@ rabbitmq_integration_suite(
     name = "message_containers_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_queue_utils_beam",
+        ":test_helpers",
     ],
 )
 
@@ -681,7 +681,7 @@ rabbitmq_integration_suite(
     name = "queue_type_SUITE",
     size = "medium",
     additional_beam = [
-        ":test_queue_utils_beam",
+        ":test_helpers",
     ],
 )
 
@@ -719,7 +719,7 @@ rabbitmq_suite(
         "@erlang_packages//aten",
         "@erlang_packages//gen_batch_server",
         "@erlang_packages//meck",
-        "@ra//:erlang_app",
+        "@erlang_packages//ra",
     ],
 )
 
@@ -732,7 +732,7 @@ rabbitmq_suite(
     deps = [
         "//deps/rabbit_common",
         "@erlang_packages//proper",
-        "@ra//:erlang_app",
+        "@erlang_packages//ra",
     ],
 )
 
@@ -753,7 +753,7 @@ rabbitmq_integration_suite(
     ],
     deps = [
         "@erlang_packages//proper",
-        "@ra//:erlang_app",
+        "@erlang_packages//ra",
     ],
 )
 
@@ -767,7 +767,7 @@ rabbitmq_suite(
     deps = [
         "//deps/rabbit_common",
         "@erlang_packages//meck",
-        "@ra//:erlang_app",
+        "@erlang_packages//ra",
     ],
 )
 
@@ -780,7 +780,7 @@ rabbitmq_suite(
     deps = [
         "//deps/rabbit_common",
         "@erlang_packages//meck",
-        "@ra//:erlang_app",
+        "@erlang_packages//ra",
     ],
 )
 
@@ -1239,7 +1239,7 @@ rabbitmq_integration_suite(
     name = "amqp_client_SUITE",
     size = "large",
     additional_beam = [
-        ":test_event_recorder_beam",
+        ":test_helpers",
     ],
     shard_count = 3,
     runtime_deps = [
@@ -1267,7 +1267,7 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "amqp_auth_SUITE",
     additional_beam = [
-        ":test_event_recorder_beam",
+        ":test_helpers",
     ],
     runtime_deps = [
         "//deps/amqp10_client",

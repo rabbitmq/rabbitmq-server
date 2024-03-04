@@ -50,7 +50,7 @@ dialyze(
 
 eunit(
     name = "eunit",
-    compiled_suites = [":test_shovel_test_utils_beam"],
+    compiled_suites = [":test_helpers"],
     target = ":test_erlang_app",
 )
 

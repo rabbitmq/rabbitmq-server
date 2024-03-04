@@ -7,8 +7,8 @@ deps_symlinks(
     apps = all_plugins(
         rabbitmq_workspace = "",
     ) + [
-        "//deps/rabbitmq_ct_helpers:erlang_app",
-        "//deps/rabbitmq_ct_client_helpers:erlang_app",
+        "//deps/rabbitmq_ct_helpers",
+        "//deps/rabbitmq_ct_client_helpers",
     ],
     dest = "extra_deps",  # must also be listed in .bazelignore
     tags = ["local"],

@@ -47,18 +47,20 @@ dialyze(
 
 rabbitmq_home(
     name = "broker-for-tests-home",
+    testonly = True,
     apps = ["rabbit"],
     erl_libs = [
         "@erlang_packages//:deps",
         "@erlang_packages//:test_deps",
         "//:test_early_apps",
         "//:rabbitmq_cli",
-        "//:test_apps",  # this was using non-test rabbit before
+        "//:test_apps",
     ],
 )
 
 rabbitmq_run(
     name = "rabbitmq-for-tests-run",
+    testonly = True,
     home = ":broker-for-tests-home",
 )
 
