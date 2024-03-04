@@ -1,3 +1,4 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
@@ -6,36 +7,16 @@ load(
     rabbitmq_app = "rabbitmq_app2",
 )
 
-# APP_ENV = """[
-# 	    {default_user, "guest"},
-# 	    {default_vhost, <<"/">>},
-# 	    {protocol_strict_mode, false}
-# 	  ]"""
-
-# APP_NAME = "rabbitmq_amqp1_0"
-
-# APP_DESCRIPTION = "AMQP 1.0 support for RabbitMQ"
-
-all_test_beam_files(name = "all_test_beam_files")
-
-test_suite_beam_files(name = "test_suite_beam_files")
-
 rabbitmq_app(
     name = "erlang_app",
     app_name = "rabbitmq_amqp1_0",
     deps = [
-        "//deps/amqp10_common",
-        "//deps/amqp_client",
         "//deps/rabbit",
-        "//deps/rabbit_common",
     ],
 )
 
 xref(
     name = "xref",
-    additional_libs = [
-        "//deps/rabbitmq_cli:erlang_app",  # keep
-    ],
     target = ":erlang_app",
 )
 

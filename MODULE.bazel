@@ -68,22 +68,6 @@ archive_override(
     ],
 )
 
-# archive_override(
-#     module_name = "rabbitmq_ra",
-#     strip_prefix = "ra-rin-rules_erlang-4",
-#     urls = [
-#         "https://github.com/rabbitmq/ra/archive/refs/heads/rin/rules_erlang-4.zip",
-#     ],
-# )
-
-# archive_override(
-#     module_name = "rabbitmq_seshat",
-#     strip_prefix = "seshat-rin-rules_erlang-4",
-#     urls = [
-#         "https://github.com/rabbitmq/seshat/archive/refs/heads/rin/rules_erlang-4.zip",
-#     ],
-# )
-
 archive_override(
     module_name = "lz4-erlang",
     strip_prefix = "lz4-erlang-rin-rules_erlang-4",
@@ -239,21 +223,18 @@ erlang_package.hex_package(
 
 erlang_package.hex_package(
     name = "aten",
-    # build_file = "@rabbitmq-server//bazel:BUILD.aten",
     sha256 = "5f39a164206ae3f211ef5880b1f7819415686436e3229d30b6a058564fbaa168",
     version = "0.6.0",
 )
 
 erlang_package.hex_package(
     name = "base64url",
-    # build_file = "@rabbitmq-server//bazel:BUILD.base64url",
     sha256 = "f9b3add4731a02a9b0410398b475b33e7566a695365237a6bdee1bb447719f5c",
     version = "1.0.1",
 )
 
 erlang_package.hex_package(
     name = "cowboy",
-    # build_file = "@rabbitmq-server//bazel:BUILD.cowboy",
     patch_cmds = [
         "rm ebin/cowboy.app",
     ],
@@ -263,7 +244,6 @@ erlang_package.hex_package(
 
 erlang_package.hex_package(
     name = "cowlib",
-    # build_file = "@rabbitmq-server//bazel:BUILD.cowlib",
     patch_cmds = [
         "rm ebin/cowlib.app",
     ],
@@ -273,112 +253,96 @@ erlang_package.hex_package(
 
 erlang_package.hex_package(
     name = "credentials_obfuscation",
-    # build_file = "@rabbitmq-server//bazel:BUILD.credentials_obfuscation",
     sha256 = "738ace0ed5545d2710d3f7383906fc6f6b582d019036e5269c4dbd85dbced566",
     version = "3.4.0",
 )
 
 erlang_package.hex_package(
     name = "cuttlefish",
-    # build_file = "@rabbitmq-server//bazel:BUILD.cuttlefish",
     sha256 = "d3ef90bd2f5923477ab772fbda5cd5ad088438e4fd56801b455b87ada9f46fa3",
     version = "3.1.0",
 )
 
 erlang_package.hex_package(
     name = "eetcd",
-    # build_file = "@rabbitmq-server//bazel:BUILD.eetcd",
     sha256 = "66493bfd6698c1b6baa49679034c3def071ff329961ca1aa7b1dee061c2809af",
     version = "0.3.6",
 )
 
 erlang_package.hex_package(
     name = "enough",
-    # build_file = "@rabbitmq-server//bazel:BUILD.enough",
     sha256 = "0460c7abda5f5e0ea592b12bc6976b8a5c4b96e42f332059cd396525374bf9a1",
     version = "0.1.0",
 )
 
 erlang_package.hex_package(
     name = "gen_batch_server",
-    # build_file = "@rabbitmq-server//bazel:BUILD.gen_batch_server",
     sha256 = "c3e6a1a2a0fb62aee631a98cfa0fd8903e9562422cbf72043953e2fb1d203017",
     version = "0.8.8",
 )
 
 erlang_package.hex_package(
     name = "getopt",
-    # build_file = "@rabbitmq-server//bazel:BUILD.getopt",
     sha256 = "a0029aea4322fb82a61f6876a6d9c66dc9878b6cb61faa13df3187384fd4ea26",
     version = "1.0.2",
 )
 
 erlang_package.hex_package(
     name = "gun",
-    # build_file = "@rabbitmq-server//bazel:BUILD.gun",
     sha256 = "3106ce167f9c9723f849e4fb54ea4a4d814e3996ae243a1c828b256e749041e0",
     version = "1.3.3",
 )
 
 erlang_package.git_package(
     name = "horus",
-    # build_file = "@rabbitmq-server//bazel:BUILD.horus",
     commit = "253f9af23e539b7370a5105df19dcbb66762b247",
     repository = "rabbitmq/horus",
 )
 
 erlang_package.git_package(
     name = "jose",
-    # build_file = "@rabbitmq-server//bazel:BUILD.jose",
     commit = "d63c1c5c8f9c1a4f1438e234b886de8607a0034e",
     repository = "michaelklishin/erlang-jose",
 )
 
 erlang_package.hex_package(
     name = "khepri",
-    # build_file = "@rabbitmq-server//bazel:BUILD.khepri",
     sha256 = "0b6ff09fabf27cb1e8df0f976149305ad936abd17233263b36ccc7becbf31cb3",
     version = "0.12.1",
 )
 
 erlang_package.hex_package(
     name = "khepri_mnesia_migration",
-    # build_file = "@rabbitmq-server//bazel:BUILD.khepri_mnesia_migration",
     sha256 = "007568909c726057a6e06fb110a7309bf8bbdb9d233f09987da9388048726cbd",
     version = "0.4.0",
 )
 
 erlang_package.hex_package(
     name = "thoas",
-    # build_file = "@rabbitmq-server//bazel:BUILD.thoas",
     sha256 = "fc763185b932ecb32a554fb735ee03c3b6b1b31366077a2427d2a97f3bd26735",
     version = "1.0.0",
 )
 
 erlang_package.hex_package(
     name = "observer_cli",
-    # build_file = "@rabbitmq-server//bazel:BUILD.observer_cli",
     sha256 = "a41b6d3e11a3444e063e09cc225f7f3e631ce14019e5fbcaebfda89b1bd788ea",
     version = "1.7.3",
 )
 
 erlang_package.hex_package(
     name = "prometheus",
-    # build_file = "@rabbitmq-server//bazel:BUILD.prometheus",
     sha256 = "719862351aabf4df7079b05dc085d2bbcbe3ac0ac3009e956671b1d5ab88247d",
     version = "4.11.0",
 )
 
 erlang_package.hex_package(
     name = "quantile_estimator",
-    # build_file = "@rabbitmq-server//bazel:BUILD.quantile_estimator",
     sha256 = "282a8a323ca2a845c9e6f787d166348f776c1d4a41ede63046d72d422e3da946",
     version = "0.2.1",
 )
 
 erlang_package.git_package(
     name = "ra",
-    # build_file = "@rabbitmq-server//bazel:BUILD.ra",
     branch = "rin/rules_erlang-4",
     repository = "rabbitmq/ra",
     # pkg = "ra",
@@ -388,22 +352,12 @@ erlang_package.git_package(
 
 erlang_package.git_package(
     name = "seshat",
-    # build_file = "@rabbitmq-server//bazel:BUILD.seshat",
-#     build_file_content = """\
-# load("@rules_erlang//:erlang_autodetect.bzl", "erlang_autodetect")
-
-# erlang_autodetect(
-#     name = "seshat",
-#     testonly = False,
-# )
-# """,
     branch = "rin/rules_erlang-4",
     repository = "rabbitmq/seshat",
 )
 
 erlang_package.hex_package(
     name = "ranch",
-    # build_file = "@rabbitmq-server//bazel:BUILD.ranch",
     patch_cmds = [
         "rm ebin/ranch.app",
     ],
@@ -413,41 +367,35 @@ erlang_package.hex_package(
 
 erlang_package.hex_package(
     name = "recon",
-    # build_file = "@rabbitmq-server//bazel:BUILD.recon",
     sha256 = "6c6683f46fd4a1dfd98404b9f78dcabc7fcd8826613a89dcb984727a8c3099d7",
     version = "2.5.3",
 )
 
 erlang_package.hex_package(
     name = "redbug",
-    # build_file = "@rabbitmq-server//bazel:BUILD.redbug",
     sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
     version = "2.0.7",
 )
 
 erlang_package.hex_package(
     name = "stdout_formatter",
-    # build_file = "@rabbitmq-server//bazel:BUILD.stdout_formatter",
     sha256 = "51f1df921b0477275ea712763042155dbc74acc75d9648dbd54985c45c913b29",
     version = "0.2.4",
 )
 
 erlang_package.git_package(
-    # build_file = "@rabbitmq-server//bazel:BUILD.syslog",
     repository = "schlagert/syslog",
     tag = "4.0.0",
 )
 
 erlang_package.hex_package(
     name = "sysmon_handler",
-    # build_file = "@rabbitmq-server//bazel:BUILD.sysmon_handler",
     sha256 = "922cf0dd558b9fdb1326168373315b52ed6a790ba943f6dcbd9ee22a74cebdef",
     version = "1.3.0",
 )
 
 erlang_package.hex_package(
     name = "systemd",
-    # build_file = "@rabbitmq-server//bazel:BUILD.systemd",
     sha256 = "8ec5ed610a5507071cdb7423e663e2452a747a624bb8a58582acd9491ccad233",
     version = "0.6.1",
 )
@@ -494,14 +442,12 @@ elixir_package = use_extension(
 
 elixir_package.hex_package(
     name = "csv",
-    # build_file = "@rabbitmq-server//bazel:BUILD.csv",
     sha256 = "f5ee7299a55ff84fbe623d9aea7218b800d19ecccb2b3eac2bcb327d644365ea",
     version = "3.2.0",
 )
 
 elixir_package.hex_package(
     name = "json",
-    # build_file = "@rabbitmq-server//bazel:BUILD.json",
     sha256 = "9abf218dbe4ea4fcb875e087d5f904ef263d012ee5ed21d46e9dbca63f053d16",
     version = "1.4.1",
 )
@@ -520,7 +466,6 @@ erlang_dev_package = use_extension(
 erlang_dev_package.git_package(
     testonly = True,
     branch = "master",
-    # build_file = "@//:bazel/BUILD.ct_helper",
     repository = "ninenines/ct_helper",
 )
 
@@ -542,14 +487,12 @@ erlang_dev_package.git_package(
 erlang_dev_package.git_package(
     testonly = True,
     branch = "master",
-    # build_file = "@rabbitmq-server//bazel:BUILD.meck",
     repository = "eproxus/meck",
 )
 
 erlang_dev_package.git_package(
     testonly = True,
     branch = "master",
-    # build_file = "@rabbitmq-server//bazel:BUILD.proper",
     repository = "manopapad/proper",
 )
 
@@ -570,7 +513,6 @@ elixir_dev_package = use_extension(
 elixir_dev_package.hex_package(
     name = "amqp",
     testonly = True,
-    # build_file = "@rabbitmq-server//bazel:BUILD.amqp",
     patch_args = ["-p1"],
     patches = ["@rabbitmq-server//bazel:amqp.patch"],
     sha256 = "8d3ae139d2646c630d674a1b8d68c7f85134f9e8b2a1c3dd5621616994b10a8b",
@@ -580,7 +522,6 @@ elixir_dev_package.hex_package(
 elixir_dev_package.hex_package(
     name = "temp",
     testonly = True,
-    # build_file = "@rabbitmq-server//bazel:BUILD.temp",
     sha256 = "6af19e7d6a85a427478be1021574d1ae2a1e1b90882586f06bde76c63cd03e0d",
     version = "0.4.7",
 )
@@ -588,7 +529,6 @@ elixir_dev_package.hex_package(
 elixir_dev_package.hex_package(
     name = "x509",
     testonly = True,
-    # build_file = "@rabbitmq-server//bazel:BUILD.x509",
     sha256 = "ccc3bff61406e5bb6a63f06d549f3dba3a1bbb456d84517efaaa210d8a33750f",
     version = "0.8.8",
 )
