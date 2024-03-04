@@ -76,7 +76,7 @@
          }).
 
 -record(incoming_link, {
-          exchange :: rabbit_exchange:name(),
+          exchange :: rabbit_types:exchange() | rabbit_exchange:name(),
           routing_key :: undefined | rabbit_types:routing_key(),
           %% queue_name_bin is only set if the link target address refers to a queue.
           queue_name_bin :: undefined | rabbit_misc:resource_name(),
@@ -713,9 +713,9 @@ handle_control(#'v1_0.attach'{role = ?SEND_ROLE,
                                           user = User}}) ->
     ok = validate_attach(Attach),
     case ensure_target(Target, Vhost, User) of
-        {ok, XName, RoutingKey, QNameBin} ->
+        {ok, Exchange, RoutingKey, QNameBin} ->
             IncomingLink = #incoming_link{
-                              exchange = XName,
+                              exchange = Exchange,
                               routing_key = RoutingKey,
                               queue_name_bin = QNameBin,
                               delivery_count = DeliveryCountInt,
@@ -945,17 +945,14 @@ handle_control(#'v1_0.flow'{handle = Handle} = Flow,
             end
     end;
 
-handle_control(#'v1_0.detach'{handle = Handle = ?UINT(HandleInt),
-                              closed = Closed},
+handle_control(Detach = #'v1_0.detach'{handle = ?UINT(HandleInt)},
                State0 = #state{queue_states = QStates0,
                                incoming_links = IncomingLinks,
                                outgoing_links = OutgoingLinks0,
                                outgoing_unsettled_map = Unsettled0,
                                cfg = #cfg{
-                                        writer_pid = WriterPid,
                                         vhost = Vhost,
-                                        user = #user{username = Username},
-                                        channel_num = Ch}}) ->
+                                        user = #user{username = Username}}}) ->
     Ctag = handle_to_ctag(HandleInt),
     %% TODO delete queue if closed flag is set to true? see 2.6.6
     %% TODO keep the state around depending on the lifetime
@@ -1011,8 +1008,7 @@ handle_control(#'v1_0.detach'{handle = Handle = ?UINT(HandleInt),
                          incoming_links = maps:remove(HandleInt, IncomingLinks),
                          outgoing_links = OutgoingLinks,
                          outgoing_unsettled_map = Unsettled},
-    rabbit_amqp_writer:send_command(WriterPid, Ch, #'v1_0.detach'{handle = Handle,
-                                                                  closed = Closed}),
+    maybe_detach_reply(Detach, State, State0),
     publisher_or_consumer_deleted(State, State0),
     {noreply, State};
 
@@ -1533,7 +1529,7 @@ incoming_link_transfer(
                    rcv_settle_mode = RcvSettleMode,
                    handle = Handle = ?UINT(HandleInt)},
   MsgPart,
-  #incoming_link{exchange = XName = #resource{name = XNameBin},
+  #incoming_link{exchange = Exchange,
                  routing_key = LinkRKey,
                  delivery_count = DeliveryCount0,
                  incoming_unconfirmed_map = U0,
@@ -1564,20 +1560,16 @@ incoming_link_transfer(
     Sections = amqp10_framing:decode_bin(MsgBin),
     ?DEBUG("~s Inbound content:~n  ~tp",
            [?MODULE, [amqp10_framing:pprint(Section) || Section <- Sections]]),
-    Anns0 = #{?ANN_EXCHANGE => XNameBin},
-    Anns = case LinkRKey of
-               undefined -> Anns0;
-               _ -> Anns0#{?ANN_ROUTING_KEYS => [LinkRKey]}
-           end,
-    Mc0 = mc:init(mc_amqp, Sections, Anns),
-    Mc1 = rabbit_message_interceptor:intercept(Mc0),
-    {Mc, RoutingKey} = ensure_routing_key(Mc1),
-    check_user_id(Mc, User),
-    messages_received(Settled),
-    case rabbit_exchange:lookup(XName) of
-        {ok, Exchange} ->
-            check_write_permitted_on_topic(Exchange, User, RoutingKey),
-            QNames = rabbit_exchange:route(Exchange, Mc, #{return_binding_keys => true}),
+    case rabbit_exchange_lookup(Exchange) of
+        {ok, X = #exchange{name = #resource{name = XNameBin}}} ->
+            Anns = #{?ANN_EXCHANGE => XNameBin},
+            Mc0 = mc:init(mc_amqp, Sections, Anns),
+            {RoutingKey, Mc1} = ensure_routing_key(LinkRKey, Mc0),
+            Mc = rabbit_message_interceptor:intercept(Mc1),
+            check_user_id(Mc, User),
+            messages_received(Settled),
+            check_write_permitted_on_topic(X, User, RoutingKey),
+            QNames = rabbit_exchange:route(X, Mc, #{return_binding_keys => true}),
             rabbit_trace:tap_in(Mc, QNames, ConnName, ChannelNum, Username, Trace),
             case not Settled andalso
                  RcvSettleMode =:= ?V_1_0_RECEIVER_SETTLE_MODE_SECOND of
@@ -1619,19 +1611,29 @@ incoming_link_transfer(
             {error, [Disposition, Detach]}
     end.
 
-ensure_routing_key(Mc) ->
-    case mc:routing_keys(Mc) of
-        [RoutingKey] ->
-            {Mc, RoutingKey};
-        [] ->
-            %% Set the default routing key of AMQP 0.9.1 'basic.publish'{}.
-            %% For example, when the client attached to target /exchange/amq.fanout and sends a
-            %% message without setting a 'subject' in the message properties, the routing key is
-            %% ignored during routing, but receiving code paths still expect some routing key to be set.
-            DefaultRoutingKey = <<"">>,
-            Mc1 = mc:set_annotation(?ANN_ROUTING_KEYS, [DefaultRoutingKey], Mc),
-            {Mc1, DefaultRoutingKey}
-    end.
+rabbit_exchange_lookup(X = #exchange{}) ->
+    {ok, X};
+rabbit_exchange_lookup(XName = #resource{}) ->
+    rabbit_exchange:lookup(XName).
+
+ensure_routing_key(LinkRKey, Mc0) ->
+    RKey = case LinkRKey of
+               undefined ->
+                   case mc:property(subject, Mc0) of
+                       undefined ->
+                           %% Set the default routing key of AMQP 0.9.1 'basic.publish'{}.
+                           %% For example, when the client attached to target /exchange/amq.fanout and sends a
+                           %% message without setting a 'subject' in the message properties, the routing key is
+                           %% ignored during routing, but receiving code paths still expect some routing key to be set.
+                           <<"">>;
+                       {utf8, Subject} ->
+                           Subject
+                   end;
+               _ ->
+                   LinkRKey
+           end,
+    Mc = mc:set_annotation(?ANN_ROUTING_KEYS, [RKey], Mc0),
+    {RKey, Mc}.
 
 process_routing_confirm([], _SenderSettles = true, _, U) ->
     rabbit_global_counters:messages_unroutable_dropped(?PROTOCOL, 1),
@@ -1692,16 +1694,25 @@ ensure_target(#'v1_0.target'{address = Address,
                 {ok, Dest} ->
                     QNameBin = ensure_terminus(target, Dest, Vhost, User, Durable),
                     {XNameList1, RK} = rabbit_routing_parser:parse_routing(Dest),
-                    XName = rabbit_misc:r(Vhost, exchange, list_to_binary(XNameList1)),
+                    XNameBin = list_to_binary(XNameList1),
+                    XName = rabbit_misc:r(Vhost, exchange, XNameBin),
                     {ok, X} = rabbit_exchange:lookup(XName),
                     check_internal_exchange(X),
                     check_write_permitted(XName, User),
+                    %% Pre-declared exchanges are protected against deletion and modification.
+                    %% Let's cache the whole #exchange{} record to save a
+                    %% rabbit_exchange:lookup(XName) call each time we receive a message.
+                    Exchange = case XNameBin of
+                                   <<>> -> X;
+                                   <<"amq.", _/binary>> -> X;
+                                   _ -> XName
+                               end,
                     RoutingKey = case RK of
                                      undefined -> undefined;
                                      []        -> undefined;
                                      _         -> list_to_binary(RK)
                                  end,
-                    {ok, XName, RoutingKey, QNameBin};
+                    {ok, Exchange, RoutingKey, QNameBin};
                 {error, _} = E ->
                     E
             end;
@@ -2191,6 +2202,22 @@ publisher_or_consumer_deleted(
        true ->
            ok
     end.
+
+%% If we previously already sent a detach with an error condition, and the Detach we
+%% receive here is therefore the client's reply, do not reply again with a 3rd detach.
+maybe_detach_reply(Detach,
+                   #state{incoming_links = NewIncomingLinks,
+                          outgoing_links = NewOutgoingLinks,
+                          cfg = #cfg{writer_pid = WriterPid,
+                                     channel_num = Ch}},
+                   #state{incoming_links = OldIncomingLinks,
+                          outgoing_links = OldOutgoingLinks})
+  when map_size(NewIncomingLinks) < map_size(OldIncomingLinks) orelse
+       map_size(NewOutgoingLinks) < map_size(OldOutgoingLinks) ->
+    Reply = Detach#'v1_0.detach'{error = undefined},
+    rabbit_amqp_writer:send_command(WriterPid, Ch, Reply);
+maybe_detach_reply(_, _, _) ->
+    ok.
 
 check_internal_exchange(#exchange{internal = true,
                                   name = XName}) ->

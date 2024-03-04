@@ -925,28 +925,36 @@ server_closes_link(QType, Config) ->
 
 server_closes_link_exchange(Config) ->
     XName = atom_to_binary(?FUNCTION_NAME),
+    QName = <<"my queue">>,
+    RoutingKey = <<"my routing key">>,
     Ch = rabbit_ct_client_helpers:open_channel(Config),
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = XName}),
-
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName}),
+    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue = QName,
+                                                             exchange = XName,
+                                                             routing_key = RoutingKey}),
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
-    Address = <<"/exchange/", XName/binary, "/some-routing-key">>,
+    Address = <<"/exchange/", XName/binary, "/", RoutingKey/binary>>,
     {ok, Sender} = amqp10_client:attach_sender_link(
                      Session, <<"test-sender">>, Address),
     ok = wait_for_credit(Sender),
     ?assertMatch(#{publishers := 1}, get_global_counters(Config)),
 
+    DTag1 = <<1>>,
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag1, <<"m1">>, false)),
+    ok = wait_for_settlement(DTag1),
+
     %% Server closes the link endpoint due to some AMQP 1.0 external condition:
     %% In this test, the external condition is that an AMQP 0.9.1 client deletes the exchange.
     #'exchange.delete_ok'{} = amqp_channel:call(Ch, #'exchange.delete'{exchange = XName}),
-    ok = rabbit_ct_client_helpers:close_channel(Ch),
 
     %% When we publish the next message, we expect:
     %% 1. that the message is released because the exchange doesn't exist anymore, and
-    DTag = <<255>>,
-    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag, <<"body">>, false)),
-    ok = wait_for_settlement(DTag, released),
+    DTag2 = <<255>>,
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag2, <<"m2">>, false)),
+    ok = wait_for_settlement(DTag2, released),
     %% 2. that the server closes the link, i.e. sends us a DETACH frame.
     ExpectedError = #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_RESOURCE_DELETED},
     receive {amqp10_event, {link, Sender, {detached, ExpectedError}}} -> ok
@@ -954,6 +962,8 @@ server_closes_link_exchange(Config) ->
     end,
     ?assertMatch(#{publishers := 0}, get_global_counters(Config)),
 
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
+    ok = rabbit_ct_client_helpers:close_channel(Ch),
     ok = end_session_sync(Session),
     ok = amqp10_client:close_connection(Connection).
 
@@ -3351,7 +3361,7 @@ receive_all_messages0(Receiver, Accept, Acc) ->
                     false -> ok
                 end,
                 receive_all_messages0(Receiver, Accept, [Msg | Acc])
-    after 500 ->
+    after 1000 ->
               lists:reverse(Acc)
     end.
 

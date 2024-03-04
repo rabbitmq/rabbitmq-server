@@ -21,6 +21,7 @@
          correlation_id/1,
          user_id/1,
          message_id/1,
+         property/2,
          timestamp/1,
          priority/1,
          set_ttl/2,
@@ -301,6 +302,14 @@ message_id(#?MODULE{protocol = Proto,
     Proto:property(?FUNCTION_NAME, Data);
 message_id(BasicMsg) ->
     mc_compat:message_id(BasicMsg).
+
+-spec property(atom(), state()) ->
+    {utf8, binary()} | undefined.
+property(Property, #?MODULE{protocol = Proto,
+                            data = Data}) ->
+    Proto:property(Property, Data);
+property(_Property, _BasicMsg) ->
+    undefined.
 
 -spec set_ttl(undefined | non_neg_integer(), state()) -> state().
 set_ttl(Value, #?MODULE{annotations = Anns} = State) ->
