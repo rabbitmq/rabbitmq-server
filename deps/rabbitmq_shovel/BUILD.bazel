@@ -130,13 +130,13 @@ rabbitmq_suite(
 rabbitmq_integration_suite(
     name = "rolling_upgrade_SUITE",
     additional_beam = [
-        "test/shovel_test_utils.beam",
+        ":test_helpers",
     ],
     # FIXME: As of this writing, there is a bug in Khepri that makes this
     # testsuite unstable.
     flaky = True,
     deps = [
-        "@khepri//:erlang_app",
+        "@erlang_packages//khepri",
     ],
 )
 
