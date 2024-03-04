@@ -36,25 +36,11 @@ bazel_dep(
     repo_name = "looking_glass",
 )
 
-bazel_dep(
-    name = "rabbitmq_osiris",
-    version = "1.8.1",
-    repo_name = "osiris",
-)
-
 archive_override(
     module_name = "rules_erlang",
     strip_prefix = "rules_erlang-absurd-mode",
     urls = [
         "https://github.com/rabbitmq/rules_erlang/archive/refs/heads/absurd-mode.zip",
-    ],
-)
-
-archive_override(
-    module_name = "rabbitmq_osiris",
-    strip_prefix = "osiris-rin-use-rules_erlang-4.x",
-    urls = [
-        "https://github.com/rabbitmq/osiris/archive/refs/heads/rin/use-rules_erlang-4.x.zip",
     ],
 )
 
@@ -274,6 +260,11 @@ erlang_package.hex_package(
     name = "khepri_mnesia_migration",
     sha256 = "007568909c726057a6e06fb110a7309bf8bbdb9d233f09987da9388048726cbd",
     version = "0.4.0",
+)
+erlang_package.git_package(
+    name = "osiris",
+    branch = "rin/use-rules_erlang-4.x",
+    repository = "rabbitmq/osiris",
 )
 erlang_package.hex_package(
     name = "thoas",

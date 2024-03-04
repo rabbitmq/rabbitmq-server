@@ -468,7 +468,7 @@ compile_many(
 erl_libs(
     name = "bazel_native_deps",
     apps = [
-        "@osiris//:erlang_app",
+        "@erlang_packages//osiris",
     ],
     visibility = [":__subpackages__"],
 )

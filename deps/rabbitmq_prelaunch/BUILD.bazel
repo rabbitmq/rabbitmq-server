@@ -22,7 +22,7 @@ xref(
     name = "xref",
     additional_libs = [
         "@erlang_packages//systemd",
-        "@osiris//:erlang_app",
+        "@erlang_packages//osiris",
     ],
     target = ":erlang_app",
 )
@@ -38,7 +38,7 @@ plt(
     plt = "//:base_plt",
     deps = [
         "@erlang_packages//systemd",
-        "@osiris//:erlang_app",
+        "@erlang_packages//osiris",
     ],
 )
 

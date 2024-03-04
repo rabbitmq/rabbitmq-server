@@ -66,7 +66,7 @@ erlang_bytecode(
     erlc_opts = "//:test_erlc_opts",
     deps = [
         ":test_erlang_app",
-        # "//deps/amqp_client",
+        "//deps/rabbitmq_ct_helpers",
     ],
 )
 

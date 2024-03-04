@@ -25,7 +25,7 @@ plt(
     ignore_warnings = True,
     plt = "//:base_plt",
     deps = [
-        "@osiris//:erlang_app",  # keep
+        "@erlang_packages//osiris",  # keep
     ],
 )
 

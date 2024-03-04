@@ -193,7 +193,7 @@ rabbitmq_app(
         "@erlang_packages//syslog",
         "@erlang_packages//sysmon_handler",
         "@erlang_packages//systemd",
-        "@osiris//:erlang_app",
+        "@erlang_packages//osiris",
     ],
 )
 

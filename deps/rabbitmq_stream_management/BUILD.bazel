@@ -19,7 +19,7 @@ rabbitmq_app(
         "//deps/rabbit",
         "//deps/rabbitmq_management",
         "//deps/rabbitmq_stream",
-        "@osiris//:erlang_app",
+        "@erlang_packages//osiris",
     ],
 )
 
