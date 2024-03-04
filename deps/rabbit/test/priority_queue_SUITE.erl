@@ -392,6 +392,8 @@ info_head_message_timestamp1(_Config) ->
     PQ:delete_and_terminate(a_whim, BQS6),
     passed.
 
+%% Because queue version is now ignored, this test is expected
+%% to always get a queue version 2.
 info_backing_queue_version(Config) ->
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Q1 = <<"info-priority-queue-v1">>,
@@ -402,7 +404,7 @@ info_backing_queue_version(Config) ->
                     {<<"x-queue-version">>, byte, 2}]),
     try
         {ok, [{backing_queue_status, BQS1}]} = info(Config, Q1, [backing_queue_status]),
-        1 = proplists:get_value(version, BQS1),
+        2 = proplists:get_value(version, BQS1),
         {ok, [{backing_queue_status, BQS2}]} = info(Config, Q2, [backing_queue_status]),
         2 = proplists:get_value(version, BQS2)
     after
