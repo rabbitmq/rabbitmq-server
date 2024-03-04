@@ -98,6 +98,7 @@ rabbitmq_integration_suite(
     flaky = True,
     runtime_deps = [
         "//deps/trust_store_http",
+        "@erlang_packages//cowlib",
         "@erlang_packages//ct_helper",
     ],
 )

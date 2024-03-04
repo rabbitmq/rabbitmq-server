@@ -126,7 +126,7 @@ init_provider_server(Config, WhitelistDir) ->
     ok = application:set_env(trust_store_http, directory, WhitelistDir),
     ok = application:set_env(trust_store_http, port, CertServerPort),
     ok = application:unset_env(trust_store_http, ssl_options),
-    application:ensure_all_started(trust_store_http),
+    {ok, _} = application:ensure_all_started(trust_store_http),
     rabbit_ct_helpers:set_config(Config, [{trust_store_server_port, CertServerPort},
                                           {trust_store_server_url, Url}]).
 
