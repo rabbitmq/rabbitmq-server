@@ -347,37 +347,7 @@ erlang_package.hex_package(
 )
 use_repo(
     erlang_package,
-    "accept",
-    "aten",
-    "base64url",
-    "cowboy",
-    "cowlib",
-    "credentials_obfuscation",
     "erlang_packages",
-    # "csv",
-    "cuttlefish",
-    "eetcd",
-    "gen_batch_server",
-    "getopt",
-    "gun",
-    "horus",
-    "jose",
-    # "json",
-    "khepri",
-    "khepri_mnesia_migration",
-    "observer_cli",
-    "prometheus",
-    "quantile_estimator",
-    "ra",
-    "ranch",
-    "recon",
-    "redbug",
-    "seshat",
-    "stdout_formatter",
-    "syslog",
-    "sysmon_handler",
-    "systemd",
-    "thoas",
 )
 
 elixir_package = use_extension(
@@ -431,14 +401,6 @@ erlang_dev_package.git_package(
     testonly = True,
     branch = "master",
     repository = "manopapad/proper",
-)
-use_repo(
-    erlang_dev_package,
-    "ct_helper",
-    "emqtt",
-    "inet_tcp_proxy_dist",
-    "meck",
-    "proper",
 )
 
 elixir_dev_package = use_extension(
