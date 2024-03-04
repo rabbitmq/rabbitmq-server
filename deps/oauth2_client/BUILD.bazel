@@ -40,7 +40,6 @@ xref(
 plt(
     name = "deps_plt",
     for_target = ":erlang_app",
-    # ignore_warnings = True,
     plt = "//:base_plt",
     deps = [
         "//deps/rabbit",
