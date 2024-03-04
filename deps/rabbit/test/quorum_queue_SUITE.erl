@@ -47,7 +47,8 @@ groups() ->
                         {uncluster_size_2, [], [add_member]}
                        ]},
      {clustered, [], [
-                      {cluster_size_2, [], [add_member_not_running,
+                      {cluster_size_2, [], [add_member_2,
+                                            add_member_not_running,
                                             add_member_classic,
                                             add_member_wrong_type,
                                             add_member_already_a_member,
@@ -87,7 +88,8 @@ groups() ->
                                             leader_locator_balanced_random_maintenance,
                                             leader_locator_policy,
                                             status,
-                                            format
+                                            format,
+                                            add_member_2
                                            ]
                        ++ all_tests()},
                       {cluster_size_5, [], [start_queue,
@@ -1865,6 +1867,26 @@ add_member(Config) ->
     Info = rpc:call(Server0, rabbit_quorum_queue, infos,
                     [rabbit_misc:r(<<"/">>, queue, QQ)]),
     Servers = lists:sort(Servers0),
+    ?assertEqual(Servers, lists:sort(proplists:get_value(online, Info, []))).
+
+add_member_2(Config) ->
+    %% this tests a scenario where an older node version is running a QQ
+    %% and a member is added on a newer node version (for mixe testing)
+
+    %% we dont validate the ff was enabled as this test should pass either way
+    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue_non_voters),
+    [Server0, Server1 | _] = _Servers0 =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-quorum-initial-group-size">>, long, 1}])),
+    ?assertEqual(ok, rpc:call(Server0, rabbit_quorum_queue, add_member,
+                              [<<"/">>, QQ, Server0, 5000])),
+    Info = rpc:call(Server0, rabbit_quorum_queue, infos,
+                    [rabbit_misc:r(<<"/">>, queue, QQ)]),
+    Servers = lists:sort([Server0, Server1]),
     ?assertEqual(Servers, lists:sort(proplists:get_value(online, Info, []))).
 
 delete_member_not_running(Config) ->
