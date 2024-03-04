@@ -115,6 +115,8 @@ property(message_id, #msg{properties = #'v1_0.properties'{message_id = MsgId}}) 
     MsgId;
 property(user_id, #msg{properties = #'v1_0.properties'{user_id = UserId}}) ->
     UserId;
+property(subject, #msg{properties = #'v1_0.properties'{subject = Subject}}) ->
+    Subject;
 property(_Prop, #msg{}) ->
     undefined.
 
@@ -178,13 +180,6 @@ get_property(priority, Msg) ->
                 _ ->
                     undefined
             end
-    end;
-get_property(subject, Msg) ->
-    case Msg of
-        #msg{properties = #'v1_0.properties'{subject = {utf8, Subject}}} ->
-            Subject;
-        _ ->
-            undefined
     end.
 
 convert_to(?MODULE, Msg, _Env) ->
@@ -430,10 +425,6 @@ essential_properties(#msg{message_annotations = MA} = Msg) ->
     Priority = get_property(priority, Msg),
     Timestamp = get_property(timestamp, Msg),
     Ttl = get_property(ttl, Msg),
-    RoutingKeys = case get_property(subject, Msg) of
-                      undefined -> undefined;
-                      Subject -> [Subject]
-                  end,
 
     Deaths = case message_annotation(<<"x-death">>, Msg, undefined) of
                  {list, DeathMaps}  ->
@@ -458,10 +449,8 @@ essential_properties(#msg{message_annotations = MA} = Msg) ->
                  maps_put_truthy(
                    ttl, Ttl,
                    maps_put_truthy(
-                     ?ANN_ROUTING_KEYS, RoutingKeys,
-                     maps_put_truthy(
-                       deaths, Deaths,
-                       #{})))))),
+                     deaths, Deaths,
+                     #{}))))),
     case MA of
         [] ->
             Anns;

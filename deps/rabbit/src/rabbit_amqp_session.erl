@@ -1562,14 +1562,10 @@ incoming_link_transfer(
            [?MODULE, [amqp10_framing:pprint(Section) || Section <- Sections]]),
     case rabbit_exchange_lookup(Exchange) of
         {ok, X = #exchange{name = #resource{name = XNameBin}}} ->
-            Anns0 = #{?ANN_EXCHANGE => XNameBin},
-            Anns = case LinkRKey of
-                       undefined -> Anns0;
-                       _ -> Anns0#{?ANN_ROUTING_KEYS => [LinkRKey]}
-                   end,
+            Anns = #{?ANN_EXCHANGE => XNameBin},
             Mc0 = mc:init(mc_amqp, Sections, Anns),
-            Mc1 = rabbit_message_interceptor:intercept(Mc0),
-            {Mc, RoutingKey} = ensure_routing_key(Mc1),
+            {RoutingKey, Mc1} = ensure_routing_key(LinkRKey, Mc0),
+            Mc = rabbit_message_interceptor:intercept(Mc1),
             check_user_id(Mc, User),
             messages_received(Settled),
             check_write_permitted_on_topic(X, User, RoutingKey),
@@ -1620,19 +1616,24 @@ rabbit_exchange_lookup(X = #exchange{}) ->
 rabbit_exchange_lookup(XName = #resource{}) ->
     rabbit_exchange:lookup(XName).
 
-ensure_routing_key(Mc) ->
-    case mc:routing_keys(Mc) of
-        [RoutingKey] ->
-            {Mc, RoutingKey};
-        [] ->
-            %% Set the default routing key of AMQP 0.9.1 'basic.publish'{}.
-            %% For example, when the client attached to target /exchange/amq.fanout and sends a
-            %% message without setting a 'subject' in the message properties, the routing key is
-            %% ignored during routing, but receiving code paths still expect some routing key to be set.
-            DefaultRoutingKey = <<"">>,
-            Mc1 = mc:set_annotation(?ANN_ROUTING_KEYS, [DefaultRoutingKey], Mc),
-            {Mc1, DefaultRoutingKey}
-    end.
+ensure_routing_key(LinkRKey, Mc0) ->
+    RKey = case LinkRKey of
+               undefined ->
+                   case mc:property(subject, Mc0) of
+                       undefined ->
+                           %% Set the default routing key of AMQP 0.9.1 'basic.publish'{}.
+                           %% For example, when the client attached to target /exchange/amq.fanout and sends a
+                           %% message without setting a 'subject' in the message properties, the routing key is
+                           %% ignored during routing, but receiving code paths still expect some routing key to be set.
+                           <<"">>;
+                       {utf8, Subject} ->
+                           Subject
+                   end;
+               _ ->
+                   LinkRKey
+           end,
+    Mc = mc:set_annotation(?ANN_ROUTING_KEYS, [RKey], Mc0),
+    {RKey, Mc}.
 
 process_routing_confirm([], _SenderSettles = true, _, U) ->
     rabbit_global_counters:messages_unroutable_dropped(?PROTOCOL, 1),

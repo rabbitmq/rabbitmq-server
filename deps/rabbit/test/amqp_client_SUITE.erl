@@ -3361,7 +3361,7 @@ receive_all_messages0(Receiver, Accept, Acc) ->
                     false -> ok
                 end,
                 receive_all_messages0(Receiver, Accept, [Msg | Acc])
-    after 500 ->
+    after 1000 ->
               lists:reverse(Acc)
     end.
 
