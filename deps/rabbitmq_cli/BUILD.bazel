@@ -53,19 +53,19 @@ rabbitmqctl(
 rabbitmq_home(
     name = "broker-for-cli-tests-home",
     testonly = True,
-    erl_libs = [
-        "@erlang_packages//:deps",
-        "@erlang_packages//:test_deps",
-        "//:test_early_apps", # maybe should be regular (not test) for consistency
-        "//:rabbitmq_cli",
-        "//:test_apps",
-    ],
     apps = [
         "rabbit",
         "rabbitmq_federation",
         "rabbitmq_stomp",
         "rabbitmq_stream_management",
         "amqp_client",
+    ],
+    erl_libs = [
+        "@erlang_packages//:deps",
+        "@erlang_packages//:test_deps",
+        "//:test_early_apps",  # maybe should be regular (not test) for consistency
+        "//:rabbitmq_cli",
+        "//:test_apps",
     ],
     # plugins = [
     #     "//deps/rabbit:erlang_app",

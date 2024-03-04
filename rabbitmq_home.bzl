@@ -108,9 +108,9 @@ tar -x \\
     -f {tar} \\
     -C {dest}
 """.format(
-    tar = ctx.file.plugins_dir.path,
-    dest = plugins_dir.path,
-),
+            tar = ctx.file.plugins_dir.path,
+            dest = plugins_dir.path,
+        ),
     )
 
     # plugins = flatten([_plugins_dir_links(ctx, plugin) for plugin in plugins])

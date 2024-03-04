@@ -44,16 +44,16 @@ genrule(
 )
 
 rabbitmq_app(
+    srcs = glob([
+        "src/**/*.erl",
+    ]) + [
+        ":generated_sources",
+    ],
     app_name = "amqp10_common",
     public_hdrs = glob([
         "include/**/*.hrl",
     ]) + [
         ":generated_headers",
-    ],
-    srcs = glob([
-        "src/**/*.erl",
-    ]) + [
-        ":generated_sources",
     ],
 )
 

@@ -229,13 +229,13 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_helpers",
     ],
-    deps = [
-        "//deps/rabbitmq_stomp",
-    ],
     runtime_deps = [
         "//deps/amqp10_client",
         "//deps/rabbitmq_stream_common",
         "@erlang_packages//emqtt",
+    ],
+    deps = [
+        "//deps/rabbitmq_stomp",
     ],
 )
 

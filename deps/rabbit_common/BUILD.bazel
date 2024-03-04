@@ -68,8 +68,13 @@ write_source_files(
 )
 
 rabbitmq_app(
+    srcs = glob([
+        "src/**/*.erl",
+    ]) + [
+        ":rabbit_framing_amqp_0_8.erl",
+        ":rabbit_framing_amqp_0_9_1.erl",
+    ],
     app_name = "rabbit_common",
-    extract_from = "early_apps",
     extra_apps = [
         "compiler",
         "crypto",
@@ -82,6 +87,7 @@ rabbitmq_app(
         "os_mon",
         "runtime_tools",
     ],
+    extract_from = "early_apps",
     deps = [
         "@erlang_packages//credentials_obfuscation",
         "@erlang_packages//ranch",
@@ -114,20 +120,20 @@ dialyze(
 
 erlang_bytecode(
     name = "test_helpers",
-    hdrs = glob([
-        "include/*.hrl",
-        "src/*.hrl",
-    ]),
+    testonly = True,
     srcs = [
         "test/gen_server2_test_server.erl",
         "test/test_event_handler.erl",
     ],
+    hdrs = glob([
+        "include/*.hrl",
+        "src/*.hrl",
+    ]),
+    dest = "test",
+    erlc_opts = "//:test_erlc_opts",
     deps = [
         ":test_erlang_app",
     ],
-    dest = "test",
-    erlc_opts = "//:test_erlc_opts",
-    testonly = True,
 )
 
 eunit(

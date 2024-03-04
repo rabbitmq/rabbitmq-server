@@ -157,6 +157,7 @@ PLUGIN_NAMES = ALL_PLUGIN_NAMES + select({
 
 rabbitmq_home(
     name = "broker-home",
+    apps = PLUGIN_NAMES,
     erl_libs = [
         "@erlang_packages//:deps",
         # "@erlang_packages//:test_deps",
@@ -167,7 +168,6 @@ rabbitmq_home(
         "//:apps",
         "//:bazel_native_deps",
     ],
-    apps = PLUGIN_NAMES,
     # plugins = PLUGINS,
 )
 
@@ -296,6 +296,7 @@ pkg_files(
 
 package_generic_unix(
     name = "package-generic-unix",
+    apps = PLUGIN_NAMES,
     erl_libs = [
         "@erlang_packages//:deps",
         # "@erlang_packages//:test_deps",
@@ -306,7 +307,6 @@ package_generic_unix(
         "//:apps",
         "//:bazel_native_deps",
     ],
-    apps = PLUGIN_NAMES,
     plugins = PLUGINS,
 )
 

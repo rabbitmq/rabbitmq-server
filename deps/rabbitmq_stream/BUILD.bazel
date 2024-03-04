@@ -16,8 +16,8 @@ rabbitmq_app(
     deps = [
         "//deps/rabbit",
         "//deps/rabbitmq_stream_common",
-        "@osiris//:erlang_app",
         "@erlang_packages//ranch",
+        "@osiris//:erlang_app",
     ],
 )
 

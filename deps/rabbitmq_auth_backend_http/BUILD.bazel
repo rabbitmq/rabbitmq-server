@@ -75,13 +75,13 @@ rabbitmq_suite(
     additional_beam = [
         ":test_helpers",
     ],
-    deps = [
-        "//deps/rabbit_common",
-        "@erlang_packages//cowboy",
-    ],
     runtime_deps = [
         "@erlang_packages//cowlib",
         "@erlang_packages//ranch",
+    ],
+    deps = [
+        "//deps/rabbit_common",
+        "@erlang_packages//cowboy",
     ],
 )
 

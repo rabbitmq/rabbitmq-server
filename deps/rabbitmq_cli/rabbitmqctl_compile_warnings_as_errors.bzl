@@ -199,4 +199,3 @@ def rabbitmqctl_compile_warnings_as_errors_test(**kwargs):
         }),
         **kwargs
     )
-

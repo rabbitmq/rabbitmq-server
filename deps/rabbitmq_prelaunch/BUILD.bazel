@@ -37,8 +37,8 @@ plt(
     ignore_warnings = True,
     plt = "//:base_plt",
     deps = [
-        "@osiris//:erlang_app",
         "@erlang_packages//systemd",
+        "@osiris//:erlang_app",
     ],
 )
 
