@@ -6,11 +6,11 @@
 ## copying the entire (large!) file, create or generate a new rabbitmq.conf for the target system
 ## and populate it with the necessary settings.
 ##
-## See https://rabbitmq.com/configure.html to learn about how to configure RabbitMQ,
+## See https://www.rabbitmq.com/docs/configure to learn about how to configure RabbitMQ,
 ## the ini-style format used by rabbitmq.conf, how it is different from `advanced.config`,
 ## how to verify effective configuration, and so on.
 ##
-## See https://rabbitmq.com/documentation.html for the rest of RabbitMQ documentation.
+## See https://www.rabbitmq.com/docs/documentation for the rest of RabbitMQ documentation.
 ##
 ## In case you have questions, please use RabbitMQ community Slack and the rabbitmq-users Google group
 ## instead of GitHub issues.
@@ -23,7 +23,7 @@
 ## Networking
 ## ====================
 ##
-## Related doc guide: https://rabbitmq.com/networking.html.
+## Related doc guide: https://www.rabbitmq.com/docs/networking.
 ##
 ## By default, RabbitMQ will listen on all interfaces, using
 ## the standard (reserved) AMQP 0-9-1 and 1.0 port.
@@ -84,7 +84,7 @@
 ## ==============
 ##
 
-## Related doc guide: https://rabbitmq.com/access-control.html.
+## Related doc guide: https://www.rabbitmq.com/docs/access-control.
 
 ## The default "guest" user is only permitted to access the server
 ## via a loopback interface (e.g. localhost).
@@ -98,7 +98,7 @@
 
 ## TLS configuration.
 ##
-## Related doc guide: https://rabbitmq.com/ssl.html.
+## Related doc guide: https://www.rabbitmq.com/docs/ssl.
 ##
 # listeners.ssl.1                  = 5671
 # 
@@ -192,8 +192,8 @@
 ##
 ## Related doc guides:
 ##
-##  * https://rabbitmq.com/plugins.html
-##  * https://rabbitmq.com/access-control.html
+##  * https://www.rabbitmq.com/docs/plugins
+##  * https://www.rabbitmq.com/docs/access-control
 ##
 
 # auth_backends.1   = rabbit_auth_backend_internal
@@ -209,8 +209,8 @@
 ##
 ## Relevant doc guides:
 ##
-## * https://rabbitmq.com/ldap.html
-## * https://rabbitmq.com/access-control.html
+## * https://www.rabbitmq.com/docs/ldap
+## * https://www.rabbitmq.com/docs/access-control
 ##
 ## uses LDAP for both authentication and authorisation
 # auth_backends.1 = rabbit_auth_backend_ldap
@@ -228,14 +228,14 @@
 ## 'AMQPLAIN', and 'EXTERNAL' Additional mechanisms can be added via
 ## plugins.
 ##
-## Related doc guide: https://rabbitmq.com/authentication.html.
+## Related doc guide: https://www.rabbitmq.com/docs/authentication.
 ##
 # auth_mechanisms.1 = PLAIN
 # auth_mechanisms.2 = AMQPLAIN
 
 ## The rabbitmq-auth-mechanism-ssl plugin makes it possible to
 ## authenticate a user based on the client's x509 (TLS) certificate.
-## Related doc guide: https://rabbitmq.com/authentication.html.
+## Related doc guide: https://www.rabbitmq.com/docs/authentication.
 ##
 ## To use auth-mechanism-ssl, the EXTERNAL mechanism should
 ## be enabled:
@@ -278,13 +278,6 @@
 ##
 # load_definitions = /path/to/definitions/file.json
 
-
-##
-## Cluster name
-## ====================
-##
-# cluster_name = dev3.eng.megacorp.local
-
 ## Password hashing implementation. Will only affect newly
 ## created users. To recalculate hash for an existing user
 ## it's necessary to update her password.
@@ -306,7 +299,7 @@
 
 ## On first start RabbitMQ will create a vhost and a user. These
 ## config items control what gets created.
-## Relevant doc guide: https://rabbitmq.com/access-control.html
+## Relevant doc guide: https://www.rabbitmq.com/docs/access-control
 ##
 # default_vhost = /
 # default_user = guest
@@ -319,7 +312,7 @@
 ## Tags for default user
 ##
 ## For more details about tags, see the documentation for the
-## Management Plugin at https://rabbitmq.com/management.html.
+## Management Plugin at https://www.rabbitmq.com/docs/management.
 ##
 # default_user_tags.administrator = true
 
@@ -342,8 +335,8 @@
 ##
 ## Related doc guides:
 ##
-## * https://rabbitmq.com/heartbeats.html
-## * https://rabbitmq.com/networking.html
+## * https://www.rabbitmq.com/docs/heartbeats
+## * https://www.rabbitmq.com/docs/networking
 ##
 # heartbeat = 60
 
@@ -365,7 +358,7 @@
 ##
 ## Related doc guides:
 ##
-## * https://rabbitmq.com/networking.html
+## * https://www.rabbitmq.com/docs/networking
 ## * https://www.erlang.org/doc/man/inet.html#setopts-2
 ##
 
@@ -384,7 +377,7 @@
 ## Resource Limits & Flow Control
 ## ==============================
 ##
-## Related doc guide: https://rabbitmq.com/memory.html.
+## Related doc guide: https://www.rabbitmq.com/docs/memory.
 
 ## Memory-based Flow Control threshold.
 ##
@@ -423,7 +416,7 @@
 ##
 ## Another alternative is to configure queues to page all messages (both
 ## persistent and transient) to disk as quickly
-## as possible, see https://rabbitmq.com/lazy-queues.html.
+## as possible, see https://www.rabbitmq.com/docs/lazy-queues.
 ##
 # vm_memory_high_watermark_paging_ratio = 0.5
 
@@ -463,6 +456,32 @@
 ## Clustering
 ## =====================
 ##
+
+## By default cluster name is set to the name of the first
+## node to have formed the cluster. It can be overridden
+## to make it easier for (human) operators to tell one cluster from another.
+# cluster_name = dev3.eng.megacorp.local
+
+## Selects the default strategy used to pick a node to place a new queue leader replica
+## on. Can be overridden by the `x-queue-leader-locator` optional queue argument
+## at declaration time.
+##
+## "balanced" (the default) is recommended for most environments. It works
+## like so:
+##
+## 1. When there are many queues in the cluster, the candidate node is picked randomly
+## 2. When there are few queues, uses their current replica count to pick the node
+##    with the smallest number of replicas.
+##
+## Supported non-deprecated values are: "balanced", "client-local"
+# queue_leader_locator = balanced
+
+
+## Partition handling strategy.
+## Primarily affects deployments that use Mnesia and classic queues.
+## Khepri and quorum queues, streams will always use Raft's failure recovery
+## strategy.
+##
 # cluster_partition_handling = ignore
 
 ## Pauses all nodes on the minority side of a partition. The cluster
@@ -478,12 +497,6 @@
 ## Node names to check
 # cluster_partition_handling.pause_if_all_down.nodes.1 = rabbit@localhost
 # cluster_partition_handling.pause_if_all_down.nodes.2 = hare@localhost
-
-## Mirror sync batch size, in messages. Increasing this will speed
-## up syncing but total batch size in bytes must not exceed 2 GiB.
-## Available in RabbitMQ 3.6.0 or later.
-##
-# mirroring_sync_batch_size = 4096
 
 ## Make clustering happen *automatically* at startup. Only applied
 ## to nodes that have just been reset or started for the first time.
@@ -530,11 +543,13 @@
 #
 # This value is no longer meant to be configured directly.
 #
-# See https://www.rabbitmq.com/management.html#fine-stats.
+# See https://www.rabbitmq.com/docs/management#fine-stats.
 
 ##
-## Ra Settings
+## Raft settings
 ## =====================
+##
+## These set the defaults that quorum queues, streams, Khepri, and other Raft-based features use.
 ##
 # raft.segment_max_entries = 65536
 # raft.wal_max_size_bytes = 1048576
@@ -542,7 +557,7 @@
 # raft.snapshot_chunk_size = 1000000
 
 ##
-## Misc/Advanced Options
+## Misc and Advanced Options
 ## =====================
 ##
 ## NB: Change these only if you understand what you are doing!
@@ -570,15 +585,17 @@
 ## Timeout used when waiting for Mnesia tables in a cluster to
 ## become available.
 ##
+## Related doc guide: https://www.rabbitmq.com/docs/clustering#restarting
 # mnesia_table_loading_retry_timeout = 30000
 
 ## Retries when waiting for Mnesia tables in the cluster startup. Note that
 ## this setting is not applied to Mnesia upgrades or node deletions.
 ##
+## Related doc guide: https://www.rabbitmq.com/docs/clustering#restarting
 # mnesia_table_loading_retry_limit = 10
 
 ## Size in bytes below which to embed messages in the queue index.
-## Related doc guide: https://rabbitmq.com/persistence-conf.html
+## Related doc guide: https://www.rabbitmq.com/docs/persistence-conf
 ##
 # queue_index_embed_msgs_below = 4096
 
@@ -594,7 +611,7 @@
 ## (see https://www.erlang-solutions.com/blog/erlang-garbage-collector.html).
 ##
 ## Before trying this option, please take a look at the memory
-## breakdown (https://www.rabbitmq.com/memory-use.html).
+## breakdown (https://www.rabbitmq.com/docs/memory-use).
 ##
 # background_gc_enabled = false
 
@@ -636,7 +653,7 @@
 ## ----------------------------------------------------------------------------
 ## Advanced Erlang Networking/Clustering Options.
 ##
-## Related doc guide: https://rabbitmq.com/clustering.html
+## Related doc guide: https://www.rabbitmq.com/docs/clustering
 ## ----------------------------------------------------------------------------
 
 # ======================================
@@ -644,7 +661,7 @@
 # ======================================
 
 ## Timeout used to detect peer unavailability, including CLI tools.
-## Related doc guide: https://www.rabbitmq.com/nettick.html.
+## Related doc guide: https://www.rabbitmq.com/docs/nettick.
 ##
 # net_ticktime = 60
 
@@ -657,7 +674,7 @@
 ## ----------------------------------------------------------------------------
 ## RabbitMQ Management Plugin
 ##
-## Related doc guide: https://rabbitmq.com/management.html.
+## Related doc guide: https://www.rabbitmq.com/docs/management.
 ## ----------------------------------------------------------------------------
 
 # =======================================
@@ -665,7 +682,7 @@
 # =======================================
 
 ## Preload schema definitions from the following JSON file.
-## Related doc guide: https://rabbitmq.com/management.html#load-definitions.
+## Related doc guide: https://www.rabbitmq.com/docs/management#load-definitions.
 ##
 # management.load_definitions = /path/to/exported/definitions.json
 
@@ -674,7 +691,7 @@
 # management.http_log_dir = /path/to/access.log
 
 ## HTTP listener and embedded Web server settings.
-# ## See https://rabbitmq.com/management.html for details.
+# ## See https://www.rabbitmq.com/docs/management for details.
 #
 # management.tcp.port = 15672
 # management.tcp.ip   = 0.0.0.0
@@ -687,7 +704,7 @@
 # management.tcp.compress           = true
 
 ## HTTPS listener settings.
-## See https://rabbitmq.com/management.html and https://rabbitmq.com/ssl.html for details.
+## See https://www.rabbitmq.com/docs/management and https://www.rabbitmq.com/docs/ssl for details.
 ##
 # management.ssl.port       = 15671
 # management.ssl.cacertfile = /path/to/ca_certificate.pem
@@ -721,12 +738,12 @@
 # management.path_prefix = /a-prefix
 
 ## One of 'basic', 'detailed' or 'none'. See
-## https://rabbitmq.com/management.html#fine-stats for more details.
+## https://www.rabbitmq.com/docs/management#fine-stats for more details.
 # management.rates_mode = basic
 
 ## Configure how long aggregated data (such as message rates and queue
 ## lengths) is retained. Please read the plugin's documentation in
-## https://rabbitmq.com/management.html#configuration for more
+## https://www.rabbitmq.com/docs/management#configuration for more
 ## details.
 ## Your can use 'minute', 'hour' and 'day' keys or integer key (in seconds)
 # management.sample_retention_policies.global.minute    = 5
@@ -741,7 +758,7 @@
 ## ----------------------------------------------------------------------------
 ## RabbitMQ Shovel Plugin
 ##
-## Related doc guide: https://rabbitmq.com/shovel.html
+## Related doc guide: https://www.rabbitmq.com/docs/shovel
 ## ----------------------------------------------------------------------------
 
 ## See advanced.config.example for a Shovel plugin example
@@ -750,14 +767,14 @@
 ## ----------------------------------------------------------------------------
 ## RabbitMQ STOMP Plugin
 ##
-## Related doc guide: https://rabbitmq.com/stomp.html
+## Related doc guide: https://www.rabbitmq.com/docs/stomp
 ## ----------------------------------------------------------------------------
 
 # =======================================
 # STOMP section
 # =======================================
 
-## See https://rabbitmq.com/stomp.html for details.
+## See https://www.rabbitmq.com/docs/stomp for details.
 
 ## TCP listeners.
 ##
@@ -781,7 +798,8 @@
 # stomp.proxy_protocol = false
 
 ## TLS listeners
-## See https://rabbitmq.com/stomp.html and https://rabbitmq.com/ssl.html for details.
+№№
+## See https://www.rabbitmq.com/docs/stomp and https://www.rabbitmq.com/docs/ssl for details.
 # stomp.listeners.ssl.default = 61614
 #
 # ssl_options.cacertfile = path/to/cacert.pem
@@ -860,7 +878,7 @@
 # mqtt.tcp_listen_options.send_timeout  = 120000
 
 ## TLS listener settings
-## ## See https://rabbitmq.com/mqtt.html and https://rabbitmq.com/ssl.html for details.
+## ## See https://www.rabbitmq.com/docs/mqtt and https://www.rabbitmq.com/docs/ssl for details.
 #
 # mqtt.listeners.ssl.default = 8883
 #
@@ -960,7 +978,7 @@
 
 ## Logging settings.
 ##
-## See https://rabbitmq.com/logging.html for details.
+## See https://www.rabbitmq.com/docs/logging for details.
 ##
 
 ## Log directory, taken from the RABBITMQ_LOG_BASE env variable by default.
@@ -1004,7 +1022,7 @@
 ## ----------------------------------------------------------------------------
 ## RabbitMQ LDAP Plugin
 ##
-## Related doc guide: https://rabbitmq.com/ldap.html.
+## Related doc guide: https://www.rabbitmq.com/docs/ldap.
 ##
 ## ----------------------------------------------------------------------------
 
@@ -1138,7 +1156,7 @@
 ## The LDAP plugin can perform a variety of queries against your
 ## LDAP server to determine questions of authorisation.
 ##
-## Related doc guide: https://rabbitmq.com/ldap.html#authorisation.
+## Related doc guide: https://www.rabbitmq.com/docs/ldap#authorisation.
 
 ## Following configuration should be defined in advanced.config file
 ## DO NOT UNCOMMENT THESE LINES!
