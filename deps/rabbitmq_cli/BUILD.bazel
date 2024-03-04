@@ -128,11 +128,11 @@ rabbitmqctl_compile_warnings_as_errors_test(
     ],
     data = glob(["test/fixtures/**/*"]),
     source_deps = {
-        "@amqp//:sources": "amqp",
-        "@csv//:sources": "csv",
-        "@json//:sources": "json",
-        "@temp//:sources": "temp",
-        "@x509//:sources": "x509",
+        "@amqp//:srcs": "amqp",
+        "@csv//:srcs": "csv",
+        "@json//:srcs": "json",
+        "@temp//:srcs": "temp",
+        "@x509//:srcs": "x509",
     },
     target_compatible_with = select({
         "@platforms//os:macos": [
@@ -210,11 +210,11 @@ rabbitmqctl_test(
     flaky = True,
     rabbitmq_run = ":rabbitmq-for-cli-tests-run",
     source_deps = {
-        "@amqp//:sources": "amqp",
+        "@amqp//:srcs": "amqp",
         "@csv//:srcs": "csv",
         "@json//:srcs": "json",
-        "@temp//:sources": "temp",
-        "@x509//:sources": "x509",
+        "@temp//:srcs": "temp",
+        "@x509//:srcs": "x509",
     },
     tags = [STARTS_BACKGROUND_BROKER_TAG],
     deps = [
