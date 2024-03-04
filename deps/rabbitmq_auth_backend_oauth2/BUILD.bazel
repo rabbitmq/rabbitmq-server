@@ -31,7 +31,8 @@ rabbitmq_app(
 xref(
     name = "xref",
     additional_libs = [
-        "//deps/rabbitmq_cli:erlang_app",  # keep
+        "//deps/oauth2_client",
+        "//deps/rabbitmq_cli:erlang_app",
     ],
     target = ":erlang_app",
 )
@@ -40,9 +41,12 @@ plt(
     name = "deps_plt",
     for_target = ":erlang_app",
     ignore_warnings = True,
-    libs = ["//deps/rabbitmq_cli:elixir"],  # keep
+    libs = ["//deps/rabbitmq_cli:elixir"],
     plt = "//:base_plt",
-    deps = ["//deps/rabbitmq_cli:erlang_app"],  # keep
+    deps = [
+        "//deps/oauth2_client",
+        "//deps/rabbitmq_cli:erlang_app",
+    ],
 )
 
 dialyze(
@@ -106,12 +110,18 @@ rabbitmq_integration_suite(
     runtime_deps = [
         "@erlang_packages//cowboy",
     ],
+    deps = [
+        "//deps/oauth2_client",
+    ],
 )
 
 rabbitmq_integration_suite(
     name = "jwks_SUITE",
     additional_beam = [
         ":test_helpers",
+    ],
+    runtime_deps = [
+        "//deps/oauth2_client",
     ],
     deps = [
         "@erlang_packages//cowboy",
@@ -143,6 +153,9 @@ rabbitmq_integration_suite(
     size = "medium",
     additional_beam = [
         ":test_helpers",
+    ],
+    runtime_deps = [
+        "//deps/oauth2_client",
     ],
 )
 
