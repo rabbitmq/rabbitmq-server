@@ -20,7 +20,7 @@ rabbitmq_app(
         "//deps/amqp10_common",
         "//deps/rabbit",
         "//deps/rabbit_common",
-        "@ra//:erlang_app",
+        "@erlang_packages//ra",
         "@erlang_packages//ranch",
     ],
 )
