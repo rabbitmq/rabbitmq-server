@@ -145,11 +145,11 @@ rabbitmqctl_compile_warnings_as_errors_test(
         ],
     }),
     deps = [
-        "//deps/amqp_client:erlang_app",
-        "//deps/rabbit:erlang_app",
-        "//deps/rabbit_common:erlang_app",
-        "@observer_cli//:erlang_app",
-        "@stdout_formatter//:erlang_app",
+        "//deps/amqp_client",
+        "//deps/rabbit",
+        "//deps/rabbit_common",
+        "@erlang_packages//observer_cli",
+        "@erlang_packages//stdout_formatter",
     ],
 )
 
@@ -177,8 +177,8 @@ plt(
     deps = [
         ":elixir",
         "//bazel/elixir:logger",
-        "//deps/rabbit:erlang_app",
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit",
+        "//deps/rabbit_common",
     ],
 )
 
@@ -218,9 +218,9 @@ rabbitmqctl_test(
     },
     tags = [STARTS_BACKGROUND_BROKER_TAG],
     deps = [
-        "//deps/amqp_client:erlang_app",
-        "//deps/rabbit:erlang_app",
-        "//deps/rabbit_common:erlang_app",
+        "//deps/amqp_client",
+        "//deps/rabbit",
+        "//deps/rabbit_common",
         "@erlang_packages//observer_cli",
         "@erlang_packages//stdout_formatter",
     ],
