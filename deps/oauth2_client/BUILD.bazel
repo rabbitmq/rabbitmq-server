@@ -6,82 +6,46 @@ load(
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
-    "rabbitmq_app",
-    "rabbitmq_integration_suite",
-    "rabbitmq_suite",
+    rabbitmq_app = "rabbitmq_app2",
+    rabbitmq_integration_suite = "rabbitmq_integration_suite2",
+    rabbitmq_suite = "rabbitmq_suite2",
 )
-load(
-    ":app.bzl",
-    "all_beam_files",
-    "all_srcs",
-    "all_test_beam_files",
-    "test_suite_beam_files",
-)
-
-APP_NAME = "oauth2_client"
-
-APP_DESCRIPTION = "OAuth 2.0 client from the RabbitMQ Project"
-
-APP_MODULE = "oauth2_client_app"
-
-APP_EXTRA_KEYS = """%% Hex.pm package informations.
-	{licenses, ["MPL-2.0"]},
-	{links, [
-	    {"Website", "https://www.rabbitmq.com/"},
-	    {"GitHub", "https://github.com/rabbitmq/rabbitmq-server/tree/main/deps/oauth2_client"}
-	  ]},
-	{build_tools, ["make", "rebar3"]},
-	{files, [
-	    "erlang.mk",
-	    "git-revisions.txt",
-	    "include",
-	    "LICENSE*",
-	    "Makefile",
-	    "rabbitmq-components.mk",
-	    "README",
-	    "README.md",
-	    "src"
-	  ]}
-"""
-
-# gazelle:erlang_app_extra_app ssl
-# gazelle:erlang_app_extra_app inets
-# gazelle:erlang_app_extra_app crypto
-# gazelle:erlang_app_extra_app public_key
+load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode")
 
 rabbitmq_app(
     name = "erlang_app",
-    srcs = [":all_srcs"],
-    hdrs = [":public_hdrs"],
-    app_description = APP_DESCRIPTION,
-    app_extra_keys = APP_EXTRA_KEYS,
-    #    app_module = APP_MODULE,
-    app_name = APP_NAME,
-    beam_files = [":beam_files"],
+    app_name = "oauth2_client",
     extra_apps = [
         "crypto",
         "inets",
         "ssl",
         "public_key",
     ],
-    license_files = [":license_files"],
-    priv = [":priv"],
     deps = [
-        "//deps/rabbit:erlang_app",
-        "//deps/rabbit_common:erlang_app",
+        # "//deps/rabbit",
+        # "//deps/rabbit_common",
+        "@erlang_packages//cowlib",
     ],
 )
 
 xref(
     name = "xref",
+    additional_libs = [
+        "//deps/rabbit",
+        "//deps/rabbit_common",
+    ],
     target = ":erlang_app",
 )
 
 plt(
     name = "deps_plt",
     for_target = ":erlang_app",
-    ignore_warnings = True,
+    # ignore_warnings = True,
     plt = "//:base_plt",
+    deps = [
+        "//deps/rabbit",
+        "//deps/rabbit_common",
+    ],
 )
 
 dialyze(
@@ -93,34 +57,39 @@ dialyze(
 
 eunit(
     name = "eunit",
-    compiled_suites = [":test_oauth_http_mock_beam"],
+    compiled_suites = [":test_helpers"],
     target = ":test_erlang_app",
 )
 
-all_srcs(name = "all_srcs")
-
-all_beam_files(name = "all_beam_files")
-
-all_test_beam_files(name = "all_test_beam_files")
-
-test_suite_beam_files(name = "test_suite_beam_files")
-
-alias(
-    name = "oauth2_client",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
-)
-
 broker_for_integration_suites()
+
+erlang_bytecode(
+    name = "test_helpers",
+    testonly = True,
+    srcs = glob(
+        ["test/*.erl"],
+        exclude = ["test/*_SUITE.erl"],
+    ),
+    hdrs = glob([
+        "include/*.hrl",
+        "src/*.hrl",
+    ]),
+    dest = "test",
+    erlc_opts = "//:test_erlc_opts",
+    deps = [
+        ":test_erlang_app",
+        # "//deps/amqp_client",
+    ],
+)
 
 rabbitmq_integration_suite(
     name = "system_SUITE",
     size = "small",
     additional_beam = [
-        "test/oauth_http_mock.beam",
+        ":test_helpers",
     ],
     runtime_deps = [
-        "@cowboy//:erlang_app",
+        "@erlang_packages//cowboy",
     ],
 )
 

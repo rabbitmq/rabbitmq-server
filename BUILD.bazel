@@ -440,6 +440,7 @@ erl_libs(
 compile_many(
     name = "apps",
     apps = [
+        "//deps/oauth2_client:srcs",
         "//deps/rabbit:srcs",
         "//deps/rabbitmq_auth_backend_cache:srcs",
         "//deps/rabbitmq_auth_backend_http:srcs",
@@ -502,6 +503,7 @@ compile_many(
     name = "test_apps",
     testonly = True,
     apps = [
+        "//deps/oauth2_client:test_srcs",
         "//deps/rabbit:test_srcs",
         "//deps/rabbitmq_auth_backend_cache:test_srcs",
         "//deps/rabbitmq_auth_backend_http:test_srcs",
