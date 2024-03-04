@@ -1170,7 +1170,8 @@ get_sys_status(Proc) ->
 
 add_member(VHost, Name, Node, Membership, Timeout) when is_binary(VHost) ->
     QName = #resource{virtual_host = VHost, name = Name, kind = queue},
-    rabbit_log:debug("Asked to add a replica for queue ~ts on node ~ts", [rabbit_misc:rs(QName), Node]),
+    rabbit_log:debug("Asked to add a replica for queue ~ts on node ~ts",
+                     [rabbit_misc:rs(QName), Node]),
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} when ?amqqueue_is_classic(Q) ->
             {error, classic_queue_not_supported};
@@ -1183,7 +1184,8 @@ add_member(VHost, Name, Node, Membership, Timeout) when is_binary(VHost) ->
                     case lists:member(Node, QNodes) of
                         true ->
                           %% idempotent by design
-                          rabbit_log:debug("Quorum ~ts already has a replica on node ~ts", [rabbit_misc:rs(QName), Node]),
+                          rabbit_log:debug("Quorum ~ts already has a replica on node ~ts",
+                                           [rabbit_misc:rs(QName), Node]),
                           ok;
                         false ->
                             add_member(Q, Node, Membership, Timeout)
@@ -1213,7 +1215,13 @@ add_member(Q, Node, Membership, Timeout) when ?amqqueue_is_quorum(Q) ->
     Conf = make_ra_conf(Q, ServerId, Membership),
     case ra:start_server(?RA_SYSTEM, Conf) of
         ok ->
-            ServerIdSpec = maps:with([id, uid, membership], Conf),
+            ServerIdSpec  =
+                case rabbit_feature_flags:is_enabled(quorum_queue_non_voters) of
+                    true ->
+                        maps:with([id, uid, membership], Conf);
+                    false ->
+                        maps:get(id, Conf)
+                end,
             case ra:add_member(Members, ServerIdSpec, Timeout) of
                 {ok, _, Leader} ->
                     Fun = fun(Q1) ->
@@ -1323,13 +1331,13 @@ shrink_all(Node) ->
             lists:member(Node, get_nodes(Q))].
 
 
- grow(Node, VhostSpec, QueueSpec, Strategy) ->
+grow(Node, VhostSpec, QueueSpec, Strategy) ->
     grow(Node, VhostSpec, QueueSpec, Strategy, promotable).
 
 -spec grow(node(), binary(), binary(), all | even, membership()) ->
     [{rabbit_amqqueue:name(),
       {ok, pos_integer()} | {error, pos_integer(), term()}}].
- grow(Node, VhostSpec, QueueSpec, Strategy, Membership) ->
+grow(Node, VhostSpec, QueueSpec, Strategy, Membership) ->
     Running = rabbit_nodes:list_running(),
     [begin
          Size = length(get_nodes(Q)),
