@@ -567,7 +567,7 @@ rabbitmq_suite(
     name = "msg_store_SUITE",
     size = "small",
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
     ],
 )
 
@@ -698,7 +698,7 @@ rabbitmq_suite(
     name = "rabbit_confirms_SUITE",
     size = "small",
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
     ],
 )
 
@@ -715,7 +715,7 @@ rabbitmq_suite(
     name = "rabbit_fifo_int_SUITE",
     size = "medium",
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
         "@erlang_packages//aten",
         "@erlang_packages//gen_batch_server",
         "@erlang_packages//meck",
@@ -730,7 +730,7 @@ rabbitmq_suite(
         ":test_helpers",
     ],
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
         "@erlang_packages//proper",
         "@ra//:erlang_app",
     ],
@@ -740,7 +740,7 @@ rabbitmq_suite(
     name = "rabbit_fifo_dlx_SUITE",
     size = "small",
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
     ],
 )
 
@@ -765,7 +765,7 @@ rabbitmq_suite(
         ":rabbit_fifo_v0_SUITE_beam_files",
     ],
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
         "@erlang_packages//meck",
         "@ra//:erlang_app",
     ],
@@ -778,7 +778,7 @@ rabbitmq_suite(
         ":test_helpers",
     ],
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
         "@erlang_packages//meck",
         "@ra//:erlang_app",
     ],
@@ -788,8 +788,8 @@ rabbitmq_suite(
     name = "rabbit_msg_record_SUITE",
     size = "medium",
     deps = [
-        "//deps/amqp10_common:erlang_app",
-        "//deps/rabbit_common:erlang_app",
+        "//deps/amqp10_common",
+        "//deps/rabbit_common",
     ],
 )
 
@@ -797,15 +797,15 @@ rabbitmq_suite(
     name = "mc_unit_SUITE",
     size = "small",
     deps = [
-        "//deps/amqp10_common:erlang_app",
-        "//deps/rabbit_common:erlang_app",
+        "//deps/amqp10_common",
+        "//deps/rabbit_common",
     ],
 )
 
 rabbitmq_suite(
     name = "rabbit_stream_coordinator_SUITE",
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
     ],
 )
 
@@ -815,17 +815,17 @@ rabbitmq_suite(
         "@erlang_packages//meck",
     ],
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
     ],
 )
 
 rabbitmq_suite(
     name = "rabbit_access_control_SUITE",
     runtime_deps = [
-        "@meck//:erlang_app",
+        "@erlang_packages//meck",
     ],
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
     ],
 )
 
@@ -933,7 +933,7 @@ rabbitmq_suite(
     name = "unit_amqp091_content_framing_SUITE",
     size = "small",
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
     ],
 )
 
@@ -972,7 +972,7 @@ rabbitmq_suite(
     name = "unit_collections_SUITE",
     size = "small",
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
     ],
 )
 
@@ -1103,7 +1103,7 @@ rabbitmq_suite(
     name = "unit_classic_mirrored_queue_sync_throttling_SUITE",
     size = "small",
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
     ],
 )
 
@@ -1111,7 +1111,7 @@ rabbitmq_suite(
     name = "unit_classic_mirrored_queue_throughput_SUITE",
     size = "small",
     deps = [
-        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbit_common",
     ],
 )
 
@@ -1243,7 +1243,7 @@ rabbitmq_integration_suite(
     ],
     shard_count = 3,
     runtime_deps = [
-        "//deps/amqp10_client:erlang_app",
+        "//deps/amqp10_client",
     ],
 )
 
@@ -1270,14 +1270,14 @@ rabbitmq_integration_suite(
         ":test_event_recorder_beam",
     ],
     runtime_deps = [
-        "//deps/amqp10_client:erlang_app",
+        "//deps/amqp10_client",
     ],
 )
 
 rabbitmq_integration_suite(
     name = "amqp_credit_api_v2_SUITE",
     runtime_deps = [
-        "//deps/amqp10_client:erlang_app",
+        "//deps/amqp10_client",
     ],
 )
 
