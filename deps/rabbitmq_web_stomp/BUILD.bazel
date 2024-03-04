@@ -26,6 +26,9 @@ rabbitmq_app(
 xref(
     name = "xref",
     target = ":erlang_app",
+    additional_libs = [
+        "@erlang_packages//cowlib",
+    ],
 )
 
 plt(
@@ -34,6 +37,9 @@ plt(
     ignore_warnings = True,
     libs = ["//deps/rabbitmq_cli:elixir"],  # keep
     plt = "//:base_plt",
+    deps = [
+        "@erlang_packages//cowlib",
+    ],
 )
 
 dialyze(

@@ -20,7 +20,7 @@ rabbitmq_app(
         "public_key",
     ],
     deps = [
-        "//deps/oauth2_client",
+        # "//deps/oauth2_client",
         "//deps/rabbit",
         "@erlang_packages//base64url",
         "@erlang_packages//cowlib",

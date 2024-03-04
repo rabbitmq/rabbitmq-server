@@ -13,6 +13,9 @@ load(
 rabbitmq_app(
     name = "erlang_app",
     app_name = "rabbitmq_stream",
+    extra_apps = [
+        "ssl",
+    ],
     deps = [
         "//deps/rabbit",
         "//deps/rabbitmq_stream_common",
