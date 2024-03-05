@@ -623,12 +623,13 @@ get_data(MF, true, VHostsFilter, _) when is_map(VHostsFilter), MF == queue_metri
 get_data(queue_consumer_count, true, _, _) ->
     ets:tab2list(queue_metrics);
 get_data(vhost_status, _, _, _) ->
-    [ { #{<<"vhost">> => VHost},
-        case rabbit_vhost_sup_sup:is_vhost_alive(VHost) of
+    [ {
+        vhost_labels(VHost),
+        case rabbit_vhost_sup_sup:is_vhost_alive(vhost:get_name(VHost)) of
             true -> 1;
             false -> 0
         end}
-      || VHost <- rabbit_vhost:list()  ];
+      || VHost <- rabbit_vhost:all() ];
 get_data(exchange_bindings, _, _, _) ->
     Exchanges = lists:foldl(fun
                                 (#exchange{internal = true}, Acc) ->
@@ -743,3 +744,27 @@ queues_filter_from_pdict() ->
         Pattern ->
             Pattern
     end.
+
+-spec vhost_labels(vhost:vhost()) -> #{binary() => any()}.
+vhost_labels(VHost) ->
+    M0 = #{<<"vhost">> => vhost:get_name(VHost)},
+    M1 = case vhost:get_description(VHost) of
+             undefined -> M0;
+             V1         -> maps:put(<<"description">>, V1, M0)
+         end,
+    M2 = case vhost:get_tags(VHost) of
+             [] -> M1;
+             V2 ->
+                 Bin = join_bins(<<",">>, [rabbit_data_coercion:to_binary(T) || T <- V2]),
+                 maps:put(<<"tags">>, Bin, M1)
+         end,
+    M3 = case vhost:get_default_queue_type(VHost) of
+             undefined -> M2;
+             V3        -> maps:put(<<"default_queue_type">>, V3, M2)
+         end,
+    M3.
+
+-spec join_bins(Separator :: binary(), List :: [binary()]) -> binary().
+join_bins(_, []) -> <<>>;
+join_bins(Separator, [H | Tail]) ->
+    lists:foldl(fun(V, Acc) -> <<Acc/binary, Separator/binary, V/binary>> end, H, Tail).
