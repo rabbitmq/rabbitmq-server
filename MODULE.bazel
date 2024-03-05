@@ -283,7 +283,7 @@ erlang_package.hex_package(
 erlang_package.git_package(
     name = "horus",
     build_file = "@rabbitmq-server//bazel:BUILD.horus",
-    commit = "253f9af23e539b7370a5105df19dcbb66762b247",
+    commit = "35a84ab746a6bd6e7dab6d9ebe2637b20111642e",
     repository = "rabbitmq/horus",
 )
 
