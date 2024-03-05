@@ -464,7 +464,8 @@ return_checked_out_test(C) ->
     [{send_msg, _, {delivery, _, [{MsgId, _}]}, _}] = Fun([Msg1]),
     % returning immediately checks out the same message again
     {_, ok, [
-             {log, [1], _, _}
+             {log, [1], _, _},
+             _CheckpointEff
              % {send_msg, _, {delivery, _, [{_, _}]}, _},
             ]} =
         apply(meta(C, 3), rabbit_fifo:make_return(Cid, [MsgId]), State1),
@@ -486,7 +487,8 @@ return_checked_out_limit_test(C) ->
     [{send_msg, _, {delivery, _, [{MsgId, _}]}, _}] = Fun1([Msg1]),
     % returning immediately checks out the same message again
     {State2, ok, [
-                  {log, [1], Fun2, _}
+                  {log, [1], Fun2, _},
+                  _CheckpointEff
                  ]} =
         apply(meta(C, 3), rabbit_fifo:make_return(Cid, [MsgId]), State1),
     [{send_msg, _, {delivery, _, [{MsgId2, _}]}, _}] = Fun2([Msg1]),
@@ -2037,7 +2039,7 @@ expire_message_should_emit_release_cursor_test(C) ->
     {_S, ok, Effs} = apply(meta(C, 2, 101),
                            rabbit_fifo:make_enqueue(self(), 2, Msg),
                            S1),
-    ?ASSERT_EFF({release_cursor, 1, _}, Effs),
+    ?ASSERT_EFF({release_cursor, 1}, Effs),
     ok.
 
 header_test(_) ->
