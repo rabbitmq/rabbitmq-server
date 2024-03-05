@@ -156,8 +156,6 @@
       stability     => stable,
       depends_on    => [stream_queue]
      }}).
-<<<<<<< HEAD
-=======
 
 -rabbit_feature_flag(
    {quorum_queue_non_voters,
@@ -166,10 +164,3 @@
       stability => stable,
       depends_on => [quorum_queue]
      }}).
-
--rabbit_feature_flag(
-   {credit_api_v2,
-    #{desc          => "Credit API v2 between queue clients and queue processes",
-      stability     => stable
-     }}).
->>>>>>> 58d26cd45b (QQ: add feature flag to control adding non-voting members.)
