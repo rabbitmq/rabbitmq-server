@@ -156,3 +156,11 @@
       stability     => stable,
       depends_on    => [stream_queue]
      }}).
+
+-rabbit_feature_flag(
+   {quorum_queue_non_voters,
+    #{desc =>
+          "Allows new quorum queue members to be added as non voters initially.",
+      stability => stable,
+      depends_on => [quorum_queue]
+     }}).
