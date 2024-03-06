@@ -4,7 +4,6 @@
 -spec get(string() | binary(), term()) -> {ok, term()} | {error, term()}.
 get(JwksUrl, SslOptions) ->
     Options = [{timeout, 60000}] ++ [{ssl, SslOptions}],
-    rabbit_log:debug("get signing keys using options ~p", Options),
     httpc:request(get, {JwksUrl, []}, Options, []).
 
 -spec ssl_options(term()) -> list().
