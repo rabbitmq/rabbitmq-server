@@ -9,6 +9,10 @@
 % define access token request common constants
 
 -define(DEFAULT_HTTP_TIMEOUT, 60000).
+
+% Refresh tome this number of seconds before expires_in token's attribute
+-define(REFRESH_IN_BEFORE_EXPIRES_IN, 5).
+
 -define(DEFAULT_OPENID_CONFIGURATION_PATH, "/.well-known/openid-configuration").
 
 % define access token request constants
