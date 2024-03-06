@@ -25,6 +25,10 @@
 -define(CLOSING_TIMEOUT, 30_000).
 -define(SILENT_CLOSE_DELAY, 3_000).
 
+%% Allow for potentially large sets of tokens during the SASL exchange.
+%% https://docs.oasis-open.org/amqp/amqp-cbs/v1.0/csd01/amqp-cbs-v1.0-csd01.html#_Toc67999915
+-define(INITIAL_MAX_FRAME_SIZE, 8192).
+
 -type protocol() :: amqp | sasl.
 -type channel_number() :: non_neg_integer().
 
@@ -104,10 +108,8 @@ unpack_from_0_9_1(
                         connected_at = ConnectedAt,
                         user = none,
                         timeout = HandshakeTimeout,
-                        %% "Prior to any explicit negotiation, the maximum
-                        %% frame size is 512 (MIN-MAX-FRAME-SIZE)" [2.4.1]
-                        incoming_max_frame_size = ?MIN_MAX_FRAME_1_0_SIZE,
-                        outgoing_max_frame_size = ?MIN_MAX_FRAME_1_0_SIZE,
+                        incoming_max_frame_size = ?INITIAL_MAX_FRAME_SIZE,
+                        outgoing_max_frame_size = ?INITIAL_MAX_FRAME_SIZE,
                         channel_max = 0,
                         auth_mechanism = none,
                         auth_state = none}}.
