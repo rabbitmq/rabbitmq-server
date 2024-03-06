@@ -252,7 +252,7 @@ apply(#{index := Idx} = Meta,
                msg_id = MsgId,
                index = OldIdx,
                header = Header0,
-               msg = _Msg},
+               msg = Msg},
       #?MODULE{consumers = Cons0,
                messages = Messages,
                ra_indexes = Indexes0,
@@ -266,8 +266,9 @@ apply(#{index := Idx} = Meta,
             State0 = add_bytes_return(Header, State00),
             Con = Con0#consumer{checked_out = maps:remove(MsgId, Checked0),
                                 credit = increase_credit(Meta, Con0, 1)},
+            P = priority(Msg),
             State1 = State0#?MODULE{ra_indexes = rabbit_fifo_index:delete(OldIdx, Indexes0),
-                                    messages = lqueue:in(?MSG(Idx, Header), Messages),
+                                    messages = hinoloq:in(P, ?MSG(Idx, Header), Messages),
                                     enqueue_count = EnqCount + 1},
             State2 = update_or_remove_sub(Meta, ConsumerId, Con, State1),
             {State, Ret, Effs} = checkout(Meta, State0, State2, []),
@@ -469,7 +470,7 @@ apply(#{index := Index}, #purge{},
                                   end, Indexes0, Returns)
               end,
     State1 = State0#?MODULE{ra_indexes = Indexes,
-                            messages = lqueue:new(),
+                            messages = hinoloq:new(),
                             messages_total = Total - NumReady,
                             returns = lqueue:new(),
                             msg_bytes_enqueue = 0
@@ -704,13 +705,13 @@ convert_v1_to_v2(V1State0) ->
     %% remove all raft idx in messages from index
     {_, PrefReturns, _, PrefMsgs} = rabbit_fifo_v1:get_field(prefix_msgs, V1State),
     V2PrefMsgs = lists:foldl(fun(Hdr, Acc) ->
-                                     lqueue:in(convert_msg(Hdr), Acc)
-                             end, lqueue:new(), PrefMsgs),
+                                     hinoloq:in(normal, convert_msg(Hdr), Acc)
+                             end, hinoloq:new(), PrefMsgs),
     V2PrefReturns = lists:foldl(fun(Hdr, Acc) ->
                                         lqueue:in(convert_msg(Hdr), Acc)
                                 end, lqueue:new(), PrefReturns),
     MessagesV2 = lqueue:fold(fun ({_, Msg}, Acc) ->
-                                     lqueue:in(convert_msg(Msg), Acc)
+                                     hinoloq:in(normal, convert_msg(Msg), Acc)
                              end, V2PrefMsgs, MessagesV1),
     ReturnsV2 = lqueue:fold(fun ({_SeqId, Msg}, Acc) ->
                                     lqueue:in(convert_msg(Msg), Acc)
@@ -769,7 +770,7 @@ convert_v1_to_v2(V1State0) ->
     MessagesWaitingConsumersV2 = lists:foldl(fun({_ConsumerId, #consumer{checked_out = Checked}}, Acc) ->
                                                      Acc + maps:size(Checked)
                                              end, 0, WaitingConsumersV2),
-    MessagesTotal = lqueue:len(MessagesV2) +
+    MessagesTotal = hinoloq:len(MessagesV2) +
                     lqueue:len(ReturnsV2) +
                     MessagesConsumersV2 +
                     MessagesWaitingConsumersV2,
@@ -937,6 +938,7 @@ tick(Ts, #?MODULE{cfg = #cfg{name = _Name,
 -spec overview(state()) -> map().
 overview(#?MODULE{consumers = Cons,
                   enqueuers = Enqs,
+                  messages = Messages,
                   release_cursors = Cursors,
                   enqueue_count = EnqCount,
                   msg_bytes_enqueue = EnqueueBytes,
@@ -978,7 +980,8 @@ overview(#?MODULE{consumers = Cons,
                  enqueue_message_bytes => EnqueueBytes,
                  checkout_message_bytes => CheckoutBytes,
                  in_memory_message_bytes => 0, %% backwards compat
-                 smallest_raft_index => smallest_raft_index(State)
+                 smallest_raft_index => smallest_raft_index(State),
+                 priorities => hinoloq:overview(Messages)
                  },
     DlxOverview = rabbit_fifo_dlx:overview(DlxState),
     maps:merge(maps:merge(Overview, DlxOverview), SacOverview).
@@ -1370,7 +1373,7 @@ usage(Name) when is_atom(Name) ->
 
 messages_ready(#?MODULE{messages = M,
                         returns = R}) ->
-    lqueue:len(M) + lqueue:len(R).
+    hinoloq:len(M) + lqueue:len(R).
 
 messages_total(#?MODULE{messages_total = Total,
                         dlx = DlxState}) ->
@@ -1645,12 +1648,13 @@ maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg, Effects,
                        messages_total = Total} = State0) ->
     % direct enqueue without tracking
     Size = message_size(RawMsg),
+    P = priority(RawMsg),
     Header = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
     Msg = ?MSG(RaftIdx, Header),
     State = State0#?MODULE{msg_bytes_enqueue = Enqueue + Size,
                            enqueue_count = EnqCount + 1,
                            messages_total = Total + 1,
-                           messages = lqueue:in(Msg, Messages)
+                           messages = hinoloq:in(P, Msg, Messages)
                           },
     {ok, State, Effects};
 maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg, Effects0,
@@ -1678,10 +1682,11 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg, Effects0,
                            false ->
                                undefined
                        end,
+            Priority = priority(RawMsg),
             State = State0#?MODULE{msg_bytes_enqueue = Enqueue + Size,
                                    enqueue_count = EnqCount + 1,
                                    messages_total = Total + 1,
-                                   messages = lqueue:in(Msg, Messages),
+                                   messages = hinoloq:in(Priority, Msg, Messages),
                                    enqueuers = Enqueuers0#{From => Enq},
                                    msg_cache = MsgCache
                                   },
@@ -2043,10 +2048,10 @@ take_next_msg(#?MODULE{returns = Returns0,
         {{value, NextMsg}, Returns} ->
             {NextMsg, State#?MODULE{returns = Returns}};
         {empty, _} ->
-            case lqueue:out(Messages0) of
-                {empty, _} ->
+            case hinoloq:out(Messages0) of
+                empty ->
                     empty;
-                {{value, ?MSG(RaftIdx, _) = Msg}, Messages} ->
+                {?MSG(RaftIdx, _) = Msg, Messages} ->
                     %% add index here
                     Indexes = rabbit_fifo_index:append(RaftIdx, Indexes0),
                     {Msg, State#?MODULE{messages = Messages,
@@ -2055,10 +2060,10 @@ take_next_msg(#?MODULE{returns = Returns0,
     end.
 
 get_next_msg(#?MODULE{returns = Returns0,
-                       messages = Messages0}) ->
+                      messages = Messages0}) ->
     case lqueue:get(Returns0, empty) of
         empty ->
-            lqueue:get(Messages0, empty);
+            hinoloq:get(Messages0);
         Msg ->
             Msg
     end.
@@ -2148,7 +2153,7 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
             checkout_one(Meta, ExpiredMsg,
                          InitState#?MODULE{service_queue = SQ1}, Effects1);
         {empty, _} ->
-            case lqueue:len(Messages0) of
+            case hinoloq:len(Messages0) of
                 0 ->
                     {nochange, ExpiredMsg, InitState, Effects1};
                 _ ->
@@ -2331,11 +2336,11 @@ dehydrate_state(#?MODULE{cfg = #cfg{},
 %% make the state suitable for equality comparison
 normalize(#?MODULE{ra_indexes = _Indexes,
                    returns = Returns,
-                   messages = Messages,
+                   messages = _Messages,
                    release_cursors = Cursors,
                    dlx = DlxState} = State) ->
     State#?MODULE{returns = lqueue:from_list(lqueue:to_list(Returns)),
-                  messages = lqueue:from_list(lqueue:to_list(Messages)),
+                  % messages = lqueue:from_list(lqueue:to_list(Messages)),
                   release_cursors = lqueue:from_list(lqueue:to_list(Cursors)),
                   dlx = rabbit_fifo_dlx:normalize(DlxState)}.
 
@@ -2442,6 +2447,24 @@ message_size(Msg) ->
             erts_debug:size(Msg)
     end.
 
+priority(Msg) ->
+    case mc:is(Msg) of
+        true ->
+            case mc:priority(Msg) of
+                undefined ->
+                    normal;
+                P when P < 4 ->
+                    low;
+                4 ->
+                    normal;
+                _ ->
+                    high
+            end;
+        false ->
+            normal
+    end.
+
+
 
 all_nodes(#?MODULE{consumers = Cons0,
                    enqueuers = Enqs0,
@@ -2543,12 +2566,19 @@ smallest_raft_index(#?MODULE{messages = Messages,
                              ra_indexes = Indexes,
                              dlx = DlxState}) ->
     SmallestDlxRaIdx = rabbit_fifo_dlx:smallest_raft_index(DlxState),
-    SmallestMsgsRaIdx = case lqueue:get(Messages, undefined) of
-                            ?MSG(I, _) when is_integer(I) ->
-                                I;
-                            _ ->
-                                undefined
-                        end,
+    SmallestMsgsRaIdx =
+        case [I || ?MSG(I, _) <- hinoloq:peek_all(Messages), is_integer(I)] of
+            [] ->
+                undefined;
+            Idxs ->
+                lists:min(Idxs)
+        end,
+    % SmallestMsgsRaIdx = case lqueue:get(Messages, undefined) of
+    %                         ?MSG(I, _) when is_integer(I) ->
+    %                             I;
+    %                         _ ->
+    %                             undefined
+    %                     end,
     SmallestRaIdx = rabbit_fifo_index:smallest(Indexes),
     lists:min([SmallestDlxRaIdx, SmallestMsgsRaIdx, SmallestRaIdx]).
 
