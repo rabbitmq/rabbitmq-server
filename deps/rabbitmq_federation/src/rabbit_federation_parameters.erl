@@ -89,7 +89,8 @@ shared_validation() ->
                               ['no-ack', 'on-publish', 'on-confirm']), optional},
      {<<"resource-cleanup-mode">>, rabbit_parameter_validation:enum(
                               ['default', 'never']), optional},
-     {<<"ha-policy">>,      fun rabbit_parameter_validation:binary/2, optional},
+     {<<"queue-type">>,       rabbit_parameter_validation:enum(
+                              ['classic', 'quorum']), optional},
      {<<"bind-nowait">>,    fun rabbit_parameter_validation:boolean/2, optional},
      {<<"channel-use-mode">>, rabbit_parameter_validation:enum(
                               ['multiple', 'single']), optional}].
