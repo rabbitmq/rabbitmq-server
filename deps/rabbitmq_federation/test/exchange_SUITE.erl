@@ -50,6 +50,7 @@ groups() ->
 essential() ->
     [
       single_upstream,
+      single_upstream_quorum,
       multiple_upstreams,
       multiple_upstreams_pattern,
       single_upstream_multiple_uris,
@@ -163,9 +164,46 @@ single_upstream(Config) ->
   await_binding(Config, 0, UpX, RK),
   publish_expect(Ch, UpX, RK, Q, <<"single_upstream payload">>),
 
+  Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+  assert_federation_internal_queue_type(Config, Server, rabbit_classic_queue),
+
   rabbit_ct_client_helpers:close_channel(Ch),
   clean_up_federation_related_bits(Config).
 
+single_upstream_quorum(Config) ->
+  FedX = <<"single_upstream_quorum.federated">>,
+  UpX = <<"single_upstream_quorum.upstream.x">>,
+  rabbit_ct_broker_helpers:set_parameter(
+    Config, 0, <<"federation-upstream">>, <<"localhost">>,
+    [
+      {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, 0)},
+      {<<"exchange">>, UpX},
+      {<<"queue-type">>, <<"quorum">>}
+    ]),
+  rabbit_ct_broker_helpers:set_policy(
+    Config, 0,
+    <<"fed.x">>, <<"^single_upstream_quorum.federated">>, <<"exchanges">>,
+    [
+      {<<"federation-upstream">>, <<"localhost">>}
+    ]),
+
+  Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+  Xs = [
+    exchange_declare_method(FedX)
+  ],
+  declare_exchanges(Ch, Xs),
+
+  RK = <<"key">>,
+  Q = declare_and_bind_queue(Ch, FedX, RK),
+  await_binding(Config, 0, UpX, RK),
+  publish_expect(Ch, UpX, RK, Q, <<"single_upstream_quorum payload">>),
+
+  Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+  assert_federation_internal_queue_type(Config, Server, rabbit_quorum_queue),
+
+  rabbit_ct_client_helpers:close_channel(Ch),
+  clean_up_federation_related_bits(Config).
 
 multiple_upstreams(Config) ->
   FedX = <<"multiple_upstreams.federated">>,
@@ -870,3 +908,14 @@ await_credentials_obfuscation_seeding_on_two_nodes(Config) ->
   end),
 
   timer:sleep(1000).
+
+assert_federation_internal_queue_type(Config, Server, Expected) ->
+    Qs = all_queues_on(Config, Server),
+    FedQs = lists:filter(
+              fun(Q) ->
+                      lists:member(
+                        {<<"x-internal-purpose">>, longstr, <<"federation">>}, amqqueue:get_arguments(Q))
+              end,
+              Qs),
+    FedQTypes = lists:map(fun(Q) -> amqqueue:get_type(Q) end, FedQs),
+    ?assertEqual([Expected], lists:uniq(FedQTypes)).
