@@ -942,7 +942,13 @@ handle_info(sync, State) ->
 handle_info(timeout, State) ->
     noreply(internal_sync(State));
 
-handle_info({timeout, TimerRef, {maybe_gc, Candidates}}, State = #msstate{ gc_check_timer = TimerRef }) ->
+handle_info({timeout, TimerRef, {maybe_gc, Candidates0}},
+            State = #msstate{ gc_candidates  = NewCandidates,
+                              gc_check_timer = TimerRef }) ->
+    %% We do not want to consider candidates for GC that had
+    %% a message removed since we sent that maybe_gc message.
+    %% In that case we simply defer the GC to the next maybe_gc.
+    Candidates = maps:without(maps:keys(NewCandidates), Candidates0),
     noreply(maybe_gc(Candidates, State));
 
 %% @todo When a CQ crashes the message store does not remove
