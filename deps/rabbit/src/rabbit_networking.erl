@@ -34,7 +34,8 @@
          force_connection_event_refresh/1, force_non_amqp_connection_event_refresh/1,
          handshake/2, tcp_host/1,
          ranch_ref/1, ranch_ref/2, ranch_ref_of_protocol/1,
-         listener_of_protocol/1, stop_ranch_listener_of_protocol/1]).
+         listener_of_protocol/1, stop_ranch_listener_of_protocol/1,
+         list_local_connections_of_protocol/1]).
 
 %% Used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1,
@@ -250,6 +251,13 @@ stop_ranch_listener_of_protocol(Protocol) ->
         Ref       ->
             rabbit_log:debug("Stopping Ranch listener for protocol ~ts", [Protocol]),
             ranch:stop_listener(Ref)
+    end.
+
+-spec list_local_connections_of_protocol(atom()) -> [pid()].
+list_local_connections_of_protocol(Protocol) ->
+    case ranch_ref_of_protocol(Protocol) of
+        undefined   -> [];
+        AcceptorRef -> ranch:procs(AcceptorRef, connections)
     end.
 
 -spec start_tcp_listener(

@@ -12,7 +12,10 @@
 -define(PERSISTENT_TERM_EXCHANGE, mqtt_exchange).
 -define(DEFAULT_MQTT_EXCHANGE, <<"amq.topic">>).
 -define(MQTT_GUIDE_URL, <<"https://rabbitmq.com/docs/mqtt/">>).
+-define(WEB_MQTT_GUIDE_URL, <<"https://rabbitmq.com/docs/web-mqtt/">>).
 
+-define(MQTT_TCP_PROTOCOL, 'mqtt').
+-define(MQTT_TLS_PROTOCOL, 'mqtt/ssl').
 -define(MQTT_PROTO_V3, mqtt310).
 -define(MQTT_PROTO_V4, mqtt311).
 -define(MQTT_PROTO_V5, mqtt50).

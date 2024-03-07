@@ -23,6 +23,7 @@
 ]).
 
 -export([conserve_resources/3]).
+-export([info/2]).
 
 %% cowboy_sub_protocol
 -export([upgrade/4,
@@ -94,6 +95,19 @@ init(Req, Opts) ->
             end
     end.
 
+%% We cannot use a gen_server call, because the handler process is a
+%% special cowboy_websocket process (not a gen_server) which assumes
+%% all gen_server calls are supervisor calls, and does not pass on the
+%% request to this callback module. (see cowboy_websocket:loop/3 and
+%% cowboy_children:handle_supervisor_call/4) However using a generic
+%% gen:call with a special label ?MODULE works fine.
+-spec info(pid(), rabbit_types:info_keys()) ->
+    rabbit_types:infos().
+info(Pid, all) ->
+    info(Pid, ?INFO_ITEMS);
+info(Pid, Items) ->
+    {ok, Res} = gen:call(Pid, ?MODULE, {info, Items}),
+    Res.
 -spec websocket_init(state()) ->
     {cowboy_websocket:commands(), state()} |
     {cowboy_websocket:commands(), state(), hibernate}.
@@ -243,6 +257,10 @@ websocket_info(connection_created, State) ->
     Infos = infos(?EVENT_KEYS, State),
     rabbit_core_metrics:connection_created(self(), Infos),
     rabbit_event:notify(connection_created, Infos),
+    {[], State, hibernate};
+websocket_info({?MODULE, From, {info, Items}}, State) ->
+    Infos = infos(Items, State),
+    gen:reply(From, Infos),
     {[], State, hibernate};
 websocket_info(Msg, State) ->
     ?LOG_WARNING("Web MQTT: unexpected message ~tp", [Msg]),
