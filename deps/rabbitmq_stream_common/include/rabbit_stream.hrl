@@ -152,4 +152,4 @@
   state
 ]).
 
--define(STREAM_GUIDE_URL, <<"https://rabbitmq.com/stream.html">>).
+-define(STREAMS_GUIDE_URL, <<"https://rabbitmq.com/docs/streams">>).

@@ -91,7 +91,7 @@ usage_additional() ->
       <<"The virtual host of the stream.">>]].
 
 usage_doc_guides() ->
-    [?STREAM_GUIDE_URL].
+    [?STREAMS_GUIDE_URL].
 
 run([Stream],
     #{node := NodeName,

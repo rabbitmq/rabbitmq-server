@@ -39,6 +39,6 @@
          ssl_cipher,
          ssl_hash]).
 
--define(STOMP_GUIDE_URL, <<"https://rabbitmq.com/stomp.html">>).
+-define(STOMP_GUIDE_URL, <<"https://rabbitmq.com/docs/stomp">>).
 
 -define(DEFAULT_MAX_FRAME_SIZE, 4 * 1024 * 1024).
