@@ -43,6 +43,6 @@
 -define(DOWNSTREAM_VHOST_ARG, <<"x-downstream-vhost">>).
 -define(DEF_PREFETCH, 1000).
 
--define(FEDERATION_GUIDE_URL, <<"https://rabbitmq.com/federation.html">>).
+-define(FEDERATION_GUIDE_URL, <<"https://rabbitmq.com/docs/federation/">>).
 
 -define(FEDERATION_PG_SCOPE, rabbitmq_federation_pg_scope).
