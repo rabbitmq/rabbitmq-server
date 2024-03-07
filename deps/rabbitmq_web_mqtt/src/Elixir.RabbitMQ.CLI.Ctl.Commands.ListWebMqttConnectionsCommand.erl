@@ -4,9 +4,9 @@
 %%
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
--module('Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand').
+-module('Elixir.RabbitMQ.CLI.Ctl.Commands.ListWebMqttConnectionsCommand').
 
--include("rabbit_mqtt.hrl").
+-include_lib("rabbitmq_mqtt/include/rabbit_mqtt.hrl").
 
 -behaviour('Elixir.RabbitMQ.CLI.CommandBehaviour').
 
@@ -30,10 +30,10 @@ scopes() -> [ctl, diagnostics].
 switches() -> [{verbose, boolean}].
 aliases() -> [{'V', verbose}].
 
-description() -> <<"Lists all MQTT connections">>.
+description() -> <<"Lists all Web MQTT connections">>.
 
 help_section() ->
-    {plugin, mqtt}.
+    {plugin, web_mqtt}.
 
 validate(Args, _) ->
     InfoItems = lists:map(fun atom_to_list/1, ?INFO_ITEMS),
@@ -49,7 +49,7 @@ merge_defaults(Args, Opts) ->
     {Args, maps:merge(#{verbose => false}, Opts)}.
 
 usage() ->
-    <<"list_mqtt_connections [<column> ...]">>.
+    <<"list_web_mqtt_connections [<column> ...]">>.
 
 usage_additional() ->
     Prefix = <<" must be one of ">>,
@@ -59,7 +59,7 @@ usage_additional() ->
     ].
 
 usage_doc_guides() ->
-    [?MQTT_GUIDE_URL].
+    [?WEB_MQTT_GUIDE_URL].
 
 run(Args, #{node := NodeName,
             timeout := Timeout,
@@ -73,15 +73,14 @@ run(Args, #{node := NodeName,
 
     'Elixir.RabbitMQ.CLI.Ctl.RpcStream':receive_list_items(
         NodeName,
-        rabbit_mqtt,
+        rabbit_web_mqtt_app,
         emit_connection_info_all,
         [Nodes, InfoKeys],
         Timeout,
         InfoKeys,
         length(Nodes)).
 
-
-banner(_, _) -> <<"Listing MQTT connections ...">>.
+banner(_, _) -> <<"Listing Web MQTT connections ...">>.
 
 output(Result, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(Result).
