@@ -68,7 +68,9 @@
          make_purge/0,
          make_purge_nodes/1,
          make_update_config/1,
-         make_garbage_collection/0
+         make_garbage_collection/0,
+         convert_v1_to_v2/1,
+         convert_v2_to_v3/1
         ]).
 
 -ifdef(TEST).

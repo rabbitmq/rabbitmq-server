@@ -485,12 +485,12 @@ apply(#{index := Idx}, #garbage_collection{}, State) ->
     update_smallest_raft_index(Idx, ok, State, [{aux, garbage_collection}]);
 apply(Meta, {timeout, expire_msgs}, State) ->
     checkout(Meta, State, State, []);
-apply(#{system_time := Ts, machine_version := MachineVersion} = Meta,
+apply(#{system_time := Ts} = Meta,
       {down, Pid, noconnection},
       #?STATE{consumers = Cons0,
-               cfg = #cfg{consumer_strategy = single_active},
-               waiting_consumers = Waiting0,
-               enqueuers = Enqs0} = State0) ->
+              cfg = #cfg{consumer_strategy = single_active},
+              waiting_consumers = Waiting0,
+              enqueuers = Enqs0} = State0) ->
     Node = node(Pid),
     %% if the pid refers to an active or cancelled consumer,
     %% mark it as suspected and return it to the waiting queue
@@ -501,14 +501,15 @@ apply(#{system_time := Ts, machine_version := MachineVersion} = Meta,
                           %% and checked out messages should be returned
                           Effs = consumer_update_active_effects(
                                    S0, Cid, C0, false, suspected_down, E0),
-                          C1 = case MachineVersion of
-                                   V when V >= 3 ->
-                                       C0;
-                                   2 ->
-                                       Checked = C0#consumer.checked_out,
-                                       Credit = increase_credit(Meta, C0, maps:size(Checked)),
-                                       C0#consumer{credit = Credit}
-                               end,
+                          C1 = C0,
+                          % case MachineVersion of
+                          %          V when V >= 3 ->
+                          %              C0;
+                          %          2 ->
+                          %              Checked = C0#consumer.checked_out,
+                          %              Credit = increase_credit(Meta, C0, maps:size(Checked)),
+                          %              C0#consumer{credit = Credit}
+                          %      end,
                           {St, Effs1} = return_all(Meta, S0, Effs, Cid, C1),
                           %% if the consumer was cancelled there is a chance it got
                           %% removed when returning hence we need to be defensive here
@@ -539,7 +540,7 @@ apply(#{system_time := Ts, machine_version := MachineVersion} = Meta,
                     end, Enqs0),
     Effects = [{monitor, node, Node} | Effects1],
     checkout(Meta, State0, State#?STATE{enqueuers = Enqs}, Effects);
-apply(#{system_time := Ts, machine_version := MachineVersion} = Meta,
+apply(#{system_time := Ts} = Meta,
       {down, Pid, noconnection},
       #?STATE{consumers = Cons0,
                enqueuers = Enqs0} = State0) ->
@@ -555,17 +556,9 @@ apply(#{system_time := Ts, machine_version := MachineVersion} = Meta,
 
     {State, Effects1} =
         maps:fold(
-          fun({_, P} = Cid, #consumer{checked_out = Checked0,
-                                      status = up} = C0,
+          fun({_, P} = Cid, #consumer{status = up} = C0,
               {St0, Eff}) when node(P) =:= Node ->
-                  C = case MachineVersion of
-                          V when V >= 3 ->
-                              C0#consumer{status = suspected_down};
-                          2 ->
-                              Credit = increase_credit(Meta, C0, map_size(Checked0)),
-                              C0#consumer{status = suspected_down,
-                                          credit = Credit}
-                      end,
+                  C = C0#consumer{status = suspected_down},
                   {St, Eff0} = return_all(Meta, St0, Eff, Cid, C),
                   Eff1 = consumer_update_active_effects(St, Cid, C, false,
                                                         suspected_down, Eff0),
@@ -653,160 +646,9 @@ apply(_Meta, Cmd, State) ->
     rabbit_log:debug("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
     {State, ok, []}.
 
-convert_msg({RaftIdx, {Header, empty}}) when is_integer(RaftIdx) ->
-    ?MSG(RaftIdx, Header);
-convert_msg({RaftIdx, {Header, _Msg}}) when is_integer(RaftIdx) ->
-    ?MSG(RaftIdx, Header);
-convert_msg({'$empty_msg', Header}) ->
-    %% dummy index
-    ?MSG(undefined, Header);
-convert_msg({'$prefix_msg', Header}) ->
-    %% dummy index
-    ?MSG(undefined, Header);
-convert_msg({Header, empty}) ->
-    convert_msg(Header);
-convert_msg(Header) when ?IS_HEADER(Header) ->
-    ?MSG(undefined, Header).
-
-convert_consumer_v1_to_v2({ConsumerTag, Pid}, CV1) ->
-    Meta = element(2, CV1),
-    CheckedOut = element(3, CV1),
-    NextMsgId = element(4, CV1),
-    Credit = element(5, CV1),
-    DeliveryCount = element(6, CV1),
-    CreditMode = element(7, CV1),
-    LifeTime = element(8, CV1),
-    Status = element(9, CV1),
-    Priority = element(10, CV1),
-    #consumer{cfg = #consumer_cfg{tag = ConsumerTag,
-                                  pid = Pid,
-                                  meta = Meta,
-                                  credit_mode = CreditMode,
-                                  lifetime = LifeTime,
-                                  priority = Priority},
-              credit = Credit,
-              status = Status,
-              delivery_count = DeliveryCount,
-              next_msg_id = NextMsgId,
-              checked_out = maps:map(
-                              fun (_, {Tag, _} = Msg) when is_atom(Tag) ->
-                                      convert_msg(Msg);
-                                  (_, {_Seq, Msg}) ->
-                                      convert_msg(Msg)
-                              end, CheckedOut)
-             }.
-
-convert_v1_to_v2(V1State0) ->
-    V1State = rabbit_fifo_v1:enqueue_all_pending(V1State0),
-    IndexesV1 = rabbit_fifo_v1:get_field(ra_indexes, V1State),
-    ReturnsV1 = rabbit_fifo_v1:get_field(returns, V1State),
-    MessagesV1 = rabbit_fifo_v1:get_field(messages, V1State),
-    ConsumersV1 = rabbit_fifo_v1:get_field(consumers, V1State),
-    WaitingConsumersV1 = rabbit_fifo_v1:get_field(waiting_consumers, V1State),
-    %% remove all raft idx in messages from index
-    {_, PrefReturns, _, PrefMsgs} = rabbit_fifo_v1:get_field(prefix_msgs, V1State),
-    V2PrefMsgs = lists:foldl(fun(Hdr, Acc) ->
-                                     lqueue:in(convert_msg(Hdr), Acc)
-                             end, lqueue:new(), PrefMsgs),
-    V2PrefReturns = lists:foldl(fun(Hdr, Acc) ->
-                                        lqueue:in(convert_msg(Hdr), Acc)
-                                end, lqueue:new(), PrefReturns),
-    MessagesV2 = lqueue:fold(fun ({_, Msg}, Acc) ->
-                                     lqueue:in(convert_msg(Msg), Acc)
-                             end, V2PrefMsgs, MessagesV1),
-    ReturnsV2 = lqueue:fold(fun ({_SeqId, Msg}, Acc) ->
-                                    lqueue:in(convert_msg(Msg), Acc)
-                            end, V2PrefReturns, ReturnsV1),
-    ConsumersV2 = maps:map(
-                    fun (ConsumerId, CV1) ->
-                            convert_consumer_v1_to_v2(ConsumerId, CV1)
-                    end, ConsumersV1),
-    WaitingConsumersV2 = lists:map(
-                           fun ({ConsumerId, CV1}) ->
-                                   {ConsumerId, convert_consumer_v1_to_v2(ConsumerId, CV1)}
-                           end, WaitingConsumersV1),
-    EnqueuersV1 = rabbit_fifo_v1:get_field(enqueuers, V1State),
-    EnqueuersV2 = maps:map(fun (_EnqPid, Enq) ->
-                                   Enq#enqueuer{unused = undefined}
-                           end, EnqueuersV1),
-
-    %% do after state conversion
-    %% The (old) format of dead_letter_handler in RMQ < v3.10 is:
-    %%   {Module, Function, Args}
-    %% The (new) format of dead_letter_handler in RMQ >= v3.10 is:
-    %%   undefined | {at_most_once, {Module, Function, Args}} | at_least_once
-    %%
-    %% Note that the conversion must convert both from old format to new format
-    %% as well as from new format to new format. The latter is because quorum queues
-    %% created in RMQ >= v3.10 are still initialised with rabbit_fifo_v0 as described in
-    %% https://github.com/rabbitmq/ra/blob/e0d1e6315a45f5d3c19875d66f9d7bfaf83a46e3/src/ra_machine.erl#L258-L265
-    DLH = case rabbit_fifo_v1:get_cfg_field(dead_letter_handler, V1State) of
-              {_M, _F, _A = [_DLX = undefined|_]} ->
-                  %% queue was declared in RMQ < v3.10 and no DLX configured
-                  undefined;
-              {_M, _F, _A} = MFA ->
-                  %% queue was declared in RMQ < v3.10 and DLX configured
-                  {at_most_once, MFA};
-              Other ->
-                  Other
-          end,
-
-    Cfg = #cfg{name = rabbit_fifo_v1:get_cfg_field(name, V1State),
-               resource = rabbit_fifo_v1:get_cfg_field(resource, V1State),
-               release_cursor_interval = rabbit_fifo_v1:get_cfg_field(release_cursor_interval, V1State),
-               dead_letter_handler = DLH,
-               become_leader_handler = rabbit_fifo_v1:get_cfg_field(become_leader_handler, V1State),
-               %% TODO: what if policy enabling reject_publish was applied before conversion?
-               overflow_strategy = rabbit_fifo_v1:get_cfg_field(overflow_strategy, V1State),
-               max_length = rabbit_fifo_v1:get_cfg_field(max_length, V1State),
-               max_bytes = rabbit_fifo_v1:get_cfg_field(max_bytes, V1State),
-               consumer_strategy = rabbit_fifo_v1:get_cfg_field(consumer_strategy, V1State),
-               delivery_limit = rabbit_fifo_v1:get_cfg_field(delivery_limit, V1State),
-               expires = rabbit_fifo_v1:get_cfg_field(expires, V1State)
-              },
-
-    MessagesConsumersV2 = maps:fold(fun(_ConsumerId, #consumer{checked_out = Checked}, Acc) ->
-                                            Acc + maps:size(Checked)
-                                    end, 0, ConsumersV2),
-    MessagesWaitingConsumersV2 = lists:foldl(fun({_ConsumerId, #consumer{checked_out = Checked}}, Acc) ->
-                                                     Acc + maps:size(Checked)
-                                             end, 0, WaitingConsumersV2),
-    MessagesTotal = lqueue:len(MessagesV2) +
-                    lqueue:len(ReturnsV2) +
-                    MessagesConsumersV2 +
-                    MessagesWaitingConsumersV2,
-
-    #?STATE{cfg = Cfg,
-             messages = MessagesV2,
-             messages_total = MessagesTotal,
-             returns = ReturnsV2,
-             enqueue_count = rabbit_fifo_v1:get_field(enqueue_count, V1State),
-             enqueuers = EnqueuersV2,
-             ra_indexes = IndexesV1,
-             release_cursors = rabbit_fifo_v1:get_field(release_cursors, V1State),
-             consumers = ConsumersV2,
-             service_queue = rabbit_fifo_v1:get_field(service_queue, V1State),
-             msg_bytes_enqueue = rabbit_fifo_v1:get_field(msg_bytes_enqueue, V1State),
-             msg_bytes_checkout = rabbit_fifo_v1:get_field(msg_bytes_checkout, V1State),
-             waiting_consumers = WaitingConsumersV2,
-             last_active = rabbit_fifo_v1:get_field(last_active, V1State)
-            }.
-
-convert_v2_to_v3(#rabbit_fifo{consumers = ConsumersV2} = StateV2) ->
-    ConsumersV3 = maps:map(fun(_, C) ->
-                                   convert_consumer_v2_to_v3(C)
-                           end, ConsumersV2),
-    StateV2#rabbit_fifo{consumers = ConsumersV3}.
-
 convert_v3_to_v4(#rabbit_fifo{} = StateV3) ->
     %% nothing to convert - yet
     StateV3.
-
-convert_consumer_v2_to_v3(C = #consumer{cfg = Cfg = #consumer_cfg{credit_mode = simple_prefetch,
-                                                                  meta = #{prefetch := Prefetch}}}) ->
-    C#consumer{cfg = Cfg#consumer_cfg{credit_mode = {simple_prefetch, Prefetch}}};
-convert_consumer_v2_to_v3(C) ->
-    C.
 
 purge_node(Meta, Node, State, Effects) ->
     lists:foldl(fun(Pid, {S0, E0}) ->
@@ -1702,25 +1544,23 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg, Effects0,
             {duplicate, State0, Effects0}
     end.
 
-return(#{index := IncomingRaftIdx, machine_version := MachineVersion} = Meta,
+return(#{index := IncomingRaftIdx} = Meta,
        ConsumerId, Returned, Effects0, State0) ->
     {State1, Effects1} = maps:fold(
                            fun(MsgId, Msg, {S0, E0}) ->
                                    return_one(Meta, MsgId, Msg, S0, E0, ConsumerId)
                            end, {State0, Effects0}, Returned),
-    State2 =
-        case State1#?STATE.consumers of
-            #{ConsumerId := Con}
-              when MachineVersion >= 3 ->
-                update_or_remove_sub(Meta, ConsumerId, Con, State1);
-            #{ConsumerId := Con0}
-              when MachineVersion =:= 2 ->
-                Credit = increase_credit(Meta, Con0, map_size(Returned)),
-                Con = Con0#consumer{credit = Credit},
-                update_or_remove_sub(Meta, ConsumerId, Con, State1);
-            _ ->
-                State1
-        end,
+    State2 = case State1#?STATE.consumers of
+                 #{ConsumerId := Con} ->
+                     update_or_remove_sub(Meta, ConsumerId, Con, State1);
+                 % #{ConsumerId := Con0}
+                 %   when MachineVersion =:= 2 ->
+                 %     Credit = increase_credit(Meta, Con0, map_size(Returned)),
+                 %     Con = Con0#consumer{credit = Credit},
+                 %     update_or_remove_sub(Meta, ConsumerId, Con, State1);
+                 _ ->
+                     State1
+             end,
     {State, ok, Effects} = checkout(Meta, State0, State2, Effects1),
     update_smallest_raft_index(IncomingRaftIdx, State, Effects).
 
@@ -1776,10 +1616,10 @@ increase_credit(_Meta, #consumer{cfg = #consumer_cfg{lifetime = auto,
                                  credit = Credit}, _) ->
     %% credit_mode: `credited' also doesn't automatically increment credit
     Credit;
-increase_credit(#{machine_version := MachineVersion},
+increase_credit(_Meta,
                 #consumer{cfg = #consumer_cfg{credit_mode = {simple_prefetch, MaxCredit}},
                           credit = Current}, Credit)
-  when MachineVersion >= 3 andalso MaxCredit > 0 ->
+  when MaxCredit > 0 ->
     min(MaxCredit, Current + Credit);
 increase_credit(_Meta, #consumer{credit = Current}, Credit) ->
     Current + Credit.
@@ -1885,8 +1725,7 @@ get_header(Key, Header)
   when is_map(Header) andalso is_map_key(size, Header) ->
     maps:get(Key, Header, undefined).
 
-return_one(#{machine_version := MachineVersion} = Meta,
-           MsgId, Msg0,
+return_one(Meta, MsgId, Msg0,
            #?STATE{returns = Returns,
                     consumers = Consumers,
                     dlx = DlxState0,
@@ -1904,13 +1743,8 @@ return_one(#{machine_version := MachineVersion} = Meta,
             {State, DlxEffects ++ Effects0};
         _ ->
             Checked = maps:remove(MsgId, Checked0),
-            Con = case MachineVersion of
-                      V when V >= 3 ->
-                          Con0#consumer{checked_out = Checked,
-                                        credit = increase_credit(Meta, Con0, 1)};
-                      2 ->
-                          Con0#consumer{checked_out = Checked}
-                  end,
+            Con = Con0#consumer{checked_out = Checked,
+                                credit = increase_credit(Meta, Con0, 1)},
             {add_bytes_return(
                Header,
                State0#?STATE{consumers = Consumers#{ConsumerId => Con},
@@ -2317,8 +2151,7 @@ merge_consumer(Meta, #consumer{cfg = CCfg, checked_out = Checked} = Consumer,
                       status = up,
                       credit = NewCredit}.
 
-credit_mode(#{machine_version := Vsn}, Credit, simple_prefetch)
-  when Vsn >= 3 ->
+credit_mode(_Meta, Credit, simple_prefetch) ->
     {simple_prefetch, Credit};
 credit_mode(_, _, Mode) ->
     Mode.
@@ -2542,9 +2375,9 @@ convert(To, To, State) ->
 convert(0, To, State) ->
     convert(1, To, rabbit_fifo_v1:convert_v0_to_v1(State));
 convert(1, To, State) ->
-    convert(2, To, convert_v1_to_v2(State));
+    convert(2, To, rabbit_fifo_v3:convert_v1_to_v2(State));
 convert(2, To, State) ->
-    convert(3, To, convert_v2_to_v3(State));
+    convert(3, To, rabbit_fifo_v3:convert_v2_to_v3(State));
 convert(3, To, State) ->
     convert(4, To, convert_v3_to_v4(State)).
 
