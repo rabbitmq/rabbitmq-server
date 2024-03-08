@@ -62,7 +62,7 @@ all_tests() ->
      scenario31,
      scenario32,
      upgrade,
-     upgrade_snapshots,
+     upgrade_snapshots_v1_v2,
      upgrade_snapshots_scenario1,
      upgrade_snapshots_scenario2,
      upgrade_snapshots_v2_to_v3,
@@ -699,17 +699,17 @@ upgrade_snapshots_scenario1(_Config) ->
     Commands = [make_enqueue(E,1,msg(<<"msg1">>)),
                 make_enqueue(E,2,msg(<<"msg2">>)),
                 make_enqueue(E,3,msg(<<"msg3">>))],
-    run_upgrade_snapshot_test(#{name => ?FUNCTION_NAME,
-                                delivery_limit => 100,
-                                max_length => 1,
-                                max_bytes => 100,
-                                max_in_memory_length => undefined,
-                                max_in_memory_bytes => undefined,
-                                overflow_strategy => drop_head,
-                                single_active_consumer_on => false,
-                                dead_letter_handler => {?MODULE, banana, []}
-                               },
-                              Commands),
+    run_upgrade_snapshot_test_v1_v2(#{name => ?FUNCTION_NAME,
+                                      delivery_limit => 100,
+                                      max_length => 1,
+                                      max_bytes => 100,
+                                      max_in_memory_length => undefined,
+                                      max_in_memory_bytes => undefined,
+                                      overflow_strategy => drop_head,
+                                      single_active_consumer_on => false,
+                                      dead_letter_handler => {?MODULE, banana, []}
+                                     },
+                                    Commands),
     ok.
 
 upgrade_snapshots_scenario2(_Config) ->
@@ -720,17 +720,17 @@ upgrade_snapshots_scenario2(_Config) ->
                 make_enqueue(E,1,msg(<<"msg1">>)),
                 make_enqueue(E,2,msg(<<"msg2">>)),
                 rabbit_fifo:make_settle(C, [0])],
-    run_upgrade_snapshot_test(#{name => ?FUNCTION_NAME,
-                                delivery_limit => undefined,
-                                max_length => undefined,
-                                max_bytes => undefined,
-                                max_in_memory_length => undefined,
-                                max_in_memory_bytes => undefined,
-                                overflow_strategy => drop_head,
-                                single_active_consumer_on => false,
-                                dead_letter_handler => {?MODULE, banana, []}
-                               },
-                              Commands),
+    run_upgrade_snapshot_test_v1_v2(#{name => ?FUNCTION_NAME,
+                                      delivery_limit => undefined,
+                                      max_length => undefined,
+                                      max_bytes => undefined,
+                                      max_in_memory_length => undefined,
+                                      max_in_memory_bytes => undefined,
+                                      overflow_strategy => drop_head,
+                                      single_active_consumer_on => false,
+                                      dead_letter_handler => {?MODULE, banana, []}
+                                     },
+                                    Commands),
     ok.
 
 single_active_01(_Config) ->
@@ -952,7 +952,7 @@ upgrade(_Config) ->
                       end)
       end, [], Size).
 
-upgrade_snapshots(_Config) ->
+upgrade_snapshots_v1_v2(_Config) ->
     Size = 500,
     run_proper(
       fun () ->
@@ -975,9 +975,10 @@ upgrade_snapshots(_Config) ->
                                            drop_head,
                                            {?MODULE, banana, []}
                                           ),
-                          ?FORALL(O, ?LET(Ops, log_gen_upgrade_snapshots(Size), expand(Ops, Config)),
+                          ?FORALL(O, ?LET(Ops, log_gen_upgrade_snapshots(Size),
+                                          expand(Ops, Config)),
                                   collect({log_size, length(O)},
-                                          upgrade_snapshots_prop(Config, O)))
+                                          upgrade_snapshots_prop_v1_v2(Config, O)))
                       end)
       end, [], Size).
 
@@ -1783,8 +1784,8 @@ snapshots_prop(Conf, Commands) ->
             false
     end.
 
-upgrade_snapshots_prop(Conf, Commands) ->
-    try run_upgrade_snapshot_test(Conf, Commands) of
+upgrade_snapshots_prop_v1_v2(Conf, Commands) ->
+    try run_upgrade_snapshot_test_v1_v2(Conf, Commands) of
         _ -> true
     catch
         Err ->
@@ -1866,12 +1867,15 @@ log_gen_upgrade_snapshots(Size) ->
                                            {2, requeue}
                                           ])}},
                           {2, checkout_gen(oneof(CPids))},
-                          %% v2 fixes a bug that exists in v1 where a cancelled consumer is revived.
-                          %% Therefore, there is an expected behavioural difference between v1 and v2
+                          %% v2 fixes a bug that exists in v1 where a cancelled
+                          %% consumer is revived.
+                          %% Therefore, there is an expected behavioural
+                          %% difference between v1 and v2
                           %% and below line must be commented out.
                           % {1, checkout_cancel_gen(oneof(CPids))},
-                          %% Likewise there is a behavioural difference between v1 and v2
-                          %% when 'up' is followed by 'down' where v2 behaves correctly.
+                          %% Likewise there is a behavioural difference between
+                          %% v1 and v2 when 'up' is followed by 'down' where
+                          %% v2 behaves correctly.
                           %% Therefore, below line must be commented out.
                           % {1, down_gen(oneof(EPids ++ CPids))},
                           {1, nodeup_gen(Nodes)},
@@ -2282,7 +2286,7 @@ run_snapshot_test0(Conf0, Commands, Invariant) ->
      end || {release_cursor, SnapIdx, SnapState} <- Cursors],
     ok.
 
-run_upgrade_snapshot_test(Conf, Commands) ->
+run_upgrade_snapshot_test_v1_v2(Conf, Commands) ->
     ct:pal("running test with ~b commands using config ~tp",
            [length(Commands), Conf]),
     Indexes = lists:seq(1, length(Commands)),
@@ -2303,9 +2307,9 @@ run_upgrade_snapshot_test(Conf, Commands) ->
          %% Recover in V1.
          {StateV1, _} = run_log(SnapState, FilteredV1, Invariant, rabbit_fifo_v1),
          %% Perform conversion and recover in V2.
-         Res = rabbit_fifo:apply(meta(SnapIdx + 1), {machine_version, 1, 2}, SnapState),
+         Res = rabbit_fifo_v3:apply(meta(SnapIdx + 1), {machine_version, 1, 2}, SnapState),
          #rabbit_fifo{} = V2 = element(1, Res),
-         {StateV2, _} = run_log(V2, FilteredV2, Invariant, rabbit_fifo, 2),
+         {StateV2, _} = run_log(V2, FilteredV2, Invariant, rabbit_fifo_v3, 2),
          %% Invariant: Recovering a V1 snapshot in V1 or V2 should end up in the same
          %% number of messages.
          Fields = [num_messages,
@@ -2316,7 +2320,7 @@ run_upgrade_snapshot_test(Conf, Commands) ->
                    checkout_message_bytes
                   ],
          V1Overview = maps:with(Fields, rabbit_fifo_v1:overview(StateV1)),
-         V2Overview = maps:with(Fields, rabbit_fifo:overview(StateV2)),
+         V2Overview = maps:with(Fields, rabbit_fifo_v3:overview(StateV2)),
          case V1Overview == V2Overview of
              true -> ok;
              false ->
@@ -2335,7 +2339,8 @@ run_upgrade_snapshot_test_v2_to_v3(Conf, Commands) ->
     Entries = lists:zip(Indexes, Commands),
     Invariant = fun(_) -> true end,
     %% Run the whole command log in v2 to emit release cursors.
-    {_, Effects} = run_log(test_init(Conf), Entries, Invariant, rabbit_fifo, 2),
+    {_, Effects} = run_log(test_init(rabbit_fifo_v3, Conf), Entries, Invariant,
+                           rabbit_fifo, 2),
     Cursors = [ C || {release_cursor, _, _} = C <- Effects],
     [begin
          %% Drop all entries below and including the snapshot.
@@ -2415,16 +2420,16 @@ run_log(InitState, Entries, InvariantFun, FifoMod, MachineVersion) ->
                 end, {InitState, []}, Entries).
 
 test_init(Conf) ->
+    test_init(rabbit_fifo, Conf).
+
+test_init(Mod, Conf) ->
     Default = #{queue_resource => blah,
                 release_cursor_interval => 0,
                 metrics_handler => {?MODULE, metrics_handler, []}},
-    rabbit_fifo:init(maps:merge(Default, Conf)).
+    Mod:init(maps:merge(Default, Conf)).
 
 test_init_v1(Conf) ->
-    Default = #{queue_resource => blah,
-                release_cursor_interval => 0,
-                metrics_handler => {?MODULE, metrics_handler, []}},
-    rabbit_fifo_v1:init(maps:merge(Default, Conf)).
+    test_init(rabbit_fifo_v1, Conf).
 
 meta(Idx) ->
     meta(Idx, 3).

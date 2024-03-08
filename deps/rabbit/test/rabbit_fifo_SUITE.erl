@@ -1716,14 +1716,17 @@ meta(Config, Idx, Timestamp) ->
 
 enq(Config, Idx, MsgSeq, Msg, State) ->
     strip_reply(
-        rabbit_fifo:apply(meta(Config, Idx), rabbit_fifo:make_enqueue(self(), MsgSeq, Msg), State)).
+        rabbit_fifo:apply(meta(Config, Idx),
+                          rabbit_fifo:make_enqueue(self(), MsgSeq, Msg), State)).
 
 deq(Config, Idx, Cid, Settlement, Msg, State0) ->
     {State, _, Effs} =
         apply(meta(Config, Idx),
               rabbit_fifo:make_checkout(Cid, {dequeue, Settlement}, #{}),
               State0),
-    {value, {log, [_Idx], Fun}} = lists:search(fun(E) -> element(1, E) == log end, Effs),
+    {value, {log, [_Idx], Fun}} = lists:search(fun(E) ->
+                                                       element(1, E) == log
+                                               end, Effs),
     [{reply, _From,
       {wrap_reply, {dequeue, {MsgId, _}, _}}}] = Fun([Msg]),
 
