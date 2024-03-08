@@ -1347,7 +1347,13 @@ channel_writer_death(Config) ->
           when ConnType =:= direct -> ok;
 
         exit:{{infrastructure_died, {unknown_properties_record, <<>>}}, _}
-        when ConnType =:= network -> ok
+        when ConnType =:= network -> ok;
+
+        %% The writer process exited before the call and the amqp_channel_sup
+        %% supervisor shut the supervision tree down because the channel is
+        %% significant. The call happened at that shutdown time or just after.
+        exit:{shutdown, {gen_server, call, _}} -> ok;
+        exit:{noproc, {gen_server, call, _}} -> ok
     end,
     wait_for_death(Channel),
     wait_for_death(Connection).
@@ -1435,7 +1441,12 @@ shortstr_overflow_property(Config) ->
         Ret = amqp_channel:call(Channel, QoS),
         throw({unexpected_success, Ret})
     catch
-        exit:{{infrastructure_died, content_properties_shortstr_overflow}, _} -> ok
+        exit:{{infrastructure_died, content_properties_shortstr_overflow}, _} -> ok;
+        %% The writer process exited before the call and the amqp_channel_sup
+        %% supervisor shut the supervision tree down because the channel is
+        %% significant. The call happened at that shutdown time or just after.
+        exit:{shutdown, {gen_server, call, _}} -> ok;
+        exit:{noproc, {gen_server, call, _}} -> ok
     end,
     wait_for_death(Channel),
     wait_for_death(Connection).
@@ -1457,7 +1468,12 @@ shortstr_overflow_field(Config) ->
                                           consumer_tag = SentString}),
         throw({unexpected_success, Ret})
     catch
-        exit:{{infrastructure_died, method_field_shortstr_overflow}, _} -> ok
+        exit:{{infrastructure_died, method_field_shortstr_overflow}, _} -> ok;
+        %% The writer process exited before the call and the amqp_channel_sup
+        %% supervisor shut the supervision tree down because the channel is
+        %% significant. The call happened at that shutdown time or just after.
+        exit:{shutdown, {gen_server, call, _}} -> ok;
+        exit:{noproc, {gen_server, call, _}} -> ok
     end,
     wait_for_death(Channel),
     wait_for_death(Connection).
