@@ -11,10 +11,8 @@
 
 -export([start_link/1, compact/2, truncate/4, delete/2, stop/1]).
 
--export([set_maximum_since_use/2]).
-
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3, prioritise_cast/3]).
+         terminate/2, code_change/3]).
 
 -record(state,
         { pending,
@@ -53,22 +51,12 @@ delete(Server, File) ->
 stop(Server) ->
     gen_server2:call(Server, stop, infinity).
 
--spec set_maximum_since_use(pid(), non_neg_integer()) -> 'ok'.
-
-set_maximum_since_use(Pid, Age) ->
-    gen_server2:cast(Pid, {set_maximum_since_use, Age}).
-
 %%----------------------------------------------------------------------------
 
 init([MsgStoreState]) ->
-    ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
-                                             [self()]),
     {ok, #state { pending = #{},
                   msg_store_state    = MsgStoreState }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
-
-prioritise_cast({set_maximum_since_use, _Age}, _Len, _State) -> 8;
-prioritise_cast(_Msg,                          _Len, _State) -> 0.
 
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}.
@@ -95,10 +83,6 @@ handle_cast({delete, File}, State = #state{pending = Pending}) ->
     %% We drop any pending action because deletion takes precedence over truncation.
     State1 = State#state{pending = maps:remove(File, Pending)},
     {noreply, attempt_action(delete, [File], State1), hibernate};
-
-handle_cast({set_maximum_since_use, Age}, State) ->
-    ok = file_handle_cache:set_maximum_since_use(Age),
-    {noreply, State, hibernate}.
 
 %% Run all pending actions.
 handle_info({timeout, TimerRef, do_pending},
