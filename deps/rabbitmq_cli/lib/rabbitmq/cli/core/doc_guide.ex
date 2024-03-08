@@ -18,7 +18,7 @@ defmodule RabbitMQ.CLI.Core.DocGuide.Macros do
 
     quote do
       def unquote(fn_name)() do
-        unquote("https://#{domain}/#{path_segment}.html")
+        unquote("https://#{domain}/docs/#{path_segment}/")
       end
     end
   end
