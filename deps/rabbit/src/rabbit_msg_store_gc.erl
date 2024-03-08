@@ -82,7 +82,7 @@ handle_cast({truncate, File, TruncateSize, ThresholdTimestamp}, State = #state{p
 handle_cast({delete, File}, State = #state{pending = Pending}) ->
     %% We drop any pending action because deletion takes precedence over truncation.
     State1 = State#state{pending = maps:remove(File, Pending)},
-    {noreply, attempt_action(delete, [File], State1), hibernate};
+    {noreply, attempt_action(delete, [File], State1), hibernate}.
 
 %% Run all pending actions.
 handle_info({timeout, TimerRef, do_pending},
