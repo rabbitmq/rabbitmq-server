@@ -1913,21 +1913,25 @@ delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
             ok
     end.
 
-load_and_vacuum_message_file(File, State) ->
-    Messages0 = index_select_all_from_file(File, State),
-    %% Cleanup messages that have 0 ref_count.
-    Messages = lists:foldl(fun
-        (Entry = #msg_location{ ref_count = 0 }, Acc) ->
-            ok = index_delete_object(Entry, State),
-            Acc;
-        (Entry, Acc) ->
-            [Entry|Acc]
-    end, [], Messages0),
-    lists:keysort(#msg_location.offset, Messages).
-
-index_select_all_from_file(File, #gc_state { index_module = Index,
-                                             index_state  = State }) ->
-    Index:select_all_from_file(File, State).
+load_and_vacuum_message_file(File, State = #gc_state{ dir = Dir }) ->
+    %% Messages here will be end-of-file at start-of-list
+    {ok, Messages, _FileSize} =
+        scan_file_for_valid_messages(Dir, filenum_to_name(File)),
+    %% foldl will reverse so will end up with msgs in ascending offset order
+    lists:foldl(
+      fun ({MsgId, TotalSize, Offset}, Acc) ->
+              case index_lookup(MsgId, State) of
+                  #msg_location { file = File, total_size = TotalSize,
+                                  offset = Offset, ref_count = 0 } = Entry ->
+                      ok = index_delete_object(Entry, State),
+                      Acc;
+                  #msg_location { file = File, total_size = TotalSize,
+                                  offset = Offset } = Entry ->
+                      [ Entry | Acc ];
+                  _ ->
+                      Acc
+              end
+      end, [], Messages).
 
 scan_and_vacuum_message_file(File, State = #gc_state { dir = Dir }) ->
     %% Messages here will be end-of-file at start-of-list
