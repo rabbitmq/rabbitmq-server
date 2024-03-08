@@ -86,7 +86,7 @@ usage_additional() ->
     [{<<"<column>">>, <<Prefix/binary, InfoItems/binary>>}].
 
 usage_doc_guides() ->
-    [?STREAM_GUIDE_URL].
+    [?STREAMS_GUIDE_URL].
 
 run(Args,
     #{node := NodeName,

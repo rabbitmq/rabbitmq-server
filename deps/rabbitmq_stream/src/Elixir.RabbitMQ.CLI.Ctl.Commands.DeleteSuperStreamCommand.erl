@@ -58,7 +58,7 @@ usage_additional() ->
      [<<"--vhost <vhost>">>, <<"The virtual host of the super stream.">>]].
 
 usage_doc_guides() ->
-    [?STREAM_GUIDE_URL].
+    [?STREAMS_GUIDE_URL].
 
 run([SuperStream],
     #{node := NodeName,

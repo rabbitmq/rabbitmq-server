@@ -168,7 +168,7 @@ usage_additional() ->
       <<"The initial cluster size of partition streams.">>]].
 
 usage_doc_guides() ->
-    [?STREAM_GUIDE_URL].
+    [?STREAMS_GUIDE_URL].
 
 run([SuperStream],
     #{node := NodeName,

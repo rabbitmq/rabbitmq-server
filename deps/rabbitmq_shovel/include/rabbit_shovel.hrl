@@ -28,4 +28,4 @@
 -define(DEFAULT_ACK_MODE, on_confirm).
 -define(DEFAULT_RECONNECT_DELAY, 5).
 
--define(SHOVEL_GUIDE_URL, <<"https://rabbitmq.com/shovel.html">>).
+-define(SHOVEL_GUIDE_URL, <<"https://rabbitmq.com/docs/shovel">>).
