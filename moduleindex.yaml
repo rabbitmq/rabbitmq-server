@@ -670,7 +670,6 @@ rabbit:
 - rabbit_mirror_queue_slave
 - rabbit_mirror_queue_sync
 - rabbit_mnesia
-- rabbit_msg_file
 - rabbit_msg_record
 - rabbit_msg_store
 - rabbit_msg_store_ets_index
