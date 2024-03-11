@@ -77,10 +77,13 @@
 -endif.
 
 -import(serial_number, [add/2, diff/2]).
+-define(ENQ_V2, e).
 
 %% command records representing all the protocol actions that are supported
 -record(enqueue, {pid :: option(pid()),
                   seq :: option(msg_seqno()),
+                  msg :: raw_msg()}).
+-record(?ENQ_V2, {seq :: option(msg_seqno()),
                   msg :: raw_msg()}).
 -record(requeue, {consumer_id :: consumer_id(),
                   msg_id :: msg_id(),
@@ -108,6 +111,7 @@
 
 -opaque protocol() ::
     #enqueue{} |
+    #?ENQ_V2{} |
     #requeue{} |
     #register_enqueuer{} |
     #checkout{} |
@@ -192,6 +196,9 @@ update_config(Conf, State) ->
 apply(Meta, #enqueue{pid = From, seq = Seq,
                      msg = RawMsg}, State00) ->
     apply_enqueue(Meta, From, Seq, RawMsg, State00);
+apply(#{reply_mode := {notify, _Corr, EnqPid}} = Meta,
+      #?ENQ_V2{seq = Seq, msg = RawMsg}, State00) ->
+    apply_enqueue(Meta, EnqPid, Seq, RawMsg, State00);
 apply(_Meta, #register_enqueuer{pid = Pid},
       #?STATE{enqueuers = Enqueuers0,
               cfg = #cfg{overflow_strategy = Overflow}} = State0) ->
@@ -2063,7 +2070,8 @@ expire(RaCmdTs, State0, Effects) ->
 timer_effect(RaCmdTs, State, Effects) ->
     T = case get_next_msg(State) of
             ?MSG(_, ?TUPLE(Size, Expiry))
-              when is_integer(Size), is_integer(Expiry) ->
+              when is_integer(Size) andalso
+                   is_integer(Expiry) ->
                 %% Next message contains 'expiry' header.
                 %% (Re)set timer so that message will be dropped or
                 %% dead-lettered on time.
@@ -2243,7 +2251,14 @@ is_below(Val, Num) when is_integer(Val) andalso is_integer(Num) ->
 
 -spec make_enqueue(option(pid()), option(msg_seqno()), raw_msg()) -> protocol().
 make_enqueue(Pid, Seq, Msg) ->
-    #enqueue{pid = Pid, seq = Seq, msg = Msg}.
+    case rabbit_feature_flags:is_enabled(quorum_queues_v4) of
+        true when is_pid(Pid) andalso
+                  is_integer(Seq) ->
+            %% more compact format
+            #?ENQ_V2{seq = Seq, msg = Msg};
+        _ ->
+            #enqueue{pid = Pid, seq = Seq, msg = Msg}
+    end.
 
 -spec make_register_enqueuer(pid()) -> protocol().
 make_register_enqueuer(Pid) ->
@@ -2465,6 +2480,8 @@ can_immediately_deliver(#?STATE{service_queue = SQ,
 incr(I) ->
    I + 1.
 
+get_msg(#?ENQ_V2{msg = M}) ->
+    M;
 get_msg(#enqueue{msg = M}) ->
     M;
 get_msg(#requeue{msg = M}) ->

@@ -15,6 +15,8 @@
 
 -define(record_info(T,R),lists:zip(record_info(fields,T),tl(tuple_to_list(R)))).
 
+-define(MACHINE_VERSION, 4).
+
 %%%===================================================================
 %%% Common Test callbacks
 %%%===================================================================
@@ -944,7 +946,7 @@ upgrade(_Config) ->
                                            InMemoryLength,
                                            undefined,
                                            drop_head,
-                                           {?MODULE, banana, []}
+                                           undefined
                                           ),
                       ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops, Config)),
                               collect({log_size, length(O)},
@@ -1540,7 +1542,7 @@ max_length_prop(Conf0, Commands) ->
                         #{num_ready_messages := MsgReady} = rabbit_fifo:overview(S),
                         MsgReady =< MaxLen
                 end,
-    try run_log(test_init(Conf), Entries, Invariant, rabbit_fifo) of
+    try run_log(test_init(Conf), Entries, Invariant) of
         {_State, _Effects} ->
             true;
         _ ->
@@ -1586,7 +1588,7 @@ single_active_prop(Conf0, Commands, ValidateOrder) ->
                         map_size(Up) =< 1
                 end,
 
-    try run_log(test_init(Conf), Entries, Invariant, rabbit_fifo) of
+    try run_log(test_init(Conf), Entries, Invariant) of
         {_State, Effects} when ValidateOrder ->
             %% validate message ordering
             lists:foldl(fun ({send_msg, Pid, {delivery, Tag, Msgs}, ra_event},
@@ -1610,7 +1612,7 @@ messages_total_prop(Conf0, Commands) ->
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
     InitState = test_init(Conf),
-    run_log(InitState, Entries, messages_total_invariant(), rabbit_fifo),
+    run_log(InitState, Entries, messages_total_invariant()),
     true.
 
 messages_total_invariant() ->
@@ -1645,7 +1647,8 @@ simple_prefetch_prop(Conf0, Commands, WithCheckoutCancel) ->
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
     InitState = test_init(Conf),
-    run_log(InitState, Entries, simple_prefetch_invariant(WithCheckoutCancel), rabbit_fifo),
+    run_log(InitState, Entries,
+            simple_prefetch_invariant(WithCheckoutCancel)),
     true.
 
 simple_prefetch_invariant(WithCheckoutCancel) ->
@@ -1683,19 +1686,25 @@ valid_simple_prefetch(_, _, _, _, _) ->
     true.
 
 upgrade_prop(Conf0, Commands) ->
+    FromVersion = 3,
+    ToVersion = 4,
+    FromMod = rabbit_fifo:which_module(FromVersion),
+    ToMod = rabbit_fifo:which_module(ToVersion),
     Conf = Conf0#{release_cursor_interval => 0},
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
-    InitState = test_init_v1(Conf),
+    InitState = test_init_v(Conf, FromVersion),
     [begin
          {PreEntries, PostEntries} = lists:split(SplitPos, Entries),
          %% run log v1
-         {V1, _V1Effs} = run_log(InitState, PreEntries, fun (_) -> true end,
-                                 rabbit_fifo_v1),
+         {V1, _V1Effs} = run_log(InitState, PreEntries,
+                                 fun (_) -> true end, FromVersion),
 
          %% perform conversion
-         #rabbit_fifo{} = V2 = element(1, rabbit_fifo:apply(meta(length(PreEntries) + 1),
-                                                            {machine_version, 1, 2}, V1)),
+         #rabbit_fifo{} = V2 = element(1, rabbit_fifo:apply(
+                                            meta(length(PreEntries) + 1),
+                                            {machine_version, FromVersion, ToVersion},
+                                            V1)),
          %% assert invariants
          %%
          %% Note that we cannot test for num_messages because rabbit_fifo_v1:messages_total/1
@@ -1708,8 +1717,8 @@ upgrade_prop(Conf0, Commands) ->
                    enqueue_message_bytes,
                    checkout_message_bytes
                   ],
-         V1Overview = maps:with(Fields, rabbit_fifo_v1:overview(V1)),
-         V2Overview = maps:with(Fields, rabbit_fifo:overview(V2)),
+         V1Overview = maps:with(Fields, FromMod:overview(V1)),
+         V2Overview = maps:with(Fields, ToMod:overview(V2)),
          case V1Overview == V2Overview of
              true -> ok;
              false ->
@@ -1718,13 +1727,13 @@ upgrade_prop(Conf0, Commands) ->
                  ?assertEqual(V1Overview, V2Overview)
          end,
          %% check we can run the post entries from the converted state
-         run_log(V2, PostEntries)
+         run_log(V2, PostEntries, fun (_) -> true end, ToVersion)
      end || SplitPos <- lists:seq(1, length(Entries))],
 
-    {_, V1Effs} = run_log(InitState, Entries, fun (_) -> true end,
-                          rabbit_fifo_v1),
+    {_, V1Effs} = run_log(InitState, Entries, fun (_) -> true end, FromVersion),
     [begin
-         Res = rabbit_fifo:apply(meta(Idx + 1), {machine_version, 1, 2}, RCS) ,
+         Res = rabbit_fifo:apply(meta(Idx + 1),
+                                 {machine_version, FromVersion, ToVersion}, RCS) ,
          #rabbit_fifo{} = V2 = element(1, Res),
          %% assert invariants
          Fields = [num_ready_messages,
@@ -1734,8 +1743,8 @@ upgrade_prop(Conf0, Commands) ->
                    enqueue_message_bytes,
                    checkout_message_bytes
                   ],
-         V1Overview = maps:with(Fields, rabbit_fifo_v1:overview(RCS)),
-         V2Overview = maps:with(Fields, rabbit_fifo:overview(V2)),
+         V1Overview = maps:with(Fields, FromMod:overview(RCS)),
+         V2Overview = maps:with(Fields, ToMod:overview(V2)),
          case V1Overview == V2Overview of
              true -> ok;
              false ->
@@ -2082,7 +2091,7 @@ handle_op({enqueue, Pid, When, Data},
             Enqs = maps:update_with(Pid, fun (Seq) -> Seq + 1 end, 1, Enqs0),
             MsgSeq = maps:get(Pid, Enqs),
             {EnqSt, Msg} = Fun({EnqSt0, Data}),
-            Cmd = rabbit_fifo:make_enqueue(Pid, MsgSeq, Msg),
+            Cmd = make_enqueue(Pid, MsgSeq, Msg),
             case When of
                 enqueue ->
                     do_apply(Cmd, T#t{enqueuers = Enqs,
@@ -2258,7 +2267,7 @@ run_snapshot_test0(Conf0, Commands, Invariant) ->
     Conf = Conf0#{max_in_memory_length => 0},
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
-    {State0, Effects} = run_log(test_init(Conf), Entries, Invariant, rabbit_fifo),
+    {State0, Effects} = run_log(test_init(Conf), Entries, Invariant),
     State = rabbit_fifo:normalize(State0),
     Cursors = [ C || {release_cursor, _, _} = C <- Effects],
 
@@ -2268,7 +2277,7 @@ run_snapshot_test0(Conf0, Commands, Invariant) ->
                                        (_) -> false
                                     end, Entries),
          % ct:pal("release_cursor: ~b from ~w~n", [SnapIdx, element(1, hd_or(Filtered))]),
-         {S0, _} = run_log(SnapState, Filtered, Invariant, rabbit_fifo),
+         {S0, _} = run_log(SnapState, Filtered, Invariant),
          S = rabbit_fifo:normalize(S0),
          % assert log can be restored from any release cursor index
          case S of
@@ -2293,7 +2302,7 @@ run_upgrade_snapshot_test_v1_v2(Conf, Commands) ->
     Entries = lists:zip(Indexes, Commands),
     Invariant = fun(_) -> true end,
     %% Run the whole command log in v1 to emit release cursors.
-    {_, Effects} = run_log(test_init_v1(Conf), Entries, Invariant, rabbit_fifo_v1),
+    {_, Effects} = run_log(test_init_v1(Conf), Entries, Invariant, 1),
     Cursors = [ C || {release_cursor, _, _} = C <- Effects],
     [begin
          %% Drop all entries below and including the snapshot.
@@ -2305,11 +2314,11 @@ run_upgrade_snapshot_test_v1_v2(Conf, Commands) ->
          %% requires one additional Raft index for the conversion command from V1 to V2.
          FilteredV2 = lists:keymap(fun(Idx) -> Idx + 1 end, 1, FilteredV1),
          %% Recover in V1.
-         {StateV1, _} = run_log(SnapState, FilteredV1, Invariant, rabbit_fifo_v1),
+         {StateV1, _} = run_log(SnapState, FilteredV1, Invariant, 1),
          %% Perform conversion and recover in V2.
          Res = rabbit_fifo_v3:apply(meta(SnapIdx + 1), {machine_version, 1, 2}, SnapState),
          #rabbit_fifo{} = V2 = element(1, Res),
-         {StateV2, _} = run_log(V2, FilteredV2, Invariant, rabbit_fifo_v3, 2),
+         {StateV2, _} = run_log(V2, FilteredV2, Invariant, 2),
          %% Invariant: Recovering a V1 snapshot in V1 or V2 should end up in the same
          %% number of messages.
          Fields = [num_messages,
@@ -2339,8 +2348,7 @@ run_upgrade_snapshot_test_v2_to_v3(Conf, Commands) ->
     Entries = lists:zip(Indexes, Commands),
     Invariant = fun(_) -> true end,
     %% Run the whole command log in v2 to emit release cursors.
-    {_, Effects} = run_log(test_init(rabbit_fifo_v3, Conf), Entries, Invariant,
-                           rabbit_fifo, 2),
+    {_, Effects} = run_log(test_init(rabbit_fifo_v3, Conf), Entries, Invariant, 2),
     Cursors = [ C || {release_cursor, _, _} = C <- Effects],
     [begin
          %% Drop all entries below and including the snapshot.
@@ -2352,11 +2360,11 @@ run_upgrade_snapshot_test_v2_to_v3(Conf, Commands) ->
          %% requires one additional Raft index for the conversion command from V2 to V3.
          FilteredV3 = lists:keymap(fun(Idx) -> Idx + 1 end, 1, FilteredV2),
          %% Recover in V2.
-         {StateV2, _} = run_log(SnapState, FilteredV2, Invariant, rabbit_fifo, 2),
+         {StateV2, _} = run_log(SnapState, FilteredV2, Invariant, 2),
          %% Perform conversion and recover in V3.
          Res = rabbit_fifo:apply(meta(SnapIdx + 1), {machine_version, 2, 3}, SnapState),
          #rabbit_fifo{} = V3 = element(1, Res),
-         {StateV3, _} = run_log(V3, FilteredV3, Invariant, rabbit_fifo, 3),
+         {StateV3, _} = run_log(V3, FilteredV3, Invariant, 3),
          %% Invariant: Recovering a V2 snapshot in V2 or V3 should end up in the same
          %% number of messages given that no "return", "down", or "cancel consumer"
          %% Ra commands are used.
@@ -2391,12 +2399,13 @@ prefixes(Source, N, Acc) ->
     prefixes(Source, N+1, [X | Acc]).
 
 run_log(InitState, Entries) ->
-    run_log(InitState, Entries, fun(_) -> true end, rabbit_fifo).
+    run_log(InitState, Entries, fun(_) -> true end).
 
-run_log(InitState, Entries, InvariantFun, FifoMod) ->
-    run_log(InitState, Entries, InvariantFun, FifoMod, 3).
+run_log(InitState, Entries, InvariantFun) ->
+    run_log(InitState, Entries, InvariantFun, ?MACHINE_VERSION).
 
-run_log(InitState, Entries, InvariantFun, FifoMod, MachineVersion) ->
+run_log(InitState, Entries, InvariantFun, MachineVersion)
+  when is_integer(MachineVersion) ->
     Invariant = fun(E, S) ->
                        case InvariantFun(S) of
                            true -> ok;
@@ -2404,9 +2413,17 @@ run_log(InitState, Entries, InvariantFun, FifoMod, MachineVersion) ->
                                throw({invariant, E, S})
                        end
                 end,
+    FifoMod = rabbit_fifo:which_module(MachineVersion),
 
-    lists:foldl(fun ({Idx, E}, {Acc0, Efx0}) ->
-                        case FifoMod:apply(meta(Idx, MachineVersion), E, Acc0) of
+    lists:foldl(fun ({Idx, E0}, {Acc0, Efx0}) ->
+                        {Meta, E} = case E0 of
+                                        {M1, E1} when is_map(M1) ->
+                                            M0 = meta(Idx, MachineVersion),
+                                            {maps:merge(M0, M1), E1};
+                                        _ ->
+                                            {meta(Idx, MachineVersion), E0}
+                                    end,
+                        case FifoMod:apply(Meta, E, Acc0) of
                             {Acc, _, Efx} when is_list(Efx) ->
                                 Invariant(E, Acc),
                                 {Acc, Efx0 ++ Efx};
@@ -2431,6 +2448,9 @@ test_init(Mod, Conf) ->
 test_init_v1(Conf) ->
     test_init(rabbit_fifo_v1, Conf).
 
+test_init_v(Conf, Version) ->
+    test_init(rabbit_fifo:which_module(Version), Conf).
+
 meta(Idx) ->
     meta(Idx, 3).
 
@@ -2443,7 +2463,7 @@ make_checkout(Cid, Spec, Meta) ->
     rabbit_fifo:make_checkout(Cid, Spec, Meta).
 
 make_enqueue(Pid, Seq, Msg) ->
-    rabbit_fifo:make_enqueue(Pid, Seq, Msg).
+    rabbit_fifo_v3:make_enqueue(Pid, Seq, Msg).
 
 make_settle(Cid, MsgIds) ->
     rabbit_fifo:make_settle(Cid, MsgIds).

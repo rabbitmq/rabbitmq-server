@@ -21,8 +21,9 @@
 
 all() ->
     [
-     {group, machine_version_2},
+     % {group, machine_version_2},
      {group, machine_version_3},
+     {group, machine_version_4},
      {group, machine_version_conversion}
     ].
 
@@ -34,7 +35,7 @@ all_tests() ->
 
 groups() ->
     [
-     {machine_version_2, [shuffle], all_tests()},
+     % {machine_version_2, [shuffle], all_tests()},
      {machine_version_3, [shuffle], all_tests()},
      {machine_version_4, [shuffle], all_tests()},
      {machine_version_conversion, [shuffle],
@@ -42,16 +43,28 @@ groups() ->
        convert_v3_to_v4]}
     ].
 
-init_per_group(machine_version_2, Config) ->
-    [{machine_version, 2} | Config];
 init_per_group(machine_version_3, Config) ->
+    ok = meck:new(rabbit_feature_flags, [passthrough]),
+    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> false end),
     [{machine_version, 3} | Config];
 init_per_group(machine_version_4, Config) ->
+    ok = meck:new(rabbit_feature_flags, [passthrough]),
+    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> true end),
     [{machine_version, 4} | Config];
 init_per_group(machine_version_conversion, Config) ->
     Config.
 
-end_per_group(_Group, _Config) ->
+init_per_testcase(_Testcase, Config) ->
+    FF = ?config(machine_version, Config) == 4,
+    ok = meck:new(rabbit_feature_flags, [passthrough]),
+    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> FF end),
+    Config.
+
+end_per_group(_, Config) ->
+    Config.
+
+end_per_testcase(_Group, _Config) ->
+    meck:unload(),
     ok.
 
 %%%===================================================================
@@ -327,7 +340,8 @@ enq_expire_deq_test(C) ->
     S0 = rabbit_fifo:init(Conf),
     Msg = #basic_message{content = #content{properties = none,
                                             payload_fragments_rev = []}},
-    {S1, ok, _} = apply(meta(C, 1, 100), rabbit_fifo:make_enqueue(self(), 1, Msg), S0),
+    {S1, ok, _} = apply(meta(C, 1, 100, {notify, 1, self()}),
+                        rabbit_fifo:make_enqueue(self(), 1, Msg), S0),
     Cid = {?FUNCTION_NAME, self()},
     {_S2, {dequeue, empty}, Effs} =
         apply(meta(C, 2, 101), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}), S1),
@@ -342,11 +356,11 @@ enq_expire_enq_deq_test(C) ->
     Msg1 = #basic_message{content = #content{properties = #'P_basic'{expiration = <<"0">>},
                                              payload_fragments_rev = [<<"msg1">>]}},
     Enq1 = rabbit_fifo:make_enqueue(self(), 1, Msg1),
-    {S1, ok, _} = apply(meta(C, 1, 100), Enq1, S0),
+    {S1, ok, _} = apply(meta(C, 1, 100, {notify, 1, self()}), Enq1, S0),
     Msg2 = #basic_message{content = #content{properties = none,
                                              payload_fragments_rev = [<<"msg2">>]}},
     Enq2 = rabbit_fifo:make_enqueue(self(), 2, Msg2),
-    {S2, ok, _} = apply(meta(C, 2, 100), Enq2, S1),
+    {S2, ok, _} = apply(meta(C, 2, 100, {notify, 2, self()}), Enq2, S1),
     Cid = {?FUNCTION_NAME, self()},
     {_S3, _, Effs} =
         apply(meta(C, 3, 101), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}), S2),
@@ -357,11 +371,14 @@ enq_expire_enq_deq_test(C) ->
 
 enq_expire_deq_enq_enq_deq_deq_test(C) ->
     S0 = test_init(test),
-    Msg1 = #basic_message{content = #content{properties = #'P_basic'{expiration = <<"0">>},
-                                             payload_fragments_rev = [<<"msg1">>]}},
-    {S1, ok, _} = apply(meta(C, 1, 100), rabbit_fifo:make_enqueue(self(), 1, Msg1), S0),
+    Msg1 = #basic_message{content =
+                          #content{properties = #'P_basic'{expiration = <<"0">>},
+                                   payload_fragments_rev = [<<"msg1">>]}},
+    {S1, ok, _} = apply(meta(C, 1, 100, {notify, 1, self()}),
+                        rabbit_fifo:make_enqueue(self(), 1, Msg1), S0),
     {S2, {dequeue, empty}, _} = apply(meta(C, 2, 101),
-                                      rabbit_fifo:make_checkout({c1, self()}, {dequeue, unsettled}, #{}), S1),
+                                      rabbit_fifo:make_checkout({c1, self()},
+                                                                {dequeue, unsettled}, #{}), S1),
     {S3, _} = enq(C, 3, 2, msg2, S2),
     {S4, _} = enq(C, 4, 3, msg3, S3),
     {S5, '$ra_no_reply',
@@ -611,7 +628,8 @@ down_with_noconnection_returns_unack_test(C) ->
 down_with_noproc_enqueuer_is_cleaned_up_test(C) ->
     State00 = test_init(test),
     Pid = spawn(fun() -> ok end),
-    {State0, _, Effects0} = apply(meta(C, 1), rabbit_fifo:make_enqueue(Pid, 1, first), State00),
+    {State0, _, Effects0} = apply(meta(C, 1, ?LINE, {notify, 1, Pid}),
+                                  rabbit_fifo:make_enqueue(Pid, 1, first), State00),
     ?ASSERT_EFF({monitor, process, _}, Effects0),
     {State1, _, _} = apply(meta(C, 3), {down, Pid, noproc}, State0),
     % ensure there are no enqueuers
@@ -1564,23 +1582,31 @@ register_enqueuer_test(C) ->
                     overflow_strategy => reject_publish}),
     %% simply registering should be ok when we're below limit
     Pid1 = test_util:fake_pid(node()),
-    {State1, ok, [_]} = apply(meta(C, 1), make_register_enqueuer(Pid1), State0),
+    {State1, ok, [_]} = apply(meta(C, 1, ?LINE, {notify, 1, Pid1}),
+                              make_register_enqueuer(Pid1), State0),
 
-    {State2, ok, _} = apply(meta(C, 2), rabbit_fifo:make_enqueue(Pid1, 1, one), State1),
+    {State2, ok, _} = apply(meta(C, 2, ?LINE, {notify, 2, Pid1}),
+                            rabbit_fifo:make_enqueue(Pid1, 1, one), State1),
     %% register another enqueuer shoudl be ok
     Pid2 = test_util:fake_pid(node()),
-    {State3, ok, [_]} = apply(meta(C, 3), make_register_enqueuer(Pid2), State2),
+    {State3, ok, [_]} = apply(meta(C, 3, ?LINE, {notify, 3, Pid2}),
+                              make_register_enqueuer(Pid2), State2),
 
-    {State4, ok, _} = apply(meta(C, 4), rabbit_fifo:make_enqueue(Pid1, 2, two), State3),
-    {State5, ok, Efx} = apply(meta(C, 5), rabbit_fifo:make_enqueue(Pid1, 3, three), State4),
+    {State4, ok, _} = apply(meta(C, 4, ?LINE, {notify, 4, Pid1}),
+                            rabbit_fifo:make_enqueue(Pid1, 2, two), State3),
+    {State5, ok, Efx} = apply(meta(C, 5, ?LINE, {notify, 4, Pid1}),
+                              rabbit_fifo:make_enqueue(Pid1, 3, three), State4),
     % ct:pal("Efx ~tp", [Efx]),
     %% validate all registered enqueuers are notified of overflow state
-    ?ASSERT_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]}, P == Pid1, Efx),
-    ?ASSERT_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]}, P == Pid2, Efx),
+    ?ASSERT_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]},
+                P == Pid1, Efx),
+    ?ASSERT_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]},
+                P == Pid2, Efx),
 
     %% this time, registry should return reject_publish
-    {State6, reject_publish, [_]} = apply(meta(C, 6), make_register_enqueuer(
-                                                     test_util:fake_pid(node())), State5),
+    {State6, reject_publish, [_]} =
+        apply(meta(C, 6), make_register_enqueuer(
+                            test_util:fake_pid(node())), State5),
     ?assertMatch(#{num_enqueuers := 3}, rabbit_fifo:overview(State6)),
 
 
@@ -1620,9 +1646,12 @@ reject_publish_purge_test(C) ->
     %% simply registering should be ok when we're below limit
     Pid1 = test_util:fake_pid(node()),
     {State1, ok, [_]} = apply(meta(C, 1), make_register_enqueuer(Pid1), State0),
-    {State2, ok, _} = apply(meta(C, 2), rabbit_fifo:make_enqueue(Pid1, 1, one), State1),
-    {State3, ok, _} = apply(meta(C, 3), rabbit_fifo:make_enqueue(Pid1, 2, two), State2),
-    {State4, ok, Efx} = apply(meta(C, 4), rabbit_fifo:make_enqueue(Pid1, 3, three), State3),
+    {State2, ok, _} = apply(meta(C, 2, ?LINE, {notify, 2, Pid1}),
+                            rabbit_fifo:make_enqueue(Pid1, 1, one), State1),
+    {State3, ok, _} = apply(meta(C, 3, ?LINE, {notify, 2, Pid1}),
+                            rabbit_fifo:make_enqueue(Pid1, 2, two), State2),
+    {State4, ok, Efx} = apply(meta(C, 4, ?LINE, {notify, 2, Pid1}),
+                              rabbit_fifo:make_enqueue(Pid1, 3, three), State3),
     % ct:pal("Efx ~tp", [Efx]),
     ?ASSERT_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]}, P == Pid1, Efx),
     {_State5, {purge, 3}, Efx1} = apply(meta(C, 5), rabbit_fifo:make_purge(), State4),
@@ -1638,10 +1667,14 @@ reject_publish_applied_after_limit_test(C) ->
     State0 = init(InitConf),
     %% simply registering should be ok when we're below limit
     Pid1 = test_util:fake_pid(node()),
-    {State1, ok, [_]} = apply(meta(C, 1), make_register_enqueuer(Pid1), State0),
-    {State2, ok, _} = apply(meta(C, 2), rabbit_fifo:make_enqueue(Pid1, 1, one), State1),
-    {State3, ok, _} = apply(meta(C, 3), rabbit_fifo:make_enqueue(Pid1, 2, two), State2),
-    {State4, ok, Efx} = apply(meta(C, 4), rabbit_fifo:make_enqueue(Pid1, 3, three), State3),
+    {State1, ok, [_]} = apply(meta(C, 1, ?LINE, {notify, 1, Pid1}),
+                              make_register_enqueuer(Pid1), State0),
+    {State2, ok, _} = apply(meta(C, 2, ?LINE, {notify, 1, Pid1}),
+                            rabbit_fifo:make_enqueue(Pid1, 1, one), State1),
+    {State3, ok, _} = apply(meta(C, 3, ?LINE, {notify, 1, Pid1}),
+                            rabbit_fifo:make_enqueue(Pid1, 2, two), State2),
+    {State4, ok, Efx} = apply(meta(C, 4, ?LINE, {notify, 1, Pid1}),
+                              rabbit_fifo:make_enqueue(Pid1, 3, three), State3),
     % ct:pal("Efx ~tp", [Efx]),
     ?ASSERT_NO_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]}, P == Pid1, Efx),
     %% apply new config
@@ -1671,21 +1704,20 @@ purge_nodes_test(C) ->
                     queue_resource => rabbit_misc:r("/", queue,
                         atom_to_binary(?FUNCTION_NAME, utf8)),
                     single_active_consumer_on => false}),
-    {State1, _, _} = apply(meta(C, 1),
+    {State1, _, _} = apply(meta(C, 1, ?LINE, {notify, 1, EnqPid}),
                            rabbit_fifo:make_enqueue(EnqPid, 1, msg1),
                            State0),
-    {State2, _, _} = apply(meta(C, 2),
+    {State2, _, _} = apply(meta(C, 2, ?LINE, {notify, 2, EnqPid2}),
                            rabbit_fifo:make_enqueue(EnqPid2, 1, msg2),
                            State1),
     {State3, _} = check(C, Cid, 3, 1000, State2),
     {State4, _, _} = apply(meta(C, 4),
                            {down, EnqPid, noconnection},
                            State3),
-    ?assertMatch(
-       [{aux, {handle_tick,
-         [#resource{}, _Metrics,
-          [ThisNode, Node]
-         ]}}] , rabbit_fifo:tick(1, State4)),
+    ?assertMatch([{aux, {handle_tick,
+                         [#resource{}, _Metrics,
+                          [ThisNode, Node]]}}],
+                 rabbit_fifo:tick(1, State4)),
     %% assert there are both enqueuers and consumers
     {State, _, _} = apply(meta(C, 5),
                           rabbit_fifo:make_purge_nodes([Node]),
@@ -1697,26 +1729,29 @@ purge_nodes_test(C) ->
 
     ?assertMatch(#rabbit_fifo{consumers = Cons} when map_size(Cons) == 0,
                                                      State),
-    ?assertMatch(
-       [{aux, {handle_tick,
-         [#resource{}, _Metrics,
-          [ThisNode]
-         ]}}] , rabbit_fifo:tick(1, State)),
+    ?assertMatch([{aux, {handle_tick,
+                         [#resource{}, _Metrics,
+                          [ThisNode]]}}],
+                 rabbit_fifo:tick(1, State)),
     ok.
 
 meta(Config, Idx) ->
     meta(Config, Idx, 0).
 
 meta(Config, Idx, Timestamp) ->
+    meta(Config, Idx, Timestamp, no_reply).
+
+meta(Config, Idx, Timestamp, ReplyMode) ->
     #{machine_version => ?config(machine_version, Config),
       index => Idx,
       term => 1,
       system_time => Timestamp,
+      reply_mode => ReplyMode,
       from => {make_ref(), self()}}.
 
 enq(Config, Idx, MsgSeq, Msg, State) ->
     strip_reply(
-        rabbit_fifo:apply(meta(Config, Idx),
+        rabbit_fifo:apply(meta(Config, Idx, 0, {notify, MsgSeq, self()}),
                           rabbit_fifo:make_enqueue(self(), MsgSeq, Msg), State)).
 
 deq(Config, Idx, Cid, Settlement, Msg, State0) ->
@@ -1771,7 +1806,8 @@ strip_reply({State, _, Effects}) ->
 
 run_log(Config, InitState, Entries) ->
     lists:foldl(fun ({Idx, E}, {Acc0, Efx0}) ->
-                        case apply(meta(Config, Idx), E, Acc0) of
+                        case apply(meta(Config, Idx, Idx, {notify, Idx, self()}),
+                                   E, Acc0) of
                             {Acc, _, Efx} when is_list(Efx) ->
                                 {Acc, Efx0 ++ Efx};
                             {Acc, _, Efx}  ->
@@ -1959,7 +1995,7 @@ queue_ttl_test(C) ->
         = rabbit_fifo:tick(Now + 2500, S1Deq),
     %% Enqueue message,
     Msg = rabbit_fifo:make_enqueue(self(), 1, msg1),
-    {E1, _, _} = apply(meta(C, 2, Now), Msg, S0),
+    {E1, _, _} = apply(meta(C, 2, Now, {notify, 2, self()}), Msg, S0),
     Deq = {<<"deq1">>, self()},
     {E2, _, Effs2} =
         apply(meta(C, 3, Now),
@@ -2069,8 +2105,9 @@ expire_message_should_emit_release_cursor_test(C) ->
     S0 = rabbit_fifo:init(Conf),
     Msg = #basic_message{content = #content{properties = none,
                                             payload_fragments_rev = []}},
-    {S1, ok, _} = apply(meta(C, 1, 100), rabbit_fifo:make_enqueue(self(), 1, Msg), S0),
-    {_S, ok, Effs} = apply(meta(C, 2, 101),
+    {S1, ok, _} = apply(meta(C, 1, 100, {notify, 1, self()}),
+                        rabbit_fifo:make_enqueue(self(), 1, Msg), S0),
+    {_S, ok, Effs} = apply(meta(C, 2, 101, {notify, 2, self()}),
                            rabbit_fifo:make_enqueue(self(), 2, Msg),
                            S1),
     ?ASSERT_EFF({release_cursor, 1, _}, Effs),

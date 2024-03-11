@@ -341,10 +341,6 @@ checkout(ConsumerTag, NumUnsettled, CreditMode, Meta,
     case try_process_command(Servers, Cmd, State0) of
         {ok, Reply, Leader} ->
             LastMsgId = case Reply of
-                            ok ->
-                                %% this is the pre 3.11.1 / 3.10.9
-                                %% reply format
-                                -1;
                             {ok, #{num_checked_out := NumChecked,
                                    next_msg_id := NextMsgId}} ->
                                 case NumChecked > 0 of
