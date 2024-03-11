@@ -64,24 +64,32 @@
 -type consumer_id() :: {rabbit_types:ctag(), pid()}.
 %% The entity that receives messages. Uniquely identifies a consumer.
 
--type credit_mode() :: credited |
-                        %% machine_version 2
-                        simple_prefetch |
-                        %% machine_version 3
-                        {simple_prefetch, MaxCredit :: non_neg_integer()}.
+-type consumer_idx() :: ra:index().
+%% v4 can reference consumers by the raft index they were added at.
+%% The entity that receives messages. Uniquely identifies a consumer.
+-type consumer_key() :: consumer_id() | consumer_idx().
+
+-type credit_mode() ::
+    {credited, InitialDeliveryCount :: rabbit_queue_type:delivery_count()} |
+    %% machine_version 2
+    {simple_prefetch, MaxCredit :: non_neg_integer()}.
 %% determines how credit is replenished
 
 -type checkout_spec() :: {once | auto, Num :: non_neg_integer(),
-                          credit_mode()} |
+                          credited,
+                          simple_prefetch} |
+
                          {dequeue, settled | unsettled} |
-                         cancel.
+                         cancel |
+                         %% new v4 format
+                         {once | auto, credit_mode()}.
 
 -type consumer_meta() :: #{ack => boolean(),
                            username => binary(),
                            prefetch => non_neg_integer(),
-                           args => list(),
-                           %% set if and only if credit API v2 is in use
-                           initial_delivery_count => rabbit_queue_type:delivery_count()
+                           args => list()
+                           % %% set if and only if credit API v2 is in use
+                           % initial_delivery_count => rabbit_queue_type:delivery_count()
                           }.
 %% static meta data associated with a consumer
 
@@ -107,15 +115,15 @@
          %% simple_prefetch: credit is re-filled as deliveries are settled
          %% or returned.
          %% credited: credit can only be changed by receiving a consumer_credit
-         %% command: `{consumer_credit, ReceiverDeliveryCount, Credit}'
-         credit_mode :: credit_mode(), % part of snapshot data
+         %% command: `{credit, ReceiverDeliveryCount, Credit}'
+         credit_mode :: credited | credit_mode(),
          lifetime = once :: once | auto,
          priority = 0 :: non_neg_integer()}).
 
 -record(consumer,
         {cfg = #consumer_cfg{},
          status = up :: up | suspected_down | cancelled | waiting,
-         next_msg_id = 0 :: msg_id(), % part of snapshot data
+         next_msg_id = 0 :: msg_id(),
          checked_out = #{} :: #{msg_id() => msg()},
          %% max number of messages that can be sent
          %% decremented for each delivery
@@ -193,7 +201,7 @@
          release_cursors = lqueue:new() :: lqueue:lqueue({release_cursor,
                                                           ra:index(), #rabbit_fifo{}}),
          % consumers need to reflect consumer state at time of snapshot
-         consumers = #{} :: #{consumer_id() => consumer()},
+         consumers = #{} :: #{consumer_id() | ra:index() => consumer()},
          % consumers that require further service are queued here
          service_queue = priority_queue:new() :: priority_queue:q(),
          %% state for at-least-once dead-lettering
@@ -202,7 +210,7 @@
          msg_bytes_checkout = 0 :: non_neg_integer(),
          %% one is picked if active consumer is cancelled or dies
          %% used only when single active consumer is on
-         waiting_consumers = [] :: [{consumer_id(), consumer()}],
+         waiting_consumers = [] :: [{consumer_id() | ra:index(), consumer()}],
          last_active :: option(non_neg_integer()),
          msg_cache :: option({ra:index(), raw_msg()}),
          unused_2
