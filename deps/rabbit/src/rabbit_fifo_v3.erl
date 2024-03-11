@@ -174,16 +174,16 @@ update_config(Conf, State) ->
 
     LastActive = maps:get(created, Conf, undefined),
     State#?STATE{cfg = Cfg#cfg{release_cursor_interval = RCISpec,
-                                dead_letter_handler = DLH,
-                                become_leader_handler = BLH,
-                                overflow_strategy = Overflow,
-                                max_length = MaxLength,
-                                max_bytes = MaxBytes,
-                                consumer_strategy = ConsumerStrategy,
-                                delivery_limit = DeliveryLimit,
-                                expires = Expires,
-                                msg_ttl = MsgTTL},
-                  last_active = LastActive}.
+                               dead_letter_handler = DLH,
+                               become_leader_handler = BLH,
+                               overflow_strategy = Overflow,
+                               max_length = MaxLength,
+                               max_bytes = MaxBytes,
+                               consumer_strategy = ConsumerStrategy,
+                               delivery_limit = DeliveryLimit,
+                               expires = Expires,
+                               msg_ttl = MsgTTL},
+                 last_active = LastActive}.
 
 % msg_ids are scoped per consumer
 % ra_indexes holds all raft indexes for enqueues currently on queue

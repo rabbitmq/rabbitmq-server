@@ -874,7 +874,7 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
     ConsumerTag = quorum_ctag(ConsumerTag0),
     %% consumer info is used to describe the consumer properties
     AckRequired = not NoAck,
-    {CreditMode, EffectivePrefetch, DeclaredPrefetch, ConsumerMeta0} =
+    {CreditMode, DeclaredPrefetch, ConsumerMeta0} =
         case Mode of
             {credited, C} ->
                 Meta = if C =:= credit_api_v1 ->
@@ -882,23 +882,22 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                           is_integer(C) ->
                               #{initial_delivery_count => C}
                        end,
-                {credited, 0, 0, Meta};
+                {credited, 0, Meta};
             {simple_prefetch = M, Declared} ->
                 Effective = case Declared of
                                 0 -> ?UNLIMITED_PREFETCH_COUNT;
                                 _ -> Declared
                             end,
-                {M, Effective, Declared, #{}}
+                {{M, Effective}, Declared, #{}}
         end,
-    ConsumerMeta = maps:merge(
-                     ConsumerMeta0,
-                     #{ack => AckRequired,
-                       prefetch => DeclaredPrefetch,
-                       args => Args,
-                       username => ActingUser}),
-    {ok, QState} = rabbit_fifo_client:checkout(ConsumerTag, EffectivePrefetch,
-                                               CreditMode, ConsumerMeta,
-                                               QState0),
+    ConsumerMeta = maps:merge(ConsumerMeta0,
+                              #{ack => AckRequired,
+                                prefetch => DeclaredPrefetch,
+                                args => Args,
+                                username => ActingUser}),
+    {ok, _Infos, QState} = rabbit_fifo_client:checkout(ConsumerTag,
+                                                       CreditMode, ConsumerMeta,
+                                                       QState0),
     case single_active_consumer_on(Q) of
         true ->
             %% get the leader from state

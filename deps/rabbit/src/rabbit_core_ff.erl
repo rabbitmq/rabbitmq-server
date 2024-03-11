@@ -192,3 +192,10 @@
       doc_url       => "https://www.rabbitmq.com/docs/clustering#replica-placement",
       stability     => stable
      }}).
+
+-rabbit_feature_flag(
+   {quorum_queues_v4,
+    #{desc => "Unlocks QQ v4 goodies",
+      stability => stable,
+      depends_on => [quorum_queue]
+     }}).

@@ -14,7 +14,7 @@
 -export([
          init/1,
          init/2,
-         checkout/5,
+         checkout/4,
          cancel_checkout/2,
          enqueue/3,
          enqueue/4,
@@ -41,10 +41,13 @@
 
 -type seq() :: non_neg_integer().
 
--record(consumer, {last_msg_id :: seq() | -1 | undefined,
+-record(consumer, {key :: rabbit_fifo:consumer_key(),
+                   % status = up :: up | cancelled,
+                   last_msg_id :: seq() | -1 | undefined,
                    ack = false :: boolean(),
                    %% Remove this field when feature flag credit_api_v2 becomes required.
-                   delivery_count :: {credit_api_v1, rabbit_queue_type:delivery_count()} | credit_api_v2
+                   delivery_count :: {credit_api_v1, rabbit_queue_type:delivery_count()} |
+                                     credit_api_v2
                   }).
 
 -record(cfg, {servers = [] :: [ra:server_id()],
@@ -59,12 +62,11 @@
                 next_enqueue_seq = 1 :: seq(),
                 %% indicates that we've exceeded the soft limit
                 slow = false :: boolean(),
-                unsent_commands = #{} :: #{rabbit_fifo:consumer_id() =>
+                unsent_commands = #{} :: #{rabbit_fifo:consumer_key() =>
                                            {[seq()], [seq()], [seq()]}},
                 pending = #{} :: #{seq() =>
                                    {term(), rabbit_fifo:command()}},
-                consumer_deliveries = #{} :: #{rabbit_types:ctag() =>
-                                               #consumer{}},
+                consumers = #{} :: #{rabbit_types:ctag() => #consumer{}},
                 timer_state :: term()
                }).
 
@@ -194,6 +196,8 @@ enqueue(QName, Msg, State) ->
 dequeue(QueueName, ConsumerTag, Settlement,
         #state{cfg = #cfg{timeout = Timeout}} = State0) ->
     ServerId = pick_server(State0),
+    %% dequeue never really needs to assign a consumer key so we just use
+    %% the old ConsumerId format here
     ConsumerId = consumer_id(ConsumerTag),
     case ra:process_command(ServerId,
                             rabbit_fifo:make_checkout(ConsumerId,
@@ -236,15 +240,16 @@ add_delivery_count_header(Msg, Count) ->
 -spec settle(rabbit_types:ctag(), [rabbit_fifo:msg_id()], state()) ->
     {state(), list()}.
 settle(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
+    ConsumerKey = consumer_key(ConsumerTag, State0),
     ServerId = pick_server(State0),
-    Cmd = rabbit_fifo:make_settle(consumer_id(ConsumerTag), MsgIds),
+    Cmd = rabbit_fifo:make_settle(ConsumerKey, MsgIds),
     {send_command(ServerId, undefined, Cmd, normal, State0), []};
 settle(ConsumerTag, [_|_] = MsgIds,
        #state{unsent_commands = Unsent0} = State0) ->
-    ConsumerId = consumer_id(ConsumerTag),
+    ConsumerKey = consumer_key(ConsumerTag, State0),
     %% we've reached the soft limit so will stash the command to be
     %% sent once we have seen enough notifications
-    Unsent = maps:update_with(ConsumerId,
+    Unsent = maps:update_with(ConsumerKey,
                               fun ({Settles, Returns, Discards}) ->
                                       %% MsgIds has fewer elements than Settles.
                                       %% Therefore put it on the left side of the ++ operator.
@@ -264,16 +269,16 @@ settle(ConsumerTag, [_|_] = MsgIds,
 -spec return(rabbit_types:ctag(), [rabbit_fifo:msg_id()], state()) ->
     {state(), list()}.
 return(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
+    ConsumerKey = consumer_key(ConsumerTag, State0),
     ServerId = pick_server(State0),
-    % TODO: make rabbit_fifo return support lists of message ids
-    Cmd = rabbit_fifo:make_return(consumer_id(ConsumerTag), MsgIds),
+    Cmd = rabbit_fifo:make_return(ConsumerKey, MsgIds),
     {send_command(ServerId, undefined, Cmd, normal, State0), []};
 return(ConsumerTag, [_|_] = MsgIds,
        #state{unsent_commands = Unsent0} = State0) ->
-    ConsumerId = consumer_id(ConsumerTag),
+    ConsumerKey = consumer_key(ConsumerTag, State0),
     %% we've reached the soft limit so will stash the command to be
     %% sent once we have seen enough notifications
-    Unsent = maps:update_with(ConsumerId,
+    Unsent = maps:update_with(ConsumerKey,
                               fun ({Settles, Returns, Discards}) ->
                                       {Settles, Returns ++ MsgIds, Discards}
                               end, {[], MsgIds, []}, Unsent0),
@@ -289,15 +294,16 @@ return(ConsumerTag, [_|_] = MsgIds,
 -spec discard(rabbit_types:ctag(), [rabbit_fifo:msg_id()], state()) ->
     {state(), list()}.
 discard(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
+    ConsumerKey = consumer_key(ConsumerTag, State0),
     ServerId = pick_server(State0),
-    Cmd = rabbit_fifo:make_discard(consumer_id(ConsumerTag), MsgIds),
+    Cmd = rabbit_fifo:make_discard(ConsumerKey, MsgIds),
     {send_command(ServerId, undefined, Cmd, normal, State0), []};
 discard(ConsumerTag, [_|_] = MsgIds,
         #state{unsent_commands = Unsent0} = State0) ->
-    ConsumerId = consumer_id(ConsumerTag),
+    ConsumerKey = consumer_key(ConsumerTag, State0),
     %% we've reached the soft limit so will stash the command to be
     %% sent once we have seen enough notifications
-    Unsent = maps:update_with(ConsumerId,
+    Unsent = maps:update_with(ConsumerKey,
                               fun ({Settles, Returns, Discards}) ->
                                       {Settles, Returns, Discards ++ MsgIds}
                               end, {[], [], MsgIds}, Unsent0),
@@ -320,14 +326,21 @@ discard(ConsumerTag, [_|_] = MsgIds,
 %%
 %% @returns `{ok, State}' or `{error | timeout, term()}'
 -spec checkout(rabbit_types:ctag(),
-               NumUnsettled :: non_neg_integer(),
                CreditMode :: rabbit_fifo:credit_mode(),
                Meta :: rabbit_fifo:consumer_meta(),
-               state()) -> {ok, state()} | {error | timeout, term()}.
-checkout(ConsumerTag, NumUnsettled, CreditMode, Meta,
-         #state{consumer_deliveries = CDels0} = State0) ->
+               state()) ->
+    {ok, ConsumerInfos :: map(), state()} |
+    {error | timeout, term()}.
+checkout(ConsumerTag, CreditMode, Meta,
+         #state{consumers = CDels0} = State0)
+  when is_binary(ConsumerTag) ->
     Servers = sorted_servers(State0),
-    ConsumerId = {ConsumerTag, self()},
+    ConsumerId = consumer_id(ConsumerTag),
+    NumUnsettled = case CreditMode of
+                       credited -> 0;
+                       {simple_prefetch, Num} ->
+                           Num
+                   end,
     Cmd = rabbit_fifo:make_checkout(ConsumerId,
                                     {auto, NumUnsettled, CreditMode},
                                     Meta),
@@ -335,14 +348,10 @@ checkout(ConsumerTag, NumUnsettled, CreditMode, Meta,
     Ack = maps:get(ack, Meta, true),
 
     case try_process_command(Servers, Cmd, State0) of
-        {ok, Reply, Leader} ->
+        {ok, {ok, Reply}, Leader} ->
             LastMsgId = case Reply of
-                            ok ->
-                                %% this is the pre 3.11.1 / 3.10.9
-                                %% reply format
-                                -1;
-                            {ok, #{num_checked_out := NumChecked,
-                                   next_msg_id := NextMsgId}} ->
+                            #{num_checked_out := NumChecked,
+                              next_msg_id := NextMsgId} ->
                                 case NumChecked > 0 of
                                     true ->
                                         %% we cannot know if the pending messages
@@ -360,15 +369,17 @@ checkout(ConsumerTag, NumUnsettled, CreditMode, Meta,
                                 true -> credit_api_v2;
                                 false -> {credit_api_v1, 0}
                             end,
+            ConsumerKey = maps:get(key, Reply, ConsumerId),
             SDels = maps:update_with(
                       ConsumerTag,
                       fun (C) -> C#consumer{ack = Ack} end,
-                      #consumer{last_msg_id = LastMsgId,
+                      #consumer{key = ConsumerKey,
+                                last_msg_id = LastMsgId,
                                 ack = Ack,
                                 delivery_count = DeliveryCount},
                       CDels0),
-            {ok, State0#state{leader = Leader,
-                              consumer_deliveries = SDels}};
+            {ok, Reply, State0#state{leader = Leader,
+                                     consumers = SDels}};
         Err ->
             Err
     end.
@@ -392,7 +403,7 @@ query_single_active_consumer(#state{leader = Leader}) ->
                 state()) ->
     {state(), rabbit_queue_type:actions()}.
 credit_v1(ConsumerTag, Credit, Drain,
-          State = #state{consumer_deliveries = CDels}) ->
+          #state{consumers = CDels} = State) ->
     #consumer{delivery_count = {credit_api_v1, Count}} = maps:get(ConsumerTag, CDels),
     credit(ConsumerTag, Count, Credit, Drain, State).
 
@@ -412,9 +423,9 @@ credit_v1(ConsumerTag, Credit, Drain,
              state()) ->
     {state(), rabbit_queue_type:actions()}.
 credit(ConsumerTag, DeliveryCount, Credit, Drain, State) ->
-    ConsumerId = consumer_id(ConsumerTag),
+    ConsumerKey = consumer_key(ConsumerTag, State),
     ServerId = pick_server(State),
-    Cmd = rabbit_fifo:make_credit(ConsumerId, Credit, DeliveryCount, Drain),
+    Cmd = rabbit_fifo:make_credit(ConsumerKey, Credit, DeliveryCount, Drain),
     {send_command(ServerId, undefined, Cmd, normal, State), []}.
 
 %% @doc Cancels a checkout with the rabbit_fifo queue  for the consumer tag
@@ -428,16 +439,26 @@ credit(ConsumerTag, DeliveryCount, Credit, Drain, State) ->
 %% @returns `{ok, State}' or `{error | timeout, term()}'
 -spec cancel_checkout(rabbit_types:ctag(), state()) ->
     {ok, state()} | {error | timeout, term()}.
-cancel_checkout(ConsumerTag, #state{consumer_deliveries = CDels} = State0) ->
-    Servers = sorted_servers(State0),
-    ConsumerId = {ConsumerTag, self()},
-    Cmd = rabbit_fifo:make_checkout(ConsumerId, cancel, #{}),
-    State = State0#state{consumer_deliveries = maps:remove(ConsumerTag, CDels)},
-    case try_process_command(Servers, Cmd, State) of
-        {ok, _, Leader} ->
-            {ok, State#state{leader = Leader}};
-        Err ->
-            Err
+cancel_checkout(ConsumerTag, #state{consumers = Consumers} = State0) ->
+    case Consumers of
+        #{ConsumerTag := #consumer{}} ->
+            Servers = sorted_servers(State0),
+            ConsumerId = {ConsumerTag, self()},
+            %% TODO: send any pending commands for consumer
+            %% checkout always uses the ConsumerId, rather than the key
+            Cmd = rabbit_fifo:make_checkout(ConsumerId, cancel, #{}),
+            State = State0#state{consumers = maps:remove(ConsumerTag, Consumers)},
+            case try_process_command(Servers, Cmd, State0) of
+                {ok, _, Leader} ->
+                    {ok, State#state{leader = Leader}};
+                Err ->
+                    Err
+            end;
+        _ ->
+            %% TODO: when we implement the `delete' checkout spec we could
+            %% fallback to that to make sure there is little chance a consumer
+            %% sticks around in the machine
+            {ok, State0}
     end.
 
 %% @doc Purges all the messages from a rabbit_fifo queue and returns the number
@@ -713,7 +734,7 @@ maybe_auto_ack(false, {deliver, Tag, _Ack, Msgs} = Deliver, State0) ->
     {ok, State, [Deliver] ++ Actions}.
 
 handle_delivery(QName, Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs},
-                #state{consumer_deliveries = CDels0} = State0)
+                #state{consumers = CDels0} = State0)
   when is_map_key(Tag, CDels0) ->
     QRef = qref(Leader),
     {LastId, _} = lists:last(IdMsgs),
@@ -729,7 +750,7 @@ handle_delivery(QName, Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs},
             %% In this case we can't reliably know what the next expected message
             %% id should be so have to accept whatever message comes next
             maybe_auto_ack(Ack, Del,
-                           State0#state{consumer_deliveries =
+                           State0#state{consumers =
                                         update_consumer(Tag, LastId,
                                                         length(IdMsgs), C,
                                                         CDels0)});
@@ -749,7 +770,7 @@ handle_delivery(QName, Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs},
                     XDel = {deliver, Tag, Ack, transform_msgs(QName, QRef,
                                                               Missing ++ IdMsgs)},
                     maybe_auto_ack(Ack, XDel,
-                                   State0#state{consumer_deliveries =
+                                   State0#state{consumers =
                                                     update_consumer(Tag, LastId,
                                                                     length(IdMsgs) + NumMissing,
                                                                     C, CDels0)})
@@ -765,14 +786,14 @@ handle_delivery(QName, Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs},
         C when FstId =:= 0 ->
             % the very first delivery
             maybe_auto_ack(Ack, Del,
-                           State0#state{consumer_deliveries =
+                           State0#state{consumers =
                                         update_consumer(Tag, LastId,
                                                         length(IdMsgs),
                                                         C#consumer{last_msg_id = LastId},
                                                         CDels0)})
     end;
 handle_delivery(_QName, _Leader, {delivery, Tag, [_ | _] = IdMsgs},
-                #state{consumer_deliveries = CDels0} = State0)
+                #state{consumers = CDels0} = State0)
   when not is_map_key(Tag, CDels0) ->
     %% Note:
     %% https://github.com/rabbitmq/rabbitmq-server/issues/3729
@@ -805,17 +826,17 @@ update_consumer(Tag, LastId, DelCntIncr, Consumer, Consumers) ->
                                   delivery_count = D},
                 Consumers).
 
-add_delivery_count(DelCntIncr, Tag, #state{consumer_deliveries = CDels0} = State) ->
+add_delivery_count(DelCntIncr, Tag, #state{consumers = CDels0} = State) ->
     Con = #consumer{last_msg_id = LastMsgId} = maps:get(Tag, CDels0),
     CDels = update_consumer(Tag, LastMsgId, DelCntIncr, Con, CDels0),
-    State#state{consumer_deliveries = CDels}.
+    State#state{consumers = CDels}.
 
 get_missing_deliveries(State, From, To, ConsumerTag) ->
     %% find local server
-    ConsumerId = consumer_id(ConsumerTag),
-    rabbit_log:debug("get_missing_deliveries for ~w from ~b to ~b",
-                     [ConsumerId, From, To]),
-    Cmd = {get_checked_out, ConsumerId, lists:seq(From, To)},
+    ConsumerKey = consumer_key(ConsumerTag, State),
+    rabbit_log:debug("get_missing_deliveries for consumer '~s' from ~b to ~b",
+                     [ConsumerTag, From, To]),
+    Cmd = {get_checked_out, ConsumerKey, lists:seq(From, To)},
     ServerId = find_local_or_leader(State),
     case ra:aux_command(ServerId, Cmd) of
         {ok, Missing} ->
@@ -843,7 +864,16 @@ sorted_servers(#state{leader = Leader,
                       cfg = #cfg{servers = Servers}}) ->
     [Leader | lists:delete(Leader, Servers)].
 
-consumer_id(ConsumerTag) ->
+consumer_key(ConsumerTag, #state{consumers = Consumers}) ->
+    case Consumers of
+        #{ConsumerTag := #consumer{key = Key}} ->
+            Key;
+        _ ->
+            %% if no consumer found fall back to using the ConsumerId
+            consumer_id(ConsumerTag)
+    end.
+
+consumer_id(ConsumerTag) when is_binary(ConsumerTag) ->
     {ConsumerTag, self()}.
 
 send_command(Server, Correlation, Command, _Priority,
