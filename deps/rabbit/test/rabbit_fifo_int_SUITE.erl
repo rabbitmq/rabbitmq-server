@@ -66,6 +66,8 @@ init_per_testcase(TestCase, Config) ->
     meck:expect(rabbit_quorum_queue, file_handle_leader_reservation, fun (_) -> ok end),
     meck:expect(rabbit_quorum_queue, file_handle_other_reservation, fun () -> ok end),
     meck:expect(rabbit_quorum_queue, cancel_consumer_handler, fun (_, _) -> ok end),
+    meck:new(rabbit_feature_flags, []),
+    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> true end),
     ra_server_sup_sup:remove_all(?RA_SYSTEM),
     ServerName2 = list_to_atom(atom_to_list(TestCase) ++ "2"),
     ServerName3 = list_to_atom(atom_to_list(TestCase) ++ "3"),
