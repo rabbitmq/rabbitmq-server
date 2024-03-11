@@ -61,7 +61,8 @@ groups() ->
        connection_should_be_closed_on_token_expiry,
        should_receive_metadata_update_after_update_secret,
        store_offset_requires_read_access,
-       offset_lag_calculation
+       offset_lag_calculation,
+       test_super_stream_duplicate_partitions
       ]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
@@ -390,6 +391,27 @@ test_super_stream_creation_deletion(Config) ->
     {Cmd5, _} = receive_commands(T, S, C),
     ?assertMatch({response, 1, {create_super_stream, ?RESPONSE_CODE_PRECONDITION_FAILED}},
                  Cmd5),
+
+    test_close(T, S, C),
+    closed = wait_for_socket_close(T, S, 10),
+    ok.
+
+test_super_stream_duplicate_partitions(Config) ->
+    T = gen_tcp,
+    Port = get_port(T, Config),
+    Opts = get_opts(T),
+    {ok, S} = T:connect("localhost", Port, Opts),
+    C = rabbit_stream_core:init(0),
+    test_peer_properties(T, S, C),
+    test_authenticate(T, S, C),
+
+    Ss = atom_to_binary(?FUNCTION_NAME, utf8),
+    Partitions = [<<"same-name">>, <<"same-name">>],
+    SsCreationFrame = request({create_super_stream, Ss, Partitions, [<<"1">>, <<"2">>], #{}}),
+    ok = T:send(S, SsCreationFrame),
+    {Cmd1, _} = receive_commands(T, S, C),
+    ?assertMatch({response, 1, {create_super_stream, ?RESPONSE_CODE_PRECONDITION_FAILED}},
+                 Cmd1),
 
     test_close(T, S, C),
     closed = wait_for_socket_close(T, S, 10),
