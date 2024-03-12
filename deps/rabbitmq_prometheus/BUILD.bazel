@@ -52,6 +52,7 @@ rabbitmq_app(
     priv = [":priv"],
     deps = [
         "//deps/rabbit:erlang_app",
+        "//deps/rabbitmq_federation:erlang_app",
         "//deps/rabbitmq_management_agent:erlang_app",
         "//deps/rabbitmq_web_dispatch:erlang_app",
         "@accept//:erlang_app",
@@ -81,6 +82,7 @@ dialyze(
 
 eunit(
     name = "eunit",
+    compiled_suites = [":test_rabbitmq_prometheus_collector_test_proxy_beam"],
     target = ":test_erlang_app",
 )
 
@@ -95,6 +97,15 @@ rabbitmq_integration_suite(
     name = "rabbit_prometheus_http_SUITE",
     size = "medium",
     flaky = True,
+)
+
+rabbitmq_integration_suite(
+    name = "prometheus_rabbitmq_federation_collector_SUITE",
+    size = "small",
+    additional_beam = [
+        "//deps/rabbitmq_federation:test/rabbit_federation_test_util.beam",  #keep
+        "test/rabbitmq_prometheus_collector_test_proxy.beam",  #keep
+    ],
 )
 
 assert_suites()
