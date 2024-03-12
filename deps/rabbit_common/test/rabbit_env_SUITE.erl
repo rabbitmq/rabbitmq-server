@@ -383,7 +383,8 @@ check_values_from_reachable_remote_node(Config) ->
 
     try
         persistent_term:put({rabbit_env, os_type}, {unix, undefined}),
-        UnixContext = rabbit_env:get_context(Node),
+        TakeFromRemoteNode = {Node, 120000},
+        UnixContext = rabbit_env:get_context(TakeFromRemoteNode),
 
         persistent_term:erase({rabbit_env, os_type}),
 
@@ -447,7 +448,7 @@ check_values_from_reachable_remote_node(Config) ->
              erlang_dist_tcp_port => 25672,
              feature_flags_file => FeatureFlagsFile,
              forced_feature_flags_on_init => RFFValue,
-             from_remote_node => {Node, 10000},
+             from_remote_node => TakeFromRemoteNode,
              interactive_shell => false,
              keep_pid_file_on_exit => false,
              log_base_dir => "/var/log/rabbitmq",
