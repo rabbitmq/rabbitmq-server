@@ -2131,7 +2131,8 @@ update_consumer(Meta, {Tag, Pid} = ConsumerId, ConsumerMeta,
                         consumers = Cons0} = State0) ->
     Consumer = case Cons0 of
                    #{ConsumerId := #consumer{} = Consumer0} ->
-                       merge_consumer(Meta, Consumer0, ConsumerMeta, Spec, Priority);
+                       merge_consumer(Meta, Consumer0, ConsumerMeta,
+                                      Spec, Priority);
                    _ ->
                        Mode = credit_mode(Meta, Credit, Mode0),
                        #consumer{cfg = #consumer_cfg{tag = Tag,

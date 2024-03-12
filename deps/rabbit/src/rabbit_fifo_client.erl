@@ -14,7 +14,7 @@
 -export([
          init/1,
          init/2,
-         checkout/5,
+         checkout/4,
          cancel_checkout/2,
          enqueue/3,
          enqueue/4,
@@ -324,14 +324,18 @@ discard(ConsumerTag, [_|_] = MsgIds,
 %%
 %% @returns `{ok, State}' or `{error | timeout, term()}'
 -spec checkout(rabbit_types:ctag(),
-               NumUnsettled :: non_neg_integer(),
                CreditMode :: rabbit_fifo:credit_mode(),
                Meta :: rabbit_fifo:consumer_meta(),
                state()) -> {ok, state()} | {error | timeout, term()}.
-checkout(ConsumerTag, NumUnsettled, CreditMode, Meta,
+checkout(ConsumerTag, CreditMode, Meta,
          #state{consumer_deliveries = CDels0} = State0) ->
     Servers = sorted_servers(State0),
     ConsumerId = {ConsumerTag, self()},
+    NumUnsettled = case CreditMode of
+                       credited -> 0;
+                       {simple_prefetch, Num} ->
+                           Num
+                   end,
     Cmd = rabbit_fifo:make_checkout(ConsumerId,
                                     {auto, NumUnsettled, CreditMode},
                                     Meta),
