@@ -201,6 +201,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         hdrs = ["include/rabbit_federation.hrl"],
         app_name = "rabbitmq_federation",
         erlc_opts = "//:test_erlc_opts",
+        visibility = ["//visibility:public"],
         deps = ["//deps/amqp_client:erlang_app"],
     )
     erlang_bytecode(

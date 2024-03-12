@@ -258,6 +258,12 @@ These metrics are specific to the stream protocol.
 | rabbitmq_raft_log_snapshot_index           | Raft log snapshot index                 |
 | rabbitmq_raft_term_total                   | Current Raft term number                |
 
+### Federation
+
+| Metric                                     | Description                                    |
+| ---                                        | ---                                            |
+| rabbitmq_federation_links                 | Federations Links count grouped by Link status |
+
 ## Telemetry
 
 | Metric                              | Description              |
