@@ -82,7 +82,7 @@ dialyze(
 
 eunit(
     name = "eunit",
-    compiled_suites = [":test_rabbitmq_prometheus_collector_test_proxy_beam"],
+    compiled_suites = [":rabbitmq_prometheus_collector_test_proxy_beam_files"],  #keep
     target = ":test_erlang_app",
 )
 
