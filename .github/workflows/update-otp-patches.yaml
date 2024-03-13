@@ -47,13 +47,11 @@ jobs:
           name: '26_1'
           branch: main
           labels: |
-            backport-v3.13.x
             backport-v3.12.x
         - erlang_version: "26.2"
           name: '26_2'
           branch: main
           labels: |
-            backport-v3.13.x
             backport-v3.12.x
     timeout-minutes: 10
     env:

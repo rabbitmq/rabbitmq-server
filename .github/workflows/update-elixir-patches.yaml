@@ -86,8 +86,8 @@ jobs:
         commit-message: |
           Adopt elixir ${{ steps.fetch-version.outputs.VERSION }}
         labels: |
-          backport-v3.13.x
           backport-v3.12.x
           backport-v3.11.x
+          backport-v3.10.x
         branch: ${{ env.branch }}
         delete-branch: true

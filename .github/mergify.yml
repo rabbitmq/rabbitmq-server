@@ -13,24 +13,13 @@ pull_request_rules:
       label:
         add:
           - make
-  - name: Automatically backport to v3.13.x based on label
-    conditions:
-      - base=main
-      - label=backport-v3.13.x
-      - label!=backport-v3.12.x
-    actions:
-      backport:
-        branches:
-          - v3.13.x
-        labels:
-          - backport-v3.12.x
-        assignees:
-          - "{{ author }}"
   - name: Automatically backport to v3.12.x based on label
     conditions:
       - base=main
       - label=backport-v3.12.x
       - label!=backport-v3.11.x
+      - label!=backport-v3.10.x
+      - label!=backport-v3.9.x
     actions:
       backport:
         branches:
@@ -42,6 +31,8 @@ pull_request_rules:
       - base=main
       - label=backport-v3.12.x
       - label=backport-v3.11.x
+      - label!=backport-v3.10.x
+      - label!=backport-v3.9.x
     actions:
       backport:
         branches:
@@ -50,18 +41,20 @@ pull_request_rules:
           - backport-v3.11.x
         assignees:
           - "{{ author }}"
-  - name: Automatically backport to v3.13.x, v3.12.x, v3.11.x based on labels
+  - name: Automatically backport to v3.12.x, v3.11.x & v3.10.x based on labels
     conditions:
       - base=main
-      - label=backport-v3.13.x
       - label=backport-v3.12.x
       - label=backport-v3.11.x
+      - label=backport-v3.10.x
+      - label!=backport-v3.9.x
     actions:
       backport:
         branches:
           - v3.12.x
         labels:
           - backport-v3.11.x
+          - backport-v3.10.x
         assignees:
           - "{{ author }}"
   - name: Automatically backport to v3.12.x, v3.11.x, v3.10.x & v3.9.x based on labels
@@ -69,6 +62,8 @@ pull_request_rules:
       - base=main
       - label=backport-v3.12.x
       - label=backport-v3.11.x
+      - label=backport-v3.10.x
+      - label=backport-v3.9.x
     actions:
       backport:
         branches:
@@ -83,6 +78,8 @@ pull_request_rules:
     conditions:
       - base=v3.12.x
       - label=backport-v3.11.x
+      - label!=backport-v3.10.x
+      - label!=backport-v3.9.x
     actions:
       backport:
         branches:
@@ -93,19 +90,62 @@ pull_request_rules:
     conditions:
       - base=v3.12.x
       - label=backport-v3.11.x
+      - label=backport-v3.10.x
+      - label!=backport-v3.9.x
     actions:
       backport:
         branches:
           - v3.11.x
+        labels:
+          - backport-v3.10.x
         assignees:
           - "{{ author }}"
-  - name: Automatically backport to v3.11.x based on labels
+  - name: Automatically backport to v3.11.x, v3.10.x & v3.9.x based on labels
     conditions:
       - base=v3.12.x
       - label=backport-v3.11.x
+      - label=backport-v3.10.x
+      - label=backport-v3.9.x
     actions:
       backport:
         branches:
           - v3.11.x
+        labels:
+          - backport-v3.10.x
+          - backport-v3.9.x
+        assignees:
+          - "{{ author }}"
+  - name: Automatically backport to v3.10.x based on label
+    conditions:
+      - base=v3.11.x
+      - label=backport-v3.10.x
+      - label!=backport-v3.9.x
+    actions:
+      backport:
+        branches:
+          - v3.10.x
+        assignees:
+          - "{{ author }}"
+  - name: Automatically backport to v3.10.x & v3.9.x based on labels
+    conditions:
+      - base=v3.11.x
+      - label=backport-v3.10.x
+      - label=backport-v3.9.x
+    actions:
+      backport:
+        branches:
+          - v3.10.x
+        labels:
+          - backport-v3.9.x
+        assignees:
+          - "{{ author }}"
+  - name: Automatically backport to v3.9.x based on label
+    conditions:
+      - base=v3.10.x
+      - label=backport-v3.9.x
+    actions:
+      backport:
+        branches:
+          - v3.9.x
         assignees:
           - "{{ author }}"
