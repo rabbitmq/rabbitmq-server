@@ -2130,9 +2130,9 @@ Evaluates an Erlang expression on the target node
 .It Ar queue_name
 The name of the queue to delete.
 .It Ar --if-empty
-Delete the queue if it is empty (has no messages ready for delivery)
+Delete the queue if it is empty (has no messages ready for delivery). Ignored for Streams
 .It Ar --if-unused
-Delete the queue only if it has no consumers
+Delete the queue only if it has no consumers. Ignored for Streams
 .El
 .Pp
 Deletes a queue.
