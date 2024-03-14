@@ -51,6 +51,7 @@ all_tests() ->
      get_durable,
      get_many_durable,
      update_durable,
+     mark_local_durable_queues_stopped,
      foreach_durable,
      internal_delete
     ].
@@ -461,6 +462,24 @@ update_durable1(_Config) ->
                        fun(Q0) when ?is_amqqueue(Q0) -> true end)),
     {ok, Q0} = rabbit_db_queue:get_durable(QName1),
     ?assertMatch(my_policy, amqqueue:get_policy(Q0)),
+    passed.
+
+mark_local_durable_queues_stopped(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+               ?MODULE, mark_local_durable_queues_stopped1, [Config]).
+
+mark_local_durable_queues_stopped1(_Config) ->
+    DurableQName = rabbit_misc:r(?VHOST, queue, <<"test-queue1">>),
+    TransientQName = rabbit_misc:r(?VHOST, queue, <<"test-queue2">>),
+    DurableQ = new_queue(DurableQName, rabbit_classic_queue),
+    TransientQ = new_queue(TransientQName, rabbit_classic_queue),
+    %% Set Q1's pid to a dead process
+    RecoverableQ = amqqueue:set_pid(DurableQ, spawn(fun() -> ok end)),
+    ?assertEqual(ok, rabbit_db_queue:set(RecoverableQ)),
+    ?assertEqual(ok, rabbit_db_queue:set_dirty(TransientQ)),
+    ?assertEqual(ok, rabbit_amqqueue:mark_local_durable_queues_stopped(?VHOST)),
+    {ok, StoppedQ} = rabbit_db_queue:get_durable(DurableQName),
+    ?assertEqual(stopped, amqqueue:get_state(StoppedQ)),
     passed.
 
 foreach_durable(Config) ->
