@@ -88,7 +88,7 @@ function auth_settings_apply_defaults(authSettings) {
 
 function oauth_initialize_user_manager(resource_server) {
     oidcSettings = {
-        //userStore: new WebStorageStateStore({ store: window.localStorage }),
+        userStore: new oidc.WebStorageStateStore({ store: window.localStorage }),
         authority: resource_server.oauth_provider_url,
         client_id: resource_server.oauth_client_id,
         response_type: resource_server.oauth_response_type,
