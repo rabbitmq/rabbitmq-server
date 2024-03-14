@@ -120,6 +120,7 @@
          get/2,
          get_many/1,
          adv_get/1,
+         adv_get_many/1,
          match/1,
          match/2,
          exists/1,
@@ -882,6 +883,9 @@ get_many(PathPattern) ->
 
 adv_get(Path) ->
     khepri_adv:get(?STORE_ID, Path, #{favor => low_latency}).
+
+adv_get_many(PathPattern) ->
+    khepri_adv:get_many(?STORE_ID, PathPattern, #{favor => low_latency}).
 
 match(Path) ->
     match(Path, #{}).
