@@ -199,8 +199,8 @@ erlang_package.hex_package(
     patch_cmds = [
         "rm ebin/cowboy.app",
     ],
-    sha256 = "0fa395437f1b0e104e0e00999f39d2ac5f4082ac5049b67a5b6d56ecc31b1403",
-    version = "2.11.0",
+    sha256 = "8a7abe6d183372ceb21caa2709bec928ab2b72e18a3911aa1771639bef82651e",
+    version = "2.12.0",
 )
 
 erlang_package.hex_package(
@@ -209,8 +209,8 @@ erlang_package.hex_package(
     patch_cmds = [
         "rm ebin/cowlib.app",
     ],
-    sha256 = "163b73f6367a7341b33c794c4e88e7dbfe6498ac42dcd69ef44c5bc5507c8db0",
-    version = "2.12.1",
+    sha256 = "e1e1284dc3fc030a64b1ad0d8382ae7e99da46c3246b815318a4b848873800a4",
+    version = "2.13.0",
 )
 
 erlang_package.hex_package(
