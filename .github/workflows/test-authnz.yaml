@@ -60,6 +60,7 @@ jobs:
         key: ${{ runner.os }}-repo-cache-${{ hashFiles('MODULE.bazel','WORKSPACE','bazel/bzlmod/secondary_umbrella.bzl') }}
         restore-keys: |
           ${{ runner.os }}-repo-cache-
+        save-always: true
 
     - name: Configure Bazel
       run: |
