@@ -145,7 +145,7 @@ node_channel_limit(Config) ->
     ok.
 
 channel_consumers_limit(Config) ->
-    set_node_limit(Config, consumer_max_per_channel, 1),
+    set_node_limit(Config, consumer_max_per_channel, 2),
 
     VHost = <<"foobar">>,
     User = <<"guest">>,
@@ -155,8 +155,9 @@ channel_consumers_limit(Config) ->
     {ok, Ch} = open_channel(Conn1),
     Q = <<"Q">>, Tag = <<"Tag">>,
 
-    {ok, _} = consume(Ch, Q, Tag),
-    {error, not_allowed_crash} = consume(Ch, Q, Tag),  % Reusing Tag should fail
+    {ok, _} = consume(Ch, Q, <<"Tag1">>),
+    {ok, _} = consume(Ch, Q, <<"Tag2">>),
+    {error, not_allowed_crash} = consume(Ch, Q, <<"Tag3">>),  % Third consumer should fail
 
     close_all_connections([Conn1]),
     ok.

@@ -885,11 +885,6 @@ end}.
 
 {mapping, "channel_max", "rabbit.channel_max", [{datatype, integer}]}.
 
-%% Set the max allowed number of channels per node.
-%% `infinity` means "no limit".
-%%
-%% {channel_max_per_node, infinity},
-
 {mapping, "channel_max_per_node", "rabbit.channel_max_per_node",
   [{datatype, [{atom, infinity}, integer]}]}.
 
