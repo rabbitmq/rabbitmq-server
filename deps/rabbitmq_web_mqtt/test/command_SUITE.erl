@@ -10,22 +10,20 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
--include("rabbit_mqtt.hrl").
--import(util, [connect/3, connect/4]).
+-include_lib("rabbitmq_mqtt/include/rabbit_mqtt.hrl").
+-import(rabbit_web_mqtt_test_util, [connect/3, connect/4]).
 
--define(COMMAND, 'Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand').
+-define(COMMAND, 'Elixir.RabbitMQ.CLI.Ctl.Commands.ListWebMqttConnectionsCommand').
 
 all() ->
     [
      {group, unit},
-     {group, v4},
      {group, v5}
     ].
 
 groups() ->
     [
      {unit, [], [merge_defaults]},
-     {v4, [], [run]},
      {v5, [], [run,
                user_property]}
     ].
@@ -56,8 +54,7 @@ end_per_suite(Config) ->
 init_per_group(unit, Config) ->
     Config;
 init_per_group(Group, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, {mqtt_version, Group}),
-    util:maybe_skip_v5(Config1).
+    rabbit_ct_helpers:set_config(Config, {mqtt_version, Group}).
 
 end_per_group(_, Config) ->
     Config.
@@ -79,56 +76,60 @@ merge_defaults(_Config) ->
         ?COMMAND:merge_defaults([<<"other_key">>], #{verbose => false}).
 
 
-run(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+run(BaseConfig) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(BaseConfig, 0, nodename),
+    Config = [{websocket, true} | BaseConfig],
     Opts = #{node => Node, timeout => 10_000, verbose => false},
-
     %% No connections
     [] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)),
 
-    %% Open a WebMQTT connection, command won't list it
-    WebMqttConfig = [{websocket, true} | Config],
-    _C0 = connect(<<"simpleWebMqttClient">>, WebMqttConfig, [{ack_timeout, 1}]),
-
-    [] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)),
-
-    %% Open a connection
-    C1 = connect(<<"simpleClient">>, Config, [{ack_timeout, 1}]),
+    %% Create MQTT connection
+    C1 = connect(<<"simpleMqttClient">>, BaseConfig, [{ack_timeout, 1}]),
 
     timer:sleep(100),
 
-    [[{client_id, <<"simpleClient">>}]] =
+    %% No connections for WebMQTT, C1 is a MQTT connection
+    [] = 'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)),
+
+    %% Create WebMQTT connection
+
+    C2 = connect(<<"simpleWebMqttClient">>, Config, [{ack_timeout, 1}]),
+
+    timer:sleep(100),
+
+    [[{client_id, <<"simpleWebMqttClient">>}]] =
         'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)),
 
-    C2 = connect(<<"simpleClient1">>, Config, [{ack_timeout, 1}]),
+    C3 = connect(<<"simpleWebMqttClient1">>, Config, [{ack_timeout, 1}]),
+
     timer:sleep(200),
 
-    [[{client_id, <<"simpleClient">>}, {user, <<"guest">>}],
-     [{client_id, <<"simpleClient1">>}, {user, <<"guest">>}]] =
+    [[{client_id, <<"simpleWebMqttClient">>}, {user, <<"guest">>}],
+     [{client_id, <<"simpleWebMqttClient1">>}, {user, <<"guest">>}]] =
         lists:sort(
-            'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>, <<"user">>],
-                                               Opts))),
+            'Elixir.Enum':to_list(
+                ?COMMAND:run([<<"client_id">>, <<"user">>], Opts))),
 
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     start_amqp_connection(network, Node, Port),
 
-    %% There are still just two MQTT connections
-    [[{client_id, <<"simpleClient">>}],
-     [{client_id, <<"simpleClient1">>}]] =
+    %% There are still just two Web MQTT connections
+    [[{client_id, <<"simpleWebMqttClient">>}],
+     [{client_id, <<"simpleWebMqttClient1">>}]] =
         lists:sort('Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts))),
 
     start_amqp_connection(direct, Node, Port),
     timer:sleep(200),
 
-    %% Still two MQTT connections
-    ?assertEqual(
-       [[{client_id, <<"simpleClient">>}],
-        [{client_id, <<"simpleClient1">>}]],
-       lists:sort('Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)))),
+    %% Still two Web MQTT connections
+   [[{client_id, <<"simpleWebMqttClient">>}],
+    [{client_id, <<"simpleWebMqttClient1">>}]] =
+       lists:sort('Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts))),
 
     %% Verbose returns all keys
     AllKeys = lists:map(fun(I) -> atom_to_binary(I) end, ?INFO_ITEMS),
-    [AllInfos1Con1, _AllInfos1Con2] = 'Elixir.Enum':to_list(?COMMAND:run(AllKeys, Opts)),
+    [AllInfos1Con1, _AllInfos1Con2] =
+        'Elixir.Enum':to_list(?COMMAND:run(AllKeys, Opts)),
     [AllInfos2Con1, _AllInfos2Con2] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts#{verbose => true})),
 
     %% Keys are INFO_ITEMS
@@ -136,21 +137,23 @@ run(Config) ->
     ?assertEqual(InfoItemsSorted, lists:sort(proplists:get_keys(AllInfos1Con1))),
     ?assertEqual(InfoItemsSorted, lists:sort(proplists:get_keys(AllInfos2Con1))),
 
-    %% CLI command should list MQTT connections from all nodes.
-    C3 = connect(<<"simpleClient2">>, Config, 1, [{ack_timeout, 1}]),
+    %% CLI command should list Web MQTT connections from all nodes.
+    C4 = connect(<<"simpleWebMqttClient2">>, Config, 1, [{ack_timeout, 1}]),
     rabbit_ct_helpers:eventually(
       ?_assertEqual(
-         [[{client_id, <<"simpleClient">>}],
-          [{client_id, <<"simpleClient1">>}],
-          [{client_id, <<"simpleClient2">>}]],
+         [[{client_id, <<"simpleWebMqttClient">>}],
+          [{client_id, <<"simpleWebMqttClient1">>}],
+          [{client_id, <<"simpleWebMqttClient2">>}]],
          lists:sort('Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts))))),
 
     ok = emqtt:disconnect(C1),
     ok = emqtt:disconnect(C2),
-    ok = emqtt:disconnect(C3).
+    ok = emqtt:disconnect(C3),
+    ok = emqtt:disconnect(C4).
 
-user_property(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+user_property(BaseConfig) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(BaseConfig, 0, nodename),
+    Config = [{websocket, true} | BaseConfig],
     Opts = #{node => Node, timeout => 10_000, verbose => false},
     ClientId = <<"my-client">>,
     UserProp = [{<<"name 1">>, <<"value 1">>},
