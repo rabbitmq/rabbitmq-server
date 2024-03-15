@@ -80,7 +80,6 @@ run(Args, #{node := NodeName,
         InfoKeys,
         length(Nodes)).
 
-
 banner(_, _) -> <<"Listing MQTT connections ...">>.
 
 output(Result, _Opts) ->
