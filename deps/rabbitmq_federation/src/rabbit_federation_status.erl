@@ -13,7 +13,7 @@
 
 -export([start_link/0]).
 
--export([report/4, remove_exchange_or_queue/1, remove/2, status/0, lookup/1]).
+-export([report/4, remove_exchange_or_queue/1, remove/2, status/0, status/1, lookup/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -41,7 +41,10 @@ remove(Upstream, XorQName) ->
     gen_server:call(?SERVER, {remove, Upstream, XorQName}, infinity).
 
 status() ->
-    gen_server:call(?SERVER, status, infinity).
+    status(infinity).
+
+status(Timeout) ->
+    gen_server:call(?SERVER, status, Timeout).
 
 lookup(Id) ->
     gen_server:call(?SERVER, {lookup, Id}, infinity).
