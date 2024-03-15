@@ -105,8 +105,8 @@
           consumer_prefetch,
           consumer_timeout,
           authz_context,
+          max_consumers,  % taken from rabbit.consumer_max_per_channel
           %% defines how ofter gc will be executed
-          max_consumers  % taken from rabbit.consumer_max_per_channel
           writer_gc_threshold
          }).
 
@@ -1318,7 +1318,7 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
               _, State = #ch{reply_consumer   = ReplyConsumer,
                              cfg = #conf{max_consumers = MaxConsumers},
                              consumer_mapping = ConsumerMapping}) ->
-    CurrentConsumers = length(maps:keys(ConsumerMapping)),
+    CurrentConsumers = maps:size(ConsumerMapping),
     case maps:find(CTag0, ConsumerMapping) of
         error when CurrentConsumers >= MaxConsumers ->  % false when MaxConsumers is 'infinity'
             rabbit_misc:protocol_error(
