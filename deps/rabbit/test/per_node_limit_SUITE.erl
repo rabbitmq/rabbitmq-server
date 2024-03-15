@@ -114,7 +114,7 @@ vhost_limit(Config) ->
 node_channel_limit(Config) ->
     set_node_limit(Config, channel_max_per_node, 5),
 
-    VHost = <<"foobar">>,
+    VHost = <<"node_channel_limit">>,
     User = <<"guest">>,
     ok = rabbit_ct_broker_helpers:add_vhost(Config, VHost),
     ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
@@ -142,12 +142,15 @@ node_channel_limit(Config) ->
     %% Now all connections are closed, so there should be 0 open connections
     0 = count_channels_per_node(Config),
     close_all_connections([Conn1, Conn2]),
+
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+
     ok.
 
 channel_consumers_limit(Config) ->
     set_node_limit(Config, consumer_max_per_channel, 2),
 
-    VHost = <<"foobar">>,
+    VHost = <<"channel_consumers_limit">>,
     User = <<"guest">>,
     ok = rabbit_ct_broker_helpers:add_vhost(Config, VHost),
     ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
@@ -160,6 +163,8 @@ channel_consumers_limit(Config) ->
     {error, not_allowed_crash} = consume(Ch, Q, <<"Tag3">>),  % Third consumer should fail
 
     close_all_connections([Conn1]),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+
     ok.
 
 %% -------------------------------------------------------------------
