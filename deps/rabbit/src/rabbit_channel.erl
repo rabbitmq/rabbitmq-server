@@ -1431,7 +1431,7 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                                          authz_context = AuthzContext},
                              consumer_mapping  = ConsumerMapping
                             }) ->
-    CurrentConsumers = length(maps:keys(ConsumerMapping)),
+    CurrentConsumers = maps:size(ConsumerMapping),
     case maps:find(ConsumerTag, ConsumerMapping) of
         error when CurrentConsumers >= MaxConsumers ->  % false when MaxConsumers is 'infinity'
         rabbit_misc:protocol_error(
