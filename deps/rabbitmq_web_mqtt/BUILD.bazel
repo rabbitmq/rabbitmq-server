@@ -68,6 +68,9 @@ rabbitmq_app(
 
 xref(
     name = "xref",
+    additional_libs = [
+        "//deps/rabbitmq_cli:erlang_app",  # keep
+    ],
     target = ":erlang_app",
 )
 
