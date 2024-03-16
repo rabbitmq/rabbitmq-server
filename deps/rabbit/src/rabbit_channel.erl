@@ -111,20 +111,13 @@
           max_message_size,
           consumer_timeout,
           authz_context,
-          max_consumers,  % taken from rabbit.consumer_max_per_channel
+          %% taken from rabbit.consumer_max_per_channel
+          max_consumers,
           %% defines how ofter gc will be executed
-<<<<<<< HEAD
-<<<<<<< HEAD
           writer_gc_threshold,
           %% true with AMQP 1.0 to include the publishing sequence
           %% in the return callback, false otherwise
           extended_return_callback
-=======
-          max_consumers  % taken from rabbit.consumer_max_per_channel
-=======
->>>>>>> 72317cc1b0 (address feedback)
-          writer_gc_threshold
->>>>>>> d7374cb244 (Add consumers per channel limit)
          }).
 
 -record(pending_ack, {
@@ -545,13 +538,9 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                             max_message_size = MaxMessageSize,
                             consumer_timeout = ConsumerTimeout,
                             authz_context = OptionalVariables,
-<<<<<<< HEAD
                             writer_gc_threshold = GCThreshold,
-                            extended_return_callback = UseExtendedReturnCallback
-=======
-                            max_consumers = MaxConsumers,
-                            writer_gc_threshold = GCThreshold
->>>>>>> d7374cb244 (Add consumers per channel limit)
+                            extended_return_callback = UseExtendedReturnCallback,
+                            max_consumers = MaxConsumers
                            },
                 limiter = Limiter,
                 tx                      = none,
