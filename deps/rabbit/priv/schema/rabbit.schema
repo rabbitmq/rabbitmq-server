@@ -899,6 +899,24 @@ end}.
  end
 }.
 
+%% Set the max allowed number of consumers per channel.
+%% `infinity` means "no limit".
+%%
+%% {consumer_max_per_channel, infinity},
+
+{mapping, "consumer_max_per_channel", "rabbit.consumer_max_per_channel",
+  [{datatype, [{atom, infinity}, integer]}]}.
+
+{translation, "rabbit.consumer_max_per_channel",
+ fun(Conf) ->
+  case cuttlefish:conf_get("consumer_max_per_channel", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      infinity  -> infinity;
+      Val when is_integer(Val) andalso Val > 0 -> Val;
+      _         -> cuttlefish:invalid("should be positive integer or 'infinity'")
+  end
+ end
+}.
 
 %% Set the max permissible number of client connections per node.
 %% `infinity` means "no limit".
