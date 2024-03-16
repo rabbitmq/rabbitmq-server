@@ -33,8 +33,11 @@ all_beam_files(name = "all_beam_files")
 
 all_test_beam_files(name = "all_test_beam_files")
 
+<<<<<<< HEAD
 all_srcs(name = "all_srcs")
 
+=======
+>>>>>>> 7710ff3b4a (Fixup rabbitmq_amqp1_0 BUILD.bazel)
 test_suite_beam_files(name = "test_suite_beam_files")
 
 rabbitmq_app(
