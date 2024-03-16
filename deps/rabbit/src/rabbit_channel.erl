@@ -111,6 +111,8 @@
           max_message_size,
           consumer_timeout,
           authz_context,
+          %% taken from rabbit.consumer_max_per_channel
+          max_consumers,
           %% defines how ofter gc will be executed
           writer_gc_threshold,
           %% true with AMQP 1.0 to include the publishing sequence
@@ -518,6 +520,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
     OptionalVariables = extract_variable_map_from_amqp_params(AmqpParams),
     UseExtendedReturnCallback = use_extended_return_callback(AmqpParams),
     {ok, GCThreshold} = application:get_env(rabbit, writer_gc_threshold),
+    MaxConsumers = application:get_env(rabbit, consumer_max_per_channel, infinity),
     State = #ch{cfg = #conf{state = starting,
                             protocol = Protocol,
                             channel = Channel,
@@ -536,7 +539,8 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                             consumer_timeout = ConsumerTimeout,
                             authz_context = OptionalVariables,
                             writer_gc_threshold = GCThreshold,
-                            extended_return_callback = UseExtendedReturnCallback
+                            extended_return_callback = UseExtendedReturnCallback,
+                            max_consumers = MaxConsumers
                            },
                 limiter = Limiter,
                 tx                      = none,
@@ -1356,8 +1360,13 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
                                no_ack       = NoAck,
                                nowait       = NoWait},
               _, State = #ch{reply_consumer   = ReplyConsumer,
+                             cfg = #conf{max_consumers = MaxConsumers},
                              consumer_mapping = ConsumerMapping}) ->
+    CurrentConsumers = maps:size(ConsumerMapping),
     case maps:find(CTag0, ConsumerMapping) of
+        error when CurrentConsumers >= MaxConsumers ->  % false when MaxConsumers is 'infinity'
+            rabbit_misc:protocol_error(
+              not_allowed, "reached maximum (~ts) of consumers per channel", [MaxConsumers]);
         error ->
             case {ReplyConsumer, NoAck} of
                 {none, true} ->
@@ -1406,12 +1415,17 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                                nowait       = NoWait,
                                arguments    = Args},
               _, State = #ch{cfg = #conf{consumer_prefetch = ConsumerPrefetch,
+                                         max_consumers = MaxConsumers,
                                          user = User,
                                          virtual_host = VHostPath,
                                          authz_context = AuthzContext},
                              consumer_mapping  = ConsumerMapping
                             }) ->
+    CurrentConsumers = maps:size(ConsumerMapping),
     case maps:find(ConsumerTag, ConsumerMapping) of
+        error when CurrentConsumers >= MaxConsumers ->  % false when MaxConsumers is 'infinity'
+        rabbit_misc:protocol_error(
+              not_allowed, "reached maximum (~ts) of consumers per channel", [MaxConsumers]);
         error ->
             QueueName = qbin_to_resource(QueueNameBin, VHostPath),
             check_read_permitted(QueueName, User, AuthzContext),
