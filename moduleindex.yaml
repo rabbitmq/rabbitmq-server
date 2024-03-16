@@ -1238,6 +1238,7 @@ rabbitmq_web_dispatch:
 - webmachine_log
 - webmachine_log_handler
 rabbitmq_web_mqtt:
+- Elixir.RabbitMQ.CLI.Ctl.Commands.ListWebMqttConnectionsCommand
 - rabbit_web_mqtt_app
 - rabbit_web_mqtt_handler
 - rabbit_web_mqtt_stream_handler
