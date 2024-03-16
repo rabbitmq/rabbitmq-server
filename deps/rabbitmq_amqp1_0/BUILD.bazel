@@ -10,6 +10,8 @@ load(
     ":app.bzl",
     "all_beam_files",
     "all_srcs",
+    "all_test_beam_files",
+    "test_suite_beam_files",
 )
 
 APP_NAME = "rabbitmq_amqp1_0"
@@ -17,6 +19,10 @@ APP_NAME = "rabbitmq_amqp1_0"
 APP_DESCRIPTION = "Deprecated no-op AMQP 1.0 plugin"
 
 all_beam_files(name = "all_beam_files")
+
+all_test_beam_files(name = "all_test_beam_files")
+
+test_suite_beam_files(name = "test_suite_beam_files")
 
 rabbitmq_app(
     name = "erlang_app",
