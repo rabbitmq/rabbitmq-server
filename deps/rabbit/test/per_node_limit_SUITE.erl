@@ -23,6 +23,7 @@ groups() ->
      {limit_tests, [], [
                         node_connection_limit,
                         vhost_limit,
+                        channel_consumers_limit,
                         node_channel_limit
                        ]}
     ].
@@ -62,13 +63,15 @@ init_per_testcase(Testcase, Config) ->
 
 end_per_testcase(vhost_limit = Testcase, Config) ->
     set_node_limit(Config, vhost_max, infinity),
-    set_node_limit(Config, channel_max_per_node, 0),
+    set_node_limit(Config, channel_max_per_node, infinity),
+    set_node_limit(Config, consumer_max_per_channel, infinity),
     set_node_limit(Config, connection_max, infinity),
     [rabbit_ct_broker_helpers:delete_vhost(Config, integer_to_binary(I)) || I <- lists:seq(1,4)],
     rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     set_node_limit(Config, vhost_max, infinity),
-    set_node_limit(Config, channel_max_per_node, 0),
+    set_node_limit(Config, channel_max_per_node, infinity),
+    set_node_limit(Config, consumer_max_per_channel, infinity),
     set_node_limit(Config, connection_max, infinity),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -111,12 +114,13 @@ vhost_limit(Config) ->
 node_channel_limit(Config) ->
     set_node_limit(Config, channel_max_per_node, 5),
 
-    VHost = <<"foobar">>,
+    VHost = <<"node_channel_limit">>,
     User = <<"guest">>,
     ok = rabbit_ct_broker_helpers:add_vhost(Config, VHost),
     ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
     Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VHost),
     Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VHost),
+    0 = count_channels_per_node(Config),
 
     lists:foreach(fun(N) when (N band 1) == 1 -> {ok, _} = open_channel(Conn1);
                      (_) -> {ok,_ } = open_channel(Conn2)
@@ -137,6 +141,30 @@ node_channel_limit(Config) ->
 
     %% Now all connections are closed, so there should be 0 open connections
     0 = count_channels_per_node(Config),
+    close_all_connections([Conn1, Conn2]),
+
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+
+    ok.
+
+channel_consumers_limit(Config) ->
+    set_node_limit(Config, consumer_max_per_channel, 2),
+
+    VHost = <<"channel_consumers_limit">>,
+    User = <<"guest">>,
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, VHost),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
+    Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VHost),
+    {ok, Ch} = open_channel(Conn1),
+    Q = <<"Q">>, Tag = <<"Tag">>,
+
+    {ok, _} = consume(Ch, Q, <<"Tag1">>),
+    {ok, _} = consume(Ch, Q, <<"Tag2">>),
+    {error, not_allowed_crash} = consume(Ch, Q, <<"Tag3">>),  % Third consumer should fail
+
+    close_all_connections([Conn1]),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+
     ok.
 
 %% -------------------------------------------------------------------
@@ -156,6 +184,15 @@ set_node_limit(Config, Type, Limit) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
                                  application,
                                  set_env, [rabbit, Type, Limit]).
+
+consume(Ch, Q, Tag) ->
+    #'queue.declare_ok'{queue = Q} = amqp_channel:call(Ch, #'queue.declare'{queue = Q}),
+    try amqp_channel:call(Ch, #'basic.consume'{queue = Q, consumer_tag = Tag}) of
+      #'basic.consume_ok'{} = OK -> {ok, OK};
+      NotOk -> {error, NotOk}
+    catch
+      _:_Error -> {error, not_allowed_crash}
+   end.
 
 open_channel(Conn) when is_pid(Conn) ->
     try amqp_connection:open_channel(Conn) of
