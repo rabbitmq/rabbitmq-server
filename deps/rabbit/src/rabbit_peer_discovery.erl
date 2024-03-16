@@ -30,7 +30,8 @@
          group_leader_proxy/2]).
 
 -ifdef(TEST).
--export([sort_nodes_and_props/1,
+-export([query_node_props/1,
+         sort_nodes_and_props/1,
          join_selected_node/3]).
 -endif.
 
@@ -388,16 +389,18 @@ query_node_props(Nodes) when Nodes =/= [] ->
                   _ ->
                       VMArgs1
               end,
-    VMArgs3 = maybe_add_tls_arguments(VMArgs2),
+    VMArgs3 = maybe_add_proto_dist_arguments(VMArgs2),
+    VMArgs4 = maybe_add_inetrc_arguments(VMArgs3),
+    VMArgs5 = maybe_add_tls_arguments(VMArgs4),
     PeerStartArg = case Context of
                        #{nodename_type := longnames} ->
                            #{name => PeerName,
                              host => Suffix,
                              longnames => true,
-                             args => VMArgs3};
+                             args => VMArgs5};
                        _ ->
                            #{name => PeerName,
-                             args => VMArgs3}
+                             args => VMArgs5}
                    end,
     ?LOG_DEBUG("Peer discovery: peer node arguments: ~tp",
                [PeerStartArg]),
@@ -423,27 +426,40 @@ query_node_props(Nodes) when Nodes =/= [] ->
 query_node_props([]) ->
     [].
 
-maybe_add_tls_arguments(VMArgs0) ->
+maybe_add_proto_dist_arguments(VMArgs) ->
     case init:get_argument(proto_dist) of
-        {ok, [["inet_tls"]]} ->
-            add_tls_arguments(inet_tls, VMArgs0);
-        {ok, [["inet6_tls"]]} ->
-            add_tls_arguments(inet6_tls, VMArgs0);
+        {ok, [[Val]]} ->
+            %% See net_kernel.erl / protocol_childspecs/1.
+            Mod = list_to_existing_atom(Val ++ "_dist"),
+            ModDir = filename:dirname(code:which(Mod)),
+            ["-proto_dist", Val, "-pa", ModDir | VMArgs];
         _ ->
-            VMArgs0
+            VMArgs
     end.
 
-add_tls_arguments(InetDistModule, VMArgs0) ->
-    VMArgs1 = case InetDistModule of
-                  inet_tls ->
-                      ProtoDistArg = ["-proto_dist", "inet_tls" | VMArgs0],
-                      ["-pa", filename:dirname(code:which(inet_tls_dist))
-                       | ProtoDistArg];
-                  inet6_tls ->
-                      ProtoDistArg = ["-proto_dist", "inet6_tls" | VMArgs0],
-                      ["-pa", filename:dirname(code:which(inet6_tls_dist))
-                       | ProtoDistArg]
-              end,
+maybe_add_inetrc_arguments(VMArgs) ->
+    %% If an inetrc file is configured, we need to use it for the temporary
+    %% hidden node too.
+    case application:get_env(kernel, inetrc) of
+        {ok, Val} ->
+            maybe_add_inetrc_arguments1(VMArgs, Val);
+        undefined ->
+            case os:getenv("ERL_INETRC") of
+                Val when is_list(Val) ->
+                    maybe_add_inetrc_arguments1(VMArgs, Val);
+                false ->
+                    VMArgs
+            end
+    end.
+
+maybe_add_inetrc_arguments1(VMArgs, Val) ->
+    %% The filename argument must be passed as a quoted string so that the
+    %% command line is correctly parsed as an Erlang string by the temporary
+    %% hidden node.
+    ValString = rabbit_misc:format("~0p", [Val]),
+    ["-kernel", "inetrc", ValString | VMArgs].
+
+maybe_add_tls_arguments(VMArgs) ->
     %% In the next case, RabbitMQ has been configured with additional Erlang VM
     %% arguments such as this:
     %%
@@ -494,14 +510,14 @@ add_tls_arguments(InetDistModule, VMArgs0) ->
     %%     "/usr/local/lib/erlang/lib/ssl-11.0.3/ebin",
     %%     "-proto_dist","inet_tls","-boot",
     %%     "no_dot_erlang","-hidden"],
-    VMArgs2 = case init:get_argument(ssl_dist_opt) of
+    VMArgs1 = case init:get_argument(ssl_dist_opt) of
                   {ok, SslDistOpts0} ->
                       SslDistOpts1 = [["-ssl_dist_opt" | SslDistOpt]
                                       || SslDistOpt <- SslDistOpts0],
                       SslDistOpts2 = lists:concat(SslDistOpts1),
-                      SslDistOpts2 ++ VMArgs1;
+                      SslDistOpts2 ++ VMArgs;
                   _ ->
-                      VMArgs1
+                      VMArgs
               end,
     %% In the next case, RabbitMQ has been configured with additional Erlang VM
     %% arguments such as this:
@@ -511,13 +527,13 @@ add_tls_arguments(InetDistModule, VMArgs0) ->
     %%
     %% This code adds the `ssl_dist_optfile' argument to the peer node's
     %% argument list.
-    VMArgs3 = case init:get_argument(ssl_dist_optfile) of
+    VMArgs2 = case init:get_argument(ssl_dist_optfile) of
                   {ok, [[SslDistOptfileArg]]} ->
-                      ["-ssl_dist_optfile", SslDistOptfileArg | VMArgs2];
+                      ["-ssl_dist_optfile", SslDistOptfileArg | VMArgs1];
                   _ ->
-                      VMArgs2
+                      VMArgs1
               end,
-    VMArgs3.
+    VMArgs2.
 
 do_query_node_props(Nodes) when Nodes =/= [] ->
     %% Make sure all log messages are forwarded from this temporary hidden
@@ -608,6 +624,10 @@ query_node_props1([], [], NodesAndProps, ProxyGroupLeader) ->
 
 query_node_props2([{Node, Members} | Rest], NodesAndProps, ProxyGroupLeader) ->
     try
+        erpc:call(
+          Node, logger, debug,
+          ["Peer discovery: temporary hidden node '~ts' queries properties "
+           "from node '~ts'", [node(), Node]]),
         StartTime = get_node_start_time(Node, microsecond, ProxyGroupLeader),
         IsReady = is_node_db_ready(Node, ProxyGroupLeader),
         NodeAndProps = {Node, Members, StartTime, IsReady},
