@@ -88,25 +88,22 @@ run(BaseConfig) ->
     %% No connections
     [] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)),
 
-    %% Create MQTT connection
+    %% Open an MQTT connection
     C1 = connect(<<"simpleMqttClient">>, BaseConfig, [{ack_timeout, 1}]),
+    timer:sleep(200),
 
-    timer:sleep(100),
-
-    %% No connections for WebMQTT, C1 is a MQTT connection
+    %% No connections for MQTT-over-WebSockets, C1 is an MQTT connection
     [] = 'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)),
 
-    %% Create WebMQTT connection
+    %% Open a WebMQTT connection
 
     C2 = connect(<<"simpleWebMqttClient">>, Config, [{ack_timeout, 1}]),
-
-    timer:sleep(100),
+    timer:sleep(200),
 
     [[{client_id, <<"simpleWebMqttClient">>}]] =
         'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)),
 
     C3 = connect(<<"simpleWebMqttClient1">>, Config, [{ack_timeout, 1}]),
-
     timer:sleep(200),
 
     [[{client_id, <<"simpleWebMqttClient">>}, {user, <<"guest">>}],
@@ -142,7 +139,7 @@ run(BaseConfig) ->
     ?assertEqual(InfoItemsSorted, lists:sort(proplists:get_keys(AllInfos1Con1))),
     ?assertEqual(InfoItemsSorted, lists:sort(proplists:get_keys(AllInfos2Con1))),
 
-    %% CLI command should list Web MQTT connections from all nodes.
+    %% List Web MQTT connections from all nodes
     C4 = connect(<<"simpleWebMqttClient2">>, Config, 1, [{ack_timeout, 1}]),
     rabbit_ct_helpers:eventually(
       ?_assertEqual(
