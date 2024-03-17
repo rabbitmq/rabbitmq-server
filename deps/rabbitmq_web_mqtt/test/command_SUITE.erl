@@ -54,7 +54,12 @@ end_per_suite(Config) ->
 init_per_group(unit, Config) ->
     Config;
 init_per_group(Group, Config) ->
-    rabbit_ct_helpers:set_config(Config, {mqtt_version, Group}).
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "mixed version clusters are not supported"};
+        _ ->
+            rabbit_ct_helpers:set_config(Config, {mqtt_version, Group})
+    end.
 
 end_per_group(_, Config) ->
     Config.
