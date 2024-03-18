@@ -52,8 +52,38 @@
 
 -callback post_registration()   -> ok | {error, Reason :: string()}.
 
--callback lock(Nodes :: [node()]) -> {ok, Data :: term()} | not_supported | {error, Reason :: string()}.
+-callback pre_discovery() ->
+    {ok, BackendPriv :: backend_priv()} | {error, Reason :: string()}.
 
--callback unlock(Data :: term()) -> ok.
+-callback post_discovery(BackendPriv :: backend_priv()) ->
+    ok.
 
--optional_callbacks([init/0]).
+-callback lock(Nodes :: [node()]) ->
+    {ok, LockData :: lock_data()} |
+    not_supported |
+    {error, Reason :: string()}.
+
+-callback lock(Nodes :: [node()], BackendPriv :: term()) ->
+    {ok, LockData :: lock_data()} |
+    not_supported |
+    {error, Reason :: string()}.
+
+-callback unlock(LockData :: lock_data()) ->
+    ok.
+
+-callback unlock(LockData :: lock_data(), BackendPriv :: backend_priv()) ->
+    ok.
+
+-type backend_priv() :: any().
+-type lock_data() :: any().
+
+-optional_callbacks([init/0,
+                     pre_discovery/0,
+                     post_discovery/1,
+                     lock/1,
+                     lock/2,
+                     unlock/1,
+                     unlock/2]).
+
+-export_type([backend_priv/0,
+              lock_data/0]).
