@@ -493,9 +493,19 @@ consume_stdout(Port, Nodename) ->
 
 wait_for_remote_node(Nodename) ->
     case net_adm:ping(Nodename) of
-        pong -> ok;
-        pang -> timer:sleep(200),
-                wait_for_remote_node(Nodename)
+        pong ->
+            Ret = erpc:call(
+                    Nodename, application, get_env, [rabbit, plugins_dir]),
+            case Ret of
+                {ok, Val} when is_list(Val) ->
+                    ok;
+                _ ->
+                    timer:sleep(200),
+                    wait_for_remote_node(Nodename)
+            end;
+        pang ->
+            timer:sleep(200),
+            wait_for_remote_node(Nodename)
     end.
 
 check_values_from_offline_remote_node(_) ->
