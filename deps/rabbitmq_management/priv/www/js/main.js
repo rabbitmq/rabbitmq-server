@@ -698,9 +698,13 @@ function show_popup(type, text, _mode) {
     hide();
     $('#outer').after(format('popup', {'type': type, 'text': text}));
     $(cssClass).fadeIn(100);
-    $(cssClass + ' span').on('click', function () {
+
+    var closeButtonCssClass = cssClass + ' span';
+    $('div#outer,' + closeButtonCssClass).on('click', function(event) {
+      if ($(event.target).eq($(closeButtonCssClass)) || !$(event.target).closest(cssClass).length) {
         $('.popup-owner').removeClass('popup-owner');
         hide();
+      }
     });
 }
 
