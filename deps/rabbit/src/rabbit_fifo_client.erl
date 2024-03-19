@@ -38,6 +38,7 @@
 -define(SOFT_LIMIT, 32).
 -define(TIMER_TIME, 10000).
 -define(COMMAND_TIMEOUT, 30000).
+-define(UNLIMITED_PREFETCH_COUNT, 2000). %% something large for ra
 
 -type seq() :: non_neg_integer().
 
@@ -118,6 +119,9 @@ enqueue(QName, Correlation, Msg,
                cfg = #cfg{servers = Servers,
                           timeout = Timeout}} = State0) ->
     %% the first publish, register and enqueuer for this process.
+    %% TODO: we _only_ need to pre-register an enqueuer to discover if the
+    %% queue overflow is `reject_publish` and the queue can accept new messages
+    %% if the queue does not have `reject_publish` set we can skip this step
     Reg = rabbit_fifo:make_register_enqueuer(self()),
     case ra:process_command(Servers, Reg, Timeout) of
         {ok, reject_publish, Leader} ->
@@ -335,19 +339,32 @@ discard(ConsumerTag, [_|_] = MsgIds,
                state()) ->
     {ok, ConsumerInfos :: map(), state()} |
     {error | timeout, term()}.
-checkout(ConsumerTag, CreditMode, Meta,
+checkout(ConsumerTag, CreditMode, #{} = Meta,
          #state{consumers = CDels0} = State0)
-  when is_binary(ConsumerTag) ->
+  when is_binary(ConsumerTag) andalso
+       is_tuple(CreditMode) ->
     Servers = sorted_servers(State0),
     ConsumerId = consumer_id(ConsumerTag),
-    NumUnsettled = case CreditMode of
-                       credited -> 0;
+    Spec = case rabbit_fifo:is_v4() of
+               true ->
+                   case CreditMode of
+                       {simple_prefetch, 0} ->
+                           {auto, {simple_prefetch,
+                                   ?UNLIMITED_PREFETCH_COUNT}};
+                       _ ->
+                           {auto, CreditMode}
+                   end;
+               false ->
+                   case CreditMode of
+                       {credited, _} ->
+                           {auto, 0, credited};
+                       {simple_prefetch, 0} ->
+                           {auto, ?UNLIMITED_PREFETCH_COUNT, simple_prefetch};
                        {simple_prefetch, Num} ->
-                           Num
-                   end,
-    Cmd = rabbit_fifo:make_checkout(ConsumerId,
-                                    {auto, NumUnsettled, CreditMode},
-                                    Meta),
+                           {auto, Num, simple_prefetch}
+                   end
+           end,
+    Cmd = rabbit_fifo:make_checkout(ConsumerId, Spec, Meta),
     %% ???
     Ack = maps:get(ack, Meta, true),
 
@@ -369,7 +386,7 @@ checkout(ConsumerTag, CreditMode, Meta,
                                         NextMsgId - 1
                                 end
                         end,
-            DeliveryCount = case maps:is_key(initial_delivery_count, Meta) of
+            DeliveryCount = case rabbit_fifo:is_v4() of
                                 true -> credit_api_v2;
                                 false -> {credit_api_v1, 0}
                             end,

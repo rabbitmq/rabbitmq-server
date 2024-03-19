@@ -1368,7 +1368,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         hdrs = ["src/rabbit_fifo.hrl"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
+        deps = ["//deps/rabbit_common:erlang_app", "@proper//:erlang_app"],
     )
     erlang_bytecode(
         name = "rabbit_fifo_dlx_SUITE_beam_files",
