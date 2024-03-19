@@ -64,26 +64,32 @@
 -type consumer_id() :: {rabbit_types:ctag(), pid()}.
 %% The entity that receives messages. Uniquely identifies a consumer.
 
--type credit_mode() :: credited |
-                       %% machine_version 2
-                       {simple_prefetch, MaxCredit :: non_neg_integer()}.
+-type consumer_idx() :: ra:index().
+%% v4 can reference consumers by the raft index they were added at.
+%% The entity that receives messages. Uniquely identifies a consumer.
+-type consumer_key() :: consumer_id() | consumer_idx().
+
+-type credit_mode() ::
+    {credited, InitialDeliveryCount :: rabbit_queue_type:delivery_count()} |
+    %% machine_version 2
+    {simple_prefetch, MaxCredit :: non_neg_integer()}.
 %% determines how credit is replenished
 
 -type checkout_spec() :: {once | auto, Num :: non_neg_integer(),
-                          credit_mode()} |
+                          credited,
+                          simple_prefetch} |
+
                          {dequeue, settled | unsettled} |
                          cancel |
-                         %% v4 format
-                         {once | auto,
-                          {simple_prefetch, MaxCredit :: non_neg_integer()} |
-                          credited}.
+                         %% new v4 format
+                         {once | auto, credit_mode()}.
 
 -type consumer_meta() :: #{ack => boolean(),
                            username => binary(),
                            prefetch => non_neg_integer(),
-                           args => list(),
-                           %% set if and only if credit API v2 is in use
-                           initial_delivery_count => rabbit_queue_type:delivery_count()
+                           args => list()
+                           % %% set if and only if credit API v2 is in use
+                           % initial_delivery_count => rabbit_queue_type:delivery_count()
                           }.
 %% static meta data associated with a consumer
 
@@ -109,8 +115,8 @@
          %% simple_prefetch: credit is re-filled as deliveries are settled
          %% or returned.
          %% credited: credit can only be changed by receiving a consumer_credit
-         %% command: `{consumer_credit, ReceiverDeliveryCount, Credit}'
-         credit_mode :: credit_mode(), % part of snapshot data
+         %% command: `{credit, ReceiverDeliveryCount, Credit}'
+         credit_mode :: credited | credit_mode(),
          lifetime = once :: once | auto,
          priority = 0 :: non_neg_integer()}).
 

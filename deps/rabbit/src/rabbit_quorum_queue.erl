@@ -870,9 +870,9 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                                 prefetch => DeclaredPrefetch,
                                 args => Args,
                                 username => ActingUser}),
-    {ok, QState} = rabbit_fifo_client:checkout(ConsumerTag,
-                                               CreditMode, ConsumerMeta,
-                                               QState0),
+    {ok, _Infos, QState} = rabbit_fifo_client:checkout(ConsumerTag,
+                                                       CreditMode, ConsumerMeta,
+                                                       QState0),
     case single_active_consumer_on(Q) of
         true ->
             %% get the leader from state
