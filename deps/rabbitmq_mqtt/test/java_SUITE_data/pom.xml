@@ -22,7 +22,7 @@
     <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
     <groovy-maven-plugin.version>2.1.1</groovy-maven-plugin.version>
     <groovy.version>2.4.21</groovy.version>
-    <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
+    <maven-compiler-plugin.version>3.12.1</maven-compiler-plugin.version>
     <spotless.version>2.43.0</spotless.version>
     <google-java-format.version>1.17.0</google-java-format.version>
     <test-keystore.ca>${project.build.directory}/ca.keystore</test-keystore.ca>
