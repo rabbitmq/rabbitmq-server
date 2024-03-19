@@ -100,9 +100,9 @@ http_file(
 
 http_file(
     name = "otp_src_25_3",
-    downloaded_file_path = "OTP-25.3.2.9.tar.gz",
-    sha256 = "86fce5b418d127fb6049d69ecc1c32306128736d291e49077943cb3dcc73d7d5",
-    urls = ["https://github.com/erlang/otp/archive/OTP-25.3.2.9.tar.gz"],
+    downloaded_file_path = "OTP-25.3.2.10.tar.gz",
+    sha256 = "be76f05bd38c60df056ed35f01085f088474a1942ce1778c2217e5658d435b35",
+    urls = ["https://github.com/erlang/otp/archive/OTP-25.3.2.10.tar.gz"],
 )
 
 http_file(
