@@ -716,6 +716,7 @@ rabbitmq_suite(
     deps = [
         "//deps/rabbit_common:erlang_app",
         "@proper//:erlang_app",
+        "@meck//:erlang_app",
         "@ra//:erlang_app",
     ],
 )

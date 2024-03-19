@@ -3284,12 +3284,14 @@ cancel_consumer_gh_3729(Config) ->
         ct:fail("basic.cancel_ok timeout")
     end,
 
-    D = #'queue.declare'{queue = QQ, passive = true, arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
+    D = #'queue.declare'{queue = QQ, passive = true,
+                         arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
 
     F = fun() ->
             #'queue.declare_ok'{queue = QQ,
                                 message_count = MC,
                                 consumer_count = CC} = amqp_channel:call(Ch, D),
+            ct:pal("Mc ~b CC ~b", [MC, CC]),
             MC =:= 1 andalso CC =:= 0
         end,
     rabbit_ct_helpers:await_condition(F, 30000),
