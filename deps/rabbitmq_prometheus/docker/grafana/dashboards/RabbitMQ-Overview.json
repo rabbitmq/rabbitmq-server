@@ -1284,7 +1284,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "rabbitmq_erlang_uptime_seconds * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
+          "expr": "rabbitmq_erlang_uptime_seconds * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
