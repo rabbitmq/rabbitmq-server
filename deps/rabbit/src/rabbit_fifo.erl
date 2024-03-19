@@ -79,7 +79,8 @@
 
 -ifdef(TEST).
 -export([update_header/4,
-         chunk_disk_msgs/3]).
+         chunk_disk_msgs/3,
+         smallest_raft_index/1]).
 -endif.
 
 -import(serial_number, [add/2, diff/2]).
@@ -146,6 +147,7 @@
               credit_mode/0,
               consumer_meta/0,
               consumer_id/0,
+              consumer_key/0,
               client_msg/0,
               msg/0,
               msg_id/0,
@@ -273,12 +275,13 @@ apply(#{index := Idx} = Meta,
       #requeue{consumer_key = ConsumerKey,
                msg_id = MsgId,
                index = OldIdx,
-               header = Header0,
-               msg = _Msg},
+               header = Header0},
       #?STATE{consumers = Cons0,
               messages = Messages,
               ra_indexes = Indexes0,
               enqueue_count = EnqCount} = State00) ->
+    %% the actual consumer key was looked up in the aux handler so we
+    %% dont need to use find_consumer/2 here
     case Cons0 of
         #{ConsumerKey := #consumer{checked_out = Checked0} = Con0}
           when is_map_key(MsgId, Checked0) ->
@@ -423,7 +426,7 @@ apply(#{index := Index,
     %% dequeue always updates last_active
     State0 = State00#?STATE{last_active = Ts},
     %% all dequeue operations result in keeping the queue from expiring
-    Exists = maps:is_key(ConsumerId, Consumers),
+    Exists = find_consumer(ConsumerId, Consumers) /= undefined,
     case messages_ready(State0) of
         0 ->
             update_smallest_raft_index(Index, {dequeue, empty}, State0, []);
@@ -774,7 +777,7 @@ handle_waiting_consumer_down(Pid,
                                      waiting_consumers = WaitingConsumers0}
                              = State0) ->
     % get cancel effects for down waiting consumers
-    Down = lists:filter(fun({{_, P}, _}) -> P =:= Pid end,
+    Down = lists:filter(fun({_, ?CONSUMER_PID(P)}) -> P =:= Pid end,
                         WaitingConsumers0),
     Effects = lists:foldl(fun ({_ConsumerKey, Consumer}, Effects) ->
                                   ConsumerId = consumer_id(Consumer),
@@ -799,8 +802,8 @@ update_waiting_consumer_status(Node,
              _ ->
                  {ConsumerKey, Consumer}
          end
-     end || {{_, Pid} = ConsumerKey, Consumer} <- WaitingConsumers,
-     Consumer#consumer.status =/= cancelled].
+     end || {ConsumerKey, ?CONSUMER_PID(Pid) =  Consumer}
+            <- WaitingConsumers, Consumer#consumer.status =/= cancelled].
 
 -spec state_enter(ra_server:ra_state() | eol, state()) ->
     ra_machine:effects().
@@ -821,8 +824,8 @@ state_enter0(leader, #?STATE{consumers = Cons,
     TimerEffs = timer_effect(erlang:system_time(millisecond), State, Effects0),
     % return effects to monitor all current consumers and enqueuers
     Pids = lists:usort(maps:keys(Enqs)
-        ++ [P || {_, P} <- maps:keys(Cons)]
-        ++ [P || {{_, P}, _} <- WaitingConsumers]),
+        ++ [P || ?CONSUMER_PID(P) <- maps:values(Cons)]
+        ++ [P || {_, ?CONSUMER_PID(P)} <- WaitingConsumers]),
     Mons = [{monitor, process, P} || P <- Pids],
     Nots = [{send_msg, P, leader_change, ra_event} || P <- Pids],
     NodeMons = lists:usort([{monitor, node, node(P)} || P <- Pids]),
@@ -835,12 +838,15 @@ state_enter0(leader, #?STATE{consumers = Cons,
             [{mod_call, Mod, Fun, Args ++ [Name]} | Effects]
     end;
 state_enter0(eol, #?STATE{enqueuers = Enqs,
-                          consumers = Custs0,
+                          consumers = Cons0,
                           waiting_consumers = WaitingConsumers0},
              Effects) ->
-    Custs = maps:fold(fun({_, P}, V, S) -> S#{P => V} end, #{}, Custs0),
-    WaitingConsumers1 = lists:foldl(fun({{_, P}, V}, Acc) -> Acc#{P => V} end,
-                                    #{}, WaitingConsumers0),
+    Custs = maps:fold(fun(_K, ?CONSUMER_PID(P) = V, S) ->
+                              S#{P => V}
+                      end, #{}, Cons0),
+    WaitingConsumers1 = lists:foldl(fun({_, ?CONSUMER_PID(P) = V}, Acc) ->
+                                            Acc#{P => V}
+                                    end, #{}, WaitingConsumers0),
     AllConsumers = maps:merge(Custs, WaitingConsumers1),
     [{send_msg, P, eol, ra_event}
      || P <- maps:keys(maps:merge(Enqs, AllConsumers))] ++
@@ -916,11 +922,11 @@ overview(#?STATE{consumers = Cons,
     DlxOverview = rabbit_fifo_dlx:overview(DlxState),
     maps:merge(maps:merge(Overview, DlxOverview), SacOverview).
 
--spec get_checked_out(consumer_id(), msg_id(), msg_id(), state()) ->
+-spec get_checked_out(consumer_key(), msg_id(), msg_id(), state()) ->
     [delivery_msg()].
-get_checked_out(Cid, From, To, #?STATE{consumers = Consumers}) ->
-    case Consumers of
-        #{Cid := #consumer{checked_out = Checked}} ->
+get_checked_out(CKey, From, To, #?STATE{consumers = Consumers}) ->
+    case find_consumer(CKey, Consumers) of
+        {_CKey, #consumer{checked_out = Checked}} ->
             [begin
                  ?MSG(I, H) = maps:get(K, Checked),
                  {K, {I, H}}
@@ -973,11 +979,12 @@ handle_aux(leader, _, garbage_collection, Aux, Log, MacState) ->
 handle_aux(follower, _, garbage_collection, Aux, Log, MacState) ->
     {no_reply, force_eval_gc(Log, MacState, Aux), Log};
 handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
-                                      consumer_key = ConsumerKey}, Corr, Pid},
+                                      consumer_key = Key}, Corr, Pid},
            Aux0, Log0, #?STATE{cfg = #cfg{delivery_limit = undefined},
                                consumers = Consumers}) ->
-    case Consumers of
-        #{ConsumerKey := #consumer{checked_out = Checked}} ->
+
+    case find_consumer(Key, Consumers) of
+        {ConsumerKey, #consumer{checked_out = Checked}} ->
             {Log, ToReturn} =
                 maps:fold(
                   fun (MsgId, ?MSG(Idx, Header), {L0, Acc}) ->
@@ -1162,7 +1169,9 @@ query_messages_total(State) ->
     messages_total(State).
 
 query_processes(#?STATE{enqueuers = Enqs, consumers = Cons0}) ->
-    Cons = maps:fold(fun({_, P}, V, S) -> S#{P => V} end, #{}, Cons0),
+    Cons = maps:fold(fun(_, ?CONSUMER_PID(P) = V, S) ->
+                             S#{P => V}
+                     end, #{}, Cons0),
     maps:keys(maps:merge(Enqs, Cons)).
 
 
@@ -1184,7 +1193,7 @@ query_consumers(#?STATE{consumers = Consumers,
                         cfg = #cfg{consumer_strategy = ConsumerStrategy}}
                 = State) ->
     ActiveActivityStatusFun =
-        case ConsumerStrategy of
+    case ConsumerStrategy of
             competing ->
                 fun(_ConsumerKey, #consumer{status = Status}) ->
                         case Status of
@@ -1196,7 +1205,7 @@ query_consumers(#?STATE{consumers = Consumers,
                 end;
             single_active ->
                 SingleActiveConsumer = query_single_active_consumer(State),
-                fun({Tag, Pid} = _Consumer, _) ->
+                fun(_, ?CONSUMER_TAG_PID(Tag, Pid)) ->
                         case SingleActiveConsumer of
                             {value, {Tag, Pid}} ->
                                 {true, single_active};
@@ -1208,11 +1217,13 @@ query_consumers(#?STATE{consumers = Consumers,
     FromConsumers =
         maps:fold(fun (_, #consumer{status = cancelled}, Acc) ->
                           Acc;
-                      (Key = {Tag, Pid},
-                       #consumer{cfg = #consumer_cfg{meta = Meta}} = Consumer,
+                      (Key,
+                       #consumer{cfg = #consumer_cfg{tag = Tag,
+                                                     pid = Pid,
+                                                     meta = Meta}} = Consumer,
                        Acc) ->
                           {Active, ActivityStatus} =
-                          ActiveActivityStatusFun(Key, Consumer),
+                              ActiveActivityStatusFun(Key, Consumer),
                           maps:put(Key,
                                    {Pid, Tag,
                                     maps:get(ack, Meta, undefined),
@@ -1223,35 +1234,38 @@ query_consumers(#?STATE{consumers = Consumers,
                                     maps:get(username, Meta, undefined)},
                                    Acc)
                   end, #{}, Consumers),
-    FromWaitingConsumers =
-        lists:foldl(fun ({_, #consumer{status = cancelled}}, Acc) ->
-                                      Acc;
-                        (Key = {{Tag, Pid},
-                          #consumer{cfg = #consumer_cfg{meta = Meta}} = Consumer},
-                         Acc) ->
-                            {Active, ActivityStatus} =
-                                ActiveActivityStatusFun(Key, Consumer),
-                            maps:put(Key,
-                                     {Pid, Tag,
-                                      maps:get(ack, Meta, undefined),
-                                      maps:get(prefetch, Meta, undefined),
-                                      Active,
-                                      ActivityStatus,
-                                      maps:get(args, Meta, []),
-                                      maps:get(username, Meta, undefined)},
-                                     Acc)
-                    end, #{}, WaitingConsumers),
-    maps:merge(FromConsumers, FromWaitingConsumers).
+        FromWaitingConsumers =
+            lists:foldl(
+              fun ({_, #consumer{status = cancelled}},
+                   Acc) ->
+                      Acc;
+                  ({Key,
+                    #consumer{cfg = #consumer_cfg{tag = Tag,
+                                                  pid = Pid,
+                                                  meta = Meta}} = Consumer},
+                   Acc) ->
+                      {Active, ActivityStatus} =
+                          ActiveActivityStatusFun(Key, Consumer),
+                      maps:put(Key,
+                               {Pid, Tag,
+                                maps:get(ack, Meta, undefined),
+                                maps:get(prefetch, Meta, undefined),
+                                Active,
+                                ActivityStatus,
+                                maps:get(args, Meta, []),
+                                maps:get(username, Meta, undefined)},
+                               Acc)
+              end, #{}, WaitingConsumers),
+        maps:merge(FromConsumers, FromWaitingConsumers).
 
 
-query_single_active_consumer(
-  #?STATE{cfg = #cfg{consumer_strategy = single_active},
-          consumers = Consumers}) ->
+query_single_active_consumer(#?STATE{cfg = #cfg{consumer_strategy = single_active},
+                                     consumers = Consumers}) ->
     case active_consumer(Consumers) of
         undefined ->
             {error, no_value};
-        {ActiveCid, _} ->
-            {value, ActiveCid}
+        {_CKey, ?CONSUMER_TAG_PID(Tag, Pid)} ->
+            {value, {Tag, Pid}}
     end;
 query_single_active_consumer(_) ->
     disabled.
@@ -1374,11 +1388,16 @@ cancel_consumer(Meta, ConsumerKey,
         _ ->
             % The cancelled consumer is not active or cancelled
             % Just remove it from idle_consumers
-            Waiting = lists:keydelete(ConsumerKey, 1, Waiting0),
-            Effects = cancel_consumer_effects(ConsumerKey, State0, Effects0),
-            % A waiting consumer isn't supposed to have any checked out messages,
-            % so nothing special to do here
-            {State0#?STATE{waiting_consumers = Waiting}, Effects}
+            case lists:keyfind(ConsumerKey, 1, Waiting0) of
+                {_, ?CONSUMER_TAG_PID(T, P)} ->
+                    Waiting = lists:keydelete(ConsumerKey, 1, Waiting0),
+                    Effects = cancel_consumer_effects({T, P}, State0, Effects0),
+                    % A waiting consumer isn't supposed to have any checked out messages,
+                    % so nothing special to do here
+                    {State0#?STATE{waiting_consumers = Waiting}, Effects};
+                _ ->
+                    {State0, Effects0}
+            end
     end.
 
 consumer_update_active_effects(#?STATE{cfg = #cfg{resource = QName}},
@@ -1405,7 +1424,7 @@ cancel_consumer0(Meta, ConsumerKey,
             %% if the consumer has unacked messages. This is a bit weird but
             %% in line with what classic queues do (from an external point of
             %% view)
-            Effects = cancel_consumer_effects(ConsumerKey, S, Effects2),
+            Effects = cancel_consumer_effects(consumer_id(Consumer), S, Effects2),
             {S, Effects};
         _ ->
             %% already removed: do nothing
@@ -2410,21 +2429,21 @@ message_size(Msg) ->
 all_nodes(#?STATE{consumers = Cons0,
                   enqueuers = Enqs0,
                   waiting_consumers = WaitingConsumers0}) ->
-    Nodes0 = maps:fold(fun({_, P}, _, Acc) ->
+    Nodes0 = maps:fold(fun(_, ?CONSUMER_PID(P), Acc) ->
                                Acc#{node(P) => ok}
                        end, #{}, Cons0),
     Nodes1 = maps:fold(fun(P, _, Acc) ->
                                Acc#{node(P) => ok}
                        end, Nodes0, Enqs0),
     maps:keys(
-      lists:foldl(fun({{_, P}, _}, Acc) ->
+      lists:foldl(fun({_, ?CONSUMER_PID(P)}, Acc) ->
                           Acc#{node(P) => ok}
                   end, Nodes1, WaitingConsumers0)).
 
 all_pids_for(Node, #?STATE{consumers = Cons0,
                            enqueuers = Enqs0,
-                            waiting_consumers = WaitingConsumers0}) ->
-    Cons = maps:fold(fun({_, P}, _, Acc)
+                           waiting_consumers = WaitingConsumers0}) ->
+    Cons = maps:fold(fun(_, ?CONSUMER_PID(P), Acc)
                            when node(P) =:= Node ->
                              [P | Acc];
                         (_, _, Acc) -> Acc
@@ -2434,7 +2453,7 @@ all_pids_for(Node, #?STATE{consumers = Cons0,
                              [P | Acc];
                         (_, _, Acc) -> Acc
                      end, Cons, Enqs0),
-    lists:foldl(fun({{_, P}, _}, Acc)
+    lists:foldl(fun({_, ?CONSUMER_PID(P)}, Acc)
                       when node(P) =:= Node ->
                         [P | Acc];
                    (_, Acc) -> Acc
@@ -2443,8 +2462,9 @@ all_pids_for(Node, #?STATE{consumers = Cons0,
 suspected_pids_for(Node, #?STATE{consumers = Cons0,
                                  enqueuers = Enqs0,
                                  waiting_consumers = WaitingConsumers0}) ->
-    Cons = maps:fold(fun({_, P},
-                         #consumer{status = suspected_down},
+    Cons = maps:fold(fun(_Key,
+                         #consumer{cfg = #consumer_cfg{pid = P},
+                                   status = suspected_down},
                          Acc)
                            when node(P) =:= Node ->
                              [P | Acc];
@@ -2455,8 +2475,9 @@ suspected_pids_for(Node, #?STATE{consumers = Cons0,
                              [P | Acc];
                         (_, _, Acc) -> Acc
                      end, Cons, Enqs0),
-    lists:foldl(fun({{_, P},
-                     #consumer{status = suspected_down}}, Acc)
+    lists:foldl(fun({_Key,
+                     #consumer{cfg = #consumer_cfg{pid = P},
+                               status = suspected_down}}, Acc)
                       when node(P) =:= Node ->
                         [P | Acc];
                    (_, Acc) -> Acc
@@ -2507,8 +2528,8 @@ convert(3, To, State) ->
     convert(4, To, convert_v3_to_v4(State)).
 
 smallest_raft_index(#?STATE{messages = Messages,
-                             ra_indexes = Indexes,
-                             dlx = DlxState}) ->
+                            ra_indexes = Indexes,
+                            dlx = DlxState}) ->
     SmallestDlxRaIdx = rabbit_fifo_dlx:smallest_raft_index(DlxState),
     SmallestMsgsRaIdx = case lqueue:get(Messages, undefined) of
                             ?MSG(I, _) when is_integer(I) ->

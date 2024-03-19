@@ -75,9 +75,9 @@
     {simple_prefetch, MaxCredit :: non_neg_integer()}.
 %% determines how credit is replenished
 
--type checkout_spec() :: {once | auto, Num :: non_neg_integer(),
-                          credited,
-                          simple_prefetch} |
+-type checkout_spec() :: {once | auto,
+                          Num :: non_neg_integer(),
+                          credited | simple_prefetch} |
 
                          {dequeue, settled | unsettled} |
                          cancel |

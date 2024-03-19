@@ -126,6 +126,8 @@ credit_api_v2(Config) ->
 
     ?assertEqual(ok,
                  rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FUNCTION_NAME)),
+    ?assertEqual(ok,
+                 rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queues_v4)),
     flush(enabled_feature_flag),
 
     %% Consume with credit API v2
