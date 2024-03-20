@@ -79,7 +79,8 @@
 
 -ifdef(TEST).
 -export([update_header/4,
-         chunk_disk_msgs/3]).
+         chunk_disk_msgs/3,
+         smallest_raft_index/1]).
 -endif.
 
 -import(serial_number, [add/2, diff/2]).
@@ -273,12 +274,13 @@ apply(#{index := Idx} = Meta,
       #requeue{consumer_key = ConsumerKey,
                msg_id = MsgId,
                index = OldIdx,
-               header = Header0,
-               msg = _Msg},
+               header = Header0},
       #?STATE{consumers = Cons0,
               messages = Messages,
               ra_indexes = Indexes0,
               enqueue_count = EnqCount} = State00) ->
+    %% the actual consumer key was looked up in the aux handler so we
+    %% dont need to use find_consumer/2 here
     case Cons0 of
         #{ConsumerKey := #consumer{checked_out = Checked0} = Con0}
           when is_map_key(MsgId, Checked0) ->
@@ -979,11 +981,12 @@ handle_aux(leader, _, garbage_collection, Aux, Log, MacState) ->
 handle_aux(follower, _, garbage_collection, Aux, Log, MacState) ->
     {no_reply, force_eval_gc(Log, MacState, Aux), Log};
 handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
-                                      consumer_key = ConsumerKey}, Corr, Pid},
+                                      consumer_key = Key}, Corr, Pid},
            Aux0, Log0, #?STATE{cfg = #cfg{delivery_limit = undefined},
                                consumers = Consumers}) ->
-    case Consumers of
-        #{ConsumerKey := #consumer{checked_out = Checked}} ->
+
+    case find_consumer(Key, Consumers) of
+        {ConsumerKey, #consumer{checked_out = Checked}} ->
             {Log, ToReturn} =
                 maps:fold(
                   fun (MsgId, ?MSG(Idx, Header), {L0, Acc}) ->
@@ -1734,7 +1737,6 @@ increase_credit(#consumer{cfg = #consumer_cfg{credit_mode =
                                               {simple_prefetch, MaxCredit}},
                           credit = Current}, Credit)
   when MaxCredit > 0 ->
-    ct:pal("increase credit ~p ~p", [Current, Credit]),
     min(MaxCredit, Current + Credit);
 increase_credit(#consumer{credit = Current}, Credit) ->
     Current + Credit.
@@ -2526,8 +2528,8 @@ convert(3, To, State) ->
     convert(4, To, convert_v3_to_v4(State)).
 
 smallest_raft_index(#?STATE{messages = Messages,
-                             ra_indexes = Indexes,
-                             dlx = DlxState}) ->
+                            ra_indexes = Indexes,
+                            dlx = DlxState}) ->
     SmallestDlxRaIdx = rabbit_fifo_dlx:smallest_raft_index(DlxState),
     SmallestMsgsRaIdx = case lqueue:get(Messages, undefined) of
                             ?MSG(I, _) when is_integer(I) ->
