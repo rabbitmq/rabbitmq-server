@@ -1,3 +1,4 @@
+load("@aspect_bazel_lib//lib:write_source_files.bzl", "write_source_files")
 load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
@@ -28,36 +29,48 @@ py_binary(
 )
 
 genrule(
-    name = "generated_headers",
+    name = "rabbit_framing",
     srcs = [
         "//deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
         "//deps/rabbitmq_codegen:credit_extension.json",
         "//deps/rabbitmq_codegen:amqp-rabbitmq-0.8.json",
     ],
-    outs = ["include/rabbit_framing.hrl"],
+    outs = ["gen/rabbit_framing.hrl"],
     cmd = "$(location :codegen) --ignore-conflicts header $(SRCS) $@",
+    tags = ["manual"],
     tools = [":codegen"],
 )
 
 genrule(
-    name = "rabbit_framing_amqp_0_9_1.erl",
+    name = "rabbit_framing_amqp_0_9_1",
     srcs = [
         "//deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
         "//deps/rabbitmq_codegen:credit_extension.json",
     ],
-    outs = ["src/rabbit_framing_amqp_0_9_1.erl"],
+    outs = ["gen/rabbit_framing_amqp_0_9_1.erl"],
     cmd = "$(location :codegen) body $(SRCS) $@",
+    tags = ["manual"],
     tools = [":codegen"],
 )
 
 genrule(
-    name = "rabbit_framing_amqp_0_8.erl",
+    name = "rabbit_framing_amqp_0_8",
     srcs = [
         "//deps/rabbitmq_codegen:amqp-rabbitmq-0.8.json",
     ],
-    outs = ["src/rabbit_framing_amqp_0_8.erl"],
+    outs = ["gen/rabbit_framing_amqp_0_8.erl"],
     cmd = "$(location :codegen) body $(SRCS) $@",
+    tags = ["manual"],
     tools = [":codegen"],
+)
+
+write_source_files(
+    name = "write_framing_sources",
+    files = {
+        "include/rabbit_framing.hrl": ":rabbit_framing",
+        "src/rabbit_framing_amqp_0_8.erl": ":rabbit_framing_amqp_0_8",
+        "src/rabbit_framing_amqp_0_9_1.erl": ":rabbit_framing_amqp_0_9_1",
+    },
 )
 
 APP_EXTRA_KEYS = """
