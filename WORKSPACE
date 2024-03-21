@@ -28,7 +28,7 @@ rules_erlang_internal_deps()
 
 load("@rules_erlang//:internal_setup.bzl", "rules_erlang_internal_setup")
 
-rules_erlang_internal_setup(go_repository_default_config = "//:WORKSPACE")
+rules_erlang_internal_setup()
 
 http_archive(
     name = "io_bazel_rules_docker",

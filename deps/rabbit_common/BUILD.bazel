@@ -68,12 +68,6 @@ write_source_files(
 )
 
 rabbitmq_app(
-    srcs = glob([
-        "src/**/*.erl",
-    ]) + [
-        ":rabbit_framing_amqp_0_8.erl",
-        ":rabbit_framing_amqp_0_9_1.erl",
-    ],
     app_name = "rabbit_common",
     extra_apps = [
         "compiler",

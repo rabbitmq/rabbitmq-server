@@ -11,7 +11,6 @@ bazel_dep(
     name = "bazel_skylib",
     version = "1.5.0",
 )
-
 bazel_dep(
     name = "aspect_bazel_lib",
     version = "2.5.3",
@@ -208,6 +207,7 @@ erlang_package.hex_package(
 )
 erlang_package.hex_package(
     name = "credentials_obfuscation",
+    build_file = "@rabbitmq-server//bazel:BUILD.credentials_obfuscation",
     sha256 = "738ace0ed5545d2710d3f7383906fc6f6b582d019036e5269c4dbd85dbced566",
     version = "3.4.0",
 )

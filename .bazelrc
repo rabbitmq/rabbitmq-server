@@ -31,7 +31,7 @@ build:buildbuddy --experimental_remote_cache_async
 build:buildbuddy --noslim_profile
 build:buildbuddy --experimental_profile_include_target_label
 build:buildbuddy --experimental_profile_include_primary_output
-build:buildbuddy --experimental_remote_build_event_upload=minimal
+build:buildbuddy --remote_build_event_upload=minimal
 build:buildbuddy --nolegacy_important_outputs
 
 # buildbuddy implies remote cache, so ct_logdir is restored to its default for reproducibility
