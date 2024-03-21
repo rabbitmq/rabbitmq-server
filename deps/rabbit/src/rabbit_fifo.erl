@@ -1172,7 +1172,9 @@ query_messages_total(State) ->
     messages_total(State).
 
 query_processes(#?STATE{enqueuers = Enqs, consumers = Cons0}) ->
-    Cons = maps:fold(fun({_, P}, V, S) -> S#{P => V} end, #{}, Cons0),
+    Cons = maps:fold(fun(_, ?CONSUMER_PID(P) = V, S) ->
+                             S#{P => V}
+                     end, #{}, Cons0),
     maps:keys(maps:merge(Enqs, Cons)).
 
 
