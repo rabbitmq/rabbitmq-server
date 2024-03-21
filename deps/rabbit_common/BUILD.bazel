@@ -8,8 +8,8 @@ load(
     "assert_suites",
     rabbitmq_app = "rabbitmq_app2",
     rabbitmq_suite = "rabbitmq_suite2",
+    "test_helpers",
 )
-load("@rules_erlang//:erlang_bytecode2.bzl", "erlang_bytecode")
 
 py_binary(
     name = "codegen",
@@ -112,23 +112,7 @@ dialyze(
     target = ":erlang_app",
 )
 
-erlang_bytecode(
-    name = "test_helpers",
-    testonly = True,
-    srcs = [
-        "test/gen_server2_test_server.erl",
-        "test/test_event_handler.erl",
-    ],
-    hdrs = glob([
-        "include/*.hrl",
-        "src/*.hrl",
-    ]),
-    dest = "test",
-    erlc_opts = "//:test_erlc_opts",
-    deps = [
-        ":test_erlang_app",
-    ],
-)
+test_helpers(name = "test_helpers")
 
 eunit(
     name = "eunit",

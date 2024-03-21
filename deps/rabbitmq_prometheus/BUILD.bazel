@@ -8,6 +8,7 @@ load(
     "broker_for_integration_suites",
     rabbitmq_app = "rabbitmq_app2",
     rabbitmq_integration_suite = "rabbitmq_integration_suite2",
+    "test_helpers",
 )
 
 rabbitmq_app(
@@ -43,9 +44,11 @@ dialyze(
     target = ":erlang_app",
 )
 
+test_helpers(name = "test_helpers")
+
 eunit(
     name = "eunit",
-    compiled_suites = [":rabbitmq_prometheus_collector_test_proxy_beam_files"],  #keep
+    compiled_suites = [":test_helpers"],
     target = ":test_erlang_app",
 )
 
@@ -66,8 +69,8 @@ rabbitmq_integration_suite(
     name = "prometheus_rabbitmq_federation_collector_SUITE",
     size = "small",
     additional_beam = [
-        "//deps/rabbitmq_federation:test/rabbit_federation_test_util.beam",  #keep
-        "test/rabbitmq_prometheus_collector_test_proxy.beam",  #keep
+        "//deps/rabbitmq_federation:test/rabbit_federation_test_util.beam",
+        ":test_helpers",
     ],
 )
 

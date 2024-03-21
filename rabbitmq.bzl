@@ -344,6 +344,27 @@ def rabbitmq_suite2(
     )
     return name
 
+def test_helpers(
+        name = "test_helpers",
+        deps = [":test_erlang_app"],
+        **kwargs):
+    erlang_bytecode(
+        name = name,
+        testonly = True,
+        srcs = native.glob(
+            ["test/**/*.erl"],
+            exclude = ["test/*_SUITE.erl"],
+        ),
+        hdrs = native.glob([
+            "include/*.hrl",
+            "src/*.hrl",
+        ]),
+        dest = "test",
+        erlc_opts = "//:test_erlc_opts",
+        deps = deps,
+        **kwargs
+    )
+
 def broker_for_integration_suites(extra_plugins = []):
     apps = ["rabbit"]
     if native.package_name() != "deps/rabbit":
