@@ -21,7 +21,7 @@ def _impl(ctx):
         outputs = [ebin],
         command = """set -euo pipefail
 
-cp -r "{elixir_home}"/lib/{app}/ebin/* {ebin}
+cp -RL "{elixir_home}"/lib/{app}/ebin/* {ebin}
 """.format(
             elixir_home = elixir_home,
             app = ctx.attr.app,
