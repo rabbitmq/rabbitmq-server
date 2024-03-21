@@ -59,7 +59,7 @@ usage_additional() ->
     ].
 
 usage_doc_guides() ->
-    [?WEB_MQTT_GUIDE_URL].
+    [<<"https://rabbitmq.com/docs/web-mqtt">>].
 
 run(Args, #{node := NodeName,
             timeout := Timeout,
