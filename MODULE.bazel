@@ -24,6 +24,16 @@ bazel_dep(
     version = "0.0.9",
 )
 bazel_dep(
+    name = "rules_go",
+    version = "0.44.2",
+    repo_name = "io_bazel_rules_go",
+)
+bazel_dep(
+    name = "gazelle",
+    version = "0.35.0",
+    repo_name = "bazel_gazelle",
+)
+bazel_dep(
     name = "rules_erlang",
     version = "3.15.0",
 )

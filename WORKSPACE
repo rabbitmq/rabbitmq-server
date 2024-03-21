@@ -16,19 +16,39 @@ load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
 
 rules_pkg_dependencies()
 
-git_repository(
-    name = "rules_erlang",
-    remote = "https://github.com/rabbitmq/rules_erlang.git",
-    tag = "3.15.0",
+http_archive(
+    name = "io_bazel_rules_go",
+    integrity = "sha256-fHbWI2so/2laoozzX5XeMXqUcv0fsUrHl8m/aE8Js3w=",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.44.2/rules_go-v0.44.2.zip",
+        "https://github.com/bazelbuild/rules_go/releases/download/v0.44.2/rules_go-v0.44.2.zip",
+    ],
 )
 
-load("@rules_erlang//:internal_deps.bzl", "rules_erlang_internal_deps")
+http_archive(
+    name = "bazel_gazelle",
+    integrity = "sha256-MpOL2hbmcABjA1R5Bj2dJMYO2o15/Uc5Vj9Q0zHLMgk=",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v0.35.0/bazel-gazelle-v0.35.0.tar.gz",
+        "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.35.0/bazel-gazelle-v0.35.0.tar.gz",
+    ],
+)
 
-rules_erlang_internal_deps()
 
-load("@rules_erlang//:internal_setup.bzl", "rules_erlang_internal_setup")
+load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
+load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies", "go_repository")
 
-rules_erlang_internal_setup()
+############################################################
+# Define your own dependencies here using go_repository.
+# Else, dependencies declared by rules_go/gazelle will be used.
+# The first declaration of an external repository "wins".
+############################################################
+
+go_rules_dependencies()
+
+go_register_toolchains(version = "1.20.5")
+
+gazelle_dependencies()
 
 http_archive(
     name = "io_bazel_rules_docker",
@@ -58,6 +78,20 @@ container_pull(
     repository = "pivotalrabbitmq/ubuntu",
     tag = "20.04",
 )
+
+git_repository(
+    name = "rules_erlang",
+    remote = "https://github.com/rabbitmq/rules_erlang.git",
+    tag = "3.15.0",
+)
+
+load("@rules_erlang//:internal_deps.bzl", "rules_erlang_internal_deps")
+
+rules_erlang_internal_deps()
+
+load("@rules_erlang//:internal_setup.bzl", "rules_erlang_internal_setup")
+
+rules_erlang_internal_setup()
 
 http_file(
     name = "openssl-3.1.4",

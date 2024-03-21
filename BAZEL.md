@@ -71,26 +71,6 @@ Note: This takes quite some time on a single machine.
 
 `bazel test //deps/rabbit:lazy_queue_SUITE`
 
-## Add/update an external dependency
-
-### from hex.pm
-
-1. `bazel run gazelle-update-repos -- hex.pm/accept@0.3.5` to generate/update `bazel/BUILD.accept`
-1. Add/update the entry in MODULE.bazel
-
-### from github 
-
-1. `bazel run gazelle-update-repos -- --testonly github.com/extend/ct_helper@master`
-1. Add/update the entry in MODULE.bazel
-
-## Update BUILD files
-
-`bazel run gazelle`
-
-## Regenerate moduleindex.yaml
-
-`bazel run :moduleindex > moduleindex.yaml`
-
 ## Additional Useful Commands
 
 - Format all bazel files consistently (requires [buildifier](https://github.com/bazelbuild/buildtools/blob/master/buildifier/README.md)):
