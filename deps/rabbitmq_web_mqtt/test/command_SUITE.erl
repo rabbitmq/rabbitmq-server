@@ -11,7 +11,9 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_mqtt/include/rabbit_mqtt.hrl").
--import(rabbit_web_mqtt_test_util, [connect/3, connect/4]).
+
+-import(rabbit_web_mqtt_test_util,
+        [connect/3, connect/4]).
 
 -define(COMMAND, 'Elixir.RabbitMQ.CLI.Ctl.Commands.ListWebMqttConnectionsCommand').
 
@@ -53,12 +55,11 @@ end_per_suite(Config) ->
 
 init_per_group(unit, Config) ->
     Config;
-init_per_group(Group, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "mixed version clusters are not supported"};
-        _ ->
-            rabbit_ct_helpers:set_config(Config, {mqtt_version, Group})
+init_per_group(v5 = V5, Config0) ->
+    Config = rabbit_ct_helpers:set_config(Config0, {mqtt_version, V5}),
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, mqtt_v5) of
+        ok -> Config;
+        {skip, _} = Skip -> Skip
     end.
 
 end_per_group(_, Config) ->

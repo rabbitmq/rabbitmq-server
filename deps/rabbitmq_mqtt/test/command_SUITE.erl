@@ -56,24 +56,9 @@ end_per_suite(Config) ->
 init_per_group(unit, Config) ->
     Config;
 init_per_group(Group, Config) ->
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, delete_ra_cluster_mqtt_node),
     Config1 = rabbit_ct_helpers:set_config(Config, {mqtt_version, Group}),
-    case Group of
-        v4 ->
-            AllApps = rabbit_ct_broker_helpers:rpc_all(Config1, application, loaded_applications, []),
-            AllAppNames = lists:map(fun (AppList) ->
-               lists:map(fun ({Name, _, _}) -> Name end, AppList)
-            end, AllApps),
-            case lists:all(fun (NodeApps) ->
-                lists:member(rabbit_web_mqtt_app, NodeApps)
-            end, AllAppNames) of
-                true ->
-                    Config1;
-                false ->
-                    {skip, "rabbit_web_mqtt_app not available on all nodes"}
-            end;
-        v5 ->
-            util:maybe_skip_v5(Config1)
-    end.
+    util:maybe_skip_v5(Config1).
 
 end_per_group(_, Config) ->
     Config.
