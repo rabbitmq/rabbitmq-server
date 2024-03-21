@@ -147,6 +147,7 @@
               credit_mode/0,
               consumer_meta/0,
               consumer_id/0,
+              consumer_key/0,
               client_msg/0,
               msg/0,
               msg_id/0,
