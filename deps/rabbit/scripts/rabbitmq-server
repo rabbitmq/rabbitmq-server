@@ -83,7 +83,7 @@ start_rabbitmq_server() {
 stop_rabbitmq_server() {
     if test "$rabbitmq_server_pid"; then
         kill -TERM "$rabbitmq_server_pid"
-        wait "$rabbitmq_server_pid" || (exit $?)
+        wait "$rabbitmq_server_pid" || exit "$?"
     fi
 }
 
