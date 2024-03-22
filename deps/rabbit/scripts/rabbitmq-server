@@ -147,5 +147,5 @@ else
     # force that statement to succeed and the signal handler to properly
     # execute. Because the statement below has an exit code of 0, the
     # signal handler has to restate the expected exit code.
-    wait "$rabbitmq_server_pid" || (exit $?)
+    wait "$rabbitmq_server_pid" || exit "$?"
 fi
