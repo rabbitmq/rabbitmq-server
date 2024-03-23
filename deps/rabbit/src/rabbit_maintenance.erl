@@ -226,7 +226,7 @@ transfer_leadership_of_metadata_store(TransferCandidates) ->
     end.
 
 -spec transfer_leadership_of_classic_mirrored_queues([node()]) -> ok.
-%% This function is no longer used by maintanence mode. We retain it in case
+%% This function is no longer used by maintenance mode. We retain it in case
 %% classic mirrored queue leadership transfer would be reconsidered.
 %%
 %% With a lot of CMQs in a cluster, the transfer procedure can take prohibitively long
