@@ -26,7 +26,7 @@ enhancements
    now enforces the negotiated maximum frame size
  - AMQP 0.9.1 guidance on error constants is now followed more closely and
    0.9.1 error codes are produced in more situations
- - SSL compatiblity under R14A has been improved
+ - SSL compatibility under R14A has been improved
 
 java client
 -----------
