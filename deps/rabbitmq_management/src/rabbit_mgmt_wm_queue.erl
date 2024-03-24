@@ -50,8 +50,13 @@ to_json(ReqData, Context) ->
                             rabbit_mgmt_format:strip_pids(Q)),
                 rabbit_mgmt_util:reply(ensure_defaults(Payload), ReqData, Context);
             true ->
-                rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(queue(ReqData)),
-                                       ReqData, Context)
+                Q = case rabbit_mgmt_util:enable_queue_totals(ReqData) of
+                    false -> queue(ReqData);
+                    true  -> queue_with_totals(ReqData)
+                end,
+                rabbit_mgmt_util:reply(
+                    rabbit_mgmt_format:strip_pids(Q),
+                    ReqData, Context)
         end
     catch
         {error, invalid_range_parameters, Reason} ->
@@ -110,10 +115,26 @@ queue(ReqData) ->
         VHost     -> queue(VHost, rabbit_mgmt_util:id(queue, ReqData))
     end.
 
-
 queue(VHost, QName) ->
     Name = rabbit_misc:r(VHost, queue, QName),
     case rabbit_amqqueue:lookup(Name) of
         {ok, Q}            -> rabbit_mgmt_format:queue(Q);
+        {error, not_found} -> not_found
+    end.
+
+queue_with_totals(ReqData) ->
+    case rabbit_mgmt_util:vhost(ReqData) of
+        not_found -> not_found;
+        VHost     -> queue_with_totals(VHost, rabbit_mgmt_util:id(queue, ReqData))
+    end. 
+
+queue_with_totals(VHost, QName) ->
+    Name = rabbit_misc:r(VHost, queue, QName),
+    case rabbit_amqqueue:lookup(Name) of
+        {ok, Q}            -> QueueInfo = rabbit_amqqueue:info(Q,
+                                    [name, durable, auto_delete, exclusive,
+                                    owner_pid, arguments, type, state,
+                                    policy, totals, online, type_specific]),
+                              rabbit_mgmt_format:queue_info(QueueInfo);
         {error, not_found} -> not_found
     end.
