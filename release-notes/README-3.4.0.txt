@@ -218,7 +218,7 @@ dependency change
 26095 drop support for Java 1.5
 
 licencing change
-24543 make the Java client additionally avaliable under the ASL2
+24543 make the Java client additionally available under the ASL2
 
 
 .net client
