@@ -52,6 +52,7 @@ jobs:
           build:buildbuddy --disk_cache=
           build:buildbuddy --noexperimental_remote_cache_compression
           build:buildbuddy --noexperimental_remote_cache_async
+          build:buildbuddy --remote_build_event_upload=all
         EOF
 
         bazelisk info release
