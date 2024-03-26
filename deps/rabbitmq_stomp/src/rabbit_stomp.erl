@@ -20,10 +20,13 @@
 
 -define(DEFAULT_CONFIGURATION,
         #stomp_configuration{
-          default_login    = undefined,
-          default_passcode = undefined,
-          implicit_connect = false,
-          ssl_cert_login   = false}).
+           default_login     = undefined,
+           default_passcode  = undefined,
+           implicit_connect  = false,
+           ssl_cert_login    = false,
+           max_header_length = 1024*100,
+           max_headers      = 1000,
+           max_body_length   = 1024*1024*100}).
 
 start(normal, []) ->
     Config = parse_configuration(),
@@ -75,7 +78,11 @@ parse_configuration() ->
     {ok, SSLLogin} = application:get_env(ssl_cert_login),
     {ok, ImplicitConnect} = application:get_env(implicit_connect),
     Conf = Conf0#stomp_configuration{ssl_cert_login   = SSLLogin,
-                                     implicit_connect = ImplicitConnect},
+                                     implicit_connect = ImplicitConnect,
+                                     max_headers = application:get_env(max_headers, ?DEFAULT_CONFIGURATION#stomp_configuration.max_headers),
+                                     max_header_length = application:get_env(max_header_length, ?DEFAULT_CONFIGURATION#stomp_configuration.max_header_length),
+                                     max_body_length = application:get_env(max_body_length, ?DEFAULT_CONFIGURATION#stomp_configuration.max_body_length)},
+
     report_configuration(Conf),
     Conf.
 

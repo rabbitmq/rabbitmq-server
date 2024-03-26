@@ -27,13 +27,13 @@ connect0(Version, Login, Pass, Port, Headers) ->
     %% AMQP default port.
     {ok, Sock} = gen_tcp:connect(localhost, Port, [{active, false}, binary]),
     Client0 = recv_state(Sock),
-    send(Client0, "CONNECT", [{"login", Login},
+    send(Client0, 'CONNECT', [{"login", Login},
                               {"passcode", Pass} | Version] ++ Headers),
-    {#stomp_frame{command = "CONNECTED"}, Client1} = recv(Client0),
+    {#stomp_frame{command = 'CONNECTED'}, Client1} = recv(Client0),
     {ok, Client1}.
 
 disconnect(Client = {Sock, _}) ->
-    send(Client, "DISCONNECT"),
+    send(Client, 'DISCONNECT'),
     gen_tcp:close(Sock).
 
 send(Client, Command) ->

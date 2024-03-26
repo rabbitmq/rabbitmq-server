@@ -10,7 +10,7 @@
 -include("rabbit_stomp_frame.hrl").
 -include("rabbit_stomp_headers.hrl").
 
--export([parse/2, initial_state/0]).
+-export([parse/2, initial_state/0, initial_state/1]).
 -export([header/2, header/3,
          boolean_header/2, boolean_header/3,
          integer_header/2, integer_header/3,
@@ -18,7 +18,8 @@
 -export([stream_offset_header/1, stream_filter_header/1]).
 -export([serialize/1, serialize/2]).
 
-initial_state() -> none.
+initial_state() -> {none, ?DEFAULT_STOMP_PARSER_CONFIG}.
+initial_state(Config) -> {none, Config}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% STOMP 1.1 frames basic syntax
@@ -73,11 +74,29 @@ initial_state() -> none.
 -define(COLON_ESC, $c).
 -define(CR_ESC,    $r).
 
+-define(COMMAND_TREE,
+        #{$S => #{$E => #{$N => #{$D => 'SEND'}},
+                  $U => #{$B => #{$S => #{$C => #{$R => #{$I => #{$B => #{$E => 'SUBSCRIBE'}}}}}}},
+                  $T => #{$O => #{$M => #{$P => 'STOMP'}}}},
+          $U => #{$N => #{$S => #{$U => #{$B => #{$S => #{$C => #{$R => #{$I => #{$B => #{$E => 'UNSUBSCRIBE'}}}}}}}}}},
+          $B => #{$E => #{$G => #{$I => #{$N => 'BEGIN'}}}},
+          $C => #{$O => #{$M => #{$M => #{$I => #{$T => 'COMMIT'}}},
+                          $N => #{$N => #{$E => #{$C => #{$T => {'CONNECT',
+                                                                 #{$E => #{$D => 'CONNECTED'}}}}}}}}},
+          $A => #{$B => #{$O => #{$R => #{$T => 'ABORT'}}},
+                  $C => #{$K => 'ACK'}},
+          $N => #{$A => #{$C => #{$K => 'NACK'}}},
+          $D => #{$I => #{$S => #{$C => #{$O => #{$N => #{$N => #{$E => #{$C => #{$T => 'DISCONNECT'}}}}}}}}},
+          $M => #{$E => #{$S => #{$S => #{$A => #{$G => #{$E => 'MESSAGE'}}}}}},
+          $R => #{$E => #{$C => #{$E => #{$I => #{$P => #{$T => 'RECEIPT'}}}}}},
+          $E => #{$R => #{$R => #{$O => #{$R => 'ERROR'}}}}}).
+
 %% parser state
--record(state, {acc, cmd, hdrs, hdrname}).
+-record(state, {acc, cmd, cmd_tree = ?COMMAND_TREE, hdrs, hdrname, hdrl = 0,
+                config}).
 
 parse(Content, {resume, Continuation}) -> Continuation(Content);
-parse(Content, none                  ) -> parser(Content, noframe, #state{}).
+parse(Content, {none, Config}                 ) -> parser(Content, noframe, #state{config=Config}).
 
 more(Continuation) -> {more, {resume, Continuation}}.
 
@@ -103,14 +122,40 @@ parser(              Rest,          headers ,  State) -> goto(headers,  hdrname,
 parser(<<?COLON,     Rest/binary>>, hdrname ,  State) -> goto(hdrname,  hdrvalue, Rest, State);
 parser(<<?LF,        Rest/binary>>, hdrname ,  State) -> goto(hdrname,  headers,  Rest, State);
 parser(<<?LF,        Rest/binary>>, hdrvalue,  State) -> goto(hdrvalue, headers,  Rest, State);
+parser(<<Ch:8,       Rest/binary>>,   command ,  #state{cmd_tree = {_, CmdTree}} = State) ->
+    case maps:get(Ch, CmdTree, undefined) of
+        undefined -> {error, unknown_command};
+        NewCmdTree -> parser(Rest, command, State#state{cmd_tree = NewCmdTree})
+    end;
+parser(<<Ch:8,       Rest/binary>>,   command ,  #state{cmd_tree = #{} = CmdTree} = State) ->
+    case maps:get(Ch, CmdTree, undefined) of
+        undefined -> {error, unknown_command};
+        NewCmdTree -> parser(Rest, command, State#state{cmd_tree = NewCmdTree})
+    end;
+parser(<<_Ch:8,       _Rest/binary>>,   command ,  _) ->
+    {error, unknown_command};
 %% accumulate
+%% parser(<<Ch:8,       Rest/binary>>, Term = hdrname    ,  State = #state{config = #stomp_parser_config{max_header_length = MaxHeaderLength}}) ->
+
+%%     parser(Rest, Term, accum(Ch, State));
+%% parser(<<Ch:8,       Rest/binary>>, Term = hdrvalue    ,  State = #state{config = #stomp_parser_config{max_header_length = MaxHeaderLength}}) ->
+%%     parser(Rest, Term, accum(Ch, State));
 parser(<<Ch:8,       Rest/binary>>, Term    ,  State) -> parser(Rest, Term, accum(Ch, State)).
 
 %% state transitions
-goto(noframe,  command,  Rest, State                                 ) -> parser(Rest, command, State#state{acc = []});
-goto(command,  headers,  Rest, State = #state{acc = Acc}             ) -> parser(Rest, headers, State#state{cmd = lists:reverse(Acc), hdrs = []});
-goto(headers,  body,     Rest,         #state{cmd = Cmd, hdrs = Hdrs}) -> parse_body(Rest, #stomp_frame{command = Cmd, headers = Hdrs});
-goto(headers,  hdrname,  Rest, State                                 ) -> parser(Rest, hdrname, State#state{acc = []});
+goto(noframe,  command,  Rest, State                                 ) -> parser(Rest, command, State#state{acc = [], cmd_tree = ?COMMAND_TREE});
+goto(command,  headers,  Rest, State = #state{cmd_tree = Command}) when is_atom(Command) ->
+    parser(Rest, headers, State#state{cmd = Command, hdrs = []});
+goto(command,  headers,  Rest, State = #state{cmd_tree = {Command, _}}) when is_atom(Command) ->
+    parser(Rest, headers, State#state{cmd = Command, hdrs = []});
+goto(command,  headers,  _Rest, _State)->
+   {error, unknown_command};
+goto(headers,  body,     Rest, State                                 ) -> parse_body(Rest, State);
+goto(headers,  hdrname,  Rest, State = #state{hdrs = Headers, config = #stomp_parser_config{max_headers = MaxHeaders}}) ->
+    case length(Headers) == MaxHeaders of
+        true -> {error, {max_headeres, MaxHeaders}};
+        _ -> parser(Rest, hdrname, State#state{acc = []})
+    end;
 goto(hdrname,  hdrvalue, Rest, State = #state{acc = Acc}             ) -> parser(Rest, hdrvalue, State#state{acc = [], hdrname = lists:reverse(Acc)});
 goto(hdrname,  headers, _Rest,         #state{acc = Acc}             ) -> {error, {header_no_value, lists:reverse(Acc)}};  % badly formed header -- fatal error
 goto(hdrvalue, headers,  Rest, State = #state{acc = Acc, hdrs = Headers, hdrname = HdrName}) ->
@@ -140,28 +185,51 @@ insert_header(Headers, Name, Value) ->
         false -> [{Name, Value} | Headers]
     end.
 
-parse_body(Content, Frame = #stomp_frame{command = Command}) ->
-    case Command of
-        "SEND" -> parse_body(Content, Frame, [], integer_header(Frame, ?HEADER_CONTENT_LENGTH, unknown));
-        _ -> parse_body(Content, Frame, [], unknown)
+parse_body(Content, State) ->
+    #state{cmd = Cmd, hdrs = Hdrs, config = #stomp_parser_config{max_body_length = MaxBodyLength}} = State,
+    Frame = #stomp_frame{command = Cmd, headers = Hdrs},
+    case Cmd of
+        'SEND' ->
+            case integer_header(Frame, ?HEADER_CONTENT_LENGTH, unknown) of
+                ContentLength when is_integer(ContentLength) and (ContentLength > MaxBodyLength) ->
+                    {error, {max_body_length, ContentLength}};
+                ContentLength when is_integer(ContentLength) ->
+                    parse_known_body(Content, Frame, [], ContentLength);
+                _ ->
+                    parse_unknown_body(Content, Frame, [], MaxBodyLength)
+            end;
+        _ ->
+            parse_unknown_body(Content, Frame, [], MaxBodyLength)
     end.
 
-parse_body(Content, Frame, Chunks, unknown) ->
-    parse_body2(Content, Frame, Chunks, case firstnull(Content) of
-                                            -1  -> {more, unknown};
-                                            Pos -> {done, Pos}
-                                        end);
-parse_body(Content, Frame, Chunks, Remaining) ->
-    Size = byte_size(Content),
-    parse_body2(Content, Frame, Chunks, case Remaining >= Size of
-                                            true  -> {more, Remaining - Size};
-                                            false -> {done, Remaining}
-                                        end).
+-define(MORE_BODY(Content, Frame, Chunks, Remaining),
+            Chunks1 = finalize_chunk(Content, Chunks),
+            more(fun(Rest) -> ?FUNCTION_NAME(Rest, Frame, Chunks1, Remaining) end)).
 
-parse_body2(Content, Frame, Chunks, {more, Left}) ->
-    Chunks1 = finalize_chunk(Content, Chunks),
-    more(fun(Rest) -> parse_body(Rest, Frame, Chunks1, Left) end);
-parse_body2(Content, Frame, Chunks, {done, Pos}) ->
+parse_unknown_body(Content, Frame, Chunks, Remaining) ->
+    case firstnull(Content) of
+        -1  ->
+            ChunkSize = byte_size(Content),
+            case ChunkSize > Remaining of
+                true ->  {error, {max_body_length, unknown}};
+                false -> ?MORE_BODY(Content, Frame, Chunks, Remaining - ChunkSize)
+            end;
+        Pos ->
+            case Pos > Remaining of
+                true ->  {error, {max_body_length, unknown}};
+                false -> finish_body(Content, Frame, Chunks, Pos)
+            end
+    end.
+
+parse_known_body(Content, Frame, Chunks, Remaining) ->
+    Size = byte_size(Content),
+    case Remaining >= Size of
+        true  ->
+            ?MORE_BODY(Content, Frame, Chunks, Remaining - Size);
+        false -> finish_body(Content, Frame, Chunks, Remaining)
+    end.
+
+finish_body(Content, Frame, Chunks, Pos) ->
     <<Chunk:Pos/binary, 0, Rest/binary>> = Content,
     Body = finalize_chunk(Chunk, Chunks),
     {ok, Frame#stomp_frame{body_iolist_rev = Body}, Rest}.
@@ -251,7 +319,7 @@ serialize(#stomp_frame{command = Command,
                        headers = Headers,
                        body_iolist_rev = BodyFragments}, false) ->
     Len = iolist_size(BodyFragments),
-    [Command, ?LF,
+    [serialize_command(Command), ?LF,
      lists:map(fun serialize_header/1,
                lists:keydelete(?HEADER_CONTENT_LENGTH, 1, Headers)),
      if
@@ -262,6 +330,10 @@ serialize(#stomp_frame{command = Command,
               _ when is_binary(BodyFragments) -> BodyFragments;
               _ -> lists:reverse(BodyFragments)
           end, 0].
+
+serialize_command(Command) when is_atom(Command) ->
+    atom_to_binary(Command, utf8);
+serialize_command(Command) -> Command.
 
 serialize_header({K, V}) when is_integer(V) -> hdr(escape(K), integer_to_list(V));
 serialize_header({K, V}) when is_boolean(V) -> hdr(escape(K), boolean_to_list(V));

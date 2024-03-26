@@ -191,8 +191,7 @@ websocket_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
                      timeout_sec = {0, 0}}};
 websocket_info(connection_created, State) ->
     Infos = infos(?INFO_ITEMS ++ ?OTHER_METRICS, State),
-
-    ?LOG_INFO("Connection created infos ~p", [Infos]),
+    ?LOG_DEBUG("Connection created infos ~p", [Infos]),
     rabbit_core_metrics:connection_created(self(), Infos),
     rabbit_event:notify(connection_created, Infos),
     {[], State, hibernate};

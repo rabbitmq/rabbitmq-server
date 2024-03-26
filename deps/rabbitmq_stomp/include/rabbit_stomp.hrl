@@ -9,9 +9,15 @@
                               default_passcode,
                               force_default_creds = false,
                               implicit_connect,
-                              ssl_cert_login}).
+                              ssl_cert_login,
+                              max_header_length,
+                              max_headers,
+                              max_body_length}).
+
 
 -define(SUPPORTED_VERSIONS, ["1.0", "1.1", "1.2"]).
+
+
 
 -define(INFO_ITEMS,
         [conn_name,
@@ -56,3 +62,5 @@
          garbage_collection,
          state,
          timeout]).
+
+-type send_fun() :: fun ((async | sync, iodata()) -> ok | {atom(), any()}).

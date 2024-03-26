@@ -36,7 +36,8 @@
     heartbeat_sup, heartbeat,
     %% heartbeat timeout value used, 0 means
     %% heartbeats are disabled
-    timeout_sec
+    timeout_sec,
+    parser_config
 }).
 
 %%----------------------------------------------------------------------------
@@ -74,6 +75,12 @@ init([SupHelperPid, Ref, Configuration]) ->
                 [self(), ConnName]),
 
             ParseState = rabbit_stomp_frame:initial_state(),
+            ParserConfig = #stomp_parser_config{
+                              max_headers        = Configuration#stomp_configuration.max_headers,
+                              max_header_length  = Configuration#stomp_configuration.max_header_length,
+                              max_body_length    = Configuration#stomp_configuration.max_body_length
+                             },
+            ParseState = rabbit_stomp_frame:initial_state(ParserConfig),
             _ = register_resource_alarm(),
 
             LoginTimeout = application:get_env(rabbitmq_stomp, login_timeout, 10_000),
@@ -88,6 +95,7 @@ init([SupHelperPid, Ref, Configuration]) ->
                   #reader_state{socket             = RealSocket,
                                 conn_name          = ConnName,
                                 parse_state        = ParseState,
+                                parser_config      = ParserConfig,
                                 processor_state    = ProcState,
                                 heartbeat_sup      = SupHelperPid,
                                 heartbeat          = {none, none},
@@ -282,7 +290,7 @@ control_throttle(State = #reader_state{state              = CS,
     end.
 
 maybe_block(State = #reader_state{state = blocking, heartbeat = Heartbeat},
-            #stomp_frame{command = "SEND"}) ->
+            #stomp_frame{command = 'SEND'}) ->
     rabbit_heartbeat:pause_monitor(Heartbeat),
     State#reader_state{state = blocked};
 maybe_block(State, _) ->
