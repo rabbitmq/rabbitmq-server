@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mgmt_only_http_SUITE).
@@ -516,14 +516,14 @@ queues_enable_totals_test(Config) ->
                   vhost       => <<"/">>,
                   durable     => true,
                   auto_delete => false,
-                  exclusive   => false,
+                  exclusive   => null,
                   arguments   => #{'x-queue-type' => <<"quorum">>},
                   leader      => NodeBin,
+                  messages    => 2,
+                  messages_ready => 2,
+                  messages_unacknowledged => 0,
                   members     => [NodeBin]}, Queue),
 
-    ?assert(not maps:is_key(messages, Queue)),
-    ?assert(not maps:is_key(messages_ready, Queue)),
-    ?assert(not maps:is_key(messages_unacknowledged, Queue)),
     ?assert(not maps:is_key(message_stats, Queue)),
     ?assert(not maps:is_key(messages_details, Queue)),
     ?assert(not maps:is_key(reductions_details, Queue)),

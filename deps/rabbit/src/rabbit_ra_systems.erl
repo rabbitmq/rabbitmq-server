@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2021 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_ra_systems).
@@ -14,7 +14,10 @@
 -export([setup/0,
          setup/1,
          all_ra_systems/0,
-         ensure_ra_system_started/1]).
+         are_running/0,
+         ensure_ra_system_started/1,
+         ensure_started/0,
+         ensure_stopped/0]).
 
 -type ra_system_name() :: atom().
 
@@ -29,9 +32,7 @@ setup() ->
 -spec setup(Context :: map()) -> ok | no_return().
 
 setup(_) ->
-    ?LOG_DEBUG("Starting Ra systems"),
-    lists:foreach(fun ensure_ra_system_started/1, all_ra_systems()),
-    ?LOG_DEBUG("Ra systems started"),
+    ensure_started(),
     ok.
 
 -spec all_ra_systems() -> [ra_system_name()].
@@ -39,6 +40,41 @@ setup(_) ->
 all_ra_systems() ->
     [quorum_queues,
      coordination].
+
+-spec are_running() -> AreRunning when
+      AreRunning :: boolean().
+
+are_running() ->
+    try
+        %% FIXME: We hard-code the name of an internal Ra process here.
+        Children = supervisor:which_children(ra_systems_sup),
+        lists:all(
+          fun(RaSystem) ->
+                  is_ra_system_running(Children, RaSystem)
+          end,
+          all_ra_systems())
+    catch
+        exit:{noproc, _} ->
+            false
+    end.
+
+is_ra_system_running(Children, RaSystem) ->
+    case lists:keyfind(RaSystem, 1, Children) of
+        {RaSystem, Child, _, _} -> is_pid(Child);
+        false                   -> false
+    end.
+
+-spec ensure_started() -> ok | no_return().
+
+ensure_started() ->
+    ?LOG_DEBUG(
+       "Starting Ra systems",
+       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    lists:foreach(fun ensure_ra_system_started/1, all_ra_systems()),
+    ?LOG_DEBUG(
+       "Ra systems started",
+       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    ok.
 
 -spec ensure_ra_system_started(ra_system_name()) -> ok | no_return().
 
@@ -98,3 +134,29 @@ get_config(coordination = RaSystem) ->
 
 get_default_config() ->
     ra_system:default_config().
+
+-spec ensure_stopped() -> ok | no_return().
+
+ensure_stopped() ->
+    ?LOG_DEBUG(
+       "Stopping Ra systems",
+       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    lists:foreach(fun ensure_ra_system_stopped/1, all_ra_systems()),
+    ?LOG_DEBUG(
+       "Ra systems stopped",
+       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    ok.
+
+-spec ensure_ra_system_stopped(ra_system_name()) -> ok | no_return().
+
+ensure_ra_system_stopped(RaSystem) ->
+    case ra_system:stop(RaSystem) of
+        ok ->
+            ok;
+        {error, _} = Error ->
+            ?LOG_ERROR(
+               "Failed to stop Ra system \"~ts\": ~tp",
+               [RaSystem, Error],
+               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+            throw(Error)
+    end.

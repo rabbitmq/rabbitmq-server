@@ -3,9 +3,9 @@ on:
   push:
     branches:
       - main
+      - v3.13.x
       - v3.12.x
       - v3.11.x
-      - v3.10.x
       - bump-otp-for-oci
       - bump-rbe-*
       - bump-rules_erlang
@@ -42,12 +42,13 @@ jobs:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v3.3.2
+      uses: actions/cache@v4.0.2
       with:
         path: "/home/runner/repo-cache/"
         key: ${{ runner.os }}-repo-cache-${{ hashFiles('MODULE.bazel','WORKSPACE','bazel/bzlmod/secondary_umbrella.bzl') }}
         restore-keys: |
           ${{ runner.os }}-repo-cache-
+        save-always: true
     - name: CONFIGURE BAZEL
       run: |
         if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then

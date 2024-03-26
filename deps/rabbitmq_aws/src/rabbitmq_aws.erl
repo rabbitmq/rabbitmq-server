@@ -42,7 +42,7 @@
 -spec get(Service :: string(),
           Path :: path()) -> result().
 %% @doc Perform a HTTP GET request to the AWS API for the specified service. The
-%%      response will automatically be decoded if it is either in JSON or XML
+%%      response will automatically be decoded if it is either in JSON, or XML
 %%      format.
 %% @end
 get(Service, Path) ->
@@ -243,7 +243,7 @@ handle_msg(_Request, State) ->
 -spec endpoint(State :: state(), Host :: string(),
                Service :: string(), Path :: string()) -> string().
 %% @doc Return the endpoint URL, either by constructing it with the service
-%%      information passed in or by using the passed in Host value.
+%%      information passed in, or by using the passed in Host value.
 %% @ednd
 endpoint(#state{region = Region}, undefined, Service, Path) ->
   lists:flatten(["https://", endpoint_host(Region, Service), Path]);
@@ -294,11 +294,11 @@ get_content_type(Headers) ->
   end,
   parse_content_type(Value).
 
--spec has_credentials() -> true | false.
+-spec has_credentials() -> boolean().
 has_credentials() ->
   gen_server:call(rabbitmq_aws, has_credentials).
 
--spec has_credentials(state()) -> true | false.
+-spec has_credentials(state()) -> boolean().
 %% @doc check to see if there are credentials made available in the current state
 %%      returning false if not or if they have expired.
 %% @end
@@ -307,7 +307,7 @@ has_credentials(#state{access_key = Key}) when Key /= undefined -> true;
 has_credentials(_) -> false.
 
 
--spec expired_credentials(Expiration :: calendar:datetime()) -> true | false.
+-spec expired_credentials(Expiration :: calendar:datetime()) -> boolean().
 %% @doc Indicates if the date that is passed in has expired.
 %% end
 expired_credentials(undefined) -> false;
@@ -354,9 +354,8 @@ local_time() ->
 
 
 -spec maybe_decode_body(ContentType :: {nonempty_string(), nonempty_string()}, Body :: body()) -> list() | body().
-%% @doc Attempt to decode the response body based upon the mime type that is
-%%      presented.
-%% @end.
+%% @doc Attempt to decode the response body by its MIME
+%% @end
 maybe_decode_body({"application", "x-amz-json-1.0"}, Body) ->
   rabbitmq_aws_json:decode(Body);
 maybe_decode_body({"application", "json"}, Body) ->
@@ -387,10 +386,10 @@ perform_request(State, Service, Method, Headers, Path, Body, Options, Host) ->
                             Headers, Path, Body, Options, Host).
 
 
--spec perform_request_has_creds(true | false, State :: state(),
-                                Service :: string(), Method :: method(),
-                                Headers :: headers(), Path :: path(), Body :: body(),
-                                Options :: http_options(), Host :: string() | undefined)
+-spec perform_request_has_creds(HasCreds :: boolean(), State :: state(),
+                                Service  :: string(), Method :: method(),
+                                Headers  :: headers(), Path :: path(), Body :: body(),
+                                Options  :: http_options(), Host :: string() | undefined)
     -> {Result :: result(), NewState :: state()}.
 %% @doc Invoked after checking to see if there are credentials. If there are,
 %%      validate they have not or will not expire, performing the request if not,
@@ -403,10 +402,10 @@ perform_request_has_creds(false, State, _, _, _, _, _, _, _) ->
   perform_request_creds_error(State).
 
 
--spec perform_request_creds_expired(true | false, State :: state(),
-                                    Service :: string(), Method :: method(),
-                                    Headers :: headers(), Path :: path(), Body :: body(),
-                                    Options :: http_options(), Host :: string() | undefined)
+-spec perform_request_creds_expired(CredsExp :: boolean(), State :: state(),
+                                    Service  :: string(), Method :: method(),
+                                    Headers  :: headers(), Path :: path(), Body :: body(),
+                                    Options  :: http_options(), Host :: string() | undefined)
   -> {Result :: result(), NewState :: state()}.
 %% @doc Invoked after checking to see if the current credentials have expired.
 %%      If they haven't, perform the request, otherwise try and refresh the

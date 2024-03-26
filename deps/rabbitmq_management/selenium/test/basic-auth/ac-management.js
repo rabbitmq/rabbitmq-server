@@ -24,6 +24,37 @@ describe('management user with vhosts permissions', function () {
     await overview.isLoaded()
   })
 
+  it('can access overview tab', async function () {
+    await overview.clickOnOverviewTab()
+    await overview.waitForOverviewTab()
+    assert.ok(!await overview.isPopupWarningDisplayed())
+  })
+  it('can access connections tab', async function () {
+    await overview.clickOnConnectionsTab()
+    await overview.waitForConnectionsTab()
+    assert.ok(!await overview.isPopupWarningDisplayed())
+  })
+  it('can access channels tab', async function () {
+    await overview.clickOnChannelsTab()
+    await overview.waitForChannelsTab()
+    assert.ok(!await overview.isPopupWarningDisplayed())
+  })
+  it('can access exchanges tab', async function () {
+    await overview.clickOnExchangesTab()
+    await overview.waitForExchangesTab()
+    assert.ok(!await overview.isPopupWarningDisplayed())
+  })
+  it('can access queues and streams tab', async function () {
+    await overview.clickOnQueuesTab()
+    await overview.waitForQueuesTab()
+    assert.ok(!await overview.isPopupWarningDisplayed())
+  })
+  it('can access limited options in admin tab', async function () {
+    await overview.clickOnAdminTab()
+    await overview.waitForAdminTab()
+    assert.ok(!await overview.isPopupWarningDisplayed())
+  })
+
   it('cannot add/update user limits', async function () {
     await overview.clickOnAdminTab()
     await admin.clickOnLimits()

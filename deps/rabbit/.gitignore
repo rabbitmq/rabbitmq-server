@@ -40,3 +40,6 @@ callgraph.dot*
 PACKAGES/*
 
 rabbit-rabbitmq-deps.mk
+
+[Bb]in/
+[Oo]bj/

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_classic_queue_index_v2).
@@ -196,9 +196,10 @@ init_for_conversion(#resource{ virtual_host = VHost } = Name, OnSyncFun, OnSyncM
 
 init1(Name, Dir, OnSyncFun, OnSyncMsgFun) ->
     ensure_queue_name_stub_file(Name, Dir),
+    DirBin = rabbit_file:filename_to_binary(Dir),
     #qi{
         queue_name = Name,
-        dir = rabbit_file:filename_to_binary(Dir),
+        dir = << DirBin/binary, "/" >>,
         on_sync = OnSyncFun,
         on_sync_msg = OnSyncMsgFun
     }.
@@ -1277,8 +1278,8 @@ queue_name_to_dir_name(#resource { kind = queue,
     rabbit_misc:format("~.36B", [Num]).
 
 segment_file(Segment, #qi{ dir = Dir }) ->
-    filename:join(rabbit_file:binary_to_filename(Dir),
-                  integer_to_list(Segment) ++ ?SEGMENT_EXTENSION).
+    N = integer_to_binary(Segment),
+    <<Dir/binary, N/binary, ?SEGMENT_EXTENSION>>.
 
 highest_continuous_seq_id([SeqId|Tail], EndSeqId)
         when (1 + SeqId) =:= EndSeqId ->

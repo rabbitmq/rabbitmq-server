@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_federation_upstream).
@@ -136,7 +136,7 @@ from_upstream_or_set(US, Name, U, XorQ) ->
               message_ttl     = bget('message-ttl',     US, U, none),
               trust_user_id   = bget('trust-user-id',   US, U, false),
               ack_mode        = to_atom(bget('ack-mode', US, U, <<"on-confirm">>)),
-              ha_policy       = bget('ha-policy',       US, U, none),
+              queue_type      = to_atom(bget('queue-type', US, U, <<"classic">>)),
               name            = Name,
               bind_nowait     = bget('bind-nowait',     US, U, false),
               resource_cleanup_mode = to_atom(bget('resource-cleanup-mode', US, U, <<"default">>)),

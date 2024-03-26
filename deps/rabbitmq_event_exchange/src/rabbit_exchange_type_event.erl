@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_exchange_type_event).
@@ -107,10 +107,7 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %%----------------------------------------------------------------------------
 
 ensure_vhost_exists(VHost) ->
-    case rabbit_vhost:exists(VHost) of
-        false -> rabbit_vhost:add(VHost, ?INTERNAL_USER);
-        _     -> ok
-    end.
+    rabbit_vhost:add(VHost, ?INTERNAL_USER).
 
 %% pattern matching is way more efficient that the string operations,
 %% let's use all the keys we're aware of to speed up the handler.

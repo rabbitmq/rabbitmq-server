@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_node_memory).
@@ -26,7 +26,7 @@ content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {node_exists(ReqData, get_node(ReqData)), ReqData, Context}.
+    {rabbit_mgmt_nodes:node_exists(ReqData), ReqData, Context}.
 
 to_json(ReqData, {Mode, Context}) ->
     rabbit_mgmt_util:reply(augment(Mode, ReqData), ReqData, {Mode, Context}).
@@ -39,16 +39,9 @@ is_authorized(ReqData, {Mode, Context}) ->
 get_node(ReqData) ->
     list_to_atom(binary_to_list(rabbit_mgmt_util:id(node, ReqData))).
 
-node_exists(ReqData, Node) ->
-    case [N || N <- rabbit_mgmt_wm_nodes:all_nodes(ReqData),
-               proplists:get_value(name, N) == Node] of
-        [] -> false;
-        [_] -> true
-    end.
-
 augment(Mode, ReqData) ->
     Node = get_node(ReqData),
-    case node_exists(ReqData, Node) of
+    case rabbit_mgmt_nodes:node_exists(ReqData) of
         false ->
             not_found;
         true ->

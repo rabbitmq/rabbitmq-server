@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 %% This module is a pseudo queue type.
@@ -51,7 +51,8 @@
          cancel/5,
          handle_event/3,
          settle/5,
-         credit/5,
+         credit_v1/5,
+         credit/7,
          dequeue/5,
          state_info/1
         ]).
@@ -277,8 +278,11 @@ handle_event(A1,A2,A3) ->
 settle(A1,A2,A3,A4,A5) ->
     ?UNSUPPORTED([A1,A2,A3,A4,A5]).
 
-credit(A1,A2,A3,A4,A5) ->
+credit_v1(A1,A2,A3,A4,A5) ->
     ?UNSUPPORTED([A1,A2,A3,A4,A5]).
+
+credit(A1,A2,A3,A4,A5,A6,A7) ->
+    ?UNSUPPORTED([A1,A2,A3,A4,A5,A6,A7]).
 
 dequeue(A1,A2,A3,A4,A5) ->
     ?UNSUPPORTED([A1,A2,A3,A4,A5]).

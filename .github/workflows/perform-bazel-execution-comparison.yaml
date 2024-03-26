@@ -37,7 +37,7 @@ jobs:
           --config=rbe-${{ matrix.erlang_version }} \
           --execution_log_binary_file=/tmp/exec.log
     - name: SAVE EXECUTION LOG BINARY
-      uses: actions/upload-artifact@v3.1.3
+      uses: actions/upload-artifact@v4.3.1
       with:
         name: execution-log-binary-A
         path: /tmp/exec.log
@@ -72,7 +72,7 @@ jobs:
           --config=rbe-${{ matrix.erlang_version }} \
           --execution_log_binary_file=/tmp/exec.log
     - name: SAVE EXECUTION LOG BINARY
-      uses: actions/upload-artifact@v3.1.3
+      uses: actions/upload-artifact@v4.3.1
       with:
         name: execution-log-binary-B
         path: /tmp/exec.log
@@ -87,7 +87,7 @@ jobs:
         repository: bazelbuild/bazel
         path: bazel
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v3.3.2
+      uses: actions/cache@v4.0.2
       with:
         path: "/home/runner/.cache/bazel"
         key: bazel
@@ -96,7 +96,7 @@ jobs:
       run: |
         bazelisk build src/tools/execlog:parser
     - name: FETCH LOGS
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
     - name: PARSE LOGS
       run: |
         bazel/bazel-bin/src/tools/execlog/parser \
@@ -105,7 +105,7 @@ jobs:
           --output_path=/tmp/execution-log-binary-A.log.txt \
           --output_path=/tmp/execution-log-binary-B.log.txt
     - name: SAVE PARSED LOGS
-      uses: actions/upload-artifact@v3.1.3
+      uses: actions/upload-artifact@v4.3.1
       with:
         name: parsed-logs
         path: /tmp/execution-log-binary-*.log.txt

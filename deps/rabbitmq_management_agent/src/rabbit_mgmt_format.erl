@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mgmt_format).
@@ -213,6 +213,8 @@ tuple(Term)                       -> Term.
 protocol(unknown) ->
     unknown;
 protocol(Version = {_Major, _Minor, _Revision}) ->
+    protocol({'AMQP', Version});
+protocol(Version = {1, 0}) ->
     protocol({'AMQP', Version});
 protocol({Family, Version}) ->
     print("~ts ~ts", [Family, protocol_version(Version)]);

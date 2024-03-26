@@ -16,26 +16,26 @@
         <developer>
             <email>rabbitmq-core@groups.vmware.com</email>
             <name>Team RabbitMQ</name>
-            <organization>VMware, Inc. or its affiliates.</organization>
+            <organization>Broadcom Inc. and/or its subsidiaries.</organization>
             <organizationUrl>https://rabbitmq.com</organizationUrl>
         </developer>
     </developers>
 
     <organization>
-        <name>VMware, Inc. or its affiliates.</name>
+        <name>Broadcom Inc. and/or its subsidiaries.</name>
         <url>https://www.rabbitmq.com</url>
     </organization>
 
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.2.0</version>
+        <version>3.2.4</version>
     </parent>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
-        <junit.jupiter.version>5.10.1</junit.jupiter.version>
+        <junit.jupiter.version>5.10.2</junit.jupiter.version>
     </properties>
 
     <groupId>com.rabbitmq.examples</groupId>

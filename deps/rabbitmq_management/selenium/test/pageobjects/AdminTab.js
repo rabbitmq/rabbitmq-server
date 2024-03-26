@@ -111,7 +111,7 @@ module.exports = class AdminTab extends OverviewPage {
 
   async searchForUser(user, regex = false) {
 
-    var filtered_user = By.css('a[href="#/users/' + user + '"]')
+    const filtered_user = By.css('a[href="#/users/' + user + '"]')
 
     await this.sendKeys(FILTER_USER, user)
     await this.sendKeys(FILTER_USER, Key.RETURN)

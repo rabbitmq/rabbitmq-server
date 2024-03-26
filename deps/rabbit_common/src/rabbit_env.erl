@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2019-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_env).
@@ -194,7 +194,7 @@ context_base(TakeFromRemoteNode) ->
                Timeout >= 0 ->
             update_context(Context,
                            from_remote_node,
-                           {TakeFromRemoteNode, Timeout})
+                           TakeFromRemoteNode)
     end.
 
 -ifdef(TEST).
@@ -2146,7 +2146,8 @@ maybe_stop_dist_for_remote_query(
 maybe_stop_dist_for_remote_query(Context) ->
     Context.
 
-query_remote({RemoteNode, Timeout}, Mod, Func, Args) ->
+query_remote({RemoteNode, Timeout}, Mod, Func, Args)
+  when is_atom(RemoteNode) ->
     Ret = rpc:call(RemoteNode, Mod, Func, Args, Timeout),
     case Ret of
         {badrpc, nodedown} = Error -> Error;

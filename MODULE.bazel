@@ -5,17 +5,22 @@ module(
 
 bazel_dep(
     name = "rules_pkg",
-    version = "0.9.1",
+    version = "0.10.1",
 )
 
 bazel_dep(
     name = "bazel_skylib",
-    version = "1.4.2",
+    version = "1.5.0",
+)
+
+bazel_dep(
+    name = "aspect_bazel_lib",
+    version = "2.5.3",
 )
 
 bazel_dep(
     name = "platforms",
-    version = "0.0.7",
+    version = "0.0.8",
 )
 
 bazel_dep(
@@ -31,7 +36,7 @@ bazel_dep(
 
 bazel_dep(
     name = "rules_erlang",
-    version = "3.14.0",
+    version = "3.15.0",
 )
 
 bazel_dep(
@@ -43,20 +48,8 @@ bazel_dep(
 
 bazel_dep(
     name = "rabbitmq_osiris",
-    version = "1.7.2",
+    version = "1.8.1",
     repo_name = "osiris",
-)
-
-bazel_dep(
-    name = "rabbitmq_ra",
-    version = "2.7.0",
-    repo_name = "ra",
-)
-
-bazel_dep(
-    name = "rabbitmq_seshat",
-    version = "0.6.1",
-    repo_name = "seshat",
 )
 
 erlang_config = use_extension(
@@ -66,42 +59,56 @@ erlang_config = use_extension(
 
 erlang_config.internal_erlang_from_github_release(
     name = "24",
+    extra_make_opts = ["-j 4"],
     sha256 = "8444ff9abe23aea268adbb95463561fc222c965052d35d7c950b17be01c3ad82",
     version = "24.3.4.6",
 )
 
 erlang_config.internal_erlang_from_github_release(
     name = "25_0",
+    extra_make_opts = ["-j 4"],
     sha256 = "8fc707f92a124b2aeb0f65dcf9ac8e27b2a305e7bcc4cc1b2fdf770eec0165bf",
     version = "25.0.4",
 )
 
 erlang_config.internal_erlang_from_github_release(
     name = "25_1",
+    extra_make_opts = ["-j 4"],
     sha256 = "1cd2fbe225a412009cda9b1fd9f3fff0293e75e3020daa48abf68721471e91eb",
     version = "25.1.2.1",
 )
 
 erlang_config.internal_erlang_from_github_release(
     name = "25_2",
+    extra_make_opts = ["-j 4"],
     sha256 = "f4d9f11d67ba478a053d72e635a44722a975603fe1284063fdf38276366bc61c",
     version = "25.2.3",
 )
 
 erlang_config.internal_erlang_from_github_release(
     name = "25_3",
-    sha256 = "a8662859d153d3c4253c6a3a4d1538d0f32ce1cf02bb5484b17c9c176da37b37",
-    version = "25.3.2.7",
+    extra_make_opts = ["-j 4"],
+    sha256 = "0a7338415c8eb6ae25664bfd1a10631c293838ef072665223a524831b823a8b7",
+    version = "25.3.2.10",
 )
 
 erlang_config.internal_erlang_from_github_release(
     name = "26_1",
+    extra_make_opts = ["-j 4"],
     sha256 = "f1074cf3a54f1f87e66027d5abebab2fa76a0243453fa58bc5f30d0ce0313921",
     version = "26.1.2",
 )
 
+erlang_config.internal_erlang_from_github_release(
+    name = "26_2",
+    extra_make_opts = ["-j 4"],
+    sha256 = "d537ff4ac5d8c1cb507aedaf7198fc1f155ea8aa65a8d83edb35c2802763cc28",
+    version = "26.2.2",
+)
+
 erlang_config.internal_erlang_from_http_archive(
     name = "git_master",
+    extra_make_opts = ["-j 4"],
     strip_prefix = "otp-master",
     url = "https://github.com/erlang/otp/archive/refs/heads/master.tar.gz",
     version = "27",
@@ -153,6 +160,8 @@ register_toolchains(
     "@erlang_config//25_3:toolchain_major_minor",
     "@erlang_config//26_1:toolchain_major",
     "@erlang_config//26_1:toolchain_major_minor",
+    "@erlang_config//26_2:toolchain_major",
+    "@erlang_config//26_2:toolchain_major_minor",
     "@erlang_config//git_master:toolchain_major",
     "@erlang_config//git_master:toolchain_major_minor",
     "@elixir_config//external:toolchain",
@@ -176,8 +185,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "aten",
     build_file = "@rabbitmq-server//bazel:BUILD.aten",
-    sha256 = "64d40a8cf0ddfea4e13af00b7327f0925147f83612d0627d9506cbffe90c13ef",
-    version = "0.5.8",
+    sha256 = "5f39a164206ae3f211ef5880b1f7819415686436e3229d30b6a058564fbaa168",
+    version = "0.6.0",
 )
 
 erlang_package.hex_package(
@@ -193,8 +202,8 @@ erlang_package.hex_package(
     patch_cmds = [
         "rm ebin/cowboy.app",
     ],
-    sha256 = "3afdccb7183cc6f143cb14d3cf51fa00e53db9ec80cdcd525482f5e99bc41d6b",
-    version = "2.10.0",
+    sha256 = "8a7abe6d183372ceb21caa2709bec928ab2b72e18a3911aa1771639bef82651e",
+    version = "2.12.0",
 )
 
 erlang_package.hex_package(
@@ -203,8 +212,8 @@ erlang_package.hex_package(
     patch_cmds = [
         "rm ebin/cowlib.app",
     ],
-    sha256 = "163b73f6367a7341b33c794c4e88e7dbfe6498ac42dcd69ef44c5bc5507c8db0",
-    version = "2.12.1",
+    sha256 = "e1e1284dc3fc030a64b1ad0d8382ae7e99da46c3246b815318a4b848873800a4",
+    version = "2.13.0",
 )
 
 erlang_package.hex_package(
@@ -287,15 +296,15 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "khepri",
     build_file = "@rabbitmq-server//bazel:BUILD.khepri",
-    sha256 = "da618ec76abd188620c8fbdc16cb8eb94b09055a657c488da7fab160d49abcbe",
-    version = "0.10.1",
+    sha256 = "0b6ff09fabf27cb1e8df0f976149305ad936abd17233263b36ccc7becbf31cb3",
+    version = "0.12.1",
 )
 
-erlang_package.git_package(
+erlang_package.hex_package(
     name = "khepri_mnesia_migration",
     build_file = "@rabbitmq-server//bazel:BUILD.khepri_mnesia_migration",
-    commit = "56d7d123cc3e9dce309582b4d45ea58f3580ee71",
-    repository = "rabbitmq/khepri_mnesia_migration",
+    sha256 = "007568909c726057a6e06fb110a7309bf8bbdb9d233f09987da9388048726cbd",
+    version = "0.4.0",
 )
 
 erlang_package.hex_package(
@@ -315,8 +324,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "prometheus",
     build_file = "@rabbitmq-server//bazel:BUILD.prometheus",
-    sha256 = "2a99bb6dce85e238c7236fde6b0064f9834dc420ddbd962aac4ea2a3c3d59384",
-    version = "4.10.0",
+    sha256 = "719862351aabf4df7079b05dc085d2bbcbe3ac0ac3009e956671b1d5ab88247d",
+    version = "4.11.0",
 )
 
 erlang_package.hex_package(
@@ -327,15 +336,15 @@ erlang_package.hex_package(
 )
 
 erlang_package.hex_package(
-    name = "ra_alt",
+    name = "ra",
     build_file = "@rabbitmq-server//bazel:BUILD.ra",
     pkg = "ra",
-    sha256 = "f4dd317ab4030c0b14453bcf70179130f388dec35f7d59b6c7edcdfa25270397",
-    version = "2.7.0",
+    sha256 = "ee7f63461e9b1734e99a7d38cb601803dc0868f015672d795857fa329287288c",
+    version = "2.9.1",
 )
 
 erlang_package.git_package(
-    name = "seshat_alt",
+    name = "seshat",
     build_file = "@rabbitmq-server//bazel:BUILD.seshat",
     repository = "rabbitmq/seshat",
     tag = "v0.6.1",
@@ -413,11 +422,11 @@ use_repo(
     "khepri_mnesia_migration",
     "observer_cli",
     "prometheus",
-    "ra_alt",
+    "ra",
     "ranch",
     "recon",
     "redbug",
-    "seshat_alt",
+    "seshat",
     "stdout_formatter",
     "syslog",
     "sysmon_handler",

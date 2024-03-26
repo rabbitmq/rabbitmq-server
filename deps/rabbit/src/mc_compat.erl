@@ -14,6 +14,7 @@
          is_persistent/1,
          ttl/1,
          correlation_id/1,
+         user_id/1,
          message_id/1,
          timestamp/1,
          priority/1,
@@ -49,18 +50,18 @@ is(_) ->
     false.
 
 -spec get_annotation(mc:ann_key(), state()) -> mc:ann_value() | undefined.
-get_annotation(routing_keys, #basic_message{routing_keys = RKeys}) ->
+get_annotation(?ANN_ROUTING_KEYS, #basic_message{routing_keys = RKeys}) ->
     RKeys;
-get_annotation(exchange, #basic_message{exchange_name = Ex}) ->
+get_annotation(?ANN_EXCHANGE, #basic_message{exchange_name = Ex}) ->
     Ex#resource.name;
 get_annotation(id, #basic_message{id = Id}) ->
     Id.
 
 set_annotation(id, Value, #basic_message{} = Msg) ->
     Msg#basic_message{id = Value};
-set_annotation(routing_keys, Value, #basic_message{} = Msg) ->
+set_annotation(?ANN_ROUTING_KEYS, Value, #basic_message{} = Msg) ->
     Msg#basic_message{routing_keys = Value};
-set_annotation(exchange, Value, #basic_message{exchange_name = Ex} = Msg) ->
+set_annotation(?ANN_EXCHANGE, Value, #basic_message{exchange_name = Ex} = Msg) ->
     Msg#basic_message{exchange_name = Ex#resource{name = Value}};
 set_annotation(<<"x-", _/binary>> = Key, Value,
                #basic_message{content = Content0} = Msg) ->
@@ -88,7 +89,7 @@ set_annotation(<<"x-", _/binary>> = Key, Value,
     Msg#basic_message{content = C};
 set_annotation(<<"timestamp_in_ms">> = Name, Value, #basic_message{} = Msg) ->
     rabbit_basic:add_header(Name, long, Value, Msg);
-set_annotation(timestamp, Millis,
+set_annotation(?ANN_TIMESTAMP, Millis,
                #basic_message{content = #content{properties = B} = C0} = Msg) ->
     C = C0#content{properties = B#'P_basic'{timestamp = Millis div 1000},
                    properties_bin = none},
@@ -104,6 +105,9 @@ timestamp(#basic_message{content = Content}) ->
     get_property(?FUNCTION_NAME, Content).
 
 priority(#basic_message{content = Content}) ->
+    get_property(?FUNCTION_NAME, Content).
+
+user_id(#basic_message{content = Content}) ->
     get_property(?FUNCTION_NAME, Content).
 
 correlation_id(#basic_message{content = Content}) ->
@@ -384,6 +388,13 @@ get_property(P, #content{properties = none} = Content) ->
 get_property(durable,
              #content{properties = #'P_basic'{delivery_mode = Mode}}) ->
     Mode == 2;
+get_property(user_id,
+             #content{properties = #'P_basic'{user_id = UserId}}) ->
+    if UserId =:= undefined ->
+           undefined;
+       is_binary(UserId) ->
+           {binary, UserId}
+    end;
 get_property(ttl, #content{properties = Props}) ->
     {ok, MsgTTL} = rabbit_basic:parse_expiration(Props),
     MsgTTL;

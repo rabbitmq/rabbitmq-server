@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_data_coercion).
@@ -65,9 +65,9 @@ to_map(Val) when is_list(Val) -> maps:from_list(Val).
 
 -spec atomize_keys(Val :: map() | list()) -> map() | list().
 atomize_keys(Val) when is_list(Val) ->
-  [{to_atom(K), V} || {K, V} <- Val];
+    [{to_atom(K), V} || {K, V} <- Val];
 atomize_keys(Val) when is_map(Val) ->
-  maps:from_list(atomize_keys(maps:to_list(Val))).
+    #{to_atom(K) => V || K := V <- Val}.
 
 -spec to_list_of_binaries(Val :: undefined | [atom() | list() | binary() | integer()]) -> [binary()].
 to_list_of_binaries(Value) ->

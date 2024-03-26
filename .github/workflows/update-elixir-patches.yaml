@@ -72,7 +72,7 @@ jobs:
         set -x
         git diff
     - name: CREATE PULL REQUEST
-      uses: peter-evans/create-pull-request@v5.0.2
+      uses: peter-evans/create-pull-request@v6.0.2
       with:
         token: ${{ secrets.REPO_SCOPED_TOKEN }}
         committer: GitHub <noreply@github.com>
@@ -86,8 +86,8 @@ jobs:
         commit-message: |
           Adopt elixir ${{ steps.fetch-version.outputs.VERSION }}
         labels: |
+          backport-v3.13.x
           backport-v3.12.x
           backport-v3.11.x
-          backport-v3.10.x
         branch: ${{ env.branch }}
         delete-branch: true

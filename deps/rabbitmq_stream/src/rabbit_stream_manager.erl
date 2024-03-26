@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_stream_manager).
@@ -418,8 +418,10 @@ handle_call({topology, VirtualHost, Stream}, _From, State) ->
                                      #{leader_node => undefined,
                                        replica_nodes => []},
                                      Members)};
-                      _ ->
-                          {error, not_available}
+                      Err ->
+                          rabbit_log:info("Error locating ~tp stream members: ~tp",
+                                          [StreamName, Err]),
+                          {error, stream_not_available}
                   end;
               {error, not_found} ->
                   {error, stream_not_found};
@@ -676,6 +678,7 @@ validate_super_stream_creation(_VirtualHost, _Name, Partitions, BindingKeys)
    {error, {validation_failed, "There must be the same number of partitions and binding keys"}};
 validate_super_stream_creation(VirtualHost, Name, Partitions, _BindingKeys) ->
     maybe
+        ok ?= validate_super_stream_partitions(Partitions),
         ok ?= case rabbit_vhost_limit:would_exceed_queue_limit(length(Partitions), VirtualHost) of
                   false ->
                       ok;
@@ -700,6 +703,26 @@ validate_super_stream_creation(VirtualHost, Name, Partitions, _BindingKeys) ->
                       ok
               end,
         ok ?= check_already_existing_queue(VirtualHost, Partitions)
+    end.
+
+validate_super_stream_partitions(Partitions) ->
+    case erlang:length(Partitions) == sets:size(sets:from_list(Partitions)) of
+        true ->
+            case lists:dropwhile(fun(Partition) ->
+                                         case rabbit_stream_utils:enforce_correct_name(Partition) of
+                                             {ok, _} -> true;
+                                             _ -> false
+                                         end
+                                 end, Partitions) of
+                [] ->
+                    ok;
+                InvalidPartitions -> {error, {validation_failed,
+                                              {rabbit_misc:format("~ts is not a correct partition names",
+                                                                  [InvalidPartitions])}}}
+            end;
+        _ -> {error, {validation_failed,
+                      {rabbit_misc:format("Duplicate partition names found ~ts",
+                                          [Partitions])}}}
     end.
 
 exchange_exists(VirtualHost, Name) ->

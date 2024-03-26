@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_stream_mgmt_db).
@@ -112,13 +112,13 @@ augment_entity(?ENTITY_PUBLISHER, {{Q, ConnPid, PubId}, Props}) ->
      | Props].
 
 consumers_by_vhost(VHost) ->
-    ets:select(?TABLE_CONSUMER,
+    ets_select(?TABLE_CONSUMER,
                [{{{#resource{virtual_host = '$1', _ = '_'}, '_', '_'}, '_'},
                  [{'orelse', {'==', all, VHost}, {'==', VHost, '$1'}}],
                  ['$_']}]).
 
 publishers_by_vhost(VHost) ->
-    ets:select(?TABLE_PUBLISHER,
+    ets_select(?TABLE_PUBLISHER,
                [{{{#resource{virtual_host = '$1', _ = '_'}, '_', '_'}, '_'},
                  [{'orelse', {'==', all, VHost}, {'==', VHost, '$1'}}],
                  ['$_']}]).
@@ -133,13 +133,13 @@ publishers_by_stream(QueueResource) ->
     get_entity_stats_by_resource(?TABLE_PUBLISHER, QueueResource).
 
 get_entity_stats(Table, Id) ->
-    ets:select(Table, match_entity_spec(Id)).
+    ets_select(Table, match_entity_spec(Id)).
 
 match_entity_spec(ConnectionId) ->
     [{{{'_', '$1', '_'}, '_'}, [{'==', ConnectionId, '$1'}], ['$_']}].
 
 get_entity_stats_by_resource(Table, Resource) ->
-    ets:select(Table, match_entity_spec_by_resource(Resource)).
+    ets_select(Table, match_entity_spec_by_resource(Resource)).
 
 match_entity_spec_by_resource(#resource{virtual_host = VHost,
                                         name = Name}) ->
@@ -177,3 +177,13 @@ format_resource(_, unknown) ->
 format_resource(NameAs,
                 #resource{name = Name, virtual_host = VHost}) ->
     [{NameAs, Name}, {vhost, VHost}].
+
+ets_select(T, Spec) ->
+    try
+        ets:select(T, Spec)
+    catch error:Reason ->
+              %% badarg can occur if the table has no been created yet
+              rabbit_log:warning("Error while querying ETS table '~tp': ~tp",
+                                 [T, Reason]),
+              []
+    end.

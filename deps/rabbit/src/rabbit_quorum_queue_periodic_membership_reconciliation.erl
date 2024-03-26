@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_quorum_queue_periodic_membership_reconciliation).
@@ -131,6 +131,11 @@ reconciliate_quorum_queue_membership(State) ->
     Running = rabbit_nodes:list_running(),
     reconciliate_quorum_members(ExpectedNodes, Running, LocalLeaders, State, noop).
 
+reconciliate_quorum_members([], _Running, _, _State, Result) ->
+    %% if there are no expected nodes rabbit_nodes:list_running/0 encountered
+    %% an error during query and returned the empty list which is case we need
+    %% to handle
+    Result;
 reconciliate_quorum_members(_ExpectedNodes, _Running, [], _State, Result) ->
     Result;
 reconciliate_quorum_members(ExpectedNodes, Running, [Q | LocalLeaders],

@@ -93,7 +93,7 @@
 %%
 %% 11) Internal buffer length is emitted as a core [RabbitMQ] metric.
 
-%% All modifications are (C) 2009-2023 VMware, Inc. or its affiliates.
+%% All modifications are (C) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 %% ``The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_upgrade_preparation).
@@ -85,15 +85,7 @@ list_with_minimum_quorum_for_cli() ->
     EndangeredQueues = lists:append(
                          rabbit_quorum_queue:list_with_minimum_quorum(),
                          rabbit_stream_queue:list_with_minimum_quorum()),
-    [begin
-         #resource{name = Name} = QName = amqqueue:get_name(Q),
-         #{
-           <<"readable_name">> => rabbit_data_coercion:to_binary(rabbit_misc:rs(QName)),
-           <<"name">> => Name,
-           <<"virtual_host">> => amqqueue:get_vhost(Q),
-           <<"type">> => amqqueue:get_type(Q)
-          }
-     end || Q <- EndangeredQueues] ++
+    [amqqueue:to_printable(Q) || Q <- EndangeredQueues] ++
     [#{
            <<"readable_name">> => C,
            <<"name">> => C,

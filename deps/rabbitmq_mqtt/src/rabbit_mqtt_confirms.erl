@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mqtt_confirms).
@@ -18,12 +18,8 @@
          size/1,
          contains/2]).
 
-%% As done in OTP's sets module:
-%% Empty list is cheaper to serialize than atom.
--define(VALUE, []).
-
 -type queue_name() :: rabbit_amqqueue:name().
--opaque state() :: #{packet_id() => #{queue_name() => ?VALUE}}.
+-opaque state() :: #{packet_id() => #{queue_name() => ok}}.
 -export_type([state/0]).
 
 -spec init() -> state().
@@ -43,7 +39,7 @@ insert(PktId, QNames, State)
   when is_integer(PktId) andalso
        PktId > 0 andalso
        not is_map_key(PktId, State) ->
-    QMap = maps:from_keys(QNames, ?VALUE),
+    QMap = maps:from_keys(QNames, ok),
     maps:put(PktId, QMap, State).
 
 -spec confirm([packet_id()], queue_name(), state()) ->

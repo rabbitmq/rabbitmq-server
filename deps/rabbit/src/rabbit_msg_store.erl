@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_msg_store).
@@ -942,7 +942,13 @@ handle_info(sync, State) ->
 handle_info(timeout, State) ->
     noreply(internal_sync(State));
 
-handle_info({timeout, TimerRef, {maybe_gc, Candidates}}, State = #msstate{ gc_check_timer = TimerRef }) ->
+handle_info({timeout, TimerRef, {maybe_gc, Candidates0}},
+            State = #msstate{ gc_candidates  = NewCandidates,
+                              gc_check_timer = TimerRef }) ->
+    %% We do not want to consider candidates for GC that had
+    %% a message removed since we sent that maybe_gc message.
+    %% In that case we simply defer the GC to the next maybe_gc.
+    Candidates = maps:without(maps:keys(NewCandidates), Candidates0),
     noreply(maybe_gc(Candidates, State));
 
 %% @todo When a CQ crashes the message store does not remove
@@ -1357,12 +1363,6 @@ writer_flush(#writer{fd = Fd, buffer = Buffer}) ->
 writer_close(#writer{fd = Fd}) ->
     file:close(Fd).
 
-open_file(File, Mode) ->
-    file_handle_cache:open_with_absolute_path(
-      File, ?BINARY_MODE ++ Mode,
-      [{write_buffer, ?HANDLE_CACHE_BUFFER_SIZE},
-       {read_buffer,  ?HANDLE_CACHE_BUFFER_SIZE}]).
-
 mark_handle_open(FileHandlesEts, File, Ref) ->
     %% This is fine to fail (already exists). Note it could fail with
     %% the value being close, and not have it updated to open.
@@ -1381,6 +1381,80 @@ filename_to_num(FileName) -> list_to_integer(filename:rootname(FileName)).
 list_sorted_filenames(Dir, Ext) ->
     lists:sort(fun (A, B) -> filename_to_num(A) < filename_to_num(B) end,
                filelib:wildcard("*" ++ Ext, Dir)).
+
+%%----------------------------------------------------------------------------
+%% file scanning
+%%----------------------------------------------------------------------------
+
+-define(SCAN_BLOCK_SIZE, 4194304). %% 4MB
+
+scan_file_for_valid_messages(Dir, FileName) ->
+    scan_file_for_valid_messages(form_filename(Dir, FileName)).
+
+scan_file_for_valid_messages(Path) ->
+    case file:open(Path, [read, binary, raw]) of
+        {ok, Fd} ->
+            {ok, FileSize} = file:position(Fd, eof),
+            {ok, _} = file:position(Fd, bof),
+            Messages = scan(<<>>, Fd, 0, FileSize, #{}, []),
+            ok = file:close(Fd),
+            case Messages of
+                [] ->
+                    {ok, [], 0};
+                [{_, TotalSize, Offset}|_] ->
+                    {ok, Messages, Offset + TotalSize}
+            end;
+        {error, enoent} ->
+            {ok, [], 0};
+        {error, Reason} ->
+            {error, {unable_to_scan_file,
+                     filename:basename(Path),
+                     Reason}}
+    end.
+
+scan(Buffer, Fd, Offset, FileSize, MsgIdsFound, Acc) ->
+    case file:read(Fd, ?SCAN_BLOCK_SIZE) of
+        eof ->
+            Acc;
+        {ok, Data0} ->
+            Data = case Buffer of
+                <<>> -> Data0;
+                _ -> <<Buffer/binary, Data0/binary>>
+            end,
+            scan_data(Data, Fd, Offset, FileSize, MsgIdsFound, Acc)
+    end.
+
+%% Message might have been found.
+scan_data(<<Size:64, MsgIdAndMsg:Size/binary, 255, Rest/bits>> = Data,
+          Fd, Offset, FileSize, MsgIdsFound, Acc)
+          when Size >= 16 ->
+    <<MsgIdInt:128, _/bits>> = MsgIdAndMsg,
+    case MsgIdsFound of
+        %% This MsgId was found already. This data is probably
+        %% a remnant from a previous compaction, but it might
+        %% simply be a coincidence. Try the next byte.
+        #{MsgIdInt := true} ->
+            <<_, Rest2/bits>> = Data,
+            scan_data(Rest2, Fd, Offset + 1, FileSize, MsgIdsFound, Acc);
+        %% Data looks to be a message.
+        _ ->
+            %% Avoid sub-binary construction.
+            MsgId = <<MsgIdInt:128>>,
+            TotalSize = Size + 9,
+            scan_data(Rest, Fd, Offset + TotalSize, FileSize,
+                      MsgIdsFound#{MsgIdInt => true},
+                      [{MsgId, TotalSize, Offset}|Acc])
+    end;
+%% This might be the start of a message.
+scan_data(<<Size:64, Rest/bits>> = Data, Fd, Offset, FileSize, MsgIdsFound, Acc)
+          when byte_size(Rest) < Size + 1, Size < FileSize - Offset ->
+    scan(Data, Fd, Offset, FileSize, MsgIdsFound, Acc);
+scan_data(Data, Fd, Offset, FileSize, MsgIdsFound, Acc)
+          when byte_size(Data) < 8 ->
+    scan(Data, Fd, Offset, FileSize, MsgIdsFound, Acc);
+%% This is definitely not a message. Try the next byte.
+scan_data(<<_, Rest/bits>>, Fd, Offset, FileSize, MsgIdsFound, Acc) ->
+    scan_data(Rest, Fd, Offset + 1, FileSize, MsgIdsFound, Acc).
 
 %%----------------------------------------------------------------------------
 %% index
@@ -1521,25 +1595,6 @@ count_msg_refs(Gen, Seed, State) ->
                  end,
             count_msg_refs(Gen, Next, State)
     end.
-
-scan_file_for_valid_messages(File) ->
-    case open_file(File, ?READ_MODE) of
-        {ok, Hdl}       -> Valid = rabbit_msg_file:scan(
-                                     Hdl, filelib:file_size(File),
-                                     fun scan_fun/2, []),
-                           ok = file_handle_cache:close(Hdl),
-                           Valid;
-        {error, enoent} -> {ok, [], 0};
-        {error, Reason} -> {error, {unable_to_scan_file,
-                                    filename:basename(File),
-                                    Reason}}
-    end.
-
-scan_file_for_valid_messages(Dir, FileName) ->
-    scan_file_for_valid_messages(form_filename(Dir, FileName)).
-
-scan_fun({MsgId, TotalSize, Offset, _Msg}, Acc) ->
-    [{MsgId, TotalSize, Offset} | Acc].
 
 build_index(true, _StartupFunState,
             State = #msstate { file_summary_ets = FileSummaryEts }) ->
@@ -1907,21 +1962,25 @@ delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
             ok
     end.
 
-load_and_vacuum_message_file(File, State) ->
-    Messages0 = index_select_all_from_file(File, State),
-    %% Cleanup messages that have 0 ref_count.
-    Messages = lists:foldl(fun
-        (Entry = #msg_location{ ref_count = 0 }, Acc) ->
-            ok = index_delete_object(Entry, State),
-            Acc;
-        (Entry, Acc) ->
-            [Entry|Acc]
-    end, [], Messages0),
-    lists:keysort(#msg_location.offset, Messages).
-
-index_select_all_from_file(File, #gc_state { index_module = Index,
-                                             index_state  = State }) ->
-    Index:select_all_from_file(File, State).
+load_and_vacuum_message_file(File, State = #gc_state{ dir = Dir }) ->
+    %% Messages here will be end-of-file at start-of-list
+    {ok, Messages, _FileSize} =
+        scan_file_for_valid_messages(Dir, filenum_to_name(File)),
+    %% foldl will reverse so will end up with msgs in ascending offset order
+    lists:foldl(
+      fun ({MsgId, TotalSize, Offset}, Acc) ->
+              case index_lookup(MsgId, State) of
+                  #msg_location { file = File, total_size = TotalSize,
+                                  offset = Offset, ref_count = 0 } = Entry ->
+                      ok = index_delete_object(Entry, State),
+                      Acc;
+                  #msg_location { file = File, total_size = TotalSize,
+                                  offset = Offset } = Entry ->
+                      [ Entry | Acc ];
+                  _ ->
+                      Acc
+              end
+      end, [], Messages).
 
 scan_and_vacuum_message_file(File, State = #gc_state { dir = Dir }) ->
     %% Messages here will be end-of-file at start-of-list

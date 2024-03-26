@@ -20,19 +20,19 @@
         <developer>
             <email>rabbitmq-core@groups.vmware.com</email>
             <name>Team RabbitMQ</name>
-            <organization>VMware, Inc. or its affiliates.</organization>
+            <organization>Broadcom, Inc. or its affiliates.</organization>
             <organizationUrl>https://rabbitmq.com</organizationUrl>
         </developer>
     </developers>
 
     <properties>
         <stream-client.version>[0.12.0-SNAPSHOT,)</stream-client.version>
-        <junit.jupiter.version>5.10.1</junit.jupiter.version>
-        <assertj.version>3.24.2</assertj.version>
+        <junit.jupiter.version>5.10.2</junit.jupiter.version>
+        <assertj.version>3.25.3</assertj.version>
         <logback.version>1.2.13</logback.version>
-        <maven.compiler.plugin.version>3.11.0</maven.compiler.plugin.version>
-        <maven-surefire-plugin.version>3.2.3</maven-surefire-plugin.version>
-        <spotless.version>2.41.1</spotless.version>
+        <maven.compiler.plugin.version>3.12.1</maven.compiler.plugin.version>
+        <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
+        <spotless.version>2.43.0</spotless.version>
         <google-java-format.version>1.18.1</google-java-format.version>
         <okhttp.version>4.12.0</okhttp.version>
         <gson.version>2.10.1</gson.version>

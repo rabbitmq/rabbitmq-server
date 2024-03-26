@@ -25,7 +25,8 @@
          message/3,
          message/4,
          message/5,
-         from_basic_message/1
+         from_basic_message/1,
+         to_091/2
         ]).
 
 -import(rabbit_misc,
@@ -412,7 +413,7 @@ protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
                  end, Headers0, Anns),
     Headers = case Headers1 of
                   [] ->
-                      undefined;
+                      H00;
                   _ ->
                       %% Dedup
                       lists:usort(fun({Key1, _, _}, {Key2, _, _}) ->
@@ -420,7 +421,7 @@ protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
                                   end, Headers1)
               end,
     Timestamp = case Anns of
-                    #{timestamp := Ts} ->
+                    #{?ANN_TIMESTAMP := Ts} ->
                         Ts div 1000;
                     _ ->
                         undefined
@@ -473,8 +474,8 @@ message(#resource{name = ExchangeNameBin}, RoutingKey,
         HeaderRoutes ->
             {ok, mc:init(?MODULE,
                          rabbit_basic:strip_bcc_header(Content),
-                         Anns#{routing_keys => [RoutingKey | HeaderRoutes],
-                               exchange => ExchangeNameBin})}
+                         Anns#{?ANN_ROUTING_KEYS => [RoutingKey | HeaderRoutes],
+                               ?ANN_EXCHANGE => ExchangeNameBin})}
     end;
 message(#resource{} = XName, RoutingKey,
         #content{} = Content, Anns, false) ->
@@ -707,13 +708,13 @@ essential_properties(#content{} = C) ->
                 end,
     Durable = Mode == 2,
     maps_put_truthy(
-      priority, Priority,
+      ?ANN_PRIORITY, Priority,
       maps_put_truthy(
         ttl, MsgTTL,
         maps_put_truthy(
-          timestamp, Timestamp,
+          ?ANN_TIMESTAMP, Timestamp,
           maps_put_falsy(
-            durable, Durable,
+            ?ANN_DURABLE, Durable,
             #{})))).
 
 %% headers that are added as annotations during conversions

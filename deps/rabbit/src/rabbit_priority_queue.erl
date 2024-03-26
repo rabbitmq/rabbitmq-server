@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%%  Copyright (c) 2015-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%%  Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_priority_queue).
@@ -413,6 +413,8 @@ info(backing_queue_status, #state{bq = BQ, bqss = BQSs}) ->
           end, nothing, BQSs);
 info(head_message_timestamp, #state{bq = BQ, bqss = BQSs}) ->
     find_head_message_timestamp(BQ, BQSs, '');
+info(oldest_message_received_timestamp, #state{bq = BQ, bqss = BQSs}) ->
+    find_oldest_message_received_timestamp(BQ, BQSs);
 info(online, _) ->
     '';
 info(Item, #state{bq = BQ, bqss = BQSs}) ->
@@ -688,6 +690,28 @@ find_head_message_timestamp(BQ, [{_, BQSN} | Rest], Timestamp) ->
     end;
 find_head_message_timestamp(_, [], Timestamp) ->
     Timestamp.
+
+find_oldest_message_received_timestamp(BQ, BQs) ->
+    %% Oldest message timestamp among all priority queues
+    Timestamps =
+        lists:foldl(
+          fun({_, BQSN}, Acc) ->
+                  case oldest_message_received_timestamp(BQ, BQSN) of
+                      '' -> Acc;
+                      Ts -> [Ts | Acc]
+                  end
+          end, [], BQs),
+    case Timestamps of
+        [] -> '';
+        _ -> lists:min(Timestamps)
+    end.
+
+oldest_message_received_timestamp(BQ, BQSN) ->
+    MsgCount = BQ:len(BQSN) + BQ:info(messages_unacknowledged_ram, BQSN),
+    if
+        MsgCount =/= 0 -> BQ:info(oldest_message_received_timestamp, BQSN);
+        true -> ''
+    end.
 
 zip_msgs_and_acks(Pubs, AckTags) ->
     lists:zipwith(

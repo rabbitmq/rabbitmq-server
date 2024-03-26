@@ -8,6 +8,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   import RabbitMQ.CLI.Core.ANSI
+  import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
 
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
   use RabbitMQ.CLI.Core.MergesNoDefaults
@@ -67,7 +68,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand do
 
   def output(result, _opts) do
     cookie_file_lines = [
-      "#{bright("Cookie File")}\n",
+      "#{bright("Cookie File")}",
       "Effective user: #{result[:effective_user] || "(none)"}",
       "Effective home directory: #{result[:home_dir] || "(none)"}",
       "Cookie file path: #{result[:cookie_file_path]}",
@@ -78,20 +79,20 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand do
     ]
 
     switch_lines = [
-      "\n#{bright("Cookie CLI Switch")}\n",
+      "#{line_separator()}#{bright("Cookie CLI Switch")}",
       "--erlang-cookie value set? #{result[:switch_cookie_set]}",
       "--erlang-cookie value length: #{result[:switch_cookie_value_length] || 0}"
     ]
 
     os_env_lines = [
-      "\n#{bright("Env variable ")} #{bright_red("(Deprecated)")}\n",
+      "#{line_separator()}#{bright("Env variable ")} #{bright_red("(Deprecated)")}",
       "RABBITMQ_ERLANG_COOKIE value set? #{result[:os_env_cookie_set]}",
       "RABBITMQ_ERLANG_COOKIE value length: #{result[:os_env_cookie_value_length] || 0}"
     ]
 
     lines = cookie_file_lines ++ switch_lines ++ os_env_lines
 
-    {:ok, lines}
+    {:ok, Enum.join(lines, line_separator())}
   end
 
   def help_section(), do: :configuration
@@ -102,7 +103,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangCookieSourcesCommand do
 
   def usage, do: "erlang_cookie_sources"
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.StringPerLine
+  def formatter(), do: RabbitMQ.CLI.Formatters.String
 
   #
   # Implementation

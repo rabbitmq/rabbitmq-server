@@ -20,4 +20,4 @@ set -a
 # shellcheck source=./rabbitmq-env
 . "${0%/*}"/rabbitmq-env
 
-run_escript rabbitmqctl_escript "${ESCRIPT_DIR:?must be defined}"/vmware-rabbitmq "$@"
+run_escript "${ESCRIPT_DIR:?must be defined}"/vmware-rabbitmq 'noinput' "$@"

@@ -12,17 +12,13 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - "24.3"
         - "25.0"
         - "25.1"
         - "25.2"
         - "25.3"
         - "26.1"
+        - "26.2"
         include:
-        - erlang_version: "24.3"
-          name: '24'
-          branch: v3.10.x
-          labels: ""
         - erlang_version: "25.0"
           name: '25_0'
           branch: main
@@ -35,25 +31,29 @@ jobs:
           labels: |
             backport-v3.12.x
             backport-v3.11.x
-            backport-v3.10.x
         - erlang_version: "25.2"
           name: '25_2'
           branch: main
           labels: |
             backport-v3.12.x
             backport-v3.11.x
-            backport-v3.10.x
         - erlang_version: "25.3"
           name: '25_3'
           branch: main
           labels: |
             backport-v3.12.x
             backport-v3.11.x
-            backport-v3.10.x
         - erlang_version: "26.1"
           name: '26_1'
           branch: main
           labels: |
+            backport-v3.13.x
+            backport-v3.12.x
+        - erlang_version: "26.2"
+          name: '26_2'
+          branch: main
+          labels: |
+            backport-v3.13.x
             backport-v3.12.x
     timeout-minutes: 10
     env:
@@ -127,7 +127,7 @@ jobs:
         set -x
         git diff
     - name: CREATE PULL REQUEST
-      uses: peter-evans/create-pull-request@v5.0.2
+      uses: peter-evans/create-pull-request@v6.0.2
       with:
         token: ${{ secrets.REPO_SCOPED_TOKEN }}
         committer: GitHub <noreply@github.com>

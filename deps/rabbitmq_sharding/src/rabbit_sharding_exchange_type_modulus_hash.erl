@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_sharding_exchange_type_modulus_hash).
@@ -34,7 +34,7 @@ description() ->
 serialise_events() -> false.
 
 route(#exchange{name = Name}, Msg, _Options) ->
-    Routes = mc:get_annotation(routing_keys, Msg),
+    Routes = mc:routing_keys(Msg),
     Qs = rabbit_router:match_routing_key(Name, ['_']),
     case length(Qs) of
         0 -> [];

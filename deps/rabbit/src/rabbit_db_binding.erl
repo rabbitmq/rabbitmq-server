@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_db_binding).
@@ -928,7 +928,7 @@ clear_in_mnesia() ->
     ok.
 
 clear_in_khepri() ->
-    Path = rabbit_db_binding:khepri_routes_path(),
+    Path = khepri_routes_path(),
     case rabbit_khepri:delete(Path) of
         ok -> ok;
         Error -> throw(Error)

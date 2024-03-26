@@ -12,7 +12,7 @@
 %% limitations under the License.
 %%
 %% Copyright Ericsson AB 2011-2023. All Rights Reserved.
-%% Copyright (c) 2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 %% This code originated here and has been modified to suit RabbitMQ:
 %% https://github.com/erlang/otp/blob/2d43af53899d35423f1c83887026089c91bce010/lib/ssl/src/ssl_dist_sup.erl

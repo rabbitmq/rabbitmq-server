@@ -1,7 +1,7 @@
 %% ====================================================================
 %% @author Gavin M. Roy <gavinmroy@gmail.com>
 %% @copyright 2016, Gavin M. Roy
-%% @copyright 2016-2023 VMware, Inc. or its affiliates.
+%% @copyright 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %% @private
 %% @doc rabbitmq_aws configuration functionality
 %% @end
@@ -290,7 +290,7 @@ ini_file_data(Path) ->
   ini_file_data(Path, filelib:is_file(Path)).
 
 
--spec ini_file_data(Path :: string(), FileExists :: true | false)
+-spec ini_file_data(Path :: string(), FileExists :: boolean())
   -> list() | {error, atom()}.
 %% @doc Return the parsed ini file for the specified path.
 %% @end

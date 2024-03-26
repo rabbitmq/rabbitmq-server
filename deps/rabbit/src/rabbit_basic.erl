@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_basic).
@@ -286,7 +286,7 @@ msg_size(Content) ->
     rabbit_writer:msg_size(Content).
 
 add_header(Name, Type, Value, #basic_message{content = Content0} = Msg) ->
-    Content = rabbit_basic:map_headers(
+    Content = map_headers(
                 fun(undefined) ->
                         rabbit_misc:set_table_value([], Name, Type, Value);
                    (Headers) ->

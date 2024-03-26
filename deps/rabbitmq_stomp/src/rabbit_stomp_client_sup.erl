@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_stomp_client_sup).
@@ -15,12 +15,16 @@
 
 start_link(Ref, _Transport, Configuration) ->
     {ok, SupPid} = supervisor:start_link(?MODULE, []),
+    ConnectionHelperSupFlags = #{strategy => one_for_one,
+                                 intensity => 10,
+                                 period => 10,
+                                 auto_shutdown => any_significant},
     {ok, HelperPid} =
         supervisor:start_child(
             SupPid,
             #{
                 id => rabbit_stomp_heartbeat_sup,
-                start => {rabbit_connection_helper_sup, start_link, []},
+                start => {rabbit_connection_helper_sup, start_link, [ConnectionHelperSupFlags]},
                 restart => transient,
                 significant => true,
                 shutdown => infinity,

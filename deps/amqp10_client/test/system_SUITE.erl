@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2017-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(system_SUITE).
@@ -14,21 +14,10 @@
 
 -include("src/amqp10_client.hrl").
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
--define(UNAUTHORIZED_USER, <<"test_user_no_perm">>).
-
-%% The latch constant defines how many processes are spawned in order
-%% to run certain functionality in parallel. It follows the standard
-%% countdown latch pattern.
--define(LATCH, 100).
-
-%% The wait constant defines how long a consumer waits before it
-%% unsubscribes
--define(WAIT, 200).
-
-%% How to long wait for a process to die after an expected failure
--define(PROCESS_EXIT_TIMEOUT, 5000).
+suite() ->
+    [{timetrap, {minutes, 4}}].
 
 all() ->
     [
@@ -75,9 +64,11 @@ shared() ->
      split_transfer,
      transfer_unsettled,
      subscribe,
-     subscribe_with_auto_flow,
+     subscribe_with_auto_flow_settled,
+     subscribe_with_auto_flow_unsettled,
      outgoing_heartbeat,
-     roundtrip_large_messages
+     roundtrip_large_messages,
+     transfer_id_vs_delivery_id
     ].
 
 %% -------------------------------------------------------------------
@@ -112,17 +103,13 @@ stop_amqp10_client_app(Config) ->
 init_per_group(rabbitmq, Config0) ->
     Config = rabbit_ct_helpers:set_config(Config0,
                                           {sasl, {plain, <<"guest">>, <<"guest">>}}),
-    Config1 = rabbit_ct_helpers:merge_app_env(Config,
-                                              [{rabbitmq_amqp1_0,
-                                                [{protocol_strict_mode, true}]}]),
-    rabbit_ct_helpers:run_steps(Config1, rabbit_ct_broker_helpers:setup_steps());
+    rabbit_ct_helpers:run_steps(Config, rabbit_ct_broker_helpers:setup_steps());
 init_per_group(rabbitmq_strict, Config0) ->
     Config = rabbit_ct_helpers:set_config(Config0,
                                           {sasl, {plain, <<"guest">>, <<"guest">>}}),
     Config1 = rabbit_ct_helpers:merge_app_env(Config,
-                                              [{rabbitmq_amqp1_0,
-                                                [{default_user, none},
-                                                 {protocol_strict_mode, true}]}]),
+                                              [{rabbit,
+                                                [{amqp1_0_default_user, none}]}]),
     rabbit_ct_helpers:run_steps(Config1, rabbit_ct_broker_helpers:setup_steps());
 init_per_group(activemq, Config0) ->
     Config = rabbit_ct_helpers:set_config(Config0, {sasl, anon}),
@@ -304,14 +291,15 @@ roundtrip_large_messages(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     OpenConf = #{address => Hostname, port => Port, sasl => anon},
-    DataKb = crypto:strong_rand_bytes(1024),
-    roundtrip(OpenConf, DataKb),
-    Data1Mb = binary:copy(DataKb, 1024),
-    roundtrip(OpenConf, Data1Mb),
-    roundtrip(OpenConf, binary:copy(Data1Mb, 8)),
-    roundtrip(OpenConf, binary:copy(Data1Mb, 64)),
-    ok.
 
+    DataKb = rand:bytes(1024),
+    DataMb = rand:bytes(1024 * 1024),
+    Data8Mb = rand:bytes(8 * 1024 * 1024),
+    Data64Mb = rand:bytes(64 * 1024 * 1024),
+    ok = roundtrip(OpenConf, DataKb),
+    ok = roundtrip(OpenConf, DataMb),
+    ok = roundtrip(OpenConf, Data8Mb),
+    ok = roundtrip(OpenConf, Data64Mb).
 
 roundtrip(OpenConf) ->
     roundtrip(OpenConf, <<"banana">>).
@@ -319,39 +307,33 @@ roundtrip(OpenConf) ->
 roundtrip(OpenConf, Body) ->
     {ok, Connection} = amqp10_client:open_connection(OpenConf),
     {ok, Session} = amqp10_client:begin_session(Connection),
-    {ok, Sender} = amqp10_client:attach_sender_link(Session,
-                                                    <<"banana-sender">>,
-                                                    <<"test1">>,
-                                                    settled,
-                                                    unsettled_state),
+    {ok, Sender} = amqp10_client:attach_sender_link(
+                     Session, <<"banana-sender">>, <<"test1">>, settled, unsettled_state),
     await_link(Sender, credited, link_credit_timeout),
 
     Now = os:system_time(millisecond),
     Props = #{creation_time => Now},
-    Msg0 =  amqp10_msg:set_properties(Props,
-                                      amqp10_msg:new(<<"my-tag">>, Body, true)),
-    Msg1 = amqp10_msg:set_application_properties(#{"a_key" => "a_value"}, Msg0),
-    Msg = amqp10_msg:set_message_annotations(#{<<"x_key">> => "x_value"}, Msg1),
-    % RabbitMQ AMQP 1.0 does not yet support delivery annotations
-    % Msg = amqp10_msg:set_delivery_annotations(#{<<"x_key">> => "x_value"}, Msg2),
+    Msg0 = amqp10_msg:new(<<"my-tag">>, Body, true),
+    Msg1 =  amqp10_msg:set_properties(Props, Msg0),
+    Msg2 = amqp10_msg:set_application_properties(#{"a_key" => "a_value"}, Msg1),
+    Msg3 = amqp10_msg:set_message_annotations(#{<<"x_key">> => "x_value"}, Msg2),
+    Msg = amqp10_msg:set_delivery_annotations(#{<<"y_key">> => "y_value"}, Msg3),
     ok = amqp10_client:send_msg(Sender, Msg),
     ok = amqp10_client:detach_link(Sender),
     await_link(Sender, {detached, normal}, link_detach_timeout),
 
     {error, link_not_found} = amqp10_client:detach_link(Sender),
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
-                                                        <<"banana-receiver">>,
-                                                        <<"test1">>,
-                                                        settled,
-                                                        unsettled_state),
-    {ok, OutMsg} = amqp10_client:get_msg(Receiver, 60000 * 5),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"banana-receiver">>, <<"test1">>, settled, unsettled_state),
+    {ok, OutMsg} = amqp10_client:get_msg(Receiver, 4 * 60_000),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
+
     % ct:pal(?LOW_IMPORTANCE, "roundtrip message Out: ~tp~nIn: ~tp~n", [OutMsg, Msg]),
     #{creation_time := Now} = amqp10_msg:properties(OutMsg),
     #{<<"a_key">> := <<"a_value">>} = amqp10_msg:application_properties(OutMsg),
     #{<<"x_key">> := <<"x_value">>} = amqp10_msg:message_annotations(OutMsg),
-    % #{<<"x_key">> := <<"x_value">>} = amqp10_msg:delivery_annotations(OutMsg),
+    #{<<"y_key">> := <<"y_value">>} = amqp10_msg:delivery_annotations(OutMsg),
     ?assertEqual([Body], amqp10_msg:body(OutMsg)),
     ok.
 
@@ -379,7 +361,7 @@ filtered_roundtrip(OpenConf, Body) ->
                                                         settled,
                                                         unsettled_state),
     ok = amqp10_client:send_msg(Sender, Msg1),
-    {ok, OutMsg1} = amqp10_client:get_msg(DefaultReceiver, 60000 * 5),
+    {ok, OutMsg1} = amqp10_client:get_msg(DefaultReceiver, 60_000 * 4),
     ?assertEqual(<<"msg-1-tag">>, amqp10_msg:delivery_tag(OutMsg1)),
 
     timer:sleep(5 * 1000),
@@ -398,15 +380,51 @@ filtered_roundtrip(OpenConf, Body) ->
                                                         unsettled_state,
                                                         #{<<"apache.org:selector-filter:string">> => <<"amqp.annotation.x-opt-enqueuedtimeutc > ", Now2Binary/binary>>}),
 
-    {ok, OutMsg2} = amqp10_client:get_msg(DefaultReceiver, 60000 * 5),
+    {ok, OutMsg2} = amqp10_client:get_msg(DefaultReceiver, 60_000 * 4),
     ?assertEqual(<<"msg-2-tag">>, amqp10_msg:delivery_tag(OutMsg2)),
 
-    {ok, OutMsgFiltered} = amqp10_client:get_msg(FilteredReceiver, 60000 * 5),
+    {ok, OutMsgFiltered} = amqp10_client:get_msg(FilteredReceiver, 60_000 * 4),
     ?assertEqual(<<"msg-2-tag">>, amqp10_msg:delivery_tag(OutMsgFiltered)),
 
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
     ok.
+
+%% Assert that implementations respect the difference between transfer-id and delivery-id.
+transfer_id_vs_delivery_id(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    OpenConf = #{address => Hostname, port => Port, sasl => anon},
+
+    {ok, Connection} = amqp10_client:open_connection(OpenConf),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+    {ok, Sender} = amqp10_client:attach_sender_link(
+                     Session, <<"banana-sender">>, <<"test1">>, settled, unsettled_state),
+    await_link(Sender, credited, link_credit_timeout),
+
+    P0 = binary:copy(<<0>>, 8_000_000),
+    P1 = <<P0/binary, 1>>,
+    P2 = <<P0/binary, 2>>,
+    Msg1 = amqp10_msg:new(<<"tag 1">>, P1, true),
+    Msg2 = amqp10_msg:new(<<"tag 2">>, P2, true),
+    ok = amqp10_client:send_msg(Sender, Msg1),
+    ok = amqp10_client:send_msg(Sender, Msg2),
+    ok = amqp10_client:detach_link(Sender),
+    await_link(Sender, {detached, normal}, link_detach_timeout),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"banana-receiver">>, <<"test1">>, settled, unsettled_state),
+    {ok, RcvMsg1} = amqp10_client:get_msg(Receiver, 60_000 * 4),
+    {ok, RcvMsg2} = amqp10_client:get_msg(Receiver, 60_000 * 4),
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
+
+    ?assertEqual([P1], amqp10_msg:body(RcvMsg1)),
+    ?assertEqual([P2], amqp10_msg:body(RcvMsg2)),
+    %% Despite many transfers, there were only 2 deliveries.
+    %% Therefore, delivery-id should have been increased by just 1.
+    ?assertEqual(serial_number:add(amqp10_msg:delivery_id(RcvMsg1), 1),
+                 amqp10_msg:delivery_id(RcvMsg2)).
 
 % a message is sent before the link attach is guaranteed to
 % have completed and link credit granted
@@ -489,7 +507,7 @@ transfer_unsettled(Config) ->
 subscribe(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    QueueName = <<"test-sub">>,
+    QueueName = atom_to_binary(?FUNCTION_NAME),
     {ok, Connection} = amqp10_client:open_connection(Hostname, Port),
     {ok, Session} = amqp10_client:begin_session(Connection),
     {ok, Sender} = amqp10_client:attach_sender_link_sync(Session,
@@ -501,41 +519,165 @@ subscribe(Config) ->
                                                         <<"sub-receiver">>,
                                                         QueueName, unsettled),
     ok = amqp10_client:flow_link_credit(Receiver, 10, never),
+    [begin
+         receive {amqp10_msg, Receiver, Msg} ->
+                     ok = amqp10_client:accept_msg(Receiver, Msg)
+         after 2000 -> ct:fail(timeout)
+         end
+     end || _ <- lists:seq(1, 10)],
+    ok = assert_no_message(Receiver),
 
-    _ = receive_messages(Receiver, 10),
-    % assert no further messages are delivered
-    timeout = receive_one(Receiver),
-    receive
-        {amqp10_event, {link, Receiver, credit_exhausted}} ->
-            ok
-    after 5000 ->
-              flush(),
-              exit(credit_exhausted_assert)
+    receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
+    after 5000 -> flush(),
+                  exit(credit_exhausted_assert)
     end,
 
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
 
-subscribe_with_auto_flow(Config) ->
+subscribe_with_auto_flow_settled(Config) ->
+    SenderSettleMode = settled,
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    QueueName = <<"test-sub">>,
+    QueueName = atom_to_binary(?FUNCTION_NAME),
     {ok, Connection} = amqp10_client:open_connection(Hostname, Port),
     {ok, Session} = amqp10_client:begin_session(Connection),
     {ok, Sender} = amqp10_client:attach_sender_link_sync(Session,
                                                          <<"sub-sender">>,
                                                          QueueName),
     await_link(Sender, credited, link_credit_timeout),
-    _ = publish_messages(Sender, <<"banana">>, 10),
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
-                                                        <<"sub-receiver">>,
-                                                        QueueName, unsettled),
+
+    publish_messages(Sender, <<"banana">>, 20),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"sub-receiver">>, QueueName, SenderSettleMode),
+    await_link(Receiver, attached, attached_timeout),
+
     ok = amqp10_client:flow_link_credit(Receiver, 5, 2),
+    ?assertEqual(20, count_received_messages(Receiver)),
 
-    _ = receive_messages(Receiver, 10),
+    ok = amqp10_client:detach_link(Receiver),
+    ok = amqp10_client:detach_link(Sender),
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection).
 
-    % assert no further messages are delivered
-    timeout = receive_one(Receiver),
+subscribe_with_auto_flow_unsettled(Config) ->
+    SenderSettleMode = unsettled,
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    QueueName = atom_to_binary(?FUNCTION_NAME),
+    {ok, Connection} = amqp10_client:open_connection(Hostname, Port),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+    {ok, Sender} = amqp10_client:attach_sender_link_sync(Session,
+                                                         <<"sub-sender">>,
+                                                         QueueName),
+    await_link(Sender, credited, link_credit_timeout),
+
+    _ = publish_messages(Sender, <<"1-">>, 30),
+    %% Use sender settle mode 'unsettled'.
+    %% This should require us to manually settle message in order to receive more messages.
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"sub-receiver-2">>, QueueName, SenderSettleMode),
+    await_link(Receiver, attached, attached_timeout),
+    ok = amqp10_client:flow_link_credit(Receiver, 5, 2),
+    %% We should receive exactly 5 messages.
+    [M1, _M2, M3, M4, M5] = receive_messages(Receiver, 5),
+    ok = assert_no_message(Receiver),
+
+    %% Even when we accept the first 3 messages, the number of unsettled messages has not yet fallen below 2.
+    %% Therefore, the client should not yet grant more credits to the sender.
+    ok = amqp10_client_session:disposition(
+           Receiver, amqp10_msg:delivery_id(M1), amqp10_msg:delivery_id(M3), true, accepted),
+    ok = assert_no_message(Receiver),
+
+    %% When we accept 1 more message (the order in which we accept shouldn't matter, here we accept M5 before M4),
+    %% the number of unsettled messages now falls below 2 (since only M4 is left unsettled).
+    %% Therefore, the client should grant 5 credits to the sender.
+    %% Therefore, we should receive 5 more messages.
+    ok = amqp10_client:accept_msg(Receiver, M5),
+    [_M6, _M7, _M8, _M9, M10] = receive_messages(Receiver, 5),
+    ok = assert_no_message(Receiver),
+
+    %% It shouldn't matter how we settle messages, therefore we use 'rejected' this time.
+    %% Settling all in flight messages should cause us to receive exactly 5 more messages.
+    ok = amqp10_client_session:disposition(
+           Receiver, amqp10_msg:delivery_id(M4), amqp10_msg:delivery_id(M10), true, rejected),
+    [M11, _M12, _M13, _M14, M15] = receive_messages(Receiver, 5),
+    ok = assert_no_message(Receiver),
+
+    %% Dynamically decrease link credit.
+    %% Since we explicitly tell to grant 3 new credits now, we expect to receive 3 more messages.
+    ok = amqp10_client:flow_link_credit(Receiver, 3, 3),
+    [M16, _M17, M18] = receive_messages(Receiver, 3),
+    ok = assert_no_message(Receiver),
+
+    ok = amqp10_client_session:disposition(
+           Receiver, amqp10_msg:delivery_id(M11), amqp10_msg:delivery_id(M15), true, accepted),
+    %% However, the RenewWhenBelow=3 still refers to all unsettled messages.
+    %% Right now we have 3 messages (M16, M17, M18) unsettled.
+    ok = assert_no_message(Receiver),
+
+    %% Settling 1 out of these 3 messages causes RenewWhenBelow to fall below 3 resulting
+    %% in 3 new messages to be received.
+    ok = amqp10_client:accept_msg(Receiver, M18),
+    [_M19, _M20, _M21] = receive_messages(Receiver, 3),
+    ok = assert_no_message(Receiver),
+
+    ok = amqp10_client:flow_link_credit(Receiver, 3, never, true),
+    [_M22, _M23, M24] = receive_messages(Receiver, 3),
+    ok = assert_no_message(Receiver),
+
+    %% Since RenewWhenBelow = never, we expect to receive no new messages despite settling.
+    ok = amqp10_client_session:disposition(
+           Receiver, amqp10_msg:delivery_id(M16), amqp10_msg:delivery_id(M24), true, rejected),
+    ok = assert_no_message(Receiver),
+
+    ok = amqp10_client:flow_link_credit(Receiver, 2, never, false),
+    [M25, _M26] = receive_messages(Receiver, 2),
+    ok = assert_no_message(Receiver),
+
+    ok = amqp10_client:flow_link_credit(Receiver, 3, 3),
+    [_M27, _M28, M29] = receive_messages(Receiver, 3),
+    ok = assert_no_message(Receiver),
+
+    ok = amqp10_client_session:disposition(
+           Receiver, amqp10_msg:delivery_id(M25), amqp10_msg:delivery_id(M29), true, accepted),
+    [M30] = receive_messages(Receiver, 1),
+    ok = assert_no_message(Receiver),
+    ok = amqp10_client:accept_msg(Receiver, M30),
+    %% The sender queue is empty now.
+    ok = assert_no_message(Receiver),
+
+    ok = amqp10_client:flow_link_credit(Receiver, 3, 1),
+    _ = publish_messages(Sender, <<"2-">>, 1),
+    [M31] = receive_messages(Receiver, 1),
+    ok = amqp10_client:accept_msg(Receiver, M31),
+
+    %% Since function flow_link_credit/3 documents
+    %%     "if RenewWhenBelow is an integer, the amqp10_client will automatically grant more
+    %%     Credit to the sender when the sum of the remaining link credit and the number of
+    %%     unsettled messages falls below the value of RenewWhenBelow."
+    %% our expectation is that the amqp10_client has not renewed credit since the sum of
+    %% remaining link credit (2) and unsettled messages (0) is 2.
+    %%
+    %% Therefore, when we publish another 3 messages, we expect to only receive only 2 messages!
+    _ = publish_messages(Sender, <<"3-">>, 5),
+    [M32, M33] = receive_messages(Receiver, 2),
+    ok = assert_no_message(Receiver),
+
+    %% When we accept both messages, the sum of the remaining link credit (0) and unsettled messages (0)
+    %% falls below RenewWhenBelow=1 causing the amqp10_client to grant 3 new credits.
+    ok = amqp10_client:accept_msg(Receiver, M32),
+    ok = assert_no_message(Receiver),
+    ok = amqp10_client:accept_msg(Receiver, M33),
+
+    [M35, M36, M37] = receive_messages(Receiver, 3),
+    ok = amqp10_client:accept_msg(Receiver, M35),
+    ok = amqp10_client:accept_msg(Receiver, M36),
+    ok = amqp10_client:accept_msg(Receiver, M37),
+    %% The sender queue is empty now.
+    ok = assert_no_message(Receiver),
+
+    ok = amqp10_client:detach_link(Receiver),
+    ok = amqp10_client:detach_link(Sender),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
 
@@ -676,11 +818,13 @@ incoming_heartbeat(Config) ->
               idle_time_out => 1000, notify => self()},
     {ok, Connection} = amqp10_client:open_connection(CConf),
     receive
-        {amqp10_event, {connection, Connection,
-         {closed, {resource_limit_exceeded, <<"remote idle-time-out">>}}}} ->
+        {amqp10_event,
+         {connection, Connection0,
+          {closed, {resource_limit_exceeded, <<"remote idle-time-out">>}}}}
+          when Connection0 =:= Connection ->
             ok
     after 5000 ->
-          exit(incoming_heartbeat_assert)
+              exit(incoming_heartbeat_assert)
     end,
     demonitor(MockRef).
 
@@ -688,45 +832,72 @@ incoming_heartbeat(Config) ->
 %%% HELPERS
 %%%
 
-receive_messages(Receiver, Num) ->
-    [begin
-         ct:pal("receive_messages ~tp", [T]),
-         ok = receive_one(Receiver)
-     end || T <- lists:seq(1, Num)].
-
-publish_messages(Sender, Data, Num) ->
-    [begin
-        Tag = integer_to_binary(T),
-        Msg = amqp10_msg:new(Tag, Data, false),
-        ok = amqp10_client:send_msg(Sender, Msg),
-        ok = await_disposition(Tag)
-     end || T <- lists:seq(1, Num)].
-
-receive_one(Receiver) ->
+await_link(Who, What, Err) ->
     receive
-        {amqp10_msg, Receiver, Msg} ->
-            amqp10_client:accept_msg(Receiver, Msg)
-    after 2000 ->
-          timeout
+        {amqp10_event, {link, Who0, What0}}
+          when Who0 =:= Who andalso
+               What0 =:= What ->
+            ok;
+        {amqp10_event, {link, Who0, {detached, Why}}}
+          when Who0 =:= Who ->
+            ct:fail(Why)
+    after 5000 ->
+              flush(),
+              ct:fail(Err)
     end.
+
+publish_messages(Sender, BodyPrefix, Num) ->
+    [begin
+         Tag = integer_to_binary(T),
+         Msg = amqp10_msg:new(Tag, <<BodyPrefix/binary, Tag/binary>>, false),
+         ok = amqp10_client:send_msg(Sender, Msg),
+         ok = await_disposition(Tag)
+     end || T <- lists:seq(1, Num)].
 
 await_disposition(DeliveryTag) ->
     receive
-        {amqp10_disposition, {accepted, DeliveryTag}} -> ok
+        {amqp10_disposition, {accepted, DeliveryTag0}}
+          when DeliveryTag0 =:= DeliveryTag -> ok
     after 3000 ->
               flush(),
-              exit(dispostion_timeout)
+              ct:fail(dispostion_timeout)
     end.
 
-await_link(Who, What, Err) ->
+count_received_messages(Receiver) ->
+    count_received_messages0(Receiver, 0).
+
+count_received_messages0(Receiver, Count) ->
     receive
-        {amqp10_event, {link, Who, What}} ->
-            ok;
-        {amqp10_event, {link, Who, {detached, Why}}} ->
-            exit(Why)
-    after 5000 ->
-              flush(),
-              exit(Err)
+        {amqp10_msg, Receiver, _Msg} ->
+            count_received_messages0(Receiver, Count + 1)
+    after 500 ->
+              Count
+    end.
+
+receive_messages(Receiver, N) ->
+    receive_messages0(Receiver, N, []).
+
+receive_messages0(_Receiver, 0, Acc) ->
+    lists:reverse(Acc);
+receive_messages0(Receiver, N, Acc) ->
+    receive
+        {amqp10_msg, Receiver, Msg} ->
+            receive_messages0(Receiver, N - 1, [Msg | Acc])
+    after 5000  ->
+              LastReceivedMsg = case Acc of
+                                    [] -> none;
+                                    [M | _] -> M
+                                end,
+              ct:fail({timeout,
+                       {num_received, length(Acc)},
+                       {num_missing, N},
+                       {last_received_msg, LastReceivedMsg}
+                      })
+    end.
+
+assert_no_message(Receiver) ->
+    receive {amqp10_msg, Receiver, Msg} -> ct:fail({unexpected_message, Msg})
+    after 50 -> ok
     end.
 
 to_bin(X) when is_list(X) ->

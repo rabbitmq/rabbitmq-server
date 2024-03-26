@@ -34,16 +34,10 @@ all_tests() ->
 
 groups() ->
     [
-     {machine_version_2, [], all_tests()},
-     {machine_version_3, [], all_tests()},
-     {machine_version_conversion, [], [convert_v2_to_v3]}
+     {machine_version_2, [shuffle], all_tests()},
+     {machine_version_3, [shuffle], all_tests()},
+     {machine_version_conversion, [shuffle], [convert_v2_to_v3]}
     ].
-
-init_per_suite(Config) ->
-    Config.
-
-end_per_suite(_Config) ->
-    ok.
 
 init_per_group(machine_version_2, Config) ->
     [{machine_version, 2} | Config];
@@ -53,12 +47,6 @@ init_per_group(machine_version_conversion, Config) ->
     Config.
 
 end_per_group(_Group, _Config) ->
-    ok.
-
-init_per_testcase(_TestCase, Config) ->
-    Config.
-
-end_per_testcase(_TestCase, _Config) ->
     ok.
 
 %%%===================================================================
@@ -91,8 +79,7 @@ end_per_testcase(_TestCase, _Config) ->
 test_init(Name) ->
     init(#{name => Name,
            max_in_memory_length => 0,
-           queue_resource => rabbit_misc:r("/", queue,
-                                           atom_to_binary(Name, utf8)),
+           queue_resource => rabbit_misc:r("/", queue, atom_to_binary(Name)),
            release_cursor_interval => 0}).
 
 enq_enq_checkout_test(C) ->
@@ -109,7 +96,7 @@ enq_enq_checkout_test(C) ->
     ?ASSERT_EFF({log, [1,2], _Fun, _Local}, Effects),
     ok.
 
-credit_enq_enq_checkout_settled_credit_test(C) ->
+credit_enq_enq_checkout_settled_credit_v1_test(C) ->
     Cid = {?FUNCTION_NAME, self()},
     {State1, _} = enq(C, 1, 1, first, test_init(test)),
     {State2, _} = enq(C, 2, 2, second, State1),
@@ -122,7 +109,8 @@ credit_enq_enq_checkout_settled_credit_test(C) ->
     {State4, SettledEffects} = settle(C, Cid, 4, 1, State3),
     ?assertEqual(false, lists:any(fun ({log, _, _, _}) ->
                                           true;
-                                      (_) -> false
+                                      (_) ->
+                                          false
                                   end, SettledEffects)),
     %% granting credit (3) should deliver the second msg if the receivers
     %% delivery count is (1)
@@ -136,8 +124,43 @@ credit_enq_enq_checkout_settled_credit_test(C) ->
                                   end, FinalEffects)),
     ok.
 
-credit_with_drained_test(C) ->
-    Cid = {?FUNCTION_NAME, self()},
+credit_enq_enq_checkout_settled_credit_v2_test(C) ->
+    Ctag = ?FUNCTION_NAME,
+    Cid = {Ctag, self()},
+    {State1, _} = enq(C, 1, 1, first, test_init(test)),
+    {State2, _} = enq(C, 2, 2, second, State1),
+    {State3, _, Effects} = apply(meta(C, 3),
+                                 rabbit_fifo:make_checkout(
+                                   Cid,
+                                   {auto, 1, credited},
+                                   %% denotes that credit API v2 is used
+                                   #{initial_delivery_count => 16#ff_ff_ff_ff}),
+                                 State2),
+    ?ASSERT_EFF({monitor, _, _}, Effects),
+    ?ASSERT_EFF({log, [1], _Fun, _Local}, Effects),
+    %% Settling the delivery should not grant new credit.
+    {State4, SettledEffects} = settle(C, Cid, 4, 1, State3),
+    ?assertEqual(false, lists:any(fun ({log, _, _, _}) ->
+                                          true;
+                                      (_) ->
+                                          false
+                                  end, SettledEffects)),
+    {State5, CreditEffects} = credit(C, Cid, 5, 1, 0, false, State4),
+    ?ASSERT_EFF({log, [2], _, _}, CreditEffects),
+    %% The credit_reply should be sent **after** the delivery.
+    ?assertEqual({send_msg, self(),
+                  {credit_reply, Ctag, _DeliveryCount = 1, _Credit = 0, _Available = 0, _Drain = false},
+                  ?DELIVERY_SEND_MSG_OPTS},
+                 lists:last(CreditEffects)),
+    {_State6, FinalEffects} = enq(C, 6, 3, third, State5),
+    ?assertEqual(false, lists:any(fun ({log, _, _, _}) ->
+                                          true;
+                                      (_) -> false
+                                  end, FinalEffects)).
+
+credit_with_drained_v1_test(C) ->
+    Ctag = ?FUNCTION_NAME,
+    Cid = {Ctag, self()},
     State0 = test_init(test),
     %% checkout with a single credit
     {State1, _, _} =
@@ -147,17 +170,42 @@ credit_with_drained_test(C) ->
                                                        delivery_count = 0}}},
                  State1),
     {State, Result, _} =
-         apply(meta(C, 3), rabbit_fifo:make_credit(Cid, 0, 5, true), State1),
-    ?assertMatch(#rabbit_fifo{consumers = #{Cid := #consumer{credit = 0,
-                                                       delivery_count = 5}}},
+         apply(meta(C, 3), rabbit_fifo:make_credit(Cid, 5, 0, true), State1),
+         ?assertMatch(#rabbit_fifo{consumers = #{Cid := #consumer{credit = 0,
+                                                                  delivery_count = 5}}},
                  State),
     ?assertEqual({multi, [{send_credit_reply, 0},
-                          {send_drained, {?FUNCTION_NAME, 5}}]},
+                          {send_drained, {Ctag, 5}}]},
                            Result),
     ok.
 
-credit_and_drain_test(C) ->
-    Cid = {?FUNCTION_NAME, self()},
+credit_with_drained_v2_test(C) ->
+    Ctag = ?FUNCTION_NAME,
+    Cid = {Ctag, self()},
+    State0 = test_init(test),
+    %% checkout with a single credit
+    {State1, _, _} = apply(meta(C, 1),
+                           rabbit_fifo:make_checkout(
+                             Cid,
+                             {auto, 1, credited},
+                             %% denotes that credit API v2 is used
+                             #{initial_delivery_count => 0}),
+                           State0),
+    ?assertMatch(#rabbit_fifo{consumers = #{Cid := #consumer{credit = 1,
+                                                             delivery_count = 0}}},
+                 State1),
+    {State, ok, Effects} = apply(meta(C, 3), rabbit_fifo:make_credit(Cid, 5, 0, true), State1),
+    ?assertMatch(#rabbit_fifo{consumers = #{Cid := #consumer{credit = 0,
+                                                             delivery_count = 5}}},
+                 State),
+    ?assertEqual([{send_msg, self(),
+                   {credit_reply, Ctag, _DeliveryCount = 5, _Credit = 0, _Available = 0, _Drain = true},
+                   ?DELIVERY_SEND_MSG_OPTS}],
+                 Effects).
+
+credit_and_drain_v1_test(C) ->
+    Ctag = ?FUNCTION_NAME,
+    Cid = {Ctag, self()},
     {State1, _} = enq(C, 1, 1, first, test_init(test)),
     {State2, _} = enq(C, 2, 2, second, State1),
     %% checkout without any initial credit (like AMQP 1.0 would)
@@ -167,7 +215,7 @@ credit_and_drain_test(C) ->
 
     ?ASSERT_NO_EFF({log, _, _, _}, CheckEffs),
     {State4, {multi, [{send_credit_reply, 0},
-                      {send_drained, {?FUNCTION_NAME, 2}}]},
+                      {send_drained, {Ctag, 2}}]},
     Effects} = apply(meta(C, 4), rabbit_fifo:make_credit(Cid, 4, 0, true), State3),
     ?assertMatch(#rabbit_fifo{consumers = #{Cid := #consumer{credit = 0,
                                                              delivery_count = 4}}},
@@ -178,7 +226,36 @@ credit_and_drain_test(C) ->
     ?ASSERT_NO_EFF({log, _, _, _}, EnqEffs),
     ok.
 
+credit_and_drain_v2_test(C) ->
+    Ctag = ?FUNCTION_NAME,
+    Cid = {Ctag, self()},
+    {State1, _} = enq(C, 1, 1, first, test_init(test)),
+    {State2, _} = enq(C, 2, 2, second, State1),
+    {State3, _, CheckEffs} = apply(meta(C, 3),
+                                   rabbit_fifo:make_checkout(
+                                     Cid,
+                                     %% checkout without any initial credit (like AMQP 1.0 would)
+                                     {auto, 0, credited},
+                                     %% denotes that credit API v2 is used
+                                     #{initial_delivery_count => 16#ff_ff_ff_ff - 1}),
+                                   State2),
+    ?ASSERT_NO_EFF({log, _, _, _}, CheckEffs),
 
+    {State4, ok, Effects} = apply(meta(C, 4),
+                                  rabbit_fifo:make_credit(Cid, 4, 16#ff_ff_ff_ff - 1, true),
+                                  State3),
+    ?assertMatch(#rabbit_fifo{consumers = #{Cid := #consumer{credit = 0,
+                                                             delivery_count = 2}}},
+                 State4),
+    ?ASSERT_EFF({log, [1, 2], _, _}, Effects),
+    %% The credit_reply should be sent **after** the deliveries.
+    ?assertEqual({send_msg, self(),
+                  {credit_reply, Ctag, _DeliveryCount = 2, _Credit = 0, _Available = 0, _Drain = true},
+                  ?DELIVERY_SEND_MSG_OPTS},
+                 lists:last(Effects)),
+
+    {_State5, EnqEffs} = enq(C, 5, 2, third, State4),
+    ?ASSERT_NO_EFF({log, _, _, _}, EnqEffs).
 
 enq_enq_deq_test(C) ->
     Cid = {?FUNCTION_NAME, self()},
@@ -1402,10 +1479,9 @@ single_active_cancelled_with_unacked_test(C) ->
     ?assertMatch([], rabbit_fifo:query_waiting_consumers(State6)),
     ok.
 
-single_active_with_credited_test(C) ->
+single_active_with_credited_v1_test(C) ->
     State0 = init(#{name => ?FUNCTION_NAME,
-                    queue_resource => rabbit_misc:r("/", queue,
-                        atom_to_binary(?FUNCTION_NAME, utf8)),
+                    queue_resource => rabbit_misc:r("/", queue, atom_to_binary(?FUNCTION_NAME)),
                     release_cursor_interval => 0,
                     single_active_consumer_on => true}),
 
@@ -1435,6 +1511,45 @@ single_active_with_credited_test(C) ->
                  rabbit_fifo:query_waiting_consumers(State3)),
     ok.
 
+single_active_with_credited_v2_test(C) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue, atom_to_binary(?FUNCTION_NAME)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
+    C1 = {<<"ctag1">>, self()},
+    {State1, _, _} = apply(meta(C, 1),
+                           make_checkout(C1,
+                                         {auto, 0, credited},
+                                         %% denotes that credit API v2 is used
+                                         #{initial_delivery_count => 0}),
+                           State0),
+    C2 = {<<"ctag2">>, self()},
+    {State2, _, _} = apply(meta(C, 2),
+                           make_checkout(C2,
+                                         {auto, 0, credited},
+                                         %% denotes that credit API v2 is used
+                                         #{initial_delivery_count => 0}),
+                           State1),
+    %% add some credit
+    C1Cred = rabbit_fifo:make_credit(C1, 5, 0, false),
+    {State3, ok, Effects1} = apply(meta(C, 3), C1Cred, State2),
+    ?assertEqual([{send_msg, self(),
+                   {credit_reply, <<"ctag1">>, _DeliveryCount = 0, _Credit = 5, _Available = 0, _Drain = false},
+                   ?DELIVERY_SEND_MSG_OPTS}],
+                 Effects1),
+
+    C2Cred = rabbit_fifo:make_credit(C2, 4, 0, false),
+    {State, ok, Effects2} = apply(meta(C, 4), C2Cred, State3),
+    ?assertEqual({send_msg, self(),
+                  {credit_reply, <<"ctag2">>, _DeliveryCount = 0, _Credit = 4, _Available = 0, _Drain = false},
+                  ?DELIVERY_SEND_MSG_OPTS},
+                 Effects2),
+
+    %% both consumers should have credit
+    ?assertMatch(#{C1 := #consumer{credit = 5}},
+                 State#rabbit_fifo.consumers),
+    ?assertMatch([{C2, #consumer{credit = 4}}],
+                 rabbit_fifo:query_waiting_consumers(State)).
 
 register_enqueuer_test(C) ->
     State0 = init(#{name => ?FUNCTION_NAME,

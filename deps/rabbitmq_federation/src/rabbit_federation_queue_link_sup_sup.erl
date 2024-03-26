@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_federation_queue_link_sup_sup).
@@ -18,6 +18,7 @@
 
 -export([start_link/0, start_child/1, adjust/1, stop_child/1]).
 -export([init/1]).
+-export([id_to_khepri_path/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -51,12 +52,12 @@ start_child(Q) ->
 
 adjust({clear_upstream, VHost, UpstreamName}) ->
     _ = [rabbit_federation_link_sup:adjust(Pid, Q, {clear_upstream, UpstreamName}) ||
-            {{_, Q}, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR),
+            {Q, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR),
             ?amqqueue_vhost_equals(Q, VHost)],
     ok;
 adjust(Reason) ->
     _ = [rabbit_federation_link_sup:adjust(Pid, Q, Reason) ||
-            {{_, Q}, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
+            {Q, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
     ok.
 
 stop_child(Q) ->
@@ -88,8 +89,9 @@ init([]) ->
 id(Q) when ?is_amqqueue(Q) ->
     Policy = amqqueue:get_policy(Q),
     Q1 = amqqueue:set_immutable(Q),
-    {simple_id(Q), amqqueue:set_policy(Q1, Policy)}.
+    Q2 = amqqueue:set_policy(Q1, Policy),
+    Q2.
 
-simple_id(Q) when ?is_amqqueue(Q) ->
-    #resource{virtual_host = VHost, name = Name} = amqqueue:get_name(Q),
+id_to_khepri_path(Id) when ?is_amqqueue(Id) ->
+    #resource{virtual_host = VHost, name = Name} = amqqueue:get_name(Id),
     [queue, VHost, Name].

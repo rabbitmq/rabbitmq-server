@@ -160,7 +160,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=~\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
+          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=~\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
@@ -415,7 +415,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=~\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
+          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=~\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",

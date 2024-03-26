@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 %% This test suite contains test cases that are shared between (i.e. executed across):
 %% 1. plugins rabbitmq_mqtt and rabbitmq_web_mqtt
@@ -142,6 +142,7 @@ cluster_size_3_tests() ->
      flow_quorum_queue,
      flow_stream,
      rabbit_mqtt_qos0_queue,
+     rabbit_mqtt_qos0_queue_kill_node,
      cli_list_queues,
      delete_create_queue,
      session_reconnect,
@@ -614,7 +615,7 @@ events(Config) ->
                                            {exclusive, false},
                                            {arguments, []}],
                                           ConsumerCreated),
-                        classic
+                        rabbit_classic_queue
                 end,
     assert_event_type(queue_created, E2),
     assert_event_prop([{name, QueueName},
@@ -1212,6 +1213,47 @@ rabbit_mqtt_qos0_queue(Config) ->
     ok = emqtt:disconnect(Sub),
     ok = emqtt:disconnect(Pub).
 
+rabbit_mqtt_qos0_queue_kill_node(Config) ->
+    Topic1 = <<"t/1">>,
+    Topic2 = <<"t/2">>,
+    Pub = connect(<<"publisher">>, Config, 2, []),
+
+    SubscriberId = <<"subscriber">>,
+    Sub0 = connect(SubscriberId, Config, 0, []),
+    {ok, _, [0]} = emqtt:subscribe(Sub0, Topic1, qos0),
+    ok = emqtt:publish(Pub, Topic1, <<"m0">>, qos0),
+    ok = expect_publishes(Sub0, Topic1, [<<"m0">>]),
+
+    process_flag(trap_exit, true),
+    ok = rabbit_ct_broker_helpers:kill_node(Config, 0),
+    ok = await_exit(Sub0),
+    %% Wait to run rabbit_amqqueue:on_node_down/1 on both live nodes.
+    timer:sleep(500),
+    %% Re-connect to a live node with same MQTT client ID.
+    Sub1 = connect(SubscriberId, Config, 1, []),
+    {ok, _, [0]} = emqtt:subscribe(Sub1, Topic2, qos0),
+    ok = emqtt:publish(Pub, Topic2, <<"m1">>, qos0),
+    ok = expect_publishes(Sub1, Topic2, [<<"m1">>]),
+    %% Since we started a new clean session, previous subscription should have been deleted.
+    ok = emqtt:publish(Pub, Topic1, <<"m2">>, qos0),
+    receive {publish, _} = Publish -> ct:fail({unexpected, Publish})
+    after 300 -> ok
+    end,
+
+    ok = rabbit_ct_broker_helpers:start_node(Config, 0),
+    ok = rabbit_ct_broker_helpers:kill_node(Config, 1),
+    %% This time, do not wait.
+    %% rabbit_amqqueue:on_node_down/1 may or may not have run.
+    Sub2 = connect(SubscriberId, Config, 2, []),
+    {ok, _, [0]} = emqtt:subscribe(Sub2, Topic2, qos0),
+    ok = emqtt:publish(Pub, Topic2, <<"m3">>, qos0),
+    ok = expect_publishes(Sub2, Topic2, [<<"m3">>]),
+
+    ok = emqtt:disconnect(Sub2),
+    ok = emqtt:disconnect(Pub),
+    ok = rabbit_ct_broker_helpers:start_node(Config, 1),
+    ?assertEqual([], rpc(Config, rabbit_db_binding, get_all, [])).
+
 %% Test that MQTT connection can be listed and closed via the rabbitmq_management plugin.
 management_plugin_connection(Config) ->
     KeepaliveSecs = 99,
@@ -1226,7 +1268,7 @@ management_plugin_connection(Config) ->
        name := ConnectionName}] = http_get(Config, "/connections"),
     process_flag(trap_exit, true),
     http_delete(Config,
-                "/connections/" ++ binary_to_list(uri_string:quote((ConnectionName))),
+                "/connections/" ++ binary_to_list(uri_string:quote(ConnectionName)),
                 ?NO_CONTENT),
     await_exit(C1),
     ?assertEqual([], http_get(Config, "/connections")),
@@ -1344,7 +1386,7 @@ keepalive(Config) ->
 
     await_exit(C1),
     assert_v5_disconnect_reason_code(Config, ?RC_KEEP_ALIVE_TIMEOUT),
-    true = rpc(Config, meck, validate, [Mod]),
+    ?assert(rpc(Config, meck, validate, [Mod])),
     ok = rpc(Config, meck, unload, [Mod]),
 
     C2 = connect(<<"client2">>, Config),
@@ -1373,7 +1415,7 @@ keepalive_turned_off(Config) ->
 
     rabbit_ct_helpers:consistently(?_assert(erlang:is_process_alive(C))),
 
-    true = rpc(Config, meck, validate, [Mod]),
+    ?assert(rpc(Config, meck, validate, [Mod])),
     ok = rpc(Config, meck, unload, [Mod]),
     ok = emqtt:disconnect(C).
 

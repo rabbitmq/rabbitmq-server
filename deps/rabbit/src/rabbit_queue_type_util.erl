@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_queue_type_util).
@@ -12,7 +12,8 @@
          check_auto_delete/1,
          check_exclusive/1,
          check_non_durable/1,
-         run_checks/2]).
+         run_checks/2,
+         erpc_call/5]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
@@ -69,4 +70,31 @@ run_checks([C | Checks], Q) ->
             run_checks(Checks, Q);
         Err ->
             Err
+    end.
+
+-spec erpc_call(node(), module(), atom(), list(), non_neg_integer()) ->
+    term() | {error, term()}.
+erpc_call(Node, M, F, A, _Timeout)
+  when Node =:= node()  ->
+    %% Only timeout 'infinity' optimises the local call in OTP 23-25 avoiding a new process being spawned:
+    %% https://github.com/erlang/otp/blob/47f121af8ee55a0dbe2a8c9ab85031ba052bad6b/lib/kernel/src/erpc.erl#L121
+    try erpc:call(Node, M, F, A, infinity) of
+        Result ->
+            Result
+    catch
+        error:Err ->
+            {error, Err}
+    end;
+erpc_call(Node, M, F, A, Timeout) ->
+    case lists:member(Node, nodes()) of
+        true ->
+            try erpc:call(Node, M, F, A, Timeout) of
+                Result ->
+                    Result
+            catch
+                error:Err ->
+                    {error, Err}
+            end;
+        false ->
+            {error, noconnection}
     end.

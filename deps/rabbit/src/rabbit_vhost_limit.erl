@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_vhost_limit).
@@ -84,7 +84,7 @@ list(VHost) ->
 -spec is_over_connection_limit(vhost:name()) -> {true, non_neg_integer()} | false.
 
 is_over_connection_limit(VirtualHost) ->
-    case rabbit_vhost_limit:connection_limit(VirtualHost) of
+    case connection_limit(VirtualHost) of
         %% no limit configured
         undefined                                            -> false;
         %% with limit = 0, no connections are allowed

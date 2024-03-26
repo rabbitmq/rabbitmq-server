@@ -39,6 +39,8 @@ define PROJECT_ENV
 	    {default_user_tags, [administrator]},
 	    {default_vhost, <<"/">>},
 	    {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
+	    {amqp1_0_default_user, <<"guest">>},
+	    {amqp1_0_default_vhost, <<"/">>},
 	    {loopback_users, [<<"guest">>]},
 	    {password_hashing_module, rabbit_password_hashing_sha256},
 	    {server_properties, []},
@@ -65,8 +67,6 @@ define PROJECT_ENV
 	                         ]},
 	    {halt_on_upgrade_failure, true},
 	    {ssl_apps, [asn1, crypto, public_key, ssl]},
-	    %% classic queue storage implementation version
-	    {classic_queue_default_version, 2},
 	    %% see rabbitmq-server#114
 	    {mirroring_flow_control, true},
 	    {mirroring_sync_batch_size, 4096},
@@ -135,13 +135,13 @@ endef
 LOCAL_DEPS = sasl os_mon inets compiler public_key crypto ssl syntax_tools xmerl
 
 BUILD_DEPS = rabbitmq_cli
-DEPS = ranch rabbit_common rabbitmq_prelaunch ra sysmon_handler stdout_formatter recon redbug observer_cli osiris amqp10_common syslog systemd seshat khepri khepri_mnesia_migration
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
+DEPS = ranch rabbit_common amqp10_common rabbitmq_prelaunch ra sysmon_handler stdout_formatter recon redbug observer_cli osiris syslog systemd seshat khepri khepri_mnesia_migration
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers meck proper amqp_client amqp10_client rabbitmq_amqp1_0
 
 PLT_APPS += mnesia
 
 dep_syslog = git https://github.com/schlagert/syslog 4.0.0
-dep_osiris = git https://github.com/rabbitmq/osiris v1.7.2
+dep_osiris = git https://github.com/rabbitmq/osiris v1.8.1
 dep_systemd = hex 0.6.1
 
 dep_seshat = git https://github.com/rabbitmq/seshat v0.6.1
@@ -153,6 +153,7 @@ endef
 DOCS_DIR     = docs
 MANPAGES     = $(wildcard $(DOCS_DIR)/*.[0-9])
 WEB_MANPAGES = $(patsubst %,%.html,$(MANPAGES))
+MD_MANPAGES  = $(patsubst %,%.md,$(MANPAGES))
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
@@ -271,7 +272,7 @@ docs:: manpages web-manpages
 manpages: $(MANPAGES)
 	@:
 
-web-manpages: $(WEB_MANPAGES)
+web-manpages: $(WEB_MANPAGES) $(MD_MANPAGES)
 	@:
 
 # We use mandoc(1) to convert manpages to HTML plus an awk script which
@@ -299,7 +300,12 @@ web-manpages: $(WEB_MANPAGES)
 	  } } \
 	  ' > "$@"
 
+%.md: %
+	$(gen_verbose) mandoc -T markdown -O 'fragment,man=%N.%S.md' "$<" | \
+	  sed -E -e 's/\{/\&lcub;/g' \
+	> "$@"
+
 distclean:: distclean-manpages
 
 distclean-manpages::
-	$(gen_verbose) rm -f $(WEB_MANPAGES)
+	$(gen_verbose) rm -f $(WEB_MANPAGES) $(MD_MANPAGES)

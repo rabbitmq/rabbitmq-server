@@ -889,6 +889,39 @@ end}.
 
 {mapping, "channel_max", "rabbit.channel_max", [{datatype, integer}]}.
 
+{mapping, "channel_max_per_node", "rabbit.channel_max_per_node",
+  [{datatype, [{atom, infinity}, integer]}]}.
+
+{translation, "rabbit.channel_max_per_node",
+ fun(Conf) ->
+  case cuttlefish:conf_get("channel_max_per_node", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      infinity  -> infinity;
+      Val when is_integer(Val) andalso Val > 0 -> Val;
+      _         -> cuttlefish:invalid("should be positive integer or 'infinity'")
+  end
+ end
+}.
+
+%% Set the max allowed number of consumers per channel.
+%% `infinity` means "no limit".
+%%
+%% {consumer_max_per_channel, infinity},
+
+{mapping, "consumer_max_per_channel", "rabbit.consumer_max_per_channel",
+  [{datatype, [{atom, infinity}, integer]}]}.
+
+{translation, "rabbit.consumer_max_per_channel",
+ fun(Conf) ->
+  case cuttlefish:conf_get("consumer_max_per_channel", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      infinity  -> infinity;
+      Val when is_integer(Val) andalso Val > 0 -> Val;
+      _         -> cuttlefish:invalid("should be positive integer or 'infinity'")
+  end
+ end
+}.
+
 %% Set the max permissible number of client connections per node.
 %% `infinity` means "no limit".
 %%
@@ -1064,10 +1097,13 @@ end}.
 %% GB: gigabytes (10^9 - 1,000,000,000 bytes)
 
 {mapping, "vm_memory_high_watermark.relative", "rabbit.vm_memory_high_watermark", [
-    {datatype, float}]}.
+    {datatype, float}
+]}.
 
 {mapping, "vm_memory_high_watermark.absolute", "rabbit.vm_memory_high_watermark", [
-    {datatype, [integer, string]}]}.
+    {datatype, [integer, string]},
+    {validators, ["is_supported_information_unit"]}
+]}.
 
 
 {translation, "rabbit.vm_memory_high_watermark",
@@ -1126,7 +1162,6 @@ end}.
 %% {disk_free_limit, 50000000},
 %%
 %% Or you can set it using memory units (same as in vm_memory_high_watermark)
-%% with RabbitMQ 3.6.0+.
 %% {disk_free_limit, "50MB"},
 %% {disk_free_limit, "50000kB"},
 %% {disk_free_limit, "2GB"},
@@ -1140,7 +1175,9 @@ end}.
     {datatype, float}]}.
 
 {mapping, "disk_free_limit.absolute", "rabbit.disk_free_limit", [
-    {datatype, [integer, string]}]}.
+    {datatype, [integer, string]},
+    {validators, ["is_supported_information_unit"]}
+]}.
 
 
 {translation, "rabbit.disk_free_limit",
@@ -2485,7 +2522,7 @@ end}.
 
 {translation, "rabbit.classic_queue_default_version",
     fun(Conf) ->
-        case cuttlefish:conf_get("classic_queue.default_version", Conf, 2) of
+        case cuttlefish:conf_get("classic_queue.default_version", Conf, 1) of
             1 -> 1;
             2 -> 2;
             _ -> cuttlefish:unset()
@@ -2568,6 +2605,33 @@ end}.
 }.
 
 % ===============================
+% AMQP 1.0
+% ===============================
+
+%% Connections that skip SASL layer or use SASL mechanism ANONYMOUS will connect as this account.
+%% Setting this to a username will allow clients to connect without authenticating.
+%% For production environments, set this value to 'none'.
+{mapping, "amqp1_0.default_user", "rabbit.amqp1_0_default_user",
+    [{datatype, [{enum, [none]}, string]}]}.
+
+{mapping, "amqp1_0.default_vhost", "rabbit.amqp1_0_default_vhost",
+    [{datatype, string}]}.
+
+{translation, "rabbit.amqp1_0_default_user",
+fun(Conf) ->
+        case cuttlefish:conf_get("amqp1_0.default_user", Conf) of
+            none -> none;
+            User -> list_to_binary(User)
+        end
+end}.
+
+{translation , "rabbit.amqp1_0_default_vhost",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("amqp1_0.default_vhost", Conf))
+end}.
+
+
+% ===============================
 % Validators
 % ===============================
 
@@ -2638,4 +2702,28 @@ end}.
  fun("")     -> false;
     (String) -> {Res, _ } = re:compile(String),
                 Res =:= ok
+ end}.
+
+{validator, "is_supported_information_unit", "supported formats: 500MB, 500MiB, 10GB, 10GiB, 2TB, 2TiB, 10000000000",
+ fun(S0) ->
+    case is_integer(S0) of
+       true -> true;
+       false ->
+         %% this is a string
+         S = string:strip(S0, right),
+         %% The suffix is optional
+         {ok, HasIUSuffix} = re:compile("([0-9]+)([a-zA-Z]){1,3}$", [dollar_endonly, caseless]),
+         %% Here are the prefixes we accept. This must match
+         %% what rabbit_resource_monitor_misc and 'rabbitmq-diagnostics status' can format.
+         {ok, SuffixExtractor} = re:compile("(k|ki|kb|kib|m|mi|mb|mib|g|gi|gb|gib|t|ti|tb|tib|p|pi|pb|pib)$", [dollar_endonly, caseless]),
+         case re:run(S, HasIUSuffix) of
+             nomatch -> false;
+             {match, _} ->
+                 case re:split(S, SuffixExtractor) of
+                     [] -> false;
+                    [_CompleteMatch] -> false;
+                     [_CompleteMatch, Suffix | _] -> true
+                 end
+         end
+    end
  end}.

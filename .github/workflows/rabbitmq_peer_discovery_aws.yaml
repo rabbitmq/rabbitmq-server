@@ -17,25 +17,26 @@ jobs:
       matrix:
         include:
           - image_tag_suffix: otp-max-bazel
-            otp_version_id: 26_1
+            otp_version_id: 26_2
     timeout-minutes: 45
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
     - name: WAIT FOR OCI IMAGE WORKFLOW
-      uses: lewagon/wait-on-check-action@v1.3.1
+      uses: lewagon/wait-on-check-action@v1.3.3
       with:
         ref: ${{ github.ref }}
         check-name: build-publish-dev-bazel (${{ matrix.image_tag_suffix }}, ${{ matrix.otp_version_id }})
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         wait-interval: 30 # seconds
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v3.3.2
+      uses: actions/cache@v4.0.2
       with:
         path: "/home/runner/repo-cache/"
         key: ${{ runner.os }}-repo-cache-${{ hashFiles('MODULE.bazel','WORKSPACE','bazel/bzlmod/secondary_umbrella.bzl') }}
         restore-keys: |
           ${{ runner.os }}-repo-cache-
+        save-always: true
     - name: CONFIGURE BAZEL
       run: |
         cat << EOF >> user.bazelrc

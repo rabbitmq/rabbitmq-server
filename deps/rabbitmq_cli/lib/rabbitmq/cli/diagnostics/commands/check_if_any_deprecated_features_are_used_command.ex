@@ -5,12 +5,6 @@
 ## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckIfAnyDeprecatedFeaturesAreUsedCommand do
-  alias RabbitMQ.CLI.Core.DocGuide
-
-  alias RabbitMQ.CLI.Diagnostics.Commands.{
-    CheckIfClusterHasClassicQueueMirroringPolicyCommand
-  }
-
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def scopes(), do: [:ctl, :diagnostics]
@@ -100,16 +94,5 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckIfAnyDeprecatedFeaturesAreUsedC
   def description(),
     do: "Generate a report listing all deprecated features in use"
 
-  def banner(_, %{node: node_name}), do: "Checking if any deprecated features are used ..."
-
-  #
-  # Implementation
-  #
-
-  defp run_command(command, args, opts) do
-    {args, opts} = command.merge_defaults(args, opts)
-    banner = command.banner(args, opts)
-    command_result = command.run(args, opts) |> command.output(opts)
-    {command, banner, command_result}
-  end
+  def banner(_, %{node: _node_name}), do: "Checking if any deprecated features are used ..."
 end

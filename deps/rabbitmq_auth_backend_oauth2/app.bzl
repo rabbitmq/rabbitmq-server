@@ -9,9 +9,11 @@ def all_beam_files(name = "all_beam_files"):
     erlang_bytecode(
         name = "other_beam",
         srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddSigningKeyCommand.erl",
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand.erl",
             "src/rabbit_auth_backend_oauth2.erl",
             "src/rabbit_auth_backend_oauth2_app.erl",
+            "src/rabbit_oauth2_config.erl",
             "src/rabbit_oauth2_scope.erl",
             "src/uaa_jwks.erl",
             "src/uaa_jwt.erl",
@@ -24,6 +26,7 @@ def all_beam_files(name = "all_beam_files"):
         dest = "ebin",
         erlc_opts = "//:erlc_opts",
         deps = [
+            "//deps/oauth2_client:erlang_app",
             "//deps/rabbit_common:erlang_app",
             "//deps/rabbitmq_cli:erlang_app",
             "@jose//:erlang_app",
@@ -40,9 +43,11 @@ def all_test_beam_files(name = "all_test_beam_files"):
         name = "test_other_beam",
         testonly = True,
         srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddSigningKeyCommand.erl",
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand.erl",
             "src/rabbit_auth_backend_oauth2.erl",
             "src/rabbit_auth_backend_oauth2_app.erl",
+            "src/rabbit_oauth2_config.erl",
             "src/rabbit_oauth2_scope.erl",
             "src/uaa_jwks.erl",
             "src/uaa_jwt.erl",
@@ -55,6 +60,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
         dest = "test",
         erlc_opts = "//:test_erlc_opts",
         deps = [
+            "//deps/oauth2_client:erlang_app",
             "//deps/rabbit_common:erlang_app",
             "//deps/rabbitmq_cli:erlang_app",
             "@jose//:erlang_app",
@@ -82,9 +88,11 @@ def all_srcs(name = "all_srcs"):
     filegroup(
         name = "srcs",
         srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddSigningKeyCommand.erl",
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand.erl",
             "src/rabbit_auth_backend_oauth2.erl",
             "src/rabbit_auth_backend_oauth2_app.erl",
+            "src/rabbit_oauth2_config.erl",
             "src/rabbit_oauth2_scope.erl",
             "src/uaa_jwks.erl",
             "src/uaa_jwt.erl",
@@ -105,6 +113,14 @@ def all_srcs(name = "all_srcs"):
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):
+    erlang_bytecode(
+        name = "test_oauth2_http_mock_beam",
+        testonly = True,
+        srcs = ["test/oauth2_http_mock.erl"],
+        outs = ["test/oauth2_http_mock.beam"],
+        app_name = "rabbitmq_auth_backend_oauth2",
+        erlc_opts = "//:test_erlc_opts",
+    )
     erlang_bytecode(
         name = "add_uaa_key_command_SUITE_beam_files",
         testonly = True,
@@ -167,6 +183,15 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         deps = ["@cowboy//:erlang_app"],
     )
     erlang_bytecode(
+        name = "test_openid_http_handler_beam",
+        testonly = True,
+        srcs = ["test/openid_http_handler.erl"],
+        outs = ["test/openid_http_handler.beam"],
+        app_name = "rabbitmq_auth_backend_oauth2",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["@cowboy//:erlang_app"],
+    )
+    erlang_bytecode(
         name = "test_jwks_http_sup_beam",
         testonly = True,
         srcs = ["test/jwks_http_sup.erl"],
@@ -198,4 +223,22 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/wildcard_match_SUITE.beam"],
         app_name = "rabbitmq_auth_backend_oauth2",
         erlc_opts = "//:test_erlc_opts",
+    )
+    erlang_bytecode(
+        name = "rabbit_oauth2_config_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/rabbit_oauth2_config_SUITE.erl"],
+        outs = ["test/rabbit_oauth2_config_SUITE.beam"],
+        app_name = "rabbitmq_auth_backend_oauth2",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/oauth2_client:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "add_signing_key_command_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/add_signing_key_command_SUITE.erl"],
+        outs = ["test/add_signing_key_command_SUITE.beam"],
+        app_name = "rabbitmq_auth_backend_oauth2",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/rabbit_common:erlang_app"],
     )

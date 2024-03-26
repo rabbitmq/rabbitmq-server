@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_vhost).
@@ -271,18 +271,23 @@ delete(VHost, ActingUser) ->
     %% modules, like `rabbit_amqqueue:delete_all_for_vhost(VHost)'. These new
     %% calls would be responsible for the atomicity, not this code.
     %% Clear the permissions first to prohibit new incoming connections when deleting a vhost
+    rabbit_log:info("Clearing permissions in vhost '~ts' because it's being deleted", [VHost]),
     _ = rabbit_auth_backend_internal:clear_permissions_for_vhost(VHost, ActingUser),
     _ = rabbit_auth_backend_internal:clear_topic_permissions_for_vhost(VHost, ActingUser),
+    rabbit_log:info("Deleting queues in vhost '~ts' because it's being deleted", [VHost]),
     QDelFun = fun (Q) -> rabbit_amqqueue:delete(Q, false, false, ActingUser) end,
     [begin
          Name = amqqueue:get_name(Q),
          assert_benign(rabbit_amqqueue:with(Name, QDelFun), ActingUser)
      end || Q <- rabbit_amqqueue:list(VHost)],
+    rabbit_log:info("Deleting exchanges in vhost '~ts' because it's being deleted", [VHost]),
     [assert_benign(rabbit_exchange:delete(Name, false, ActingUser), ActingUser) ||
         #exchange{name = Name} <- rabbit_exchange:list(VHost)],
+    rabbit_log:info("Clearing policies and runtime parameters in vhost '~ts' because it's being deleted", [VHost]),
     _ = rabbit_runtime_parameters:clear_vhost(VHost, ActingUser),
     _ = [rabbit_policy:delete(VHost, proplists:get_value(name, Info), ActingUser)
          || Info <- rabbit_policy:list(VHost)],
+    rabbit_log:debug("Removing vhost '~ts' from the metadata storage because it's being deleted", [VHost]),
     case rabbit_db_vhost:delete(VHost) of
         true ->
             ok = rabbit_event:notify(
@@ -336,7 +341,7 @@ put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
                                         Metadata0#{default_queue_type =>
                                                        DefaultQueueType}
                                 end,
-                     case add(Name, Metadata, Username) of
+                     case catch do_add(Name, Metadata, Username) of
                          ok ->
                              %% wait for up to 45 seconds for the vhost to initialise
                              %% on all nodes

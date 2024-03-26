@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(amqp10_binary_generator).
@@ -22,9 +22,8 @@
 
 -type amqp10_prim() ::
     null |
-    true |
-    false |
-    {boolean, true | false} |
+    boolean() | 
+    {boolean, boolean()} |
     {ubyte, byte()} |
     {ushort, non_neg_integer()} |
     {uint, non_neg_integer()} |

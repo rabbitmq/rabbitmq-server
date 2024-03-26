@@ -2,13 +2,13 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -include("resource.hrl").
 
 %% Passed around most places
--record(user, {username,
+-record(user, {username :: rabbit_types:option(rabbit_types:username()),
                tags,
                authz_backends}). %% List of {Module, AuthUserImpl} pairs
 
@@ -210,7 +210,7 @@
         }).
 %%----------------------------------------------------------------------------
 
--define(COPYRIGHT_MESSAGE, "Copyright (c) 2007-2023 Broadcom Inc and/or its subsidiaries").
+-define(COPYRIGHT_MESSAGE, "Copyright (c) 2007-2024 Broadcom Inc and/or its subsidiaries").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL 2.0. Website: https://rabbitmq.com").
 
 %% EMPTY_FRAME_SIZE, 8 = 1 + 2 + 4 + 1
@@ -254,7 +254,7 @@
 %% Max message size is hard limited to 512 MiB.
 %% If user configures a greater rabbit.max_message_size,
 %% this value is used instead.
--define(MAX_MSG_SIZE, 536870912).
+-define(MAX_MSG_SIZE, 536_870_912).
 
 -define(store_proc_name(N), rabbit_misc:store_proc_name(?MODULE, N)).
 

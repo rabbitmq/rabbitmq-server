@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 %% One rabbit_fifo_dlx_worker process exists per (source) quorum queue that has at-least-once dead lettering
 %% enabled. The rabbit_fifo_dlx_worker process is co-located on the quorum queue leader node.
@@ -317,14 +317,14 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
     #resource{name = DLXName} = DLXRef,
     DLRKeys = case RKey of
                   undefined ->
-                      mc:get_annotation(routing_keys, ConsumedMsg);
+                      mc:routing_keys(ConsumedMsg);
                   _ ->
                       [RKey]
               end,
     Msg0 = mc:record_death(Reason, SourceQName, ConsumedMsg),
     Msg1 = mc:set_ttl(undefined, Msg0),
-    Msg2 = mc:set_annotation(routing_keys, DLRKeys, Msg1),
-    Msg = mc:set_annotation(exchange, DLXName, Msg2),
+    Msg2 = mc:set_annotation(?ANN_ROUTING_KEYS, DLRKeys, Msg1),
+    Msg = mc:set_annotation(?ANN_EXCHANGE, DLXName, Msg2),
     {TargetQs, State3} =
         case DLX of
             not_found ->
@@ -478,8 +478,8 @@ redeliver0(#pending{delivery = Msg0,
   when is_list(DLRKeys) ->
     #resource{name = DLXName} = DLXRef,
     Msg1 = mc:set_ttl(undefined, Msg0),
-    Msg2 = mc:set_annotation(routing_keys, DLRKeys, Msg1),
-    Msg = mc:set_annotation(exchange, DLXName, Msg2),
+    Msg2 = mc:set_annotation(?ANN_ROUTING_KEYS, DLRKeys, Msg1),
+    Msg = mc:set_annotation(?ANN_EXCHANGE, DLXName, Msg2),
     %% Because of implicit default bindings rabbit_exchange:route/2 can route to target
     %% queues that do not exist. Therefore, filter out non-existent target queues.
     RouteToQs0 = queue_names(

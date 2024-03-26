@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(priority_queue_SUITE).
@@ -29,6 +29,7 @@ groups() ->
                          dropwhile_fetchwhile,
                          info_head_message_timestamp,
                          info_backing_queue_version,
+                         info_oldest_message_received_timestamp,
                          unknown_info_key,
                          matching,
                          purge,
@@ -414,6 +415,53 @@ info_backing_queue_version(Config) ->
         rabbit_ct_client_helpers:close_connection(Conn),
         passed
     end.
+
+info_oldest_message_received_timestamp(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, info_oldest_message_received_timestamp1, [Config]).
+
+info_oldest_message_received_timestamp1(_Config) ->
+    QName = rabbit_misc:r(<<"/">>, queue,
+      <<"info_oldest_message_received_timestamp-queue">>),
+    ExName = rabbit_misc:r(<<"/">>, exchange, <<>>),
+    Q0 = rabbit_amqqueue:pseudo_queue(QName, self()),
+    Q1 = amqqueue:set_arguments(Q0, [{<<"x-max-priority">>, long, 2}]),
+    PQ = rabbit_priority_queue,
+    BQS1 = PQ:init(Q1, new, fun(_, _) -> ok end),
+    %% The queue is empty: no timestamp.
+    true = PQ:is_empty(BQS1),
+    '' = PQ:info(oldest_message_received_timestamp, BQS1),
+    %% Publish one message.
+    Content1 = #content{properties = #'P_basic'{priority = 1},
+                        payload_fragments_rev = []},
+    {ok, Msg1} = mc_amqpl:message(ExName, <<>>, Content1, #{id => <<"msg1">>}),
+    BQS2 = PQ:publish(Msg1, #message_properties{size = 0}, false, self(),
+                      noflow, BQS1),
+    Ts1 = PQ:info(oldest_message_received_timestamp, BQS2),
+    ?assert(is_integer(Ts1)),
+    %% Publish a higher priority message.
+    Content2 = #content{properties = #'P_basic'{priority = 2},
+                        payload_fragments_rev = []},
+    {ok, Msg2} = mc_amqpl:message(ExName, <<>>, Content2, #{id => <<"msg2">>}),
+    BQS3 = PQ:publish(Msg2, #message_properties{size = 0}, false, self(),
+                      noflow, BQS2),
+    %% Even though is highest priority, the lower priority message is older.
+    %% Timestamp hasn't changed.
+    ?assertEqual(Ts1, PQ:info(oldest_message_received_timestamp, BQS3)),
+    %% Consume message.
+    {{Msg2, _, _}, BQS4} = PQ:fetch(false, BQS3),
+    ?assertEqual(Ts1, PQ:info(oldest_message_received_timestamp, BQS4)),
+    %% Consume the first message, but do not acknowledge it
+    %% yet. The goal is to verify that the unacknowledged message's
+    %% timestamp is returned.
+    {{Msg1, _, AckTag}, BQS5} = PQ:fetch(true, BQS4),
+    ?assertEqual(Ts1, PQ:info(oldest_message_received_timestamp, BQS5)),
+    %% Ack message. The queue is empty now.
+    {[<<"msg1">>], BQS6} = PQ:ack([AckTag], BQS5),
+    true = PQ:is_empty(BQS6),
+    ?assertEqual('', PQ:info(oldest_message_received_timestamp, BQS6)),
+    PQ:delete_and_terminate(a_whim, BQS6),
+    passed.
 
 unknown_info_key(Config) ->
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),

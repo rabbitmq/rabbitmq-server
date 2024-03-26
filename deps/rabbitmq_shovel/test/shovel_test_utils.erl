@@ -2,35 +2,50 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(shovel_test_utils).
 
 -include_lib("common_test/include/ct.hrl").
--export([set_param/3, set_param_nowait/3, await_shovel/2, await_shovel1/2,
-         shovels_from_status/0, get_shovel_status/2,
-         await/1, await/2, clear_param/2]).
+-export([set_param/3, set_param/4, set_param/5, set_param_nowait/3,
+         await_shovel/2, await_shovel/3, await_shovel1/2,
+         shovels_from_status/0, get_shovel_status/2, get_shovel_status/3,
+         await/1, await/2, clear_param/2, clear_param/3]).
 
-make_uri(Config) ->
+make_uri(Config, Node) ->
     Hostname = ?config(rmq_hostname, Config),
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_amqp),
     list_to_binary(lists:flatten(io_lib:format("amqp://~ts:~b",
                                                [Hostname, Port]))).
+
 set_param(Config, Name, Value) ->
-    set_param_nowait(Config, Name, Value),
-    await_shovel(Config, Name).
+    set_param_nowait(Config, 0, 0, Name, Value),
+    await_shovel(Config, 0, Name).
+
+set_param(Config, Node, Name, Value) ->
+    set_param(Config, Node, Node, Name, Value).
+
+set_param(Config, Node, QueueNode, Name, Value) ->
+    set_param_nowait(Config, Node, QueueNode, Name, Value),
+    await_shovel(Config, Node, Name).
 
 set_param_nowait(Config, Name, Value) ->
-    Uri = make_uri(Config),
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+    set_param_nowait(Config, 0, 0, Name, Value).
+
+set_param_nowait(Config, Node, QueueNode, Name, Value) ->
+    Uri = make_uri(Config, QueueNode),
+    ok = rabbit_ct_broker_helpers:rpc(Config, Node,
       rabbit_runtime_parameters, set, [
         <<"/">>, <<"shovel">>, Name, [{<<"src-uri">>,  Uri},
                                       {<<"dest-uri">>, [Uri]} |
                                       Value], none]).
 
 await_shovel(Config, Name) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0,
+    await_shovel(Config, 0, Name).
+
+await_shovel(Config, Node, Name) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node,
       ?MODULE, await_shovel1, [Config, Name]).
 
 await_shovel1(_Config, Name) ->
@@ -41,8 +56,11 @@ shovels_from_status() ->
     [N || {{<<"/">>, N}, dynamic, {running, _}, _} <- S].
 
 get_shovel_status(Config, Name) ->
+    get_shovel_status(Config, 0, Name).
+
+get_shovel_status(Config, Node, Name) ->
     S = rabbit_ct_broker_helpers:rpc(
-          Config, 0, rabbit_shovel_status, lookup, [{<<"/">>, Name}]),
+          Config, Node, rabbit_shovel_status, lookup, [{<<"/">>, Name}]),
     case S of
         not_found ->
             not_found;
@@ -70,5 +88,8 @@ await(Pred, Timeout) ->
     end.
 
 clear_param(Config, Name) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0,
+    clear_param(Config, 0, Name).
+
+clear_param(Config, Node, Name) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node,
       rabbit_runtime_parameters, clear, [<<"/">>, <<"shovel">>, Name, <<"acting-user">>]).

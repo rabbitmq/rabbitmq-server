@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 -module(amqp10_client_types).
 
@@ -10,7 +10,8 @@
 
 -export([unpack/1,
          utf8/1,
-         uint/1]).
+         uint/1,
+         make_properties/1]).
 
 -type amqp10_performative() :: #'v1_0.open'{} | #'v1_0.begin'{} | #'v1_0.attach'{} |
                                #'v1_0.flow'{} | #'v1_0.transfer'{} |
@@ -63,10 +64,13 @@
                                 link_event_detail()}.
 -type amqp10_event() :: {amqp10_event, amqp10_event_detail()}.
 
+-type properties() :: #{binary() => tuple()}.
+
 -export_type([amqp10_performative/0, channel/0,
               source/0, target/0, amqp10_msg_record/0,
               delivery_state/0, amqp_error/0, connection_error/0,
-              amqp10_event_detail/0, amqp10_event/0]).
+              amqp10_event_detail/0, amqp10_event/0,
+              properties/0]).
 
 
 unpack(undefined) -> undefined;
@@ -77,3 +81,12 @@ utf8(S) when is_list(S) -> {utf8, list_to_binary(S)};
 utf8(B) when is_binary(B) -> {utf8, B}.
 
 uint(N) -> {uint, N}.
+
+make_properties(#{properties := Props})
+  when is_map(Props) andalso
+       map_size(Props) > 0 ->
+    {map, maps:fold(fun(K, V, L) ->
+                            [{{symbol, K}, V} | L]
+                    end, [], Props)};
+make_properties(_) ->
+    undefined.

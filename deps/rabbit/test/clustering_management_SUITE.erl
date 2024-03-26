@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(clustering_management_SUITE).
@@ -43,9 +43,7 @@ groups() ->
                                                  join_to_start_interval,
                                                  forget_cluster_node,
                                                  change_cluster_node_type,
-                                                 change_cluster_when_node_offline,
-                                                 update_cluster_nodes,
-                                                 force_reset_node
+                                                 change_cluster_when_node_offline
                                                 ]}
                           ]},
                          {clustered_2_nodes, [],
@@ -83,8 +81,7 @@ groups() ->
                                                  persistent_cluster_id,
                                                  stop_start_cluster_node,
                                                  restart_cluster_node,
-                                                 unsupported_forget_cluster_node_offline,
-                                                 unsupported_update_cluster_nodes
+                                                 unsupported_forget_cluster_node_offline
 
                                                 ]}
                           ]},
@@ -924,61 +921,7 @@ change_cluster_when_node_offline(Config) ->
     assert_clustered([Rabbit, Hare]),
     ok = start_app(Config, Bunny),
     assert_not_clustered(Bunny),
-
-    %% Now the same, but Rabbit is a RAM node, and we bring up Bunny
-    %% before
-    ok = stop_app(Config, Rabbit),
-    ok = change_cluster_node_type(Config, Rabbit, ram),
-    ok = start_app(Config, Rabbit),
-    stop_join_start(Config, Bunny, Hare),
-    assert_cluster_status(
-      {[Rabbit, Hare, Bunny], [Hare, Bunny], [Rabbit, Hare, Bunny]},
-      [Rabbit, Hare, Bunny]),
-    ok = stop_app(Config, Rabbit),
-    ok = stop_app(Config, Bunny),
-    ok = reset(Config, Bunny),
-    ok = start_app(Config, Bunny),
-    assert_not_clustered(Bunny),
-    assert_cluster_status({[Rabbit, Hare], [Hare], [Hare]}, [Hare]),
-    assert_cluster_status(
-      {[Rabbit, Hare, Bunny], [Hare, Bunny], [Hare, Bunny]},
-      [Rabbit]),
-    ok = start_app(Config, Rabbit),
-    assert_cluster_status({[Rabbit, Hare], [Hare], [Rabbit, Hare]},
-                          [Rabbit, Hare]),
-    assert_not_clustered(Bunny).
-
-update_cluster_nodes(Config) ->
-    [Rabbit, Hare, Bunny] = cluster_members(Config),
-
-    %% Mnesia is running...
-    assert_failure(fun () -> update_cluster_nodes(Config, Rabbit, Hare) end),
-
-    ok = stop_app(Config, Rabbit),
-    ok = join_cluster(Config, Rabbit, Hare),
-    ok = stop_app(Config, Bunny),
-    ok = join_cluster(Config, Bunny, Hare),
-    ok = start_app(Config, Bunny),
-    stop_reset_start(Config, Hare),
-    assert_failure(fun () -> start_app(Config, Rabbit) end),
-    %% Bogus node
-    assert_failure(fun () -> update_cluster_nodes(Config, Rabbit, non@existent) end),
-    %% Inconsistent node
-    assert_failure(fun () -> update_cluster_nodes(Config, Rabbit, Hare) end),
-    ok = update_cluster_nodes(Config, Rabbit, Bunny),
-    ok = start_app(Config, Rabbit),
-    assert_not_clustered(Hare),
-    assert_clustered([Rabbit, Bunny]).
-
-unsupported_update_cluster_nodes(Config) ->
-    [Rabbit, Hare] = cluster_members(Config),
-
-    %% Mnesia is running...
-    assert_failure(fun () -> update_cluster_nodes(Config, Rabbit, Hare) end),
-
-    ok = stop_app(Config, Rabbit),
-    Ret = update_cluster_nodes(Config, Rabbit, Hare),
-    is_not_supported(Ret).
+    ok.
 
 is_not_supported(Ret) ->
     ?assertMatch({error, _, _}, Ret),
@@ -1032,22 +975,6 @@ classic_config_discovery_node_list(Config) ->
                   [rabbit, cluster_nodes, "Yes, please"]),
     assert_failure(fun () -> start_app(Config, Hare) end),
     assert_not_clustered(Rabbit).
-
-force_reset_node(Config) ->
-    [Rabbit, Hare, _Bunny] = cluster_members(Config),
-
-    stop_join_start(Config, Rabbit, Hare),
-    stop_app(Config, Rabbit),
-    force_reset(Config, Rabbit),
-    %% Hare thinks that Rabbit is still clustered
-    assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]},
-                          [Hare]),
-    %% %% ...but it isn't
-    assert_cluster_status({[Rabbit], [Rabbit], []}, [Rabbit]),
-    %% We can rejoin Rabbit and Hare
-    update_cluster_nodes(Config, Rabbit, Hare),
-    start_app(Config, Rabbit),
-    assert_clustered([Rabbit, Hare]).
 
 force_reset_node_in_khepri(Config) ->
     [Rabbit, Hare, _Bunny] = cluster_members(Config),
@@ -1428,15 +1355,6 @@ forget_cluster_node(Config, Node, Removee) ->
 change_cluster_node_type(Config, Node, Type) ->
     Ret = rabbit_ct_broker_helpers:rabbitmqctl(
             Config, Node, ["change_cluster_node_type", atom_to_list(Type)]),
-    case Ret of
-        {ok, _} -> ok;
-        Error   -> Error
-    end.
-
-update_cluster_nodes(Config, Node, DiscoveryNode) ->
-    Ret = rabbit_ct_broker_helpers:rabbitmqctl(
-            Config, Node,
-            ["update_cluster_nodes", atom_to_list(DiscoveryNode)]),
     case Ret of
         {ok, _} -> ok;
         Error   -> Error

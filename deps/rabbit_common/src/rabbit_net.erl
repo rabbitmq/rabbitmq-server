@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_net).
@@ -32,11 +32,11 @@
                  {raw, non_neg_integer(), non_neg_integer(), binary()}].
 -type hostname() :: inet:hostname().
 -type ip_port() :: inet:port_number().
--type rabbit_proxy_socket() :: {'rabbit_proxy_socket', ranch_transport:socket(), ranch_proxy_header:proxy_info()}.
+-type proxy_socket() :: {'rabbit_proxy_socket', ranch_transport:socket(), ranch_proxy_header:proxy_info()}.
 % -type host_or_ip() :: binary() | inet:ip_address().
 -spec is_ssl(socket()) -> boolean().
 -spec ssl_info(socket()) -> 'nossl' | ok_val_or_error([{atom(), any()}]).
--spec proxy_ssl_info(socket(), rabbit_proxy_socket() | 'undefined') -> 'nossl' | ok_val_or_error([{atom(), any()}]).
+-spec proxy_ssl_info(socket(), proxy_socket() | 'undefined') -> 'nossl' | ok_val_or_error([{atom(), any()}]).
 -spec controlling_process(socket(), pid()) -> ok_or_any_error().
 -spec getstat(socket(), [stat_option()]) ->
           ok_val_or_error([{stat_option(), integer()}]).

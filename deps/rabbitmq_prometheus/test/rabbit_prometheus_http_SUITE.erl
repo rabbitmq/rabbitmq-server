@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_prometheus_http_SUITE).
@@ -24,6 +24,7 @@ all() ->
         {group, per_object_endpoint_metrics},
         {group, commercial},
         {group, detailed_metrics},
+        {group, special_chars},
         {group, authentication}
     ].
 
@@ -62,6 +63,7 @@ groups() ->
                                      exchange_bindings_metric,
                                      exchange_names_metric
         ]},
+       {special_chars, [], [core_metrics_special_chars]},
        {authentication, [], [basic_auth]}
     ].
 
@@ -206,6 +208,39 @@ init_per_group(commercial, Config0) ->
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, ProductConfig),
     init_per_group(commercial, Config1, []);
 
+init_per_group(special_chars, Config0) ->
+    StatsEnv = {rabbit, [{collect_statistics, fine}, {collect_statistics_interval, 100}]},
+    Config1 = init_per_group(special_chars, rabbit_ct_helpers:merge_app_env(Config0, StatsEnv), []),
+
+    VHost = <<"vhost\"\n\\">>,
+    rabbit_ct_broker_helpers:add_vhost(Config1, 0, VHost, <<"guest">>),
+    rabbit_ct_broker_helpers:set_full_permissions(Config1, VHost),
+    VHostConn = rabbit_ct_client_helpers:open_unmanaged_connection(Config1, 0, VHost),
+    {ok, VHostCh} = amqp_connection:open_channel(VHostConn),
+
+    %% new line characters (\r and \n) are removed from queue and
+    %% exchange names during creation (unlike for vhosts)
+    QName = <<"queue\"\\">>,
+    #'queue.declare_ok'{} = amqp_channel:call(VHostCh,
+                                              #'queue.declare'{queue = QName,
+                                                               durable = true
+                                                              }),
+    Exchange = <<"exchange\"\\">>,
+    #'exchange.declare_ok'{} = amqp_channel:call(VHostCh, #'exchange.declare'{exchange = Exchange}),
+    #'queue.bind_ok'{} = amqp_channel:call(VHostCh, #'queue.bind'{queue = QName, exchange = Exchange, routing_key = QName}),
+
+    amqp_channel:call(VHostCh,
+                      #'basic.publish'{exchange = Exchange, routing_key = QName},
+                      #amqp_msg{payload = <<"msg">>}),
+
+    Config2 = [{vhost_name, VHost},
+               {queue_name, QName},
+               {exchange_name, Exchange},
+               {connection, VHostConn},
+               {channel, VHostCh}
+               |Config1],
+    init_per_group(special_chars, Config2, []);
+
 init_per_group(authentication, Config) ->
     Config1 = rabbit_ct_helpers:merge_app_env(
                 Config, {rabbitmq_prometheus, [{authentication, [{enabled, true}]}]}),
@@ -249,6 +284,11 @@ end_per_group(detailed_metrics, Config) ->
     amqp_channel:close(VHost2Ch),
     amqp_connection:close(?config(vhost2_conn, Config)),
 
+    %% Delete queues?
+    end_per_group_(Config);
+end_per_group(special_chars, Config) ->
+    amqp_channel:close(?config(channel, Config)),
+    amqp_connection:close(?config(connection, Config)),
     %% Delete queues?
     end_per_group_(Config);
 end_per_group(authentication, Config) ->
@@ -560,6 +600,32 @@ exchange_names_metric(Config) ->
                   }, Names),
     ok.
 
+core_metrics_special_chars(Config) ->
+    {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?family=queue_coarse_metrics", [], 200),
+    ?assertMatch(#{rabbitmq_detailed_queue_messages :=
+                       #{#{vhost => "vhost\\\"\\n\\\\",
+                           queue => "queue\\\"\\\\"} := [I]}}
+                 when I == 0; I == 1,
+                      parse_response(Body1)),
+
+    {_, Body2} = http_get_with_pal(Config, "/metrics/detailed?family=channel_exchange_metrics", [], 200),
+    #{rabbitmq_detailed_channel_messages_published_total := LabelValue2} = parse_response(Body2),
+    ?assertMatch([{#{channel := _,
+                     vhost := "vhost\\\"\\n\\\\",
+                     exchange := "exchange\\\"\\\\"}, [I]}]
+                 when I == 0; I == 1,
+                      maps:to_list(LabelValue2)),
+
+    {_, Body3} = http_get_with_pal(Config, "/metrics/detailed?family=channel_queue_exchange_metrics", [], 200),
+    #{rabbitmq_detailed_queue_messages_published_total := LabelValue3} = parse_response(Body3),
+    ?assertMatch([{#{channel := _,
+                     queue_vhost := "vhost\\\"\\n\\\\",
+                     queue := "queue\\\"\\\\",
+                     exchange_vhost := "vhost\\\"\\n\\\\",
+                     exchange := "exchange\\\"\\\\"}, [I]}]
+                 when I == 0; I == 1,
+                      maps:to_list(LabelValue3)),
+    ok.
 
 basic_auth(Config) ->
     http_get(Config, [{"accept-encoding", "deflate"}], 401),

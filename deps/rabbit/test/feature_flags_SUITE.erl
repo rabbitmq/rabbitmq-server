@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(feature_flags_SUITE).
@@ -548,8 +548,10 @@ registry_concurrent_reloads(_Config) ->
     %% all added feature flags.
     timer:sleep(1000),
 
+    MRef = erlang:monitor(process, Spammer),
     unlink(Spammer),
-    exit(Spammer, normal).
+    exit(Spammer, kill),
+    receive {'DOWN', MRef, process, Spammer, _} -> ok end.
 
 registry_spammer(CurrentFeatureNames, FinalFeatureNames) ->
     %% Infinite loop.

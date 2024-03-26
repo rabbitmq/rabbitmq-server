@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_db_msup).
@@ -73,11 +73,11 @@ table_definitions() ->
 %% -------------------------------------------------------------------
 
 -spec create_or_update(Group, Overall, Delegate, ChildSpec, Id) -> Ret when
-      Group :: any(),
+      Group :: mirrored_supervisor:group_name(),
       Overall :: pid(),
       Delegate :: pid() | undefined,
       ChildSpec :: supervisor2:child_spec(),
-      Id :: {any(), any()},
+      Id :: mirrored_supervisor:child_id(),
       Ret :: start | undefined | pid().
 
 create_or_update(Group, Overall, Delegate, ChildSpec, Id) ->
@@ -129,8 +129,8 @@ write_in_mnesia(Group, Overall, ChildSpec, Id) ->
     ok = mnesia:write(?TABLE, S, write),
     ChildSpec.
 
-create_or_update_in_khepri(Group, Overall, Delegate, ChildSpec, {SimpleId, _} = Id) ->
-    Path = khepri_mirrored_supervisor_path(Group, SimpleId),
+create_or_update_in_khepri(Group, Overall, Delegate, ChildSpec, Id) ->
+    Path = khepri_mirrored_supervisor_path(Group, Id),
     S = #mirrored_sup_childspec{key           = {Group, Id},
                                 mirroring_pid = Overall,
                                 childspec     = ChildSpec},
@@ -169,8 +169,8 @@ create_or_update_in_khepri(Group, Overall, Delegate, ChildSpec, {SimpleId, _} = 
 %% -------------------------------------------------------------------
 
 -spec delete(Group, Id) -> ok when
-      Group :: any(),
-      Id :: any().
+      Group :: mirrored_supervisor:group_name(),
+      Id :: mirrored_supervisor:child_id().
 
 delete(Group, Id) ->
     rabbit_khepri:handle_fallback(
@@ -184,16 +184,16 @@ delete_in_mnesia(Group, Id) ->
               ok = mnesia:delete({?TABLE, {Group, Id}})
       end).
 
-delete_in_khepri(Group, {SimpleId, _}) ->
-    ok = rabbit_khepri:delete(khepri_mirrored_supervisor_path(Group, SimpleId)).
+delete_in_khepri(Group, Id) ->
+    ok = rabbit_khepri:delete(khepri_mirrored_supervisor_path(Group, Id)).
 
 %% -------------------------------------------------------------------
 %% find_mirror().
 %% -------------------------------------------------------------------
 
 -spec find_mirror(Group, Id) -> Ret when
-      Group :: any(),
-      Id :: any(),
+      Group :: mirrored_supervisor:group_name(),
+      Id :: mirrored_supervisor:child_id(),
       Ret :: {ok, pid()} | {error, not_found}.
 
 find_mirror(Group, Id) ->
@@ -214,8 +214,8 @@ find_mirror_in_mnesia(Group, Id) ->
         _ -> {error, not_found}
     end.
 
-find_mirror_in_khepri(Group, {SimpleId, _}) ->
-    case rabbit_khepri:get(khepri_mirrored_supervisor_path(Group, SimpleId)) of
+find_mirror_in_khepri(Group, Id) ->
+    case rabbit_khepri:get(khepri_mirrored_supervisor_path(Group, Id)) of
         {ok, #mirrored_sup_childspec{mirroring_pid = Pid}} ->
             {ok, Pid};
         _ ->
@@ -269,7 +269,7 @@ update_all_in_khepri(Overall, OldOverall) ->
 %% -------------------------------------------------------------------
 
 -spec delete_all(Group) -> ok when
-      Group :: any().
+      Group :: mirrored_supervisor:group_name().
 
 delete_all(Group) ->
     rabbit_khepri:handle_fallback(
@@ -324,5 +324,9 @@ clear_in_khepri() ->
 khepri_mirrored_supervisor_path() ->
     [?MODULE, mirrored_supervisor_childspec].
 
+khepri_mirrored_supervisor_path(Group, Id)
+  when is_atom(Id) orelse is_binary(Id) ->
+    [?MODULE, mirrored_supervisor_childspec, Group, Id];
 khepri_mirrored_supervisor_path(Group, Id) ->
-    [?MODULE, mirrored_supervisor_childspec, Group] ++ Id.
+    IdPath = Group:id_to_khepri_path(Id),
+    [?MODULE, mirrored_supervisor_childspec, Group] ++ IdPath.

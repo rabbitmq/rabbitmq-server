@@ -128,7 +128,6 @@ broker_for_integration_suites(
         "//deps/rabbitmq_management:erlang_app",
         "//deps/rabbitmq_web_mqtt:erlang_app",
         "//deps/rabbitmq_consistent_hash_exchange:erlang_app",
-        "//deps/rabbitmq_amqp1_0:erlang_app",
         "//deps/rabbitmq_stomp:erlang_app",
         "//deps/rabbitmq_stream:erlang_app",
     ],
@@ -315,6 +314,7 @@ rabbitmq_suite(
     size = "small",
     deps = [
         "//deps/amqp10_common:erlang_app",
+        "//deps/rabbit:erlang_app",
     ],
 )
 

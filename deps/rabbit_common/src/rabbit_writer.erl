@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_writer).
@@ -105,10 +105,7 @@
 
 -spec send_command(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
 -spec send_command
-        (pid(), rabbit_framing:amqp_method_record(),
-         rabbit_types:content() |
-         {integer(), rabbit_types:content()} %% publishing sequence for AMQP 1.0 return callback
-        ) ->
+        (pid(), rabbit_framing:amqp_method_record(), rabbit_types:content()) ->
             'ok'.
 -spec send_command_sync(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
 -spec send_command_sync

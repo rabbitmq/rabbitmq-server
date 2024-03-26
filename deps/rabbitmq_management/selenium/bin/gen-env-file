@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
+#set -x
+
 ENV_FILE="/tmp/rabbitmq/.env"
 FIND_PATH=$1
 ENV_FILE=$2
@@ -9,12 +11,40 @@ FIND_PARENT_PATH="$(dirname "$FIND_PATH")"
 generate_env_file() {
   parentdir="$(dirname "$ENV_FILE")"
   mkdir -p $parentdir
-  echo "" > $ENV_FILE
+  echo "#!/usr/bin/env bash" > $ENV_FILE
+  echo "set -u" >> $ENV_FILE
 
-  for f in $($SCRIPT/find-template-files $FIND_PATH ".env")
+  declare -a FILE_ARRAY
+  for f in $($SCRIPT/find-template-files $FIND_PATH "env")
   do
-    cat $f >> $ENV_FILE
+    FILE_ARRAY+=($f)
   done
+
+  TMP_ENV_FILE="/tmp/env-tmp"
+  FILE_ARRAY_LENGTH=${#FILE_ARRAY[@]}
+
+  ## Append each .env file one by one while all variables can be resolved
+  ## if one variable cannot be resolve the temporary .env file fails
+  ## and we add the last env file to end of the list and carry one with the next one
+  while [ $FILE_ARRAY_LENGTH -gt 0 ]
+  do
+    f="${FILE_ARRAY[0]}"
+    cp $ENV_FILE $TMP_ENV_FILE
+    cat $f >> $TMP_ENV_FILE
+    chmod u+x $TMP_ENV_FILE
+    $TMP_ENV_FILE 2> /dev/null
+
+    if [ $? -eq 0 ]
+    then
+      cat $f >> $ENV_FILE
+    else
+      FILE_ARRAY+=($f)               # insert it to the end
+    fi
+    FILE_ARRAY=("${FILE_ARRAY[@]:1}")  # remove the first element
+    FILE_ARRAY_LENGTH=${#FILE_ARRAY[@]}
+  done
+  rm -r $TMP_ENV_FILE
+  tail +3 $ENV_FILE > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" $ENV_FILE
 }
 
 generate_env_file

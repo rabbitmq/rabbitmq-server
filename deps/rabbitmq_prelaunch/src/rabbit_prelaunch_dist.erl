@@ -12,7 +12,7 @@ setup(#{nodename := Node, nodename_type := NameType} = Context) ->
        "~n== Erlang distribution ==", [],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     ?LOG_DEBUG(
-       "Rqeuested node name: ~ts (type: ~ts)",
+       "Requested node name: ~ts (type: ~ts)",
        [Node, NameType],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     case node() of
@@ -149,5 +149,3 @@ set_credentials_obfuscation_secret() ->
                                    credentials_obfuscation_fallback_secret, 
                                    <<"nocookie">>),
     ok = credentials_obfuscation:set_fallback_secret(Fallback).
-
-    

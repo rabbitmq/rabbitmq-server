@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(amqp10_dynamic_SUITE).
@@ -131,12 +131,15 @@ test_amqp10_destination(Config, Src, Dest, Sess, Protocol, ProtocolSrc) ->
                                            <<"message-ann-value">>}]
                                   end}]),
     Msg = publish_expect(Sess, Src, Dest, <<"tag1">>, <<"hello">>),
+    AppProps = amqp10_msg:application_properties(Msg),
+
     ?assertMatch((#{user_id := <<"guest">>, creation_time := _}),
                  (amqp10_msg:properties(Msg))),
     ?assertMatch((#{<<"shovel-name">> := <<"test">>,
                     <<"shovel-type">> := <<"dynamic">>, <<"shovelled-by">> := _,
                     <<"app-prop-key">> := <<"app-prop-value">>}),
-                 (amqp10_msg:application_properties(Msg))),
+                 (AppProps)),
+    ?assertEqual(undefined, maps:get(<<"delivery_mode">>, AppProps, undefined)),
     ?assertMatch((#{<<"message-ann-key">> := <<"message-ann-value">>}),
                  (amqp10_msg:message_annotations(Msg))).
 

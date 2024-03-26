@@ -238,7 +238,7 @@
       ],
       "targets": [
         {
-          "expr": "max(rabbitmq_build_info * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_node=~\"$src_node|$dst_node\"}) by(erlang_version, rabbitmq_version, product_version, prometheus_client_version, rabbitmq_node, rabbitmq_cluster)",
+          "expr": "max(rabbitmq_build_info * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_node=~\"$src_node|$dst_node\"}) by(erlang_version, rabbitmq_version, product_version, prometheus_client_version, rabbitmq_node, rabbitmq_cluster)",
           "format": "table",
           "instant": true,
           "interval": "",

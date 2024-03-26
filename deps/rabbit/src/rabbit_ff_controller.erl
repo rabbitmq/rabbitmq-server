@@ -2,11 +2,11 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2021-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 %% @author The RabbitMQ team
-%% @copyright 2023 VMware, Inc. or its affiliates.
+%% @copyright 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 %% @doc
 %% The feature flag controller is responsible for synchronization and managing
@@ -186,6 +186,7 @@ init(_Args) ->
     ?LOG_DEBUG(
        "Feature flags: controller standing by",
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+    process_flag(trap_exit, true),
     {ok, standing_by, none}.
 
 standing_by(

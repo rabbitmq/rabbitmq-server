@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 -module('Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamGroupConsumersCommand').
 
@@ -86,7 +86,7 @@ usage_additional() ->
     [{<<"<column>">>, <<Prefix/binary, InfoItems/binary>>}].
 
 usage_doc_guides() ->
-    [?STREAM_GUIDE_URL].
+    [?STREAMS_GUIDE_URL].
 
 run(Args,
     #{node := NodeName,

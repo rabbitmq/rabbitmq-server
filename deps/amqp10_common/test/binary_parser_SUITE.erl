@@ -61,7 +61,7 @@ roundtrip(_Config) ->
               {symbol, <<"URL">>},
               {binary, <<"https://rabbitmq.com">>}},
              {array, ubyte, [{ubyte, 1}, {ubyte, 255}]},
-             {boolean, false},
+             true,
              {list, [{utf8, <<"hi">>},
                      {described,
                       {symbol, <<"URL">>},

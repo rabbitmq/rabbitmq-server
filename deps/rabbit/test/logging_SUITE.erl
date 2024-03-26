@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(logging_SUITE).
@@ -107,9 +107,12 @@ groups() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config).
+    Config1 = rabbit_ct_helpers:run_setup_steps(Config),
+    meck_rabbit_logger_std_h(),
+    Config1.
 
 end_per_suite(Config) ->
+    unmeck_rabbit_logger_std_h(),
     Config.
 
 init_per_group(syslog_output, Config) ->
@@ -185,6 +188,23 @@ end_per_testcase(Testcase, Config) ->
                         rabbit_ct_broker_helpers:teardown_steps())
               end,
     rabbit_ct_helpers:testcase_finished(Config1, Testcase).
+
+meck_rabbit_logger_std_h() ->
+    ok = meck:new(rabbit_logger_std_h, [no_link, passthrough]),
+    ok = meck:expect(
+           rabbit_logger_std_h, io_put_chars,
+           fun(DEVICE, DATA) ->
+                   %% We log to Common Test log as well.
+                   %% This is the file we use to check
+                   %% the message made it to
+                   %% stdout/stderr.
+                   ct:log("~ts", [DATA]),
+                   io:put_chars(DEVICE, DATA)
+           end).
+
+unmeck_rabbit_logger_std_h() ->
+    ?assert(meck:validate(rabbit_logger_std_h)),
+    ok = meck:unload(rabbit_logger_std_h).
 
 remove_all_handlers() ->
     _ = [logger:remove_handler(Id)

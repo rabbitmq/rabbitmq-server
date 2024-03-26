@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_stream_utils).
@@ -20,7 +20,7 @@
 
 %% API
 -export([enforce_correct_name/1,
-         write_messages/5,
+         write_messages/6,
          parse_map/2,
          auth_mechanisms/1,
          auth_mechanism_to_module/2,
@@ -35,9 +35,9 @@
          filter_spec/1,
          command_versions/0,
          filtering_supported/0,
-         check_super_stream_management_permitted/4]).
-
--define(MAX_PERMISSION_CACHE_SIZE, 12).
+         check_super_stream_management_permitted/4,
+         offset_lag/4,
+         consumer_offset/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
@@ -60,21 +60,23 @@ check_name(<<"">>) ->
 check_name(_Name) ->
     ok.
 
-write_messages(_Version, _ClusterLeader, _PublisherRef, _PublisherId, <<>>) ->
+write_messages(_Version, _ClusterLeader, _PublisherRef, _PublisherId, _InternalId, <<>>) ->
     ok;
 write_messages(?VERSION_1 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
+               InternalId,
                <<PublishingId:64,
                  0:1,
                  MessageSize:31,
                  Message:MessageSize/binary,
                  Rest/binary>>) ->
-    write_messages0(V, ClusterLeader, PublisherRef, PublisherId,
+    write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
                     PublishingId, Message, Rest);
 write_messages(?VERSION_1 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
+               InternalId,
                <<PublishingId:64,
                  1:1,
                  CompressionType:3,
@@ -85,38 +87,45 @@ write_messages(?VERSION_1 = V, ClusterLeader,
                  Batch:BatchSize/binary,
                  Rest/binary>>) ->
     Data = {batch, MessageCount, CompressionType, UncompressedSize, Batch},
-    write_messages0(V, ClusterLeader, PublisherRef, PublisherId,
+    write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
                     PublishingId, Data, Rest);
 write_messages(?VERSION_2 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
+               InternalId,
                <<PublishingId:64,
                  -1:16/signed,
                  0:1,
                  MessageSize:31,
                  Message:MessageSize/binary,
                  Rest/binary>>) ->
-    write_messages0(V, ClusterLeader, PublisherRef, PublisherId,
+    write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
                     PublishingId, Message, Rest);
 write_messages(?VERSION_2 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
+               InternalId,
                <<PublishingId:64,
                  FilterValueLength:16, FilterValue:FilterValueLength/binary,
                  0:1,
                  MessageSize:31,
                  Message:MessageSize/binary,
                  Rest/binary>>) ->
-    write_messages0(V, ClusterLeader, PublisherRef, PublisherId,
+    write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
                     PublishingId, {FilterValue, Message}, Rest).
 
-write_messages0(Vsn, ClusterLeader, PublisherRef, PublisherId, PublishingId, Data, Rest) ->
+write_messages0(Vsn, ClusterLeader, PublisherRef, PublisherId, InternalId, PublishingId, Data, Rest) ->
     Corr = case PublisherRef of
-               undefined -> {PublisherId, PublishingId};
-               _ -> PublishingId
+               undefined ->
+                   %% we add the internal ID to detect late confirms from a stale publisher
+                   {PublisherId, InternalId, PublishingId};
+               _ ->
+                   %% we cannot add the internal ID because the correlation ID must be an integer
+                   %% when deduplication is activated.
+                   PublishingId
            end,
     ok = osiris:write(ClusterLeader, PublisherRef, Corr, Data),
-    write_messages(Vsn, ClusterLeader, PublisherRef, PublisherId, Rest).
+    write_messages(Vsn, ClusterLeader, PublisherRef, PublisherId, InternalId, Rest).
 
 parse_map(<<>>, _Count) ->
     {#{}, <<>>};
@@ -165,32 +174,15 @@ auth_mechanism_to_module(TypeBin, Sock) ->
     end.
 
 check_resource_access(User, Resource, Perm, Context) ->
-    V = {Resource, Context, Perm},
-
-    Cache =
-        case get(permission_cache) of
-            undefined ->
-                [];
-            Other ->
-                Other
-        end,
-    case lists:member(V, Cache) of
-        true ->
-            ok;
-        false ->
-            try
-                rabbit_access_control:check_resource_access(User,
-                                                            Resource,
-                                                            Perm,
-                                                            Context),
-                CacheTail =
-                    lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE - 1),
-                put(permission_cache, [V | CacheTail]),
-                ok
-            catch
-                exit:_ ->
-                    error
-            end
+    try
+        rabbit_access_control:check_resource_access(User,
+                                                    Resource,
+                                                    Perm,
+                                                    Context),
+        ok
+    catch
+        exit:_ ->
+            error
     end.
 
 check_configure_permitted(Resource, User) ->
@@ -340,3 +332,27 @@ q(VirtualHost, Name) ->
 
 e(VirtualHost, Name) ->
     rabbit_misc:r(VirtualHost, exchange, Name).
+
+-spec consumer_offset(ConsumerOffsetFromCounter :: integer(),
+                      MessageConsumed :: non_neg_integer(),
+                      LastListenerOffset :: integer() | undefined) -> integer().
+consumer_offset(0, 0, undefined) ->
+    0;
+consumer_offset(0, 0, LastListenerOffset) when LastListenerOffset > 0 ->
+    %% consumer at "next" waiting for messages most likely
+    LastListenerOffset;
+consumer_offset(ConsumerOffsetFromCounter, _, _) ->
+    ConsumerOffsetFromCounter.
+
+-spec offset_lag(CommittedOffset :: integer(),
+                 ConsumerOffsetFromCounter :: integer(),
+                 MessageConsumed :: non_neg_integer(),
+                 LastListenerOffset :: integer() | undefined) -> integer().
+offset_lag(-1, _, _, _) ->
+    %% -1 is for an empty stream, so no lag
+    0;
+offset_lag(_, 0, 0, LastListenerOffset) when LastListenerOffset > 0 ->
+    %% consumer waiting for messages at the end of the stream, most likely
+    0;
+offset_lag(CommittedOffset, ConsumerOffset, _, _) ->
+    CommittedOffset - ConsumerOffset.

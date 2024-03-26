@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_queue).
@@ -50,8 +50,13 @@ to_json(ReqData, Context) ->
                             rabbit_mgmt_format:strip_pids(Q)),
                 rabbit_mgmt_util:reply(ensure_defaults(Payload), ReqData, Context);
             true ->
-                rabbit_mgmt_util:reply(rabbit_mgmt_format:strip_pids(queue(ReqData)),
-                                       ReqData, Context)
+                Q = case rabbit_mgmt_util:enable_queue_totals(ReqData) of
+                    false -> queue(ReqData);
+                    true  -> queue_with_totals(ReqData)
+                end,
+                rabbit_mgmt_util:reply(
+                    rabbit_mgmt_format:strip_pids(Q),
+                    ReqData, Context)
         end
     catch
         {error, invalid_range_parameters, Reason} ->
@@ -71,29 +76,18 @@ accept_content(ReqData, Context) ->
             rabbit_mgmt_util:bad_request(iolist_to_binary(io_lib:format(F ++ "~n", A)), ReqData, Context)
     end.
 
-delete_resource(ReqData, Context = #context{user = #user{username = ActingUser}}) ->
+delete_resource(ReqData, Context) ->
     %% We need to retrieve manually if-unused and if-empty, as the HTTP API uses '-'
     %% while the record uses '_'
     IfUnused = <<"true">> =:= rabbit_mgmt_util:qs_val(<<"if-unused">>, ReqData),
     IfEmpty = <<"true">> =:= rabbit_mgmt_util:qs_val(<<"if-empty">>, ReqData),
-    VHost = rabbit_mgmt_util:id(vhost, ReqData),
-    QName = rabbit_mgmt_util:id(queue, ReqData),
-    Name = rabbit_misc:r(VHost, queue, QName),
-    case rabbit_amqqueue:lookup(Name) of
-        {ok, Q} ->
-            IsExclusive = amqqueue:is_exclusive(Q),
-            ExclusiveOwnerPid = amqqueue:get_exclusive_owner(Q),
-            try rabbit_amqqueue:delete_with(Q, ExclusiveOwnerPid, IfUnused, IfEmpty, ActingUser, IsExclusive) of
-                {ok, _} ->
-                    {true, ReqData, Context}
-            catch
-                _:#amqp_error{explanation = Explanation} ->
-                    rabbit_log:warning("Delete queue error: ~ts", [Explanation]),
-                    rabbit_mgmt_util:bad_request(list_to_binary(Explanation), ReqData, Context)
-            end;
-        {error, not_found} ->
-            {true, ReqData, Context}
-   end.
+    Name = rabbit_mgmt_util:id(queue, ReqData),
+    rabbit_mgmt_util:direct_request(
+      'queue.delete',
+      fun rabbit_mgmt_format:format_accept_content/1,
+      [{queue, Name},
+       {if_unused, IfUnused},
+       {if_empty, IfEmpty}], "Delete queue error: ~ts", ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
@@ -121,10 +115,26 @@ queue(ReqData) ->
         VHost     -> queue(VHost, rabbit_mgmt_util:id(queue, ReqData))
     end.
 
-
 queue(VHost, QName) ->
     Name = rabbit_misc:r(VHost, queue, QName),
     case rabbit_amqqueue:lookup(Name) of
         {ok, Q}            -> rabbit_mgmt_format:queue(Q);
+        {error, not_found} -> not_found
+    end.
+
+queue_with_totals(ReqData) ->
+    case rabbit_mgmt_util:vhost(ReqData) of
+        not_found -> not_found;
+        VHost     -> queue_with_totals(VHost, rabbit_mgmt_util:id(queue, ReqData))
+    end. 
+
+queue_with_totals(VHost, QName) ->
+    Name = rabbit_misc:r(VHost, queue, QName),
+    case rabbit_amqqueue:lookup(Name) of
+        {ok, Q}            -> QueueInfo = rabbit_amqqueue:info(Q,
+                                    [name, durable, auto_delete, exclusive,
+                                    owner_pid, arguments, type, state,
+                                    policy, totals, online, type_specific]),
+                              rabbit_mgmt_format:queue_info(QueueInfo);
         {error, not_found} -> not_found
     end.

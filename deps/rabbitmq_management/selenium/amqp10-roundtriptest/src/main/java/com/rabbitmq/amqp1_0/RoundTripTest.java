@@ -19,9 +19,11 @@ public class RoundTripTest {
     String hostname = getEnv("RABBITMQ_HOSTNAME", "localhost");
     String port = getEnv("RABBITMQ_AMQP_PORT", "5672");
     String scheme = getEnv("RABBITMQ_AMQP_SCHEME", "amqp");
-    String username = getEnv("RABBITMQ_AMQP_USERNAME", "guest");
-    String password = getEnv("RABBITMQ_AMQP_PASSWORD", "guest");
+    String username = args.length > 0 ? args[0] : getEnv("RABBITMQ_AMQP_USERNAME", "guest");
+    String password = args.length > 1 ? args[1] : getEnv("RABBITMQ_AMQP_PASSWORD", "guest");
     String uri = scheme + "://" + hostname + ":" + port;
+
+    System.out.println("AMQPS Roundrip using uri " + uri);
 
     Hashtable<Object, Object> env = new Hashtable<>();
     env.put(Context.INITIAL_CONTEXT_FACTORY, "org.apache.qpid.jms.jndi.JmsInitialContextFactory");

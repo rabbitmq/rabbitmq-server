@@ -1,3 +1,10 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%%
+
 -module(mc).
 
 -export([
@@ -12,12 +19,16 @@
          is_persistent/1,
          ttl/1,
          correlation_id/1,
+         user_id/1,
          message_id/1,
+         property/2,
          timestamp/1,
          priority/1,
          set_ttl/2,
          x_header/2,
          routing_headers/2,
+         exchange/1,
+         routing_keys/1,
          %%
          convert/2,
          convert/3,
@@ -148,7 +159,7 @@ init(Proto, Data, Anns0, Env)
            end,
     #?MODULE{protocol = Proto,
              data = ProtoData,
-             annotations = maps:merge(ProtoAnns, Anns)}.
+             annotations = set_received_at_timestamp(maps:merge(ProtoAnns, Anns))}.
 
 -spec size(state()) ->
     {MetadataSize :: non_neg_integer(),
@@ -223,9 +234,21 @@ routing_headers(#?MODULE{protocol = Proto,
 routing_headers(BasicMsg, Opts) ->
     mc_compat:routing_headers(BasicMsg, Opts).
 
+-spec exchange(state()) -> undefined | rabbit_misc:resource_name().
+exchange(#?MODULE{annotations = Anns}) ->
+    maps:get(?ANN_EXCHANGE, Anns, undefined);
+exchange(BasicMessage) ->
+    mc_compat:get_annotation(?ANN_EXCHANGE, BasicMessage).
+
+-spec routing_keys(state()) -> [rabbit_types:routing_key()].
+routing_keys(#?MODULE{annotations = Anns}) ->
+    maps:get(?ANN_ROUTING_KEYS, Anns, []);
+routing_keys(BasicMessage) ->
+    mc_compat:get_annotation(?ANN_ROUTING_KEYS, BasicMessage).
+
 -spec is_persistent(state()) -> boolean().
 is_persistent(#?MODULE{annotations = Anns}) ->
-    maps:get(durable, Anns, true);
+    maps:get(?ANN_DURABLE, Anns, true);
 is_persistent(BasicMsg) ->
     mc_compat:is_persistent(BasicMsg).
 
@@ -235,16 +258,15 @@ ttl(#?MODULE{annotations = Anns}) ->
 ttl(BasicMsg) ->
     mc_compat:ttl(BasicMsg).
 
-
 -spec timestamp(state()) -> undefined | non_neg_integer().
 timestamp(#?MODULE{annotations = Anns}) ->
-    maps:get(timestamp, Anns, undefined);
+    maps:get(?ANN_TIMESTAMP, Anns, undefined);
 timestamp(BasicMsg) ->
     mc_compat:timestamp(BasicMsg).
 
 -spec priority(state()) -> undefined | non_neg_integer().
 priority(#?MODULE{annotations = Anns}) ->
-    maps:get(priority, Anns, undefined);
+    maps:get(?ANN_PRIORITY, Anns, undefined);
 priority(BasicMsg) ->
     mc_compat:priority(BasicMsg).
 
@@ -260,6 +282,15 @@ correlation_id(#?MODULE{protocol = Proto,
 correlation_id(BasicMsg) ->
     mc_compat:correlation_id(BasicMsg).
 
+-spec user_id(state()) ->
+    {binary, rabbit_types:username()} |
+    undefined.
+user_id(#?MODULE{protocol = Proto,
+                 data = Data}) ->
+    Proto:property(?FUNCTION_NAME, Data);
+user_id(BasicMsg) ->
+    mc_compat:user_id(BasicMsg).
+
 -spec message_id(state()) ->
     {uuid, binary()} |
     {utf8, binary()} |
@@ -271,6 +302,14 @@ message_id(#?MODULE{protocol = Proto,
     Proto:property(?FUNCTION_NAME, Data);
 message_id(BasicMsg) ->
     mc_compat:message_id(BasicMsg).
+
+-spec property(atom(), state()) ->
+    {utf8, binary()} | undefined.
+property(Property, #?MODULE{protocol = Proto,
+                            data = Data}) ->
+    Proto:property(Property, Data);
+property(_Property, _BasicMsg) ->
+    undefined.
 
 -spec set_ttl(undefined | non_neg_integer(), state()) -> state().
 set_ttl(Value, #?MODULE{annotations = Anns} = State) ->
@@ -327,8 +366,8 @@ record_death(Reason, SourceQueue,
                       annotations = Anns0} = State)
   when is_atom(Reason) andalso is_binary(SourceQueue) ->
     Key = {SourceQueue, Reason},
-    Exchange = maps:get(exchange, Anns0),
-    RoutingKeys = maps:get(routing_keys, Anns0),
+    #{?ANN_EXCHANGE := Exchange,
+      ?ANN_ROUTING_KEYS := RoutingKeys} = Anns0,
     Timestamp = os:system_time(millisecond),
     Ttl = maps:get(ttl, Anns0, undefined),
 
@@ -424,6 +463,10 @@ is_cycle(Queue, [{Queue, Reason} | _])
     true;
 is_cycle(Queue, [_ | Rem]) ->
     is_cycle(Queue, Rem).
+
+set_received_at_timestamp(Anns) ->
+    Millis = os:system_time(millisecond),
+    Anns#{?ANN_RECEIVED_AT_TIMESTAMP => Millis}.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

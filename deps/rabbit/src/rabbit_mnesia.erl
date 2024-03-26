@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mnesia).
@@ -17,7 +17,6 @@
          join_cluster/2,
          reset/0,
          force_reset/0,
-         update_cluster_nodes/1,
          change_cluster_node_type/1,
          forget_cluster_node/2,
          force_load_next_boot/0,
@@ -37,7 +36,8 @@
          dir/0,
          cluster_status_from_mnesia/0,
 
-         %% Operations on the db and utils, mainly used in `rabbit_mnesia_rename' and `rabbit'
+         %% Operations on the db and utils, mainly used in `rabbit' and Mnesia-era modules
+         %% (some of which may now be gone)
          init_db_unchecked/2,
          copy_db/1,
          check_mnesia_consistency/1,
@@ -284,27 +284,6 @@ change_cluster_node_type(Type) ->
     ok = reset(),
     ok = join_cluster(Node, Type).
 
--spec update_cluster_nodes(node()) -> 'ok'.
-
-update_cluster_nodes(DiscoveryNode) ->
-    ensure_mnesia_not_running(),
-    ensure_mnesia_dir(),
-    Status = {AllNodes, _, _} = discover_cluster([DiscoveryNode]),
-    case rabbit_nodes:me_in_nodes(AllNodes) of
-        true ->
-            %% As in `check_consistency/0', we can safely delete the
-            %% schema here, since it'll be replicated from the other
-            %% nodes
-            _ = mnesia:delete_schema([node()]),
-            rabbit_node_monitor:write_cluster_status(Status),
-            rabbit_log:info("Updating cluster nodes from ~tp",
-                            [DiscoveryNode]),
-            init_db_with_mnesia(AllNodes, node_type(), true, true, _Retry = false);
-        false ->
-            e(inconsistent_cluster)
-    end,
-    ok.
-
 %% We proceed like this: try to remove the node locally. If the node
 %% is offline, we remove the node if:
 %%   * This node is a disc node
@@ -483,7 +462,7 @@ cluster_status(WhichNodes) ->
     end.
 
 members() ->
-    case rabbit_mnesia:is_running() andalso rabbit_table:is_present() of
+    case is_running() andalso rabbit_table:is_present() of
         true ->
             %% If Mnesia is running locally and some tables exist, we can know
             %% the database was initialized and we can query the list of
@@ -1087,16 +1066,14 @@ e(Tag) -> throw({error, {Tag, error_description(Tag)}}).
 
 error_description(clustering_only_disc_node) ->
     "You cannot cluster a node if it is the only disc node in its existing "
-        " cluster. If new nodes joined while this node was offline, use "
-        "'update_cluster_nodes' to add them manually.";
+        " cluster.";
 error_description(resetting_only_disc_node) ->
     "You cannot reset a node when it is the only disc node in a cluster. "
         "Please convert another node of the cluster to a disc node first.";
 error_description(not_clustered) ->
     "Non-clustered nodes can only be disc nodes.";
 error_description(no_online_cluster_nodes) ->
-    "Could not find any online cluster nodes. If the cluster has changed, "
-        "you can use the 'update_cluster_nodes' command.";
+    "Could not find any online cluster nodes.";
 error_description(inconsistent_cluster) ->
     "The nodes provided do not have this node as part of the cluster.";
 error_description(not_a_cluster_node) ->

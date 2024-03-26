@@ -67,9 +67,8 @@ null(_Config) ->
 booleans(_Config) ->
     roundtrip(true),
     roundtrip(false),
-    roundtrip({boolean, false}),
-    roundtrip({boolean, true}),
-    ok.
+    ?assertEqual(true, roundtrip_return({boolean, true})),
+    ?assertEqual(false, roundtrip_return({boolean, false})).
 
 symbol(_Config) ->
     roundtrip({symbol, <<"SYMB">>}),
@@ -164,7 +163,11 @@ array(_Config) ->
     roundtrip({array, ulong, [{ulong, 0}, {ulong, 16#FFFFFFFFFFFFFFFF}]}),
     roundtrip({array, long, [{long, 0}, {long, -16#8000000000000},
                              {long, 16#7FFFFFFFFFFFFF}]}),
-    roundtrip({array, boolean, [{boolean, true}, {boolean, false}]}),
+    roundtrip({array, boolean, [true, false]}),
+
+    ?assertEqual({array, boolean, [true, false]},
+                 roundtrip_return({array, boolean, [{boolean, true}, {boolean, false}]})),
+
     % array of arrays
     % TODO: does the inner type need to be consistent across the array?
     roundtrip({array, array, []}),
@@ -175,7 +178,7 @@ array(_Config) ->
                [{described, Desc, {utf8, <<"http://example.org/hello">>}}]}),
     roundtrip({array, {described, Desc, utf8}, []}),
     %% array:array32
-    roundtrip({array, boolean, [{boolean, true} || _ <- lists:seq(1, 256)]}),
+    roundtrip({array, boolean, [true || _ <- lists:seq(1, 256)]}),
     ok.
 
 %% Utility
@@ -183,5 +186,14 @@ array(_Config) ->
 roundtrip(Term) ->
     Bin = iolist_to_binary(amqp10_binary_generator:generate(Term)),
     % generate returns an iolist but parse expects a binary
-    ?assertMatch({Term, _}, amqp10_binary_parser:parse(Bin)),
-    ?assertMatch([Term | _], amqp10_binary_parser:parse_all(Bin)).
+    ?assertEqual({Term, <<>>}, amqp10_binary_parser:parse(Bin)),
+    ?assertEqual([Term], amqp10_binary_parser:parse_all(Bin)).
+
+%% Return the roundtripped term.
+roundtrip_return(Term) ->
+    Bin = iolist_to_binary(amqp10_binary_generator:generate(Term)),
+    %% We assert only that amqp10_binary_parser:parse/1 and
+    %% amqp10_binary_parser:parse_all/1 return the same term.
+    {RoundTripTerm, <<>>} = amqp10_binary_parser:parse(Bin),
+    ?assertEqual([RoundTripTerm], amqp10_binary_parser:parse_all(Bin)),
+    RoundTripTerm.

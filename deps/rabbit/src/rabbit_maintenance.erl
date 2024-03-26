@@ -2,12 +2,19 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_maintenance).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+
+%% FIXME: Ra consistent queries are currently fragile in the sense that the
+%% query function may run on a remote node and the function reference or MFA
+%% may not be valid on that node. That's why consistent queries in this module
+%% are in fact local queries when Khepri is enabled.
+%%
+%% See `rabbit_db_maintenance:get_consistent_in_khepri/1'.
 
 -export([
     is_enabled/0,
@@ -219,7 +226,7 @@ transfer_leadership_of_metadata_store(TransferCandidates) ->
     end.
 
 -spec transfer_leadership_of_classic_mirrored_queues([node()]) -> ok.
-%% This function is no longer used by maintanence mode. We retain it in case
+%% This function is no longer used by maintenance mode. We retain it in case
 %% classic mirrored queue leadership transfer would be reconsidered.
 %%
 %% With a lot of CMQs in a cluster, the transfer procedure can take prohibitively long

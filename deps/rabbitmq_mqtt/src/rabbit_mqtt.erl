@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mqtt).
@@ -62,7 +62,7 @@ emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
 
 -spec emit_connection_info_local(rabbit_types:info_keys(), reference(), pid()) -> ok.
 emit_connection_info_local(Items, Ref, AggregatorPid) ->
-    LocalPids = local_connection_pids(),
+    LocalPids = list_local_mqtt_connections(),
     emit_connection_info(Items, Ref, AggregatorPid, LocalPids).
 
 emit_connection_info(Items, Ref, AggregatorPid, Pids) ->
@@ -92,6 +92,13 @@ local_connection_pids() ->
                                   pg:get_local_members(PgScope, Group)
                           end, pg:which_groups(PgScope))
     end.
+
+%% This function excludes Web MQTT connections
+list_local_mqtt_connections() ->
+    PlainPids = rabbit_networking:list_local_connections_of_protocol(?MQTT_TCP_PROTOCOL),
+    TLSPids   = rabbit_networking:list_local_connections_of_protocol(?MQTT_TLS_PROTOCOL),
+    PlainPids ++ TLSPids.
+
 
 init_global_counters() ->
     lists:foreach(fun init_global_counters/1, [?MQTT_PROTO_V3,

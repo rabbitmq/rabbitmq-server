@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_exchange).
@@ -220,7 +220,7 @@ list() ->
 count() ->
     rabbit_db_exchange:count().
 
--spec list_names() -> [rabbit_exchange:name()].
+-spec list_names() -> [name()].
 
 list_names() ->
     rabbit_db_exchange:list().
@@ -351,7 +351,7 @@ route(Exchange, Message) ->
 route(#exchange{name = #resource{name = ?DEFAULT_EXCHANGE_NAME,
                                  virtual_host = VHost}},
       Message, _Opts) ->
-    RKs0 = mc:get_annotation(routing_keys, Message),
+    RKs0 = mc:routing_keys(Message),
     RKs = lists:usort(RKs0),
     [begin
          case virtual_reply_queue(RK) of

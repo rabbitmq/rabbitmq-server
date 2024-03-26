@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 -module(quorum_queue_SUITE).
 
@@ -47,7 +47,8 @@ groups() ->
                         {uncluster_size_2, [], [add_member]}
                        ]},
      {clustered, [], [
-                      {cluster_size_2, [], [add_member_not_running,
+                      {cluster_size_2, [], [add_member_2,
+                                            add_member_not_running,
                                             add_member_classic,
                                             add_member_wrong_type,
                                             add_member_already_a_member,
@@ -87,7 +88,8 @@ groups() ->
                                             leader_locator_balanced_random_maintenance,
                                             leader_locator_policy,
                                             status,
-                                            format
+                                            format,
+                                            add_member_2
                                            ]
                        ++ all_tests()},
                       {cluster_size_5, [], [start_queue,
@@ -166,8 +168,8 @@ all_tests() ->
      consumer_priorities,
      cancel_consumer_gh_3729,
      cancel_and_consume_with_same_tag,
-     validate_messages_on_queue
-
+     validate_messages_on_queue,
+     amqpl_headers
     ].
 
 memory_tests() ->
@@ -1867,6 +1869,26 @@ add_member(Config) ->
     Servers = lists:sort(Servers0),
     ?assertEqual(Servers, lists:sort(proplists:get_value(online, Info, []))).
 
+add_member_2(Config) ->
+    %% this tests a scenario where an older node version is running a QQ
+    %% and a member is added on a newer node version (for mixe testing)
+
+    %% we dont validate the ff was enabled as this test should pass either way
+    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue_non_voters),
+    [Server0, Server1 | _] = _Servers0 =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-quorum-initial-group-size">>, long, 1}])),
+    ?assertEqual(ok, rpc:call(Server0, rabbit_quorum_queue, add_member,
+                              [<<"/">>, QQ, Server0, 5000])),
+    Info = rpc:call(Server0, rabbit_quorum_queue, infos,
+                    [rabbit_misc:r(<<"/">>, queue, QQ)]),
+    Servers = lists:sort([Server0, Server1]),
+    ?assertEqual(Servers, lists:sort(proplists:get_value(online, Info, []))).
+
 delete_member_not_running(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -2990,13 +3012,15 @@ per_message_ttl(Config) ->
 
     Msg1 = <<"msg1">>,
 
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
     ok = amqp_channel:cast(Ch,
                            #'basic.publish'{routing_key = QQ},
                            #amqp_msg{props = #'P_basic'{delivery_mode = 2,
                                                         expiration = <<"2000">>},
                                      payload = Msg1}),
-
-    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
+    amqp_channel:wait_for_confirms(Ch, 5),
+    %% we know the message got to the queue in 2s it should be gone
     timer:sleep(2000),
     wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
     ok.
@@ -3330,6 +3354,38 @@ validate_messages_on_queue(Config) ->
 
     ok.
 
+amqpl_headers(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    Headers1Sent = undefined,
+    Headers2Sent = [],
+    [ok = amqp_channel:cast(
+            Ch,
+            #'basic.publish'{routing_key = QQ},
+            #amqp_msg{props = #'P_basic'{headers = HeadersSent,
+                                         delivery_mode = 2}}) ||
+     HeadersSent <- [Headers1Sent, Headers2Sent]],
+    RaName = ra_name(QQ),
+    wait_for_messages_ready(Servers, RaName, 2),
+
+    {#'basic.get_ok'{},
+     #amqp_msg{props = #'P_basic'{headers = Headers1Received}}
+    } = amqp_channel:call(Ch, #'basic.get'{queue = QQ}),
+
+    {#'basic.get_ok'{delivery_tag = DeliveryTag},
+     #amqp_msg{props = #'P_basic'{headers = Headers2Received}}
+    } = amqp_channel:call(Ch, #'basic.get'{queue = QQ}),
+
+    ?assertEqual(Headers1Sent, Headers1Received),
+    ?assertEqual(Headers2Sent, Headers2Received),
+
+    ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
+                                            multiple = true}).
+
 leader_locator_client_local(Config) ->
     [Server1 | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Q = ?config(queue_name, Config),
@@ -3392,7 +3448,7 @@ leader_locator_balanced_maintenance(Config) ->
      || Q <- Qs].
 
 leader_locator_balanced_random_maintenance(Config) ->
-    [S1, S2, S3] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [S1, S2, _S3] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, S1),
     Q = ?config(queue_name, Config),
 
@@ -3414,15 +3470,15 @@ leader_locator_balanced_random_maintenance(Config) ->
                                 amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
                    Leader
                end || _ <- lists:seq(1, 10)],
-    ?assert(lists:member(S1, Leaders)),
-    ?assertNot(lists:member(S2, Leaders)),
-    ?assert(lists:member(S3, Leaders)),
 
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
                                       [rabbit, queue_leader_locator]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
                                       [rabbit, queue_count_start_random_selection]),
-    true = rabbit_ct_broker_helpers:unmark_as_being_drained(Config, S2).
+    true = rabbit_ct_broker_helpers:unmark_as_being_drained(Config, S2),
+    %% assert after resetting maintenance mode else other tests may also fail
+    ?assertNot(lists:member(S2, Leaders)),
+    ok.
 
 leader_locator_policy(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -3441,12 +3497,14 @@ leader_locator_policy(Config) ->
                    {ok, _, {_, Leader}} = ra:members({ra_name(Q), Server}),
                    Leader
                end || Q <- Qs],
-    ?assertEqual(3, sets:size(sets:from_list(Leaders))),
 
     [?assertMatch(#'queue.delete_ok'{},
                   amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
      || Q <- Qs],
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"my-leader-locator">>).
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"my-leader-locator">>),
+
+    ?assertEqual(3, length(lists:usort(Leaders))),
+    ok.
 
 select_nodes_with_least_replicas(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),

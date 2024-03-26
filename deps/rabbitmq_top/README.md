@@ -62,6 +62,6 @@ You can build and install it like any other plugin (see
 
 ## License and Copyright
 
-(c) 2007-2020 VMware, Inc. or its affiliates.
+(c) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 Released under the same license as RabbitMQ.

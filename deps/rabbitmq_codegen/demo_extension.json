@@ -2,7 +2,7 @@
     "extension": {
 	"name": "demo",
 	"version": "1.0",
-	"copyright": "Copyright (C) 2009-2020 VMware, Inc. or its affiliates."
+	"copyright": "Copyright (c) 2007-2024 Broadcom Inc. and its subsidiaries. All rights reserved."
     },
     "domains": [
 	["foo-domain", "shortstr"]

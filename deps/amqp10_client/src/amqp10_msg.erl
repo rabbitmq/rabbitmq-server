@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 -module(amqp10_msg).
 
@@ -38,7 +38,7 @@
 
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
--type maybe(T) :: T | undefined.
+-type opt(T) :: T | undefined.
 
 -type delivery_tag() :: binary().
 -type content_type() :: term(). % TODO: refine
@@ -52,23 +52,23 @@
 
 -type amqp10_header() :: #{durable => boolean(), % false
                            priority => byte(), % 4
-                           ttl => maybe(non_neg_integer()),
+                           ttl => opt(non_neg_integer()),
                            first_acquirer => boolean(), % false
                            delivery_count => non_neg_integer()}. % 0
 
--type amqp10_properties() :: #{message_id => maybe(any()),
-                               user_id => maybe(binary()),
-                               to => maybe(any()),
-                               subject => maybe(binary()),
-                               reply_to => maybe(any()),
-                               correlation_id => maybe(any()),
-                               content_type => maybe(content_type()),
-                               content_encoding => maybe(content_encoding()),
-                               absolute_expiry_time => maybe(non_neg_integer()),
-                               creation_time => maybe(non_neg_integer()),
-                               group_id => maybe(binary()),
-                               group_sequence => maybe(non_neg_integer()),
-                               reply_to_group_id => maybe(binary())}.
+-type amqp10_properties() :: #{message_id => opt(any()),
+                               user_id => opt(binary()),
+                               to => opt(any()),
+                               subject => opt(binary()),
+                               reply_to => opt(any()),
+                               correlation_id => opt(any()),
+                               content_type => opt(content_type()),
+                               content_encoding => opt(content_encoding()),
+                               absolute_expiry_time => opt(non_neg_integer()),
+                               creation_time => opt(non_neg_integer()),
+                               group_id => opt(binary()),
+                               group_sequence => opt(non_neg_integer()),
+                               reply_to_group_id => opt(binary())}.
 
 -type amqp10_body() :: [#'v1_0.data'{}] |
                        [#'v1_0.amqp_sequence'{}] |
@@ -78,13 +78,13 @@
 
 -record(amqp10_msg,
         {transfer :: #'v1_0.transfer'{},
-         header :: maybe(#'v1_0.header'{}),
-         delivery_annotations :: maybe(#'v1_0.delivery_annotations'{}),
-         message_annotations :: maybe(#'v1_0.message_annotations'{}),
-         properties :: maybe(#'v1_0.properties'{}),
-         application_properties :: maybe(#'v1_0.application_properties'{}),
+         header :: opt(#'v1_0.header'{}),
+         delivery_annotations :: opt(#'v1_0.delivery_annotations'{}),
+         message_annotations :: opt(#'v1_0.message_annotations'{}),
+         properties :: opt(#'v1_0.properties'{}),
+         application_properties :: opt(#'v1_0.application_properties'{}),
          body :: amqp10_body() | unset,
-         footer :: maybe(#'v1_0.footer'{})
+         footer :: opt(#'v1_0.footer'{})
          }).
 
 -opaque amqp10_msg() :: #amqp10_msg{}.
@@ -142,7 +142,7 @@ settled(#amqp10_msg{transfer = #'v1_0.transfer'{settled = Settled}}) ->
 % the last 1 octet is the version
 % See 2.8.11 in the spec
 -spec message_format(amqp10_msg()) ->
-    maybe({non_neg_integer(), non_neg_integer()}).
+    opt({non_neg_integer(), non_neg_integer()}).
 message_format(#amqp10_msg{transfer =
                          #'v1_0.transfer'{message_format = undefined}}) ->
     undefined;
@@ -306,7 +306,7 @@ set_headers(Headers, #amqp10_msg{header = Current} = Msg) ->
     H = maps:fold(fun(durable, V, Acc) ->
                           Acc#'v1_0.header'{durable = V};
                      (priority, V, Acc) ->
-                          Acc#'v1_0.header'{priority = {uint, V}};
+                          Acc#'v1_0.header'{priority = {ubyte, V}};
                      (first_acquirer, V, Acc) ->
                           Acc#'v1_0.header'{first_acquirer = V};
                      (ttl, V, Acc) ->
@@ -325,8 +325,8 @@ set_properties(Props, #amqp10_msg{properties = Current} = Msg) ->
     P = maps:fold(fun(message_id, V, Acc) when is_binary(V) ->
                           % message_id can be any type but we restrict it here
                           Acc#'v1_0.properties'{message_id = utf8(V)};
-                     (user_id, V, Acc) ->
-                          Acc#'v1_0.properties'{user_id = utf8(V)};
+                     (user_id, V, Acc) when is_binary(V) ->
+                          Acc#'v1_0.properties'{user_id = {binary, V}};
                      (to, V, Acc) ->
                           Acc#'v1_0.properties'{to = utf8(V)};
                      (subject, V, Acc) ->

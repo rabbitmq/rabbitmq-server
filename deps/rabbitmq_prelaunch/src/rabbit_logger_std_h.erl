@@ -20,19 +20,9 @@
 -module(rabbit_logger_std_h).
 
 -ifdef(TEST).
--define(io_put_chars(DEVICE, DATA), begin
-                                        %% We log to Common Test log as well.
-                                        %% This is the file we use to check
-                                        %% the message made it to
-                                        %% stdout/stderr.
-                                        ct:log("~ts", [DATA]),
-                                        io:put_chars(DEVICE, DATA)
-                                    end).
-
 -export([parse_date_spec/1, parse_day_of_week/2, parse_day_of_month/2, parse_hour/2, parse_minute/2]).
--else.
--define(io_put_chars(DEVICE, DATA), io:put_chars(DEVICE, DATA)).
 -endif.
+
 -define(file_write(DEVICE, DATA), file:write(DEVICE, DATA)).
 -define(file_datasync(DEVICE), file:datasync(DEVICE)).
 
@@ -49,6 +39,9 @@
 %% logger callbacks
 -export([log/2, adding_handler/1, removing_handler/1, changing_config/3,
          filter_config/1]).
+
+%% Internal export to allow the use of meck.
+-export([io_put_chars/2]).
 
 -define(DEFAULT_CALL_TIMEOUT, 5000).
 
@@ -524,22 +517,40 @@ ensure_file(#{inode:=INode0,file_name:=FileName,modes:=Modes}=State) ->
             State#{last_check=>timestamp()};
         _ ->
             close_log_file(State),
-            case file:open(FileName,Modes) of
-                {ok,Fd} ->
-                    {ok,#file_info{inode=INode}} =
-                        file:read_file_info(FileName,[raw]),
-                    State#{fd=>Fd,inode=>INode,
-                           last_check=>timestamp(),
-                           synced=>true,sync_res=>ok};
-                Error ->
-                    exit({could_not_reopen_file,Error})
-            end
+            {ok, Fd} = ensure_open(FileName, Modes),
+            {ok,#file_info{inode=INode}} =
+                file:read_file_info(FileName,[raw]),
+            State#{fd=>Fd,inode=>INode,
+                   last_check=>timestamp(),
+                   synced=>true,sync_res=>ok}
     end;
 ensure_file(State) ->
     State.
 
+ensure_open(Filename, Modes) ->
+    case filelib:ensure_dir(Filename) of
+        ok ->
+            case file:open(Filename, Modes) of
+                {ok, Fd} ->
+                    {ok, Fd};
+                Error ->
+                    exit({could_not_reopen_file,Error})
+            end;
+        Error ->
+            exit({could_not_create_dir_for_file,Error})
+    end.
+
+write_to_dev(Bin,#{dev:=standard_io}=State) ->
+    try
+        ?MODULE:io_put_chars(user, Bin)
+    catch _E:_R ->
+            ?MODULE:io_put_chars(
+              standard_error, "Failed to write log message to stdout, trying stderr\n"),
+            ?MODULE:io_put_chars(standard_error, Bin)
+    end,
+    State;
 write_to_dev(Bin,#{dev:=DevName}=State) ->
-    ?io_put_chars(DevName, Bin),
+    ?MODULE:io_put_chars(DevName, Bin),
     State;
 write_to_dev(Bin, State) ->
     State1 = #{fd:=Fd} = maybe_ensure_file(State),
@@ -547,6 +558,9 @@ write_to_dev(Bin, State) ->
     State2 = maybe_rotate_file(Bin,State1),
     maybe_notify_error(write,Result,State2),
     State2#{synced=>false,write_res=>Result}.
+
+io_put_chars(DevName, Bin) ->
+    io:put_chars(DevName, Bin).
 
 sync_dev(#{synced:=false}=State) ->
     State1 = #{fd:=Fd} = maybe_ensure_file(State),

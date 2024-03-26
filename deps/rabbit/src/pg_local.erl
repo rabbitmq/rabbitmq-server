@@ -13,7 +13,7 @@
 %%    versions of Erlang/OTP. The remaining type specs have been
 %%    removed.
 
-%% All modifications are (C) 2010-2023 VMware, Inc. or its affiliates.
+%% All modifications are (C) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 %% %CopyrightBegin%
 %%

@@ -1,6 +1,7 @@
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
 load(":rabbitmqctl_check_formatted.bzl", "rabbitmqctl_check_formatted_test")
+load(":rabbitmqctl_compile_warnings_as_errors.bzl", "rabbitmqctl_compile_warnings_as_errors_test")
 load(":rabbitmqctl_test.bzl", "rabbitmqctl_test")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
@@ -95,6 +96,52 @@ rabbitmqctl_check_formatted_test(
 test_suite(
     name = "rabbitmqctl_check_formatted",
     tests = ["check_formatted"],
+)
+
+rabbitmqctl_compile_warnings_as_errors_test(
+    name = "compile_warnings_as_errors",
+    size = "small",
+    srcs = [
+        ".formatter.exs",
+        "config/config.exs",
+        "mix.exs",
+    ] + glob([
+        "lib/**/*.ex",
+        "test/**/*.exs",
+    ]),
+    archives = [
+        "@hex//:archive",
+    ],
+    data = glob(["test/fixtures/**/*"]),
+    source_deps = {
+        "@amqp//:sources": "amqp",
+        "@csv//:sources": "csv",
+        "@json//:sources": "json",
+        "@temp//:sources": "temp",
+        "@x509//:sources": "x509",
+    },
+    target_compatible_with = select({
+        "@platforms//os:macos": [
+            "@platforms//os:macos",
+            "@elixir_config//:elixir_1_15",
+        ],
+        "//conditions:default": [
+            "@platforms//os:linux",
+            "@elixir_config//:elixir_1_15",
+        ],
+    }),
+    deps = [
+        "//deps/amqp_client:erlang_app",
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+        "@observer_cli//:erlang_app",
+        "@stdout_formatter//:erlang_app",
+    ],
+)
+
+test_suite(
+    name = "rabbitmqctl_compile_warnings_as_errors",
+    tests = ["compile_warnings_as_errors"],
 )
 
 plt(

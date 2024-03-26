@@ -19,7 +19,7 @@
     <th>Max Hops</th>
     <th>Expiry</th>
     <th>Message TTL</th>
-    <th>HA Policy</th>
+    <th>Queue Type</th>
     <th>Queue</th>
     <th>Consumer tag</th>
   </tr>
@@ -43,7 +43,7 @@
      <td class="r"><%= upstream.value['max-hops'] %></td>
      <td class="r"><%= fmt_time(upstream.value.expires, 'ms') %></td>
      <td class="r"><%= fmt_time(upstream.value['message-ttl'], 'ms') %></td>
-     <td class="r"><%= fmt_string(upstream.value['ha-policy']) %></td>
+     <td class="r"><%= fmt_string(upstream.value['queue-type']) %></td>
      <td class="r"><%= fmt_string(upstream.value['queue']) %></td>
      <td class="r"><%= fmt_string(upstream.value['consumer-tag']) %></td>
    </tr>
@@ -195,11 +195,11 @@
         <tr>
           <th>
             <label>
-              HA Policy:
-              <span class="help" id="ha-policy"></span>
+              Queue Type:
+              <span class="help" id="queue-type"></span>
             </label>
           </th>
-          <td><input type="text" name="ha-policy"/></td>
+          <td><input type="text" name="queue-type"/></td>
         </tr>
         </tr>
 

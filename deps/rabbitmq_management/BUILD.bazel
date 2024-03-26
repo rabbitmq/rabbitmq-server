@@ -82,6 +82,7 @@ rabbitmq_app(
     priv = [":priv"],
     deps = [
         "//deps/amqp_client:erlang_app",
+        "//deps/oauth2_client:erlang_app",
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
         "//deps/rabbitmq_management_agent:erlang_app",
@@ -167,6 +168,9 @@ rabbitmq_integration_suite(
         "test/rabbit_mgmt_runtime_parameters_util.beam",
     ],
     shard_count = 2,
+    runtime_deps = [
+        "//deps/amqp10_client:erlang_app",
+    ],
 )
 
 rabbitmq_integration_suite(
@@ -204,6 +208,11 @@ rabbitmq_integration_suite(
 
 rabbitmq_suite(
     name = "rabbit_mgmt_test_unit_SUITE",
+    size = "small",
+)
+
+rabbitmq_suite(
+    name = "rabbit_mgmt_wm_auth_SUITE",
     size = "small",
 )
 

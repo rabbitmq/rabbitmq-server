@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_db_maintenance).
@@ -155,7 +155,12 @@ get_consistent_in_mnesia(Node) ->
 
 get_consistent_in_khepri(Node) ->
     Path = khepri_maintenance_path(Node),
-    case rabbit_khepri:get(Path, #{favor => consistency}) of
+    %% FIXME: Ra consistent queries are fragile in the sense that the query
+    %% function may run on a remote node and the function reference or MFA may
+    %% not be valid on that node. That's why we force a local query for now.
+    %Options = #{favor => consistent},
+    Options = #{favor => local},
+    case rabbit_khepri:get(Path, Options) of
         {ok, #node_maintenance_state{status = Status}} ->
             Status;
         _ ->

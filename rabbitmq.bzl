@@ -37,7 +37,7 @@ RABBITMQ_DIALYZER_OPTS = [
     "-Wunknown",
 ]
 
-APP_VERSION = "3.13.0"
+APP_VERSION = "4.0.0"
 
 BROKER_VERSION_REQUIREMENTS_ANY = """
 	{broker_version_requirements, []}

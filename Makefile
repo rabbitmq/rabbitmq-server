@@ -176,8 +176,6 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '/cowboy/doc/'			\
 	       --exclude '/cowboy/examples/'		\
 	       --exclude '/rabbit/escript/'		\
-	       --exclude '/rabbitmq_amqp1_0/test/swiftmq/build/'\
-	       --exclude '/rabbitmq_amqp1_0/test/swiftmq/swiftmq*'\
 	       --exclude '/rabbitmq_cli/escript/'	\
 	       --exclude '/rabbitmq_mqtt/test/build/'	\
 	       --exclude '/rabbitmq_mqtt/test/test_client/'\

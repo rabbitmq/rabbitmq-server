@@ -36,6 +36,15 @@
         "monitoring"
       ],
       "limits": {}
+    },
+    {
+      "name": "internaluser",
+      "password_hash": "wefAAoRipS2ytWb7U2+BLhReT8oO+VU8ztUi3dv+rawi9rB1",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": [
+        "management"
+      ],
+      "limits": {}
     }
   ],
   "vhosts": [
@@ -47,6 +56,13 @@
 
     {
       "user": "management",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "internaluser",
       "vhost": "/",
       "configure": ".*",
       "write": ".*",

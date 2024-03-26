@@ -9,100 +9,21 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2024 Broadcom. All Rights Reserved.
+%% The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_stream_reader).
 
+-feature(maybe_expr, enable).
+
 -behaviour(gen_statem).
 
--include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
-
+-include("rabbit_stream_reader.hrl").
 -include("rabbit_stream_metrics.hrl").
 
--type stream() :: binary().
--type publisher_id() :: byte().
--type publisher_reference() :: binary().
--type subscription_id() :: byte().
+-include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
 
--record(publisher,
-        {publisher_id :: publisher_id(),
-         stream :: stream(),
-         reference :: undefined | publisher_reference(),
-         leader :: pid(),
-         message_counters :: atomics:atomics_ref()}).
--record(consumer_configuration,
-        {socket :: rabbit_net:socket(), %% ranch_transport:socket(),
-         member_pid :: pid(),
-         subscription_id :: subscription_id(),
-         stream :: stream(),
-         offset :: osiris:offset(),
-         counters :: atomics:atomics_ref(),
-         properties :: map(),
-         active :: boolean()}).
--record(consumer,
-        {configuration :: #consumer_configuration{},
-         credit :: non_neg_integer(),
-         send_limit :: non_neg_integer(),
-         log :: undefined | osiris_log:state(),
-         last_listener_offset = undefined :: undefined | osiris:offset()}).
--record(request,
-        {start :: integer(),
-         content :: term()}).
--record(stream_connection_state,
-        {data :: rabbit_stream_core:state(), blocked :: boolean(),
-         consumers :: #{subscription_id() => #consumer{}}}).
--record(stream_connection,
-        {name :: binary(),
-         %% server host
-         host,
-         %% client host
-         peer_host,
-         %% server port
-         port,
-         %% client port
-         peer_port,
-         auth_mechanism,
-         authentication_state :: any(),
-         connected_at :: integer(),
-         helper_sup :: pid(),
-         socket :: rabbit_net:socket(),
-         publishers ::
-             #{publisher_id() =>
-                   #publisher{}}, %% FIXME replace with a list (0-255 lookup faster?)
-         publisher_to_ids ::
-             #{{stream(), publisher_reference()} => publisher_id()},
-         stream_leaders :: #{stream() => pid()},
-         stream_subscriptions :: #{stream() => [subscription_id()]},
-         credits :: atomics:atomics_ref(),
-         user :: undefined | #user{},
-         virtual_host :: undefined | binary(),
-         connection_step ::
-             atom(), % tcp_connected, peer_properties_exchanged, authenticating, authenticated, tuning, tuned, opened, failure, closing, closing_done
-         frame_max :: integer(),
-         heartbeat :: undefined | integer(),
-         heartbeater :: any(),
-         client_properties = #{} :: #{binary() => binary()},
-         monitors = #{} :: #{reference() => {pid(), stream()}},
-         stats_timer :: undefined | rabbit_event:state(),
-         resource_alarm :: boolean(),
-         send_file_oct ::
-             atomics:atomics_ref(), % number of bytes sent with send_file (for metrics)
-         transport :: tcp | ssl,
-         proxy_socket :: undefined | ranch_transport:socket(),
-         correlation_id_sequence :: integer(),
-         outstanding_requests :: #{integer() => #request{}},
-         deliver_version :: rabbit_stream_core:command_version(),
-         request_timeout :: pos_integer(),
-         outstanding_requests_timer :: undefined | erlang:reference(),
-         filtering_supported :: boolean()}).
--record(configuration,
-        {initial_credits :: integer(),
-         credits_required_for_unblocking :: integer(),
-         frame_max :: integer(),
-         heartbeat :: integer(),
-         connection_negotiation_step_timeout :: integer()}).
 -record(statem_data,
         {transport :: module(),
          connection :: #stream_connection{},
@@ -178,6 +99,10 @@
          tuned/3,
          open/3,
          close_sent/3]).
+-ifdef(TEST).
+-export([ensure_token_expiry_timer/2,
+         evaluate_state_after_secret_update/4]).
+-endif.
 
 callback_mode() ->
     [state_functions, state_enter].
@@ -993,6 +918,11 @@ open(info, check_outstanding_requests,
                            ),
             {keep_state, StatemData#statem_data{connection = Connection1}}
     end;
+open(info, token_expired, #statem_data{connection = Connection}) ->
+    _ = demonitor_all_streams(Connection),
+    rabbit_log_connection:info("Forcing stream connection ~tp closing because token expired",
+                               [self()]),
+    {stop, {shutdown, <<"Token expired">>}};
 open(info, {shutdown, Explanation} = Reason,
      #statem_data{connection = Connection}) ->
     %% rabbitmq_management or rabbitmq_stream_management plugin
@@ -1034,16 +964,17 @@ open(cast,
                   config = Configuration} =
          StatemData) ->
     ByPublisher =
-        lists:foldr(fun({PublisherId, PublishingId}, Acc) ->
-                       case maps:is_key(PublisherId, Publishers) of
-                           true ->
+        lists:foldr(fun({PublisherId, InternalId, PublishingId}, Acc) ->
+                       case Publishers of
+                           #{PublisherId := #publisher{internal_id = InternalId}} ->
                                case maps:get(PublisherId, Acc, undefined) of
                                    undefined ->
                                        Acc#{PublisherId => [PublishingId]};
                                    Ids ->
                                        Acc#{PublisherId => [PublishingId | Ids]}
                                end;
-                           false -> Acc
+                           _ ->
+                               Acc
                        end
                     end,
                     #{}, CorrelationList),
@@ -1566,8 +1497,11 @@ handle_frame_pre_auth(Transport,
 
             send(Transport, S, Frame),
             %% FIXME check if vhost is alive (see rabbit_reader:is_vhost_alive/2)
-            Connection#stream_connection{connection_step = opened,
-                                         virtual_host = VirtualHost}
+
+            {_, Conn} = ensure_token_expiry_timer(User,
+                                                  Connection#stream_connection{connection_step = opened,
+                                                                               virtual_host = VirtualHost}),
+            Conn
         catch
             exit:_ ->
                 F = rabbit_stream_core:frame({response, CorrelationId,
@@ -1641,18 +1575,17 @@ handle_frame_post_auth(Transport,
 
 handle_frame_post_auth(Transport,
                        #stream_connection{user = #user{username = Username} = _User,
-                                          socket = S,
+                                          socket = Socket,
                                           host = Host,
                                           auth_mechanism = Auth_Mechanism,
                                           authentication_state = AuthState,
-                                          resource_alarm = false} =
-                           C1,
-                       State,
+                                          resource_alarm = false} = C1,
+                       S1,
                        {request, CorrelationId,
                         {sasl_authenticate, NewMechanism, NewSaslBin}}) ->
     rabbit_log:debug("Open frame received sasl_authenticate for username '~ts'", [Username]),
 
-    Connection1 =
+    {Connection1, State1} =
       case Auth_Mechanism of
         {NewMechanism, AuthMechanism} -> %% Mechanism is the same used during the pre-auth phase
               {C2, CmdBody} =
@@ -1661,7 +1594,7 @@ handle_frame_post_auth(Transport,
                           rabbit_core_metrics:auth_attempt_failed(Host,
                                                                   NewUsername,
                                                                   stream),
-                          auth_fail(NewUsername, Msg, Args, C1, State),
+                          auth_fail(NewUsername, Msg, Args, C1, S1),
                           rabbit_log_connection:warning(Msg, Args),
                           {C1#stream_connection{connection_step = failure},
                            {sasl_authenticate,
@@ -1676,7 +1609,7 @@ handle_frame_post_auth(Transport,
                                                rabbit_misc:format(Msg,
                                                                   Args)}],
                                              C1,
-                                             State),
+                                             S1),
                           rabbit_log_connection:warning(Msg, Args),
                           {C1#stream_connection{connection_step = failure},
                            {sasl_authenticate, ?RESPONSE_SASL_ERROR, <<>>}};
@@ -1695,7 +1628,7 @@ handle_frame_post_auth(Transport,
                                                      user_authentication_success,
                                                      [],
                                                      C1,
-                                                     State),
+                                                     S1),
                                   rabbit_log:debug("Successfully updated secret for username '~ts'", [Username]),
                                   {C1#stream_connection{user = NewUser,
                                                         authentication_state = done,
@@ -1718,20 +1651,24 @@ handle_frame_post_auth(Transport,
               Frame =
                   rabbit_stream_core:frame({response, CorrelationId,
                                             CmdBody}),
-              send(Transport, S, Frame),
-              C2;
+              send(Transport, Socket, Frame),
+              case CmdBody of
+                  {sasl_authenticate, ?RESPONSE_CODE_OK, _} ->
+                     #stream_connection{user = NewUsr} = C2,
+                     evaluate_state_after_secret_update(Transport, NewUsr, C2, S1);
+                  _ ->
+                    {C2, S1}
+              end;
         {OtherMechanism, _} ->
               rabbit_log_connection:warning("User '~ts' cannot change initial auth mechanism '~ts' for '~ts'",
                                               [Username, NewMechanism, OtherMechanism]),
               CmdBody =
                 {sasl_authenticate, ?RESPONSE_SASL_CANNOT_CHANGE_MECHANISM, <<>>},
               Frame = rabbit_stream_core:frame({response, CorrelationId, CmdBody}),
-              send(Transport, S, Frame),
-              C1#stream_connection{connection_step = failure}
+              send(Transport, Socket, Frame),
+              {C1#stream_connection{connection_step = failure}, S1}
       end,
-
-    {Connection1, State};
-
+    {Connection1, State1};
 handle_frame_post_auth(Transport,
                        #stream_connection{user = User,
                                           publishers = Publishers0,
@@ -1773,7 +1710,8 @@ handle_frame_post_auth(Transport,
                             {Connection0, State};
                         {ClusterLeader,
                          #stream_connection{publishers = Publishers0,
-                                            publisher_to_ids = RefIds0} =
+                                            publisher_to_ids = RefIds0,
+                                            internal_sequence = InternalSequence} =
                              Connection1} ->
                             {PublisherReference, RefIds1} =
                                 case WriterRef of
@@ -1791,7 +1729,8 @@ handle_frame_post_auth(Transport,
                                            leader = ClusterLeader,
                                            message_counters =
                                                atomics:new(3,
-                                                           [{signed, false}])},
+                                                           [{signed, false}]),
+                                           internal_id = InternalSequence},
                             response(Transport,
                                      Connection0,
                                      declare_publisher,
@@ -1802,15 +1741,18 @@ handle_frame_post_auth(Transport,
                                                                              Connection1),
                                                                     PublisherId,
                                                                     PublisherReference),
-                            {Connection1#stream_connection{publishers =
-                                                               Publishers0#{PublisherId
-                                                                                =>
-                                                                                Publisher},
-                                                           publisher_to_ids =
-                                                               RefIds1},
+                            {Connection1#stream_connection{
+                               publishers = Publishers0#{PublisherId => Publisher},
+                               publisher_to_ids = RefIds1,
+                               internal_sequence = InternalSequence + 1},
                              State}
                     end;
-                {_, _} ->
+                {PublisherIdTaken, ReferenceTaken} ->
+                    rabbit_log:warning("Error while declaring publisher ~tp for stream '~ts', "
+                                       "with reference '~ts'. ID already taken: ~tp. "
+                                       "Reference already taken: ~tp.",
+                                       [PublisherId, Stream, WriterRef,
+                                        PublisherIdTaken, ReferenceTaken]),
                     response(Transport,
                              Connection0,
                              declare_publisher,
@@ -1872,43 +1814,25 @@ handle_frame_post_auth(Transport,
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
                                           credits = Credits,
-                                          user = User,
                                           publishers = Publishers} =
                            Connection,
                        State,
                        {publish, Version, PublisherId, MessageCount, Messages}) ->
     case Publishers of
         #{PublisherId := Publisher} ->
-            #publisher{stream = Stream,
-                       reference = Reference,
+            #publisher{reference = Reference,
+                       internal_id = InternalId,
                        leader = Leader,
                        message_counters = Counters} =
                 Publisher,
-            increase_messages_received(Counters, MessageCount),
-            case rabbit_stream_utils:check_write_permitted(stream_r(Stream, Connection),
-                                                           User) of
-                ok ->
-                    rabbit_stream_utils:write_messages(Version, Leader,
-                                                       Reference,
-                                                       PublisherId,
-                                                       Messages),
-                    sub_credits(Credits, MessageCount),
-                    {Connection, State};
-                error ->
-                    PublishingIds = publishing_ids_from_messages(Version, Messages),
-                    Command =
-                        {publish_error,
-                         PublisherId,
-                         ?RESPONSE_CODE_ACCESS_REFUSED,
-                         PublishingIds},
-                    Frame = rabbit_stream_core:frame(Command),
-                    send(Transport, S, Frame),
-                    rabbit_global_counters:increase_protocol_counter(stream,
-                                                                     ?ACCESS_REFUSED,
-                                                                     1),
-                    increase_messages_errored(Counters, MessageCount),
-                    {Connection, State}
-            end;
+                increase_messages_received(Counters, MessageCount),
+                rabbit_stream_utils:write_messages(Version, Leader,
+                                                   Reference,
+                                                   PublisherId,
+                                                   InternalId,
+                                                   Messages),
+                sub_credits(Credits, MessageCount),
+                {Connection, State};
         _ ->
             PublishingIds = publishing_ids_from_messages(Version, Messages),
             Command =
@@ -2282,29 +2206,25 @@ handle_frame_post_auth(Transport,
             {Connection, State}
     end;
 handle_frame_post_auth(_Transport,
-                       #stream_connection{user = User} = Connection,
+                       #stream_connection{stream_subscriptions = Subscriptions,
+                                          user = User} = Connection0,
                        State,
                        {store_offset, Reference, Stream, Offset}) ->
-    case rabbit_stream_utils:check_write_permitted(stream_r(Stream, Connection),
-                                                   User) of
-        ok ->
-            case lookup_leader(Stream, Connection) of
-                {error, Error} ->
-                    rabbit_log:warning("Could not find leader to store offset on ~tp: "
-                                       "~tp",
-                                       [Stream, Error]),
-                    %% FIXME store offset is fire-and-forget, so no response even if error, change this?
-                    {Connection, State};
-                {ClusterLeader, Connection1} ->
-                    osiris:write_tracking(ClusterLeader, Reference, Offset),
-                    {Connection1, State}
-            end;
-        error ->
-            %% FIXME store offset is fire-and-forget, so no response even if error, change this?
-            rabbit_log:warning("Not authorized to store offset on stream ~tp",
-                               [Stream]),
-            {Connection, State}
-    end;
+    Connection1 =
+    case Subscriptions of
+        #{Stream := _} ->
+            store_offset(Reference, Stream, Offset, Connection0);
+        _ ->
+            case rabbit_stream_utils:check_read_permitted(stream_r(Stream, Connection0), User, #{}) of
+                ok ->
+                    store_offset(Reference, Stream, Offset, Connection0);
+                _ ->
+                    rabbit_log:warning("Not authorized to store offset on stream ~tp",
+                                       [Stream]),
+                    Connection0
+            end
+    end,
+    {Connection1, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
                                           virtual_host = VirtualHost,
@@ -3235,6 +3155,56 @@ request(Content) ->
     #request{start = erlang:monotonic_time(millisecond),
              content = Content}.
 
+evaluate_state_after_secret_update(Transport,
+                                   User,
+                                   #stream_connection{socket = Socket,
+                                                      publishers = Publishers,
+                                                      stream_subscriptions = Subscriptions} = Conn0,
+                                   State0) ->
+    {_, Conn1} = ensure_token_expiry_timer(User, Conn0),
+    PublisherStreams =
+    lists:foldl(fun(#publisher{stream = Str}, Acc) ->
+                        case rabbit_stream_utils:check_write_permitted(stream_r(Str, Conn0), User) of
+                            ok ->
+                                Acc;
+                            _ ->
+                                Acc#{Str => ok}
+                        end
+                end, #{}, maps:values(Publishers)),
+    {SubscriptionStreams, Conn2, State1} =
+    maps:fold(fun(Str, Subs, {Acc, C0, S0}) ->
+                      case rabbit_stream_utils:check_read_permitted(stream_r(Str, Conn0), User, #{}) of
+                          ok ->
+                              {Acc, C0, S0};
+                          _ ->
+                              {C1, S1} =
+                              lists:foldl(fun(SubId, {Conn, St}) ->
+                                                  remove_subscription(SubId, Conn, St)
+                                          end, {C0, S0}, Subs),
+                              {Acc#{Str => ok}, C1, S1}
+                      end
+              end, {#{}, Conn1, State0}, Subscriptions),
+    Streams = maps:merge(PublisherStreams, SubscriptionStreams),
+    {Conn3, State2} =
+    case maps:size(Streams) of
+        0 ->
+            {Conn2, State1};
+        _ ->
+            maps:fold(fun(Str, _, {C0, S0}) ->
+                              {_, C1, S1} = clean_state_after_stream_deletion_or_failure(
+                                              undefined, Str, C0, S0),
+                              Command = {metadata_update, Str,
+                                         ?RESPONSE_CODE_STREAM_NOT_AVAILABLE},
+                              Frame = rabbit_stream_core:frame(Command),
+                              send(Transport, Socket, Frame),
+                              rabbit_global_counters:increase_protocol_counter(stream,
+                                                                               ?STREAM_NOT_AVAILABLE,
+                                                                               1),
+                              {C1, S1}
+                      end, {Conn2, State1}, Streams)
+    end,
+    {Conn3, State2}.
+
 ensure_outstanding_requests_timer(#stream_connection{
                                      outstanding_requests = Requests,
                                      outstanding_requests_timer = undefined
@@ -3255,6 +3225,33 @@ ensure_outstanding_requests_timer(#stream_connection{
     C#stream_connection{outstanding_requests_timer = TRef};
 ensure_outstanding_requests_timer(C) ->
     C.
+
+ensure_token_expiry_timer(User, #stream_connection{token_expiry_timer = Timer} = Conn) ->
+    TimerRef =
+    maybe
+        rabbit_log:debug("Checking token expiry"),
+        true ?= rabbit_access_control:permission_cache_can_expire(User),
+        rabbit_log:debug("Token can expire"),
+        Ts = rabbit_access_control:expiry_timestamp(User),
+        rabbit_log:debug("Token expiry timestamp: ~tp", [Ts]),
+        true ?= is_integer(Ts),
+        Time = (Ts - os:system_time(second)) * 1000,
+        rabbit_log:debug("Token expires in ~tp ms, setting timer to close connection", [Time]),
+        true ?= Time > 0,
+        erlang:send_after(Time, self(), token_expired)
+    else
+        false ->
+            undefined;
+        {error, _} ->
+            undefined
+    end,
+    Cancel = case Timer of
+                 undefined ->
+                     ok;
+                 _ ->
+                     erlang:cancel_timer(Timer, [{async, false}, {info, true}])
+             end,
+    {Cancel, Conn#stream_connection{token_expiry_timer = TimerRef}}.
 
 maybe_unregister_consumer(_, _, false = _Sac, Requests) ->
     Requests;
@@ -3489,6 +3486,18 @@ clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
             {cleaned, C3#stream_connection{stream_leaders = Leaders1}, S2};
         false ->
             {not_cleaned, C2#stream_connection{stream_leaders = Leaders1}, S2}
+    end.
+
+store_offset(Reference, Stream, Offset, Connection0) ->
+    case lookup_leader(Stream, Connection0) of
+        {error, Error} ->
+            rabbit_log:warning("Could not find leader to store offset on ~tp: "
+                               "~tp",
+                               [Stream, Error]),
+            Connection0;
+        {ClusterLeader, Connection1} ->
+            osiris:write_tracking(ClusterLeader, Reference, Offset),
+            Connection1
     end.
 
 lookup_leader(Stream,
@@ -3899,16 +3908,21 @@ consumer_i(messages_consumed,
                          #consumer_configuration{counters = Counters}}) ->
     messages_consumed(Counters);
 consumer_i(offset,
-           #consumer{configuration =
-                         #consumer_configuration{counters = Counters}}) ->
-    consumer_offset(Counters);
+           #consumer{configuration = #consumer_configuration{counters = Counters},
+                     last_listener_offset = LLO}) ->
+    rabbit_stream_utils:consumer_offset(consumer_offset(Counters),
+                                        messages_consumed(Counters),
+                                        LLO);
 consumer_i(offset_lag, #consumer{log = undefined}) ->
     0;
 consumer_i(offset_lag,
-           #consumer{configuration =
-                         #consumer_configuration{counters = Counters},
+           #consumer{configuration = #consumer_configuration{counters = Counters},
+                     last_listener_offset = LLO,
                      log = Log}) ->
-    stream_stored_offset(Log) - consumer_offset(Counters);
+    rabbit_stream_utils:offset_lag(stream_stored_offset(Log),
+                                   consumer_offset(Counters),
+                                   messages_consumed(Counters),
+                                   LLO);
 consumer_i(connection_pid, _) ->
     self();
 consumer_i(node, _) ->

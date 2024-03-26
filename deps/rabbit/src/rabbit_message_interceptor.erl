@@ -2,13 +2,14 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 %% This module exists since 3.12 replacing plugins rabbitmq-message-timestamp
 %% and rabbitmq-routing-node-stamp. Instead of using these plugins, RabbitMQ core can
 %% now be configured to add such headers. This enables non-AMQP 0.9.1 protocols (that
 %% do not use rabbit_channel) to also add AMQP 0.9.1 headers to incoming messages.
 -module(rabbit_message_interceptor).
+-include("mc.hrl").
 
 -export([intercept/1]).
 
@@ -45,5 +46,5 @@ set_timestamp(Msg, Timestamp, Overwrite) ->
         {Ts, false} when is_integer(Ts) ->
             Msg;
         _ ->
-            mc:set_annotation(timestamp, Timestamp, Msg)
+            mc:set_annotation(?ANN_TIMESTAMP, Timestamp, Msg)
     end.

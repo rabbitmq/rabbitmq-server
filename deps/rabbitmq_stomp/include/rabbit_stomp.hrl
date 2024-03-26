@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -record(stomp_configuration, {default_login,
@@ -39,6 +39,6 @@
          ssl_cipher,
          ssl_hash]).
 
--define(STOMP_GUIDE_URL, <<"https://rabbitmq.com/stomp.html">>).
+-define(STOMP_GUIDE_URL, <<"https://rabbitmq.com/docs/stomp">>).
 
 -define(DEFAULT_MAX_FRAME_SIZE, 4 * 1024 * 1024).

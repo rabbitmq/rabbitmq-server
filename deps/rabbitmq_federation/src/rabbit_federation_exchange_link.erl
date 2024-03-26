@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_federation_exchange_link).
@@ -504,15 +504,16 @@ consume_from_upstream_queue(
     #upstream{prefetch_count = Prefetch,
               expires        = Expiry,
               message_ttl    = TTL,
-              ha_policy      = HA} = Upstream,
+              queue_type     = QueueType} = Upstream,
     #upstream_params{x_or_q = X,
                      params = Params} = UParams,
     Q = upstream_queue_name(name(X), vhost(Params), DownXName),
     Args = [A || {_K, _T, V} = A
                      <- [{<<"x-expires">>,          long,    Expiry},
                          {<<"x-message-ttl">>,      long,    TTL},
-                         {<<"x-ha-policy">>,        longstr, HA},
-                         {<<"x-internal-purpose">>, longstr, <<"federation">>}],
+                         {<<"x-internal-purpose">>, longstr, <<"federation">>},
+                         {<<"x-queue-type">>,       longstr, atom_to_binary(QueueType)}
+                        ],
                    V =/= none],
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
                                            durable   = true,

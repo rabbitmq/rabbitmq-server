@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_web_mqtt_app).
@@ -12,7 +12,9 @@
     start/2,
     prep_stop/1,
     stop/1,
-    list_connections/0
+    list_connections/0,
+    emit_connection_info_all/4,
+    emit_connection_info_local/3
 ]).
 
 %% Dummy supervisor - see Ulf Wiger's comment at
@@ -48,26 +50,32 @@ init([]) -> {ok, {{one_for_one, 1, 5}, []}}.
 
 -spec list_connections() -> [pid()].
 list_connections() ->
-    PlainPids = connection_pids_of_protocol(?TCP_PROTOCOL),
-    TLSPids   = connection_pids_of_protocol(?TLS_PROTOCOL),
+    PlainPids = rabbit_networking:list_local_connections_of_protocol(?TCP_PROTOCOL),
+    TLSPids   = rabbit_networking:list_local_connections_of_protocol(?TLS_PROTOCOL),
     PlainPids ++ TLSPids.
 
+-spec emit_connection_info_all([node()], rabbit_types:info_keys(), reference(), pid()) -> term().
+emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
+    Pids = [spawn_link(Node, ?MODULE, emit_connection_info_local,
+                       [Items, Ref, AggregatorPid])
+            || Node <- Nodes],
+
+    rabbit_control_misc:await_emitters_termination(Pids).
+
+-spec emit_connection_info_local(rabbit_types:info_keys(), reference(), pid()) -> ok.
+emit_connection_info_local(Items, Ref, AggregatorPid) ->
+    LocalPids = list_connections(),
+    emit_connection_info(Items, Ref, AggregatorPid, LocalPids).
+
+emit_connection_info(Items, Ref, AggregatorPid, Pids) ->
+    rabbit_control_misc:emitting_map_with_exit_handler(
+      AggregatorPid, Ref,
+      fun(Pid) ->
+              rabbit_web_mqtt_handler:info(Pid, Items)
+      end, Pids).
 %%
 %% Implementation
 %%
-
-connection_pids_of_protocol(Protocol) ->
-    case rabbit_networking:ranch_ref_of_protocol(Protocol) of
-        undefined   -> [];
-        AcceptorRef ->
-            lists:map(fun cowboy_ws_connection_pid/1, ranch:procs(AcceptorRef, connections))
-    end.
-
--spec cowboy_ws_connection_pid(pid()) -> pid().
-cowboy_ws_connection_pid(RanchConnPid) ->
-    Children = supervisor:which_children(RanchConnPid),
-    {cowboy_clear, Pid, _, _} = lists:keyfind(cowboy_clear, 1, Children),
-    Pid.
 
 mqtt_init() ->
     CowboyOpts0  = maps:from_list(get_env(cowboy_opts, [])),

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mgmt_http_SUITE).
@@ -15,6 +15,10 @@
 
 -import(rabbit_ct_client_helpers, [close_connection/1, close_channel/1,
                                    open_unmanaged_connection/1]).
+-import(rabbit_ct_broker_helpers, [rpc/4]).
+-import(rabbit_ct_helpers,
+        [eventually/3,
+         eventually/1]).
 -import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2,
                                 assert_keys/2, assert_no_keys/2,
                                 http_get/2, http_get/3, http_get/5,
@@ -35,7 +39,7 @@
 -define(COLLECT_INTERVAL, 1000).
 -define(PATH_PREFIX, "/custom-prefix").
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 all() ->
     [
@@ -79,7 +83,8 @@ all_tests() -> [
     permissions_validation_test,
     permissions_list_test,
     permissions_test,
-    connections_test,
+    connections_test_amqpl,
+    connections_test_amqp,
     multiple_invalid_connections_test,
     exchanges_test,
     queues_test,
@@ -93,6 +98,7 @@ all_tests() -> [
     permissions_administrator_test,
     permissions_vhost_test,
     permissions_amqp_test,
+    permissions_queue_delete_test,
     permissions_connection_channel_consumer_test,
     consumers_cq_test,
     consumers_qq_test,
@@ -148,7 +154,8 @@ all_tests() -> [
     rates_test,
     single_active_consumer_cq_test,
     single_active_consumer_qq_test,
-%%    oauth_test,  %% disabled until we are able to enable oauth2 plugin
+    %% This test needs the OAuth 2 plugin to be enabled
+    %% oauth_test,
     disable_basic_auth_test,
     login_test,
     csp_headers_test,
@@ -189,6 +196,13 @@ finish_init(Group, Config) ->
     NodeConf = [{rmq_nodename_suffix, Group}],
     Config1 = rabbit_ct_helpers:set_config(Config, NodeConf),
     merge_app_env(Config1).
+
+init_per_suite(Config) ->
+    {ok, _} = application:ensure_all_started(amqp10_client),
+    Config.
+
+end_per_suite(Config) ->
+    Config.
 
 init_per_group(all_tests_with_prefix=Group, Config0) ->
     PathConfig = {rabbitmq_management, [{path_prefix, ?PATH_PREFIX}]},
@@ -241,8 +255,7 @@ init_per_testcase(Testcase, Config) ->
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"rabbit_mgmt_SUITE:end_per_testcase">>),
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbitmq_management, disable_basic_auth, false]),
+    rpc(Config, application, set_env, [rabbitmq_management, disable_basic_auth, false]),
     Config1 = end_per_testcase0(Testcase, Config),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase).
 
@@ -253,9 +266,7 @@ end_per_testcase0(T, Config)
      || #{name := Name} <- Vhosts],
     Config;
 end_per_testcase0(definitions_password_test, Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0,
-                                 application, unset_env,
-                                 [rabbit, password_hashing_module]),
+    rpc(Config, application, unset_env, [rabbit, password_hashing_module]),
     Config;
 end_per_testcase0(queues_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"downvhost">>),
@@ -289,23 +300,18 @@ end_per_testcase0(permissions_vhost_test, Config) ->
     rabbit_ct_broker_helpers:delete_user(Config, <<"myuser2">>),
     Config;
 end_per_testcase0(config_environment_test, Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
-                                 [rabbit, config_environment_test_env]),
+    rpc(Config, application, unset_env, [rabbit, config_environment_test_env]),
     Config;
 end_per_testcase0(disabled_operator_policy_test, Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
-                                 [rabbitmq_management, restrictions]),
+    rpc(Config, application, unset_env, [rabbitmq_management, restrictions]),
     Config;
 end_per_testcase0(disabled_qq_replica_opers_test, Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
-                                 [rabbitmq_management, restrictions]),
+    rpc(Config, application, unset_env, [rabbitmq_management, restrictions]),
     Config;
 end_per_testcase0(Testcase, Config)
   when Testcase == list_deprecated_features_test;
        Testcase == list_used_deprecated_features_test ->
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_feature_flags,
-                                      clear_injected_test_feature_flags,
-                                      []),
+    ok = rpc(Config, rabbit_feature_flags, clear_injected_test_feature_flags, []),
     Config;
 end_per_testcase0(_, Config) -> Config.
 
@@ -341,6 +347,7 @@ nodes_test(Config) ->
     assert_list([DiscNode], http_get(Config, "/nodes")),
     assert_list([DiscNode], http_get(Config, "/nodes", "monitor", "monitor", ?OK)),
     http_get(Config, "/nodes", "user", "user", ?NOT_AUTHORISED),
+    http_get(Config, "/nodes/does-not-exist", ?NOT_FOUND),
     [Node] = http_get(Config, "/nodes"),
     Path = "/nodes/" ++ binary_to_list(maps:get(name, Node)),
     assert_item(DiscNode, http_get(Config, Path, ?OK)),
@@ -510,8 +517,7 @@ vhosts_trace_test(Config) ->
 users_test(Config) ->
     assert_item(#{name => <<"guest">>, tags => [<<"administrator">>]},
                 http_get(Config, "/whoami")),
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbitmq_management, login_session_timeout, 100]),
+    rpc(Config, application, set_env, [rabbitmq_management, login_session_timeout, 100]),
     assert_item(#{name => <<"guest">>,
                   tags => [<<"administrator">>],
                   login_session_timeout => 100},
@@ -922,7 +928,7 @@ topic_permissions_test(Config) ->
     http_delete(Config, "/vhosts/myvhost2", {group, '2xx'}),
     passed.
 
-connections_test(Config) ->
+connections_test_amqpl(Config) ->
     {Conn, _Ch} = open_connection_and_channel(Config),
     LocalPort = local_port(Conn),
     Path = binary_to_list(
@@ -950,6 +956,72 @@ connections_test(Config) ->
     wait_until(Fun, 60),
     close_connection(Conn),
     passed.
+
+%% Test that AMQP 1.0 connection can be listed and closed via the rabbitmq_management plugin.
+connections_test_amqp(Config) ->
+    Node = atom_to_binary(rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename)),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    User = <<"guest">>,
+    OpnConf = #{address => ?config(rmq_hostname, Config),
+                port => Port,
+                container_id => <<"my container">>,
+                sasl => {plain, User, <<"guest">>}},
+    {ok, C1} = amqp10_client:open_connection(OpnConf),
+    receive {amqp10_event, {connection, C1, opened}} -> ok
+    after 5000 -> ct:fail(opened_timeout)
+    end,
+    eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
+    ?assertEqual(1, length(rpc(Config, rabbit_amqp1_0, list_local, []))),
+    [Connection1] = http_get(Config, "/connections"),
+    ?assertMatch(#{node := Node,
+                   vhost := <<"/">>,
+                   user := User,
+                   auth_mechanism := <<"PLAIN">>,
+                   protocol := <<"AMQP 1-0">>,
+                   client_properties := #{version := _,
+                                          product := <<"AMQP 1.0 client from the RabbitMQ Project">>,
+                                          platform := _}},
+                 Connection1),
+    ConnectionName = maps:get(name, Connection1),
+    http_delete(Config,
+                "/connections/" ++ binary_to_list(uri_string:quote(ConnectionName)),
+                ?NO_CONTENT),
+    receive {amqp10_event,
+             {connection, C1,
+              {closed,
+               {internal_error,
+                <<"Connection forced: \"Closed via management plugin\"">>}}}} -> ok
+    after 5000 -> ct:fail(closed_timeout)
+    end,
+    eventually(?_assertNot(is_process_alive(C1))),
+    ?assertEqual([], http_get(Config, "/connections")),
+
+    {ok, C2} = amqp10_client:open_connection(OpnConf),
+    receive {amqp10_event, {connection, C2, opened}} -> ok
+    after 5000 -> ct:fail(opened_timeout)
+    end,
+    eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
+    http_delete(Config,
+                "/connections/username/guest",
+                ?NO_CONTENT),
+    receive {amqp10_event,
+             {connection, C2,
+              {closed,
+               {internal_error,
+                <<"Connection forced: \"Closed via management plugin\"">>}}}} -> ok
+    after 5000 -> ct:fail(closed_timeout)
+    end,
+    ?assertEqual([], http_get(Config, "/connections")),
+    ?assertEqual(0, length(rpc(Config, rabbit_amqp1_0, list_local, []))).
+
+flush(Prefix) ->
+    receive
+        Msg ->
+            ct:pal("~ts flushed: ~p~n", [Prefix, Msg]),
+            flush(Prefix)
+    after 1 ->
+              ok
+    end.
 
 multiple_invalid_connections_test(Config) ->
     Count = 100,
@@ -1063,21 +1135,21 @@ queues_test(Config) ->
                    auto_delete => false,
                    exclusive   => false,
                    arguments   => #{},
-                   storage_version => 2},
+                   storage_version => 1},
                  #{name        => <<"foo">>,
                    vhost       => <<"/">>,
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
                    arguments   => #{},
-                   storage_version => 2}], Queues),
+                   storage_version => 1}], Queues),
     assert_item(#{name        => <<"foo">>,
                   vhost       => <<"/">>,
                   durable     => true,
                   auto_delete => false,
                   exclusive   => false,
                   arguments   => #{},
-                  storage_version => 2}, Queue),
+                  storage_version => 1}, Queue),
 
     http_delete(Config, "/queues/%2F/foo", {group, '2xx'}),
     http_delete(Config, "/queues/%2F/baz", {group, '2xx'}),
@@ -1095,14 +1167,11 @@ crashed_queues_test(Config) ->
     QArgs = #{},
     http_put(Config, "/queues/%2F/crashingqueue", QArgs, {group, '2xx'}),
 
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-            rabbit_amqqueue_control, await_state, [Node, Q, running]),
+    ok = rpc(Config, rabbit_amqqueue_control, await_state, [Node, Q, running]),
 
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-        rabbit_amqqueue, kill_queue_hard, [Node, Q]),
+    ok = rpc(Config, rabbit_amqqueue, kill_queue_hard, [Node, Q]),
 
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-            rabbit_amqqueue_control, await_state, [Node, Q, crashed]),
+    ok = rpc(Config, rabbit_amqqueue_control, await_state, [Node, Q, crashed]),
 
     CrashedQueue  = http_get(Config, "/queues/%2F/crashingqueue"),
 
@@ -1427,6 +1496,18 @@ permissions_amqp_test(Config) ->
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     passed.
 
+permissions_queue_delete_test(Config) ->
+    QArgs = #{},
+    PermArgs = [{configure, <<"foo.*">>}, {write, <<".*">>}, {read, <<".*">>}],
+    http_put(Config, "/users/myuser", [{password, <<"myuser">>},
+                                       {tags, <<"management">>}], {group, '2xx'}),
+    http_put(Config, "/permissions/%2F/myuser", PermArgs, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/bar-queue", QArgs, {group, '2xx'}),
+    http_delete(Config, "/queues/%2F/bar-queue", "myuser", "myuser", ?NOT_AUTHORISED),
+    http_delete(Config, "/queues/%2F/bar-queue", {group, '2xx'}),
+    http_delete(Config, "/users/myuser", {group, '2xx'}),
+    passed.
+
 %% Opens a new connection and a channel on it.
 %% The channel is not managed by rabbit_ct_client_helpers and
 %% should be explicitly closed by the caller.
@@ -1649,12 +1730,12 @@ defs(Config, Key, URI, CreateMethod, Args, DeleteFun0, DeleteFun1) ->
     passed.
 
 register_parameters_and_policy_validator(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mgmt_runtime_parameters_util, register, []),
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mgmt_runtime_parameters_util, register_policy_validator, []).
+    rpc(Config, rabbit_mgmt_runtime_parameters_util, register, []),
+    rpc(Config, rabbit_mgmt_runtime_parameters_util, register_policy_validator, []).
 
 unregister_parameters_and_policy_validator(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mgmt_runtime_parameters_util, unregister_policy_validator, []),
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mgmt_runtime_parameters_util, unregister, []).
+    rpc(Config, rabbit_mgmt_runtime_parameters_util, unregister_policy_validator, []),
+    rpc(Config, rabbit_mgmt_runtime_parameters_util, unregister, []).
 
 definitions_test(Config) ->
     register_parameters_and_policy_validator(Config),
@@ -1918,9 +1999,7 @@ definitions_password_test(Config) ->
                                 password_hash => <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>,
                                 tags          => <<"management">>}
                              ]},
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbit,
-                                                                   password_hashing_module,
-                                                                   rabbit_password_hashing_sha512]),
+    rpc(Config, application, set_env, [rabbit, password_hashing_module, rabbit_password_hashing_sha512]),
 
     ExpectedDefault = #{name              => <<"myuser">>,
                         password_hash     => <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>,
@@ -2050,7 +2129,9 @@ queue_purge_test(Config) ->
     http_delete(Config, "/queues/%2F/myqueue/contents", {group, '2xx'}),
     http_delete(Config, "/queues/%2F/badqueue/contents", ?NOT_FOUND),
     http_delete(Config, "/queues/%2F/exclusive/contents", ?BAD_REQUEST),
-    http_delete(Config, "/queues/%2F/exclusive", {group, '2xx'}),
+    http_delete(Config, "/queues/%2F/exclusive", ?BAD_REQUEST),
+    #'basic.get_empty'{} =
+        amqp_channel:call(Ch, #'basic.get'{queue = <<"myqueue">>}),
     close_channel(Ch),
     close_connection(Conn),
     http_delete(Config, "/queues/%2F/myqueue", {group, '2xx'}),
@@ -2146,7 +2227,7 @@ exchanges_pagination_test(Config) ->
     %% for stats to update
     timer:sleep(1500),
 
-    Total     = length(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, list_names, [])),
+    Total = length(rpc(Config, rabbit_exchange, list_names, [])),
 
     PageOfTwo = http_get(Config, "/exchanges?page=1&page_size=2", ?OK),
     ?assertEqual(Total, maps:get(total_count, PageOfTwo)),
@@ -2249,7 +2330,7 @@ queue_pagination_test(Config) ->
     %% for stats to update
     timer:sleep(1500),
 
-    Total     = length(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list_names, [])),
+    Total = length(rpc(Config, rabbit_amqqueue, list_names, [])),
 
     PageOfTwo = http_get(Config, "/queues?page=1&page_size=2", ?OK),
     ?assertEqual(Total, maps:get(total_count, PageOfTwo)),
@@ -2258,8 +2339,8 @@ queue_pagination_test(Config) ->
     ?assertEqual(1, maps:get(page, PageOfTwo)),
     ?assertEqual(2, maps:get(page_size, PageOfTwo)),
     ?assertEqual(2, maps:get(page_count, PageOfTwo)),
-    assert_list([#{name => <<"test0">>, vhost => <<"/">>, storage_version => 2},
-                 #{name => <<"test2_reg">>, vhost => <<"/">>, storage_version => 2}
+    assert_list([#{name => <<"test0">>, vhost => <<"/">>, storage_version => 1},
+                 #{name => <<"test2_reg">>, vhost => <<"/">>, storage_version => 1}
                 ], maps:get(items, PageOfTwo)),
 
     SortedByName = http_get(Config, "/queues?sort=name&page=1&page_size=2", ?OK),
@@ -3159,7 +3240,7 @@ cors_test(Config) ->
     %% The Vary header should include "Origin" regardless of CORS configuration.
     {_, "accept, accept-encoding, origin"} = lists:keyfind("vary", 1, HdNoCORS),
     %% Enable CORS.
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_management, cors_allow_origins, ["https://rabbitmq.com"]]),
+    rpc(Config, application, set_env, [rabbitmq_management, cors_allow_origins, ["https://rabbitmq.com"]]),
     %% We should only receive allow-origin and allow-credentials from GET.
     {ok, {_, HdGetCORS, _}} = req(Config, get, "/overview",
                                   [{"origin", "https://rabbitmq.com"}, auth_header("guest", "guest")]),
@@ -3185,7 +3266,7 @@ cors_test(Config) ->
                                             {"access-control-request-headers", "x-piggy-bank"}]),
     {_, "x-piggy-bank"} = lists:keyfind("access-control-allow-headers", 1, HdAllowHeadersCORS),
     %% Disable preflight request caching.
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_management, cors_max_age, undefined]),
+    rpc(Config, application, set_env, [rabbitmq_management, cors_max_age, undefined]),
     %% We shouldn't receive max-age anymore.
     {ok, {_, HdNoMaxAgeCORS, _}} = req(Config, options, "/overview",
                                        [{"origin", "https://rabbitmq.com"}, auth_header("guest", "guest")]),
@@ -3194,7 +3275,7 @@ cors_test(Config) ->
     %% Check OPTIONS method in all paths
     check_cors_all_endpoints(Config),
     %% Disable CORS again.
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_management, cors_allow_origins, []]),
+    rpc(Config, application, set_env, [rabbitmq_management, cors_allow_origins, []]),
     passed.
 
 check_cors_all_endpoints(Config) ->
@@ -3529,21 +3610,16 @@ oauth_test(Config) ->
     ?assertEqual(false, maps:get(oauth_enabled, Map1)),
 
     %% Misconfiguration
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbitmq_management, oauth_enabled, true]),
+    rpc(Config, application, set_env, [rabbitmq_management, oauth_enabled, true]),
     Map2 = http_get(Config, "/auth", ?OK),
     ?assertEqual(false, maps:get(oauth_enabled, Map2)),
     ?assertEqual(<<>>, maps:get(oauth_client_id, Map2)),
     ?assertEqual(<<>>, maps:get(oauth_provider_url, Map2)),
     %% Valid config requires non empty OAuthClientId, OAuthClientSecret, OAuthResourceId, OAuthProviderUrl
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbitmq_management, oauth_client_id, "rabbit_user"]),
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbitmq_management, oauth_client_secret, "rabbit_secret"]),
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbitmq_management, oauth_provider_url, "http://localhost:8080/uaa"]),
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbitmq_auth_backend_oauth2, resource_server_id, "rabbitmq"]),
+    rpc(Config, application, set_env, [rabbitmq_management, oauth_client_id, "rabbit_user"]),
+    rpc(Config, application, set_env, [rabbitmq_management, oauth_client_secret, "rabbit_secret"]),
+    rpc(Config, application, set_env, [rabbitmq_management, oauth_provider_url, "http://localhost:8080/uaa"]),
+    rpc(Config, application, set_env, [rabbitmq_auth_backend_oauth2, resource_server_id, "rabbitmq"]),
     Map3 = http_get(Config, "/auth", ?OK),
     println(Map3),
     ?assertEqual(true, maps:get(oauth_enabled, Map3)),
@@ -3552,8 +3628,7 @@ oauth_test(Config) ->
     ?assertEqual(<<"rabbitmq">>, maps:get(resource_server_id, Map3)),
     ?assertEqual(<<"http://localhost:8080/uaa">>, maps:get(oauth_provider_url, Map3)),
     %% cleanup
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
-                                 [rabbitmq_management, oauth_enabled]).
+    rpc(Config, application, unset_env, [rabbitmq_management, oauth_enabled]).
 
 login_test(Config) ->
     http_put(Config, "/users/myuser", [{password, <<"myuser">>},
@@ -3594,8 +3669,7 @@ csp_headers_test(Config) ->
     ?assert(lists:keymember("content-security-policy", 1, HdGetCsp1)).
 
 disable_basic_auth_test(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbitmq_management, disable_basic_auth, true]),
+    rpc(Config, application, set_env, [rabbitmq_management, disable_basic_auth, true]),
     http_get(Config, "/overview", ?NOT_AUTHORISED),
 
     %% Ensure that a request without auth header does not return a basic auth prompt
@@ -3612,13 +3686,12 @@ disable_basic_auth_test(Config) ->
     http_delete(Config, "/queues/%2F/myqueue", ?NOT_AUTHORISED),
     http_get(Config, "/definitions", ?NOT_AUTHORISED),
     http_post(Config, "/definitions", [], ?NOT_AUTHORISED),
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbitmq_management, disable_basic_auth, 50]),
+    rpc(Config, application, set_env, [rabbitmq_management, disable_basic_auth, 50]),
     %% Defaults to 'false' when config is invalid
     http_get(Config, "/overview", ?OK).
 
 auth_attempts_test(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_core_metrics, reset_auth_attempt_metrics, []),
+    rpc(Config, rabbit_core_metrics, reset_auth_attempt_metrics, []),
     {Conn, _Ch} = open_connection_and_channel(Config),
     close_connection(Conn),
     [NodeData] = http_get(Config, "/nodes"),
@@ -3637,8 +3710,7 @@ auth_attempts_test(Config) ->
     ?assertEqual(2, maps:get(auth_attempts_succeeded, Http)),
     ?assertEqual(0, maps:get(auth_attempts_failed, Http)),
 
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbit, track_auth_attempt_source, true]),
+    rpc(Config, application, set_env, [rabbit, track_auth_attempt_source, true]),
     {Conn2, _Ch2} = open_connection_and_channel(Config),
     close_connection(Conn2),
     Map2 = http_get(Config, "/auth/attempts/" ++ atom_to_list(Node) ++ "/source", ?OK),
@@ -3675,10 +3747,9 @@ auth_attempts_test(Config) ->
 
 
 config_environment_test(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbitmq_management,
-                                  config_environment_test_env,
-                                  config_environment_test_value]),
+    rpc(Config, application, set_env, [rabbitmq_management,
+                                       config_environment_test_env,
+                                       config_environment_test_value]),
     ResultString = http_get_no_decode(Config, "/config/effective",
                                       "guest", "guest", ?OK),
     CleanString = re:replace(ResultString, "\\s+", "", [global,{return,list}]),
@@ -3707,9 +3778,7 @@ list_deprecated_features_test(Config) ->
                            deprecation_phase => permitted_by_default,
                            desc => Desc,
                            doc_url => DocUrl}},
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_feature_flags,
-                                      inject_test_feature_flags,
-                                      [FeatureFlags]),
+    ok = rpc(Config, rabbit_feature_flags, inject_test_feature_flags, [FeatureFlags]),
     Result = http_get(Config, "/deprecated-features", ?OK),
     Features = lists:filter(fun(Map) ->
                                     maps:get(name, Map) == atom_to_binary(?FUNCTION_NAME)
@@ -3730,9 +3799,7 @@ list_used_deprecated_features_test(Config) ->
                            desc => Desc,
                            doc_url => DocUrl,
                            callbacks => #{is_feature_used => {rabbit_mgmt_wm_deprecated_features, feature_is_used}}}},
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_feature_flags,
-                                      inject_test_feature_flags,
-                                      [FeatureFlags]),
+    ok = rpc(Config, rabbit_feature_flags, inject_test_feature_flags, [FeatureFlags]),
     Result = http_get(Config, "/deprecated-features/used", ?OK),
     Features = lists:filter(fun(Map) ->
                                     maps:get(name, Map) == atom_to_binary(?FUNCTION_NAME)

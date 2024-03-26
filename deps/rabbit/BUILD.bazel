@@ -59,6 +59,8 @@ _APP_ENV = """[
 	    {default_user_tags, [administrator]},
 	    {default_vhost, <<"/">>},
 	    {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
+	    {amqp1_0_default_user, <<"guest">>},
+	    {amqp1_0_default_vhost, <<"/">>},
 	    {loopback_users, [<<"guest">>]},
 	    {password_hashing_module, rabbit_password_hashing_sha256},
 	    {server_properties, []},
@@ -85,8 +87,6 @@ _APP_ENV = """[
 	                         ]},
 	    {halt_on_upgrade_failure, true},
 	    {ssl_apps, [asn1, crypto, public_key, ssl]},
-	    %% classic queue storage implementation version
-	    {classic_queue_default_version, 2},
 	    %% see rabbitmq-server#114
 	    {mirroring_flow_control, true},
 	    {mirroring_sync_batch_size, 4096},
@@ -236,6 +236,9 @@ rabbitmq_app(
 
 xref(
     name = "xref",
+    additional_libs = [
+        "//deps/rabbitmq_cli:erlang_app",  # keep
+    ],
     target = ":erlang_app",
 )
 
@@ -247,8 +250,10 @@ plt(
     ],
     for_target = ":erlang_app",
     ignore_warnings = True,
+    libs = ["//deps/rabbitmq_cli:elixir"],  # keep
     plt = "//:base_plt",
     deps = [
+        "//deps/rabbitmq_cli:erlang_app",  # keep
         "@looking_glass//:erlang_app",  # keep
     ],
 )
@@ -275,6 +280,7 @@ rabbitmq_home(
     plugins = [
         ":test_erlang_app",
         "//deps/rabbitmq_ct_client_helpers:erlang_app",
+        "//deps/rabbitmq_amqp1_0:erlang_app",
         "@inet_tcp_proxy_dist//:erlang_app",
         "@meck//:erlang_app",
     ],
@@ -324,13 +330,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    name = "cluster_rename_SUITE",
-    size = "large",
-    flaky = True,
-    shard_count = 3,
-)
-
-rabbitmq_integration_suite(
     name = "cluster_SUITE",
     size = "medium",
 )
@@ -349,7 +348,7 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_clustering_utils_beam",
     ],
-    shard_count = 48,
+    shard_count = 45,
     sharding_method = "case",
 )
 
@@ -549,6 +548,9 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "message_containers_SUITE",
     size = "medium",
+    additional_beam = [
+        ":test_queue_utils_beam",
+    ],
 )
 
 rabbitmq_integration_suite(
@@ -615,10 +617,7 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "per_vhost_connection_limit_SUITE",
     size = "medium",
-    additional_beam = [
-        ":cluster_rename_SUITE_beam_files",
-    ],
-    shard_count = 10,
+    shard_count = 9,
 )
 
 rabbitmq_integration_suite(
@@ -687,6 +686,9 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "queue_type_SUITE",
     size = "medium",
+    additional_beam = [
+        ":test_queue_utils_beam",
+    ],
 )
 
 rabbitmq_integration_suite(
@@ -825,13 +827,23 @@ rabbitmq_suite(
     ],
 )
 
+rabbitmq_suite(
+    name = "rabbit_access_control_SUITE",
+    runtime_deps = [
+        "@meck//:erlang_app",
+    ],
+    deps = [
+        "//deps/rabbit_common:erlang_app",
+    ],
+)
+
 rabbitmq_integration_suite(
     name = "rabbit_stream_queue_SUITE",
     size = "large",
     additional_beam = [
         ":test_queue_utils_beam",
     ],
-    shard_count = 21,
+    shard_count = 22,
     deps = [
         "@proper//:erlang_app",
     ],
@@ -1232,6 +1244,52 @@ rabbitmq_integration_suite(
     ],
 )
 
+rabbitmq_integration_suite(
+    name = "amqp_client_SUITE",
+    size = "large",
+    additional_beam = [
+        ":test_event_recorder_beam",
+    ],
+    shard_count = 3,
+    runtime_deps = [
+        "//deps/amqp10_client:erlang_app",
+    ],
+)
+
+rabbitmq_integration_suite(
+    name = "amqp_proxy_protocol_SUITE",
+    size = "medium",
+)
+
+rabbitmq_integration_suite(
+    name = "amqp_system_SUITE",
+    flaky = True,
+    shard_count = 2,
+    tags = [
+        "dotnet",
+    ],
+    test_env = {
+        "TMPDIR": "$TEST_TMPDIR",
+    },
+)
+
+rabbitmq_integration_suite(
+    name = "amqp_auth_SUITE",
+    additional_beam = [
+        ":test_event_recorder_beam",
+    ],
+    runtime_deps = [
+        "//deps/amqp10_client:erlang_app",
+    ],
+)
+
+rabbitmq_integration_suite(
+    name = "amqp_credit_api_v2_SUITE",
+    runtime_deps = [
+        "//deps/amqp10_client:erlang_app",
+    ],
+)
+
 assert_suites()
 
 filegroup(
@@ -1328,6 +1386,7 @@ eunit(
         ":test_test_util_beam",
         ":test_test_rabbit_event_handler_beam",
         ":test_clustering_utils_beam",
+        ":test_event_recorder_beam",
     ],
     target = ":test_erlang_app",
     test_env = {

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright © 2022-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2022-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_db_msup_m2k_converter).
@@ -46,13 +46,13 @@ init_copy_to_khepri(_StoreId, _MigrationId, Tables) ->
 %% @private
 
 copy_to_khepri(mirrored_sup_childspec = Table,
-               #mirrored_sup_childspec{key = {Group, {SimpleId, _}} = Key} = Record,
+               #mirrored_sup_childspec{key = {Group, Id} = Key} = Record,
                State) ->
     ?LOG_DEBUG(
        "Mnesia->Khepri data copy: [~0p] key: ~0p",
        [Table, Key],
        #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
-    Path = rabbit_db_msup:khepri_mirrored_supervisor_path(Group, SimpleId),
+    Path = rabbit_db_msup:khepri_mirrored_supervisor_path(Group, Id),
     rabbit_db_m2k_converter:with_correlation_id(
       fun(CorrId) ->
               Extra = #{async => CorrId},

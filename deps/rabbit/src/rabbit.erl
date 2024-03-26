@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit).
@@ -36,7 +36,7 @@
 
 %%---------------------------------------------------------------------------
 %% Boot steps.
--export([maybe_insert_default_data/0, boot_delegate/0, recover/0]).
+-export([maybe_insert_default_data/0, boot_delegate/0, recover/0, pg_local/0]).
 
 %% for tests
 -export([validate_msg_store_io_batch_size_and_credit_disc_bound/2]).
@@ -267,6 +267,12 @@
                     {mfa,         {logger, debug, ["'networking' boot step skipped and moved to end of startup", [], #{domain => ?RMQLOG_DOMAIN_GLOBAL}]}},
                     {requires,    notify_cluster}]}).
 
+-rabbit_boot_step({pg_local,
+                   [{description, "local-only pg scope"},
+                    {mfa,         {rabbit, pg_local, []}},
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
+
 %%---------------------------------------------------------------------------
 
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
@@ -403,20 +409,18 @@ run_prelaunch_second_phase() ->
 start_it(StartType) ->
     case spawn_boot_marker() of
         {ok, Marker} ->
-            T0 = erlang:timestamp(),
             ?LOG_INFO("RabbitMQ is asked to start...", [],
                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             try
-                {ok, _} = application:ensure_all_started(rabbitmq_prelaunch,
-                                                         StartType),
-                {ok, _} = application:ensure_all_started(rabbit,
-                                                         StartType),
-                ok = wait_for_ready_or_stopped(),
-
-                T1 = erlang:timestamp(),
-                ?LOG_INFO(
-                  "Time to start RabbitMQ: ~tp us",
-                  [timer:now_diff(T1, T0)]),
+                {Millis, ok} = timer:tc(
+                                 fun() ->
+                                         {ok, _} = application:ensure_all_started(
+                                                     rabbitmq_prelaunch, StartType),
+                                         {ok, _} = application:ensure_all_started(
+                                                     rabbit, StartType),
+                                         wait_for_ready_or_stopped()
+                                 end, millisecond),
+                ?LOG_INFO("Time to start RabbitMQ: ~b ms", [Millis]),
                 stop_boot_marker(Marker),
                 ok
             catch
@@ -752,7 +756,7 @@ status() ->
                  true ->
                      [{virtual_host_count, rabbit_vhost:count()},
                       {connection_count,
-                       length(rabbit_networking:connections_local()) +
+                       length(rabbit_networking:local_connections()) +
                        length(rabbit_networking:local_non_amqp_connections())},
                       {queue_count, total_queue_count()}];
                  false ->
@@ -1098,6 +1102,9 @@ recover() ->
     ok = rabbit_vhost:recover(),
     ok.
 
+pg_local() ->
+    rabbit_sup:start_child(pg, [node()]).
+
 -spec maybe_insert_default_data() -> 'ok'.
 
 maybe_insert_default_data() ->
@@ -1291,10 +1298,10 @@ print_banner() ->
               "~n  TLS Library: ~ts"
               "~n  Release series support status: ~ts"
               "~n"
-              "~n  Doc guides:  https://rabbitmq.com/documentation.html"
-              "~n  Support:     https://rabbitmq.com/contact.html"
-              "~n  Tutorials:   https://rabbitmq.com/getstarted.html"
-              "~n  Monitoring:  https://rabbitmq.com/monitoring.html"
+              "~n  Doc guides:  https://www.rabbitmq.com/docs/documentation"
+              "~n  Support:     https://www.rabbitmq.com/docs/contact"
+              "~n  Tutorials:   https://www.rabbitmq.com/tutorials"
+              "~n  Monitoring:  https://www.rabbitmq.com/docs/monitoring"
               "~n"
               "~n  Logs: ~ts" ++ LogFmt ++ "~n"
               "~n  Config file(s): ~ts" ++ CfgFmt ++ "~n"
@@ -1690,7 +1697,19 @@ persist_static_configuration() ->
        classic_queue_store_v2_max_cache_size,
        classic_queue_store_v2_check_crc32,
        incoming_message_interceptors
-      ]).
+      ]),
+
+    %% Disallow 0 as it means unlimited:
+    %% "If this field is zero or unset, there is no maximum
+    %% size imposed by the link endpoint." [AMQP 1.0 §2.7.3]
+    MaxMsgSize = case application:get_env(?MODULE, max_message_size) of
+                     {ok, Size}
+                       when is_integer(Size) andalso Size > 0 ->
+                         erlang:min(Size, ?MAX_MSG_SIZE);
+                     _ ->
+                         ?MAX_MSG_SIZE
+                 end,
+    ok = persistent_term:put(max_message_size, MaxMsgSize).
 
 persist_static_configuration(Params) ->
     App = ?MODULE,

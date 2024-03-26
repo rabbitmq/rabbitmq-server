@@ -4,7 +4,7 @@
 %%
 %% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2015-2016 AWeber Communications
-%% Copyright (c) 2016-2023 VMware, Inc. or its affiliates. All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved. All rights reserved.
 %%
 -module(rabbit_peer_discovery_util).
 
@@ -246,7 +246,7 @@ node_name_parse(Value) ->
 %% result of the IPv4 check is processed.
 %% @end
 %%--------------------------------------------------------------------
--spec node_name_parse(IsIPv4 :: true | false, Value :: string())
+-spec node_name_parse(IsIPv4 :: boolean(), Value :: string())
     -> string().
 node_name_parse(true, Value) -> Value;
 node_name_parse(false, Value) ->
@@ -410,7 +410,7 @@ as_list([]) -> [];
 as_list(Value) when is_atom(Value) ; is_integer(Value) ; is_binary(Value) ->
   [Value];
 as_list(Value) when is_list(Value) ->
-  Parse = fun(T) -> 
+  Parse = fun(T) ->
     S = string:strip(T),
     case string:to_float(S) of
       {Float, []} -> Float;

@@ -56,16 +56,16 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ListPoliciesThatMatchCommand do
     end
   end
 
-  def output([], %{node: node_name, formatter: "json"}) do
+  def output([], %{node: _node_name, formatter: "json"}) do
     {:ok, %{"result" => "ok", "policies" => []}}
   end
 
-  def output({:error, :not_found}, %{node: node_name, formatter: "json"}) do
+  def output({:error, :not_found}, %{node: _node_name, formatter: "json"}) do
     {:ok,
      %{"result" => "error", "message" => "object (queue, exchange) not found", "policies" => []}}
   end
 
-  def output(value, %{node: node_name, formatter: "json"}) when is_list(value) do
+  def output(value, %{node: _node_name, formatter: "json"}) when is_list(value) do
     {:ok, %{"result" => "ok", "policies" => value}}
   end
 

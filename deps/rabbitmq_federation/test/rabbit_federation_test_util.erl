@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_federation_test_util).
@@ -193,7 +193,7 @@ expect(Payloads, Timeout) ->
                 false -> ?assert(false, rabbit_misc:format("received an unexpected payload ~tp", [Payload]))
             end
     after Timeout ->
-        ?assert(false, rabbit_misc:format("Did not receive expected payloads ~tp in time", [Payloads]))
+              ct:fail("Did not receive expected payloads ~tp in time", [Payloads])
     end.
 
 expect_empty(Ch, Q) ->

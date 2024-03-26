@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -define(APP_NAME, rabbitmq_mqtt).
@@ -11,8 +11,10 @@
 -define(PERSISTENT_TERM_MAILBOX_SOFT_LIMIT, mqtt_mailbox_soft_limit).
 -define(PERSISTENT_TERM_EXCHANGE, mqtt_exchange).
 -define(DEFAULT_MQTT_EXCHANGE, <<"amq.topic">>).
--define(MQTT_GUIDE_URL, <<"https://rabbitmq.com/mqtt.html">>).
+-define(MQTT_GUIDE_URL, <<"https://rabbitmq.com/docs/mqtt/">>).
 
+-define(MQTT_TCP_PROTOCOL, 'mqtt').
+-define(MQTT_TLS_PROTOCOL, 'mqtt/ssl').
 -define(MQTT_PROTO_V3, mqtt310).
 -define(MQTT_PROTO_V4, mqtt311).
 -define(MQTT_PROTO_V5, mqtt50).

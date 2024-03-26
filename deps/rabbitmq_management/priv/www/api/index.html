@@ -216,10 +216,17 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td class="path">/api/nodes/<i>name</i></td>
         <td>
-          An individual node in the RabbitMQ cluster. Add
-          "?memory=true" to get memory statistics, and "?binary=true"
-          to get a breakdown of binary memory use (may be expensive if
-          there are many small binaries in the system).
+          Returns information about an individual node in the RabbitMQ cluster.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="path">/api/nodes/<i>name</i>/memory</td>
+        <td>
+          Returns a <a href="https://rabbitmq.com/memory-use.html">memory usage breakdown</a> of an individual node in the RabbitMQ cluster.
         </td>
       </tr>
       <tr>
@@ -760,7 +767,7 @@ vary: accept, accept-encoding, origin</pre>
         <td>An individual user. To PUT a user, you will need a body looking something like this:
 <pre>{"password":"secret","tags":"administrator"}</pre>
 or:
-<pre>{"password_hash":"2lmoth8l4H0DViLaK9Fxi6l9ds8=", "tags":"administrator"}</pre>
+<pre>{"password_hash":"2lmoth8l4H0DViLaK9Fxi6l9ds8=", "tags":["administrator"]}</pre>
         The <code>tags</code> key is mandatory. Either
         <code>password</code> or <code>password_hash</code>
         can be set. If neither are set the user will not be able to log in with a password,

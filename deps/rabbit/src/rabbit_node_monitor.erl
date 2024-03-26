@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_node_monitor).
@@ -168,7 +168,7 @@ notify_node_up() ->
 
 notify_joined_cluster() ->
     NewMember = node(),
-    Nodes = rabbit_nodes:list_running() -- [NewMember],
+    Nodes = alive_rabbit_nodes() -- [NewMember],
     gen_server:abcast(Nodes, ?SERVER,
                       {joined_cluster, node(), rabbit_db_cluster:node_type()}),
 
@@ -177,7 +177,7 @@ notify_joined_cluster() ->
 -spec notify_left_cluster(node()) -> 'ok'.
 
 notify_left_cluster(Node) ->
-    Nodes = rabbit_nodes:list_running(),
+    Nodes = alive_rabbit_nodes(),
     gen_server:abcast(Nodes, ?SERVER, {left_cluster, Node}),
     ok.
 
@@ -1020,11 +1020,13 @@ alive_nodes() -> rabbit_nodes:list_reachable().
 
 alive_nodes(Nodes) -> rabbit_nodes:filter_reachable(Nodes).
 
-alive_rabbit_nodes() -> rabbit_nodes:list_running().
+alive_rabbit_nodes() ->
+    alive_rabbit_nodes(rabbit_nodes:list_members()).
 
 -spec alive_rabbit_nodes([node()]) -> [node()].
 
 alive_rabbit_nodes(Nodes) ->
+    ok = ping(Nodes),
     rabbit_nodes:filter_running(Nodes).
 
 %% This one is allowed to connect!
@@ -1032,7 +1034,10 @@ alive_rabbit_nodes(Nodes) ->
 -spec ping_all() -> 'ok'.
 
 ping_all() ->
-    [net_adm:ping(N) || N <- rabbit_nodes:list_members()],
+    ping(rabbit_nodes:list_members()).
+
+ping(Nodes) ->
+    _ = [net_adm:ping(N) || N <- Nodes],
     ok.
 
 possibly_partitioned_nodes() ->

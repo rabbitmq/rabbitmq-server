@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_auth_backend_cache).
@@ -13,7 +13,7 @@
 
 -export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/4, check_topic_access/4,
-         state_can_expire/0]).
+         expiry_timestamp/1]).
 
 %% API
 
@@ -60,7 +60,7 @@ check_topic_access(#auth_user{} = AuthUser,
             (_)                -> unknown
         end).
 
-state_can_expire() -> false.
+expiry_timestamp(_) -> never.
 
 %%
 %% Implementation

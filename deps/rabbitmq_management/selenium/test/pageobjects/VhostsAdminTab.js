@@ -25,7 +25,7 @@ module.exports = class VhostsAdminTab extends AdminTab {
     return await this.searchForVhosts(vhost, regex) != undefined
   }
   async clickOnVhost(vhost_rows, vhost) {
-     let links = await vhost_rows.findElements(By.css("td a"))
+     const links = await vhost_rows.findElements(By.css("td a"))
      for (let link of links) {
        let text = await link.getText()
        if ( text === "/" ) return link.click()

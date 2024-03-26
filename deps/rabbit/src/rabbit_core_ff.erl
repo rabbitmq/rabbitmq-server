@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_core_ff).
@@ -123,6 +123,8 @@
 -rabbit_feature_flag(
    {message_containers,
     #{desc          => "Message containers.",
+      %%TODO Once lower version node in mixed versions is bumped to 3.13,
+      %% make 'required' for upgrading AMQP 1.0 from 3.13 to 4.0
       stability     => stable,
       depends_on    => [feature_flags_v2]
      }}).
@@ -147,4 +149,26 @@
                          {rabbit_khepri, khepri_db_migration_enable},
                          post_enable =>
                          {rabbit_khepri, khepri_db_migration_post_enable}}
+     }}).
+
+-rabbit_feature_flag(
+   {stream_update_config_command,
+    #{desc          => "A new internal command that is used to update streams as "
+                        "part of a policy.",
+      stability     => stable,
+      depends_on    => [stream_queue]
+     }}).
+
+-rabbit_feature_flag(
+   {quorum_queue_non_voters,
+    #{desc =>
+          "Allows new quorum queue members to be added as non voters initially.",
+      stability => stable,
+      depends_on => [quorum_queue]
+     }}).
+
+-rabbit_feature_flag(
+   {credit_api_v2,
+    #{desc          => "Credit API v2 between queue clients and queue processes",
+      stability     => stable
      }}).

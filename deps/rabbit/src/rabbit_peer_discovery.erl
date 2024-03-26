@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_peer_discovery).
@@ -355,9 +355,8 @@ check_discovered_nodes_list_validity(DiscoveredNodes, BadNodeType)
 %% @private
 
 query_node_props(Nodes) when Nodes =/= [] ->
-    {Prefix, _Suffix} = rabbit_nodes_common:parts(node()),
-    PeerName = lists:flatten(
-                 io_lib:format("~s-peerdisc-~s", [Prefix, os:getpid()])),
+    {Prefix, Suffix} = rabbit_nodes_common:parts(node()),
+    PeerName = peer:random_name(Prefix),
     %% We go through a temporary hidden node to query all other discovered
     %% peers properties, instead of querying them directly.
     %%
@@ -372,18 +371,40 @@ query_node_props(Nodes) when Nodes =/= [] ->
     %%
     %% By using a temporary intermediate hidden node, we ask Erlang not to
     %% connect everyone automatically.
+    Context = rabbit_prelaunch:get_context(),
     VMArgs0 = ["-hidden"],
-    VMArgs1 = case rabbit_prelaunch:get_context() of
+    VMArgs1 = case init:get_argument(boot) of
+                  {ok, [[BootFileArg]]} ->
+                      ["-boot", BootFileArg | VMArgs0];
+                  _ ->
+                      %% Note: start_clean is the default boot file
+                      %% defined in rabbitmq-defaults / CLEAN_BOOT_FILE
+                      ["-boot", "start_clean" | VMArgs0]
+              end,
+    VMArgs2 = case Context of
                   #{erlang_cookie := ErlangCookie,
                     var_origins := #{erlang_cookie := environment}} ->
-                      ["-setcookie", atom_to_list(ErlangCookie) | VMArgs0];
+                      ["-setcookie", atom_to_list(ErlangCookie) | VMArgs1];
                   _ ->
-                      VMArgs0
+                      VMArgs1
               end,
-    case peer:start(#{name => PeerName, args => VMArgs1}) of
+    VMArgs3 = maybe_add_tls_arguments(VMArgs2),
+    PeerStartArg = case Context of
+                       #{nodename_type := longnames} ->
+                           #{name => PeerName,
+                             host => Suffix,
+                             longnames => true,
+                             args => VMArgs3};
+                       _ ->
+                           #{name => PeerName,
+                             args => VMArgs3}
+                   end,
+    ?LOG_DEBUG("Peer discovery: peer node arguments: ~tp",
+               [PeerStartArg]),
+    case peer:start(PeerStartArg) of
         {ok, Pid, Peer} ->
             ?LOG_DEBUG(
-               "Peer discovery: use temporary hidden node '~ts' to query "
+               "Peer discovery: using temporary hidden node '~ts' to query "
                "discovered peers properties",
                [Peer],
                #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
@@ -401,6 +422,102 @@ query_node_props(Nodes) when Nodes =/= [] ->
     end;
 query_node_props([]) ->
     [].
+
+maybe_add_tls_arguments(VMArgs0) ->
+    case init:get_argument(proto_dist) of
+        {ok, [["inet_tls"]]} ->
+            add_tls_arguments(inet_tls, VMArgs0);
+        {ok, [["inet6_tls"]]} ->
+            add_tls_arguments(inet6_tls, VMArgs0);
+        _ ->
+            VMArgs0
+    end.
+
+add_tls_arguments(InetDistModule, VMArgs0) ->
+    VMArgs1 = case InetDistModule of
+                  inet_tls ->
+                      ProtoDistArg = ["-proto_dist", "inet_tls" | VMArgs0],
+                      ["-pa", filename:dirname(code:which(inet_tls_dist))
+                       | ProtoDistArg];
+                  inet6_tls ->
+                      ProtoDistArg = ["-proto_dist", "inet6_tls" | VMArgs0],
+                      ["-pa", filename:dirname(code:which(inet6_tls_dist))
+                       | ProtoDistArg]
+              end,
+    %% In the next case, RabbitMQ has been configured with additional Erlang VM
+    %% arguments such as this:
+    %%
+    %% SERVER_ADDITIONAL_ERL_ARGS="-pa $ERL_SSL_PATH -proto_dist inet_tls
+    %%     -ssl_dist_opt server_cacertfile /etc/rabbitmq/ca_certificate.pem
+    %%     -ssl_dist_opt server_certfile /etc/rabbitmq/server_certificate.pem
+    %%     -ssl_dist_opt server_keyfile /etc/rabbitmq/server_key.pem
+    %%     -ssl_dist_opt server_verify verify_peer
+    %%     -ssl_dist_opt server_fail_if_no_peer_cert true
+    %%     -ssl_dist_opt client_cacertfile /etc/rabbitmq/ca_certificate.pem
+    %%     -ssl_dist_opt client_certfile /etc/rabbitmq/client_certificate.pem
+    %%     -ssl_dist_opt client_keyfile /etc/rabbitmq/client_key.pem
+    %%     -ssl_dist_opt client_verify verify_peer"
+    %%
+    %% `init:get_argument(ssl_dist_opt)' returns the following data structure:
+    %%
+    %% (rabbit@rmq0.local)1> init:get_argument(ssl_dist_opt).
+    %% {ok,[["server_cacertfile", "/etc/rabbitmq/ca_certificate.pem"],
+    %%      ["server_certfile", "/etc/rabbitmq/server_certificate.pem"],
+    %%      ["server_keyfile","/etc/rabbitmq/server_key.pem"],
+    %%      ["server_verify","verify_peer"],
+    %%      ["server_fail_if_no_peer_cert","true"],
+    %%      ["client_cacertfile","/etc/rabbitmq/ca_certificate.pem"],
+    %%      ["client_certfile", "/etc/rabbitmq/client_certificate.pem"],
+    %%      ["client_keyfile","/etc/rabbitmq/client_key.pem"],
+    %%      ["client_verify","verify_peer"]]}
+    %%
+    %% Which is then translated into arguments to `peer:start/1':
+    %% #{args =>
+    %%    ["-ssl_dist_opt","server_cacertfile",
+    %%     "/etc/rabbitmq/ca_certificate.pem",
+    %%     "-ssl_dist_opt","server_certfile",
+    %%     "/etc/rabbitmq/server_rmq2.local_certificate.pem",
+    %%     "-ssl_dist_opt","server_keyfile",
+    %%     "/etc/rabbitmq/server_rmq2.local_key.pem",
+    %%     "-ssl_dist_opt","server_verify",
+    %%     "verify_peer","-ssl_dist_opt",
+    %%     "server_fail_if_no_peer_cert",
+    %%     "true","-ssl_dist_opt",
+    %%     "client_cacertfile",
+    %%     "/etc/rabbitmq/ca_certificate.pem",
+    %%     "-ssl_dist_opt","client_certfile",
+    %%     "/etc/rabbitmq/client_rmq2.local_certificate.pem",
+    %%     "-ssl_dist_opt","client_keyfile",
+    %%     "/etc/rabbitmq/client_rmq2.local_key.pem",
+    %%     "-ssl_dist_opt","client_verify",
+    %%     "verify_peer","-pa",
+    %%     "/usr/local/lib/erlang/lib/ssl-11.0.3/ebin",
+    %%     "-proto_dist","inet_tls","-boot",
+    %%     "no_dot_erlang","-hidden"],
+    VMArgs2 = case init:get_argument(ssl_dist_opt) of
+                  {ok, SslDistOpts0} ->
+                      SslDistOpts1 = [["-ssl_dist_opt" | SslDistOpt]
+                                      || SslDistOpt <- SslDistOpts0],
+                      SslDistOpts2 = lists:concat(SslDistOpts1),
+                      SslDistOpts2 ++ VMArgs1;
+                  _ ->
+                      VMArgs1
+              end,
+    %% In the next case, RabbitMQ has been configured with additional Erlang VM
+    %% arguments such as this:
+    %%
+    %% SERVER_ADDITIONAL_ERL_ARGS="-pa $ERL_SSL_PATH -proto_dist inet_tls
+    %%     -ssl_dist_optfile /etc/rabbitmq/inter_node_tls.config"
+    %%
+    %% This code adds the `ssl_dist_optfile' argument to the peer node's
+    %% argument list.
+    VMArgs3 = case init:get_argument(ssl_dist_optfile) of
+                  {ok, [[SslDistOptfileArg]]} ->
+                      ["-ssl_dist_optfile", SslDistOptfileArg | VMArgs2];
+                  _ ->
+                      VMArgs2
+              end,
+    VMArgs3.
 
 do_query_node_props(Nodes) when Nodes =/= [] ->
     %% Make sure all log messages are forwarded from this temporary hidden

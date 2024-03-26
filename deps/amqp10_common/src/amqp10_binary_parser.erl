@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(amqp10_binary_parser).
@@ -52,8 +52,8 @@ parse_primitive(16#52, <<V:8/unsigned,  R/binary>>) -> {{uint, V},       R};
 parse_primitive(16#53, <<V:8/unsigned,  R/binary>>) -> {{ulong, V},      R};
 parse_primitive(16#54, <<V:8/signed,    R/binary>>) -> {{int, V},        R};
 parse_primitive(16#55, <<V:8/signed,    R/binary>>) -> {{long, V},       R};
-parse_primitive(16#56, <<0:8/unsigned,  R/binary>>) -> {{boolean, false},R};
-parse_primitive(16#56, <<1:8/unsigned,  R/binary>>) -> {{boolean, true}, R};
+parse_primitive(16#56, <<0:8/unsigned,  R/binary>>) -> {false,           R};
+parse_primitive(16#56, <<1:8/unsigned,  R/binary>>) -> {true,            R};
 parse_primitive(16#60, <<V:16/unsigned, R/binary>>) -> {{ushort, V},     R};
 parse_primitive(16#61, <<V:16/signed,   R/binary>>) -> {{short, V},      R};
 parse_primitive(16#70, <<V:32/unsigned, R/binary>>) -> {{uint, V},       R};
@@ -117,11 +117,8 @@ parse_compound(UnitSize, Bin) ->
 
 parse_compound1(0, <<>>, List) ->
     lists:reverse(List);
-parse_compound1(_Left, <<>>, List) ->
-    case application:get_env(rabbitmq_amqp1_0, protocol_strict_mode) of
-        {ok, false} -> lists:reverse(List); %% ignore miscount
-        {ok, true}  -> throw(compound_datatype_miscount)
-    end;
+parse_compound1(_Left, <<>>, _List) ->
+    throw(compound_datatype_miscount);
 parse_compound1(Count, Bin, Acc) ->
     {Value, Rest} = parse(Bin),
     parse_compound1(Count - 1, Rest, [Value | Acc]).
@@ -224,8 +221,8 @@ parse_all(<<16#52, V:8/unsigned,  R/binary>>) -> [{uint, V} | parse_all(R)];
 parse_all(<<16#53, V:8/unsigned,  R/binary>>) -> [{ulong, V} | parse_all(R)];
 parse_all(<<16#54, V:8/signed,    R/binary>>) -> [{int, V} | parse_all(R)];
 parse_all(<<16#55, V:8/signed,    R/binary>>) -> [{long, V} | parse_all(R)];
-parse_all(<<16#56, 0:8/unsigned,  R/binary>>) -> [{boolean, false} | parse_all(R)];
-parse_all(<<16#56, 1:8/unsigned,  R/binary>>) -> [{boolean, true} | parse_all(R)];
+parse_all(<<16#56, 0:8/unsigned,  R/binary>>) -> [false | parse_all(R)];
+parse_all(<<16#56, 1:8/unsigned,  R/binary>>) -> [true  | parse_all(R)];
 parse_all(<<16#60, V:16/unsigned, R/binary>>) -> [{ushort, V} | parse_all(R)];
 parse_all(<<16#61, V:16/signed,   R/binary>>) -> [{short, V} | parse_all(R)];
 parse_all(<<16#70, V:32/unsigned, R/binary>>) -> [{uint, V} | parse_all(R)];

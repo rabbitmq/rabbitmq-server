@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 -module(rabbit_auth_backend_oauth2_test_util).
 
@@ -40,12 +40,18 @@ sign_token(Token, Jwk, Jws) ->
     jose_jws:compact(Signed).
 
 fixture_jwk() ->
+  fixture_jwk(<<"token-key">>).
+
+fixture_jwk(TokenKey) ->
+    fixture_jwk(TokenKey, <<"dG9rZW5rZXk">>).
+  
+fixture_jwk(TokenKey, K) ->
     #{<<"alg">> => <<"HS256">>,
-      <<"k">> => <<"dG9rZW5rZXk">>,
-      <<"kid">> => <<"token-key">>,
+      <<"k">> => K,
+      <<"kid">> => TokenKey,
       <<"kty">> => <<"oct">>,
       <<"use">> => <<"sig">>,
-      <<"value">> => <<"tokenkey">>}.
+      <<"value">> => TokenKey}.
 
 full_permission_scopes() ->
     [<<"rabbitmq.configure:*/*">>,
@@ -78,7 +84,6 @@ fixture_token_with_scopes(Scopes) ->
 token_with_scopes_and_expiration(Scopes, Expiration) ->
     %% expiration is a timestamp with precision in seconds
     #{<<"exp">> => Expiration,
-      <<"kid">> => <<"token-key">>,
       <<"iss">> => <<"unit_test">>,
       <<"foo">> => <<"bar">>,
       <<"aud">> => [<<"rabbitmq">>],
@@ -87,7 +92,6 @@ token_with_scopes_and_expiration(Scopes, Expiration) ->
 token_without_scopes() ->
     %% expiration is a timestamp with precision in seconds
     #{
-      <<"kid">> => <<"token-key">>,
       <<"iss">> => <<"unit_test">>,
       <<"foo">> => <<"bar">>,
       <<"aud">> => [<<"rabbitmq">>]
@@ -115,14 +119,12 @@ fixture_token_with_full_permissions() ->
 plain_token_without_scopes_and_aud() ->
   %% expiration is a timestamp with precision in seconds
   #{<<"exp">> => default_expiration_moment(),
-    <<"kid">> => <<"token-key">>,
     <<"iss">> => <<"unit_test">>,
     <<"foo">> => <<"bar">>}.
 
 token_with_scope_alias_in_scope_field(Value) ->
     %% expiration is a timestamp with precision in seconds
     #{<<"exp">> => default_expiration_moment(),
-      <<"kid">> => <<"token-key">>,
       <<"iss">> => <<"unit_test">>,
       <<"foo">> => <<"bar">>,
       <<"aud">> => [<<"rabbitmq">>],
@@ -131,7 +133,6 @@ token_with_scope_alias_in_scope_field(Value) ->
 token_with_scope_alias_in_claim_field(Claims, Scopes) ->
     %% expiration is a timestamp with precision in seconds
     #{<<"exp">> => default_expiration_moment(),
-      <<"kid">> => <<"token-key">>,
       <<"iss">> => <<"unit_test">>,
       <<"foo">> => <<"bar">>,
       <<"aud">> => [<<"rabbitmq">>],

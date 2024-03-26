@@ -38,7 +38,7 @@
 %% 4) normal, and {shutdown, _} exit reasons are all treated the same
 %%    (i.e. are regarded as normal exits)
 %%
-%% All modifications are (C) 2010-2023 VMware, Inc. or its affiliates.
+%% All modifications are (C) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 %% %CopyrightBegin%
 %%
@@ -878,17 +878,13 @@ do_restart_delay(Reason,
 
 maybe_restart(Strategy, Child, State) ->
     case restart(Strategy, Child, State) of
-        {{try_again, Reason}, NState2} ->
+        {{try_again, TryAgainId}, NState2} ->
             %% Leaving control back to gen_server before
             %% trying again. This way other incoming requests
             %% for the supervisor can be handled - e.g. a
             %% shutdown request for the supervisor or the
             %% child.
-            Id = if ?is_simple(State) -> Child#child.pid;
-                    true -> Child#child.id
-                 end,
-            Args = [self(), Id, Reason],
-            {ok, _TRef} = timer:apply_after(0, ?MODULE, try_again_restart, Args),
+            try_again_restart(TryAgainId),
             {ok, NState2};
         Other ->
             Other

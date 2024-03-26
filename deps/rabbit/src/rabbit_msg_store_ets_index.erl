@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_msg_store_ets_index).
@@ -12,7 +12,7 @@
 -behaviour(rabbit_msg_store_index).
 
 -export([new/1, recover/1,
-         lookup/2, select_from_file/3, select_all_from_file/2, insert/2, update/2, update_fields/3, delete/2,
+         lookup/2, select_from_file/3, insert/2, update/2, update_fields/3, delete/2,
          delete_object/2, clean_up_temporary_reference_count_entries_without_file/1, terminate/1]).
 
 -define(MSG_LOC_NAME, rabbit_msg_store_ets_index).
@@ -48,11 +48,6 @@ lookup(Key, State) ->
 select_from_file(MsgIds, File, State) ->
     All = [lookup(Id, State) || Id <- MsgIds],
     [MsgLoc || MsgLoc=#msg_location{file=MsgFile} <- All, MsgFile =:= File].
-
-%% Note that this function is not terribly efficient and should only be
-%% used for compaction or similar.
-select_all_from_file(File, State) ->
-    ets:match_object(State #state.table, #msg_location { file = File, _ = '_' }).
 
 insert(Obj, State) ->
     true = ets:insert_new(State #state.table, Obj),

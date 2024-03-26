@@ -101,7 +101,6 @@ rabbitmq_home(
     name = "broker-for-tests-home",
     plugins = [
         "//deps/rabbit:erlang_app",
-        "//deps/rabbitmq_amqp1_0:erlang_app",
         ":erlang_app",
     ],
 )
@@ -161,6 +160,19 @@ rabbitmq_suite(
     size = "medium",
     deps = [
         "//deps/rabbit_common:erlang_app",
+    ],
+)
+
+rabbitmq_integration_suite(
+    name = "rolling_upgrade_SUITE",
+    additional_beam = [
+        "test/shovel_test_utils.beam",
+    ],
+    # FIXME: As of this writing, there is a bug in Khepri that makes this
+    # testsuite unstable.
+    flaky = True,
+    deps = [
+        "@khepri//:erlang_app",
     ],
 )
 

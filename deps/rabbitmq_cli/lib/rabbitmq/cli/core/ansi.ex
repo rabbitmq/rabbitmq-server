@@ -6,30 +6,36 @@
 
 defmodule RabbitMQ.CLI.Core.ANSI do
   def bright(string) do
-    "#{IO.ANSI.bright()}#{string}#{IO.ANSI.reset()}"
+    maybe_colorize([:bright, string])
   end
 
   def red(string) do
-    "#{IO.ANSI.red()}#{string}#{IO.ANSI.reset()}"
+    maybe_colorize([:red, string])
   end
 
   def yellow(string) do
-    "#{IO.ANSI.yellow()}#{string}#{IO.ANSI.reset()}"
+    maybe_colorize([:yellow, string])
   end
 
   def magenta(string) do
-    "#{IO.ANSI.magenta()}#{string}#{IO.ANSI.reset()}"
+    maybe_colorize([:magenta, string])
   end
 
   def bright_red(string) do
-    "#{IO.ANSI.bright()}#{IO.ANSI.red()}#{string}#{IO.ANSI.reset()}"
+    maybe_colorize([:bright, :red, string])
   end
 
   def bright_yellow(string) do
-    "#{IO.ANSI.bright()}#{IO.ANSI.yellow()}#{string}#{IO.ANSI.reset()}"
+    maybe_colorize([:bright, :yellow, string])
   end
 
   def bright_magenta(string) do
-    "#{IO.ANSI.bright()}#{IO.ANSI.magenta()}#{string}#{IO.ANSI.reset()}"
+    maybe_colorize([:bright, :magenta, string])
+  end
+
+  defp maybe_colorize(ascii_esc_and_string) do
+    ascii_esc_and_string
+    |> IO.ANSI.format()
+    |> IO.chardata_to_string()
   end
 end

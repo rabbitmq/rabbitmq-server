@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 -module(auth_SUITE).
 -compile([export_all,
@@ -1092,7 +1092,8 @@ vhost_connection_limit(Config) ->
     unlink(C3),
     ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C3)),
     ok = emqtt:disconnect(C1),
-    ok = emqtt:disconnect(C2).
+    ok = emqtt:disconnect(C2),
+    ok = rabbit_ct_broker_helpers:clear_vhost_limit(Config, 0, <<"/">>).
 
 vhost_queue_limit(Config) ->
     ok = rabbit_ct_broker_helpers:set_vhost_limit(Config, 0, <<"/">>, max_queues, 1),
@@ -1105,7 +1106,8 @@ vhost_queue_limit(Config) ->
                  emqtt:subscribe(C, [{<<"topic1">>, qos0},
                                      {<<"topic2">>, qos1},
                                      {<<"topic3">>, qos1}])),
-    ok = assert_connection_closed(C).
+    ok = assert_connection_closed(C),
+    ok = rabbit_ct_broker_helpers:clear_vhost_limit(Config, 0, <<"/">>).
 
 user_connection_limit(Config) ->
     DefaultUser = <<"guest">>,

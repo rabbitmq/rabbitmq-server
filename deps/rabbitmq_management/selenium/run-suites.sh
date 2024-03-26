@@ -11,7 +11,7 @@ NC='\033[0m'
 SUCCESSFUL_SUITES=()
 FAILED_SUITES=()
 
-TOTAL_SUITES=`wc -l $SCRIPT/$SUITE_FILE | awk '{print $1}'`
+TOTAL_SUITES=$(wc -l $SCRIPT/$SUITE_FILE | awk '{print $1}')
 
 while read SUITE
 do

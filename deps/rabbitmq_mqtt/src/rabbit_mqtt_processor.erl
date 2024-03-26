@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 -module(rabbit_mqtt_processor).
 
@@ -33,6 +33,7 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
+-include_lib("rabbit/include/mc.hrl").
 -include("rabbit_mqtt.hrl").
 -include("rabbit_mqtt_packet.hrl").
 
@@ -143,9 +144,9 @@ process_connect(
                "protocol version: ~p, keepalive: ~p, property names: ~p",
                [ClientId0, Username0, CleanStart, ProtoVer, KeepaliveSecs, maps:keys(ConnectProps)]),
     SslLoginName = ssl_login_name(Socket),
-    Flow = case rabbit_misc:get_env(rabbit, mirroring_flow_control, true) of
-               true   -> flow;
-               false  -> noflow
+    Flow = case application:get_env(rabbit, mirroring_flow_control) of
+               {ok, true} -> flow;
+               {ok, false} -> noflow
            end,
     MaxPacketSize = maps:get('Maximum-Packet-Size', ConnectProps, ?MAX_PACKET_SIZE),
     TopicAliasMax = persistent_term:get(?PERSISTENT_TERM_TOPIC_ALIAS_MAXIMUM),
@@ -1053,7 +1054,7 @@ check_vhost_connection_limit(VHost) ->
 
 check_vhost_alive(VHost) ->
     case rabbit_vhost_sup_sup:is_vhost_alive(VHost) of
-        true  ->
+        true ->
             ok;
         false ->
             ?LOG_ERROR("MQTT connection failed: vhost '~s' is down", [VHost]),
@@ -1444,7 +1445,7 @@ consume(Q, QoS, #state{
                              channel_pid => self(),
                              limiter_pid => none,
                              limiter_active => false,
-                             prefetch_count => Prefetch,
+                             mode => {simple_prefetch, Prefetch},
                              consumer_tag => ?CONSUMER_TAG,
                              exclusive_consume => false,
                              args => [],
@@ -1549,8 +1550,8 @@ publish_to_queues(
                     conn_name = ConnName,
                     trace_state = TraceState},
          auth_state = #auth_state{user = #user{username = Username}}} = State) ->
-    Anns = #{exchange => ExchangeNameBin,
-             routing_keys => [mqtt_to_amqp(Topic)]},
+    Anns = #{?ANN_EXCHANGE => ExchangeNameBin,
+             ?ANN_ROUTING_KEYS => [mqtt_to_amqp(Topic)]},
     Msg0 = mc:init(mc_mqtt, MqttMsg, Anns, mc_env()),
     Msg = rabbit_message_interceptor:intercept(Msg0),
     case rabbit_exchange:lookup(ExchangeName) of
@@ -1710,7 +1711,8 @@ send_disconnect(_, _) ->
     ok.
 
 -spec terminate(boolean(), rabbit_event:event_props(), state()) -> ok.
-terminate(SendWill, Infos, State) ->
+terminate(SendWill, Infos, State = #state{queue_states = QStates}) ->
+    rabbit_queue_type:close(QStates),
     rabbit_core_metrics:connection_closed(self()),
     rabbit_event:notify(connection_closed, Infos),
     rabbit_networking:unregister_non_amqp_connection(self()),
@@ -1767,13 +1769,13 @@ maybe_send_will(
                                  kind = exchange,
                                  name = ?DEFAULT_EXCHANGE_NAME},
             #resource{name = QNameBin} = amqqueue:get_name(Q),
-            Anns0 = #{exchange => ?DEFAULT_EXCHANGE_NAME,
-                      routing_keys => [QNameBin],
+            Anns0 = #{?ANN_EXCHANGE => ?DEFAULT_EXCHANGE_NAME,
+                      ?ANN_ROUTING_KEYS => [QNameBin],
                       ttl => Ttl,
                       %% Persist message regardless of Will QoS since there is no noticable
                       %% performance benefit if that single message is transient. This ensures that
                       %% delayed Will Messages are not lost after a broker restart.
-                      durable => true},
+                      ?ANN_DURABLE => true},
             Anns = case Props of
                        #{'Message-Expiry-Interval' := MEI} ->
                            Anns0#{dead_letter_ttl => timer:seconds(MEI)};
@@ -2551,7 +2553,7 @@ compat(McMqtt, #state{cfg = #cfg{exchange = XName}}) ->
             McMqtt;
         false = FFState ->
             #mqtt_msg{qos = Qos} = mc:protocol_state(McMqtt),
-            [RoutingKey] = mc:get_annotation(routing_keys, McMqtt),
+            [RoutingKey] = mc:routing_keys(McMqtt),
             McLegacy = mc:convert(mc_amqpl, McMqtt),
             Content = mc:protocol_state(McLegacy),
             {ok, BasicMsg} = mc_amqpl:message(XName, RoutingKey, Content, #{}, FFState),

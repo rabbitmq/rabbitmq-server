@@ -3,7 +3,7 @@
 ##  License, v. 2.0. If a copy of the MPL was not distributed with this
 ##  file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-##  Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+##  Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 ##
 
 # Exit immediately if a pipeline, which may consist of a single simple command,
@@ -20,4 +20,135 @@ set -a
 # shellcheck source=./rabbitmq-env
 . "${0%/*}"/rabbitmq-env
 
-run_escript rabbitmqctl_escript "${ESCRIPT_DIR:?must be defined}"/rabbitmqctl "$@"
+# Uncomment for debugging
+# echo "\$# : $#"
+# echo "\$0: $0"
+# echo "\$1: $1"
+# echo "\$2: $2"
+# echo "\$3: $3"
+# echo "\$4: $4"
+# echo "\$5: $5"
+# set -x
+
+_tmp_help_requested='false'
+
+for _tmp_argument in "$@"
+do
+    if [ "$_tmp_argument" = '--help' ]
+    then
+        _tmp_help_requested='true'
+        break
+    fi
+done
+
+if [ "$1" = 'help' ] || [ "$_tmp_help_requested" = 'true' ]
+then
+    unset _tmp_help_requested
+    # In this case, we do not require input and can exit early since
+    # help was requested
+    #
+    run_escript "${ESCRIPT_DIR:?must be defined}"/rabbitmqctl 'noinput' "$@"
+    exit "$?"
+fi
+
+unset _tmp_help_requested
+
+maybe_noinput='noinput'
+
+case "$1" in
+    add_user)
+        if [ "$#" -eq 2 ]
+        then
+            # In this case, input is required to provide the password:
+            #
+            # rabbitmqctl add_user bob
+            #
+            maybe_noinput='input'
+        elif [ "$#" -eq 3 ]
+        then
+            # In these cases, input depends on the arguments provided:
+            #
+            # rabbitmqctl add_user bob --pre-hashed-password (input needed)
+            # rabbitmqctl add_user bob bobpassword (NO input needed)
+            # rabbitmqctl add_user --pre-hashed-password bob (input needed)
+            #
+            for _tmp_argument in "$@"
+            do
+                if [ "$_tmp_argument" = '--pre-hashed-password' ]
+                then
+                    maybe_noinput='input'
+                    break
+                fi
+            done
+        elif [ "$#" -gt 3 ]
+        then
+            # If there are 4 or more arguments, no input is needed:
+            #
+            # rabbitmqctl add_user bob --pre-hashed-password HASHVALUE
+            # rabbitmqctl add_user bob bobpassword IGNORED
+            # rabbitmqctl add_user --pre-hashed-password bob HASHVALUE
+            #
+            maybe_noinput='noinput'
+        fi
+        ;;
+    authenticate_user)
+        if [ "$#" -eq 2 ]
+        then
+            # In this case, input is required to provide the password:
+            #
+            # rabbitmqctl authenticate_user bob
+            #
+            maybe_noinput='input'
+        elif [ "$#" -gt 2 ]
+        then
+            # If there are 2 or more arguments, no input is needed:
+            #
+            maybe_noinput='noinput'
+        fi
+        ;;
+    change_password)
+        maybe_noinput='input'
+        if [ "$#" -gt 2 ]
+        then
+            # If there are 3 or more arguments, no input is needed:
+            #
+            # rabbitmqctl change_password sue foobar
+            # rabbitmqctl change_password sue newpassword IGNORED
+            #
+            maybe_noinput='noinput'
+        fi
+        ;;
+    decode|encode)
+        # It is unlikely that these commands will be run in a shell script loop
+        # with redirection, so always assume that stdin input is needed
+        #
+        maybe_noinput='input'
+        ;;
+    eval)
+        if [ "$#" -eq 1 ]
+        then
+            # If there is only one argument, 'eval', then input is required
+            #
+            # rabbitmqctl eval
+            #
+            maybe_noinput='input'
+        fi
+        ;;
+    hash_password)
+        if [ "$#" -eq 1 ]
+        then
+            # If there is only one argument, 'hash_password', then input is required
+            #
+            # rabbitmqctl hash_password
+            #
+            maybe_noinput='input'
+        fi
+        ;;
+    *)
+        maybe_noinput='noinput'
+        ;;
+esac
+
+unset _tmp_argument
+
+run_escript "${ESCRIPT_DIR:?must be defined}"/rabbitmqctl "$maybe_noinput" "$@"

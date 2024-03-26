@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 -module(reader_SUITE).
 -compile([export_all,
@@ -94,8 +94,9 @@ end_per_testcase(Testcase, Config) ->
 
 block_connack_timeout(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    Ports0 = rpc(Config, erlang, ports, []),
+    Ports = rpc(Config, erlang, ports, []),
 
+    DefaultWatermark = rpc(Config, vm_memory_monitor, get_vm_memory_high_watermark, []),
     ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0]),
     %% Let connection block.
     timer:sleep(100),
@@ -109,33 +110,34 @@ block_connack_timeout(Config) ->
     unlink(Client),
     ClientMRef = monitor(process, Client),
     {error, connack_timeout} = emqtt:connect(Client),
-    receive
-        {'DOWN', ClientMRef, process, Client, connack_timeout} ->
-            ok
-    after 200 ->
-              ct:fail("missing connack_timeout in client")
+    receive {'DOWN', ClientMRef, process, Client, connack_timeout} -> ok
+    after 200 -> ct:fail("missing connack_timeout in client")
     end,
 
-    Ports = rpc(Config, erlang, ports, []),
-    %% Server creates 1 new port to handle our MQTT connection.
-    [NewPort] = Ports -- Ports0,
-    {connected, MqttReader} = rpc(Config, erlang, port_info, [NewPort, connected]),
+    MqttReader = rpc(Config, ?MODULE, mqtt_connection_pid, [Ports]),
     MqttReaderMRef = monitor(process, MqttReader),
 
     %% Unblock connection. CONNECT packet will be processed on the server.
-    rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
+    rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [DefaultWatermark]),
 
-    receive
-        {'DOWN', MqttReaderMRef, process, MqttReader, {shutdown, {socket_ends, einval}}} ->
-            %% We expect that MQTT reader process exits (without crashing)
-            %% because our client already disconnected.
-            ok
-    after 2000 ->
-              ct:fail("missing peername_not_known from server")
+    receive {'DOWN', MqttReaderMRef, process, MqttReader, {shutdown, {socket_ends, einval}}} ->
+                %% We expect that MQTT reader process exits (without crashing)
+                %% because our client already disconnected.
+                ok
+    after 2000 -> ct:fail("missing peername_not_known from server")
     end,
     %% Ensure that our client is not registered.
     ?assertEqual([], all_connection_pids(Config)),
     ok.
+
+mqtt_connection_pid(ExistingPorts) ->
+    NewPorts = erlang:ports() -- ExistingPorts,
+    %% Server creates 1 new TCP port to handle our MQTT connection.
+    [MqttConnectionPort] = lists:filter(fun(P) ->
+                                                erlang:port_info(P, name) =:= {name, "tcp_inet"}
+                                        end, NewPorts),
+    {connected, MqttConnectionPid} = erlang:port_info(MqttConnectionPort, connected),
+    MqttConnectionPid.
 
 handle_invalid_packets(Config) ->
     N = rpc(Config, ets, info, [connection_metrics, size]),
@@ -150,15 +152,13 @@ handle_invalid_packets(Config) ->
     ?assertEqual(N, rpc(Config, ets, info, [connection_metrics, size])).
 
 login_timeout(Config) ->
-    rpc(Config, application, set_env, [rabbitmq_mqtt, login_timeout, 400]),
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-    {ok, C} = gen_tcp:connect("localhost", P, [{active, false}]),
-
-    try
-        {error, closed} = gen_tcp:recv(C, 0, 500)
-    after
-        rpc(Config, application, unset_env, [rabbitmq_mqtt, login_timeout])
-    end.
+    App = rabbitmq_mqtt,
+    Par = ?FUNCTION_NAME,
+    ok = rpc(Config, application, set_env, [App, Par, 400]),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    {ok, Socket} = gen_tcp:connect("localhost", Port, [{active, false}]),
+    ?assertEqual({error, closed}, gen_tcp:recv(Socket, 0, 500)),
+    ok = rpc(Config, application, unset_env, [App, Par]).
 
 stats(Config) ->
     C = connect(?FUNCTION_NAME, Config),

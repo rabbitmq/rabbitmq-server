@@ -3,7 +3,7 @@ REM  This Source Code Form is subject to the terms of the Mozilla Public
 REM  License, v. 2.0. If a copy of the MPL was not distributed with this
 REM  file, You can obtain one at https://mozilla.org/MPL/2.0/.
 REM
-REM  Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+REM  Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 REM
 
 REM Scopes the variables to the current batch file
@@ -42,9 +42,10 @@ if "%1"=="remote_shell" (
     set ERL_CMD=erl.exe
 )
 
+REM Note: do NOT add -noinput because "observer" depends on it
 "!ERLANG_HOME!\bin\!ERL_CMD!" +B ^
 -boot !CLEAN_BOOT_FILE! ^
--noinput -noshell -hidden -smp enable ^
+-noshell -hidden -smp enable ^
 !RABBITMQ_CTL_ERL_ARGS! ^
 -kernel inet_dist_listen_min !RABBITMQ_CTL_DIST_PORT_MIN! ^
 -kernel inet_dist_listen_max !RABBITMQ_CTL_DIST_PORT_MAX! ^

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_deprecated_features).
@@ -40,7 +40,7 @@ to_json(ReqData, {Mode, Context}) ->
     rabbit_mgmt_util:reply_list(deprecated_features(Mode), ReqData, Context).
 
 is_authorized(ReqData, {Mode, Context}) ->
-    {Res, Req2, Context2} = rabbit_mgmt_util:is_authorized_admin(ReqData, Context),
+    {Res, Req2, Context2} = rabbit_mgmt_util:is_authorized(ReqData, Context),
     {Res, Req2, {Mode, Context2}}.
 
 %%--------------------------------------------------------------------

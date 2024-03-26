@@ -52,9 +52,7 @@ amqpl_defaults(_Config) ->
     Payload = [<<"data">>],
     Content = #content{properties = Props,
                        payload_fragments_rev = Payload},
-    Anns = #{exchange => <<"exch">>,
-             routing_keys => [<<"apple">>]},
-    Msg = mc:init(mc_amqpl, Content, Anns),
+    Msg = mc:init(mc_amqpl, Content, annotations()),
 
     ?assertEqual(undefined, mc:priority(Msg)),
     ?assertEqual(false, mc:is_persistent(Msg)),
@@ -151,9 +149,7 @@ amqpl_table_x_header(_Config) ->
     Payload = [<<"data">>],
     Content = #content{properties = Props,
                        payload_fragments_rev = Payload},
-    Anns = #{exchange => <<"exch">>,
-             routing_keys => [<<"apple">>]},
-    Msg = mc:init(mc_amqpl, Content, Anns),
+    Msg = mc:init(mc_amqpl, Content, annotations()),
 
     %% x-header values come back AMQP 1.0 ish formatted
     ?assertMatch({map,
@@ -181,9 +177,7 @@ amqpl_table_x_header_array_of_tbls(_Config) ->
     Payload = [<<"data">>],
     Content = #content{properties = Props,
                        payload_fragments_rev = Payload},
-    Anns = #{exchange => <<"exch">>,
-             routing_keys => [<<"apple">>]},
-    Msg = mc:init(mc_amqpl, Content, Anns),
+    Msg = mc:init(mc_amqpl, Content, annotations()),
     ?assertMatch({list,
                   [{map,
                     [{{symbol, <<"type">>}, {utf8, <<"apple">>}},
@@ -201,9 +195,7 @@ amqpl_death_records(_Config) ->
     Content = #content{class_id = 60,
                        properties = #'P_basic'{headers = []},
                        payload_fragments_rev = [<<"data">>]},
-    Anns = #{exchange => <<"exch">>,
-             routing_keys => [<<"apple">>]},
-    Msg0 = mc:prepare(store, mc:init(mc_amqpl, Content, Anns)),
+    Msg0 = mc:prepare(store, mc:init(mc_amqpl, Content, annotations())),
 
     Msg1 = mc:record_death(rejected, <<"q1">>, Msg0),
     ?assertEqual([<<"q1">>], mc:death_queue_names(Msg1)),
@@ -281,12 +273,10 @@ amqpl_amqp_bin_amqpl(_Config) ->
     Payload = [<<"data">>],
     Content = #content{properties = Props,
                        payload_fragments_rev = Payload},
-    Anns = #{exchange => <<"exch">>,
-             routing_keys => [<<"apple">>]},
-    Msg = mc:init(mc_amqpl, Content, Anns),
+    Msg = mc:init(mc_amqpl, Content, annotations()),
 
-    ?assertEqual(<<"exch">>, mc:get_annotation(exchange, Msg)),
-    ?assertEqual([<<"apple">>], mc:get_annotation(routing_keys, Msg)),
+    ?assertEqual(<<"exch">>, mc:exchange(Msg)),
+    ?assertEqual([<<"apple">>], mc:routing_keys(Msg)),
     ?assertEqual(98, mc:priority(Msg)),
     ?assertEqual(true, mc:is_persistent(Msg)),
     ?assertEqual(99000, mc:timestamp(Msg)),
@@ -294,7 +284,7 @@ amqpl_amqp_bin_amqpl(_Config) ->
     ?assertEqual({utf8, <<"msg-id">>}, mc:message_id(Msg)),
     ?assertEqual(1, mc:ttl(Msg)),
     ?assertEqual({utf8, <<"apple">>}, mc:x_header(<<"x-stream-filter">>, Msg)),
-
+    ?assert(is_integer(mc:get_annotation(rts, Msg))),
 
     %% array type non x-headers cannot be converted into amqp
     RoutingHeaders = maps:remove(<<"a-array">>, mc:routing_headers(Msg, [])),
@@ -304,8 +294,8 @@ amqpl_amqp_bin_amqpl(_Config) ->
     Sections = amqp10_framing:decode_bin(
                  iolist_to_binary(amqp_serialize(Msg10Pre))),
     Msg10 = mc:init(mc_amqp, Sections, #{}),
-    ?assertEqual(<<"exch">>, mc:get_annotation(exchange, Msg10)),
-    ?assertEqual([<<"apple">>], mc:get_annotation(routing_keys, Msg10)),
+    ?assertEqual(<<"exch">>, mc:exchange(Msg10)),
+    ?assertEqual([<<"apple">>], mc:routing_keys(Msg10)),
     ?assertEqual(98, mc:priority(Msg10)),
     ?assertEqual(true, mc:is_persistent(Msg10)),
     ?assertEqual(99000, mc:timestamp(Msg10)),
@@ -316,6 +306,7 @@ amqpl_amqp_bin_amqpl(_Config) ->
     %% at this point the type is now present as a message annotation
     ?assertEqual({utf8, <<"45">>}, mc:x_header(<<"x-basic-type">>, Msg10)),
     ?assertEqual(RoutingHeaders, mc:routing_headers(Msg10, [])),
+    ?assert(is_integer(mc:get_annotation(rts, Msg10))),
 
     [
      #'v1_0.header'{} = Hdr10,
@@ -342,7 +333,7 @@ amqpl_amqp_bin_amqpl(_Config) ->
 
     ?assertEqual({long, 99}, Get(<<"a-stream-offset">>, AP10)),
     ?assertEqual({utf8, <<"a string">>}, Get(<<"a-string">>, AP10)),
-    ?assertEqual({boolean, false}, Get(<<"a-bool">>, AP10)),
+    ?assertEqual(false, Get(<<"a-bool">>, AP10)),
     ?assertEqual({ubyte, 1}, Get(<<"a-unsignedbyte">>, AP10)),
     ?assertEqual({ushort, 1}, Get(<<"a-unsignedshort">>, AP10)),
     ?assertEqual({uint, 1}, Get(<<"a-unsignedint">>, AP10)),
@@ -360,8 +351,8 @@ amqpl_amqp_bin_amqpl(_Config) ->
 
     MsgL2 = mc:convert(mc_amqpl, Msg10),
 
-    ?assertEqual(<<"exch">>, mc:get_annotation(exchange, MsgL2)),
-    ?assertEqual([<<"apple">>], mc:get_annotation(routing_keys, MsgL2)),
+    ?assertEqual(<<"exch">>, mc:exchange(MsgL2)),
+    ?assertEqual([<<"apple">>], mc:routing_keys(MsgL2)),
     ?assertEqual(98, mc:priority(MsgL2)),
     ?assertEqual(true, mc:is_persistent(MsgL2)),
     ?assertEqual(99000, mc:timestamp(MsgL2)),
@@ -370,6 +361,7 @@ amqpl_amqp_bin_amqpl(_Config) ->
     ?assertEqual(1, mc:ttl(MsgL2)),
     ?assertEqual({utf8, <<"apple">>}, mc:x_header(<<"x-stream-filter">>, MsgL2)),
     ?assertEqual(RoutingHeaders, mc:routing_headers(MsgL2, [])),
+    ?assert(is_integer(mc:get_annotation(rts, MsgL2))),
     ok.
 
 amqpl_cc_amqp_bin_amqpl(_Config) ->
@@ -382,16 +374,16 @@ amqpl_cc_amqp_bin_amqpl(_Config) ->
     {ok, Msg} = mc_amqpl:message(X, <<"apple">>, Content, #{}, true),
 
     RoutingKeys =  [<<"apple">>, <<"q1">>, <<"q2">>],
-    ?assertEqual(RoutingKeys, mc:get_annotation(routing_keys, Msg)),
+    ?assertEqual(RoutingKeys, mc:routing_keys(Msg)),
 
     Msg10Pre = mc:convert(mc_amqp, Msg),
     Sections = amqp10_framing:decode_bin(
                  iolist_to_binary(amqp_serialize(Msg10Pre))),
     Msg10 = mc:init(mc_amqp, Sections, #{}),
-    ?assertEqual(RoutingKeys, mc:get_annotation(routing_keys, Msg10)),
+    ?assertEqual(RoutingKeys, mc:routing_keys(Msg10)),
 
     MsgL2 = mc:convert(mc_amqpl, Msg10),
-    ?assertEqual(RoutingKeys, mc:get_annotation(routing_keys, MsgL2)),
+    ?assertEqual(RoutingKeys, mc:routing_keys(MsgL2)),
     ?assertMatch(#content{properties = #'P_basic'{headers = Headers}},
                  mc:protocol_state(MsgL2)).
 
@@ -435,9 +427,7 @@ amqp_amqpl_unsupported_values_not_converted(_Config) ->
     P = #'v1_0.properties'{user_id = {binary, UserId}},
     D =  #'v1_0.data'{content = <<"data">>},
 
-    Anns = #{exchange => <<"exch">>,
-             routing_keys => [<<"apple">>]},
-    Msg = mc:init(mc_amqp, [P, AP, D], Anns),
+    Msg = mc:init(mc_amqp, [P, AP, D], annotations()),
     MsgL = mc:convert(mc_amqpl, Msg),
     #content{properties = #'P_basic'{user_id = undefined,
                                      headers = HL}} = mc:protocol_state(MsgL),
@@ -455,9 +445,7 @@ amqp_amqpl_amqp_uuid_correlation_id(_Config) ->
                            message_id = {uuid, UUID}},
     D =  #'v1_0.data'{content = <<"data">>},
 
-    Anns = #{exchange => <<"exch">>,
-             routing_keys => [<<"apple">>]},
-    Msg = mc:init(mc_amqp, [P, D], Anns),
+    Msg = mc:init(mc_amqp, [P, D], annotations()),
     MsgL = mc:convert(mc_amqpl, Msg),
     MsgOut = mc:convert(mc_amqp, MsgL),
 
@@ -511,9 +499,7 @@ amqp_amqpl(_Config) ->
     A =  #'v1_0.application_properties'{content = AC},
     D =  #'v1_0.data'{content = <<"data">>},
 
-    Anns = #{exchange => <<"exch">>,
-             routing_keys => [<<"apple">>]},
-    Msg = mc:init(mc_amqp, [H, M, P, A, D], Anns),
+    Msg = mc:init(mc_amqp, [H, M, P, A, D], annotations()),
     %% validate source data is serialisable
     _ = amqp_serialize(Msg),
 
@@ -579,9 +565,7 @@ amqp_amqpl_message_id_ulong(_Config) ->
     P = #'v1_0.properties'{message_id = {ulong, Num},
                            correlation_id = {ulong, Num}},
     D =  #'v1_0.data'{content = <<"data">>},
-    Anns = #{exchange => <<"exch">>,
-             routing_keys => [<<"apple">>]},
-    Msg = mc:init(mc_amqp, [P, D], Anns),
+    Msg = mc:init(mc_amqp, [P, D], annotations()),
     MsgL = mc:convert(mc_amqpl, Msg),
     ?assertEqual({utf8, ULong}, mc:message_id(MsgL)),
     ?assertEqual({utf8, ULong}, mc:correlation_id(MsgL)),
@@ -598,9 +582,7 @@ amqp_amqpl_amqp_message_id_uuid(_Config) ->
     P = #'v1_0.properties'{message_id = {uuid, UUId},
                            correlation_id = {uuid, UUId}},
     D =  #'v1_0.data'{content = <<"data">>},
-    Anns = #{exchange => <<"exch">>,
-             routing_keys => [<<"apple">>]},
-    Msg = mc:init(mc_amqp, [P, D], Anns),
+    Msg = mc:init(mc_amqp, [P, D], annotations()),
     MsgL = mc:convert(mc_amqpl, Msg),
     ?assertEqual({utf8, Urn}, mc:message_id(MsgL)),
     ?assertEqual({utf8, Urn}, mc:correlation_id(MsgL)),
@@ -619,9 +601,7 @@ amqp_amqpl_message_id_large(_Config) ->
     P = #'v1_0.properties'{message_id = {utf8, Orig},
                            correlation_id = {utf8, Orig}},
     D =  #'v1_0.data'{content = <<"data">>},
-    Anns = #{exchange => <<"exch">>,
-             routing_keys => [<<"apple">>]},
-    Msg = mc:init(mc_amqp, [P, D], Anns),
+    Msg = mc:init(mc_amqp, [P, D], annotations()),
     MsgL = mc:convert(mc_amqpl, Msg),
     ?assertEqual(undefined, mc:message_id(MsgL)),
     ?assertEqual(undefined, mc:correlation_id(MsgL)),
@@ -635,9 +615,7 @@ amqp_amqpl_message_id_binary(_Config) ->
     P = #'v1_0.properties'{message_id = {binary, Orig},
                            correlation_id = {binary, Orig}},
     D =  #'v1_0.data'{content = <<"data">>},
-    Anns = #{exchange => <<"exch">>,
-             routing_keys => [<<"apple">>]},
-    Msg = mc:init(mc_amqp, [P, D], Anns),
+    Msg = mc:init(mc_amqp, [P, D], annotations()),
     MsgL = mc:convert(mc_amqpl, Msg),
     ?assertEqual(undefined, mc:message_id(MsgL)),
     ?assertEqual(undefined, mc:correlation_id(MsgL)),
@@ -729,3 +707,7 @@ amqp_map_get(K, Tuples) ->
         {_, V}  ->
             V
     end.
+
+annotations() ->
+    #{?ANN_EXCHANGE => <<"exch">>,
+      ?ANN_ROUTING_KEYS => [<<"apple">>]}.

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_variable_queue).
@@ -489,11 +489,10 @@ process_recovery_terms(Terms) ->
         PRef      -> {PRef, Terms}
     end.
 
-%% If queue-version is undefined, we assume v2 starting with RabbitMQ 3.13.0.
 queue_version(Q) ->
     Resolve = fun(_, ArgVal) -> ArgVal end,
     case rabbit_queue_type_util:args_policy_lookup(<<"queue-version">>, Resolve, Q) of
-        undefined -> rabbit_misc:get_env(rabbit, classic_queue_default_version, 2);
+        undefined -> rabbit_misc:get_env(rabbit, classic_queue_default_version, 1);
         Vsn when is_integer(Vsn) -> Vsn;
         Vsn -> binary_to_integer(Vsn)
     end.
@@ -833,6 +832,10 @@ info(head_message_timestamp, #vqstate{
           q3               = Q3,
           ram_pending_ack  = RPA}) ->
     head_message_timestamp(Q3, RPA);
+info(oldest_message_received_timestamp, #vqstate{
+                                           q3               = Q3,
+                                           ram_pending_ack  = RPA}) ->
+    oldest_message_received_timestamp(Q3, RPA);
 info(disk_reads, #vqstate{disk_read_count = Count}) ->
     Count;
 info(disk_writes, #vqstate{disk_write_count = Count}) ->
@@ -1194,7 +1197,6 @@ convert_from_v2_to_v1_loop(QueueName, V1Index0, V2Index0, V2Store0,
 %% regarded as unprocessed until acked, this also prevents the result
 %% apparently oscillating during repeated rejects.
 %%
-%% @todo OK I think we can do this differently
 head_message_timestamp(Q3, RPA) ->
     HeadMsgs = [ HeadMsgStatus#msg_status.msg ||
                    HeadMsgStatus <-
@@ -1207,6 +1209,26 @@ head_message_timestamp(Q3, RPA) ->
         [Timestamp div 1000
          || HeadMsg <- HeadMsgs,
             Timestamp <- [mc:timestamp(HeadMsg)],
+            Timestamp /= undefined
+        ],
+
+    case Timestamps == [] of
+        true -> '';
+        false -> lists:min(Timestamps)
+    end.
+
+oldest_message_received_timestamp(Q3, RPA) ->
+    HeadMsgs = [ HeadMsgStatus#msg_status.msg ||
+                   HeadMsgStatus <-
+                       [ get_q_head(Q3),
+                         get_pa_head(RPA) ],
+                   HeadMsgStatus /= undefined,
+                   HeadMsgStatus#msg_status.msg /= undefined ],
+
+    Timestamps =
+        [Timestamp
+         || HeadMsg <- HeadMsgs,
+            Timestamp <- [mc:get_annotation(?ANN_RECEIVED_AT_TIMESTAMP, HeadMsg)],
             Timestamp /= undefined
         ],
 

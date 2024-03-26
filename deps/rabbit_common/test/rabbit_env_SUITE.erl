@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2019-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_env_SUITE).
@@ -383,7 +383,8 @@ check_values_from_reachable_remote_node(Config) ->
 
     try
         persistent_term:put({rabbit_env, os_type}, {unix, undefined}),
-        UnixContext = rabbit_env:get_context(Node),
+        TakeFromRemoteNode = {Node, 120000},
+        UnixContext = rabbit_env:get_context(TakeFromRemoteNode),
 
         persistent_term:erase({rabbit_env, os_type}),
 
@@ -447,7 +448,7 @@ check_values_from_reachable_remote_node(Config) ->
              erlang_dist_tcp_port => 25672,
              feature_flags_file => FeatureFlagsFile,
              forced_feature_flags_on_init => RFFValue,
-             from_remote_node => {Node, 10000},
+             from_remote_node => TakeFromRemoteNode,
              interactive_shell => false,
              keep_pid_file_on_exit => false,
              log_base_dir => "/var/log/rabbitmq",
@@ -492,9 +493,19 @@ consume_stdout(Port, Nodename) ->
 
 wait_for_remote_node(Nodename) ->
     case net_adm:ping(Nodename) of
-        pong -> ok;
-        pang -> timer:sleep(200),
-                wait_for_remote_node(Nodename)
+        pong ->
+            Ret = erpc:call(
+                    Nodename, application, get_env, [rabbit, plugins_dir]),
+            case Ret of
+                {ok, Val} when is_list(Val) ->
+                    ok;
+                _ ->
+                    timer:sleep(200),
+                    wait_for_remote_node(Nodename)
+            end;
+        pang ->
+            timer:sleep(200),
+            wait_for_remote_node(Nodename)
     end.
 
 check_values_from_offline_remote_node(_) ->

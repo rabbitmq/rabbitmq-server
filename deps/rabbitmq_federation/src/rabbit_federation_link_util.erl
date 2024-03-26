@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_federation_link_util).
@@ -262,6 +262,9 @@ handle_downstream_down(Reason, _Args, State) ->
 
 %% If the upstream channel goes down for an intelligible reason, just
 %% log it and die quietly.
+handle_upstream_down(shutdown, {Upstream, UParams, XName}, State) ->
+    rabbit_federation_link_util:connection_error(
+      remote, {upstream_channel_down, shutdown}, Upstream, UParams, XName, State);
 handle_upstream_down({shutdown, Reason}, {Upstream, UParams, XName}, State) ->
     rabbit_federation_link_util:connection_error(
       remote, {upstream_channel_down, Reason}, Upstream, UParams, XName, State);

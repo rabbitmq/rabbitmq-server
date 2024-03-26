@@ -2,13 +2,11 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -define(AMQP_PROTOCOL_HEADER, <<"AMQP", 0, 1, 0, 0>>).
 -define(SASL_PROTOCOL_HEADER, <<"AMQP", 3, 1, 0, 0>>).
--define(MIN_MAX_FRAME_SIZE, 512).
--define(MAX_MAX_FRAME_SIZE, 1024 * 1024).
 -define(FRAME_HEADER_SIZE, 8).
 
 -define(TIMEOUT, 5000).
@@ -22,4 +20,5 @@
 
 -record(link_ref, {role :: sender | receiver,
                    session :: pid(),
+                   %% locally chosen output handle
                    link_handle :: non_neg_integer()}).

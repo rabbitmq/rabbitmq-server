@@ -3,7 +3,7 @@
 ##  License, v. 2.0. If a copy of the MPL was not distributed with this
 ##  file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-##  Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+##  Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 ##
 
 if [ "$RABBITMQ_ENV_LOADED" = 1 ]; then
@@ -178,25 +178,24 @@ _rmq_env_set_erl_libs()
 
 run_escript()
 {
-    escript_main="${1:?escript_main must be defined}"
-    shift
     escript="${1:?escript must be defined}"
+    shift
+
+    maybe_noinput="${1:?maybe_noinput must be defined}"
     shift
 
     _rmq_env_set_erl_libs
 
-    # Important: do not quote RABBITMQ_CTL_ERL_ARGS as they must be
-    # word-split
-    # shellcheck disable=SC2086
-    exec erl +B \
-        -boot "$CLEAN_BOOT_FILE" \
-        -noinput -noshell -hidden -smp enable \
-        $RABBITMQ_CTL_ERL_ARGS \
-        -kernel inet_dist_listen_min "$RABBITMQ_CTL_DIST_PORT_MIN" \
-        -kernel inet_dist_listen_max "$RABBITMQ_CTL_DIST_PORT_MAX" \
-        -run escript start \
-        -escript main "$escript_main" \
-        -extra "$escript" "$@"
+    tmp_erl_flags="-boot $CLEAN_BOOT_FILE $RABBITMQ_CTL_ERL_ARGS -kernel inet_dist_listen_min $RABBITMQ_CTL_DIST_PORT_MIN -kernel inet_dist_listen_max $RABBITMQ_CTL_DIST_PORT_MAX"
+
+    if [ "$maybe_noinput" = 'noinput' ]
+    then
+        tmp_erl_flags="-noinput $tmp_erl_flags"
+    fi
+
+    ERL_FLAGS="$tmp_erl_flags" "$escript" "$@"
+
+    unset tmp_erl_flags
 }
 
 RABBITMQ_ENV_LOADED=1

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2021 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_logger_exchange_h).
@@ -12,6 +12,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/logging.hrl").
+-include_lib("rabbit/include/mc.hrl").
 
 %% logger callbacks
 -export([log/2, adding_handler/1, removing_handler/1, changing_config/3,
@@ -54,12 +55,15 @@ do_log(LogEvent, #{config := #{exchange := Exchange}} = Config) ->
     PBasic = log_event_to_amqp_msg(LogEvent, Config),
     Body = try_format_body(LogEvent, Config),
     Content = rabbit_basic:build_content(PBasic, Body),
-    Anns = #{exchange => Exchange#resource.name,
-             routing_keys => [RoutingKey]},
-    Msg = mc:init(mc_amqpl, Content, Anns),
-    case rabbit_queue_type:publish_at_most_once(Exchange, Msg) of
-        ok -> ok;
-        {error, not_found} -> ok
+    case mc_amqpl:message(Exchange, RoutingKey, Content) of
+        {ok, Msg} ->
+            case rabbit_queue_type:publish_at_most_once(Exchange, Msg) of
+                ok -> ok;
+                {error, not_found} -> ok
+            end;
+        {error, _Reason} ->
+            %% it would be good to log this error but can we?
+            ok
     end.
 
 removing_handler(Config) ->

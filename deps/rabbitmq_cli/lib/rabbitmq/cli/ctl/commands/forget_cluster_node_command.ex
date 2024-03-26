@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2016-2023 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   alias RabbitMQ.CLI.Core.{DocGuide, Distribution, Validators}
@@ -72,7 +72,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
         {:error,
          "RabbitMQ on node #{node_to_remove} must be stopped with 'rabbitmqctl -n #{node_to_remove} stop_app' before it can be removed"}
 
-      {:error, {:failed_to_remove_node, ^atom_name, unavailable}} ->
+      {:error, {:failed_to_remove_node, ^atom_name, :unavailable}} ->
         {:error, "Node #{node_to_remove} must be running before it can be removed"}
 
       {:error, _} = error ->
@@ -97,6 +97,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
               any
           end
 
+        stream_coord_result =
+          :rabbit_misc.rpc_call(node_name, :rabbit_stream_coordinator, :forget_node, [atom_name])
+
         is_error_fun = fn
           {_, {:ok, _}} ->
             false
@@ -117,20 +120,22 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
         has_stream_error =
           not Enum.empty?(stream_shrink_result) and Enum.any?(stream_shrink_result, is_error_fun)
 
-        case {has_qq_error, has_stream_error} do
-          {false, false} ->
+        errors =
+          append_err(stream_coord_result != :ok, "Stream coordinator", [])
+
+        errors =
+          append_err(has_qq_error, "Quorum queues", errors)
+
+        errors =
+          append_err(has_stream_error, "Streams", errors)
+
+        case errors do
+          [] ->
             :ok
 
-          {true, false} ->
+          _ ->
             {:error,
-             "RabbitMQ failed to shrink some of the quorum queues on node #{node_to_remove}"}
-
-          {false, true} ->
-            {:error, "RabbitMQ failed to shrink some of the streams on node #{node_to_remove}"}
-
-          {true, true} ->
-            {:error,
-             "RabbitMQ failed to shrink some of the quorum queues and streams on node #{node_to_remove}"}
+             "RabbitMQ failed to shrink some entities on node #{node_to_remove} : #{errors}"}
         end
 
       other ->
@@ -175,6 +180,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
   #
   # Implementation
   #
+
+  defp append_err(false, _err, errs) do
+    errs
+  end
+
+  defp append_err(true, err, []) do
+    [err]
+  end
+
+  defp append_err(true, err, errs) do
+    [err, ", " | errs]
+  end
 
   defp become(node_name, opts) do
     :error_logger.tty(false)

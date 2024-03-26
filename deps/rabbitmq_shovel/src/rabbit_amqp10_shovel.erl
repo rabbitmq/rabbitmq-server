@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_amqp10_shovel).
@@ -101,7 +101,12 @@ connect_dest(State = #{name := Name,
                                      uri => Uri}}}.
 
 connect(Name, AckMode, Uri, Postfix, Addr, Map, AttachFun) ->
-    {ok, Config} = amqp10_client:parse_uri(Uri),
+    {ok, Config0} = amqp10_client:parse_uri(Uri),
+    %% As done for AMQP 0.9.1, exclude AMQP 1.0 shovel connections from maintenance mode
+    %% to prevent crashes and errors being logged by the shovel plugin when a node gets drained.
+    %% A better solution would be that the shovel plugin subscribes to event
+    %% maintenance_connections_closed to gracefully transfer shovels over to other live nodes.
+    Config = Config0#{properties => #{<<"ignore-maintenance">> => {boolean, true}}},
     {ok, Conn} = amqp10_client:open_connection(Config),
     {ok, Sess} = amqp10_client:begin_session(Conn),
     link(Conn),
@@ -125,13 +130,13 @@ connect(Name, AckMode, Uri, Postfix, Addr, Map, AttachFun) ->
 -spec init_source(state()) -> state().
 init_source(State = #{source := #{current := #{link := Link},
                                   prefetch_count := Prefetch} = Src}) ->
-    {Credit, RenewAfter} = case Src of
-                               #{delete_after := R} when is_integer(R) ->
-                                   {R, never};
-                               #{prefetch_count := Pre} ->
-                                   {Pre, round(Prefetch/10)}
-                           end,
-    ok = amqp10_client:flow_link_credit(Link, Credit, RenewAfter),
+    {Credit, RenewWhenBelow} = case Src of
+                                   #{delete_after := R} when is_integer(R) ->
+                                       {R, never};
+                                   #{prefetch_count := Pre} ->
+                                       {Pre, max(1, round(Prefetch/10))}
+                               end,
+    ok = amqp10_client:flow_link_credit(Link, Credit, RenewWhenBelow),
     Remaining = case Src of
                     #{delete_after := never} -> unlimited;
                     #{delete_after := Rem} -> Rem;
@@ -278,30 +283,24 @@ close_dest(#{dest := #{current := #{conn := Conn}}}) ->
 close_dest(_Config) -> ok.
 
 -spec ack(Tag :: tag(), Multi :: boolean(), state()) -> state().
-ack(Tag, true, State = #{source := #{current := #{session := Session},
+ack(Tag, true, State = #{source := #{current := #{link := LinkRef},
                                      last_acked_tag := LastTag} = Src}) ->
     First = LastTag + 1,
-    ok = amqp10_client_session:disposition(Session, receiver, First,
-                                           Tag, true, accepted),
+    ok = amqp10_client_session:disposition(LinkRef, First, Tag, true, accepted),
     State#{source => Src#{last_acked_tag => Tag}};
-ack(Tag, false, State = #{source := #{current :=
-                                      #{session := Session}} = Src}) ->
-    ok = amqp10_client_session:disposition(Session, receiver, Tag,
-                                           Tag, true, accepted),
+ack(Tag, false, State = #{source := #{current := #{link := LinkRef}} = Src}) ->
+    ok = amqp10_client_session:disposition(LinkRef, Tag, Tag, true, accepted),
     State#{source => Src#{last_acked_tag => Tag}}.
 
 -spec nack(Tag :: tag(), Multi :: boolean(), state()) -> state().
-nack(Tag, false, State = #{source :=
-                           #{current := #{session := Session}} = Src}) ->
+nack(Tag, false, State = #{source := #{current := #{link := LinkRef}} = Src}) ->
     % the tag is the same as the deliveryid
-    ok = amqp10_client_session:disposition(Session, receiver, Tag,
-                                           Tag, false, rejected),
+    ok = amqp10_client_session:disposition(LinkRef, Tag, Tag, true, rejected),
     State#{source => Src#{last_nacked_tag => Tag}};
-nack(Tag, true, State = #{source := #{current := #{session := Session},
-                                     last_nacked_tag := LastTag} = Src}) ->
+nack(Tag, true, State = #{source := #{current := #{link := LinkRef},
+                                      last_nacked_tag := LastTag} = Src}) ->
     First = LastTag + 1,
-    ok = amqp10_client_session:disposition(Session, receiver, First,
-                                           Tag, true, accepted),
+    ok = amqp10_client_session:disposition(LinkRef, First, Tag, true, rejected),
     State#{source => Src#{last_nacked_tag => Tag}}.
 
 status(#{dest := #{current := #{link_state := attached}}}) ->
@@ -390,6 +389,11 @@ set_message_properties(Props, Msg) ->
                 #{content_encoding => to_binary(Ct)}, M);
          (delivery_mode, 2, M) ->
               amqp10_msg:set_headers(#{durable => true}, M);
+         (delivery_mode, 1, M) ->
+              % by default the durable flag is false
+              M;
+         (priority, P, M) when is_integer(P) ->
+                amqp10_msg:set_headers(#{priority => P}, M);
          (correlation_id, Ct, M) ->
               amqp10_msg:set_properties(#{correlation_id => to_binary(Ct)}, M);
          (reply_to, Ct, M) ->
