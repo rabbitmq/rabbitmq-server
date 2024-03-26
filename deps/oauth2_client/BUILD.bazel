@@ -70,6 +70,7 @@ rabbitmq_app(
     deps = [
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
+        "@jose//:erlang_app",
     ],
 )
 
@@ -94,7 +95,9 @@ dialyze(
 
 eunit(
     name = "eunit",
-    compiled_suites = [":test_oauth_http_mock_beam"],
+    compiled_suites = [
+        ":test_oauth_http_mock_beam",
+        ":test_oauth2_client_test_util_beam"],
     target = ":test_erlang_app",
 )
 
@@ -128,6 +131,9 @@ rabbitmq_integration_suite(
 rabbitmq_suite(
     name = "unit_SUITE",
     size = "small",
+    additional_beam = [
+        "test/oauth2_client_test_util.beam",
+    ],
 )
 
 assert_suites()

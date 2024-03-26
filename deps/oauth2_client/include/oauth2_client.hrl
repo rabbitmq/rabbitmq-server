@@ -9,6 +9,10 @@
 % define access token request common constants
 
 -define(DEFAULT_HTTP_TIMEOUT, 60000).
+
+% Refresh tome this number of seconds before expires_in token's attribute
+-define(REFRESH_IN_BEFORE_EXPIRES_IN, 5).
+
 -define(DEFAULT_OPENID_CONFIGURATION_PATH, "/.well-known/openid-configuration").
 
 % define access token request constants
@@ -66,7 +70,9 @@
 -record(successful_access_token_response, {
   access_token :: binary(),
   token_type :: binary(),
-  refresh_token :: option(binary()),
+  refresh_token :: option(binary()),    % A refresh token SHOULD NOT be included
+                                        % .. for client-credentials flow.
+                                        % https://www.rfc-editor.org/rfc/rfc6749#section-4.4.3
   expires_in :: option(integer())
 }).
 
