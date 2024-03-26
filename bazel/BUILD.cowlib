@@ -39,35 +39,9 @@ erlang_bytecode(
         "src/cow_uri_template.erl",
         "src/cow_ws.erl",
     ],
-    outs = [
-        "ebin/cow_base64url.beam",
-        "ebin/cow_cookie.beam",
-        "ebin/cow_date.beam",
-        "ebin/cow_hpack.beam",
-        "ebin/cow_http.beam",
-        "ebin/cow_http2.beam",
-        "ebin/cow_http2_machine.beam",
-        "ebin/cow_http_hd.beam",
-        "ebin/cow_http_struct_hd.beam",
-        "ebin/cow_http_te.beam",
-        "ebin/cow_iolists.beam",
-        "ebin/cow_link.beam",
-        "ebin/cow_mimetypes.beam",
-        "ebin/cow_multipart.beam",
-        "ebin/cow_qs.beam",
-        "ebin/cow_spdy.beam",
-        "ebin/cow_sse.beam",
-        "ebin/cow_uri.beam",
-        "ebin/cow_uri_template.beam",
-        "ebin/cow_ws.beam",
-    ],
-    hdrs = [
-        "include/cow_inline.hrl",
-        "include/cow_parse.hrl",
-        "src/cow_hpack_dec_huffman_lookup.hrl",
-        "src/cow_spdy.hrl",
-    ],
+    hdrs = [":public_and_private_hdrs"],
     app_name = "cowlib",
+    dest = "ebin",
     erlc_opts = "//:erlc_opts",
 )
 
@@ -147,15 +121,24 @@ erlang_app(
     name = "erlang_app",
     srcs = [":all_srcs"],
     hdrs = [":public_hdrs"],
-    app_name = "cowlib",
     app_description = "Support library for manipulating Web protocols.",
-    app_version = "2.12.1",
+    app_name = "cowlib",
+    app_version = "2.13.0",
     beam_files = [":beam_files"],
     extra_apps = ["crypto"],
+    license_files = [":license_files"],
+    priv = [":priv"],
 )
 
 alias(
     name = "cowlib",
     actual = ":erlang_app",
     visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "license_files",
+    srcs = [
+        "LICENSE",
+    ],
 )
