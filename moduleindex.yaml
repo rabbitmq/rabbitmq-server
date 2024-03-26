@@ -64,6 +64,7 @@ cowboy:
 - cowboy_clock
 - cowboy_compress_h
 - cowboy_constraints
+- cowboy_decompress_h
 - cowboy_handler
 - cowboy_http
 - cowboy_http2
