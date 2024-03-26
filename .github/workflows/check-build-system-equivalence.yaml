@@ -19,7 +19,7 @@ on:
       erlang_version:
         description: 'OTP version to build with'
         required: true
-        default: "26.1"
+        default: "26.2"
       elixir_version:
         description: 'Elixir version to build with'
         required: true
@@ -27,7 +27,7 @@ on:
       project_version:
         description: 'PROJECT_VERSION used for make'
         required: true
-        default: "3.13.0"
+        default: "4.0.0"
 env:
   erlang_version: ${{ inputs.erlang_version || github.event.inputs.erlang_version }}
   elixir_version: ${{ inputs.elixir_version || github.event.inputs.elixir_version }}
