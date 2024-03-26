@@ -1,7 +1,51 @@
 # The official Canonical Ubuntu Bionic image is ideal from a security perspective,
 # especially for the enterprises that we, the RabbitMQ team, have to deal with
 ARG BASE=ubuntu
+FROM ${BASE}:22.04 as openssl-builder
+
+# Install dependencies required to build Erlang/OTP from source
+# https://erlang.org/doc/installation_guide/INSTALL.html
+# autoconf: Required to configure Erlang/OTP before compiling
+# dpkg-dev: Required to set up host & build type when compiling Erlang/OTP
+# gnupg: Required to verify OpenSSL artefacts
+# libncurses5-dev: Required for Erlang/OTP new shell & observer_cli - https://github.com/zhongwencool/observer_cli
+RUN set -eux; \
+	\
+	apt-get update; \
+	apt-get install --yes --no-install-recommends \
+		autoconf \
+		ca-certificates \
+		dpkg-dev \
+		gcc \
+		g++ \
+		libncurses5-dev \
+		make
+
+ARG OPENSSL_VERSION
+ENV OPENSSL_VERSION=${OPENSSL_VERSION}
+ADD openssl-${OPENSSL_VERSION}.tar.gz /usr/local/src
+ADD build_install_openssl.sh /usr/local/src
+
+RUN /usr/local/src/build_install_openssl.sh
+
+FROM openssl-builder as otp-builder
+
+ADD OTP.tar.gz /usr/local/src
+ADD build_install_otp.sh /usr/local/src
+
+RUN /usr/local/src/build_install_otp.sh
+
+ARG BASE=ubuntu
 FROM ${BASE}:20.04
+
+COPY --from=otp-builder /usr/local/lib/erlang /usr/local/lib/erlang
+
+RUN \
+# Check that OpenSSL still works after purging build dependencies
+	openssl version; \
+# Check that Erlang/OTP crypto & ssl were compiled against OpenSSL correctly
+	erl -noshell -eval 'io:format("~p~n~n~p~n~n", [crypto:supports(), ssl:versions()]), init:stop().'
+
 
 RUN set -eux; \
         apt-get update; \
@@ -12,178 +56,6 @@ RUN set -eux; \
 	rm -rf /var/lib/apt/lists/*; \
 # verify that the "gosu" binary works
 	gosu nobody true
-
-# PGP key servers are too flaky for us to verify during every CI triggered build
-# https://github.com/docker-library/official-images/issues/4252
-ARG SKIP_PGP_VERIFY=false
-# Default to a PGP keyserver that pgp-happy-eyeballs recognizes, but allow for substitutions locally
-ARG PGP_KEYSERVER=ha.pool.sks-keyservers.net
-# If you are building this image locally and are getting `gpg: keyserver receive failed: No data` errors,
-# run the build with a different PGP_KEYSERVER, e.g. docker build --tag rabbitmq:3.7 --build-arg PGP_KEYSERVER=pgpkeys.eu 3.7/ubuntu
-# For context, see https://github.com/docker-library/official-images/issues/4252
-
-# Using the latest OpenSSL LTS release, with support until September 2023 - https://www.openssl.org/source/
-ENV OPENSSL_VERSION 1.1.1g
-ENV OPENSSL_SOURCE_SHA256="ddb04774f1e32f0c49751e21b67216ac87852ceb056b75209af2443400636d46"
-# https://www.openssl.org/community/omc.html
-ENV OPENSSL_PGP_KEY_IDS="0x8657ABB260F056B1E5190839D9C4D26D0E604491 0x5B2545DAB21995F4088CEFAA36CEE4DEB00CFE33 0xED230BEC4D4F2518B9D7DF41F0DB4D21C1D35231 0xC1F33DD8CE1D4CC613AF14DA9195C48241FBF7DD 0x7953AC1FBC3DC8B3B292393ED5E9E43F7DF9EE8C 0xE5E52560DD91C556DDBDA5D02064C53641C25E5D"
-
-# Use the latest stable Erlang/OTP release - make find-latest-otp - https://github.com/erlang/otp/tags
-ARG OTP_VERSION
-ENV OTP_VERSION ${OTP_VERSION}
-# TODO add PGP checking when the feature will be added to Erlang/OTP's build system
-# http://erlang.org/pipermail/erlang-questions/2019-January/097067.html
-ARG OTP_SHA256
-ENV OTP_SOURCE_SHA256=${OTP_SHA256}
-ARG SKIP_OTP_VERIFY=false
-
-# Install dependencies required to build Erlang/OTP from source
-# https://erlang.org/doc/installation_guide/INSTALL.html
-# autoconf: Required to configure Erlang/OTP before compiling
-# dpkg-dev: Required to set up host & build type when compiling Erlang/OTP
-# gnupg: Required to verify OpenSSL artefacts
-# libncurses5-dev: Required for Erlang/OTP new shell & observer_cli - https://github.com/zhongwencool/observer_cli
-RUN set -eux; \
-	\
-	savedAptMark="$(apt-mark showmanual)"; \
-	apt-get update; \
-	apt-get install --yes --no-install-recommends \
-		autoconf \
-		ca-certificates \
-		dpkg-dev \
-		gcc \
-		g++ \
-		gnupg \
-		libncurses5-dev \
-		make \
-		wget \
-	; \
-	rm -rf /var/lib/apt/lists/*; \
-	\
-	OPENSSL_SOURCE_URL="https://www.openssl.org/source/openssl-$OPENSSL_VERSION.tar.gz"; \
-	OPENSSL_PATH="/usr/local/src/openssl-$OPENSSL_VERSION"; \
-	OPENSSL_CONFIG_DIR=/usr/local/etc/ssl; \
-	\
-# Required by the crypto & ssl Erlang/OTP applications
-	wget --progress dot:giga --output-document "$OPENSSL_PATH.tar.gz.asc" "$OPENSSL_SOURCE_URL.asc"; \
-	wget --progress dot:giga --output-document "$OPENSSL_PATH.tar.gz" "$OPENSSL_SOURCE_URL"; \
-	export GNUPGHOME="$(mktemp -d)"; \
-	for key in $OPENSSL_PGP_KEY_IDS; do \
-		gpg --batch --keyserver "$PGP_KEYSERVER" --recv-keys "$key" || true; \
-	done; \
-	test "$SKIP_PGP_VERIFY" == "true" || gpg --batch --verify "$OPENSSL_PATH.tar.gz.asc" "$OPENSSL_PATH.tar.gz"; \
-	gpgconf --kill all; \
-	rm -rf "$GNUPGHOME"; \
-	echo "$OPENSSL_SOURCE_SHA256 *$OPENSSL_PATH.tar.gz" | sha256sum --check --strict -; \
-	mkdir -p "$OPENSSL_PATH"; \
-	tar --extract --file "$OPENSSL_PATH.tar.gz" --directory "$OPENSSL_PATH" --strip-components 1; \
-	\
-# Configure OpenSSL for compilation
-	cd "$OPENSSL_PATH"; \
-# OpenSSL's "config" script uses a lot of "uname"-based target detection...
-	MACHINE="$(dpkg-architecture --query DEB_BUILD_GNU_CPU)" \
-	RELEASE="4.x.y-z" \
-	SYSTEM='Linux' \
-	BUILD='???' \
-	./config \
-		--openssldir="$OPENSSL_CONFIG_DIR" \
-# add -rpath to avoid conflicts between our OpenSSL's "libssl.so" and the libssl package by making sure /usr/local/lib is searched first (but only for Erlang/OpenSSL to avoid issues with other tools using libssl; https://github.com/docker-library/rabbitmq/issues/364)
-		-Wl,-rpath=/usr/local/lib \
-	; \
-# Compile, install OpenSSL, verify that the command-line works & development headers are present
-	make -j "$(getconf _NPROCESSORS_ONLN)"; \
-	make install_sw install_ssldirs; \
-	cd ..; \
-	rm -rf "$OPENSSL_PATH"*; \
-	ldconfig; \
-# use Debian's CA certificates
-	rmdir "$OPENSSL_CONFIG_DIR/certs" "$OPENSSL_CONFIG_DIR/private"; \
-	ln -sf /etc/ssl/certs /etc/ssl/private "$OPENSSL_CONFIG_DIR"; \
-# smoke test
-	openssl version; \
-	\
-	OTP_SOURCE_URL="https://github.com/erlang/otp/archive/OTP-$OTP_VERSION.tar.gz"; \
-	OTP_PATH="/usr/local/src/otp-$OTP_VERSION"; \
-	\
-# Download, verify & extract OTP_SOURCE
-	mkdir -p "$OTP_PATH"; \
-	wget --progress dot:giga --output-document "$OTP_PATH.tar.gz" "$OTP_SOURCE_URL"; \
-	test "$SKIP_OTP_VERIFY" = "true" || echo "$OTP_SOURCE_SHA256 *$OTP_PATH.tar.gz" | sha256sum --check --strict -; \
-	tar --extract --file "$OTP_PATH.tar.gz" --directory "$OTP_PATH" --strip-components 1; \
-	\
-# Configure Erlang/OTP for compilation, disable unused features & applications
-# https://erlang.org/doc/applications.html
-# ERL_TOP is required for Erlang/OTP makefiles to find the absolute path for the installation
-	cd "$OTP_PATH"; \
-	export ERL_TOP="$OTP_PATH"; \
-	./otp_build autoconf; \
-	CFLAGS="$(dpkg-buildflags --get CFLAGS)"; export CFLAGS; \
-# add -rpath to avoid conflicts between our OpenSSL's "libssl.so" and the libssl package by making sure /usr/local/lib is searched first (but only for Erlang/OpenSSL to avoid issues with other tools using libssl; https://github.com/docker-library/rabbitmq/issues/364)
-	export CFLAGS="$CFLAGS -Wl,-rpath=/usr/local/lib"; \
-	hostArch="$(dpkg-architecture --query DEB_HOST_GNU_TYPE)"; \
-	buildArch="$(dpkg-architecture --query DEB_BUILD_GNU_TYPE)"; \
-	dpkgArch="$(dpkg --print-architecture)"; dpkgArch="${dpkgArch##*-}"; \
-	./configure \
-		--host="$hostArch" \
-		--build="$buildArch" \
-		--disable-dynamic-ssl-lib \
-		--disable-hipe \
-		--disable-sctp \
-		--disable-silent-rules \
-		--enable-jit \
-		--enable-clock-gettime \
-		--enable-hybrid-heap \
-		--enable-kernel-poll \
-		--enable-shared-zlib \
-		--enable-smp-support \
-		--enable-threads \
-		--with-microstate-accounting=extra \
-		--without-common_test \
-		--without-debugger \
-		--without-dialyzer \
-		--without-diameter \
-		--without-edoc \
-		--without-erl_docgen \
-		--without-et \
-		--without-eunit \
-		--without-ftp \
-		--without-hipe \
-		--without-jinterface \
-		--without-megaco \
-		--without-observer \
-		--without-odbc \
-		--without-reltool \
-		--without-ssh \
-		--without-tftp \
-		--without-wx \
-	; \
-# Compile & install Erlang/OTP
-	make -j "$(getconf _NPROCESSORS_ONLN)" GEN_OPT_FLGS="-O2 -fno-strict-aliasing"; \
-	make install; \
-	cd ..; \
-	rm -rf \
-		"$OTP_PATH"* \
-		/usr/local/lib/erlang/lib/*/examples \
-		/usr/local/lib/erlang/lib/*/src \
-	; \
-	\
-# reset apt-mark's "manual" list so that "purge --auto-remove" will remove all build dependencies
-	apt-mark auto '.*' > /dev/null; \
-	[ -z "$savedAptMark" ] || apt-mark manual $savedAptMark; \
-	find /usr/local -type f -executable -exec ldd '{}' ';' \
-		| awk '/=>/ { print $(NF-1) }' \
-		| sort -u \
-		| xargs -r dpkg-query --search \
-		| cut -d: -f1 \
-		| sort -u \
-		| xargs -r apt-mark manual \
-	; \
-	apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false; \
-	\
-# Check that OpenSSL still works after purging build dependencies
-	openssl version; \
-# Check that Erlang/OTP crypto & ssl were compiled against OpenSSL correctly
-	erl -noshell -eval 'io:format("~p~n~n~p~n~n", [crypto:supports(), ssl:versions()]), init:stop().'
 
 ENV RABBITMQ_DATA_DIR=/var/lib/rabbitmq
 # Create rabbitmq system user & group, fix permissions & allow root user to connect to the RabbitMQ Erlang VM

@@ -20,6 +20,68 @@ load(
     "install_pkgs",
 )
 
+FIRECRACKER_EXEC_PROPS = {
+    # https://www.buildbuddy.io/docs/rbe-microvms
+    "workload-isolation-type": "firecracker",
+    "EstimatedFreeDiskBytes": "16GB",
+    "init-dockerd": "true",
+    "recycle-runner": "true",
+    # Use the default buildbuddy RBE image
+    "container-image": "",
+}
+
+OPENSSL_VERSION = "3.1.4"
+
+filegroup(
+    name = "context-files",
+    srcs = [
+        "Dockerfile",
+        "build_install_openssl.sh",
+        "build_install_otp.sh",
+        "docker-entrypoint.sh",
+        "10-default-guest-user.conf",
+        "//:package-generic-unix",
+        "@openssl-%s//file" % OPENSSL_VERSION,
+    ] + select({
+        "@erlang_config//:erlang_24_3": ["@otp_src_24//file"],
+        "@erlang_config//:erlang_25_0": ["@otp_src_25_0//file"],
+        "@erlang_config//:erlang_25_1": ["@otp_src_25_1//file"],
+        "@erlang_config//:erlang_25_2": ["@otp_src_25_2//file"],
+        "@erlang_config//:erlang_25_3": ["@otp_src_25_3//file"],
+        "@erlang_config//:erlang_26_1": ["@otp_src_26_1//file"],
+        "@erlang_config//:erlang_26_2": ["@otp_src_26_2//file"],
+    }),
+)
+
+genrule(
+    name = "docker-build",
+    srcs = [
+        ":context-files",
+    ],
+    outs = [
+        "context",
+        "image.tar",
+    ],
+    cmd = """set -euxo pipefail
+
+mkdir $(location context)
+
+cp $(locations :context-files) $(location context)
+mv $(location context)/OTP-*.tar.gz $(location context)/OTP.tar.gz
+
+docker buildx \\
+    build \\
+    $(location context) \\
+    --build-arg OPENSSL_VERSION={openssl_version} \\
+    --tag {tag}
+""".format(
+    openssl_version = OPENSSL_VERSION,
+    tag = "bazel/%s/docker-build" % package_name(),
+),
+    exec_properties = FIRECRACKER_EXEC_PROPS,
+    tags = ["manual"],
+)
+
 BUILD_DEPS_PACKAGES = [
     "autoconf",
     "ca-certificates",
@@ -44,16 +106,6 @@ CONVENIENCE_PACKAGES = [
     "tmux",
     "neovim",
 ]
-
-FIRECRACKER_EXEC_PROPS = {
-    # https://www.buildbuddy.io/docs/rbe-microvms
-    "workload-isolation-type": "firecracker",
-    "EstimatedFreeDiskBytes": "16GB",
-    "init-dockerd": "true",
-    "recycle-runner": "true",
-    # Use the default buildbuddy RBE image
-    "container-image": "",
-}
 
 download_pkgs(
     name = "otp_pkgs",
