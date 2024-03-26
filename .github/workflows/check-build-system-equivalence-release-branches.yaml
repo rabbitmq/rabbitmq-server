@@ -8,7 +8,15 @@ jobs:
     uses: ./.github/workflows/check-build-system-equivalence.yaml
     with:
       ref: refs/heads/main
-      erlang_version: 26.1
+      erlang_version: 26.2
+      elixir_version: 1.15
+      project_version: 4.0.0
+
+  check-v3_13_x:
+    uses: ./.github/workflows/check-build-system-equivalence.yaml
+    with:
+      ref: refs/heads/v3.13.x
+      erlang_version: 26.2
       elixir_version: 1.15
       project_version: 3.13.0
 
@@ -19,11 +27,3 @@ jobs:
       erlang_version: 26.1
       elixir_version: 1.15
       project_version: 3.12.0
-
-  check-v3_11_x:
-    uses: ./.github/workflows/check-build-system-equivalence.yaml
-    with:
-      ref: refs/heads/v3.11.x
-      erlang_version: 26.1
-      elixir_version: 1.15
-      project_version: 3.11.0
