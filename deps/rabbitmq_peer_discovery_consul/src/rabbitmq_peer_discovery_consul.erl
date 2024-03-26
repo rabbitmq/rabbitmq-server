@@ -9,7 +9,8 @@
 -behaviour(rabbit_peer_discovery_backend).
 
 -export([init/0, list_nodes/0, supports_registration/0, register/0, unregister/0,
-         post_registration/0, lock/1, unlock/1]).
+         post_registration/0, lock/2, unlock/2,
+         pre_discovery/0, post_discovery/1]).
 -export([send_health_check_pass/0]).
 -export([session_ttl_update_callback/1]).
 
@@ -42,13 +43,31 @@ unregister() ->
 post_registration() ->
     ?DELEGATE:post_registration().
 
--spec lock(Nodes :: [node()]) -> {ok, Data :: term()} | {error, Reason :: string()}.
-lock(Node) ->
-    ?DELEGATE:lock(Node).
+-spec pre_discovery() ->
+    {ok, BackendPriv :: rabbit_peer_discovery_backend:backend_priv()} |
+    {error, Reason :: string()}.
 
--spec unlock({SessionId :: string(), TRef :: timer:tref()}) -> ok.
-unlock(Data) ->
-    ?DELEGATE:unlock(Data).
+pre_discovery() ->
+    ?DELEGATE:pre_discovery().
+
+-spec post_discovery(BackendPriv :: rabbit_peer_discovery_backend:backend_priv()) ->
+    ok.
+
+post_discovery(BackendPriv) ->
+    ?DELEGATE:post_discovery(BackendPriv).
+
+-spec lock(Nodes :: [node()],
+           BackendPriv :: rabbit_peer_discovery_backend:backend_priv()) ->
+    {ok, ok} | {error, Reason :: string()}.
+
+lock(Node, BackendPriv) ->
+    ?DELEGATE:lock(Node, BackendPriv).
+
+-spec unlock(LockData :: rabbit_peer_discovery_backend:lock_data(),
+            BackendPriv :: rabbit_peer_discovery_backend:backend_priv()) ->
+    ok.
+unlock(LockData, BackendPriv) ->
+    ?DELEGATE:unlock(LockData, BackendPriv).
 
 -spec send_health_check_pass() -> ok.
 send_health_check_pass() ->
