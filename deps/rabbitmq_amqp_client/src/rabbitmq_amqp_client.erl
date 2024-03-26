@@ -321,11 +321,8 @@ purge_or_delete_queue(LinkPair, QueueName, PathSuffix) ->
         {ok, Resp} ->
             case is_success(Resp) of
                 true ->
-                    #'v1_0.amqp_value'{content = Content} = amqp10_msg:body(Resp),
-                    {map, [
-                           {{utf8, <<"message_count">>}, {ulong, Count}}
-                          ]
-                    } = Content,
+                    #'v1_0.amqp_value'{content = {map, KVList}} = amqp10_msg:body(Resp),
+                    #{{utf8, <<"message_count">>} := {ulong, Count}} = maps:from_list(KVList),
                     {ok, #{message_count => Count}};
                 false ->
                     {error, Resp}
@@ -411,33 +408,44 @@ request(#link_pair{session = Session,
     {ok, queue_info()}.
 get_queue_info(Response) ->
     #'v1_0.amqp_value'{content = {map, KVList}} = amqp10_msg:body(Response),
-    Map = lists:foldl(
-            fun({{utf8, Key = <<"arguments">>}, {map, KVList0}}, Acc) ->
-                    Map = lists:foldl(fun({{utf8, K}, TypeVal}, M) ->
-                                              M#{K => TypeVal}
-                                      end, #{}, KVList0),
-                    Acc#{to_atom(Key) => Map};
-               ({{utf8, Key = <<"replicas">>}, {array, utf8, Arr}}, Acc) ->
-                    L = lists:map(fun({utf8, Replica}) ->
-                                          Replica
-                                  end, Arr),
-                    Acc#{to_atom(Key) => L};
-               ({{utf8, Key}, TypeVal}, Acc) ->
-                    Acc#{to_atom(Key) => amqp10_client_types:unpack(TypeVal)}
-            end, #{}, KVList),
-    {ok, Map}.
+    RespMap = maps:from_list(KVList),
 
-to_atom(<<"name">>) -> name;
-to_atom(<<"vhost">>) -> vhost;
-to_atom(<<"durable">>) -> durable;
-to_atom(<<"exclusive">>) -> exclusive;
-to_atom(<<"auto_delete">>) -> auto_delete;
-to_atom(<<"arguments">>) -> arguments;
-to_atom(<<"type">>) -> type;
-to_atom(<<"message_count">>) -> message_count;
-to_atom(<<"consumer_count">>) -> consumer_count;
-to_atom(<<"replicas">>) -> replicas;
-to_atom(<<"leader">>) -> leader.
+    RequiredQInfo = [<<"name">>,
+                     <<"vhost">>,
+                     <<"durable">>,
+                     <<"exclusive">>,
+                     <<"auto_delete">>,
+                     <<"type">>,
+                     <<"message_count">>,
+                     <<"consumer_count">>],
+    Map0 = lists:foldl(fun(Key, M) ->
+                               {ok, TypeVal} = maps:find({utf8, Key}, RespMap),
+                               M#{binary_to_atom(Key) => amqp10_client_types:unpack(TypeVal)}
+                       end, #{}, RequiredQInfo),
+
+    {ok, {map, ArgsKVList}} = maps:find({utf8, <<"arguments">>}, RespMap),
+    ArgsMap = lists:foldl(fun({{utf8, K}, TypeVal}, M) ->
+                                  M#{K => TypeVal}
+                          end, #{}, ArgsKVList),
+    Map1 = Map0#{arguments => ArgsMap},
+
+    Map2 = case maps:find({utf8, <<"replicas">>}, RespMap) of
+               {ok, {array, utf8, Arr}} ->
+                   Replicas = lists:map(fun({utf8, Replica}) ->
+                                                Replica
+                                        end, Arr),
+                   Map1#{replicas => Replicas};
+               error ->
+                   Map1
+           end,
+
+    Map = case maps:find({utf8, <<"leader">>}, RespMap) of
+              {ok, {utf8, Leader}} ->
+                  Map2#{leader => Leader};
+              error ->
+                  Map2
+          end,
+    {ok, Map}.
 
 -spec encode_arguments(arguments()) ->
     {map, list(tuple())}.
