@@ -2,7 +2,6 @@ load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
-    "BROKER_VERSION_REQUIREMENTS_ANY",
     "assert_suites",
     "rabbitmq_app",
 )
@@ -29,7 +28,6 @@ rabbitmq_app(
     srcs = [":all_srcs"],
     hdrs = [":public_hdrs"],
     app_description = APP_DESCRIPTION,
-    app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_name = APP_NAME,
     beam_files = [":beam_files"],
     license_files = [":license_files"],
