@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build-publish-dev-bazel:
-    runs-on: ubuntu-latst
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
