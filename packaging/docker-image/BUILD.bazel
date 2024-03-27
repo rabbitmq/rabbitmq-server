@@ -104,6 +104,7 @@ oci_image_index(
 ]
 
 oci_push(
+    name = "push",
     image = ":rabbitmq",
     repository = "index.docker.io/pivotalrabbitmq/rabbitmq",
 )
