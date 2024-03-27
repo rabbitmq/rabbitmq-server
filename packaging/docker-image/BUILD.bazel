@@ -1,24 +1,5 @@
-load(
-    "@io_bazel_rules_docker//container:container.bzl",
-    "container_image",
-    "container_layer",
-)
-load(
-    "@io_bazel_rules_docker//contrib:test.bzl",
-    "container_test",
-)
-load(
-    "@io_bazel_rules_docker//docker/util:run.bzl",
-    "container_run_and_commit_layer",
-)
-load(
-    "@io_bazel_rules_docker//docker/package_managers:download_pkgs.bzl",
-    "download_pkgs",
-)
-load(
-    "@io_bazel_rules_docker//docker/package_managers:install_pkgs.bzl",
-    "install_pkgs",
-)
+load("@container_structure_test//:defs.bzl", "container_structure_test")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_image_index")
 
 FIRECRACKER_EXEC_PROPS = {
     # https://www.buildbuddy.io/docs/rbe-microvms
@@ -30,322 +11,85 @@ FIRECRACKER_EXEC_PROPS = {
     "container-image": "",
 }
 
-OPENSSL_VERSION = "3.1.4"
-
 filegroup(
     name = "context-files",
     srcs = [
+        "10-defaults.conf",
+        "20-management_agent.disable_metrics_collector.conf",
         "Dockerfile",
-        "build_install_openssl.sh",
-        "build_install_otp.sh",
         "docker-entrypoint.sh",
-        "10-default-guest-user.conf",
         "//:package-generic-unix",
-        "@openssl-%s//file" % OPENSSL_VERSION,
-    ] + select({
-        "@erlang_config//:erlang_24_3": ["@otp_src_24//file"],
-        "@erlang_config//:erlang_25_0": ["@otp_src_25_0//file"],
-        "@erlang_config//:erlang_25_1": ["@otp_src_25_1//file"],
-        "@erlang_config//:erlang_25_2": ["@otp_src_25_2//file"],
-        "@erlang_config//:erlang_25_3": ["@otp_src_25_3//file"],
-        "@erlang_config//:erlang_26_1": ["@otp_src_26_1//file"],
-        "@erlang_config//:erlang_26_2": ["@otp_src_26_2//file"],
-    }),
+    ],
 )
 
-genrule(
-    name = "docker-build",
-    srcs = [
-        ":context-files",
-    ],
-    outs = [
-        "context",
-        "image.tar",
-    ],
-    cmd = """set -euxo pipefail
+_ARCHS = [
+    "amd64",
+    "arm64",
+]
 
-mkdir $(location context)
+[
+    genrule(
+        name = "docker-build-%s" % arch,
+        srcs = [
+            ":context-files",
+        ],
+        outs = [
+            "image-%s.tar" % arch,
+        ],
+        cmd = """set -euo pipefail
 
-cp $(locations :context-files) $(location context)
-mv $(location context)/OTP-*.tar.gz $(location context)/OTP.tar.gz
+CONTEXT="$$(mktemp -d)"
+
+cp $(locations :context-files) "$$CONTEXT"
 
 docker buildx \\
     build \\
-    $(location context) \\
-    --build-arg OPENSSL_VERSION={openssl_version} \\
-    --tag {tag}
+    "$$CONTEXT" \\
+    --platform linux/{arch} \\
+    --tag {tag}:{arch} \\
+    --output type=tar,dest=$(location image-{arch}.tar)
 """.format(
-    openssl_version = OPENSSL_VERSION,
-    tag = "bazel/%s/docker-build" % package_name(),
-),
-    exec_properties = FIRECRACKER_EXEC_PROPS,
-    tags = ["manual"],
-)
-
-BUILD_DEPS_PACKAGES = [
-    "autoconf",
-    "ca-certificates",
-    "dpkg-dev",
-    "g++",
-    "gcc",
-    "libncurses5-dev",
-    "make",
+            arch = arch,
+            tag = "bazel/%s/docker-build" % package_name(),
+        ),
+        exec_properties = FIRECRACKER_EXEC_PROPS,
+        tags = [
+            "docker",
+            "manual",
+            "no-sandbox",
+            "no-remote-exec", # buildbuddy runners do not have the emulator available
+        ],
+    )
+    for arch in _ARCHS
 ]
 
-REQUIRED_PACKAGES = [
-    "gosu",
-    "ca-certificates",
+[
+    oci_image(
+        name = "rabbitmq-%s" % arch,
+        architecture = arch,
+        os = "linux",
+        tags = [
+            "docker",
+            "manual",
+        ],
+        tars = [":image-%s.tar" % arch],
+    )
+    for arch in _ARCHS
 ]
 
-CONVENIENCE_PACKAGES = [
-    "python3",
-    "dstat",
-    "sysstat",
-    "htop",
-    "nmon",
-    "tmux",
-    "neovim",
-]
-
-download_pkgs(
-    name = "otp_pkgs",
-    exec_properties = FIRECRACKER_EXEC_PROPS,
-    image_tar = "@ubuntu2004//image",
-    packages = BUILD_DEPS_PACKAGES,
-    tags = ["manual"],
-)
-
-download_pkgs(
-    name = "rabbitmq_pkgs",
-    exec_properties = FIRECRACKER_EXEC_PROPS,
-    image_tar = "@ubuntu2004//image",
-    packages = REQUIRED_PACKAGES + CONVENIENCE_PACKAGES,
-    tags = ["manual"],
-)
-
-install_pkgs(
-    name = "otp_pkgs_image",
-    exec_properties = FIRECRACKER_EXEC_PROPS,
-    image_tar = "@ubuntu2004//image",
-    installables_tar = ":otp_pkgs.tar",
-    installation_cleanup_commands = "rm -rf /var/lib/apt/lists/*",
-    output_image_name = "otp_pkgs_image",
-    tags = ["manual"],
-)
-
-install_pkgs(
-    name = "rabbitmq_pkgs_image",
-    exec_properties = FIRECRACKER_EXEC_PROPS,
-    image_tar = "@ubuntu2004//image",
-    installables_tar = ":rabbitmq_pkgs.tar",
-    installation_cleanup_commands = "rm -rf /var/lib/apt/lists/*",
-    output_image_name = "rabbitmq_pkgs_image",
-    tags = ["manual"],
-)
-
-container_layer(
-    name = "openssl_source_layer",
-    directory = "/usr/local/src",
-    env = {
-        "OPENSSL_VERSION": "3.1.4",
-    },
-    files = [
-        "build_install_openssl.sh",
-    ],
-    tags = ["manual"],
-    tars = [
-        "@openssl-3.1.4//file",
-    ],
-)
-
-container_image(
-    name = "openssl_source",
-    base = ":otp_pkgs_image",
-    layers = [":openssl_source_layer"],
-    tags = ["manual"],
-)
-
-container_run_and_commit_layer(
-    name = "openssl_layer",
-    commands = [
-        "/usr/local/src/build_install_openssl.sh",
-        "rm /usr/local/src/build_install_openssl.sh",
-    ],
-    exec_properties = FIRECRACKER_EXEC_PROPS,
-    image = ":openssl_source.tar",
-    tags = ["manual"],
-)
-
-container_image(
-    name = "otp_source",
-    base = ":otp_pkgs_image",
-    directory = "/usr/local/src",
-    files = [
-        "build_install_otp.sh",
-    ],
-    layers = [
-        ":openssl_layer",
-    ],
-    tags = ["manual"],
-    tars = select({
-        "@erlang_config//:erlang_24_3": ["@otp_src_24//file"],
-        "@erlang_config//:erlang_25_0": ["@otp_src_25_0//file"],
-        "@erlang_config//:erlang_25_1": ["@otp_src_25_1//file"],
-        "@erlang_config//:erlang_25_2": ["@otp_src_25_2//file"],
-        "@erlang_config//:erlang_25_3": ["@otp_src_25_3//file"],
-        "@erlang_config//:erlang_26_1": ["@otp_src_26_1//file"],
-        "@erlang_config//:erlang_26_2": ["@otp_src_26_2//file"],
-    }),
-)
-
-container_run_and_commit_layer(
-    name = "otp_layer",
-    commands = [
-        "/usr/local/src/build_install_otp.sh",
-        "rm /usr/local/src/build_install_otp.sh",
-    ],
-    exec_properties = FIRECRACKER_EXEC_PROPS,
-    image = ":otp_source.tar",
-    tags = ["manual"],
-)
-
-container_layer(
-    name = "rabbitmq_tarball_layer",
-    directory = "/opt",
-    files = [
-        "10-default-guest-user.conf",
-        "docker-entrypoint.sh",
-        "install_rabbitmq.sh",
-    ],
-    tags = ["manual"],
-    tars = [
-        "//:package-generic-unix",
-    ],
-)
-
-RABBITMQ_DATA_DIR = "/var/lib/rabbitmq"
-
-RABBITMQ_HOME = "/opt/rabbitmq"
-
-container_image(
-    name = "rabbitmq_tarball",
-    base = ":rabbitmq_pkgs_image",
-    env = {
-        "RABBITMQ_DATA_DIR": RABBITMQ_DATA_DIR,
-        "RABBITMQ_HOME": RABBITMQ_HOME,
-        "RABBITMQ_LOGS": "-",
-    },
-    layers = [
-        ":openssl_layer",
-        ":otp_layer",
-        ":rabbitmq_tarball_layer",
-    ],
-    tags = ["manual"],
-)
-
-container_run_and_commit_layer(
-    name = "rabbitmq_layer",
-    commands = [
-        "/opt/install_rabbitmq.sh",
-        "rm /opt/install_rabbitmq.sh",
-    ],
-    exec_properties = FIRECRACKER_EXEC_PROPS,
-    image = ":rabbitmq_tarball.tar",
-    tags = ["manual"],
-)
-
-C_UTF8 = "C.UTF-8"
-
-container_image(
+oci_image_index(
     name = "rabbitmq",
-    base = ":rabbitmq_pkgs_image",
-    cmd = ["rabbitmq-server"],
-    entrypoint = ["docker-entrypoint.sh"],
-    env = {
-        "RABBITMQ_DATA_DIR": RABBITMQ_DATA_DIR,
-        "RABBITMQ_HOME": RABBITMQ_HOME,
-        "RABBITMQ_LOGS": "-",
-        "HOME": RABBITMQ_DATA_DIR,
-        "PATH": "%s/sbin:$$PATH" % RABBITMQ_HOME,
-        "LANG": C_UTF8,
-        "LANGUAGE": C_UTF8,
-        "LC_ALL": C_UTF8,
-    },
-    layers = [
-        ":openssl_layer",
-        ":otp_layer",
-        ":rabbitmq_layer",
+    images = [
+        ":rabbitmq-amd64",
+        ":rabbitmq-arm64",
     ],
-    ports = [
-        "4369/tcp",  # epmd
-        "5671/tcp",  # amqp-tls
-        "5672/tcp",  # amqp
-        "25672/tcp",  # erlang
-        "15671/tcp",  # management-tls
-        "15672/tcp",  # management
-        "15691/tcp",  # prometheus-tls
-        "15692/tcp",  # prometheus
-        "5551/tcp",  # stream-tls
-        "5552/tcp",  # stream
-        "8883/tcp",  # mqtt-tls
-        "1883/tcp",  # mqtt
-        "15676/tcp",  # web-mqtt-tls
-        "15675/tcp",  # web-mqtt
-        "61614/tcp",  # stomp-tls
-        "61613/tcp",  # stomp
-        "15673/tcp",  # web-stomp-tls
-        "15674/tcp",  # web-stomp
-        "15670/tcp",  # examples
-    ],
-    tags = ["manual"],
-    volumes = [
-        RABBITMQ_DATA_DIR,
-    ],
-)
-
-# Wrapper targets for the tarred images are required in order to be able to run
-# commandTests in container_test targets.
-
-container_image(
-    name = "openssl_install_wrapper",
-    base = ":otp_source",
-    tags = ["manual"],
-)
-
-container_image(
-    name = "otp_install_wrapper",
-    base = ":rabbitmq_pkgs_image",
-    layers = [
-        ":otp_layer",
-    ],
-    tags = ["manual"],
-)
-
-# Tests
-
-container_test(
-    name = "openssl_test",
-    configs = ["//packaging/docker-image/test_configs:openssl_ubuntu.yaml"],
-    exec_properties = FIRECRACKER_EXEC_PROPS,
-    image = ":openssl_install_wrapper",
     tags = [
         "docker",
         "manual",
     ],
 )
 
-container_test(
-    name = "otp_test",
-    configs = ["//packaging/docker-image/test_configs:otp_ubuntu.yaml"],
-    exec_properties = FIRECRACKER_EXEC_PROPS,
-    image = ":otp_install_wrapper",
-    tags = [
-        "docker",
-        "manual",
-    ],
-)
-
-container_test(
+container_structure_test(
     name = "rabbitmq_test",
     configs = ["//packaging/docker-image/test_configs:rabbitmq_ubuntu.yaml"],
     exec_properties = FIRECRACKER_EXEC_PROPS,
