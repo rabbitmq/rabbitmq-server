@@ -118,9 +118,9 @@ jobs:
         echo "$(cat MODULE.bazel | buildozer 'set version "${{ steps.fetch-version.outputs.VERSION }}"' -:${{ matrix.name }})" > MODULE.bazel
         echo "MODULE.bazel updated"
 
-        buildozer 'set downloaded_file_path "OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"' //WORKSPACE:otp_src_${{ matrix.name }}
-        buildozer 'set urls ["https://github.com/erlang/otp/archive/OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"]' //WORKSPACE:otp_src_${{ matrix.name }}
-        buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA2 }}"' //WORKSPACE:otp_src_${{ matrix.name }}
+        buildozer 'set downloaded_file_path "OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"' //WORKSPACE:otp_src_${{ matrix.name }} || test $? -eq 3
+        buildozer 'set urls ["https://github.com/erlang/otp/archive/OTP-${{ steps.fetch-version.outputs.VERSION }}.tar.gz"]' //WORKSPACE:otp_src_${{ matrix.name }} || test $? -eq 3
+        buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA2 }}"' //WORKSPACE:otp_src_${{ matrix.name }} || test $? -eq 3
 
         echo "WORKSPACE updated"
 
