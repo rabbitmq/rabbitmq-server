@@ -34,6 +34,7 @@
                    ?V_1_0_SYMBOL_RELEASED,
                    ?V_1_0_SYMBOL_MODIFIED]).
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
+-define(PERMISSION_CACHE, permission_cache).
 -define(TOPIC_PERMISSION_CACHE, topic_permission_cache).
 -define(PROCESS_GROUP_NAME, amqp_sessions).
 -define(UINT(N), {uint, N}).
@@ -50,12 +51,16 @@
 -define(LINK_CREDIT_RCV, 128).
 -define(MANAGEMENT_LINK_CREDIT_RCV, 8).
 -define(MANAGEMENT_NODE_ADDRESS, <<"/management">>).
+-define(DEFAULT_EXCHANGE_NAME, <<>>).
+-define(CP_TARGET_ADDRESS, cp_target_address).
 
 -export([start_link/8,
          process_frame/2,
          list_local/0,
          conserve_resources/3,
-         check_read_permitted_on_topic/3
+         check_resource_access/3,
+         check_read_permitted_on_topic/3,
+         persist/0
         ]).
 
 -export([init/1,
@@ -96,8 +101,14 @@
          }).
 
 -record(incoming_link, {
-          exchange :: rabbit_types:exchange() | rabbit_exchange:name(),
-          routing_key :: undefined | rabbit_types:routing_key(),
+          %% The exchange is either defined in the ATTACH frame and static for
+          %% the life time of the link or dynamically defined in each message's
+          %% "to" field (address v2).
+          exchange :: rabbit_types:exchange() | rabbit_exchange:name() | to,
+          %% The routing key is either defined in the ATTACH frame and static for
+          %% the life time of the link or dynamically defined in each message's
+          %% "to" field (address v2) or "subject" field (address v1).
+          routing_key :: rabbit_types:routing_key() | to | subject,
           %% queue_name_bin is only set if the link target address refers to a queue.
           queue_name_bin :: undefined | rabbit_misc:resource_name(),
           delivery_count :: sequence_no(),
@@ -888,7 +899,6 @@ handle_control(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
             rabbit_global_counters:publisher_created(?PROTOCOL),
             reply0([Reply, Flow], State);
         {error, Reason} ->
-            %% TODO proper link establishment protocol here?
             protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
                            "Attach rejected: ~tp",
                            [Reason])
@@ -907,21 +917,21 @@ handle_control(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                           user = User = #user{username = Username},
                                           reader_pid = ReaderPid}}) ->
     ok = validate_attach(Attach),
-    {SndSettled, EffectiveSndSettleMode} = case SndSettleMode of
-                                               ?V_1_0_SENDER_SETTLE_MODE_SETTLED ->
-                                                   {true, SndSettleMode};
-                                               _ ->
-                                                   %% In the future, we might want to support sender settle
-                                                   %% mode mixed where we would expect a settlement from the
-                                                   %% client only for durable messages.
-                                                   {false, ?V_1_0_SENDER_SETTLE_MODE_UNSETTLED}
-                                           end,
+    {SndSettled,
+     EffectiveSndSettleMode} = case SndSettleMode of
+                                   ?V_1_0_SENDER_SETTLE_MODE_SETTLED ->
+                                       {true, SndSettleMode};
+                                   _ ->
+                                       %% In the future, we might want to support sender settle
+                                       %% mode mixed where we would expect a settlement from the
+                                       %% client only for durable messages.
+                                       {false, ?V_1_0_SENDER_SETTLE_MODE_UNSETTLED}
+                               end,
     case ensure_source(Source, Vhost, User) of
         {error, Reason} ->
             protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD, "Attach rejected: ~tp", [Reason]);
-        {ok, QNameBin} ->
-            QName = rabbit_misc:r(Vhost, queue, QNameBin),
-            check_read_permitted(QName, User),
+        {ok, QName = #resource{name = QNameBin}} ->
+            check_resource_access(QName, read, User),
             case rabbit_amqqueue:with(
                    QName,
                    fun(Q) ->
@@ -1769,7 +1779,7 @@ incoming_link_transfer(
                    rcv_settle_mode = RcvSettleMode,
                    handle = Handle = ?UINT(HandleInt)},
   MsgPart,
-  #incoming_link{exchange = Exchange,
+  #incoming_link{exchange = LinkExchange,
                  routing_key = LinkRKey,
                  delivery_count = DeliveryCount0,
                  incoming_unconfirmed_map = U0,
@@ -1778,6 +1788,7 @@ incoming_link_transfer(
                 } = Link0,
   State0 = #state{queue_states = QStates0,
                   cfg = #cfg{user = User = #user{username = Username},
+                             vhost = Vhost,
                              trace_state = Trace,
                              conn_name = ConnName,
                              channel_num = ChannelNum}}) ->
@@ -1801,15 +1812,13 @@ incoming_link_transfer(
     Sections = amqp10_framing:decode_bin(MsgBin),
     ?DEBUG("~s Inbound content:~n  ~tp",
            [?MODULE, [amqp10_framing:pprint(Section) || Section <- Sections]]),
-    case rabbit_exchange_lookup(Exchange) of
-        {ok, X = #exchange{name = #resource{name = XNameBin}}} ->
-            Anns = #{?ANN_EXCHANGE => XNameBin},
-            Mc0 = mc:init(mc_amqp, Sections, Anns),
-            {RoutingKey, Mc1} = ensure_routing_key(LinkRKey, Mc0),
+    Mc0 = mc:init(mc_amqp, Sections, #{}),
+    case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User) of
+        {ok, X, RoutingKey, Mc1} ->
             Mc = rabbit_message_interceptor:intercept(Mc1),
             check_user_id(Mc, User),
-            messages_received(Settled),
             check_write_permitted_on_topic(X, User, RoutingKey),
+            messages_received(Settled),
             QNames = rabbit_exchange:route(X, Mc, #{return_binding_keys => true}),
             rabbit_trace:tap_in(Mc, QNames, ConnName, ChannelNum, Username, Trace),
             Opts = #{correlation => {HandleInt, DeliveryId}},
@@ -1846,29 +1855,54 @@ incoming_link_transfer(
             {error, [Disposition, Detach]}
     end.
 
-ensure_routing_key(LinkRKey, Mc0) ->
-    RKey = case LinkRKey of
-               undefined ->
+lookup_target(#exchange{} = X, LinkRKey, Mc, _, _) ->
+    lookup_routing_key(X, LinkRKey, Mc);
+lookup_target(#resource{} = XName, LinkRKey, Mc, _, _) ->
+    case rabbit_exchange:lookup(XName) of
+        {ok, X} ->
+            lookup_routing_key(X, LinkRKey, Mc);
+        {error, _} = Err ->
+            Err
+    end;
+lookup_target(to, to, Mc, Vhost, User) ->
+    case mc:property(to, Mc) of
+        {utf8, <<"/exchange/", Rest/binary>>} ->
+            {XNameBin, RKey} = exchange_target(Rest),
+            XName = rabbit_misc:r(Vhost, exchange, XNameBin),
+            check_resource_access(XName, write, User),
+            case rabbit_exchange:lookup(XName) of
+                {ok, X} ->
+                    lookup_routing_key(X, RKey, Mc);
+                {error, _} = Err ->
+                    Err
+            end;
+        undefined ->
+            protocol_error(
+              ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+              "anonymous terminus requires 'to' address to be set",
+              []);
+        Other ->
+            protocol_error(
+              ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+              "bad 'to' address: ~p",
+              [Other])
+    end.
+
+lookup_routing_key(X = #exchange{name = #resource{name = XNameBin}}, RKey0, Mc0) ->
+    RKey = case RKey0 of
+               subject ->
                    case mc:property(subject, Mc0) of
                        undefined ->
-                           %% Set the default routing key of AMQP 0.9.1 'basic.publish'{}.
-                           %% For example, when the client attached to target /exchange/amq.fanout and sends a
-                           %% message without setting a 'subject' in the message properties, the routing key is
-                           %% ignored during routing, but receiving code paths still expect some routing key to be set.
-                           <<"">>;
+                           <<>>;
                        {utf8, Subject} ->
                            Subject
                    end;
                _ ->
-                   LinkRKey
+                   RKey0
            end,
-    Mc = mc:set_annotation(?ANN_ROUTING_KEYS, [RKey], Mc0),
-    {RKey, Mc}.
-
-rabbit_exchange_lookup(X = #exchange{}) ->
-    {ok, X};
-rabbit_exchange_lookup(XName = #resource{}) ->
-    rabbit_exchange:lookup(XName).
+    Mc1 = mc:set_annotation(?ANN_EXCHANGE, XNameBin, Mc0),
+    Mc = mc:set_annotation(?ANN_ROUTING_KEYS, [RKey], Mc1),
+    {ok, X, RKey, Mc}.
 
 process_routing_confirm([], _SenderSettles = true, _, U) ->
     rabbit_global_counters:messages_unroutable_dropped(?PROTOCOL, 1),
@@ -1924,43 +1958,149 @@ maybe_grant_mgmt_link_credit(Credit, DeliveryCount, Handle)
 maybe_grant_mgmt_link_credit(Credit, _, _) ->
     {Credit, []}.
 
-%% TODO default-outcome and outcomes, dynamic lifetimes
+-spec ensure_source(#'v1_0.source'{}, rabbit_types:vhost(), rabbit_types:user()) ->
+    {ok, rabbit_amqqueue:name()} | {error, term()}.
+ensure_source(#'v1_0.source'{dynamic = true}, _, _) ->
+    protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
+                   "Dynamic sources not supported",
+                   []);
+ensure_source(#'v1_0.source'{address = Address,
+                             durable = Durable}, Vhost, User) ->
+    case Address of
+        {utf8, SourceAddr} ->
+            case min_amqp_address_version() of
+                2 -> ensure_source_v2(SourceAddr, Vhost);
+                1 -> ensure_source_v1(SourceAddr, Vhost, User, Durable)
+            end;
+        _ ->
+            {error, {bad_address, Address}}
+    end.
+
+%% The only possible v2 source address format is:
+%%  /queue/:queue
+ensure_source_v2(<<"/queue/", QNameBin/binary>>, Vhost) ->
+    QName = rabbit_misc:r(Vhost, queue, QNameBin),
+    ok = exit_if_absent(QName),
+    {ok, QName};
+ensure_source_v2(Address, _) ->
+    {error, {bad_address, Address}}.
+
+ensure_source_v1(Address, Vhost, User = #user{username = Username}, Durable) ->
+    case rabbit_routing_parser:parse_endpoint(Address, false) of
+        {ok, Src} ->
+            QNameBin = ensure_terminus(source, Src, Vhost, User, Durable),
+            case rabbit_routing_parser:parse_routing(Src) of
+                {"", QNameList} ->
+                    true = string:equal(QNameList, QNameBin),
+                    QName = rabbit_misc:r(Vhost, queue, QNameBin),
+                    {ok, QName};
+                {XNameList, RoutingKeyList} ->
+                    RoutingKey = unicode:characters_to_binary(RoutingKeyList),
+                    XNameBin = unicode:characters_to_binary(XNameList),
+                    XName = rabbit_misc:r(Vhost, exchange, XNameBin),
+                    QName = rabbit_misc:r(Vhost, queue, QNameBin),
+                    Binding = #binding{source = XName,
+                                       destination = QName,
+                                       key = RoutingKey},
+                    check_resource_access(QName, write, User),
+                    check_resource_access(XName, read, User),
+                    {ok, X} = rabbit_exchange:lookup(XName),
+                    check_read_permitted_on_topic(X, User, RoutingKey),
+                    case rabbit_binding:add(Binding, Username) of
+                        ok ->
+                            {ok, QName};
+                        {error, _} = Err ->
+                            Err
+                    end
+            end;
+        {error, _} = Err ->
+            Err
+    end.
+
+-spec ensure_target(#'v1_0.target'{},
+                    rabbit_types:vhost(),
+                    rabbit_types:user()) ->
+    {ok,
+     rabbit_types:exchange() | rabbit_exchange:name() | to,
+     rabbit_types:routing_key() | to | subject,
+     rabbit_misc:resource_name() | undefined} |
+    {error, term()}.
 ensure_target(#'v1_0.target'{dynamic = true}, _, _) ->
     protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
                    "Dynamic targets not supported", []);
 ensure_target(#'v1_0.target'{address = Address,
                              durable = Durable}, Vhost, User) ->
-    case Address of
-        {utf8, Destination} ->
-            case rabbit_routing_parser:parse_endpoint(Destination, true) of
-                {ok, Dest} ->
-                    QNameBin = ensure_terminus(target, Dest, Vhost, User, Durable),
-                    {XNameList1, RK} = rabbit_routing_parser:parse_routing(Dest),
-                    XNameBin = unicode:characters_to_binary(XNameList1),
-                    XName = rabbit_misc:r(Vhost, exchange, XNameBin),
-                    {ok, X} = rabbit_exchange:lookup(XName),
-                    check_internal_exchange(X),
-                    check_write_permitted(XName, User),
-                    %% Pre-declared exchanges are protected against deletion and modification.
-                    %% Let's cache the whole #exchange{} record to save a
-                    %% rabbit_exchange:lookup(XName) call each time we receive a message.
-                    Exchange = case XNameBin of
-                                   <<>> -> X;
-                                   <<"amq.", _/binary>> -> X;
-                                   _ -> XName
-                               end,
-                    RoutingKey = case RK of
-                                     undefined -> undefined;
-                                     []        -> undefined;
-                                     _         -> unicode:characters_to_binary(RK)
-                                 end,
-                    {ok, Exchange, RoutingKey, QNameBin};
-                {error, _} = E ->
-                    E
-            end;
-        _Else ->
-            {error, {address_not_utf8_string, Address}}
+    case case min_amqp_address_version() of
+             2 -> ensure_target_v2(Address, Vhost);
+             1 -> ensure_target_v1(Address, Vhost, User, Durable)
+         end of
+        {ok, XNameBin, RKey, QNameBin}
+          when is_binary(XNameBin) ->
+            XName = rabbit_misc:r(Vhost, exchange, XNameBin),
+            {ok, X} = rabbit_exchange:lookup(XName),
+            check_internal_exchange(X),
+            check_resource_access(XName, write, User),
+            %% Pre-declared exchanges are protected against deletion and modification.
+            %% Let's cache the whole #exchange{} record to save a
+            %% rabbit_exchange:lookup(XName) call each time we receive a message.
+            Exchange = case XNameBin of
+                           ?DEFAULT_EXCHANGE_NAME -> X;
+                           <<"amq.", _/binary>> -> X;
+                           _ -> XName
+                       end,
+            {ok, Exchange, RKey, QNameBin};
+        Other ->
+            Other
     end.
+
+%% The possible v2 target address formats are:
+%%  /exchange/:exchange/key/:routing-key
+%%  /exchange/:exchange
+%%  /queue/:queue
+%%  <null>
+ensure_target_v2({utf8, <<"/exchange/", Rest/binary>>}, _) ->
+    {XNameBin, RKey} = exchange_target(Rest),
+    {ok, XNameBin, RKey, undefined};
+ensure_target_v2({utf8, <<"/queue/">>} = Address, _) ->
+    %% empty queue name is inavlid
+    {error, {bad_address, Address}};
+ensure_target_v2({utf8, <<"/queue/", QNameBin/binary>>}, Vhost) ->
+    ok = exit_if_absent(queue, Vhost, QNameBin),
+    {ok, ?DEFAULT_EXCHANGE_NAME, QNameBin, QNameBin};
+ensure_target_v2(null, _) ->
+    %% anonymous terminus
+    %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
+    {ok, to, to, undefined};
+ensure_target_v2(Address, _) ->
+    {error, {bad_address, Address}}.
+
+%% Empty exchange name (default exchange) is valid.
+exchange_target(Target) ->
+    Pattern = persistent_term:get(?CP_TARGET_ADDRESS),
+    case binary:split(Target, Pattern) of
+        [XNameBin] ->
+            {XNameBin, <<>>};
+        [XNameBin, RKey] ->
+            {XNameBin, RKey}
+    end.
+
+ensure_target_v1({utf8, Address}, Vhost, User, Durable) ->
+    case rabbit_routing_parser:parse_endpoint(Address, true) of
+        {ok, Dest} ->
+            QNameBin = ensure_terminus(target, Dest, Vhost, User, Durable),
+            {XNameList1, RK} = rabbit_routing_parser:parse_routing(Dest),
+            XNameBin = unicode:characters_to_binary(XNameList1),
+            RoutingKey = case RK of
+                             undefined -> subject;
+                             []        -> subject;
+                             _         -> unicode:characters_to_binary(RK)
+                         end,
+            {ok, XNameBin, RoutingKey, QNameBin};
+        {error, _} = Err ->
+            Err
+    end;
+ensure_target_v1(Address, _, _, _) ->
+    {error, {bad_address, Address}}.
 
 handle_outgoing_mgmt_link_flow_control(
   #management_link{delivery_count = DeliveryCountSnd} = Link0,
@@ -2119,47 +2259,6 @@ credit_reply_timeout(QType, QName) ->
 
 default(undefined, Default) -> Default;
 default(Thing,    _Default) -> Thing.
-
-ensure_source(#'v1_0.source'{dynamic = true}, _, _) ->
-    protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED, "Dynamic sources not supported", []);
-ensure_source(#'v1_0.source'{address = Address,
-                             durable = Durable},
-              Vhost,
-              User = #user{username = Username}) ->
-    case Address of
-        {utf8, SourceAddr} ->
-            case rabbit_routing_parser:parse_endpoint(SourceAddr, false) of
-                {ok, Src} ->
-                    QNameBin = ensure_terminus(source, Src, Vhost, User, Durable),
-                    case rabbit_routing_parser:parse_routing(Src) of
-                        {"", QNameList} ->
-                            true = string:equal(QNameList, QNameBin),
-                            {ok, QNameBin};
-                        {XNameList, RoutingKeyList} ->
-                            RoutingKey = unicode:characters_to_binary(RoutingKeyList),
-                            XNameBin = unicode:characters_to_binary(XNameList),
-                            XName = rabbit_misc:r(Vhost, exchange, XNameBin),
-                            QName = rabbit_misc:r(Vhost, queue, QNameBin),
-                            Binding = #binding{source = XName,
-                                               destination = QName,
-                                               key = RoutingKey},
-                            check_write_permitted(QName, User),
-                            check_read_permitted(XName, User),
-                            {ok, X} = rabbit_exchange:lookup(XName),
-                            check_read_permitted_on_topic(X, User, RoutingKey),
-                            case rabbit_binding:add(Binding, Username) of
-                                ok ->
-                                    {ok, QNameBin};
-                                {error, _} = Err ->
-                                    Err
-                            end
-                    end;
-                {error, _} = Err ->
-                    Err
-            end;
-        _ ->
-            {error, {address_not_utf8_string, Address}}
-    end.
 
 transfer_frames(Transfer, Sections, unlimited) ->
     [[Transfer, Sections]];
@@ -2353,6 +2452,9 @@ ensure_terminus(_, {amqqueue, QNameList}, Vhost, _, _) ->
 
 exit_if_absent(Kind, Vhost, Name) ->
     ResourceName = rabbit_misc:r(Vhost, Kind, unicode:characters_to_binary(Name)),
+    exit_if_absent(ResourceName).
+
+exit_if_absent(ResourceName = #resource{kind = Kind}) ->
     Mod = case Kind of
               exchange -> rabbit_exchange;
               queue -> rabbit_amqqueue
@@ -2361,7 +2463,9 @@ exit_if_absent(Kind, Vhost, Name) ->
         true ->
             ok;
         false ->
-            protocol_error(?V_1_0_AMQP_ERROR_NOT_FOUND, "no ~ts", [rabbit_misc:rs(ResourceName)])
+            protocol_error(?V_1_0_AMQP_ERROR_NOT_FOUND,
+                           "no ~ts",
+                           [rabbit_misc:rs(ResourceName)])
     end.
 
 generate_queue_name() ->
@@ -2369,7 +2473,7 @@ generate_queue_name() ->
 
 declare_queue(QNameBin, Vhost, User = #user{username = Username}, TerminusDurability) ->
     QName = rabbit_misc:r(Vhost, queue, QNameBin),
-    check_configure_permitted(QName, User),
+    check_resource_access(QName, configure, User),
     check_vhost_queue_limit(Vhost, QName),
     rabbit_core_metrics:queue_declared(QName),
     Q0 = amqqueue:new(QName,
@@ -2559,26 +2663,41 @@ check_internal_exchange(#exchange{internal = true,
 check_internal_exchange(_) ->
     ok.
 
-check_write_permitted(Resource, User) ->
-    check_resource_access(Resource, User, write).
+-spec check_resource_access(rabbit_types:r(exchange | queue),
+                            rabbit_types:permission_atom(),
+                            rabbit_types:user()) -> ok.
+check_resource_access(Resource, Perm, User) ->
+    CacheElem = {Resource, Perm},
+    Cache = case get(?PERMISSION_CACHE) of
+                undefined -> [];
+                L -> L
+            end,
+    case lists:member(CacheElem, Cache) of
+        true ->
+            ok;
+        false ->
+            Context = #{},
+            try rabbit_access_control:check_resource_access(User, Resource, Perm, Context) of
+                ok ->
+                    CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE - 1),
+                    put(?PERMISSION_CACHE, [CacheElem | CacheTail]),
+                    ok
+            catch
+                exit:#amqp_error{name = access_refused,
+                                 explanation = Msg} ->
+                    protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, Msg, [])
+            end
+    end.
 
-check_read_permitted(Resource, User) ->
-    check_resource_access(Resource, User, read).
-
-check_configure_permitted(Resource, User) ->
-    check_resource_access(Resource, User, configure).
-
-check_resource_access(Resource, User, Perm) ->
-    Context = #{},
-    ok = try rabbit_access_control:check_resource_access(User, Resource, Perm, Context)
-         catch exit:#amqp_error{name = access_refused,
-                                explanation = Msg} ->
-                   protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, Msg, [])
-         end.
-
+-spec check_write_permitted_on_topic(rabbit_types:exchange(),
+                                     rabbit_types:user(),
+                                     rabbit_types:routing_key()) -> ok.
 check_write_permitted_on_topic(Resource, User, RoutingKey) ->
     check_topic_authorisation(Resource, User, RoutingKey, write).
 
+-spec check_read_permitted_on_topic(rabbit_types:exchange(),
+                                    rabbit_types:user(),
+                                    rabbit_types:routing_key()) -> ok.
 check_read_permitted_on_topic(Resource, User, RoutingKey) ->
     check_topic_authorisation(Resource, User, RoutingKey, read).
 
@@ -2668,6 +2787,16 @@ check_paired(_) ->
 property_paired_not_set() ->
     protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
                    "Link property 'paired' is not set to boolean value 'true'", []).
+
+-spec min_amqp_address_version() -> 1 | 2.
+min_amqp_address_version() ->
+    {ok, Vsn} = application:get_env(rabbit, min_amqp_address_version),
+    Vsn.
+
+-spec persist() -> ok.
+persist() ->
+    CompiledPattern = binary:compile_pattern(<<"/key/">>),
+    ok = persistent_term:put(?CP_TARGET_ADDRESS, CompiledPattern).
 
 format_status(
   #{state := #state{cfg = Cfg,

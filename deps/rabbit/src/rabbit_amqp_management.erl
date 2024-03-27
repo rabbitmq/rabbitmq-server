@@ -3,13 +3,15 @@
 -include("rabbit_amqp.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([persist_static_configuration/0,
+-export([persist/0,
          handle_request/4]).
+
+-import(rabbit_amqp_session,
+        [check_resource_access/3,
+         check_read_permitted_on_topic/3]).
 
 -define(DEAD_LETTER_EXCHANGE_KEY, <<"x-dead-letter-exchange">>).
 -define(MP_BINDING_URI_PATH_SEGMENT, mp_binding_uri_path_segment).
-
--type resource_name() :: rabbit_types:exchange_name() | rabbit_types:rabbit_amqqueue_name().
 
 -spec handle_request(binary(), rabbit_types:vhost(), rabbit_types:user(), pid()) -> iolist().
 handle_request(Request, Vhost, User, ConnectionPid) ->
@@ -549,8 +551,8 @@ compose_binding_uri(Src, DstKind, Dst, Key, Args) ->
       ";key=", KeyQ/binary,
       ";args=", ArgsHash/binary>>.
 
--spec persist_static_configuration() -> ok.
-persist_static_configuration() ->
+-spec persist() -> ok.
+persist() ->
     %% This regex matches for example binding:
     %% src=e1;dstq=q2;key=my-key;args=
     %% Source, destination, and binding key values must be percent encoded.
@@ -599,7 +601,7 @@ args_hash(Args)
                          padding => false}).
 
 -spec binding_checks(rabbit_types:exchange_name(),
-                     resource_name(),
+                     rabbit_types:r(exchange | queue),
                      rabbit_types:binding_key(),
                      rabbit_types:user()) -> ok.
 binding_checks(SrcXName, DstName, BindingKey, User) ->
@@ -611,7 +613,7 @@ binding_checks(SrcXName, DstName, BindingKey, User) ->
     ok = check_resource_access(SrcXName, read, User),
     case rabbit_exchange:lookup(SrcXName) of
         {ok, SrcX} ->
-            rabbit_amqp_session:check_read_permitted_on_topic(SrcX, User, BindingKey);
+            check_read_permitted_on_topic(SrcX, User, BindingKey);
         {error, not_found} ->
             ok
     end.
@@ -641,26 +643,13 @@ prohibit_default_exchange(#resource{kind = exchange,
 prohibit_default_exchange(_) ->
     ok.
 
--spec prohibit_reserved_amq(resource_name()) -> ok.
+-spec prohibit_reserved_amq(rabbit_types:r(exchange | queue)) -> ok.
 prohibit_reserved_amq(Res = #resource{name = <<"amq.", _/binary>>}) ->
     throw(<<"403">>,
           "~ts starts with reserved prefix 'amq.'",
           [rabbit_misc:rs(Res)]);
 prohibit_reserved_amq(#resource{}) ->
     ok.
-
--spec check_resource_access(resource_name(),
-                            rabbit_types:permission_atom(),
-                            rabbit_types:user()) -> ok.
-check_resource_access(Resource, Perm, User) ->
-    try rabbit_access_control:check_resource_access(User, Resource, Perm, #{})
-    catch exit:#amqp_error{name = access_refused,
-                           explanation = Explanation} ->
-              %% For authorization failures, let's be more strict: Close the entire
-              %% AMQP session instead of only returning an HTTP Status Code 403.
-              rabbit_amqp_util:protocol_error(
-                ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, Explanation, [])
-    end.
 
 check_vhost_queue_limit(QName = #resource{virtual_host = Vhost}) ->
     case rabbit_vhost_limit:is_over_queue_limit(Vhost) of

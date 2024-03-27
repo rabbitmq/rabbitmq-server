@@ -146,20 +146,17 @@ init(Proto, Data, Anns) ->
     init(Proto, Data, Anns, #{}).
 
 -spec init(protocol(), term(), annotations(), environment()) -> state().
-init(Proto, Data, Anns0, Env)
-  when is_atom(Proto)
-       andalso is_map(Anns0)
-       andalso is_map(Env) ->
+init(Proto, Data, Anns0, Env) ->
     {ProtoData, ProtoAnns} = Proto:init(Data),
-    Anns = case maps:size(Env) == 0 of
-               true ->
-                   Anns0;
-               false ->
-                   Anns0#{env => Env}
-           end,
+    Anns1 = case map_size(Env) == 0 of
+                true -> Anns0;
+                false -> Anns0#{env => Env}
+            end,
+    Anns2 = maps:merge(ProtoAnns, Anns1),
+    Anns = set_received_at_timestamp(Anns2),
     #?MODULE{protocol = Proto,
              data = ProtoData,
-             annotations = set_received_at_timestamp(maps:merge(ProtoAnns, Anns))}.
+             annotations = Anns}.
 
 -spec size(state()) ->
     {MetadataSize :: non_neg_integer(),
@@ -196,7 +193,7 @@ take_annotation(_Key, BasicMessage) ->
 -spec set_annotation(ann_key(), ann_value(), state()) ->
     state().
 set_annotation(Key, Value, #?MODULE{annotations = Anns} = State) ->
-    State#?MODULE{annotations = maps:put(Key, Value, Anns)};
+    State#?MODULE{annotations = Anns#{Key => Value}};
 set_annotation(Key, Value, BasicMessage) ->
     mc_compat:set_annotation(Key, Value, BasicMessage).
 
@@ -313,7 +310,7 @@ property(_Property, _BasicMsg) ->
 
 -spec set_ttl(undefined | non_neg_integer(), state()) -> state().
 set_ttl(Value, #?MODULE{annotations = Anns} = State) ->
-    State#?MODULE{annotations = maps:put(ttl, Value, Anns)};
+    State#?MODULE{annotations = Anns#{ttl => Value}};
 set_ttl(Value, BasicMsg) ->
     mc_compat:set_ttl(Value, BasicMsg).
 

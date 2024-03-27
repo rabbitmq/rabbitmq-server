@@ -117,6 +117,8 @@ property(user_id, #msg{properties = #'v1_0.properties'{user_id = UserId}}) ->
     UserId;
 property(subject, #msg{properties = #'v1_0.properties'{subject = Subject}}) ->
     Subject;
+property(to, #msg{properties = #'v1_0.properties'{to = To}}) ->
+    To;
 property(_Prop, #msg{}) ->
     undefined.
 

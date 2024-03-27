@@ -41,6 +41,7 @@ define PROJECT_ENV
 	    {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
 	    {amqp1_0_default_user, <<"guest">>},
 	    {amqp1_0_default_vhost, <<"/">>},
+	    {min_amqp_address_version, 2},
 	    {loopback_users, [<<"guest">>]},
 	    {password_hashing_module, rabbit_password_hashing_sha256},
 	    {server_properties, []},

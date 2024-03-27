@@ -16,11 +16,12 @@ parse_endpoint(Destination) ->
 
 parse_endpoint(undefined, AllowAnonymousQueue) ->
     parse_endpoint("/queue", AllowAnonymousQueue);
-
-parse_endpoint(Destination, AllowAnonymousQueue) when is_binary(Destination) ->
-    parse_endpoint(unicode:characters_to_list(Destination),
-                                              AllowAnonymousQueue);
-parse_endpoint(Destination, AllowAnonymousQueue) when is_list(Destination) ->
+parse_endpoint(Destination, AllowAnonymousQueue)
+  when is_binary(Destination) ->
+    List = unicode:characters_to_list(Destination),
+    parse_endpoint(List, AllowAnonymousQueue);
+parse_endpoint(Destination, AllowAnonymousQueue)
+  when is_list(Destination) ->
     case re:split(Destination, "/", [unicode, {return, list}]) of
         [Name] ->
             {ok, {queue, unescape(Name)}};
