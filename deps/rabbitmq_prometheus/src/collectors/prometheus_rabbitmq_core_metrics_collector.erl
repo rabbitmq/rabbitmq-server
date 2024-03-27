@@ -752,19 +752,8 @@ vhost_labels(VHost) ->
              undefined -> M0;
              V1         -> maps:put(<<"description">>, V1, M0)
          end,
-    M2 = case vhost:get_tags(VHost) of
-             [] -> M1;
-             V2 ->
-                 Bin = join_bins(<<",">>, [rabbit_data_coercion:to_binary(T) || T <- V2]),
-                 maps:put(<<"tags">>, Bin, M1)
+    M2 = case vhost:get_default_queue_type(VHost) of
+             undefined -> M1;
+             V2        -> maps:put(<<"default_queue_type">>, V2, M1)
          end,
-    M3 = case vhost:get_default_queue_type(VHost) of
-             undefined -> M2;
-             V3        -> maps:put(<<"default_queue_type">>, V3, M2)
-         end,
-    M3.
-
--spec join_bins(Separator :: binary(), List :: [binary()]) -> binary().
-join_bins(_, []) -> <<>>;
-join_bins(Separator, [H | Tail]) ->
-    lists:foldl(fun(V, Acc) -> <<Acc/binary, Separator/binary, V/binary>> end, H, Tail).
+    M2.
