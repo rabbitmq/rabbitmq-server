@@ -20,9 +20,9 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   def merge_defaults(args, opts), do: {args, Map.merge(default_opts(), opts)}
 
   def switches(),
-    do: [verbose: :boolean, minimal: :boolean, enabled: :boolean, implicitly_enabled: :boolean]
+    do: [verbose: :boolean, minimal: :boolean, enabled: :boolean, implicitly_enabled: :boolean, no_warn: :boolean]
 
-  def aliases(), do: [v: :verbose, m: :minimal, E: :enabled, e: :implicitly_enabled]
+  def aliases(), do: [v: :verbose, m: :minimal, E: :enabled, e: :implicitly_enabled, o: :no_warn]
 
   def validate(args, _) when length(args) > 1 do
     {:validation_failure, :too_many_args}
@@ -48,7 +48,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   end
 
   def run([pattern], %{node: node_name} = opts) do
-    %{verbose: verbose, minimal: minimal, enabled: only_enabled, implicitly_enabled: all_enabled} =
+    %{verbose: verbose, minimal: minimal, enabled: only_enabled, implicitly_enabled: all_enabled, no_warn: no_warn} =
       opts
 
     all = PluginHelpers.list(opts)
@@ -56,7 +56,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
 
     missing = MapSet.difference(MapSet.new(enabled), MapSet.new(PluginHelpers.plugin_names(all)))
 
-    case Enum.empty?(missing) do
+    case (Enum.empty?(missing) or no_warn) do
       true ->
         :ok
 
@@ -108,7 +108,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
 
   def banner([pattern], _), do: "Listing plugins with pattern \"#{pattern}\" ..."
 
-  def usage, do: "list [pattern] [--verbose] [--minimal] [--enabled] [--implicitly-enabled]"
+  def usage, do: "list [pattern] [--verbose] [--minimal] [--enabled] [--implicitly-enabled] [--no-warn]"
 
   def usage_additional() do
     [
@@ -119,7 +119,8 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
         "only print plugin names. Most useful in compbination with --silent and --enabled."
       ],
       ["--enabled", "only list enabled plugins"],
-      ["--implicitly-enabled", "include plugins enabled as dependencies of other plugins"]
+      ["--implicitly-enabled", "include plugins enabled as dependencies of other plugins"],
+      ["--no-warn", "do not print warnings e.g. for plugins missings"]
     ]
   end
 
@@ -186,6 +187,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   end
 
   defp default_opts() do
-    %{minimal: false, verbose: false, enabled: false, implicitly_enabled: false}
+    %{minimal: false, verbose: false, enabled: false, implicitly_enabled: false, no_warn: false}
   end
 end
