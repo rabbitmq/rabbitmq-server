@@ -19,7 +19,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: CONFIGURE ERLANG
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure Erlang
         uses: erlef/setup-beam@v1
         with:
           otp-version: 26.2
