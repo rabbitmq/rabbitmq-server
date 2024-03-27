@@ -110,7 +110,7 @@ init_per_group(detailed_metrics, Config0) ->
     VHost1Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config1, 0, <<"vhost-1">>),
     {ok, VHost1Ch} = amqp_connection:open_channel(VHost1Conn),
 
-    rabbit_ct_broker_helpers:add_vhost_with_metadata(Config1, 0, <<"vhost-2">>, <<"description 2">>, [<<"tag1">>, <<"tag2">>]),
+    rabbit_ct_broker_helpers:add_vhost_with_metadata(Config1, 0, <<"vhost-2">>, <<"description 2">>, []),
     rabbit_ct_broker_helpers:set_full_permissions(Config1, <<"vhost-2">>),
     VHost2Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config1, 0, <<"vhost-2">>),
     {ok, VHost2Ch} = amqp_connection:open_channel(VHost2Conn),
