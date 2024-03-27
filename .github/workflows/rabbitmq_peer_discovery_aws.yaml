@@ -26,7 +26,7 @@ jobs:
       uses: lewagon/wait-on-check-action@v1.3.3
       with:
         ref: ${{ github.ref }}
-        check-name: build-publish-dev-bazel (${{ matrix.image_tag_suffix }}, ${{ matrix.otp_version_id }})
+        check-name: build-publish-dev-bazel
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         wait-interval: 30 # seconds
     - name: MOUNT BAZEL CACHE
