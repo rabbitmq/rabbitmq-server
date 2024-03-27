@@ -142,7 +142,7 @@ get_limits(#vhost{limits = Value}) -> Value.
 -spec get_metadata(vhost()) -> metadata().
 get_metadata(#vhost{metadata = Value}) -> Value.
 
--spec get_description(vhost()) -> binary().
+-spec get_description(vhost()) -> rabbit_types:option(binary()).
 get_description(#vhost{} = VHost) ->
     maps:get(description, get_metadata(VHost), undefined).
 
@@ -150,7 +150,7 @@ get_description(#vhost{} = VHost) ->
 get_tags(#vhost{} = VHost) ->
     maps:get(tags, get_metadata(VHost), []).
 
--spec get_default_queue_type(vhost()) -> binary() | undefined.
+-spec get_default_queue_type(vhost()) -> rabbit_types:option(binary()).
 get_default_queue_type(#vhost{} = VHost) ->
     maps:get(default_queue_type, get_metadata(VHost), undefined);
 get_default_queue_type(_VHost) ->
