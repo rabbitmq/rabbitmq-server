@@ -934,7 +934,9 @@ delete_create_queue(Config) ->
     timer:sleep(2),
     delete_queue(Ch, [CQ1, QQ]),
     %% Give queues some time to be fully deleted
-    timer:sleep(2000),
+    %% TODO: wait longer for quorum queues in mixed mode as it can take longer
+    %% for deletion to complete, delete timeout is 5s so we need to exceed that
+    timer:sleep(6000),
 
     %% We expect confirms for all messages.
     %% Confirm here does not mean that messages made it ever to the deleted queues.

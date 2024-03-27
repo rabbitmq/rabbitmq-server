@@ -736,6 +736,9 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
             MRef = erlang:monitor(process, Leader),
             receive
                 {'DOWN', MRef, process, _, _} ->
+                    %% leader is down,
+                    %% force delete remaining members
+                    ok = force_delete_queue(lists:delete(Leader, Servers)),
                     ok
             after Timeout ->
                     erlang:demonitor(MRef, [flush]),
@@ -846,31 +849,20 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
     ConsumerTag = quorum_ctag(ConsumerTag0),
     %% consumer info is used to describe the consumer properties
     AckRequired = not NoAck,
-    {CreditMode, EffectivePrefetch, DeclaredPrefetch, ConsumerMeta0} =
-        case Mode of
-            {credited, C} ->
-                Meta = if C =:= credit_api_v1 ->
-                              #{};
-                          is_integer(C) ->
-                              #{initial_delivery_count => C}
-                       end,
-                {credited, 0, 0, Meta};
-            {simple_prefetch = M, Declared} ->
-                Effective = case Declared of
-                                0 -> ?UNLIMITED_PREFETCH_COUNT;
-                                _ -> Declared
-                            end,
-                {M, Effective, Declared, #{}}
-        end,
-    ConsumerMeta = maps:merge(
-                     ConsumerMeta0,
-                     #{ack => AckRequired,
-                       prefetch => DeclaredPrefetch,
-                       args => Args,
-                       username => ActingUser}),
-    {ok, QState} = rabbit_fifo_client:checkout(ConsumerTag, EffectivePrefetch,
-                                               CreditMode, ConsumerMeta,
-                                               QState0),
+    Prefetch = case Mode of
+                   {simple_prefetch, Declared} ->
+                       Declared;
+                   _ ->
+                       0
+               end,
+
+    ConsumerMeta = #{ack => AckRequired,
+                     prefetch => Prefetch,
+                     args => Args,
+                     username => ActingUser},
+    {ok, _Infos, QState} = rabbit_fifo_client:checkout(ConsumerTag,
+                                                       Mode, ConsumerMeta,
+                                                       QState0),
     case single_active_consumer_on(Q) of
         true ->
             %% get the leader from state
@@ -885,10 +877,10 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                     rabbit_core_metrics:consumer_created(
                       ChPid, ConsumerTag, ExclusiveConsume,
                       AckRequired, QName,
-                      DeclaredPrefetch, ActivityStatus == single_active, %% Active
+                      Prefetch, ActivityStatus == single_active, %% Active
                       ActivityStatus, Args),
                     emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                          AckRequired, QName, DeclaredPrefetch,
+                                          AckRequired, QName, Prefetch,
                                           Args, none, ActingUser),
                     {ok, QState};
                 {error, Error} ->
@@ -900,10 +892,10 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
             rabbit_core_metrics:consumer_created(
               ChPid, ConsumerTag, ExclusiveConsume,
               AckRequired, QName,
-              DeclaredPrefetch, true, %% Active
+              Prefetch, true, %% Active
               up, Args),
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                  AckRequired, QName, DeclaredPrefetch,
+                                  AckRequired, QName, Prefetch,
                                   Args, none, ActingUser),
             {ok, QState}
     end.

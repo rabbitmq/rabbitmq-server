@@ -232,7 +232,10 @@ init_per_group(Group, Config) ->
                 {skip, _} ->
                     Ret;
                 Config2 ->
-                    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config2, message_containers),
+                    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config2,
+                                                                     message_containers),
+                    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config2,
+                                                                     quorum_queues_v4),
                     ok = rabbit_ct_broker_helpers:rpc(
                            Config2, 0, application, set_env,
                            [rabbit, channel_tick_interval, 100]),
@@ -3276,12 +3279,14 @@ cancel_consumer_gh_3729(Config) ->
         ct:fail("basic.cancel_ok timeout")
     end,
 
-    D = #'queue.declare'{queue = QQ, passive = true, arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
+    D = #'queue.declare'{queue = QQ, passive = true,
+                         arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
 
     F = fun() ->
             #'queue.declare_ok'{queue = QQ,
                                 message_count = MC,
                                 consumer_count = CC} = amqp_channel:call(Ch, D),
+            ct:pal("Mc ~b CC ~b", [MC, CC]),
             MC =:= 1 andalso CC =:= 0
         end,
     rabbit_ct_helpers:await_condition(F, 30000),
