@@ -15,12 +15,6 @@ concurrency:
 jobs:
   build-publish-dev-bazel:
     runs-on: ubuntu-latst
-    strategy:
-      fail-fast: false
-      matrix:
-        arch:
-          - amd64
-          - arm64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
