@@ -87,7 +87,7 @@ handle_port_please(init, noport, Me, Port) ->
     rabbit_log:info("epmd does not know us, re-registering as ~ts", [Me]),
     {ok, Port};
 handle_port_please(check, noport, Me, Port) ->
-    rabbit_log:warning("epmd does not know us, re-registering ~ts at port ~b", [Me, Port]),
+    rabbit_log:warning("epmd does not know us, re-registering ~ts at port ~tp", [Me, Port]),
     {ok, Port};
 handle_port_please(_, closed, _Me, Port) ->
     rabbit_log:error("epmd monitor failed to retrieve our port from epmd: closed"),
