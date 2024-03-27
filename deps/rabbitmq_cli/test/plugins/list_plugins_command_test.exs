@@ -7,6 +7,7 @@
 defmodule ListPluginsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
+  import ExUnit.CaptureIO
 
   @command RabbitMQ.CLI.Plugins.Commands.ListCommand
 
@@ -48,7 +49,8 @@ defmodule ListPluginsCommandTest do
       minimal: false,
       verbose: false,
       enabled: false,
-      implicitly_enabled: false
+      implicitly_enabled: false,
+      no_warn: false
     }
 
     on_exit(fn ->
@@ -443,5 +445,52 @@ defmodule ListPluginsCommandTest do
     } = @command.run([".*"], opts)
 
     assert_plugin_states(actual_plugins2, expected_plugins2)
+  end
+
+  test "run: lists all plugins with missing plugins warning control", context do
+    opts = Map.replace(context[:opts], :no_warn, true)
+    context = Map.replace(context, :opts, opts)
+
+    missing_plugin = :rabbitmq_non_existent
+
+    reset_enabled_plugins_to_preconfigured_defaults(context)
+    set_enabled_plugins([:rabbitmq_federation, missing_plugin], :online, context[:opts][:node], context[:opts])
+
+    on_exit(fn ->
+      set_enabled_plugins(
+        [:rabbitmq_stomp, :rabbitmq_federation],
+        :online,
+        context[:opts][:node],
+        context[:opts]
+      )
+    end)
+
+    expected_plugins = [
+      %{name: :rabbitmq_federation, enabled: :enabled, running: true},
+      %{name: :rabbitmq_stomp, enabled: :not_enabled, running: false}
+    ]
+
+    opts = context[:opts]
+
+    assert capture_io(fn ->
+      %{
+        plugins: actual_plugins
+      } = @command.run([".*"], opts)
+
+      assert_plugin_states(actual_plugins, expected_plugins)
+
+    end) =~ ~s//
+
+    opts = Map.replace(opts, :no_warn, false)
+
+    assert capture_io(fn ->
+      %{
+        plugins: actual_plugins
+      } = @command.run([".*"], opts)
+
+      assert_plugin_states(actual_plugins, expected_plugins)
+
+    end) =~ ~s/WARNING - plugins currently enabled but missing: #{missing_plugin}\n/
+
   end
 end
