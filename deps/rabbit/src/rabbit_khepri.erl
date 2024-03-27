@@ -1015,9 +1015,17 @@ register_projections() ->
                     fun register_rabbit_index_route_projection/0,
                     fun register_rabbit_topic_graph_projection/0],
     [case RegisterFun() of
-         ok              -> ok;
-         {error, exists} -> ok;
-         {error, Error}  -> throw(Error)
+         ok ->
+             ok;
+         %% Before Khepri v0.13.0, `khepri:register_projection/1,2,3` would
+         %% return `{error, exists}` for projections which already exist.
+         {error, exists} ->
+             ok;
+         %% In v0.13.0+, Khepri returns a `?khepri_error(..)` instead.
+         {error, {khepri, projection_already_exists, _Info}} ->
+             ok;
+         {error, Error} ->
+             throw(Error)
      end || RegisterFun <- RegisterFuns],
     ok.
 
