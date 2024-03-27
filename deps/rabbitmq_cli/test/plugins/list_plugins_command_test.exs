@@ -50,7 +50,7 @@ defmodule ListPluginsCommandTest do
       verbose: false,
       enabled: false,
       implicitly_enabled: false,
-      no_warn: false
+      ignore_warnings: false
     }
 
     on_exit(fn ->
@@ -448,7 +448,7 @@ defmodule ListPluginsCommandTest do
   end
 
   test "run: lists all plugins with missing plugins warning control", context do
-    opts = Map.replace(context[:opts], :no_warn, true)
+    opts = Map.replace(context[:opts], :ignore_warnings, true)
     context = Map.replace(context, :opts, opts)
 
     missing_plugin = :rabbitmq_non_existent
@@ -486,7 +486,7 @@ defmodule ListPluginsCommandTest do
              assert_plugin_states(actual_plugins, expected_plugins)
            end) =~ ~s//
 
-    opts = Map.replace(opts, :no_warn, false)
+    opts = Map.replace(opts, :ignore_warnings, false)
 
     assert capture_io(fn ->
              %{

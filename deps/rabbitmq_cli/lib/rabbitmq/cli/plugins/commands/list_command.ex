@@ -25,10 +25,11 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
       minimal: :boolean,
       enabled: :boolean,
       implicitly_enabled: :boolean,
-      no_warn: :boolean
+      ignore_warnings: :boolean
     ]
 
-  def aliases(), do: [v: :verbose, m: :minimal, E: :enabled, e: :implicitly_enabled, o: :no_warn]
+  def aliases(),
+    do: [v: :verbose, m: :minimal, E: :enabled, e: :implicitly_enabled, o: :ignore_warnings]
 
   def validate(args, _) when length(args) > 1 do
     {:validation_failure, :too_many_args}
@@ -59,7 +60,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
       minimal: minimal,
       enabled: only_enabled,
       implicitly_enabled: all_enabled,
-      no_warn: no_warn
+      ignore_warnings: ignore_warnings
     } =
       opts
 
@@ -68,7 +69,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
 
     missing = MapSet.difference(MapSet.new(enabled), MapSet.new(PluginHelpers.plugin_names(all)))
 
-    case Enum.empty?(missing) or no_warn do
+    case Enum.empty?(missing) or ignore_warnings do
       true ->
         :ok
 
@@ -121,7 +122,8 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   def banner([pattern], _), do: "Listing plugins with pattern \"#{pattern}\" ..."
 
   def usage,
-    do: "list [pattern] [--verbose] [--minimal] [--enabled] [--implicitly-enabled] [--no-warn]"
+    do:
+      "list [pattern] [--verbose] [--minimal] [--enabled] [--implicitly-enabled] [--ignore-warnings]"
 
   def usage_additional() do
     [
@@ -133,7 +135,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
       ],
       ["--enabled", "only list enabled plugins"],
       ["--implicitly-enabled", "include plugins enabled as dependencies of other plugins"],
-      ["--no-warn", "do not print warnings e.g. for plugins missing"]
+      ["--ignore-warnings", "do not print warnings e.g. for plugins missing"]
     ]
   end
 
@@ -200,6 +202,12 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   end
 
   defp default_opts() do
-    %{minimal: false, verbose: false, enabled: false, implicitly_enabled: false, no_warn: false}
+    %{
+      minimal: false,
+      verbose: false,
+      enabled: false,
+      implicitly_enabled: false,
+      ignore_warnings: false
+    }
   end
 end

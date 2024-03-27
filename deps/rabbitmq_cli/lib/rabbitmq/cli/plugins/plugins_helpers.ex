@@ -195,9 +195,9 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     all_plugin_names = Enum.map(all, &plugin_name/1)
     missing = MapSet.difference(MapSet.new(plugins), MapSet.new(all_plugin_names))
 
-    no_warn = Map.get(opts, :no_warn, false)
+    ignore_warnings = Map.get(opts, :ignore_warnings, false)
 
-    case Enum.empty?(missing) or no_warn do
+    case Enum.empty?(missing) or ignore_warnings do
       true ->
         case :rabbit_file.write_term_file(to_charlist(plugins_file), [plugins]) do
           :ok ->
