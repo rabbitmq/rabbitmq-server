@@ -454,7 +454,13 @@ defmodule ListPluginsCommandTest do
     missing_plugin = :rabbitmq_non_existent
 
     reset_enabled_plugins_to_preconfigured_defaults(context)
-    set_enabled_plugins([:rabbitmq_federation, missing_plugin], :online, context[:opts][:node], context[:opts])
+
+    set_enabled_plugins(
+      [:rabbitmq_federation, missing_plugin],
+      :online,
+      context[:opts][:node],
+      context[:opts]
+    )
 
     on_exit(fn ->
       set_enabled_plugins(
@@ -473,24 +479,21 @@ defmodule ListPluginsCommandTest do
     opts = context[:opts]
 
     assert capture_io(fn ->
-      %{
-        plugins: actual_plugins
-      } = @command.run([".*"], opts)
+             %{
+               plugins: actual_plugins
+             } = @command.run([".*"], opts)
 
-      assert_plugin_states(actual_plugins, expected_plugins)
-
-    end) =~ ~s//
+             assert_plugin_states(actual_plugins, expected_plugins)
+           end) =~ ~s//
 
     opts = Map.replace(opts, :no_warn, false)
 
     assert capture_io(fn ->
-      %{
-        plugins: actual_plugins
-      } = @command.run([".*"], opts)
+             %{
+               plugins: actual_plugins
+             } = @command.run([".*"], opts)
 
-      assert_plugin_states(actual_plugins, expected_plugins)
-
-    end) =~ ~s/WARNING - plugins currently enabled but missing: #{missing_plugin}\n/
-
+             assert_plugin_states(actual_plugins, expected_plugins)
+           end) =~ ~s/WARNING - plugins currently enabled but missing: #{missing_plugin}\n/
   end
 end

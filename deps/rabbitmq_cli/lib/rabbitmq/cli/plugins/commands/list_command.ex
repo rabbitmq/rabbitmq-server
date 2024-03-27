@@ -20,7 +20,13 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   def merge_defaults(args, opts), do: {args, Map.merge(default_opts(), opts)}
 
   def switches(),
-    do: [verbose: :boolean, minimal: :boolean, enabled: :boolean, implicitly_enabled: :boolean, no_warn: :boolean]
+    do: [
+      verbose: :boolean,
+      minimal: :boolean,
+      enabled: :boolean,
+      implicitly_enabled: :boolean,
+      no_warn: :boolean
+    ]
 
   def aliases(), do: [v: :verbose, m: :minimal, E: :enabled, e: :implicitly_enabled, o: :no_warn]
 
@@ -48,7 +54,13 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   end
 
   def run([pattern], %{node: node_name} = opts) do
-    %{verbose: verbose, minimal: minimal, enabled: only_enabled, implicitly_enabled: all_enabled, no_warn: no_warn} =
+    %{
+      verbose: verbose,
+      minimal: minimal,
+      enabled: only_enabled,
+      implicitly_enabled: all_enabled,
+      no_warn: no_warn
+    } =
       opts
 
     all = PluginHelpers.list(opts)
@@ -56,7 +68,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
 
     missing = MapSet.difference(MapSet.new(enabled), MapSet.new(PluginHelpers.plugin_names(all)))
 
-    case (Enum.empty?(missing) or no_warn) do
+    case Enum.empty?(missing) or no_warn do
       true ->
         :ok
 
@@ -108,7 +120,8 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
 
   def banner([pattern], _), do: "Listing plugins with pattern \"#{pattern}\" ..."
 
-  def usage, do: "list [pattern] [--verbose] [--minimal] [--enabled] [--implicitly-enabled] [--no-warn]"
+  def usage,
+    do: "list [pattern] [--verbose] [--minimal] [--enabled] [--implicitly-enabled] [--no-warn]"
 
   def usage_additional() do
     [
