@@ -39,7 +39,7 @@ defmodule ListPluginsCommandTest do
     {:ok, [enabled_plugins]} = :file.consult(plugins_file)
 
     IO.puts(
-      "plugins list tests will assume tnat #{Enum.join(enabled_plugins, ",")} is the list of enabled plugins to revert to"
+      "plugins list tests will assume that #{Enum.join(enabled_plugins, ",")} is the list of enabled plugins to revert to"
     )
 
     opts = %{
