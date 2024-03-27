@@ -1,7 +1,22 @@
 workspace(name = "rabbitmq-server")
 
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file")
+load(
+    "@io_bazel_rules_docker//container:container.bzl",
+    "container_pull",
+)
+load("@io_bazel_rules_docker//repositories:deps.bzl", container_deps = "deps")
+load(
+    "@io_bazel_rules_docker//repositories:repositories.bzl",
+    container_repositories = "repositories",
+)
+load("@rules_erlang//:internal_deps.bzl", "rules_erlang_internal_deps")
+load("@rules_erlang//:internal_setup.bzl", "rules_erlang_internal_setup")
+load("@rules_erlang//gazelle:deps.bzl", "gazelle_deps")
+load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
+load("//bazel/bzlmod:secondary_umbrella.bzl", "secondary_umbrella")
+load("//deps/amqp10_client:activemq.bzl", "activemq_archive")
 
 http_archive(
     name = "rules_pkg",
@@ -12,8 +27,6 @@ http_archive(
     ],
 )
 
-load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
-
 rules_pkg_dependencies()
 
 git_repository(
@@ -22,15 +35,9 @@ git_repository(
     tag = "3.15.0",
 )
 
-load("@rules_erlang//:internal_deps.bzl", "rules_erlang_internal_deps")
-
 rules_erlang_internal_deps()
 
-load("@rules_erlang//:internal_setup.bzl", "rules_erlang_internal_setup")
-
 rules_erlang_internal_setup(go_repository_default_config = "//:WORKSPACE")
-
-load("@rules_erlang//gazelle:deps.bzl", "gazelle_deps")
 
 gazelle_deps()
 
@@ -40,21 +47,9 @@ http_archive(
     urls = ["https://github.com/bazelbuild/rules_docker/releases/download/v0.25.0/rules_docker-v0.25.0.tar.gz"],
 )
 
-load(
-    "@io_bazel_rules_docker//repositories:repositories.bzl",
-    container_repositories = "repositories",
-)
-
 container_repositories()
 
-load("@io_bazel_rules_docker//repositories:deps.bzl", container_deps = "deps")
-
 container_deps()
-
-load(
-    "@io_bazel_rules_docker//container:container.bzl",
-    "container_pull",
-)
 
 container_pull(
     name = "ubuntu2004",
@@ -126,11 +121,7 @@ new_git_repository(
     tag = "v0.4.0",
 )
 
-load("//deps/amqp10_client:activemq.bzl", "activemq_archive")
-
 activemq_archive()
-
-load("//bazel/bzlmod:secondary_umbrella.bzl", "secondary_umbrella")
 
 secondary_umbrella()
 
