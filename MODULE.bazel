@@ -529,7 +529,7 @@ secondary_umbrella = use_extension(
 
 use_repo(
     secondary_umbrella,
-    "rabbitmq-server-generic-unix-3.12",
+    "rabbitmq-server-generic-unix-3.13",
 )
 
 hex = use_extension(
