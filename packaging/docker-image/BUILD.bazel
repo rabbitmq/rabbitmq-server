@@ -1,5 +1,5 @@
 load("@container_structure_test//:defs.bzl", "container_structure_test")
-load("@rules_oci//oci:defs.bzl", "oci_image", "oci_image_index")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_image_index", "oci_push")
 
 FIRECRACKER_EXEC_PROPS = {
     # https://www.buildbuddy.io/docs/rbe-microvms
@@ -89,13 +89,21 @@ oci_image_index(
     ],
 )
 
-container_structure_test(
-    name = "rabbitmq_test",
-    configs = ["//packaging/docker-image/test_configs:rabbitmq_ubuntu.yaml"],
-    exec_properties = FIRECRACKER_EXEC_PROPS,
+[
+    container_structure_test(
+        name = "rabbitmq_test_%s" % arch,
+        configs = ["//packaging/docker-image/test_configs:rabbitmq_ubuntu.yaml"],
+        exec_properties = FIRECRACKER_EXEC_PROPS,
+        image = ":rabbitmq-%s" % arch,
+        tags = [
+            "docker",
+            "manual",
+        ],
+    )
+    for arch in _ARCHS
+]
+
+oci_push(
     image = ":rabbitmq",
-    tags = [
-        "docker",
-        "manual",
-    ],
+    repository = "index.docker.io/pivotalrabbitmq/rabbitmq",
 )
