@@ -18,6 +18,7 @@
          close/1,
          discover/1,
          feature_flag_name/1,
+         to_binary/1,
          default/0,
          is_enabled/1,
          is_compatible/4,
@@ -276,6 +277,16 @@ feature_flag_name(_) ->
 
 default() ->
     rabbit_classic_queue.
+
+-spec to_binary(module()) -> binary().
+to_binary(rabbit_classic_queue) ->
+    <<"classic">>;
+to_binary(rabbit_quorum_queue) ->
+    <<"quorum">>;
+to_binary(rabbit_stream_queue) ->
+    <<"stream">>;
+to_binary(Other) ->
+    atom_to_binary(Other).
 
 %% is a specific queue type implementation enabled
 -spec is_enabled(module()) -> boolean().

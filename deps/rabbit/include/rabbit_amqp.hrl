@@ -25,9 +25,6 @@
 %% [2.8.19]
 -define(MIN_MAX_FRAME_1_0_SIZE, 512).
 
--define(SEND_ROLE, false).
--define(RECV_ROLE, true).
-
 %% for rabbit_event user_authentication_success and user_authentication_failure
 -define(AUTH_EVENT_KEYS,
         [name,

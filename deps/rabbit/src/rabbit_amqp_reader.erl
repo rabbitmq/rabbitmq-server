@@ -127,9 +127,10 @@ system_code_change(Misc, _Module, _OldVsn, _Extra) ->
     {ok, Misc}.
 
 server_properties() ->
-    %% The atom doesn't match anything, it's just "not 0-9-1".
-    Raw = lists:keydelete(<<"capabilities">>, 1, rabbit_reader:server_properties(amqp_1_0)),
-    {map, [{{symbol, K}, {utf8, V}} || {K, longstr, V}  <- Raw]}.
+    Props0 = rabbit_reader:server_properties(amqp_1_0),
+    Props1 = [{{symbol, K}, {utf8, V}} || {K, longstr, V} <- Props0],
+    Props = [{{symbol, <<"node">>}, {utf8, atom_to_binary(node())}} | Props1],
+    {map, Props}.
 
 %%--------------------------------------------------------------------------
 
@@ -491,6 +492,7 @@ handle_1_0_connection_frame(
                         %% "the value in idle-time-out SHOULD be half the peer's actual timeout threshold" [2.4.5]
                         idle_time_out  = {uint, ReceiveTimeoutMillis div 2},
                         container_id   = {utf8, rabbit_nodes:cluster_name()},
+                        offered_capabilities = {array, symbol, [{symbol, <<"LINK_PAIR_V1_0">>}]},
                         properties     = server_properties()}),
     State;
 handle_1_0_connection_frame(#'v1_0.close'{}, State0) ->

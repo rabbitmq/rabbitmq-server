@@ -1709,7 +1709,8 @@ persist_static_configuration() ->
                      _ ->
                          ?MAX_MSG_SIZE
                  end,
-    ok = persistent_term:put(max_message_size, MaxMsgSize).
+    ok = persistent_term:put(max_message_size, MaxMsgSize),
+    ok = rabbit_amqp_management:persist_static_configuration().
 
 persist_static_configuration(Params) ->
     App = ?MODULE,

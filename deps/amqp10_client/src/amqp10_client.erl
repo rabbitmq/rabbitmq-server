@@ -42,8 +42,6 @@
          parse_uri/1
         ]).
 
--define(DEFAULT_TIMEOUT, 5000).
-
 -type snd_settle_mode() :: amqp10_client_session:snd_settle_mode().
 -type rcv_settle_mode() :: amqp10_client_session:rcv_settle_mode().
 
@@ -134,7 +132,7 @@ begin_session(Connection) when is_pid(Connection) ->
 -spec begin_session_sync(pid()) ->
     supervisor:startchild_ret() | session_timeout.
 begin_session_sync(Connection) when is_pid(Connection) ->
-    begin_session_sync(Connection, ?DEFAULT_TIMEOUT).
+    begin_session_sync(Connection, ?TIMEOUT).
 
 %% @doc Synchronously begins an amqp10 session using 'Connection'.
 %% This is a convenience function that awaits the 'begun' event
@@ -191,7 +189,7 @@ attach_sender_link_sync(Session, Name, Target, SettleMode, Durability) ->
             {ok, Ref};
         {amqp10_event, {link, Ref, {detached, Err}}} ->
             {error, Err}
-    after ?DEFAULT_TIMEOUT -> link_timeout
+    after ?TIMEOUT -> link_timeout
     end.
 
 %% @doc Attaches a sender link to a target.
@@ -357,7 +355,7 @@ stop_receiver_link(#link_ref{role = receiver,
 send_msg(#link_ref{role = sender, session = Session,
                    link_handle = Handle}, Msg0) ->
     Msg = amqp10_msg:set_handle(Handle, Msg0),
-    amqp10_client_session:transfer(Session, Msg, ?DEFAULT_TIMEOUT).
+    amqp10_client_session:transfer(Session, Msg, ?TIMEOUT).
 
 %% @doc Accept a message on a the link referred to be the 'LinkRef'.
 -spec accept_msg(link_ref(), amqp10_msg:amqp10_msg()) -> ok.
@@ -376,7 +374,7 @@ settle_msg(LinkRef, Msg, Settlement) ->
 %% Flows a single link credit then awaits delivery or timeout.
 -spec get_msg(link_ref()) -> {ok, amqp10_msg:amqp10_msg()} | {error, timeout}.
 get_msg(LinkRef) ->
-    get_msg(LinkRef, ?DEFAULT_TIMEOUT).
+    get_msg(LinkRef, ?TIMEOUT).
 
 %% @doc Get a single message from a link.
 %% Flows a single link credit then awaits delivery or timeout.

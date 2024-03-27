@@ -13,7 +13,7 @@
 -spec protocol_error(term(), io:format(), [term()]) ->
     no_return().
 protocol_error(Condition, Msg, Args) ->
-    Description = list_to_binary(lists:flatten(io_lib:format(Msg, Args))),
+    Description = unicode:characters_to_binary(lists:flatten(io_lib:format(Msg, Args))),
     Reason = #'v1_0.error'{condition = Condition,
                            description = {utf8, Description}},
     exit(Reason).

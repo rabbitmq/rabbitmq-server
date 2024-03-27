@@ -10,3 +10,10 @@
 -type transfer_number() :: sequence_no().
 % [2.8.10]
 -type sequence_no() :: uint().
+
+% [2.8.1]
+-define(AMQP_ROLE_SENDER, false).
+-define(AMQP_ROLE_RECEIVER, true).
+
+% [3.2.16]
+-define(MESSAGE_FORMAT, 0).

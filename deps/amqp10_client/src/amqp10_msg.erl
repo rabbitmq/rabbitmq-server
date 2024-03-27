@@ -6,6 +6,8 @@
 %%
 -module(amqp10_msg).
 
+-include_lib("amqp10_common/include/amqp10_types.hrl").
+
 -export([from_amqp_records/1,
          to_amqp_records/1,
          % "read" api
@@ -256,12 +258,12 @@ body_bin(#amqp10_msg{body = #'v1_0.amqp_value'{} = Body}) ->
 new(DeliveryTag, Body, Settled) when is_binary(Body) ->
     #amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = {binary, DeliveryTag},
                                             settled = Settled,
-                                            message_format = {uint, 0}},
+                                            message_format = {uint, ?MESSAGE_FORMAT}},
                 body = [#'v1_0.data'{content = Body}]};
 new(DeliveryTag, Body, Settled) -> % TODO: constrain to amqp types
     #amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = {binary, DeliveryTag},
                                             settled = Settled,
-                                            message_format = {uint, 0}},
+                                            message_format = {uint, ?MESSAGE_FORMAT}},
                 body = Body}.
 
 %% @doc Create a new settled amqp10 message using the specified delivery tag
@@ -322,8 +324,13 @@ set_properties(Props, #amqp10_msg{properties = undefined} = Msg) ->
     set_properties(Props, Msg#amqp10_msg{properties = #'v1_0.properties'{}});
 set_properties(Props, #amqp10_msg{properties = Current} = Msg) ->
     % TODO many fields are `any` types and we need to try to type tag them
-    P = maps:fold(fun(message_id, V, Acc) when is_binary(V) ->
-                          % message_id can be any type but we restrict it here
+    P = maps:fold(fun(message_id, {T, _V} = TypeVal, Acc) when T =:= ulong orelse
+                                                               T =:= uuid orelse
+                                                               T =:= binary orelse
+                                                               T =:= uf8 ->
+                          Acc#'v1_0.properties'{message_id = TypeVal};
+                     (message_id, V, Acc) when is_binary(V) ->
+                          %% backward compat clause
                           Acc#'v1_0.properties'{message_id = utf8(V)};
                      (user_id, V, Acc) when is_binary(V) ->
                           Acc#'v1_0.properties'{user_id = {binary, V}};

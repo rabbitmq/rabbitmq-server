@@ -1252,7 +1252,7 @@ rabbitmq_integration_suite(
     ],
     shard_count = 3,
     runtime_deps = [
-        "//deps/amqp10_client:erlang_app",
+        "//deps/rabbitmq_amqp_client:erlang_app",
     ],
 )
 
@@ -1279,7 +1279,7 @@ rabbitmq_integration_suite(
         ":test_event_recorder_beam",
     ],
     runtime_deps = [
-        "//deps/amqp10_client:erlang_app",
+        "//deps/rabbitmq_amqp_client:erlang_app",
     ],
 )
 

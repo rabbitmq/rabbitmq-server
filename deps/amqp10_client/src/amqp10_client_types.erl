@@ -64,7 +64,7 @@
                                 link_event_detail()}.
 -type amqp10_event() :: {amqp10_event, amqp10_event_detail()}.
 
--type properties() :: #{binary() => tuple()}.
+-type properties() :: #{binary() => amqp10_binary_generator:amqp10_prim()}.
 
 -export_type([amqp10_performative/0, channel/0,
               source/0, target/0, amqp10_msg_record/0,
@@ -73,7 +73,6 @@
               properties/0]).
 
 
-unpack(undefined) -> undefined;
 unpack({_, Value}) -> Value;
 unpack(Value) -> Value.
 

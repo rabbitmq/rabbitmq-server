@@ -21,7 +21,7 @@ parse_endpoint(Destination, AllowAnonymousQueue) when is_binary(Destination) ->
     parse_endpoint(unicode:characters_to_list(Destination),
                                               AllowAnonymousQueue);
 parse_endpoint(Destination, AllowAnonymousQueue) when is_list(Destination) ->
-    case re:split(Destination, "/", [{return, list}]) of
+    case re:split(Destination, "/", [unicode, {return, list}]) of
         [Name] ->
             {ok, {queue, unescape(Name)}};
         ["", Type | Rest]
