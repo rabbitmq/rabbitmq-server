@@ -83,7 +83,7 @@ start_rabbitmq_server() {
 stop_rabbitmq_server() {
     if test "$rabbitmq_server_pid"; then
         kill -TERM "$rabbitmq_server_pid"
-        wait "$rabbitmq_server_pid" || true
+        wait "$rabbitmq_server_pid" || exit "$?"
     fi
 }
 
@@ -147,5 +147,5 @@ else
     # force that statement to succeed and the signal handler to properly
     # execute. Because the statement below has an exit code of 0, the
     # signal handler has to restate the expected exit code.
-    wait "$rabbitmq_server_pid" || true
+    wait "$rabbitmq_server_pid" || exit "$?"
 fi
