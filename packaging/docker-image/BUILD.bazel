@@ -99,6 +99,7 @@ oci_image_index(
             "docker",
             "manual",
             "no-sandbox",
+            "no-remote-exec",
         ],
     )
     for arch in _ARCHS
