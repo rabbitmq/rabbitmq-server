@@ -185,8 +185,8 @@ For targets, addresses are:
 
 For sources, addresses are:
 
-    = "/exchange/"  X "/" BK  Consume from temp queue bound to X with binding key BK
-    | "/topic/"     BK        Consume from temp queue bound to amq.topic with binding key BK
+    = "/exchange/"  X "/" BK  Consume from queue bound to X with binding key BK
+    | "/topic/"     BK        Consume from queue bound to amq.topic with binding key BK
     | "/amq/queue/" Q         Consume from Q
     | "/queue/"     Q         Consume from Q
     | Q (no leading slash)    Consume from Q
