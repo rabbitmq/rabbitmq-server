@@ -30,7 +30,8 @@
 -opaque state() :: #?MODULE{}.
 
 -export_type([
-              state/0
+              state/0,
+              mx/0
               ]).
 
 -spec init() -> state().

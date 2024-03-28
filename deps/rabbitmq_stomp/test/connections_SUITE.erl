@@ -102,7 +102,7 @@ messages_not_dropped_on_disconnect(Config) ->
     N1 = N + 1,
     N1 = count_connections(Config),
     [rabbit_stomp_client:send(
-       Client, "SEND", [{"destination", ?DESTINATION}],
+       Client, 'SEND', [{"destination", ?DESTINATION}],
        [integer_to_list(Count)]) || Count <- lists:seq(1, 1000)],
     rabbit_stomp_client:disconnect(Client),
     QName = rabbit_misc:r(<<"/">>, queue, <<"bulk-test">>),
@@ -185,7 +185,7 @@ frame_size(Config) ->
     {ok, Client} = rabbit_stomp_client:connect("1.2", "guest", "guest", StompPort,
                                                [{"heart-beat", "5000,7000"}]),
     ok = rabbit_stomp_client:send(
-      Client, "SEND", [{"destination", "qwe"}],
+      Client, 'SEND', [{"destination", "qwe"}],
       ["Lorem ipsum dolor sit amet viverra fusce. "
        "Lorem ipsum dolor sit amet viverra fusce. "
        "Lorem ipsum dolor sit amet viverra fusce."
@@ -204,7 +204,7 @@ frame_size_huge(Config) ->
     {ok, Client} = rabbit_stomp_client:connect("1.2", "guest", "guest", StompPort,
                                                [{"heart-beat", "5000,7000"}]),
     rabbit_stomp_client:send(
-      Client, "SEND", [{"destination", "qwe"}],
+      Client, 'SEND', [{"destination", "qwe"}],
       [base64:encode(crypto:strong_rand_bytes(100000000))]),
     {S, _} = Client,
     {error, closed} = gen_tcp:recv(S, 0, 500),

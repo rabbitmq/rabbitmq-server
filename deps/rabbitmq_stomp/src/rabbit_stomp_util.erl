@@ -17,7 +17,6 @@
 -export([trim_headers/1]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
--include_lib("amqp_client/include/rabbit_routing_prefixes.hrl").
 -include("rabbit_stomp_frame.hrl").
 -include("rabbit_stomp_headers.hrl").
 
@@ -135,10 +134,9 @@ headers_extra(SessionId, AckMode, Version,
     end.
 
 headers_post_process(Headers) ->
-    Prefixes = rabbit_routing_util:dest_prefixes(),
     [case Header of
          {?HEADER_REPLY_TO, V} ->
-             case lists:any(fun (P) -> lists:prefix(P, V) end, Prefixes) of
+             case lists:any(fun (P) -> lists:prefix(P, V) end, ?DEST_PREFIXES) of
                  true  -> {?HEADER_REPLY_TO, V};
                  false -> {?HEADER_REPLY_TO, ?REPLY_QUEUE_PREFIX ++ V}
              end;

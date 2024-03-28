@@ -95,7 +95,7 @@ run(Config) ->
     
     start_amqp_connection(direct, Node, Port),
 
-    %% Still two MQTT connections, one direct AMQP 0-9-1 connection
+    %% Still two STOMP connections, one direct AMQP 0-9-1 connection
     [[{session_id, _}], [{session_id, _}]] =
         'Elixir.Enum':to_list(?COMMAND:run([<<"session_id">>], Opts)),
 
