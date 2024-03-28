@@ -23,7 +23,6 @@
 -record(cq, {
     amq = undefined :: amqqueue:amqqueue(),
     name :: atom(),
-    version :: 1 | 2,
 
     %% We have one queue per way of publishing messages (such as channels).
     %% We can only confirm the publish order on a per-channel level because
@@ -73,19 +72,12 @@
 %% Common Test.
 
 all() ->
-    [{group, classic_queue_tests}, {group, classic_queue_regressions}].
+    [{group, classic_queue_tests}].
 
 groups() ->
     [{classic_queue_tests, [], [
 %        manual%,
-        classic_queue_v1,
         classic_queue_v2
-     ]},
-     {classic_queue_regressions, [], [
-        reg_v1_full_recover_only_journal,
-        reg_v1_no_del_jif,
-        reg_v1_no_del_idx,
-        reg_v1_no_del_idx_unclean
      ]}
     ].
 
@@ -136,10 +128,10 @@ instrs_to_manual([Instrs]) ->
     io:format("~ndo_manual(Config) ->~n~n"),
     lists:foreach(fun
         ({init, CQ}) ->
-            #cq{name=Name, version=Version} = CQ,
-            io:format("    St0 = #cq{name=~0p, version=~0p,~n"
+            #cq{name=Name} = CQ,
+            io:format("    St0 = #cq{name=~0p,~n"
                       "              config=minimal_config(Config)},~n~n",
-                      [Name, Version]);
+                      [Name]);
         ({set, {var,Var}, {call, ?MODULE, cmd_setup_queue, _}}) ->
             Res = "Res" ++ integer_to_list(Var),
             PrevSt = "St" ++ integer_to_list(Var - 1),
@@ -197,15 +189,6 @@ manual(Config) ->
 do_manual(Config) ->
     Config =:= Config.
 
-classic_queue_v1(Config) ->
-    true = rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, do_classic_queue_v1, [Config]).
-
-do_classic_queue_v1(Config) ->
-    true = proper:quickcheck(prop_classic_queue_v1(Config),
-                             [{on_output, on_output_fun()},
-                              {numtests, ?NUM_TESTS}]).
-
 classic_queue_v2(Config) ->
     true = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, do_classic_queue_v2, [Config]).
@@ -225,16 +208,11 @@ on_output_fun() ->
 
 %% Properties.
 
-prop_classic_queue_v1(Config) ->
-    {ok, LimiterPid} = rabbit_limiter:start_link(no_id),
-    InitialState = #cq{name=?FUNCTION_NAME, version=1,
-                       config=minimal_config(Config), limiter=LimiterPid},
-    prop_common(InitialState).
-
 prop_classic_queue_v2(Config) ->
     {ok, LimiterPid} = rabbit_limiter:start_link(no_id),
-    InitialState = #cq{name=?FUNCTION_NAME, version=2,
-                       config=minimal_config(Config), limiter=LimiterPid},
+    InitialState = #cq{name=?FUNCTION_NAME,
+                       config=minimal_config(Config),
+                       limiter=LimiterPid},
     prop_common(InitialState).
 
 prop_common(InitialState) ->
@@ -343,8 +321,8 @@ next_state(St=#cq{q=Q0, confirmed=Confirmed, uncertain=Uncertain0}, AMQ, {call, 
     St#cq{amq=AMQ, q=Q, restarted=true, crashed=true, uncertain=Uncertain};
 next_state(St, _, {call, _, cmd_set_v2_check_crc32, _}) ->
     St;
-next_state(St, _, {call, _, cmd_set_version, [Version]}) ->
-    St#cq{version=Version};
+next_state(St, _, {call, _, cmd_set_version, _}) ->
+    St;
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_publish_msg, _}) ->
     IntQ = maps:get(internal, Q, queue:new()),
     St#cq{q=Q#{internal => queue:in(Msg, IntQ)}};
@@ -530,8 +508,10 @@ postcondition(_, {call, _, Cmd, _}, Q) when
     element(1, Q) =:= amqqueue;
 postcondition(_, {call, _, cmd_set_v2_check_crc32, _}, Res) ->
     Res =:= ok;
-postcondition(#cq{amq=AMQ}, {call, _, cmd_set_version, [Version]}, _) ->
-    do_check_queue_version(AMQ, Version) =:= ok;
+postcondition(#cq{amq=AMQ}, {call, _, cmd_set_version, _}, _) ->
+    %% We cannot use CQv1 anymore so we always
+    %% expect the queue to use v2.
+    do_check_queue_version(AMQ, 2) =:= ok;
 postcondition(_, {call, _, cmd_publish_msg, _}, Msg) ->
     is_record(Msg, amqp_msg);
 postcondition(_, {call, _, cmd_purge, _}, Res) ->
@@ -698,21 +678,16 @@ crashed_and_previously_received(#cq{crashed=Crashed, received=Received}, Msg) ->
 
 %% Helpers.
 
-cmd_setup_queue(St=#cq{name=Name, version=Version}) ->
+cmd_setup_queue(St=#cq{name=Name}) ->
     ?DEBUG("~0p", [St]),
     IsDurable = true, %% We want to be able to restart the queue process.
     IsAutoDelete = false,
-    %% We cannot use args to set the version as the arguments override
-    %% the policies and we also want to test policy changes.
-    cmd_set_version(Version),
-    Args = [
-%        {<<"x-queue-version">>, long, Version}
-    ],
+    Args = [],
     QName = rabbit_misc:r(<<"/">>, queue, iolist_to_binary([atom_to_binary(Name, utf8), $_,
                                                             integer_to_binary(erlang:unique_integer([positive]))])),
     {new, AMQ} = rabbit_amqqueue:declare(QName, IsDurable, IsAutoDelete, Args, none, <<"acting-user">>),
-    %% We check that the queue was creating with the right version.
-    ok = do_check_queue_version(AMQ, Version),
+    %% We check that the queue was created with the right version.
+    ok = do_check_queue_version(AMQ, 2),
     AMQ.
 
 cmd_teardown_queue(St=#cq{amq=undefined}) ->
@@ -788,7 +763,7 @@ do_check_queue_version(AMQ, Version, N) ->
     timer:sleep(1),
     [{backing_queue_status, Status}] = rabbit_amqqueue:info(AMQ, [backing_queue_status]),
     case proplists:get_value(version, Status) of
-        Version -> ok;
+        2 -> ok;
         _ -> do_check_queue_version(AMQ, Version, N - 1)
     end.
 
@@ -1097,243 +1072,6 @@ queue_fold(Fun, Acc0, {R, F}) when is_function(Fun, 2), is_list(R), is_list(F) -
     lists:foldr(Fun, Acc1, R);
 queue_fold(Fun, Acc0, Q) ->
     erlang:error(badarg, [Fun, Acc0, Q]).
-
-%% Regression tests.
-%%
-%% These tests are hard to reproduce by running the test suite normally
-%% because they require a very specific sequence of events.
-
-reg_v1_full_recover_only_journal(Config) ->
-    true = rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, do_reg_v1_full_recover_only_journal, [Config]).
-
-do_reg_v1_full_recover_only_journal(Config) ->
-
-    St0 = #cq{name=prop_classic_queue_v1, version=1,
-              config=minimal_config(Config)},
-
-    Res1 = cmd_setup_queue(St0),
-    St3 = St0#cq{amq=Res1},
-
-    Res4 = cmd_channel_open(St3),
-    true = postcondition(St3, {call, undefined, cmd_channel_open, [St3]}, Res4),
-    St7 = next_state(St3, Res4, {call, undefined, cmd_channel_open, [St3]}),
-
-    Res8 = cmd_restart_queue_dirty(St7),
-    true = postcondition(St7, {call, undefined, cmd_restart_queue_dirty, [St7]}, Res8),
-    St11 = next_state(St7, Res8, {call, undefined, cmd_restart_queue_dirty, [St7]}),
-
-    Res12 = cmd_channel_publish_many(St11, Res4, 117, 4541, 2, true, undefined),
-    true = postcondition(St11, {call, undefined, cmd_channel_publish_many, [St11, Res4, 117, 4541, 2, true, undefined]}, Res12),
-    St14 = next_state(St11, Res12, {call, undefined, cmd_channel_publish_many, [St11, Res4, 117, 4541, 2, true, undefined]}),
-
-    Res15 = cmd_restart_vhost_clean(St14),
-    true = postcondition(St14, {call, undefined, cmd_restart_vhost_clean, [St14]}, Res15),
-    St15 = next_state(St14, Res15, {call, undefined, cmd_restart_vhost_clean, [St14]}),
-
-    cmd_teardown_queue(St15),
-
-    true.
-
-%% The following reg_v1_no_del_* cases test when a classic queue has a
-%% published message before an upgrade to 3.10. In that case there is
-%% no delivery marker in the v1 queue index.
-
-%% After upgrade to 3.10 there is a published message in the journal file.
-%% Consuming and acknowledging the message should work fine.
-reg_v1_no_del_jif(Config) ->
-    try
-        true = rabbit_ct_broker_helpers:rpc(
-                 Config, 0, ?MODULE, do_reg_v1_no_del_jif, [Config])
-    catch exit:{exception, Reason} ->
-            exit(Reason)
-    end.
-
-do_reg_v1_no_del_jif(Config) ->
-    St0 = #cq{name=prop_classic_queue_v1, version=1,
-              config=minimal_config(Config)},
-
-    Res1 = cmd_setup_queue(St0),
-    St3 = St0#cq{amq=Res1},
-
-    {St4, Ch} = cmd(cmd_channel_open, St3, []),
-
-    %% Simulate pre-3.10.0 behaviour by making deliver a noop
-    ok = meck:new(rabbit_queue_index, [passthrough]),
-    ok = meck:expect(rabbit_queue_index, deliver, fun(_, State) -> State end),
-
-    {St5, _Res5} = cmd(cmd_channel_publish, St4, [Ch, 4, _Persistent = 2, _NotMandatory = false, _NoExpiration = undefined]),
-
-    %% Enforce syncing journal to disk
-    %% (Not strictly necessary as vhost restart also triggers a sync)
-    %% At this point there should be a publish entry in the journal and no segment files
-    rabbit_amqqueue:pid_of(St5#cq.amq) ! timeout,
-
-    {SyncTime, ok} = timer:tc(fun() -> meck:wait(rabbit_queue_index, sync, '_', 1000) end),
-    ct:pal("wait for sync took ~p ms", [SyncTime div 1000]),
-
-    %% Simulate RabbitMQ version upgrade by a clean vhost restart
-    %% (also reset delivery to normal operation)
-    ok = meck:delete(rabbit_queue_index, deliver, 2),
-    {St10, _} = cmd(cmd_restart_vhost_clean, St5, []),
-
-    meck:reset(rabbit_queue_index),
-
-    %% Consume the message and acknowledge it
-    %% The queue index should not crash when finding a pub+ack but no_del in the journal
-    %% (It used to crash in `action_to_entry/3' with a case_clause)
-    {St6, _Tag} = cmd(cmd_channel_consume, St10, [Ch]),
-    receive SomeMsg -> self() ! SomeMsg
-    after 5000 -> ct:fail(no_message_consumed)
-    end,
-    {St7, _Msg = #amqp_msg{}} = cmd(cmd_channel_receive_and_ack, St6, [Ch]),
-
-    %% enforce syncing journal to disk
-    rabbit_amqqueue:pid_of(St7#cq.amq) ! timeout,
-
-    {SyncTime2, ok} = timer:tc(fun() -> meck:wait(rabbit_queue_index, sync, '_', 1000) end),
-    ct:pal("wait for sync took ~p ms", [SyncTime2 div 1000]),
-
-    validate_and_teaddown(St7).
-
-%% After upgrade to 3.10 there is a published message in a segment file.
-%% Consuming and acknowledging the message inserts an ack entry in the journal file.
-%% A subsequent restart (of the queue/vhost/node) should work fine.
-reg_v1_no_del_idx(Config) ->
-    try
-        true = rabbit_ct_broker_helpers:rpc(
-                 Config, 0, ?MODULE, do_reg_v1_no_del_idx, [Config])
-    catch exit:{exception, Reason} ->
-            exit(Reason)
-    end.
-
-do_reg_v1_no_del_idx(Config) ->
-    St0 = #cq{name=prop_classic_queue_v1, version=1,
-              config=minimal_config(Config)},
-
-    Res1 = cmd_setup_queue(St0),
-    St3 = St0#cq{amq=Res1},
-
-    {St4, Ch} = cmd(cmd_channel_open, St3, []),
-
-    %% Simulate pre-3.10.0 behaviour by making deliver a noop
-    ok = meck:new(rabbit_queue_index, [passthrough]),
-    ok = meck:expect(rabbit_queue_index, deliver, fun(_, State) -> State end),
-
-    ok = meck:new(rabbit_variable_queue, [passthrough]),
-
-    {St5, _Res5} = cmd(cmd_channel_publish, St4, [Ch, 4, _Persistent = 2, _NotMandatory = false, _NoExpiration = undefined]),
-
-    %% Wait for the queue process to get hibernated
-    %% handle_pre_hibernate syncs and flushes the journal
-    %% At this point there should be a publish entry in the segment file and an empty journal
-    {Time, ok} = timer:tc(fun() -> meck:wait(rabbit_variable_queue, handle_pre_hibernate, '_', 10000) end),
-    ct:pal("wait for hibernate took ~p ms", [Time div 1000]),
-    ok = meck:unload(rabbit_variable_queue),
-
-    %% Simulate RabbitMQ version upgrade by a clean vhost restart
-    %% (also reset delivery to normal operation)
-    ok = meck:delete(rabbit_queue_index, deliver, 2),
-    {St10, _} = cmd(cmd_restart_vhost_clean, St5, []),
-
-    %% Consume the message and acknowledge it
-    {St6, _Tag} = cmd(cmd_channel_consume, St10, [Ch]),
-    receive SomeMsg -> self() ! SomeMsg
-    after 5000 -> ct:fail(no_message_consumed)
-    end,
-    {St7, _Msg = #amqp_msg{}} = cmd(cmd_channel_receive_and_ack, St6, [Ch]),
-
-    meck:reset(rabbit_queue_index),
-
-    %% enforce syncing journal to disk
-    %% At this point there should be a publish entry in the segment file and an ack in the journal
-    rabbit_amqqueue:pid_of(St7#cq.amq) ! timeout,
-    {SyncTime, ok} = timer:tc(fun() -> meck:wait(rabbit_queue_index, sync, '_', 1000) end),
-    ct:pal("wait for sync took ~p ms", [SyncTime div 1000]),
-
-    meck:reset(rabbit_queue_index),
-
-    %% Another clean vhost restart
-    %% The queue index should not crash when finding a pub in a
-    %% segment, an ack in the journal, but no_del
-    %% (It used to crash in `segment_plus_journal1/2' with a function_clause)
-    catch cmd(cmd_restart_vhost_clean, St7, []),
-
-    {ReadTime, ok} = timer:tc(fun() -> meck:wait(rabbit_queue_index, read, '_', 1000) end),
-    ct:pal("wait for queue read took ~p ms", [ReadTime div 1000]),
-
-    validate_and_teaddown(St7).
-
-%% After upgrade to 3.10 there is a published message in a segment file.
-%% Consuming and acknowledging the message inserts an ack entry in the journal file.
-%% The recovery after a subsequent unclean shutdown (of the queue/vhost/node) should work fine.
-reg_v1_no_del_idx_unclean(Config) ->
-    try
-        true = rabbit_ct_broker_helpers:rpc(
-                 Config, 0, ?MODULE, do_reg_v1_no_del_idx_unclean, [Config])
-    catch exit:{exception, Reason} ->
-            exit(Reason)
-    end.
-
-do_reg_v1_no_del_idx_unclean(Config) ->
-    St0 = #cq{name=prop_classic_queue_v1, version=1,
-              config=minimal_config(Config)},
-
-    Res1 = cmd_setup_queue(St0),
-    St3 = St0#cq{amq=Res1},
-
-    {St4, Ch} = cmd(cmd_channel_open, St3, []),
-
-    %% Simulate pre-3.10.0 behaviour by making deliver a noop
-    ok = meck:new(rabbit_queue_index, [passthrough]),
-    ok = meck:expect(rabbit_queue_index, deliver, fun(_, State) -> State end),
-
-    ok = meck:new(rabbit_variable_queue, [passthrough]),
-
-    {St5, _Res5} = cmd(cmd_channel_publish, St4, [Ch, 4, _Persistent = 2, _NotMandatory = false, _NoExpiration = undefined]),
-
-    %% Wait for the queue process to get hibernated
-    %% handle_pre_hibernate syncs and flushes the journal
-    %% At this point there should be a publish entry in the segment file and an empty journal
-    {Time, ok} = timer:tc(fun() -> meck:wait(rabbit_variable_queue, handle_pre_hibernate, '_', 10000) end),
-    ct:pal("wait for hibernate took ~p ms", [Time div 1000]),
-    ok = meck:unload(rabbit_variable_queue),
-
-    %% Simulate RabbitMQ version upgrade by a clean vhost restart
-    %% (also reset delivery to normal operation)
-    ok = meck:delete(rabbit_queue_index, deliver, 2),
-    {St10, _} = cmd(cmd_restart_vhost_clean, St5, []),
-
-    %% Consume the message and acknowledge it
-    {St6, _Tag} = cmd(cmd_channel_consume, St10, [Ch]),
-    receive SomeMsg -> self() ! SomeMsg
-    after 5000 -> ct:fail(no_message_consumed)
-    end,
-    meck:reset(rabbit_queue_index),
-    {St7, _Msg = #amqp_msg{}} = cmd(cmd_channel_receive_and_ack, St6, [Ch]),
-
-    %% (need to ensure that the queue processed the ack before triggering the sync)
-    {AckTime, ok} = timer:tc(fun() -> meck:wait(rabbit_queue_index, ack, '_', 1000) end),
-    ct:pal("wait for ack took ~p ms", [AckTime div 1000]),
-
-    %% enforce syncing journal to disk
-    %% At this point there should be a publish entry in the segment file and an ack in the journal
-    rabbit_amqqueue:pid_of(St7#cq.amq) ! timeout,
-    {SyncTime, ok} = timer:tc(fun() -> meck:wait(rabbit_queue_index, sync, '_', 1000) end),
-    ct:pal("wait for sync took ~p ms", [SyncTime div 1000]),
-
-    meck:reset(rabbit_queue_index),
-
-    %% Recovery after unclean queue shutdown
-    %% The queue index should not crash when finding a pub in a
-    %% segment, an ack in the journal, but no_del
-    %% (It used to crash in `journal_minus_segment1/2' with a function_clause)
-    {St20, _} = cmd(cmd_restart_queue_dirty, St7, []),
-
-    {RecoverTime, ok} = timer:tc(fun() -> meck:wait(rabbit_queue_index, recover, '_', 1000) end),
-    ct:pal("wait for queue recover took ~p ms", [RecoverTime div 1000]),
-
-    validate_and_teaddown(St20).
 
 cmd(CmdName, StIn, ExtraArgs) ->
     Res0 = apply(?MODULE, CmdName, [StIn | ExtraArgs]),

@@ -17,7 +17,6 @@ all() ->
 groups() ->
     [
      {queues, [], [
-                   classic_queue_v1,
                    classic_queue_v2,
                    quorum_queue,
                    stream
@@ -57,14 +56,7 @@ init_per_testcase(Testcase, Config) ->
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
-classic_queue_v1(Config) ->
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config, 0, application, set_env, [rabbit, classic_queue_default_version, 1]),
-    ok = queue(Config, ?FUNCTION_NAME, []).
-
 classic_queue_v2(Config) ->
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config, 0, application, set_env, [rabbit, classic_queue_default_version, 2]),
     ok = queue(Config, ?FUNCTION_NAME, []).
 
 quorum_queue(Config) ->

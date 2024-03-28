@@ -201,11 +201,8 @@ init_per_group(Group, Config0) ->
                 Config1,
                 [{rmq_nodes_count, Nodes},
                  {rmq_nodename_suffix, Suffix}]),
-    Config3 = rabbit_ct_helpers:merge_app_env(
-                Config2,
-                {rabbit, [{classic_queue_default_version, 2}]}),
     Config = rabbit_ct_helpers:run_steps(
-               Config3,
+               Config2,
                rabbit_ct_broker_helpers:setup_steps() ++
                rabbit_ct_client_helpers:setup_steps()),
     util:maybe_skip_v5(Config).

@@ -477,12 +477,8 @@ init_queue_mode(Mode, State = #q {backing_queue = BQ,
 
 init_queue_version(Version0, State = #q {backing_queue = BQ,
                                          backing_queue_state = BQS}) ->
-    %% When the version is undefined we use the default version 1.
-    %% We want to BQ:set_queue_version in all cases because a v2
-    %% policy might have been deleted, for example, and we want
-    %% the queue to go back to v1.
     Version = case Version0 of
-        undefined -> rabbit_misc:get_env(rabbit, classic_queue_default_version, 1);
+        undefined -> 2;
         _ -> Version0
     end,
     BQS1 = BQ:set_queue_version(Version, BQS),

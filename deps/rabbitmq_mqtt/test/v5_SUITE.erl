@@ -169,8 +169,7 @@ init_per_group(Group, Config0) ->
                  {rmq_nodename_suffix, Suffix}]),
     Config2 = rabbit_ct_helpers:merge_app_env(
                 Config1,
-                {rabbit, [{classic_queue_default_version, 2},
-                          {quorum_tick_interval, 200}]}),
+                {rabbit, [{quorum_tick_interval, 200}]}),
     Config = rabbit_ct_helpers:run_steps(
                Config2,
                rabbit_ct_broker_helpers:setup_steps() ++
