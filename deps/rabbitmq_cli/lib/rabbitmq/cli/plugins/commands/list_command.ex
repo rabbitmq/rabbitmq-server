@@ -122,7 +122,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
       ["--verbose", "output more information"],
       [
         "--minimal",
-        "only print plugin names. Most useful in compbination with --silent and --enabled."
+        "only print plugin names. Most useful in combination with --silent and --enabled."
       ],
       ["--enabled", "only list enabled plugins"],
       ["--implicitly-enabled", "include plugins enabled as dependencies of other plugins"]

@@ -195,7 +195,9 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     all_plugin_names = Enum.map(all, &plugin_name/1)
     missing = MapSet.difference(MapSet.new(plugins), MapSet.new(all_plugin_names))
 
-    case Enum.empty?(missing) do
+    hard_write = Map.get(opts, :hard_write, false)
+
+    case Enum.empty?(missing) or hard_write do
       true ->
         case :rabbit_file.write_term_file(to_charlist(plugins_file), [plugins]) do
           :ok ->
