@@ -59,6 +59,7 @@ jobs:
 
             build:buildbuddy --remote_download_toplevel
 
+            build --experimental_ui_max_stdouterr_bytes=2097152
             build --action_env EXTRA_BUILDX_OPTS="--cache-from=type=gha --cache-to=type=gha"
           EOF
 
