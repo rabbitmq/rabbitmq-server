@@ -13,10 +13,12 @@
 
 -export([setup/0,
          setup/1,
+         get_config/1,
          all_ra_systems/0,
          are_running/0,
          ensure_ra_system_started/1,
          ensure_started/0,
+         ensure_ra_system_stopped/1,
          ensure_stopped/0]).
 
 -type ra_system_name() :: atom().
