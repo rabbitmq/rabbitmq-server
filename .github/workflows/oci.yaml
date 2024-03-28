@@ -40,6 +40,9 @@ jobs:
             ${{ runner.os }}-repo-cache-
           save-always: true
 
+      - name: Expose GitHub Runtime
+        uses: crazy-max/ghaction-github-runtime@v3
+
       - name: Configure Bazel
         run: |
           if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
@@ -55,6 +58,8 @@ jobs:
             build:buildbuddy --disk_cache=
 
             build:buildbuddy --remote_download_toplevel
+
+            build --action_env EXTRA_BUILDX_OPTS="--cache-from=type=gha --cache-to=type=gha"
           EOF
 
       - name: Build

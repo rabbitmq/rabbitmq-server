@@ -36,7 +36,7 @@ _ARCHS = [
         outs = [
             "image-%s.tar" % arch,
         ],
-        cmd = """set -euo pipefail
+        cmd = """set -eo pipefail
 
 CONTEXT="$$(mktemp -d)"
 
@@ -47,7 +47,7 @@ docker buildx \\
     "$$CONTEXT" \\
     --platform linux/{arch} \\
     --tag {tag}:{arch} \\
-    --output type=tar,dest=$(location image-{arch}.tar)
+    --output type=tar,dest=$(location image-{arch}.tar) $$EXTRA_BUILDX_OPTS
 """.format(
             arch = arch,
             tag = "bazel/%s/docker-build" % package_name(),
