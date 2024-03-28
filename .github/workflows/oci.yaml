@@ -59,13 +59,18 @@ jobs:
 
             build:buildbuddy --remote_download_toplevel
 
-            build --experimental_ui_max_stdouterr_bytes=2097152
+            build --experimental_ui_max_stdouterr_bytes=4194304
             build --action_env EXTRA_BUILDX_OPTS="--cache-from=type=gha --cache-to=type=gha"
           EOF
 
-      - name: Build
+      - name: Build amd64
         run: |
-          bazelisk build //packaging/docker-image:rabbitmq \
+          bazelisk build //packaging/docker-image:rabbitmq-amd64 \
+            --config=buildbuddy
+
+      - name: Build arm64
+        run: |
+          bazelisk build //packaging/docker-image:rabbitmq-arm64 \
             --config=buildbuddy
 
       - name: Test
