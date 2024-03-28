@@ -31,15 +31,6 @@ jobs:
           otp-version: 26.2
           elixir-version: 1.15
 
-      - name: Mount Bazel Cache
-        uses: actions/cache@v4.0.2
-        with:
-          path: "/home/runner/repo-cache/"
-          key: ${{ runner.os }}-repo-cache-${{ hashFiles('MODULE.bazel','WORKSPACE','bazel/bzlmod/secondary_umbrella.bzl') }}
-          restore-keys: |
-            ${{ runner.os }}-repo-cache-
-          save-always: true
-
       - name: Expose GitHub Runtime
         uses: crazy-max/ghaction-github-runtime@v3
 
@@ -53,9 +44,7 @@ jobs:
           cat << EOF >> user.bazelrc
             build:buildbuddy --build_metadata=ROLE=CI
             build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
-            build:buildbuddy --repository_cache=/home/runner/repo-cache/
             build:buildbuddy --color=yes
-            build:buildbuddy --disk_cache=
 
             build:buildbuddy --remote_download_toplevel
 

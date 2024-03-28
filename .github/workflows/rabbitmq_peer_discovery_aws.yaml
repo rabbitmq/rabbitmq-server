@@ -29,14 +29,6 @@ jobs:
         check-name: build-publish-dev-bazel
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         wait-interval: 30 # seconds
-    - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v4.0.2
-      with:
-        path: "/home/runner/repo-cache/"
-        key: ${{ runner.os }}-repo-cache-${{ hashFiles('MODULE.bazel','WORKSPACE','bazel/bzlmod/secondary_umbrella.bzl') }}
-        restore-keys: |
-          ${{ runner.os }}-repo-cache-
-        save-always: true
     - name: CONFIGURE BAZEL
       run: |
         cat << EOF >> user.bazelrc
@@ -44,9 +36,7 @@ jobs:
 
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
-          build:buildbuddy --repository_cache=/home/runner/repo-cache/
           build:buildbuddy --color=yes
-          build:buildbuddy --disk_cache=
         EOF
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
