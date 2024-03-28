@@ -2,6 +2,6 @@ schemaVersion: 2.0.0
 
 commandTests:
   - name: "rabbitmq-plugins"
-    command: "/bin/bash"
-    args: ["-c", "rabbitmq-plugins list"]
+    command: "/opt/rabbitmq/sbin/rabbitmq-plugins"
+    args: ["list"]
     expectedOutput: ["\\[E \\] rabbitmq_management"]
