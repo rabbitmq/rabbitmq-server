@@ -188,11 +188,11 @@ erlang_package.hex_package(
     version = "1.3.3",
 )
 
-erlang_package.git_package(
+erlang_package.hex_package(
     name = "horus",
     build_file = "@rabbitmq-server//bazel:BUILD.horus",
-    commit = "253f9af23e539b7370a5105df19dcbb66762b247",
-    repository = "rabbitmq/horus",
+    sha256 = "f75317a5f15dd153395d0ee40401a126a87360af0f995c3377b8042eb222d082",
+    version = "0.2.5",
 )
 
 erlang_package.hex_package(
