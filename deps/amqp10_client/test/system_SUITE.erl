@@ -83,7 +83,8 @@ init_per_suite(Config) ->
       ]).
 
 end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config,
+    rabbit_ct_helpers:run_teardown_steps(
+      Config,
       [
        fun stop_amqp10_client_app/1
       ]).
