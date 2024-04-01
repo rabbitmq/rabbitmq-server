@@ -329,7 +329,7 @@ put_vhost(Name, Description, Tags0, DefaultQueueType0, Trace, Username) ->
     DefaultQueueType = case DefaultQueueType0 of
         <<"undefined">> -> undefined;
         _ -> DefaultQueueType0
-    end,     
+    end,
     ParsedTags = parse_tags(Tags),
     rabbit_log:debug("Parsed tags ~tp to ~tp", [Tags, ParsedTags]),
     Result = case exists(Name) of
