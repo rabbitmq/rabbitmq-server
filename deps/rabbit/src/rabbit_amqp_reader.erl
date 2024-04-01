@@ -485,15 +485,19 @@ handle_1_0_connection_frame(
            Infos),
     ok = rabbit_event:notify(connection_created, Infos),
     ok = rabbit_amqp1_0:register_connection(self()),
-    ok = send_on_channel0(
-           Sock,
-           #'v1_0.open'{channel_max    = ClientChannelMax,
-                        max_frame_size = {uint, IncomingMaxFrameSize},
-                        %% "the value in idle-time-out SHOULD be half the peer's actual timeout threshold" [2.4.5]
-                        idle_time_out  = {uint, ReceiveTimeoutMillis div 2},
-                        container_id   = {utf8, rabbit_nodes:cluster_name()},
-                        offered_capabilities = {array, symbol, [{symbol, <<"LINK_PAIR_V1_0">>}]},
-                        properties     = server_properties()}),
+    Caps = [%% https://docs.oasis-open.org/amqp/linkpair/v1.0/cs01/linkpair-v1.0-cs01.html#_Toc51331306
+            {symbol, <<"LINK_PAIR_V1_0">>},
+            %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
+            {symbol, <<"ANONYMOUS-RELAY">>}],
+    Open = #'v1_0.open'{
+              channel_max = ClientChannelMax,
+              max_frame_size = {uint, IncomingMaxFrameSize},
+              %% "the value in idle-time-out SHOULD be half the peer's actual timeout threshold" [2.4.5]
+              idle_time_out = {uint, ReceiveTimeoutMillis div 2},
+              container_id = {utf8, rabbit_nodes:cluster_name()},
+              offered_capabilities = {array, symbol, Caps},
+              properties = server_properties()},
+    ok = send_on_channel0(Sock, Open),
     State;
 handle_1_0_connection_frame(#'v1_0.close'{}, State0) ->
     State = State0#v1{connection_state = closing},
@@ -881,13 +885,14 @@ check_user_connection_limit(Username) ->
 %%    https://datatracker.ietf.org/doc/html/rfc4422#section-3.8 , or
 %% 2. Claims Based Security (CBS) extension, see https://docs.oasis-open.org/amqp/amqp-cbs/v1.0/csd01/amqp-cbs-v1.0-csd01.html
 %%    and https://github.com/rabbitmq/rabbitmq-server/issues/9259
+%% 3. Simpler variation of 2. where a token is put to a special /token node.
 %%
 %% If the user does not refresh their credential on time (the only implementation currently),
 %% close the entire connection as we must assume that vhost access could have been revoked.
 %%
 %% If the user refreshes their credential on time (to be implemented), the AMQP reader should
 %% 1. rabbit_access_control:check_vhost_access/4
-%% 2. send a message to all its sessions which should then erase the topic permission cache and
+%% 2. send a message to all its sessions which should then erase the permission caches and
 %% re-check all link permissions (i.e. whether reading / writing to exchanges / queues is still allowed).
 %% 3. cancel the current timer, and set a new timer
 %% similary as done for Stream connections, see https://github.com/rabbitmq/rabbitmq-server/issues/10292

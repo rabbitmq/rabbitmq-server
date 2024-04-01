@@ -918,8 +918,9 @@ server_closes_link_exchange(Config) ->
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag2, <<"m2">>, false)),
     ok = wait_for_settlement(DTag2, released),
     %% 2. that the server closes the link, i.e. sends us a DETACH frame.
-    ExpectedError = #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_RESOURCE_DELETED},
-    receive {amqp10_event, {link, Sender, {detached, ExpectedError}}} -> ok
+    receive {amqp10_event,
+             {link, Sender,
+              {detached, #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_NOT_FOUND}}}} -> ok
     after 5000 -> ct:fail("server did not close our outgoing link")
     end,
     ?assertMatch(#{publishers := 0}, get_global_counters(Config)),

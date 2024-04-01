@@ -662,7 +662,11 @@ make_target(#{role := {receiver, _Source, _Pid}}) ->
     #'v1_0.target'{};
 make_target(#{role := {sender, #{address := Address} = Target}}) ->
     Durable = translate_terminus_durability(maps:get(durable, Target, none)),
-    #'v1_0.target'{address = {utf8, Address},
+    TargetAddr = case is_binary(Address) of
+                     true -> {utf8, Address};
+                     false -> Address
+                 end,
+    #'v1_0.target'{address = TargetAddr,
                    durable = {uint, Durable}}.
 
 max_message_size(#{max_message_size := Size})

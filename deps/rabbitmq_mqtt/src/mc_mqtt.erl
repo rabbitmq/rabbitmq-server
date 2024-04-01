@@ -95,7 +95,8 @@ convert_from(mc_amqp, Sections, Env) ->
                      MqttX = maps:get(mqtt_x, Env, ?DEFAULT_MQTT_EXCHANGE),
                      case Address of
                          <<"/exchange/",
-                           MqttX:(byte_size(MqttX))/binary, "/",
+                           MqttX:(byte_size(MqttX))/binary,
+                           "/key/",
                            RoutingKey/binary>> ->
                              MqttTopic = rabbit_mqtt_util:amqp_to_mqtt(RoutingKey),
                              Props0#{'Response-Topic' => MqttTopic};
@@ -271,7 +272,7 @@ convert_to(mc_amqp, #mqtt_msg{qos = Qos,
                   #{'Response-Topic' := MqttTopic} ->
                       Exchange = maps:get(mqtt_x, Env, ?DEFAULT_MQTT_EXCHANGE),
                       Topic = rabbit_mqtt_util:mqtt_to_amqp(MqttTopic),
-                      Address = <<"/exchange/", Exchange/binary, "/", Topic/binary>>,
+                      Address = <<"/exchange/", Exchange/binary, "/key/", Topic/binary>>,
                       {utf8, Address};
                   _ ->
                       undefined

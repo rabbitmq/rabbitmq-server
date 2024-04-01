@@ -16,6 +16,15 @@
 -include("rabbit_amqp.hrl").
 -include("mc.hrl").
 
+-rabbit_deprecated_feature(
+   {amqp_address_v1,
+    #{deprecation_phase => permitted_by_default,
+      messages =>
+      #{when_permitted =>
+        "RabbitMQ AMQP address version 1 is deprecated. "
+        "Clients should use RabbitMQ AMQP address version 2."}}
+   }).
+
 -define(PROTOCOL, amqp10).
 -define(HIBERNATE_AFTER, 6_000).
 -define(CREDIT_REPLY_TIMEOUT, 30_000).
@@ -34,7 +43,6 @@
                    ?V_1_0_SYMBOL_RELEASED,
                    ?V_1_0_SYMBOL_MODIFIED]).
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
--define(TOPIC_PERMISSION_CACHE, topic_permission_cache).
 -define(PROCESS_GROUP_NAME, amqp_sessions).
 -define(UINT(N), {uint, N}).
 %% This is the link credit that we grant to sending clients.
@@ -50,12 +58,14 @@
 -define(LINK_CREDIT_RCV, 128).
 -define(MANAGEMENT_LINK_CREDIT_RCV, 8).
 -define(MANAGEMENT_NODE_ADDRESS, <<"/management">>).
+-define(DEFAULT_EXCHANGE_NAME, <<>>).
 
 -export([start_link/8,
          process_frame/2,
          list_local/0,
          conserve_resources/3,
-         check_read_permitted_on_topic/3
+         check_resource_access/4,
+         check_read_permitted_on_topic/4
         ]).
 
 -export([init/1,
@@ -71,6 +81,15 @@
         [add/2,
          diff/2,
          compare/2]).
+
+-type permission_cache() :: [{rabbit_types:r(exchange | queue),
+                              rabbit_types:permission_atom()}].
+-type topic_permission_cache() :: [{rabbit_types:r(topic),
+                                    rabbit_types:routing_key(),
+                                    rabbit_types:permission_atom()}].
+
+-export_type([permission_cache/0,
+              topic_permission_cache/0]).
 
 %% incoming multi transfer delivery [2.6.14]
 -record(multi_transfer_msg, {
@@ -96,8 +115,14 @@
          }).
 
 -record(incoming_link, {
-          exchange :: rabbit_types:exchange() | rabbit_exchange:name(),
-          routing_key :: undefined | rabbit_types:routing_key(),
+          %% The exchange is either defined in the ATTACH frame and static for
+          %% the life time of the link or dynamically provided in each message's
+          %% "to" field (address v2).
+          exchange :: rabbit_types:exchange() | rabbit_exchange:name() | to,
+          %% The routing key is either defined in the ATTACH frame and static for
+          %% the life time of the link or dynamically provided in each message's
+          %% "to" field (address v2) or "subject" field (address v1).
+          routing_key :: rabbit_types:routing_key() | to | subject,
           %% queue_name_bin is only set if the link target address refers to a queue.
           queue_name_bin :: undefined | rabbit_misc:resource_name(),
           delivery_count :: sequence_no(),
@@ -256,7 +281,9 @@
           %% Queues that got deleted.
           stashed_eol = [] :: [rabbit_amqqueue:name()],
 
-          queue_states = rabbit_queue_type:init() :: rabbit_queue_type:state()
+          queue_states = rabbit_queue_type:init() :: rabbit_queue_type:state(),
+          permission_cache = [] :: permission_cache(),
+          topic_permission_cache = [] :: topic_permission_cache()
          }).
 
 -type state() :: #state{}.
@@ -703,13 +730,15 @@ destroy_outgoing_link(Handle, Link = #outgoing_link{queue_name_bin = QNameBin}, 
 destroy_outgoing_link(_, _, _, Acc) ->
     Acc.
 
-detach(Handle, Link, ErrorCondition) ->
-    rabbit_log:warning("Detaching link handle ~b due to error condition: ~tp",
-                       [Handle, ErrorCondition]),
+detach(Handle, Link, Error = #'v1_0.error'{}) ->
+    rabbit_log:warning("Detaching link handle ~b due to error: ~tp",
+                       [Handle, Error]),
     publisher_or_consumer_deleted(Link),
     #'v1_0.detach'{handle = ?UINT(Handle),
                    closed = true,
-                   error = #'v1_0.error'{condition = ErrorCondition}}.
+                   error = Error};
+detach(Handle, Link, ErrorCondition) ->
+    detach(Handle, Link, #'v1_0.error'{condition = ErrorCondition}).
 
 send_dispositions(Ids, DeliveryState, Writer, ChannelNum) ->
     Ranges = serial_number:ranges(Ids),
@@ -857,11 +886,12 @@ handle_control(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
                               initial_delivery_count = DeliveryCount = ?UINT(DeliveryCountInt)
                              } = Attach,
                State0 = #state{incoming_links = IncomingLinks0,
+                               permission_cache = PermCache0,
                                cfg = #cfg{vhost = Vhost,
                                           user = User}}) ->
     ok = validate_attach(Attach),
-    case ensure_target(Target, Vhost, User) of
-        {ok, Exchange, RoutingKey, QNameBin} ->
+    case ensure_target(Target, Vhost, User, PermCache0) of
+        {ok, Exchange, RoutingKey, QNameBin, PermCache} ->
             IncomingLink = #incoming_link{
                               exchange = Exchange,
                               routing_key = RoutingKey,
@@ -887,11 +917,11 @@ handle_control(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
             %% using a handle which is already associated with a link MUST be responded to
             %% with an immediate close carrying a handle-in-use session-error."
             IncomingLinks = IncomingLinks0#{HandleInt => IncomingLink},
-            State = State0#state{incoming_links = IncomingLinks},
+            State = State0#state{incoming_links = IncomingLinks,
+                                 permission_cache = PermCache},
             rabbit_global_counters:publisher_created(?PROTOCOL),
             reply0([Reply, Flow], State);
         {error, Reason} ->
-            %% TODO proper link establishment protocol here?
             protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
                            "Attach rejected: ~tp",
                            [Reason])
@@ -906,25 +936,27 @@ handle_control(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                               max_message_size = MaybeMaxMessageSize} = Attach,
                State0 = #state{queue_states = QStates0,
                                outgoing_links = OutgoingLinks0,
+                               permission_cache = PermCache0,
+                               topic_permission_cache = TopicPermCache0,
                                cfg = #cfg{vhost = Vhost,
                                           user = User = #user{username = Username},
                                           reader_pid = ReaderPid}}) ->
     ok = validate_attach(Attach),
-    {SndSettled, EffectiveSndSettleMode} = case SndSettleMode of
-                                               ?V_1_0_SENDER_SETTLE_MODE_SETTLED ->
-                                                   {true, SndSettleMode};
-                                               _ ->
-                                                   %% In the future, we might want to support sender settle
-                                                   %% mode mixed where we would expect a settlement from the
-                                                   %% client only for durable messages.
-                                                   {false, ?V_1_0_SENDER_SETTLE_MODE_UNSETTLED}
-                                           end,
-    case ensure_source(Source, Vhost, User) of
+    {SndSettled,
+     EffectiveSndSettleMode} = case SndSettleMode of
+                                   ?V_1_0_SENDER_SETTLE_MODE_SETTLED ->
+                                       {true, SndSettleMode};
+                                   _ ->
+                                       %% In the future, we might want to support sender settle
+                                       %% mode mixed where we would expect a settlement from the
+                                       %% client only for durable messages.
+                                       {false, ?V_1_0_SENDER_SETTLE_MODE_UNSETTLED}
+                               end,
+    case ensure_source(Source, Vhost, User, PermCache0, TopicPermCache0) of
         {error, Reason} ->
             protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD, "Attach rejected: ~tp", [Reason]);
-        {ok, QNameBin} ->
-            QName = rabbit_misc:r(Vhost, queue, QNameBin),
-            check_read_permitted(QName, User),
+        {ok, QName = #resource{name = QNameBin}, PermCache1, TopicPermCache} ->
+            PermCache = check_resource_access(QName, read, User, PermCache1),
             case rabbit_amqqueue:with(
                    QName,
                    fun(Q) ->
@@ -990,7 +1022,9 @@ handle_control(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                                          delivery_count = DeliveryCount},
                                    OutgoingLinks = OutgoingLinks0#{HandleInt => Link},
                                    State1 = State0#state{queue_states = QStates,
-                                                         outgoing_links = OutgoingLinks},
+                                                         outgoing_links = OutgoingLinks,
+                                                         permission_cache = PermCache,
+                                                         topic_permission_cache = TopicPermCache},
                                    rabbit_global_counters:consumer_created(?PROTOCOL),
                                    {ok, [A], State1};
                                {error, Reason} ->
@@ -1669,6 +1703,8 @@ incoming_mgmt_link_transfer(
          outgoing_management_links = OutgoingLinks,
          outgoing_pending = Pending,
          outgoing_delivery_id = OutgoingDeliveryId,
+         permission_cache = PermCache0,
+         topic_permission_cache = TopicPermCache0,
          cfg = #cfg{outgoing_max_frame_size = MaxFrameSize,
                     vhost = Vhost,
                     user = User,
@@ -1723,7 +1759,9 @@ incoming_mgmt_link_transfer(
               [OutgoingCredit])
     end,
     validate_message_size(Request, IncomingMaxMessageSize),
-    Response = rabbit_amqp_management:handle_request(Request, Vhost, User, ReaderPid),
+    {Response,
+     {PermCache, TopicPermCache}} = rabbit_amqp_management:handle_request(
+                                      Request, Vhost, User, ReaderPid, {PermCache0, TopicPermCache0}),
 
     Transfer = #'v1_0.transfer'{
                   handle = ?UINT(OutgoingHandleInt),
@@ -1749,7 +1787,9 @@ incoming_mgmt_link_transfer(
               outgoing_delivery_id = add(OutgoingDeliveryId, 1),
               outgoing_pending = queue:in(PendingTransfer, Pending),
               incoming_management_links = maps:update(IncomingHandleInt, IncomingLink, IncomingLinks),
-              outgoing_management_links = maps:update(OutgoingHandleInt, OutgoingLink, OutgoingLinks)},
+              outgoing_management_links = maps:update(OutgoingHandleInt, OutgoingLink, OutgoingLinks),
+              permission_cache = PermCache,
+              topic_permission_cache = TopicPermCache},
     {Reply, State}.
 
 incoming_link_transfer(
@@ -1802,7 +1842,7 @@ incoming_link_transfer(
                    rcv_settle_mode = RcvSettleMode,
                    handle = Handle = ?UINT(HandleInt)},
   MsgPart,
-  #incoming_link{exchange = Exchange,
+  #incoming_link{exchange = LinkExchange,
                  routing_key = LinkRKey,
                  delivery_count = DeliveryCount0,
                  incoming_unconfirmed_map = U0,
@@ -1810,7 +1850,10 @@ incoming_link_transfer(
                  multi_transfer_msg = MultiTransfer
                 } = Link0,
   State0 = #state{queue_states = QStates0,
+                  permission_cache = PermCache0,
+                  topic_permission_cache = TopicPermCache0,
                   cfg = #cfg{user = User = #user{username = Username},
+                             vhost = Vhost,
                              trace_state = Trace,
                              conn_name = ConnName,
                              channel_num = ChannelNum}}) ->
@@ -1834,15 +1877,14 @@ incoming_link_transfer(
     Sections = amqp10_framing:decode_bin(MsgBin),
     ?DEBUG("~s Inbound content:~n  ~tp",
            [?MODULE, [amqp10_framing:pprint(Section) || Section <- Sections]]),
-    case rabbit_exchange_lookup(Exchange) of
-        {ok, X = #exchange{name = #resource{name = XNameBin}}} ->
-            Anns = #{?ANN_EXCHANGE => XNameBin},
-            Mc0 = mc:init(mc_amqp, Sections, Anns),
-            {RoutingKey, Mc1} = ensure_routing_key(LinkRKey, Mc0),
+    Mc0 = mc:init(mc_amqp, Sections, #{}),
+    case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, PermCache0) of
+        {ok, X, RoutingKey, Mc1, PermCache} ->
             Mc = rabbit_message_interceptor:intercept(Mc1),
             check_user_id(Mc, User),
+            TopicPermCache = check_write_permitted_on_topic(
+                               X, User, RoutingKey, TopicPermCache0),
             messages_received(Settled),
-            check_write_permitted_on_topic(X, User, RoutingKey),
             QNames = rabbit_exchange:route(X, Mc, #{return_binding_keys => true}),
             rabbit_trace:tap_in(Mc, QNames, ConnName, ChannelNum, Username, Trace),
             Opts = #{correlation => {HandleInt, DeliveryId}},
@@ -1850,7 +1892,9 @@ incoming_link_transfer(
             Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
             case rabbit_queue_type:deliver(Qs, Mc, Opts, QStates0) of
                 {ok, QStates, Actions} ->
-                    State1 = State0#state{queue_states = QStates},
+                    State1 = State0#state{queue_states = QStates,
+                                          permission_cache = PermCache,
+                                          topic_permission_cache = TopicPermCache},
                     %% Confirms must be registered before processing actions
                     %% because actions may contain rejections of publishes.
                     {U, Reply0} = process_routing_confirm(
@@ -1873,35 +1917,68 @@ incoming_link_transfer(
                                    "delivery_tag=~p, delivery_id=~p, reason=~p",
                                    [DeliveryTag, DeliveryId, Reason])
             end;
-        {error, not_found} ->
+        {error, not_found, XName} ->
             Disposition = released(DeliveryId),
-            Detach = detach(HandleInt, Link0, ?V_1_0_AMQP_ERROR_RESOURCE_DELETED),
+            Description = unicode:characters_to_binary("no " ++ rabbit_misc:rs(XName)),
+            Err = #'v1_0.error'{
+                     condition = ?V_1_0_AMQP_ERROR_NOT_FOUND,
+                     description = {utf8, Description}},
+            Detach = detach(HandleInt, Link0, Err),
             {error, [Disposition, Detach]}
     end.
 
-ensure_routing_key(LinkRKey, Mc0) ->
-    RKey = case LinkRKey of
-               undefined ->
-                   case mc:property(subject, Mc0) of
-                       undefined ->
-                           %% Set the default routing key of AMQP 0.9.1 'basic.publish'{}.
-                           %% For example, when the client attached to target /exchange/amq.fanout and sends a
-                           %% message without setting a 'subject' in the message properties, the routing key is
-                           %% ignored during routing, but receiving code paths still expect some routing key to be set.
-                           <<"">>;
-                       {utf8, Subject} ->
-                           Subject
-                   end;
-               _ ->
-                   LinkRKey
-           end,
-    Mc = mc:set_annotation(?ANN_ROUTING_KEYS, [RKey], Mc0),
-    {RKey, Mc}.
+lookup_target(#exchange{} = X, LinkRKey, Mc, _, _, PermCache) ->
+    lookup_routing_key(X, LinkRKey, Mc, PermCache);
+lookup_target(#resource{} = XName, LinkRKey, Mc, _, _, PermCache) ->
+    case rabbit_exchange:lookup(XName) of
+        {ok, X} ->
+            lookup_routing_key(X, LinkRKey, Mc, PermCache);
+        {error, not_found} ->
+            {error, not_found, XName}
+    end;
+lookup_target(to, to, Mc, Vhost, User, PermCache0) ->
+    case mc:property(to, Mc) of
+        {utf8, String} ->
+            case parse_target_v2_string(String) of
+                {ok, XNameBin, RKey, _} ->
+                    XName = rabbit_misc:r(Vhost, exchange, XNameBin),
+                    PermCache = check_resource_access(XName, write, User, PermCache0),
+                    case rabbit_exchange:lookup(XName) of
+                        {ok, X} ->
+                            check_internal_exchange(X),
+                            lookup_routing_key(X, RKey, Mc, PermCache);
+                        {error, not_found} ->
+                            {error, not_found, XName}
+                    end;
+                {error, bad_address} ->
+                    protocol_error(
+                      ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+                      "bad 'to' address string: ~ts",
+                      [String])
+            end;
+        undefined ->
+            protocol_error(
+              ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+              "anonymous terminus requires 'to' address to be set",
+              [])
+    end.
 
-rabbit_exchange_lookup(X = #exchange{}) ->
-    {ok, X};
-rabbit_exchange_lookup(XName = #resource{}) ->
-    rabbit_exchange:lookup(XName).
+lookup_routing_key(X = #exchange{name = #resource{name = XNameBin}},
+                   RKey0, Mc0, PermCache) ->
+    RKey = case RKey0 of
+               subject ->
+                   case mc:property(subject, Mc0) of
+                       {utf8, Subject} ->
+                           Subject;
+                       undefined ->
+                           <<>>
+                   end;
+               _ when is_binary(RKey0) ->
+                   RKey0
+           end,
+    Mc1 = mc:set_annotation(?ANN_EXCHANGE, XNameBin, Mc0),
+    Mc = mc:set_annotation(?ANN_ROUTING_KEYS, [RKey], Mc1),
+    {ok, X, RKey, Mc, PermCache}.
 
 process_routing_confirm([], _SenderSettles = true, _, U) ->
     rabbit_global_counters:messages_unroutable_dropped(?PROTOCOL, 1),
@@ -1957,42 +2034,208 @@ maybe_grant_mgmt_link_credit(Credit, DeliveryCount, Handle)
 maybe_grant_mgmt_link_credit(Credit, _, _) ->
     {Credit, []}.
 
-%% TODO default-outcome and outcomes, dynamic lifetimes
-ensure_target(#'v1_0.target'{dynamic = true}, _, _) ->
-    protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
-                   "Dynamic targets not supported", []);
-ensure_target(#'v1_0.target'{address = Address,
-                             durable = Durable}, Vhost, User) ->
+-spec ensure_source(#'v1_0.source'{},
+                    rabbit_types:vhost(),
+                    rabbit_types:user(),
+                    permission_cache(),
+                    topic_permission_cache()) ->
+    {ok, rabbit_amqqueue:name(), permission_cache(), topic_permission_cache()} |
+    {error, term()}.
+ensure_source(#'v1_0.source'{dynamic = true}, _, _, _, _) ->
+    not_implemented("Dynamic sources not supported");
+ensure_source(#'v1_0.source'{address = Address,
+                             durable = Durable},
+              Vhost, User, PermCache, TopicPermCache) ->
     case Address of
-        {utf8, Destination} ->
-            case rabbit_routing_parser:parse_endpoint(Destination, true) of
-                {ok, Dest} ->
-                    QNameBin = ensure_terminus(target, Dest, Vhost, User, Durable),
-                    {XNameList1, RK} = rabbit_routing_parser:parse_routing(Dest),
-                    XNameBin = unicode:characters_to_binary(XNameList1),
-                    XName = rabbit_misc:r(Vhost, exchange, XNameBin),
-                    {ok, X} = rabbit_exchange:lookup(XName),
-                    check_internal_exchange(X),
-                    check_write_permitted(XName, User),
-                    %% Pre-declared exchanges are protected against deletion and modification.
-                    %% Let's cache the whole #exchange{} record to save a
-                    %% rabbit_exchange:lookup(XName) call each time we receive a message.
-                    Exchange = case XNameBin of
-                                   <<>> -> X;
-                                   <<"amq.", _/binary>> -> X;
-                                   _ -> XName
-                               end,
-                    RoutingKey = case RK of
-                                     undefined -> undefined;
-                                     []        -> undefined;
-                                     _         -> unicode:characters_to_binary(RK)
-                                 end,
-                    {ok, Exchange, RoutingKey, QNameBin};
-                {error, _} = E ->
-                    E
+        {utf8, SourceAddr} ->
+            case address_v1_permitted() of
+                true -> ensure_source_v1(
+                          SourceAddr, Vhost, User, Durable, PermCache, TopicPermCache);
+                false -> ensure_source_v2(
+                           SourceAddr, Vhost, PermCache, TopicPermCache)
             end;
-        _Else ->
-            {error, {address_not_utf8_string, Address}}
+        _ ->
+            {error, {bad_address, Address}}
+    end.
+
+ensure_source_v1(Address,
+                 Vhost,
+                 User = #user{username = Username},
+                 Durable,
+                 PermCache0,
+                 TopicPermCache0) ->
+    case rabbit_routing_parser:parse_endpoint(Address, false) of
+        {ok, Src} ->
+            {QNameBin, PermCache1} = ensure_terminus(source, Src, Vhost, User, Durable, PermCache0),
+            case rabbit_routing_parser:parse_routing(Src) of
+                {"", QNameList} ->
+                    true = string:equal(QNameList, QNameBin),
+                    QName = rabbit_misc:r(Vhost, queue, QNameBin),
+                    {ok, QName, PermCache1, TopicPermCache0};
+                {XNameList, RoutingKeyList} ->
+                    RoutingKey = unicode:characters_to_binary(RoutingKeyList),
+                    XNameBin = unicode:characters_to_binary(XNameList),
+                    XName = rabbit_misc:r(Vhost, exchange, XNameBin),
+                    QName = rabbit_misc:r(Vhost, queue, QNameBin),
+                    Binding = #binding{source = XName,
+                                       destination = QName,
+                                       key = RoutingKey},
+                    PermCache2 = check_resource_access(QName, write, User, PermCache1),
+                    PermCache = check_resource_access(XName, read, User, PermCache2),
+                    {ok, X} = rabbit_exchange:lookup(XName),
+                    TopicPermCache = check_read_permitted_on_topic(
+                                       X, User, RoutingKey, TopicPermCache0),
+                    case rabbit_binding:add(Binding, Username) of
+                        ok ->
+                            {ok, QName, PermCache, TopicPermCache};
+                        {error, _} = Err ->
+                            Err
+                    end
+            end;
+        {error, _} ->
+            ensure_source_v2(Address, Vhost, PermCache0, TopicPermCache0)
+    end.
+
+%% The only possible v2 source address format is:
+%%  /queue/:queue
+ensure_source_v2(<<"/queue/", QNameBin/binary>>, Vhost, PermCache, TopicPermCache) ->
+    QName = rabbit_misc:r(Vhost, queue, QNameBin),
+    ok = exit_if_absent(QName),
+    {ok, QName, PermCache, TopicPermCache};
+ensure_source_v2(Address, _, _, _) ->
+    {error, {bad_address, Address}}.
+
+-spec ensure_target(#'v1_0.target'{},
+                    rabbit_types:vhost(),
+                    rabbit_types:user(),
+                    permission_cache()) ->
+    {ok,
+     rabbit_types:exchange() | rabbit_exchange:name() | to,
+     rabbit_types:routing_key() | to | subject,
+     rabbit_misc:resource_name() | undefined,
+     permission_cache()} |
+    {error, term()}.
+ensure_target(#'v1_0.target'{dynamic = true}, _, _, _) ->
+    not_implemented("Dynamic targets not supported");
+ensure_target(#'v1_0.target'{address = Address,
+                             durable = Durable},
+              Vhost, User, PermCache) ->
+    case address_v1_permitted() of
+        true ->
+            try_target_v1(Address, Vhost, User, Durable, PermCache);
+        false ->
+            try_target_v2(Address, Vhost, User, PermCache)
+    end.
+
+try_target_v1(Address, Vhost, User, Durable, PermCache0) ->
+    case ensure_target_v1(Address, Vhost, User, Durable, PermCache0) of
+        {ok, XNameBin, RKey, QNameBin, PermCache} ->
+            check_exchange(XNameBin, RKey, QNameBin, User, Vhost, PermCache);
+        {error, _} ->
+            try_target_v2(Address, Vhost, User, PermCache0)
+    end.
+
+try_target_v2(Address, Vhost, User, PermCache) ->
+    case ensure_target_v2(Address, Vhost) of
+        {ok, to, RKey, QNameBin} ->
+            {ok, to, RKey, QNameBin, PermCache};
+        {ok, XNameBin, RKey, QNameBin} ->
+            check_exchange(XNameBin, RKey, QNameBin, User, Vhost, PermCache);
+        {error, _} = Err ->
+            Err
+    end.
+
+check_exchange(XNameBin, RKey, QNameBin, User, Vhost, PermCache0) ->
+    XName = rabbit_misc:r(Vhost, exchange, XNameBin),
+    PermCache = check_resource_access(XName, write, User, PermCache0),
+    case rabbit_exchange:lookup(XName) of
+        {ok, X} ->
+            check_internal_exchange(X),
+            %% Pre-declared exchanges are protected against deletion and modification.
+            %% Let's cache the whole #exchange{} record to save a
+            %% rabbit_exchange:lookup(XName) call each time we receive a message.
+            Exchange = case XNameBin of
+                           ?DEFAULT_EXCHANGE_NAME -> X;
+                           <<"amq.", _/binary>> -> X;
+                           _ -> XName
+                       end,
+            {ok, Exchange, RKey, QNameBin, PermCache};
+        {error, not_found} ->
+            not_found(XName)
+    end.
+
+ensure_target_v1({utf8, Address}, Vhost, User, Durable, PermCache0) ->
+    case rabbit_routing_parser:parse_endpoint(Address, true) of
+        {ok, Dest} ->
+            {QNameBin, PermCache} = ensure_terminus(
+                                      target, Dest, Vhost, User, Durable, PermCache0),
+            {XNameList1, RK} = rabbit_routing_parser:parse_routing(Dest),
+            XNameBin = unicode:characters_to_binary(XNameList1),
+            RoutingKey = case RK of
+                             undefined -> subject;
+                             []        -> subject;
+                             _         -> unicode:characters_to_binary(RK)
+                         end,
+            {ok, XNameBin, RoutingKey, QNameBin, PermCache};
+        {error, _} = Err ->
+            Err
+    end;
+ensure_target_v1(Address, _, _, _, _) ->
+    {error, {bad_address, Address}}.
+
+%% The possible v2 target address formats are:
+%%  /exchange/:exchange/key/:routing-key
+%%  /exchange/:exchange
+%%  /queue/:queue
+%%  <null>
+ensure_target_v2({utf8, String}, Vhost) ->
+    case parse_target_v2_string(String) of
+        {ok, _XNameBin, _RKey, undefined} = Ok ->
+            Ok;
+        {ok, _XNameBin, _RKey, QNameBin} = Ok ->
+            ok = exit_if_absent(queue, Vhost, QNameBin),
+            Ok;
+        {error, bad_address} ->
+            {error, {bad_address_string, String}}
+    end;
+ensure_target_v2(undefined, _) ->
+    %% anonymous terminus
+    %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
+    {ok, to, to, undefined};
+ensure_target_v2(Address, _) ->
+    {error, {bad_address, Address}}.
+
+parse_target_v2_string(<<"/exchange/", Rest/binary>>) ->
+    case split_exchange_target(Rest) of
+        {?DEFAULT_EXCHANGE_NAME, _} ->
+            {error, bad_address};
+        {<<"amq.default">>, _} ->
+            {error, bad_address};
+        {XNameBin, RKey} ->
+            {ok, XNameBin, RKey, undefined}
+    end;
+parse_target_v2_string(<<"/queue/">>) ->
+    %% empty queue name is invalid
+    {error, bad_address};
+parse_target_v2_string(<<"/queue/", QNameBin/binary>>) ->
+    {ok, ?DEFAULT_EXCHANGE_NAME, QNameBin, QNameBin};
+parse_target_v2_string(_) ->
+    {error, bad_address}.
+
+%% Empty exchange name (default exchange) is valid.
+split_exchange_target(Target) ->
+    Key = cp_amqp_target_address,
+    Pattern = try persistent_term:get(Key)
+              catch error:badarg ->
+                        Cp = binary:compile_pattern(<<"/key/">>),
+                        ok = persistent_term:put(Key, Cp),
+                        Cp
+              end,
+    case binary:split(Target, Pattern) of
+        [XNameBin] ->
+            {XNameBin, <<>>};
+        [XNameBin, RoutingKey] ->
+            {XNameBin, RoutingKey}
     end.
 
 handle_outgoing_mgmt_link_flow_control(
@@ -2152,47 +2395,6 @@ credit_reply_timeout(QType, QName) ->
 default(undefined, Default) -> Default;
 default(Thing,    _Default) -> Thing.
 
-ensure_source(#'v1_0.source'{dynamic = true}, _, _) ->
-    protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED, "Dynamic sources not supported", []);
-ensure_source(#'v1_0.source'{address = Address,
-                             durable = Durable},
-              Vhost,
-              User = #user{username = Username}) ->
-    case Address of
-        {utf8, SourceAddr} ->
-            case rabbit_routing_parser:parse_endpoint(SourceAddr, false) of
-                {ok, Src} ->
-                    QNameBin = ensure_terminus(source, Src, Vhost, User, Durable),
-                    case rabbit_routing_parser:parse_routing(Src) of
-                        {"", QNameList} ->
-                            true = string:equal(QNameList, QNameBin),
-                            {ok, QNameBin};
-                        {XNameList, RoutingKeyList} ->
-                            RoutingKey = unicode:characters_to_binary(RoutingKeyList),
-                            XNameBin = unicode:characters_to_binary(XNameList),
-                            XName = rabbit_misc:r(Vhost, exchange, XNameBin),
-                            QName = rabbit_misc:r(Vhost, queue, QNameBin),
-                            Binding = #binding{source = XName,
-                                               destination = QName,
-                                               key = RoutingKey},
-                            check_write_permitted(QName, User),
-                            check_read_permitted(XName, User),
-                            {ok, X} = rabbit_exchange:lookup(XName),
-                            check_read_permitted_on_topic(X, User, RoutingKey),
-                            case rabbit_binding:add(Binding, Username) of
-                                ok ->
-                                    {ok, QNameBin};
-                                {error, _} = Err ->
-                                    Err
-                            end
-                    end;
-                {error, _} = Err ->
-                    Err
-            end;
-        _ ->
-            {error, {address_not_utf8_string, Address}}
-    end.
-
 transfer_frames(Transfer, Sections, unlimited) ->
     [[Transfer, Sections]];
 transfer_frames(Transfer, Sections, MaxFrameSize) ->
@@ -2281,20 +2483,16 @@ keyfind_unpack_described(Key, KvList) ->
     end.
 
 validate_attach(#'v1_0.attach'{target = #'v1_0.coordinator'{}}) ->
-    protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
-                   "Transactions not supported", []);
-validate_attach(#'v1_0.attach'{unsettled = Unsettled,
-                               incomplete_unsettled = IncompleteSettled})
-  when Unsettled =/= undefined andalso Unsettled =/= {map, []} orelse
-       IncompleteSettled =:= true ->
-    protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
-                   "Link recovery not supported", []);
+    not_implemented("Transactions not supported");
+validate_attach(#'v1_0.attach'{unsettled = {map, [_|_]}}) ->
+    not_implemented("Link recovery not supported");
+validate_attach(#'v1_0.attach'{incomplete_unsettled = true}) ->
+    not_implemented("Link recovery not supported");
 validate_attach(
   #'v1_0.attach'{snd_settle_mode = SndSettleMode,
                  rcv_settle_mode = ?V_1_0_RECEIVER_SETTLE_MODE_SECOND})
   when SndSettleMode =/= ?V_1_0_SENDER_SETTLE_MODE_SETTLED ->
-    protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
-                   "rcv-settle-mode second not supported", []);
+    not_implemented("rcv-settle-mode second not supported");
 validate_attach(#'v1_0.attach'{}) ->
     ok.
 
@@ -2328,8 +2526,7 @@ validate_multi_transfer_settled(Other, First)
 %% "If the message is being sent settled by the sender,
 %% the value of this field [rcv-settle-mode] is ignored." [2.7.5]
 validate_transfer_rcv_settle_mode(?V_1_0_RECEIVER_SETTLE_MODE_SECOND, _Settled = false) ->
-    protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
-                   "rcv-settle-mode second not supported", []);
+    not_implemented("rcv-settle-mode second not supported");
 validate_transfer_rcv_settle_mode(_, _) ->
     ok.
 
@@ -2356,52 +2553,66 @@ validate_message_size(Message, MaxMsgSize)
               [MsgSize, MaxMsgSize])
     end.
 
-ensure_terminus(Type, {exchange, {XNameList, _RoutingKey}}, Vhost, User, Durability) ->
+-spec ensure_terminus(source | target,
+                      term(),
+                      rabbit_types:vhost(),
+                      rabbit_types:user(),
+                      {uint, 0..2},
+                      permission_cache()) ->
+    {undefined | rabbit_misc:resource_name(),
+     permission_cache()}.
+ensure_terminus(Type, {exchange, {XNameList, _RoutingKey}}, Vhost, User, Durability, PermCache) ->
     ok = exit_if_absent(exchange, Vhost, XNameList),
     case Type of
-        target -> undefined;
-        source -> declare_queue(generate_queue_name(), Vhost, User, Durability)
+        target -> {undefined, PermCache};
+        source -> declare_queue(generate_queue_name(), Vhost, User, Durability, PermCache)
     end;
-ensure_terminus(target, {topic, _bindingkey}, _, _, _) ->
+ensure_terminus(target, {topic, _bindingkey}, _, _, _, PermCache) ->
     %% exchange amq.topic exists
-    undefined;
-ensure_terminus(source, {topic, _BindingKey}, Vhost, User, Durability) ->
+    {undefined, PermCache};
+ensure_terminus(source, {topic, _BindingKey}, Vhost, User, Durability, PermCache) ->
     %% exchange amq.topic exists
-    declare_queue(generate_queue_name(), Vhost, User, Durability);
-ensure_terminus(target, {queue, undefined}, _, _, _) ->
+    declare_queue(generate_queue_name(), Vhost, User, Durability, PermCache);
+ensure_terminus(target, {queue, undefined}, _, _, _, PermCache) ->
     %% Target "/queue" means publish to default exchange with message subject as routing key.
     %% Default exchange exists.
-    undefined;
-ensure_terminus(_, {queue, QNameList}, Vhost, User, Durability) ->
-    declare_queue(unicode:characters_to_binary(QNameList), Vhost, User, Durability);
-ensure_terminus(_, {amqqueue, QNameList}, Vhost, _, _) ->
+    {undefined, PermCache};
+ensure_terminus(_, {queue, QNameList}, Vhost, User, Durability, PermCache) ->
+    declare_queue(unicode:characters_to_binary(QNameList), Vhost, User, Durability, PermCache);
+ensure_terminus(_, {amqqueue, QNameList}, Vhost, _, _, PermCache) ->
     %% Target "/amq/queue/" is handled specially due to AMQP legacy:
     %% "Queue names starting with "amq." are reserved for pre-declared and
     %% standardised queues. The client MAY declare a queue starting with "amq."
     %% if the passive option is set, or the queue already exists."
     QNameBin = unicode:characters_to_binary(QNameList),
     ok = exit_if_absent(queue, Vhost, QNameBin),
-    QNameBin.
+    {QNameBin, PermCache}.
 
-exit_if_absent(Kind, Vhost, Name) ->
-    ResourceName = rabbit_misc:r(Vhost, Kind, unicode:characters_to_binary(Name)),
+exit_if_absent(Kind, Vhost, Name) when is_list(Name) ->
+    exit_if_absent(Kind, Vhost, unicode:characters_to_binary(Name));
+exit_if_absent(Kind, Vhost, Name) when is_binary(Name) ->
+    exit_if_absent(rabbit_misc:r(Vhost, Kind, Name)).
+
+exit_if_absent(ResourceName = #resource{kind = Kind}) ->
     Mod = case Kind of
               exchange -> rabbit_exchange;
               queue -> rabbit_amqqueue
           end,
     case Mod:exists(ResourceName) of
-        true ->
-            ok;
-        false ->
-            protocol_error(?V_1_0_AMQP_ERROR_NOT_FOUND, "no ~ts", [rabbit_misc:rs(ResourceName)])
+        true -> ok;
+        false -> not_found(ResourceName)
     end.
 
 generate_queue_name() ->
     rabbit_guid:binary(rabbit_guid:gen_secure(), "amq.gen").
 
-declare_queue(QNameBin, Vhost, User = #user{username = Username}, TerminusDurability) ->
+declare_queue(QNameBin,
+              Vhost,
+              User = #user{username = Username},
+              TerminusDurability,
+              PermCache0) ->
     QName = rabbit_misc:r(Vhost, queue, QNameBin),
-    check_configure_permitted(QName, User),
+    PermCache = check_resource_access(QName, configure, User, PermCache0),
     check_vhost_queue_limit(Vhost, QName),
     rabbit_core_metrics:queue_declared(QName),
     Q0 = amqqueue:new(QName,
@@ -2415,13 +2626,15 @@ declare_queue(QNameBin, Vhost, User = #user{username = Username}, TerminusDurabi
                       rabbit_classic_queue),
     case rabbit_queue_type:declare(Q0, node()) of
         {new, _Q}  ->
-            rabbit_core_metrics:queue_created(QName),
-            QNameBin;
+            rabbit_core_metrics:queue_created(QName);
         {existing, _Q} ->
-            QNameBin;
+            ok;
         Other ->
-            protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, "Failed to declare ~s: ~p", [rabbit_misc:rs(QName), Other])
-    end.
+            protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                           "Failed to declare ~s: ~p",
+                           [rabbit_misc:rs(QName), Other])
+    end,
+    {QNameBin, PermCache}.
 
 outcomes(#'v1_0.source'{outcomes = undefined}) ->
     {array, symbol, ?OUTCOMES};
@@ -2430,16 +2643,10 @@ outcomes(#'v1_0.source'{outcomes = {array, symbol, Syms} = Outcomes}) ->
         [] ->
             Outcomes;
         Unsupported ->
-            rabbit_amqp_util:protocol_error(
-              ?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
-              "Outcomes not supported: ~tp",
-              [Unsupported])
+            not_implemented("Outcomes not supported: ~tp", [Unsupported])
     end;
 outcomes(#'v1_0.source'{outcomes = Unsupported}) ->
-    rabbit_amqp_util:protocol_error(
-      ?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
-      "Outcomes not supported: ~tp",
-      [Unsupported]);
+    not_implemented("Outcomes not supported: ~tp", [Unsupported]);
 outcomes(_) ->
     {array, symbol, ?OUTCOMES}.
 
@@ -2586,48 +2793,63 @@ maybe_detach_mgmt_link(
 check_internal_exchange(#exchange{internal = true,
                                   name = XName}) ->
     protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
-                   "attach to internal ~ts is forbidden",
+                   "forbidden to publish to internal ~ts",
                    [rabbit_misc:rs(XName)]);
 check_internal_exchange(_) ->
     ok.
 
-check_write_permitted(Resource, User) ->
-    check_resource_access(Resource, User, write).
+-spec check_resource_access(rabbit_types:r(exchange | queue),
+                            rabbit_types:permission_atom(),
+                            rabbit_types:user(),
+                            permission_cache()) ->
+    permission_cache().
+check_resource_access(Resource, Perm, User, Cache) ->
+    CacheElem = {Resource, Perm},
+    case lists:member(CacheElem, Cache) of
+        true ->
+            Cache;
+        false ->
+            Context = #{},
+            try rabbit_access_control:check_resource_access(User, Resource, Perm, Context) of
+                ok ->
+                    CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE - 1),
+                    [CacheElem | CacheTail]
+            catch
+                exit:#amqp_error{name = access_refused,
+                                 explanation = Msg} ->
+                    protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, Msg, [])
+            end
+    end.
 
-check_read_permitted(Resource, User) ->
-    check_resource_access(Resource, User, read).
+-spec check_write_permitted_on_topic(
+        rabbit_types:exchange(),
+        rabbit_types:user(),
+        rabbit_types:routing_key(),
+        topic_permission_cache()) ->
+    topic_permission_cache().
+check_write_permitted_on_topic(Resource, User, RoutingKey, TopicPermCache) ->
+    check_topic_authorisation(Resource, User, RoutingKey, write, TopicPermCache).
 
-check_configure_permitted(Resource, User) ->
-    check_resource_access(Resource, User, configure).
-
-check_resource_access(Resource, User, Perm) ->
-    Context = #{},
-    ok = try rabbit_access_control:check_resource_access(User, Resource, Perm, Context)
-         catch exit:#amqp_error{name = access_refused,
-                                explanation = Msg} ->
-                   protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, Msg, [])
-         end.
-
-check_write_permitted_on_topic(Resource, User, RoutingKey) ->
-    check_topic_authorisation(Resource, User, RoutingKey, write).
-
-check_read_permitted_on_topic(Resource, User, RoutingKey) ->
-    check_topic_authorisation(Resource, User, RoutingKey, read).
+-spec check_read_permitted_on_topic(
+        rabbit_types:exchange(),
+        rabbit_types:user(),
+        rabbit_types:routing_key(),
+        topic_permission_cache()) ->
+    topic_permission_cache().
+check_read_permitted_on_topic(Resource, User, RoutingKey, TopicPermCache) ->
+    check_topic_authorisation(Resource, User, RoutingKey, read, TopicPermCache).
 
 check_topic_authorisation(#exchange{type = topic,
                                     name = XName = #resource{virtual_host = VHost}},
                           User = #user{username = Username},
                           RoutingKey,
-                          Permission) ->
+                          Permission,
+                          Cache) ->
     Resource = XName#resource{kind = topic},
     CacheElem = {Resource, RoutingKey, Permission},
-    Cache = case get(?TOPIC_PERMISSION_CACHE) of
-                undefined -> [];
-                List -> List
-            end,
     case lists:member(CacheElem, Cache) of
         true ->
-            ok;
+            Cache;
         false ->
             VariableMap = #{<<"vhost">> => VHost,
                             <<"username">> => Username},
@@ -2636,16 +2858,15 @@ check_topic_authorisation(#exchange{type = topic,
             try rabbit_access_control:check_topic_access(User, Resource, Permission, Context) of
                 ok ->
                     CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE - 1),
-                    put(?TOPIC_PERMISSION_CACHE, [CacheElem | CacheTail]),
-                    ok
+                    [CacheElem | CacheTail]
             catch
                 exit:#amqp_error{name = access_refused,
                                  explanation = Msg} ->
                     protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, Msg, [])
             end
     end;
-check_topic_authorisation(_, _, _, _) ->
-    ok.
+check_topic_authorisation(_, _, _, _, Cache) ->
+    Cache.
 
 check_vhost_queue_limit(Vhost, QName) ->
     case rabbit_vhost_limit:is_over_queue_limit(Vhost) of
@@ -2701,6 +2922,23 @@ property_paired_not_set() ->
     protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
                    "Link property 'paired' is not set to boolean value 'true'", []).
 
+-spec not_implemented(io:format()) -> no_return().
+not_implemented(Format) ->
+    not_implemented(Format, []).
+
+-spec not_implemented(io:format(), [term()]) -> no_return().
+not_implemented(Format, Args) ->
+    protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED, Format, Args).
+
+-spec not_found(rabbit_types:r(exchange | queue)) -> no_return().
+not_found(Resource) ->
+    protocol_error(?V_1_0_AMQP_ERROR_NOT_FOUND,
+                   "no ~ts",
+                   [rabbit_misc:rs(Resource)]).
+
+address_v1_permitted() ->
+    rabbit_deprecated_features:is_permitted(amqp_address_v1).
+
 format_status(
   #{state := #state{cfg = Cfg,
                     outgoing_pending = OutgoingPending,
@@ -2720,7 +2958,9 @@ format_status(
                     stashed_settled = StashedSettled,
                     stashed_down = StashedDown,
                     stashed_eol = StashedEol,
-                    queue_states = QueueStates}} = Status) ->
+                    queue_states = QueueStates,
+                    permission_cache = PermissionCache,
+                    topic_permission_cache = TopicPermissionCache}} = Status) ->
     State = #{cfg => Cfg,
               outgoing_pending => queue:len(OutgoingPending),
               remote_incoming_window => RemoteIncomingWindow,
@@ -2739,5 +2979,7 @@ format_status(
               stashed_settled => StashedSettled,
               stashed_down => StashedDown,
               stashed_eol => StashedEol,
-              queue_states => rabbit_queue_type:format_status(QueueStates)},
+              queue_states => rabbit_queue_type:format_status(QueueStates),
+              permission_cache => PermissionCache,
+              topic_permission_cache => TopicPermissionCache},
     maps:update(state, State, Status).

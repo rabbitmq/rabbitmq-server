@@ -3,16 +3,24 @@
 -include("rabbit_amqp.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([persist_static_configuration/0,
-         handle_request/4]).
+-export([handle_request/5]).
+
+-import(rabbit_amqp_session,
+        [check_resource_access/4,
+         check_read_permitted_on_topic/4]).
+
+-type permission_caches() :: {rabbit_amqp_session:permission_cache(),
+                              rabbit_amqp_session:topic_permission_cache()}.
 
 -define(DEAD_LETTER_EXCHANGE_KEY, <<"x-dead-letter-exchange">>).
--define(MP_BINDING_URI_PATH_SEGMENT, mp_binding_uri_path_segment).
 
--type resource_name() :: rabbit_types:exchange_name() | rabbit_types:rabbit_amqqueue_name().
-
--spec handle_request(binary(), rabbit_types:vhost(), rabbit_types:user(), pid()) -> iolist().
-handle_request(Request, Vhost, User, ConnectionPid) ->
+-spec handle_request(binary(),
+                     rabbit_types:vhost(),
+                     rabbit_types:user(),
+                     pid(),
+                     permission_caches()) ->
+    {iolist(), permission_caches()}.
+handle_request(Request, Vhost, User, ConnectionPid, PermCaches0) ->
     ReqSections = amqp10_framing:decode_bin(Request),
     ?DEBUG("~s Inbound request:~n  ~tp",
            [?MODULE, [amqp10_framing:pprint(Section) || Section <- ReqSections]]),
@@ -28,19 +36,22 @@ handle_request(Request, Vhost, User, ConnectionPid) ->
     } = decode_req(ReqSections, {undefined, undefined}),
 
     {StatusCode,
-     RespBody} = try {PathSegments, QueryMap} = parse_uri(HttpRequestTarget),
-                     handle_http_req(HttpMethod,
-                                     PathSegments,
-                                     QueryMap,
-                                     ReqBody,
-                                     Vhost,
-                                     User,
-                                     ConnectionPid)
-                 catch throw:{?MODULE, StatusCode0, Explanation} ->
-                           rabbit_log:warning("request ~ts ~ts failed: ~ts",
-                                              [HttpMethod, HttpRequestTarget, Explanation]),
-                           {StatusCode0, {utf8, Explanation}}
-                 end,
+     RespBody,
+     PermCaches
+    } = try {PathSegments, QueryMap} = parse_uri(HttpRequestTarget),
+            handle_http_req(HttpMethod,
+                            PathSegments,
+                            QueryMap,
+                            ReqBody,
+                            Vhost,
+                            User,
+                            ConnectionPid,
+                            PermCaches0)
+        catch throw:{?MODULE, StatusCode0, Explanation} ->
+                  rabbit_log:warning("request ~ts ~ts failed: ~ts",
+                                     [HttpMethod, HttpRequestTarget, Explanation]),
+                  {StatusCode0, {utf8, Explanation}, PermCaches0}
+        end,
 
     RespProps = #'v1_0.properties'{
                    subject = {utf8, StatusCode},
@@ -54,7 +65,8 @@ handle_request(Request, Vhost, User, ConnectionPid) ->
                                 ]},
     RespDataSect = #'v1_0.amqp_value'{content = RespBody},
     RespSections = [RespProps, RespAppProps, RespDataSect],
-    [amqp10_framing:encode_bin(Sect) || Sect <- RespSections].
+    IoList = [amqp10_framing:encode_bin(Sect) || Sect <- RespSections],
+    {IoList, PermCaches}.
 
 handle_http_req(<<"GET">>,
                 [<<"queues">>, QNameBinQuoted],
@@ -62,7 +74,8 @@ handle_http_req(<<"GET">>,
                 null,
                 Vhost,
                 _User,
-                _ConnPid) ->
+                _ConnPid,
+                PermCaches) ->
     QNameBin = uri_string:unquote(QNameBinQuoted),
     QName = rabbit_misc:r(Vhost, queue, QNameBin),
     case rabbit_amqqueue:with(
@@ -70,7 +83,7 @@ handle_http_req(<<"GET">>,
            fun(Q) ->
                    {ok, NumMsgs, NumConsumers} = rabbit_amqqueue:stat(Q),
                    RespPayload = encode_queue(Q, NumMsgs, NumConsumers),
-                   {ok, {<<"200">>, RespPayload}}
+                   {ok, {<<"200">>, RespPayload, PermCaches}}
            end) of
         {ok, Result} ->
             Result;
@@ -86,7 +99,8 @@ handle_http_req(HttpMethod = <<"PUT">>,
                 ReqPayload,
                 Vhost,
                 User = #user{username = Username},
-                ConnPid) ->
+                ConnPid,
+                {PermCache0, TopicPermCache}) ->
     #{durable := Durable,
       auto_delete := AutoDelete,
       exclusive := Exclusive,
@@ -106,10 +120,10 @@ handle_http_req(HttpMethod = <<"PUT">>,
     ok = prohibit_cr_lf(QNameBin),
     QName = rabbit_misc:r(Vhost, queue, QNameBin),
     ok = prohibit_reserved_amq(QName),
-    ok = check_resource_access(QName, configure, User),
+    PermCache1 = check_resource_access(QName, configure, User, PermCache0),
     rabbit_core_metrics:queue_declared(QName),
 
-    {Q1, NumMsgs, NumConsumers, StatusCode} =
+    {Q1, NumMsgs, NumConsumers, StatusCode, PermCache} =
     case rabbit_amqqueue:with(
            QName,
            fun(Q) ->
@@ -117,7 +131,7 @@ handle_http_req(HttpMethod = <<"PUT">>,
                          Q, Durable, AutoDelete, QArgs, Owner) of
                        ok ->
                            {ok, Msgs, Consumers} = rabbit_amqqueue:stat(Q),
-                           {ok, {Q, Msgs, Consumers, <<"200">>}}
+                           {ok, {Q, Msgs, Consumers, <<"200">>, PermCache1}}
                    catch exit:#amqp_error{name = precondition_failed,
                                           explanation = Expl} ->
                              throw(<<"409">>, Expl, []);
@@ -129,23 +143,23 @@ handle_http_req(HttpMethod = <<"PUT">>,
             Result;
         {error, not_found} ->
             ok = check_vhost_queue_limit(QName),
-            ok = check_dead_letter_exchange(QName, QArgs, User),
+            PermCache2 = check_dead_letter_exchange(QName, QArgs, User, PermCache1),
             case rabbit_amqqueue:declare(
                    QName, Durable, AutoDelete, QArgs, Owner, Username) of
                 {new, Q} ->
                     rabbit_core_metrics:queue_created(QName),
-                    {Q, 0, 0, <<"201">>};
+                    {Q, 0, 0, <<"201">>, PermCache2};
                 {owner_died, Q} ->
                     %% Presumably our own days are numbered since the
                     %% connection has died. Pretend the queue exists though,
                     %% just so nothing fails.
-                    {Q, 0, 0, <<"201">>};
+                    {Q, 0, 0, <<"201">>, PermCache2};
                 {absent, Q, Reason} ->
                     absent(Q, Reason);
                 {existing, _Q} ->
                     %% Must have been created in the meantime. Loop around again.
-                    handle_http_req(HttpMethod, PathSegments, Query,
-                                    ReqPayload, Vhost, User, ConnPid);
+                    handle_http_req(HttpMethod, PathSegments, Query, ReqPayload,
+                                    Vhost, User, ConnPid, {PermCache2, TopicPermCache});
                 {protocol_error, _ErrorType, Reason, ReasonArgs} ->
                     throw(<<"400">>, Reason, ReasonArgs)
             end;
@@ -154,7 +168,7 @@ handle_http_req(HttpMethod = <<"PUT">>,
     end,
 
     RespPayload = encode_queue(Q1, NumMsgs, NumConsumers),
-    {StatusCode, RespPayload};
+    {StatusCode, RespPayload, {PermCache, TopicPermCache}};
 
 handle_http_req(<<"PUT">>,
                 [<<"exchanges">>, XNameBinQuoted],
@@ -162,7 +176,8 @@ handle_http_req(<<"PUT">>,
                 ReqPayload,
                 Vhost,
                 User = #user{username = Username},
-                _ConnPid) ->
+                _ConnPid,
+                {PermCache0, TopicPermCache}) ->
     XNameBin = uri_string:unquote(XNameBinQuoted),
     #{type := XTypeBin,
       durable := Durable,
@@ -176,7 +191,7 @@ handle_http_req(<<"PUT">>,
                 end,
     XName = rabbit_misc:r(Vhost, exchange, XNameBin),
     ok = prohibit_default_exchange(XName),
-    ok = check_resource_access(XName, configure, User),
+    PermCache = check_resource_access(XName, configure, User, PermCache0),
     X = case rabbit_exchange:lookup(XName) of
             {ok, FoundX} ->
                 FoundX;
@@ -190,7 +205,7 @@ handle_http_req(<<"PUT">>,
     try rabbit_exchange:assert_equivalence(
           X, XTypeAtom, Durable, AutoDelete, Internal, XArgs) of
         ok ->
-            {<<"204">>, null}
+            {<<"204">>, null, {PermCache, TopicPermCache}}
     catch exit:#amqp_error{name = precondition_failed,
                            explanation = Expl} ->
               throw(<<"409">>, Expl, [])
@@ -202,17 +217,18 @@ handle_http_req(<<"DELETE">>,
                 null,
                 Vhost,
                 User,
-                ConnPid) ->
+                ConnPid,
+                {PermCache0, TopicPermCache}) ->
     QNameBin = uri_string:unquote(QNameBinQuoted),
     QName = rabbit_misc:r(Vhost, queue, QNameBin),
-    ok = check_resource_access(QName, read, User),
+    PermCache = check_resource_access(QName, read, User, PermCache0),
     try rabbit_amqqueue:with_exclusive_access_or_die(
           QName, ConnPid,
           fun (Q) ->
                   case rabbit_queue_type:purge(Q) of
                       {ok, NumMsgs} ->
                           RespPayload = purge_or_delete_queue_response(NumMsgs),
-                          {<<"200">>, RespPayload};
+                          {<<"200">>, RespPayload, {PermCache, TopicPermCache}};
                       {error, not_supported} ->
                           throw(<<"400">>,
                                 "purge not supported by ~ts",
@@ -229,15 +245,16 @@ handle_http_req(<<"DELETE">>,
                 null,
                 Vhost,
                 User = #user{username = Username},
-                ConnPid) ->
+                ConnPid,
+                {PermCache0, TopicPermCache}) ->
     QNameBin = uri_string:unquote(QNameBinQuoted),
     QName = rabbit_misc:r(Vhost, queue, QNameBin),
     ok = prohibit_cr_lf(QNameBin),
-    ok = check_resource_access(QName, configure, User),
+    PermCache = check_resource_access(QName, configure, User, PermCache0),
     try rabbit_amqqueue:delete_with(QName, ConnPid, false, false, Username, true) of
         {ok, NumMsgs} ->
             RespPayload = purge_or_delete_queue_response(NumMsgs),
-            {<<"200">>, RespPayload}
+            {<<"200">>, RespPayload, {PermCache, TopicPermCache}}
     catch exit:#amqp_error{explanation = Explanation} ->
               throw(<<"400">>, Explanation, [])
     end;
@@ -248,15 +265,16 @@ handle_http_req(<<"DELETE">>,
                 null,
                 Vhost,
                 User = #user{username = Username},
-                _ConnPid) ->
+                _ConnPid,
+                {PermCache0, TopicPermCache}) ->
     XNameBin = uri_string:unquote(XNameBinQuoted),
     XName = rabbit_misc:r(Vhost, exchange, XNameBin),
     ok = prohibit_cr_lf(XNameBin),
     ok = prohibit_default_exchange(XName),
     ok = prohibit_reserved_amq(XName),
-    ok = check_resource_access(XName, configure, User),
+    PermCache = check_resource_access(XName, configure, User, PermCache0),
     _ = rabbit_exchange:delete(XName, false, Username),
-    {<<"204">>, null};
+    {<<"204">>, null, {PermCache, TopicPermCache}};
 
 handle_http_req(<<"POST">>,
                 [<<"bindings">>],
@@ -264,7 +282,8 @@ handle_http_req(<<"POST">>,
                 ReqPayload,
                 Vhost,
                 User = #user{username = Username},
-                ConnPid) ->
+                ConnPid,
+                PermCaches0) ->
     #{source := SrcXNameBin,
       binding_key := BindingKey,
       arguments := Args} = BindingMap = decode_binding(ReqPayload),
@@ -276,13 +295,13 @@ handle_http_req(<<"POST">>,
                             end,
     SrcXName = rabbit_misc:r(Vhost, exchange, SrcXNameBin),
     DstName = rabbit_misc:r(Vhost, DstKind, DstNameBin),
-    ok = binding_checks(SrcXName, DstName, BindingKey, User),
+    PermCaches = binding_checks(SrcXName, DstName, BindingKey, User, PermCaches0),
     Binding = #binding{source      = SrcXName,
                        destination = DstName,
                        key         = BindingKey,
                        args        = Args},
     ok = binding_action(add, Binding, Username, ConnPid),
-    {<<"204">>, null};
+    {<<"204">>, null, PermCaches};
 
 handle_http_req(<<"DELETE">>,
                 [<<"bindings">>, BindingSegment],
@@ -290,7 +309,8 @@ handle_http_req(<<"DELETE">>,
                 null,
                 Vhost,
                 User = #user{username = Username},
-                ConnPid) ->
+                ConnPid,
+                PermCaches0) ->
     {SrcXNameBin,
      DstKind,
      DstNameBin,
@@ -298,7 +318,7 @@ handle_http_req(<<"DELETE">>,
      ArgsHash} = decode_binding_path_segment(BindingSegment),
     SrcXName = rabbit_misc:r(Vhost, exchange, SrcXNameBin),
     DstName = rabbit_misc:r(Vhost, DstKind, DstNameBin),
-    ok = binding_checks(SrcXName, DstName, BindingKey, User),
+    PermCaches = binding_checks(SrcXName, DstName, BindingKey, User, PermCaches0),
     Bindings = rabbit_binding:list_for_source_and_destination(SrcXName, DstName),
     case search_binding(BindingKey, ArgsHash, Bindings) of
         {value, Binding} ->
@@ -306,7 +326,7 @@ handle_http_req(<<"DELETE">>,
         false ->
             ok
     end,
-    {<<"204">>, null};
+    {<<"204">>, null, PermCaches};
 
 handle_http_req(<<"GET">>,
                 [<<"bindings">>],
@@ -315,7 +335,8 @@ handle_http_req(<<"GET">>,
                 null,
                 Vhost,
                 _User,
-                _ConnPid) ->
+                _ConnPid,
+                PermCaches) ->
     {DstKind,
      DstNameBin} = case QueryMap of
                        #{<<"dste">> := DstX} ->
@@ -332,7 +353,7 @@ handle_http_req(<<"GET">>,
     Bindings0 = rabbit_binding:list_for_source_and_destination(SrcXName, DstName),
     Bindings = [B || B = #binding{key = K} <- Bindings0, K =:= Key],
     RespPayload = encode_bindings(Bindings),
-    {<<"200">>, RespPayload}.
+    {<<"200">>, RespPayload, PermCaches}.
 
 decode_queue({map, KVList}) ->
     M = lists:foldl(
@@ -549,19 +570,21 @@ compose_binding_uri(Src, DstKind, Dst, Key, Args) ->
       ";key=", KeyQ/binary,
       ";args=", ArgsHash/binary>>.
 
--spec persist_static_configuration() -> ok.
-persist_static_configuration() ->
-    %% This regex matches for example binding:
-    %% src=e1;dstq=q2;key=my-key;args=
-    %% Source, destination, and binding key values must be percent encoded.
-    %% Binding args use the URL safe Base 64 Alphabet: https://datatracker.ietf.org/doc/html/rfc4648#section-5
-    {ok, MP} = re:compile(
-                 <<"^src=([0-9A-Za-z\-.\_\~%]+);dst([eq])=([0-9A-Za-z\-.\_\~%]+);",
-                   "key=([0-9A-Za-z\-.\_\~%]*);args=([0-9A-Za-z\-\_]*)$">>),
-    ok = persistent_term:put(?MP_BINDING_URI_PATH_SEGMENT, MP).
-
 decode_binding_path_segment(Segment) ->
-    MP = persistent_term:get(?MP_BINDING_URI_PATH_SEGMENT),
+    PersistentTermKey = mp_binding_uri_path_segment,
+    MP = try persistent_term:get(PersistentTermKey)
+         catch error:badarg ->
+                   %% This regex matches for example binding:
+                   %% src=e1;dstq=q2;key=my-key;args=
+                   %% Source, destination, and binding key values must be percent encoded.
+                   %% Binding args use the URL safe Base 64 Alphabet:
+                   %% https://datatracker.ietf.org/doc/html/rfc4648#section-5
+                   {ok, MP0} = re:compile(
+                                 <<"^src=([0-9A-Za-z\-.\_\~%]+);dst([eq])=([0-9A-Za-z\-.\_\~%]+);",
+                                   "key=([0-9A-Za-z\-.\_\~%]*);args=([0-9A-Za-z\-\_]*)$">>),
+                   ok = persistent_term:put(PersistentTermKey, MP0),
+                   MP0
+         end,
     case re:run(Segment, MP, [{capture, all_but_first, binary}]) of
         {match, [SrcQ, <<DstKindChar>>, DstQ, KeyQ, ArgsHash]} ->
             Src = uri_string:unquote(SrcQ),
@@ -599,22 +622,26 @@ args_hash(Args)
                          padding => false}).
 
 -spec binding_checks(rabbit_types:exchange_name(),
-                     resource_name(),
+                     rabbit_types:r(exchange | queue),
                      rabbit_types:binding_key(),
-                     rabbit_types:user()) -> ok.
-binding_checks(SrcXName, DstName, BindingKey, User) ->
+                     rabbit_types:user(),
+                     permission_caches()) ->
+    permission_caches().
+binding_checks(SrcXName, DstName, BindingKey, User, {PermCache0, TopicPermCache0}) ->
     lists:foreach(fun(#resource{name = NameBin} = Name) ->
                           ok = prohibit_default_exchange(Name),
                           ok = prohibit_cr_lf(NameBin)
                   end, [SrcXName, DstName]),
-    ok = check_resource_access(DstName, write, User),
-    ok = check_resource_access(SrcXName, read, User),
-    case rabbit_exchange:lookup(SrcXName) of
-        {ok, SrcX} ->
-            rabbit_amqp_session:check_read_permitted_on_topic(SrcX, User, BindingKey);
-        {error, not_found} ->
-            ok
-    end.
+    PermCache1 = check_resource_access(DstName, write, User, PermCache0),
+    PermCache = check_resource_access(SrcXName, read, User, PermCache1),
+    TopicPermCache = case rabbit_exchange:lookup(SrcXName) of
+                         {ok, SrcX} ->
+                             check_read_permitted_on_topic(
+                               SrcX, User, BindingKey, TopicPermCache0);
+                         {error, not_found} ->
+                             TopicPermCache0
+                     end,
+    {PermCache, TopicPermCache}.
 
 binding_action(Action, Binding, Username, ConnPid) ->
     try rabbit_channel:binding_action(Action, Binding, Username, ConnPid)
@@ -641,26 +668,13 @@ prohibit_default_exchange(#resource{kind = exchange,
 prohibit_default_exchange(_) ->
     ok.
 
--spec prohibit_reserved_amq(resource_name()) -> ok.
+-spec prohibit_reserved_amq(rabbit_types:r(exchange | queue)) -> ok.
 prohibit_reserved_amq(Res = #resource{name = <<"amq.", _/binary>>}) ->
     throw(<<"403">>,
           "~ts starts with reserved prefix 'amq.'",
           [rabbit_misc:rs(Res)]);
 prohibit_reserved_amq(#resource{}) ->
     ok.
-
--spec check_resource_access(resource_name(),
-                            rabbit_types:permission_atom(),
-                            rabbit_types:user()) -> ok.
-check_resource_access(Resource, Perm, User) ->
-    try rabbit_access_control:check_resource_access(User, Resource, Perm, #{})
-    catch exit:#amqp_error{name = access_refused,
-                           explanation = Explanation} ->
-              %% For authorization failures, let's be more strict: Close the entire
-              %% AMQP session instead of only returning an HTTP Status Code 403.
-              rabbit_amqp_util:protocol_error(
-                ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, Explanation, [])
-    end.
 
 check_vhost_queue_limit(QName = #resource{virtual_host = Vhost}) ->
     case rabbit_vhost_limit:is_over_queue_limit(Vhost) of
@@ -673,17 +687,17 @@ check_vhost_queue_limit(QName = #resource{virtual_host = Vhost}) ->
     end.
 
 
-check_dead_letter_exchange(QName = #resource{virtual_host = Vhost}, QArgs, User) ->
+check_dead_letter_exchange(QName = #resource{virtual_host = Vhost}, QArgs, User, PermCache0) ->
     case rabbit_misc:r_arg(Vhost, exchange, QArgs, ?DEAD_LETTER_EXCHANGE_KEY) of
         undefined ->
-            ok;
+            PermCache0;
         {error, {invalid_type, Type}} ->
             throw(<<"400">>,
                   "invalid type '~ts' for arg '~s'",
                   [Type, ?DEAD_LETTER_EXCHANGE_KEY]);
         DLX ->
-            ok = check_resource_access(QName, read, User),
-            ok = check_resource_access(DLX, write, User)
+            PermCache = check_resource_access(QName, read, User, PermCache0),
+            check_resource_access(DLX, write, User, PermCache)
     end.
 
 -spec absent(amqqueue:amqqueue(),

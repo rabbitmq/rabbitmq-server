@@ -120,7 +120,7 @@ amqp_credit_single_grant(Config) ->
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
-    Address = <<"/amq/queue/", Stream/binary>>,
+    Address = <<"/queue/", Stream/binary>>,
     {ok, Receiver} = amqp10_client:attach_receiver_link(
                        Session, <<"test-receiver">>, Address, settled,
                        configuration, #{<<"rabbitmq:stream-offset-spec">> => <<"first">>}),
@@ -141,7 +141,7 @@ amqp_credit_multiple_grants(Config) ->
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
-    Address = <<"/amq/queue/", Stream/binary>>,
+    Address = <<"/queue/", Stream/binary>>,
     {ok, Receiver} = amqp10_client:attach_receiver_link(
                        Session, <<"test-receiver">>, Address, unsettled,
                        configuration, #{<<"rabbitmq:stream-offset-spec">> => <<"first">>}),
@@ -246,7 +246,7 @@ amqp_attach_sub_batch(Config) ->
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
-    Address = <<"/amq/queue/", Stream/binary>>,
+    Address = <<"/queue/", Stream/binary>>,
     {ok, Receiver} = amqp10_client:attach_receiver_link(
                        Session, <<"test-receiver">>, Address, settled, configuration,
                        %% Attach in the middle of an uncompresssed sub batch.

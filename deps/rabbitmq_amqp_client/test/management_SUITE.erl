@@ -248,8 +248,9 @@ all_management_operations(Config) ->
     ok = amqp10_client:send_msg(Sender3, amqp10_msg:new(DTag7, <<"not routed">>, false)),
     ok = wait_for_settlement(DTag7, released),
     %% 2. that the server closes the link, i.e. sends us a DETACH frame.
-    ExpectedError = #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_RESOURCE_DELETED},
-    receive {amqp10_event, {link, Sender3, {detached, ExpectedError}}} -> ok
+    receive {amqp10_event,
+             {link, Sender3,
+              {detached, #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_NOT_FOUND}}}} -> ok
     after 5000 -> ct:fail({missing_event, ?LINE})
     end,
 

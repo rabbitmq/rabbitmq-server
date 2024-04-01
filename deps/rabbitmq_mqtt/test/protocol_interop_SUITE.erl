@@ -158,10 +158,14 @@ amqp(Config) ->
                 sasl => {plain, <<"guest">>, <<"guest">>}},
     {ok, Connection1} = amqp10_client:open_connection(OpnConf),
     {ok, Session1} = amqp10_client:begin_session(Connection1),
-    ReceiverLinkName = <<"test-receiver">>,
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session1, <<"pair">>),
+    QName = <<"queue for AMQP 1.0 client">>,
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName, <<"amq.topic">>, <<"topic.1">>, #{}),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     {ok, Receiver} = amqp10_client:attach_receiver_link(
-                       Session1, ReceiverLinkName, <<"/topic/topic.1">>, unsettled,
-                       configuration),
+                       Session1, <<"test-receiver">>, <<"/queue/", QName/binary>>,
+                       unsettled, configuration),
 
     %% MQTT 5.0 to AMQP 1.0
     C = connect(ClientId, Config),
@@ -208,7 +212,7 @@ amqp(Config) ->
     #{correlation_id := Correlation,
       content_type := ContentType,
       reply_to := ReplyToAddress} = amqp10_msg:properties(Msg1),
-    ?assertEqual(<<"/exchange/amq.topic/response.topic">>, ReplyToAddress),
+    ?assertEqual(<<"/exchange/amq.topic/key/response.topic">>, ReplyToAddress),
 
     %% Thanks to the 'Payload-Format-Indicator', we get a single utf8 value.
     ?assertEqual(#'v1_0.amqp_value'{content = {utf8, RequestPayload}}, amqp10_msg:body(Msg1)),
@@ -449,9 +453,9 @@ stream(Config) ->
                  amqp10_msg:message_annotations(Msg)),
     ?assertEqual(#{correlation_id => Correlation,
                    content_type => ContentType,
-                   %% We expect that reply_to contains a valid address,
+                   %% We expect that reply_to contains a valid AMQP 1.0 address,
                    %% and that the topic format got translated from MQTT to AMQP 0.9.1.
-                   reply_to => <<"/exchange/amq.topic/response.topic">>},
+                   reply_to => <<"/exchange/amq.topic/key/response.topic">>},
                  amqp10_msg:properties(Msg)),
     ?assertEqual(#{<<"rabbit🐇"/utf8>> => <<"carrot🥕"/utf8>>,
                    <<"key">> => <<"val">>},

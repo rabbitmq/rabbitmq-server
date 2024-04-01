@@ -35,9 +35,9 @@ init_per_suite(Config) ->
         {rmq_certspwd, "bunnychow"},
         {rabbitmq_ct_tls_verify, verify_none}
     ]),
-    MqttConfig = stomp_config(),
+    StompConfig = stomp_config(),
     rabbit_ct_helpers:run_setup_steps(Config1,
-        [ fun(Conf) -> merge_app_env(MqttConfig, Conf) end ] ++
+        [ fun(Conf) -> merge_app_env(StompConfig, Conf) end ] ++
             rabbit_ct_broker_helpers:setup_steps() ++
             rabbit_ct_client_helpers:setup_steps()).
 
@@ -111,8 +111,8 @@ connection_name() ->
     {_, Name} = lists:keyfind(name, 1, Values),
     Name.
 
-merge_app_env(MqttConfig, Config) ->
-    rabbit_ct_helpers:merge_app_env(Config, MqttConfig).
+merge_app_env(StompConfig, Config) ->
+    rabbit_ct_helpers:merge_app_env(Config, StompConfig).
 
 stomp_connect_frame() ->
     <<"CONNECT\n",

@@ -15,16 +15,16 @@
 
 all() ->
     [
-      {group, non_parallel_tests}
+     {group, tests}
     ].
 
 groups() ->
     [
-     {non_parallel_tests, [], [
-                               amqp10_shovels,
-                               shovels,
-                               dynamic_plugin_enable_disable
-                              ]}
+     {tests, [], [
+                  amqp10_shovels,
+                  shovels,
+                  dynamic_plugin_enable_disable
+                 ]}
     ].
 
 %% -------------------------------------------------------------------
