@@ -70,15 +70,6 @@ jobs:
       with:
         ref: v${{ steps.check.outputs.version }}
         path: secondary-umbrella
-    - name: MOUNT BAZEL CACHE
-      if: env.exists != 'true'
-      uses: actions/cache@v4.0.2
-      with:
-        path: "/home/runner/repo-cache/"
-        key: repo-cache-secondary-umbrella-${{ hashFiles('primary-umbrella/MODULE.bazel','primary-umbrella/WORKSPACE','primary-umbrella/bazel/bzlmod/secondary_umbrella.bzl') }}
-        restore-keys: |
-          repo-cache-secondary-umbrella-
-        save-always: true
     - name: BUILD SECONDARY UMBRELLA ARCHIVE
       if: env.exists != 'true'
       working-directory: secondary-umbrella
@@ -92,9 +83,7 @@ jobs:
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
           build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-secondary-umbrella
-          build:buildbuddy --repository_cache=/home/runner/repo-cache/
           build:buildbuddy --color=yes
-          build:buildbuddy --disk_cache=
 
           build:buildbuddy --remote_download_toplevel
         EOF
@@ -139,14 +128,6 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
-    - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v4.0.2
-      with:
-        path: "/home/runner/repo-cache/"
-        key: ${{ runner.os }}-repo-cache-${{ hashFiles('MODULE.bazel','WORKSPACE','bazel/bzlmod/secondary_umbrella.bzl') }}
-        restore-keys: |
-          ${{ runner.os }}-repo-cache-
-        save-always: true
     - name: CONFIGURE BAZEL
       run: |
         if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
@@ -157,9 +138,7 @@ jobs:
         cat << EOF >> user.bazelrc
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
-          build:buildbuddy --repository_cache=/home/runner/repo-cache/
           build:buildbuddy --color=yes
-          build:buildbuddy --disk_cache=
         EOF
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3

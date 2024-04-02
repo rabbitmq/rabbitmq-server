@@ -2,6 +2,7 @@ schemaVersion: 2.0.0
 
 commandTests:
   - name: "rabbitmq-plugins"
+    setup: [["docker-entrypoint.sh"]]
     command: "rabbitmq-plugins"
     args: ["list"]
     expectedOutput: ["\\[E \\] rabbitmq_management"]
