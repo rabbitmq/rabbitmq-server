@@ -31,7 +31,7 @@ _TAGS = [
     "docker",
     "manual",
     "no-sandbox",
-    "no-remote-exec", # buildbuddy runners do not have the emulator available
+    "no-remote-exec",  # buildbuddy runners do not have the emulator available
 ]
 
 [
@@ -79,13 +79,10 @@ docker buildx \\
 oci_image_index(
     name = "rabbitmq",
     images = [
-        ":rabbitmq-amd64",
-        ":rabbitmq-arm64",
+        ":rabbitmq-%s" % arch
+        for arch in _ARCHS
     ],
-    tags = [
-        "docker",
-        "manual",
-    ],
+    tags = _TAGS,
 )
 
 [
