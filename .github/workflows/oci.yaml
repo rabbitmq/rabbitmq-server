@@ -75,6 +75,11 @@ jobs:
             echo "PUSH=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Assemble Multi-Arch
+        run: |
+          bazelisk build //packaging/docker-image:rabbitmq \
+            --config=buildbuddy
+
       - name: Login to DockerHub
         if: steps.authorized.outputs.PUSH == 'true'
         uses: docker/login-action@v3
