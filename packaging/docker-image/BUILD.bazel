@@ -1,3 +1,4 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@container_structure_test//:defs.bzl", "container_structure_test")
 load(
     "@rules_oci//oci:defs.bzl",
@@ -6,6 +7,7 @@ load(
     "oci_push",
     "oci_tarball",
 )
+load("//:rabbitmq.bzl", "APP_VERSION")
 
 filegroup(
     name = "context-files",
@@ -49,21 +51,54 @@ docker buildx \\
     build \\
     "$$CONTEXT" \\
     --platform linux/{arch} \\
-    --tag {tag}:{arch} \\
+    --build-arg RABBITMQ_VERSION="{rmq_version}" \\
     --output type=tar,dest=$(location image-{arch}.tar) $${{EXTRA_BUILDX_OPTS:-}}
 """.format(
             arch = arch,
-            tag = "bazel/%s/docker-build" % package_name(),
+            rmq_version = APP_VERSION,
         ),
         tags = _TAGS,
     )
     for arch in _ARCHS
 ]
 
+write_file(
+    name = "cmd",
+    out = "cmd.txt",
+    # must match Dockerfile
+    content = ["rabbitmq-server"],
+)
+
+write_file(
+    name = "entrypoint",
+    out = "entrypoint.txt",
+    # must match Dockerfile
+    content = ["docker-entrypoint.sh"],
+)
+
 [
     oci_image(
         name = "image-%s" % arch,
         architecture = arch,
+        cmd = ":cmd",
+        entrypoint = ":entrypoint",
+        # must match Dockerfile
+        # docker inspect bazel/packaging/docker-image/docker-build:amd64
+        # after
+        # bazel build //packaging/docker-image/docker-build:amd64
+        # to check values
+        env = {
+            "PATH": "/opt/rabbitmq/sbin:/opt/erlang/bin:/opt/openssl/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            "ERLANG_INSTALL_PATH_PREFIX": "/opt/erlang",
+            "OPENSSL_INSTALL_PATH_PREFIX": "/opt/openssl",
+            "RABBITMQ_DATA_DIR": "/var/lib/rabbitmq",
+            "RABBITMQ_VERSION": APP_VERSION,
+            "RABBITMQ_HOME": "/opt/rabbitmq",
+            "HOME": "/var/lib/rabbitmq",
+            "LANG": "C.UTF-8",
+            "LANGUAGE": "C.UTF-8",
+            "LC_ALL": "C.UTF-8",
+        },
         os = "linux",
         tags = _TAGS,
         tars = [":image-%s.tar" % arch],

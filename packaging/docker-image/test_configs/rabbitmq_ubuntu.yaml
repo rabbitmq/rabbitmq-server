@@ -1,13 +1,8 @@
 schemaVersion: 2.0.0
 
-containerRunOptions:
-  user: "rabbitmq"
 commandTests:
   - name: "rabbitmq-plugins"
     setup: [["docker-entrypoint.sh"]]
-    envVars:
-      - key: PATH
-        value: /opt/rabbitmq/sbin:/opt/erlang/bin:/opt/openssl/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     command: "rabbitmq-plugins"
     args: ["list"]
     expectedOutput: ["\\[E \\] rabbitmq_management"]
