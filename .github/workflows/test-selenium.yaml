@@ -31,12 +31,12 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - "26.1"
+        - "26.2"
         browser:
         - chrome
         include:
-        - erlang_version: "26.1"
-          elixir_version: 1.15.2
+        - erlang_version: "26.2"
+          elixir_version: 1.15.7
     env:
       SELENIUM_DIR: deps/rabbitmq_management/selenium
       DOCKER_NETWORK: rabbitmq_net
@@ -52,8 +52,6 @@ jobs:
 
     - name: Configure Bazel
       run: |
-        ERLANG_HOME="$(dirname $(dirname $(which erl)))"
-        ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
         if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
         cat << EOF >> user.bazelrc
           build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
@@ -63,12 +61,6 @@ jobs:
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
           build:buildbuddy --color=yes
-
-          build:buildbuddy --remote_download_toplevel
-
-          build --@rules_erlang//:erlang_version=${{ matrix.erlang_version }}
-          build --@rules_erlang//:erlang_home=${ERLANG_HOME}
-          build --//:elixir_home=${ELIXIR_HOME}
         EOF
 
     - name: Build & Load RabbitMQ OCI
