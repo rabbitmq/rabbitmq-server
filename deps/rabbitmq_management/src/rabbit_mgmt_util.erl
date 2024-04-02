@@ -10,7 +10,7 @@
 %% TODO sort all this out; maybe there's scope for rabbit_mgmt_request?
 
 -export([is_authorized/2, is_authorized_admin/2, is_authorized_admin/4,
-         is_authorized_admin/3, vhost/1, vhost_from_headers/1]).
+         is_authorized_admin/3, vhost/1, vhost_or_bad_request/2, vhost_from_headers/1]).
 -export([is_authorized_vhost/2, is_authorized_user/3,
          is_authorized_user/4, is_authorized_user/5,
          is_authorized_monitor/2, is_authorized_policies/2,
@@ -209,6 +209,14 @@ vhost_from_headers(ReqData) ->
 
 vhost(ReqData) ->
     rabbit_web_dispatch_access_control:vhost(ReqData).
+
+vhost_or_bad_request(ReqData, Context) ->
+    case rabbit_web_dispatch_access_control:vhost(ReqData) of
+        not_found -> 
+            bad_request(rabbit_data_coercion:to_binary("vhost_not_found"),
+                      ReqData, Context);
+        VHost -> VHost
+    end.
 
 user(ReqData) ->
   case id(user, ReqData) of
@@ -823,23 +831,18 @@ direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
       end, ReqData, Context).
 
 with_vhost_and_props(Fun, ReqData, Context) ->
-    case vhost(ReqData) of
-        not_found ->
-            not_found(rabbit_data_coercion:to_binary("vhost_not_found"),
-                      ReqData, Context);
-        VHost ->
-            {ok, Body, ReqData1} = read_complete_body(ReqData),
-            case decode(Body) of
-                {ok, Props} ->
-                    try
-                        Fun(VHost, Props, ReqData1)
-                    catch {error, Error} ->
-                            bad_request(Error, ReqData1, Context)
-                    end;
-                {error, Reason} ->
-                    bad_request(rabbit_mgmt_format:escape_html_tags(Reason),
-                                ReqData1, Context)
-            end
+    VHost = vhost_or_bad_request(ReqData, Context),
+    {ok, Body, ReqData1} = read_complete_body(ReqData),
+    case decode(Body) of
+        {ok, Props} ->
+            try
+                Fun(VHost, Props, ReqData1)
+            catch {error, Error} ->
+                    bad_request(Error, ReqData1, Context)
+            end;
+        {error, Reason} ->
+            bad_request(rabbit_mgmt_format:escape_html_tags(Reason),
+                        ReqData1, Context)
     end.
 
 props_to_method(MethodName, Props, Transformers, Extra) when Props =:= null orelse

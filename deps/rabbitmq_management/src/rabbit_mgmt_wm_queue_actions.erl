@@ -39,7 +39,7 @@ accept_content(ReqData, Context) ->
     rabbit_mgmt_util:post_respond(do_it(ReqData, Context)).
 
 do_it(ReqData0, Context) ->
-    VHost = rabbit_mgmt_util:vhost(ReqData0),
+    VHost = rabbit_mgmt_util:vhost_or_bad_request(ReqData0, Context),
     QName = rabbit_mgmt_util:id(queue, ReqData0),
     rabbit_mgmt_util:with_decode(
       [action], ReqData0, Context,
