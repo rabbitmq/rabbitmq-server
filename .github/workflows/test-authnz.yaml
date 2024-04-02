@@ -34,12 +34,12 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - "26.1"
+        - "26.2"
         browser:
         - chrome
         include:
-        - erlang_version: "26.1"
-          elixir_version: 1.15.2
+        - erlang_version: "26.2"
+          elixir_version: 1.15.7
     env:
       SELENIUM_DIR: deps/rabbitmq_management/selenium
       DOCKER_NETWORK: rabbitmq_net
@@ -53,6 +53,7 @@ jobs:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: ${{ matrix.elixir_version }}
 
+<<<<<<< HEAD
     - name: Mount Bazel Cache
       uses: actions/cache@v4.0.0
       with:
@@ -62,10 +63,10 @@ jobs:
           ${{ runner.os }}-repo-cache-
         save-always: true
 
+=======
+>>>>>>> c9ab302e79 (Remove rules_docker in favor of rules_oci (#10869))
     - name: Configure Bazel
       run: |
-        ERLANG_HOME="$(dirname $(dirname $(which erl)))"
-        ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
         if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
         cat << EOF >> user.bazelrc
           build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
@@ -74,20 +75,12 @@ jobs:
         cat << EOF >> user.bazelrc
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
-          build:buildbuddy --repository_cache=/home/runner/repo-cache/
           build:buildbuddy --color=yes
-          build:buildbuddy --disk_cache=
-
-          build:buildbuddy --remote_download_toplevel
-
-          build --@rules_erlang//:erlang_version=${{ matrix.erlang_version }}
-          build --@rules_erlang//:erlang_home=${ERLANG_HOME}
-          build --//:elixir_home=${ELIXIR_HOME}
         EOF
 
     - name: Build & Load RabbitMQ OCI
       run: |
-        bazelisk run packaging/docker-image:rabbitmq \
+        bazelisk run packaging/docker-image:rabbitmq-amd64 \
           --config=buildbuddy
 
     - name: Configure Docker Network
@@ -101,7 +94,7 @@ jobs:
 
     - name: Run Suites
       run: |
-        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq ${SELENIUM_DIR}/run-suites.sh full-suite-authnz-messaging
+        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq-amd64 ${SELENIUM_DIR}/run-suites.sh full-suite-authnz-messaging
 
     - name: Upload Test Artifacts
       if: always()

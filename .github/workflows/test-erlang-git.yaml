@@ -11,6 +11,7 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
+<<<<<<< HEAD
     - name: MOUNT BAZEL CACHE
       uses: actions/cache@v4.0.0
       with:
@@ -19,6 +20,8 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-repo-cache-
         save-always: true
+=======
+>>>>>>> c9ab302e79 (Remove rules_docker in favor of rules_oci (#10869))
     - name: CONFIGURE BAZEL
       run: |
         if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
@@ -29,9 +32,7 @@ jobs:
         cat << EOF >> user.bazelrc
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
-          build:buildbuddy --repository_cache=/home/runner/repo-cache/
           build:buildbuddy --color=yes
-          build:buildbuddy --disk_cache=
 
           build:rbe --platforms=//bazel/platforms:erlang_linux_git_master_platform
         EOF
