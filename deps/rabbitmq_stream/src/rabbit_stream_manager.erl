@@ -769,36 +769,45 @@ declare_super_stream_exchange(VirtualHost, Name, Username) ->
                                             true),
             CheckedType = rabbit_exchange:check_type(<<"direct">>),
             ExchangeName = rabbit_misc:r(VirtualHost, exchange, CorrectName),
-            X = case rabbit_exchange:lookup(ExchangeName) of
-                    {ok, FoundX} ->
-                        FoundX;
-                    {error, not_found} ->
-                        rabbit_exchange:declare(ExchangeName,
-                                                CheckedType,
-                                                true,
-                                                false,
-                                                false,
-                                                Args,
-                                                Username)
-                end,
-            try
-                ok =
-                    rabbit_exchange:assert_equivalence(X,
-                                                       CheckedType,
-                                                       true,
-                                                       false,
-                                                       false,
-                                                       Args)
-            catch
-                exit:ExitError ->
-                    % likely to be a problem of inequivalent args on an existing stream
-                    rabbit_log:error("Error while creating ~tp super stream exchange: "
-                                     "~tp",
-                                     [Name, ExitError]),
-                    {error, validation_failed}
+            case lookup_or_declare_exchange(
+                   ExchangeName, CheckedType, Args, Username) of
+                {ok, X} ->
+                    try
+                        ok =
+                            rabbit_exchange:assert_equivalence(X,
+                                                               CheckedType,
+                                                               true,
+                                                               false,
+                                                               false,
+                                                               Args)
+                    catch
+                        exit:ExitError ->
+                            % likely to be a problem of inequivalent args on an
+                            % existing stream
+                            rabbit_log:error("Error while creating ~tp super "
+                                             "stream exchange: ~tp",
+                                             [Name, ExitError]),
+                            {error, validation_failed}
+                    end;
+                {error, _} = Error ->
+                    Error
             end;
         error ->
             {error, validation_failed}
+    end.
+
+lookup_or_declare_exchange(ExchangeName, CheckedType, Args, Username) ->
+    case rabbit_exchange:lookup(ExchangeName) of
+        {ok, FoundX} ->
+            {ok, FoundX};
+        {error, not_found} ->
+            rabbit_exchange:declare(ExchangeName,
+                                    CheckedType,
+                                    true,
+                                    false,
+                                    false,
+                                    Args,
+                                    Username)
     end.
 
 add_super_stream_bindings(VirtualHost,

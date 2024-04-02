@@ -358,7 +358,9 @@ update_in_khepri_tx(Name, Fun) ->
 
 -spec create_or_get(Exchange) -> Ret when
       Exchange :: rabbit_types:exchange(),
-      Ret :: {new, Exchange} | {existing, Exchange}.
+      Ret :: {new, Exchange} |
+             {existing, Exchange} |
+             rabbit_khepri:timeout_error().
 %% @doc Writes an exchange record if it doesn't exist already or returns
 %% the existing one.
 %%
@@ -390,7 +392,9 @@ create_or_get_in_khepri(#exchange{name = XName} = X) ->
         ok ->
             {new, X};
         {error, {khepri, mismatching_node, #{node_props := #{data := ExistingX}}}} ->
-            {existing, ExistingX}
+            {existing, ExistingX};
+        {error, _} = Error ->
+            Error
     end.
 
 %% -------------------------------------------------------------------

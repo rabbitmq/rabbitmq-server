@@ -173,14 +173,20 @@ declare_exchange(
                                       virtual_host = VHost} = Exchange}}) ->
     try
         %% Durable.
-        #exchange{} = rabbit_exchange:declare(
-                        Exchange, topic, true, false, true, [],
-                        ?INTERNAL_USER),
-        ?LOG_DEBUG(
-           "Declared exchange '~ts' in vhost '~ts'",
-           [Name, VHost],
-           #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-        ok
+        case rabbit_exchange:declare(
+               Exchange, topic, true, false, true, [], ?INTERNAL_USER) of
+            {ok, #exchange{}} ->
+                ?LOG_DEBUG(
+                   "Declared exchange '~ts' in vhost '~ts'",
+                   [Name, VHost],
+                   #{domain => ?RMQLOG_DOMAIN_GLOBAL});
+            {error, timeout} ->
+                ?LOG_DEBUG(
+                   "Could not create exchange '~ts' in vhost '~ts' due to "
+                   "timeout",
+                   [Name, VHost],
+                   #{domain => ?RMQLOG_DOMAIN_GLOBAL})
+        end
     catch
         Class:Reason ->
             ?LOG_DEBUG(

@@ -2563,13 +2563,21 @@ handle_method(#'exchange.declare'{exchange    = XNameBin,
                                  check_write_permitted(AName, User, AuthzContext),
                                  ok
                 end,
-                rabbit_exchange:declare(ExchangeName,
-                                        CheckedType,
-                                        Durable,
-                                        AutoDelete,
-                                        Internal,
-                                        Args,
-                                        Username)
+                case rabbit_exchange:declare(ExchangeName,
+                                             CheckedType,
+                                             Durable,
+                                             AutoDelete,
+                                             Internal,
+                                             Args,
+                                             Username) of
+                    {ok, DeclaredX} ->
+                        DeclaredX;
+                    {error, timeout} ->
+                        rabbit_misc:protocol_error(
+                          internal_error,
+                          "Could not create exchange '~ts' due to timeout",
+                          [rabbit_misc:rs(ExchangeName)])
+                end
         end,
     ok = rabbit_exchange:assert_equivalence(X, CheckedType, Durable,
                                             AutoDelete, Internal, Args);

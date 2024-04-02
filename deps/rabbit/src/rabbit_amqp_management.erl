@@ -205,9 +205,17 @@ handle_http_req(<<"PUT">>,
             {error, not_found} ->
                 ok = prohibit_cr_lf(XNameBin),
                 ok = prohibit_reserved_amq(XName),
-                rabbit_exchange:declare(
-                  XName, XTypeAtom, Durable, AutoDelete,
-                  Internal, XArgs, Username)
+                case rabbit_exchange:declare(
+                       XName, XTypeAtom, Durable, AutoDelete,
+                       Internal, XArgs, Username) of
+                    {ok, DeclaredX} ->
+                        DeclaredX;
+                    {error, timeout} ->
+                        throw(
+                          <<"500">>,
+                          "Could not create exchange '~ts' due to timeout",
+                          [XName])
+                end
         end,
     try rabbit_exchange:assert_equivalence(
           X, XTypeAtom, Durable, AutoDelete, Internal, XArgs) of
