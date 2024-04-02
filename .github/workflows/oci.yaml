@@ -88,7 +88,9 @@ jobs:
           image_tag_suffix: otp-max-bazel
         run: |
           TAG_1="${{ env.VERSION }}-${{ env.image_tag_suffix }}"
-          TAG_2="${{ github.ref_name }}-${{ env.image_tag_suffix }}"
+
+          REF_NAME="${{ github.ref_name }}"
+          TAG_2="${REF_NAME//\//-}-${{ env.image_tag_suffix }}"
 
           bazelisk run //packaging/docker-image:push \
             --config=buildbuddy -- \
