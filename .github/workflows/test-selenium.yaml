@@ -73,7 +73,7 @@ jobs:
 
     - name: Build & Load RabbitMQ OCI
       run: |
-        bazelisk run packaging/docker-image:rabbitmq \
+        bazelisk run packaging/docker-image:rabbitmq-amd64 \
           --config=buildbuddy
 
     - name: Configure Docker Network
@@ -87,7 +87,7 @@ jobs:
 
     - name: Run Suites
       run: |
-        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq ${SELENIUM_DIR}/run-suites.sh
+        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq-amd64 ${SELENIUM_DIR}/run-suites.sh
 
     - name: Upload Test Artifacts
       if: always()
