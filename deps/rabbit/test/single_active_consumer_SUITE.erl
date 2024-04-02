@@ -11,13 +11,15 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 -define(TIMEOUT, 30000).
 
 all() ->
     [
-        {group, classic_queue}, {group, quorum_queue}
+        {group, classic_queue},
+        {group, quorum_queue}
     ].
 
 groups() ->
