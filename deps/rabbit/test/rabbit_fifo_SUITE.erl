@@ -21,7 +21,7 @@
 
 all() ->
     [
-     {group, machine_version_4},
+     {group, tests},
      {group, machine_version_conversion}
     ].
 
@@ -33,13 +33,13 @@ all_tests() ->
 
 groups() ->
     [
-     {machine_version_4, [shuffle], all_tests()},
+     {tests, [shuffle], all_tests()},
      {machine_version_conversion, [shuffle],
       [convert_v2_to_v3,
        convert_v3_to_v4]}
     ].
 
-init_per_group(machine_version_4, Config) ->
+init_per_group(tests, Config) ->
     [{machine_version, 4} | Config];
 init_per_group(machine_version_conversion, Config) ->
     Config.
@@ -83,6 +83,11 @@ end_per_testcase(_Group, _Config) ->
         ?assert(not lists:any(fun (EfxPat) -> true;
                                   (_) -> false
                               end, Effects))).
+
+-define(ASSERT(Guard, Fun),
+        {assert, fun (S) -> ?assertMatch(Guard, S), Fun end}).
+-define(ASSERT(Guard),
+        ?ASSERT(Guard, fun () -> ok end)).
 
 test_init(Name) ->
     init(#{name => Name,
@@ -906,7 +911,7 @@ single_active_consumer_basic_get_test(Config) ->
 
 single_active_consumer_revive_test(Config) ->
     S0 = init(#{name => ?FUNCTION_NAME,
-                queue_resource => rabbit_misc:r("/", queue, atom_to_binary(?FUNCTION_NAME, utf8)),
+                queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
                 single_active_consumer_on => true}),
     Cid1 = {<<"one">>, self()},
     Cid2 = {<<"two">>, self()},
@@ -1068,7 +1073,6 @@ single_active_consumer_test(Config) ->
 single_active_consumer_cancel_consumer_when_channel_is_down_test(Config) ->
     State0 = init(#{name => ?FUNCTION_NAME,
                     queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
-                    release_cursor_interval => 0,
                     single_active_consumer_on => true}),
 
     Pid1 = spawn(fun() -> ok end),
@@ -1086,12 +1090,14 @@ single_active_consumer_cancel_consumer_when_channel_is_down_test(Config) ->
                {CK1, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{})},
                {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{})},
                {CK3, make_checkout(C3, {auto, {simple_prefetch, 1}}, #{})},
-               {CK4, make_checkout(C4, {auto, {simple_prefetch, 1}}, #{})}
+               {CK4, make_checkout(C4, {auto, {simple_prefetch, 1}}, #{})},
+               ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up}}}),
+               % the channel of the active consumer goes down
+               {?LINE, {down, Pid1, noproc}}
               ],
-    {State1, _} = run_log(Config, State0, Entries),
+    {State2, Effects} = run_log(Config, State0, Entries),
 
-    % the channel of the active consumer goes down
-    {State2, _, Effects} = apply(meta(Config, 2), {down, Pid1, noproc}, State1),
+    % {State2, _, Effects} = apply(meta(Config, 2), {down, Pid1, noproc}, State1),
     % fell back to another consumer
     ?assertEqual(1, map_size(State2#rabbit_fifo.consumers)),
     % there are still waiting consumers
@@ -1103,8 +1109,11 @@ single_active_consumer_cancel_consumer_when_channel_is_down_test(Config) ->
     ?ASSERT_EFF({mod_call, rabbit_quorum_queue,
                  update_consumer_handler, _}, Effects),
 
+    ct:pal("STate2 ~p", [State2]),
     % the channel of the active consumer and a waiting consumer goes down
     {State3, _, Effects2} = apply(meta(Config, ?LINE), {down, Pid2, noproc}, State2),
+    ct:pal("STate3 ~p", [State3]),
+    ct:pal("Effects2 ~p", [Effects2]),
     % fell back to another consumer
     ?assertEqual(1, map_size(State3#rabbit_fifo.consumers)),
     % no more waiting consumer
@@ -1212,29 +1221,20 @@ single_active_consumer_all_disconnected_test(Config) ->
 
     {CK1, {_, C1Pid} = C1} = {?LINE, {?LINE_B, test_util:fake_pid(n1)}},
     {CK2, {_, C2Pid} = C2} = {?LINE, {?LINE_B, test_util:fake_pid(n2)}},
-    Entries = [
-               {CK1, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{})},
-               {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{})}
-              ],
+    Entries =
+    [
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{})},
+     {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up}}}),
+     {?LINE, {down, C1Pid, noconnection}},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{status = up}}}),
+     {?LINE, {down, C2Pid, noconnection}},
+     ?ASSERT(#rabbit_fifo{consumers = C} when map_size(C) == 0),
+     {?LINE, {nodeup, node(C2Pid)}},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{status = up,
+                                                         credit = 1}}})
+    ],
     {State1, _} = run_log(Config, State0, Entries),
-
-    %% assert the consumer is up
-    ?assertMatch(#{CK1 := #consumer{status = up}}, State1#rabbit_fifo.consumers),
-
-    % simulate node goes down
-    {State2, _, _} = apply(meta(Config, 5), {down, C1Pid, noconnection}, State1),
-    %% assert the consumer fails over to the consumer on n2
-    ?assertMatch(#{CK2 := #consumer{status = up}}, State2#rabbit_fifo.consumers),
-    {State3, _, _} = apply(meta(Config, 6), {down, C2Pid, noconnection}, State2),
-    %% assert these no active consumer after both nodes are maked as down
-    ?assertMatch([], maps:to_list(State3#rabbit_fifo.consumers)),
-    %% n2 comes back
-    {State4, _, _} = apply(meta(Config, 7), {nodeup, node(C2Pid)}, State3),
-    %% ensure n2 is the active consumer as this node as been registered
-    %% as up again
-    ?assertMatch([{CK2, #consumer{status = up,
-                                  credit = 1}}],
-                 maps:to_list(State4#rabbit_fifo.consumers)),
     ok.
 
 single_active_consumer_state_enter_leader_include_waiting_consumers_test(Config) ->
@@ -1552,6 +1552,390 @@ single_active_with_credited_v2_test(Config) ->
                  rabbit_fifo:query_waiting_consumers(State)),
     ok.
 
+single_active_settle_after_cancel_test(Config) ->
+    S0 = init(#{name => ?FUNCTION_NAME,
+                queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                single_active_consumer_on => true}),
+
+    Pid1 = test_util:fake_pid(node()),
+    % % adding some consumers
+    E1Idx = ?LINE,
+    {CK1, C1} = {?LINE, {?LINE_B, self()}},
+    {CK2, C2} = {?LINE, {?LINE_B, self()}},
+    Entries =
+    [
+     {E1Idx , rabbit_fifo:make_enqueue(Pid1, 1, msg1)},
+     %% add a consumer
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{next_msg_id = 1,
+                                                         status = up,
+                                                         checked_out = Ch}}}
+               when map_size(Ch) == 1),
+     %% add another consumer
+     {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up}},
+                          waiting_consumers = [{CK2, _}]}),
+
+     %% cancel C1
+     {?LINE, make_checkout(C1, cancel, #{})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = cancelled},
+                                        CK2 := #consumer{status = up}},
+                          waiting_consumers = []}),
+     %% settle the message, C1 one should be completely removed
+     {?LINE, rabbit_fifo:make_settle(CK1, [0])},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{status = up}} = C,
+                          waiting_consumers = []}
+               when map_size(C) == 1)
+
+    ],
+    {_S1, _} = run_log(Config, S0, Entries, fun single_active_invariant/1),
+
+    ok.
+
+single_active_consumer_priority_test(Config) ->
+    S0 = init(#{name => ?FUNCTION_NAME,
+                queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                single_active_consumer_on => true}),
+
+    Pid1 = test_util:fake_pid(node()),
+    % % adding some consumers
+    {CK1, C1} = {?LINE, {?LINE_B, self()}},
+    {CK2, C2} = {?LINE, {?LINE_B, self()}},
+    E1Idx = ?LINE,
+    {CK3, C3} = {?LINE, {?LINE_B, self()}},
+    Entries =
+    [
+     %% add a consumer
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{priority => 1})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up}},
+                          waiting_consumers = []}),
+
+     %% add a consumer with a higher priority, assert it becomes active
+     {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{priority => 2})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{status = up}},
+                          waiting_consumers = [_]}),
+
+     %% enqueue a message
+     {E1Idx , rabbit_fifo:make_enqueue(Pid1, 1, msg1)},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{next_msg_id = 1,
+                                                         status = up,
+                                                         checked_out = Ch}}}
+               when map_size(Ch) == 1),
+
+     %% add en even higher consumer, but the current active has a message pending
+     %% so can't be immedately replaced
+     {CK3, make_checkout(C3, {auto, {simple_prefetch, 1}}, #{priority => 3})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{status = fading}},
+                          waiting_consumers = [_, _]}),
+     %% settle the message, the higher priority should become the active,
+     %% completing the replacement
+     {?LINE, rabbit_fifo:make_settle(CK2, [0])},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK3 := #consumer{status = up,
+                                                         checked_out = Ch}},
+                          waiting_consumers = [_, _]}
+               when map_size(Ch) == 0)
+
+    ],
+    {_S1, _} = run_log(Config, S0, Entries, fun single_active_invariant/1),
+
+    ok.
+
+
+single_active_consumer_priority_cancel_active_test(Config) ->
+    S0 = init(#{name => ?FUNCTION_NAME,
+                queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                single_active_consumer_on => true}),
+
+    % % adding some consumers
+    {CK1, C1} = {?LINE, {?LINE_B, self()}},
+    {CK2, C2} = {?LINE, {?LINE_B, self()}},
+    {CK3, C3} = {?LINE, {?LINE_B, self()}},
+    Entries =
+    [
+     %% add a consumer
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{priority => 2})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up}},
+                          waiting_consumers = []}),
+
+     %% add two consumers each with a lower priority
+     {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{priority => 1})},
+     {CK3, make_checkout(C3, {auto, {simple_prefetch, 1}}, #{priority => 0})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up}},
+                          waiting_consumers = [_, _]}),
+
+     {?LINE, make_checkout(C1, cancel, #{})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{status = up}},
+                          waiting_consumers = [{CK3, _}]})
+    ],
+    {_S1, _} = run_log(Config, S0, Entries, fun single_active_invariant/1),
+
+    ok.
+
+single_active_consumer_update_priority_test(Config) ->
+    S0 = init(#{name => ?FUNCTION_NAME,
+                queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                single_active_consumer_on => true}),
+
+    Pid1 = test_util:fake_pid(node()),
+    % % adding some consumers
+    {CK1, C1} = {?LINE, {?LINE_B, self()}},
+    {CK2, C2} = {?LINE, {?LINE_B, self()}},
+    Entries =
+    [
+     %% add a consumer
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{priority => 2})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up}},
+                          waiting_consumers = []}),
+     %% add abother consumer with lower priority
+     {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{priority => 1})},
+     %% update the current active consumer to lower priority
+     {?LINE, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{priority => 0})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{status = up}},
+                          waiting_consumers = [_]}),
+     %% back to original priority
+     {?LINE, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{priority => 2})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up}},
+                          waiting_consumers = [_]}),
+     {?LINE , rabbit_fifo:make_enqueue(Pid1, 1, msg1)},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{checked_out = Ch}},
+                          waiting_consumers = [{CK2, _}]}
+               when map_size(Ch) == 1),
+     %% update priority for C2
+     {?LINE, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{priority => 3})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{checked_out = Ch}},
+                          waiting_consumers = [{CK2, _}]}
+               when map_size(Ch) == 1),
+     %% settle should cause the existing active to be replaced
+     {?LINE, rabbit_fifo:make_settle(CK1, [0])},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{status = up}},
+                          waiting_consumers = [{CK1, _}]})
+    ],
+    {_S1, _} = run_log(Config, S0, Entries, fun single_active_invariant/1),
+    ok.
+
+single_active_consumer_fading_resumes_after_cancel_test(Config) ->
+    S0 = init(#{name => ?FUNCTION_NAME,
+                queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                single_active_consumer_on => true}),
+
+    Pid1 = test_util:fake_pid(node()),
+    % % adding some consumers
+    {CK1, C1} = {?LINE, {?LINE_B, self()}},
+    {CK2, C2} = {?LINE, {?LINE_B, self()}},
+    Entries =
+    [
+     %% add a consumer
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{priority => 1})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up}},
+                          waiting_consumers = []}),
+
+     %% enqueue a message
+     {?LINE , rabbit_fifo:make_enqueue(Pid1, 1, msg1)},
+
+     %% add a consumer with a higher priority, current is fading
+     {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{priority => 2})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = fading}},
+                          waiting_consumers = [{CK2, _}]}),
+
+     %% C2 cancels
+     {?LINE, make_checkout(C2, cancel, #{})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = fading,
+                                                         checked_out = Ch}},
+                         waiting_consumers = []}
+               when map_size(Ch) == 1),
+
+     %% settle
+     {?LINE, rabbit_fifo:make_settle(CK1, [0])},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up,
+                                                         credit = 1}},
+                          waiting_consumers = []})
+    ],
+
+    {_S1, _} = run_log(Config, S0, Entries, fun single_active_invariant/1),
+
+    ok.
+
+single_active_consumer_higher_waiting_disconnected_test(Config) ->
+    S0 = init(#{name => ?FUNCTION_NAME,
+                queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                single_active_consumer_on => true}),
+
+    Pid1 = test_util:fake_pid(node()),
+    C1Pid = test_util:fake_pid(n1@banana),
+    C2Pid = test_util:fake_pid(n2@banana),
+    % % adding some consumers
+    {CK1, C1} = {?LINE, {?LINE_B, C1Pid}},
+    {CK2, C2} = {?LINE, {?LINE_B, C2Pid}},
+    Entries =
+    [
+     %% add a consumer
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{priority => 1})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up}},
+                          waiting_consumers = []}),
+
+     %% enqueue a message
+     {?LINE , rabbit_fifo:make_enqueue(Pid1, 1, msg1)},
+
+     %% add a consumer with a higher priority, current is fading
+     {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{priority => 2})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = fading}},
+                          waiting_consumers = [{CK2, _}]}),
+     %% C2 is disconnected,
+     {?LINE, {down, C2Pid, noconnection}},
+     ?ASSERT(
+        #rabbit_fifo{consumers = #{CK1 := #consumer{status = fading}},
+                     waiting_consumers = [{CK2, #consumer{status = suspected_down}}]}),
+     %% settle
+     {?LINE, rabbit_fifo:make_settle(CK1, [0])},
+     %% C1 should be reactivated
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up,
+                                                         credit = 1}},
+                          waiting_consumers = [_]}),
+     %% C2 comes back up and takes over
+     {?LINE, {nodeup, n2@banana}},
+     ?ASSERT(
+        #rabbit_fifo{consumers = #{CK2 := #consumer{status = up}},
+                     waiting_consumers = [{CK1, #consumer{status = up}}]})
+    ],
+    {_S1, _} = run_log(Config, S0, Entries, fun single_active_invariant/1),
+
+    ok.
+
+single_active_consumer_fading_disconnected_test(Config) ->
+    S0 = init(#{name => ?FUNCTION_NAME,
+                queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                single_active_consumer_on => true}),
+
+    Pid1 = test_util:fake_pid(node()),
+    C1Pid = test_util:fake_pid(n1@banana),
+    C2Pid = test_util:fake_pid(n2@banana),
+    % % adding some consumers
+    {CK1, C1} = {?LINE, {?LINE_B, C1Pid}},
+    {CK2, C2} = {?LINE, {?LINE_B, C2Pid}},
+    Entries =
+    [
+     %% add a consumer
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{priority => 1})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up}},
+                          waiting_consumers = []}),
+
+     %% enqueue a message
+     {?LINE , rabbit_fifo:make_enqueue(Pid1, 1, msg1)},
+
+     %% add a consumer with a higher priority, current is fading
+     {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{priority => 2})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = fading}},
+                          waiting_consumers = [{CK2, _}]}),
+     %% C1 is disconnected,
+     {?LINE, {down, C1Pid, noconnection}},
+     ?ASSERT(
+        #rabbit_fifo{consumers = #{CK2 := #consumer{status = up,
+                                                    checked_out = Ch2}},
+                     waiting_consumers =
+                         [{CK1, #consumer{status = suspected_down,
+                                          checked_out = Ch1}}]}
+          when map_size(Ch2) == 1 andalso
+               map_size(Ch1) == 0),
+     %% C1 settles which will be ignored
+     {?LINE, rabbit_fifo:make_settle(CK1, [0])},
+     ?ASSERT(
+        #rabbit_fifo{consumers = #{CK2 := #consumer{status = up,
+                                                    checked_out = Ch2}},
+                     waiting_consumers =
+                         [{CK1, #consumer{status = suspected_down,
+                                          checked_out = Ch1}}]}
+          when map_size(Ch2) == 1 andalso
+               map_size(Ch1) == 0),
+     % %% C1 comes back up
+     {?LINE, {nodeup, n1@banana}},
+     ?ASSERT(
+        #rabbit_fifo{consumers = #{CK2 := #consumer{status = up}},
+                     waiting_consumers = [{CK1, #consumer{status = up}}]})
+    ],
+    {_S1, _} = run_log(Config, S0, Entries, fun single_active_invariant/1),
+
+    ok.
+
+single_active_consumer_fading_receives_no_further_messages_test(Config) ->
+    S0 = init(#{name => ?FUNCTION_NAME,
+                queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                single_active_consumer_on => true}),
+
+    Pid1 = test_util:fake_pid(node()),
+    C1Pid = test_util:fake_pid(n1@banana),
+    C2Pid = test_util:fake_pid(n2@banana),
+    % % adding some consumers
+    {CK1, C1} = {?LINE, {?LINE_B, C1Pid}},
+    {CK2, C2} = {?LINE, {?LINE_B, C2Pid}},
+    Entries =
+    [
+     %% add a consumer, with plenty of prefetch
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 10}}, #{priority => 1})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up}},
+                          waiting_consumers = []}),
+
+     %% enqueue a message
+     {?LINE, rabbit_fifo:make_enqueue(Pid1, 1, msg1)},
+
+     %% add a consumer with a higher priority, current is fading
+     {CK2, make_checkout(C2, {auto, {simple_prefetch, 10}}, #{priority => 2})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = fading,
+                                                         checked_out = Ch}},
+                          waiting_consumers = [{CK2, _}]}
+               when map_size(Ch) == 1),
+
+     %% enqueue another message
+     {?LINE, rabbit_fifo:make_enqueue(Pid1, 2, msg2)},
+     %% message should not be assinged to fading consumer
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = fading,
+                                                         checked_out = Ch}},
+                          waiting_consumers = [{CK2, _}]}
+               when map_size(Ch) == 1)
+
+    ],
+
+    {_S1, _} = run_log(Config, S0, Entries, fun single_active_invariant/1),
+    ok.
+
+single_active_consumer_credited_favour_with_credit_test(Config) ->
+    S0 = init(#{name => ?FUNCTION_NAME,
+                queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                single_active_consumer_on => true}),
+
+    C1Pid = test_util:fake_pid(n1@banana),
+    C2Pid = test_util:fake_pid(n2@banana),
+    C3Pid = test_util:fake_pid(n3@banana),
+    % % adding some consumers
+    {CK1, C1} = {?LINE, {?LINE_B, C1Pid}},
+    {CK2, C2} = {?LINE, {?LINE_B, C2Pid}},
+    {CK3, C3} = {?LINE, {?LINE_B, C3Pid}},
+    Entries =
+    [
+     %% add a consumer
+     {CK1, make_checkout(C1, {auto, {credited, 0}}, #{priority => 3})},
+     {CK2, make_checkout(C2, {auto, {credited, 0}}, #{priority => 1})},
+     {CK3, make_checkout(C3, {auto, {credited, 0}}, #{priority => 1})},
+     %% waiting are sorted by arrival order
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up}},
+                          waiting_consumers = [{CK2, _}, {CK3, _}]}),
+
+     %% give credit to C3
+     {?LINE , rabbit_fifo:make_credit(CK3, 1, 0, false)},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up}},
+                          waiting_consumers = [{CK3, _}, {CK2, _}]}),
+     %% cancel the current active consumer
+     {CK1, make_checkout(C1, cancel, #{})},
+     %% C3 should become active due having credits
+     ?ASSERT(#rabbit_fifo{consumers = #{CK3 := #consumer{status = up,
+                                                         credit = 1}},
+                          waiting_consumers = [{CK2, _}]})
+    ],
+
+    {_S1, _} = run_log(Config, S0, Entries, fun single_active_invariant/1),
+    ok.
+
+
+
 register_enqueuer_test(Config) ->
     State0 = init(#{name => ?FUNCTION_NAME,
                     queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
@@ -1792,17 +2176,26 @@ checkout_reply(Oth) ->
     Oth.
 
 run_log(Config, InitState, Entries) ->
-    lists:foldl(fun ({Idx, E}, {Acc0, Efx0}) ->
-                        case apply(meta(Config, Idx, Idx, {notify, Idx, self()}),
-                                   E, Acc0) of
-                            {Acc, _, Efx} when is_list(Efx) ->
-                                {Acc, Efx0 ++ Efx};
-                            {Acc, _, Efx}  ->
-                                {Acc, Efx0 ++ [Efx]};
-                            {Acc, _}  ->
-                                {Acc, Efx0}
-                        end
-                end, {InitState, []}, Entries).
+    run_log(Config, InitState, Entries, fun (_) -> true end).
+run_log(Config, InitState, Entries, Invariant) ->
+    lists:foldl(
+      fun ({assert, Fun}, {Acc0, Efx0}) ->
+              _ = Fun(Acc0),
+              {Acc0, Efx0};
+          ({Idx, E}, {Acc0, Efx0}) ->
+              case apply(meta(Config, Idx, Idx, {notify, Idx, self()}),
+                         E, Acc0) of
+                  {Acc, _, Efx} when is_list(Efx) ->
+                      ?assert(Invariant(Acc)),
+                      {Acc, Efx0 ++ Efx};
+                  {Acc, _, Efx}  ->
+                      ?assert(Invariant(Acc)),
+                      {Acc, Efx0 ++ [Efx]};
+                  {Acc, _}  ->
+                      ?assert(Invariant(Acc)),
+                      {Acc, Efx0}
+              end
+      end, {InitState, []}, Entries).
 
 
 %% AUX Tests
@@ -2192,3 +2585,9 @@ make_checkout(C, S, M) -> rabbit_fifo:make_checkout(C, S, M).
 
 cid(A) when is_atom(A) ->
     atom_to_binary(A, utf8).
+
+single_active_invariant( #rabbit_fifo{consumers = Cons}) ->
+    1 >= map_size(maps:filter(fun (_, #consumer{status = S}) ->
+                                      S == up
+                              end, Cons)).
+
