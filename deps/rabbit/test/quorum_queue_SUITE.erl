@@ -90,7 +90,9 @@ groups() ->
                                             leader_locator_policy,
                                             status,
                                             format,
-                                            add_member_2
+                                            add_member_2,
+                                            single_active_consumer_priority_take_over,
+                                            single_active_consumer_priority
                                            ]
                        ++ all_tests()},
                       {cluster_size_5, [], [start_queue,
@@ -947,6 +949,7 @@ publish_confirm(Ch, QName, Timeout) ->
             ct:pal("NOT CONFIRMED! ~ts", [QName]),
             fail
     after Timeout ->
+              flush(1),
               exit(confirm_timeout)
     end.
 
@@ -992,6 +995,120 @@ consume_in_minority(Config) ->
 
     rabbit_quorum_queue:restart_server({RaName, Server1}),
     rabbit_quorum_queue:restart_server({RaName, Server2}),
+    ok.
+
+single_active_consumer_priority_take_over(Config) ->
+    check_quorum_queues_v4_compat(Config),
+
+    [Server0, Server1, _Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    QName = ?config(queue_name, Config),
+    Q1 = <<QName/binary, "_1">>,
+    RaNameQ1 = binary_to_atom(<<"%2F", "_", Q1/binary>>, utf8),
+    QueryFun = fun rabbit_fifo:query_single_active_consumer/1,
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+            {<<"x-single-active-consumer">>, bool, true}],
+    ?assertEqual({'queue.declare_ok', Q1, 0, 0}, declare(Ch1, Q1, Args)),
+    ok = subscribe(Ch1, Q1, false, <<"ch1-ctag1">>, [{"x-priority", byte, 1}]),
+    ?assertMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
+                 rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun])),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch2, #'confirm.select'{}),
+    publish_confirm(Ch2, Q1),
+    %% higher priority consumer attaches
+    ok = subscribe(Ch2, Q1, false, <<"ch2-ctag1">>, [{"x-priority", byte, 3}]),
+
+    %% Q1 should still have Ch1 as consumer as it has pending messages
+    ?assertMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
+                 rpc:call(Server0, ra, local_query,
+                          [RaNameQ1, QueryFun])),
+
+    %% ack the message
+    receive
+        {#'basic.deliver'{consumer_tag = <<"ch1-ctag1">>,
+                          delivery_tag = DeliveryTag}, _} ->
+            amqp_channel:cast(Ch1, #'basic.ack'{delivery_tag = DeliveryTag,
+                                                multiple     = false})
+    after 5000 ->
+              flush(1),
+              exit(basic_deliver_timeout)
+    end,
+
+    ?awaitMatch({ok, {_, {value, {<<"ch2-ctag1">>, _}}}, _},
+                rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun]),
+               ?DEFAULT_AWAIT),
+    ok.
+
+single_active_consumer_priority(Config) ->
+    check_quorum_queues_v4_compat(Config),
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Ch3 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+    QName = ?config(queue_name, Config),
+    Q1 = <<QName/binary, "_1">>,
+    Q2 = <<QName/binary, "_2">>,
+    Q3 = <<QName/binary, "_3">>,
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+            {<<"x-single-active-consumer">>, bool, true}],
+    ?assertEqual({'queue.declare_ok', Q1, 0, 0}, declare(Ch1, Q1, Args)),
+    ?assertEqual({'queue.declare_ok', Q2, 0, 0}, declare(Ch2, Q2, Args)),
+    ?assertEqual({'queue.declare_ok', Q3, 0, 0}, declare(Ch3, Q3, Args)),
+
+    ok = subscribe(Ch1, Q1, false, <<"ch1-ctag1">>, [{"x-priority", byte, 3}]),
+    ok = subscribe(Ch1, Q2, false, <<"ch1-ctag2">>, [{"x-priority", byte, 2}]),
+    ok = subscribe(Ch1, Q3, false, <<"ch1-ctag3">>, [{"x-priority", byte, 1}]),
+
+
+    ok = subscribe(Ch2, Q1, false, <<"ch2-ctag1">>, [{"x-priority", byte, 1}]),
+    ok = subscribe(Ch2, Q2, false, <<"ch2-ctag2">>, [{"x-priority", byte, 3}]),
+    ok = subscribe(Ch2, Q3, false, <<"ch2-ctag3">>, [{"x-priority", byte, 2}]),
+
+    ok = subscribe(Ch3, Q1, false, <<"ch3-ctag1">>, [{"x-priority", byte, 2}]),
+    ok = subscribe(Ch3, Q2, false, <<"ch3-ctag2">>, [{"x-priority", byte, 1}]),
+    ok = subscribe(Ch3, Q3, false, <<"ch3-ctag3">>, [{"x-priority", byte, 3}]),
+
+
+    RaNameQ1 = binary_to_atom(<<"%2F", "_", Q1/binary>>, utf8),
+    RaNameQ2 = binary_to_atom(<<"%2F", "_", Q2/binary>>, utf8),
+    RaNameQ3 = binary_to_atom(<<"%2F", "_", Q3/binary>>, utf8),
+    %% assert each queue has a different consumer
+    QueryFun = fun rabbit_fifo:query_single_active_consumer/1,
+
+    %% Q1 should have the consumer on Ch1
+    ?assertMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
+                rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun])),
+
+    %% Q2 Ch2
+    ?assertMatch({ok, {_, {value, {<<"ch2-ctag2">>, _}}}, _},
+                rpc:call(Server1, ra, local_query, [RaNameQ2, QueryFun])),
+
+    %% Q3 Ch3
+    ?assertMatch({ok, {_, {value, {<<"ch3-ctag3">>, _}}}, _},
+                rpc:call(Server2, ra, local_query, [RaNameQ3, QueryFun])),
+
+    %% close Ch3
+    _ = rabbit_ct_client_helpers:close_channel(Ch3),
+    flush(100),
+
+    %% assert Q3 has Ch2 (priority 2) as consumer
+    ?assertMatch({ok, {_, {value, {<<"ch2-ctag3">>, _}}}, _},
+                rpc:call(Server2, ra, local_query, [RaNameQ3, QueryFun])),
+
+    %% close Ch2
+    _ = rabbit_ct_client_helpers:close_channel(Ch2),
+    flush(100),
+
+    %% assert all queues as has Ch1 as consumer
+    ?assertMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
+                rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun])),
+    ?assertMatch({ok, {_, {value, {<<"ch1-ctag2">>, _}}}, _},
+                rpc:call(Server0, ra, local_query, [RaNameQ2, QueryFun])),
+    ?assertMatch({ok, {_, {value, {<<"ch1-ctag3">>, _}}}, _},
+                rpc:call(Server0, ra, local_query, [RaNameQ3, QueryFun])),
     ok.
 
 reject_after_leader_transfer(Config) ->
@@ -3627,13 +3744,20 @@ consume_empty(Ch, Queue, NoAck) ->
                                                     no_ack = NoAck})).
 
 subscribe(Ch, Queue, NoAck) ->
+    subscribe(Ch, Queue, NoAck, <<"ctag">>, []).
+
+subscribe(Ch, Queue, NoAck, Tag, Args) ->
     amqp_channel:subscribe(Ch, #'basic.consume'{queue = Queue,
                                                 no_ack = NoAck,
-                                                consumer_tag = <<"ctag">>},
+                                                arguments = Args,
+                                                consumer_tag = Tag},
                            self()),
     receive
-        #'basic.consume_ok'{consumer_tag = <<"ctag">>} ->
+        #'basic.consume_ok'{consumer_tag = Tag} ->
              ok
+    after 30000 ->
+              flush(100),
+              exit(subscribe_timeout)
     end.
 
 qos(Ch, Prefetch, Global) ->
@@ -3745,4 +3869,13 @@ basic_get(Ch, Q, NoAck, Attempt) ->
         _ ->
             timer:sleep(100),
             basic_get(Ch, Q, NoAck, Attempt - 1)
+    end.
+
+check_quorum_queues_v4_compat(Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(Config,
+                                                          quorum_queues_4) of
+        false ->
+            throw({skip, "test needs feature flag quorum_queues_v4"});
+        true ->
+            ok
     end.
