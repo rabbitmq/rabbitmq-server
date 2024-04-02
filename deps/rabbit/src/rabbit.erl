@@ -1686,7 +1686,7 @@ ensure_working_fhc() ->
                   #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
         ?LOG_INFO("FHC write buffering: ~ts", [WriteBuf],
                   #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-        Filename = filename:join(code:lib_dir(kernel, ebin), "kernel.app"),
+        Filename = filename:join(code:lib_dir(kernel), "ebin/kernel.app"),
         {ok, Fd} = file_handle_cache:open(Filename, [raw, binary, read], []),
         {ok, _} = file_handle_cache:read(Fd, 1),
         ok = file_handle_cache:close(Fd),

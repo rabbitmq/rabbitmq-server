@@ -33,7 +33,7 @@
 %% gen_server callbacks
 -export([init/1, terminate/2, handle_continue/2,
          handle_cast/2, handle_call/3, handle_info/2,
-         code_change/3, format_status/2]).
+         code_change/3, format_status/1]).
 
 -define(HIBERNATE_AFTER, 4*60*1000).
 
@@ -581,31 +581,32 @@ queue_names(Qs)
   when is_list(Qs) ->
     lists:map(fun amqqueue:get_name/1, Qs).
 
-format_status(_Opt, [_PDict, #state{
-                                queue_ref = QueueRef,
-                                exchange_ref = ExchangeRef,
-                                routing_key = RoutingKey,
-                                dlx_client_state = DlxClientState,
-                                queue_type_state = QueueTypeState,
-                                pendings = Pendings,
-                                settled_ids = SettledIds,
-                                next_out_seq = NextOutSeq,
-                                settle_timeout = SettleTimeout,
-                                timer = Timer,
-                                logged = Logged
-                               }]) ->
-    S = #{queue_ref => QueueRef,
-          exchange_ref => ExchangeRef,
-          routing_key => RoutingKey,
-          dlx_client_state => rabbit_fifo_dlx_client:overview(DlxClientState),
-          queue_type_state => QueueTypeState,
-          pendings => maps:map(fun(_, P) -> format_pending(P) end, Pendings),
-          settled_ids => SettledIds,
-          next_out_seq => NextOutSeq,
-          settle_timeout => SettleTimeout,
-          timer_is_active => Timer =/= undefined,
-          logged => Logged},
-    [{data, [{"State", S}]}].
+format_status(#{state := #state{
+                            queue_ref = QueueRef,
+                            exchange_ref = ExchangeRef,
+                            routing_key = RoutingKey,
+                            dlx_client_state = DlxClientState,
+                            queue_type_state = QueueTypeState,
+                            pendings = Pendings,
+                            settled_ids = SettledIds,
+                            next_out_seq = NextOutSeq,
+                            settle_timeout = SettleTimeout,
+                            timer = Timer,
+                            logged = Logged
+                           }} = Status) ->
+    Status#{state :=
+             #{queue_ref => QueueRef,
+               exchange_ref => ExchangeRef,
+               routing_key => RoutingKey,
+               dlx_client_state => rabbit_fifo_dlx_client:overview(DlxClientState),
+               queue_type_state => QueueTypeState,
+               pendings => maps:map(fun(_, P) -> format_pending(P) end, Pendings),
+               settled_ids => SettledIds,
+               next_out_seq => NextOutSeq,
+               settle_timeout => SettleTimeout,
+               timer_is_active => Timer =/= undefined,
+               logged => Logged}
+           }.
 
 format_pending(#pending{consumed_msg_id = ConsumedMsgId,
                         delivery = _DoNotLogLargeBinary,
