@@ -87,7 +87,8 @@
 -type consumer_meta() :: #{ack => boolean(),
                            username => binary(),
                            prefetch => non_neg_integer(),
-                           args => list()
+                           args => list(),
+                           priority => non_neg_integer()
                            % %% set if and only if credit API v2 is in use
                            % initial_delivery_count => rabbit_queue_type:delivery_count()
                           }.
@@ -122,7 +123,7 @@
 
 -record(consumer,
         {cfg = #consumer_cfg{},
-         status = up :: up | suspected_down | cancelled | waiting,
+         status = up :: up | suspected_down | cancelled | fading,
          next_msg_id = 0 :: msg_id(),
          checked_out = #{} :: #{msg_id() => msg()},
          %% max number of messages that can be sent
