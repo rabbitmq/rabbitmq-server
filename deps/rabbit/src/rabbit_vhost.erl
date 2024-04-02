@@ -318,13 +318,17 @@ put_vhost(Name, Description, Tags0, Trace, Username) ->
     boolean(),
     rabbit_types:username()) ->
     'ok' | {'error', any()} | {'EXIT', any()}.
-put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
+put_vhost(Name, Description, Tags0, DefaultQueueType0, Trace, Username) ->
     Tags = case Tags0 of
       undefined   -> <<"">>;
       null        -> <<"">>;
       "undefined" -> <<"">>;
       "null"      -> <<"">>;
       Other       -> Other
+    end,
+    DefaultQueueType = case DefaultQueueType0 of
+        <<"undefined">> -> undefined;
+        _ -> DefaultQueueType0
     end,
     ParsedTags = parse_tags(Tags),
     rabbit_log:debug("Parsed tags ~tp to ~tp", [Tags, ParsedTags]),
