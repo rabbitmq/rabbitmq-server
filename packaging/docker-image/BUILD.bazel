@@ -7,16 +7,6 @@ load(
     "oci_tarball",
 )
 
-FIRECRACKER_EXEC_PROPS = {
-    # https://www.buildbuddy.io/docs/rbe-microvms
-    "workload-isolation-type": "firecracker",
-    "EstimatedFreeDiskBytes": "16GB",
-    "init-dockerd": "true",
-    "recycle-runner": "true",
-    # Use the default buildbuddy RBE image
-    "container-image": "",
-}
-
 filegroup(
     name = "context-files",
     srcs = [
@@ -65,7 +55,6 @@ docker buildx \\
             arch = arch,
             tag = "bazel/%s/docker-build" % package_name(),
         ),
-        exec_properties = FIRECRACKER_EXEC_PROPS,
         tags = _TAGS,
     )
     for arch in _ARCHS
@@ -113,7 +102,6 @@ oci_tarball(
     container_structure_test(
         name = "rabbitmq_test_%s" % arch,
         configs = ["//packaging/docker-image/test_configs:rabbitmq_ubuntu.yaml"],
-        exec_properties = FIRECRACKER_EXEC_PROPS,
         image = ":image-%s" % arch,
         tags = _TAGS,
     )
