@@ -89,13 +89,11 @@ jobs:
 
       - name: Tag and Push
         if: steps.authorized.outputs.PUSH == 'true'
-        env:
-          image_tag_suffix: otp-max-bazel
         run: |
-          TAG_1="${{ env.VERSION }}-${{ env.image_tag_suffix }}"
+          TAG_1="${{ env.VERSION }}"
 
           REF_NAME="${{ github.ref_name }}"
-          TAG_2="${REF_NAME//\//-}-${{ env.image_tag_suffix }}"
+          TAG_2="${REF_NAME//\//-}"
 
           set -x
           bazelisk run //packaging/docker-image:push \
