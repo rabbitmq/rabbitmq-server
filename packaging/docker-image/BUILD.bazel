@@ -27,6 +27,13 @@ _ARCHS = [
     "arm64",
 ]
 
+_TAGS = [
+    "docker",
+    "manual",
+    "no-sandbox",
+    "no-remote-exec", # buildbuddy runners do not have the emulator available
+]
+
 [
     genrule(
         name = "docker-build-%s" % arch,
@@ -53,12 +60,7 @@ docker buildx \\
             tag = "bazel/%s/docker-build" % package_name(),
         ),
         exec_properties = FIRECRACKER_EXEC_PROPS,
-        tags = [
-            "docker",
-            "manual",
-            "no-sandbox",
-            "no-remote-exec", # buildbuddy runners do not have the emulator available
-        ],
+        tags = _TAGS,
     )
     for arch in _ARCHS
 ]
@@ -68,10 +70,7 @@ docker buildx \\
         name = "rabbitmq-%s" % arch,
         architecture = arch,
         os = "linux",
-        tags = [
-            "docker",
-            "manual",
-        ],
+        tags = _TAGS,
         tars = [":image-%s.tar" % arch],
     )
     for arch in _ARCHS
@@ -95,10 +94,7 @@ oci_image_index(
         configs = ["//packaging/docker-image/test_configs:rabbitmq_ubuntu.yaml"],
         exec_properties = FIRECRACKER_EXEC_PROPS,
         image = ":rabbitmq-%s" % arch,
-        tags = [
-            "docker",
-            "manual",
-        ],
+        tags = _TAGS,
     )
     for arch in _ARCHS
 ]
@@ -107,4 +103,5 @@ oci_push(
     name = "push",
     image = ":rabbitmq",
     repository = "index.docker.io/pivotalrabbitmq/rabbitmq",
+    tags = _TAGS,
 )

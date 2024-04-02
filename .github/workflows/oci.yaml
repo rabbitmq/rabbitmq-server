@@ -46,8 +46,6 @@ jobs:
             build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
             build:buildbuddy --color=yes
 
-            build:buildbuddy --remote_download_toplevel
-
             build --experimental_ui_max_stdouterr_bytes=4194304
             build --action_env EXTRA_BUILDX_OPTS="--cache-from=type=gha --cache-to=type=gha"
           EOF
