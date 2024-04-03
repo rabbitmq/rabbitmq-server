@@ -133,6 +133,9 @@
 -record(pending_transfer, {
           frames :: iolist(),
           queue_ack_required :: boolean(),
+          %% Queue that sent us this message.
+          %% When feature flag credit_api_v2 becomes required, this field should be deleted.
+          queue_pid :: pid() | credit_api_v2,
           delivery_id :: delivery_number(),
           outgoing_unsettled :: #outgoing_unsettled{}
          }).
@@ -1253,10 +1256,31 @@ send_pending(#state{remote_incoming_window = Space,
             Flow = session_flow_fields(Flow0, State0),
             rabbit_amqp_writer:send_command(WriterPid, Ch, Flow),
             send_pending(State0#state{outgoing_pending = Buf});
-        {{value, #pending_transfer{frames = Frames} = Pending}, Buf1}
+        {{value, #pending_transfer{
+                    frames = Frames,
+                    queue_pid = QPid,
+                    outgoing_unsettled = #outgoing_unsettled{queue_name = QName}
+                   } = Pending}, Buf1}
           when Space > 0 ->
+            SendFun = case QPid of
+                          credit_api_v2 ->
+                              send_fun(WriterPid, Ch);
+                          _ ->
+                              case rabbit_queue_type:module(QName, State0#state.queue_states) of
+                                  {ok, rabbit_classic_queue} ->
+                                      %% Classic queue client and classic queue process that
+                                      %% communicate via credit API v1 use RabbitMQ internal
+                                      %% credit flow control.
+                                      fun(Transfer, Sections) ->
+                                              rabbit_amqp_writer:send_command_and_notify(
+                                                WriterPid, Ch, QPid, self(), Transfer, Sections)
+                                      end;
+                                  {ok, _QType} ->
+                                      send_fun(WriterPid, Ch)
+                              end
+                      end,
             {NumTransfersSent, Buf, State1} =
-            case send_frames(WriterPid, Ch, Frames, Space) of
+            case send_frames(SendFun, Frames, Space) of
                 {sent_all, SpaceLeft} ->
                     {Space - SpaceLeft,
                      Buf1,
@@ -1271,8 +1295,9 @@ send_pending(#state{remote_incoming_window = Space,
             send_pending(State);
         {{value, Pending = #pending_management_transfer{frames = Frames}}, Buf1}
           when Space > 0 ->
+            SendFun = send_fun(WriterPid, Ch),
             {NumTransfersSent, Buf} =
-            case send_frames(WriterPid, Ch, Frames, Space) of
+            case send_frames(SendFun, Frames, Space) of
                 {sent_all, SpaceLeft} ->
                     {Space - SpaceLeft, Buf1};
                 {sent_some, Rest} ->
@@ -1285,13 +1310,18 @@ send_pending(#state{remote_incoming_window = Space,
             State0
     end.
 
-send_frames(_, _, [], SpaceLeft) ->
+send_frames(_, [], SpaceLeft) ->
     {sent_all, SpaceLeft};
-send_frames(_, _, Rest, 0) ->
+send_frames(_, Rest, 0) ->
     {sent_some, Rest};
-send_frames(Writer, Ch, [[Transfer, Sections] | Rest], SpaceLeft) ->
-    rabbit_amqp_writer:send_command(Writer, Ch, Transfer, Sections),
-    send_frames(Writer, Ch, Rest, SpaceLeft - 1).
+send_frames(SendFun, [[Transfer, Sections] | Rest], SpaceLeft) ->
+    SendFun(Transfer, Sections),
+    send_frames(SendFun, Rest, SpaceLeft - 1).
+
+send_fun(WriterPid, Ch) ->
+    fun(Transfer, Sections) ->
+            rabbit_amqp_writer:send_command(WriterPid, Ch, Transfer, Sections)
+    end.
 
 record_outgoing_unsettled(#pending_transfer{queue_ack_required = true,
                                             delivery_id = DeliveryId,
@@ -1532,7 +1562,7 @@ handle_queue_actions(Actions, State) ->
       end, State, Actions).
 
 handle_deliver(ConsumerTag, AckRequired,
-               Msg = {QName, _QPid, MsgId, Redelivered, Mc0},
+               Msg = {QName, QPid0, MsgId, Redelivered, Mc0},
                State = #state{outgoing_pending = Pending,
                               outgoing_delivery_id = DeliveryId,
                               outgoing_links = OutgoingLinks0,
@@ -1565,13 +1595,15 @@ handle_deliver(ConsumerTag, AckRequired,
             Frames = transfer_frames(Transfer, Sections, MaxFrameSize),
             messages_delivered(Redelivered, QType),
             rabbit_trace:tap_out(Msg, ConnName, ChannelNum, Username, Trace),
-            OutgoingLinks = case DelCount of
-                                credit_api_v2 ->
-                                    OutgoingLinks0;
-                                {credit_api_v1, C} ->
-                                    Link = Link0#outgoing_link{delivery_count = {credit_api_v1, add(C, 1)}},
-                                    maps:update(Handle, Link, OutgoingLinks0)
-                            end,
+            {OutgoingLinks, QPid
+            } = case DelCount of
+                    credit_api_v2 ->
+                        {OutgoingLinks0, credit_api_v2};
+                    {credit_api_v1, C} ->
+                        Link = Link0#outgoing_link{delivery_count = {credit_api_v1, add(C, 1)}},
+                        OutgoingLinks1 = maps:update(Handle, Link, OutgoingLinks0),
+                        {OutgoingLinks1, QPid0}
+                end,
             Del = #outgoing_unsettled{
                      msg_id = MsgId,
                      consumer_tag = ConsumerTag,
@@ -1579,6 +1611,7 @@ handle_deliver(ConsumerTag, AckRequired,
             PendingTransfer = #pending_transfer{
                                  frames = Frames,
                                  queue_ack_required = AckRequired,
+                                 queue_pid = QPid,
                                  delivery_id = DeliveryId,
                                  outgoing_unsettled = Del},
             State#state{outgoing_pending = queue:in(PendingTransfer, Pending),

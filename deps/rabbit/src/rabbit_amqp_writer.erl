@@ -15,6 +15,7 @@
          send_command/3,
          send_command/4,
          send_command_sync/3,
+         send_command_and_notify/6,
          internal_send_command/3]).
 
 %% gen_server callbacks
@@ -70,6 +71,17 @@ send_command_sync(Writer, ChannelNum, MethodRecord) ->
     Request = {send_command, ChannelNum, MethodRecord},
     gen_server:call(Writer, Request, ?CALL_TIMEOUT).
 
+%% Delete this function when feature flag credit_api_v2 becomes required.
+-spec send_command_and_notify(pid(),
+                              rabbit_types:channel_number(),
+                              pid(),
+                              pid(),
+                              rabbit_framing:amqp_method_record(),
+                              rabbit_types:content()) -> ok.
+send_command_and_notify(Writer, ChannelNum, QueuePid, SessionPid, MethodRecord, Content) ->
+    Request = {send_command_and_notify, ChannelNum, QueuePid, SessionPid, MethodRecord, Content},
+    gen_server:cast(Writer, Request).
+
 -spec internal_send_command(rabbit_net:socket(),
                             rabbit_framing:amqp_method_record(),
                             amqp10_framing | rabbit_amqp_sasl) -> ok.
@@ -95,6 +107,11 @@ handle_cast({send_command, ChannelNum, MethodRecord}, State0) ->
     no_reply(State);
 handle_cast({send_command, ChannelNum, MethodRecord, Content}, State0) ->
     State = internal_send_command_async(ChannelNum, MethodRecord, Content, State0),
+    no_reply(State);
+%% Delete below function clause when feature flag credit_api_v2 becomes required.
+handle_cast({send_command_and_notify, ChannelNum, QueuePid, SessionPid, MethodRecord, Content}, State0) ->
+    State = internal_send_command_async(ChannelNum, MethodRecord, Content, State0),
+    rabbit_amqqueue:notify_sent(QueuePid, SessionPid),
     no_reply(State).
 
 handle_call({send_command, ChannelNum, MethodRecord}, _From, State0) ->
@@ -104,7 +121,11 @@ handle_call({send_command, ChannelNum, MethodRecord}, _From, State0) ->
 
 handle_info(timeout, State0) ->
     State = flush(State0),
-    {noreply, State}.
+    {noreply, State};
+%% Delete below function clause when feature flag credit_api_v2 becomes required.
+handle_info({'DOWN', _MRef, process, QueuePid, _Reason}, State) ->
+    rabbit_amqqueue:notify_sent_queue_down(QueuePid),
+    no_reply(State).
 
 format_status(Status) ->
     maps:update_with(
