@@ -19,10 +19,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-<<<<<<< HEAD
-      - name: Mount Bazel Cache
-        uses: actions/cache@v4.0.0
-=======
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -31,7 +27,6 @@ jobs:
 
       - name: Configure Erlang
         uses: erlef/setup-beam@v1
->>>>>>> c9ab302e79 (Remove rules_docker in favor of rules_oci (#10869))
         with:
           otp-version: 26.2
           elixir-version: 1.15

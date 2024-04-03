@@ -41,17 +41,6 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
-<<<<<<< HEAD
-    - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v4.0.0
-      with:
-        path: "/home/runner/repo-cache/"
-        key: ${{ runner.os }}-repo-cache-${{ hashFiles('MODULE.bazel','WORKSPACE','bazel/bzlmod/secondary_umbrella.bzl') }}
-        restore-keys: |
-          ${{ runner.os }}-repo-cache-
-        save-always: true
-=======
->>>>>>> c9ab302e79 (Remove rules_docker in favor of rules_oci (#10869))
     - name: CONFIGURE BAZEL
       run: |
         if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
