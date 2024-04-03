@@ -180,6 +180,17 @@
          clear_forced_metadata_store/0]).
 -endif.
 
+-type timeout_error() :: khepri:error(timeout).
+%% Commands like 'put'/'delete' etc. might time out in Khepri. It might take
+%% the leader longer to apply the command and reply to the caller than the
+%% configured timeout. This error is easy to reproduce - a cluster which is
+%% only running a minority of nodes will consistently return `{error, timeout}`
+%% for commands until the cluster majority can be re-established. Commands
+%% returning `{error, timeout}` are a likely (but not certain) indicator that
+%% the node which submitted the command is running in a minority.
+
+-export_type([timeout_error/0]).
+
 -compile({no_auto_import, [get/1, get/2, nodes/0]}).
 
 -define(RA_SYSTEM, coordination).
