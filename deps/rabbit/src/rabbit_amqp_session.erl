@@ -2090,7 +2090,6 @@ process_credit_reply_sync(
                      {queue_event,
                       QName,
                       {send_credit_reply, Avail}}} ->
-                        %% Convert to credit_api_v2 action.
                         Action = {credit_reply_v1, Ctag, Credit, Avail, false},
                         handle_queue_actions([Action], State)
             after ?CREDIT_REPLY_TIMEOUT ->
