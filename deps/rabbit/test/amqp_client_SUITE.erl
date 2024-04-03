@@ -2465,12 +2465,8 @@ queue_and_client_different_nodes(QueueLeaderNode, ClientNode, QueueType, Config)
            true,
            accepted),
 
-    CreditApiV2 = rpc(Config, rabbit_feature_flags, is_enabled, [credit_api_v2]),
-    case QueueType =:= <<"quorum">> andalso not CreditApiV2 of
+    case rpc(Config, rabbit_feature_flags, is_enabled, [credit_api_v2]) of
         true ->
-            ct:pal("Quorum queues in credit API v1 have a known bug that they "
-                   "reply with send_drained before delivering the message.");
-        false ->
             %% Send another message and drain.
             Tag = <<"tag">>,
             Body = <<"body">>,
@@ -2482,7 +2478,11 @@ queue_and_client_different_nodes(QueueLeaderNode, ClientNode, QueueType, Config)
             receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
             after 5000 -> ct:fail("expected credit_exhausted")
             end,
-            ok = amqp10_client:accept_msg(Receiver, Msg)
+            ok = amqp10_client:accept_msg(Receiver, Msg);
+        false ->
+            ct:pal("Both quorum queues and classic queues in credit API v1
+                   have a known bug that they reply with send_drained
+                   before delivering the message.")
     end,
 
     ExpectedReadyMsgs = 0,
