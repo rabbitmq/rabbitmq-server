@@ -180,6 +180,10 @@
          clear_forced_metadata_store/0]).
 -endif.
 
+-type timeout_error() :: khepri:error(timeout).
+
+-export_type([timeout_error/0]).
+
 -compile({no_auto_import, [get/1, get/2, nodes/0]}).
 
 -define(RA_SYSTEM, coordination).
