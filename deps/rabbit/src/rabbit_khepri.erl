@@ -287,7 +287,9 @@ wait_for_leader(Timeout, Retries) ->
         Exists when is_boolean(Exists) ->
             rabbit_log:info("Khepri leader elected"),
             ok;
-        {error, {timeout, _ServerId}} ->
+        {error, timeout} -> %% Khepri >= 0.14.0
+            wait_for_leader(Timeout, Retries -1);
+        {error, {timeout, _ServerId}} -> %% Khepri < 0.14.0
             wait_for_leader(Timeout, Retries -1);
         {error, Reason} ->
             throw(Reason)
@@ -491,13 +493,13 @@ remove_down_member(NodeToRemove) ->
                [NodeToRemove, ?RA_CLUSTER_NAME, Reason],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
             Error;
-        {timeout, _} = Reason ->
+        {timeout, _LeaderId} ->
             ?LOG_ERROR(
                "Failed to remove remote down node ~s from Khepri "
-               "cluster \"~s\": ~p",
-               [NodeToRemove, ?RA_CLUSTER_NAME, Reason],
+               "cluster \"~s\" due to timeout",
+               [NodeToRemove, ?RA_CLUSTER_NAME],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-            {error, Reason}
+            {error, timeout}
     end.
 
 %% @private
