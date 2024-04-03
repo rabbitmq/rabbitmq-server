@@ -15,9 +15,8 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        include:
-          - image_tag_suffix: otp-max-bazel
-            otp_version_id: 26_2
+        otp_version_id:
+          - 26_2
     timeout-minutes: 45
     steps:
     - name: CHECKOUT REPOSITORY
@@ -26,17 +25,9 @@ jobs:
       uses: lewagon/wait-on-check-action@v1.3.3
       with:
         ref: ${{ github.ref }}
-        check-name: build-publish-dev-bazel (${{ matrix.image_tag_suffix }}, ${{ matrix.otp_version_id }})
+        check-name: build-publish-dev-bazel
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         wait-interval: 30 # seconds
-    - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v4.0.0
-      with:
-        path: "/home/runner/repo-cache/"
-        key: ${{ runner.os }}-repo-cache-${{ hashFiles('MODULE.bazel','WORKSPACE','bazel/bzlmod/secondary_umbrella.bzl') }}
-        restore-keys: |
-          ${{ runner.os }}-repo-cache-
-        save-always: true
     - name: CONFIGURE BAZEL
       run: |
         cat << EOF >> user.bazelrc
@@ -44,9 +35,7 @@ jobs:
 
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
-          build:buildbuddy --repository_cache=/home/runner/repo-cache/
           build:buildbuddy --color=yes
-          build:buildbuddy --disk_cache=
         EOF
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
@@ -62,6 +51,6 @@ jobs:
           --build_tests_only \
           --test_env AWS_ACCESS_KEY_ID=${{ secrets.CONCOURSE_AWS_ACCESS_KEY_ID }} \
           --test_env AWS_SECRET_ACCESS_KEY=${{ secrets.CONCOURSE_AWS_SECRET_ACCESS_KEY }} \
-          --test_env RABBITMQ_IMAGE="pivotalrabbitmq/rabbitmq:${{ github.sha }}-otp-max-bazel" \
+          --test_env RABBITMQ_IMAGE="pivotalrabbitmq/rabbitmq:${{ github.sha }}" \
           --test_env AWS_ECS_CLUSTER_NAME="rabbitmq-peer-discovery-aws-actions-${branch_or_tag//[._]/-}" \
           --verbose_failures

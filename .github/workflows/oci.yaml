@@ -8,47 +8,31 @@ on:
       - '.github/workflows/update-otp-patches.yaml'
   workflow_dispatch:
 env:
-  GENERIC_UNIX_ARCHIVE: ${{ github.workspace }}/bazel-bin/package-generic-unix.tar.xz
-  RABBITMQ_VERSION: ${{ github.event.pull_request.head.sha || github.sha }}
   VERSION: ${{ github.event.pull_request.head.sha || github.sha }}
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
-
-  # This job will build one docker image per supported Erlang major version.
-  # Each image will have two tags (one containing the Git commit SHA, one containing the branch name).
-  #
-  # For example, for Git commit SHA '111aaa' and branch name 'main' and maximum supported Erlang major version '26',
-  # the following tags will be pushed to Dockerhub:
-  #
-  # * 111aaa-otp-min (image OTP 25)
-  # * main-otp-min (image OTP 25)
-  # * 111aaa-otp-max (image OTP 26)
-  # * main-otp-max (image OTP 26)
-
   build-publish-dev-bazel:
-    runs-on: ubuntu-20.04
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - image_tag_suffix: otp-min-bazel
-            otp_version_id: 26_1
-          - image_tag_suffix: otp-max-bazel
-            otp_version_id: 26_2
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Mount Bazel Cache
-        uses: actions/cache@v4.0.0
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure Erlang
+        uses: erlef/setup-beam@v1
         with:
-          path: "/home/runner/repo-cache/"
-          key: ${{ runner.os }}-repo-cache-${{ hashFiles('MODULE.bazel','WORKSPACE','bazel/bzlmod/secondary_umbrella.bzl') }}
-          restore-keys: |
-            ${{ runner.os }}-repo-cache-
-          save-always: true
+          otp-version: 26.2
+          elixir-version: 1.15
+
+      - name: Expose GitHub Runtime
+        uses: crazy-max/ghaction-github-runtime@v3
 
       - name: Configure Bazel
         run: |
@@ -60,35 +44,27 @@ jobs:
           cat << EOF >> user.bazelrc
             build:buildbuddy --build_metadata=ROLE=CI
             build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
-            build:buildbuddy --repository_cache=/home/runner/repo-cache/
             build:buildbuddy --color=yes
-            build:buildbuddy --disk_cache=
 
-            build:buildbuddy --remote_download_toplevel
+            build --experimental_ui_max_stdouterr_bytes=4194304
+            build --action_env EXTRA_BUILDX_OPTS="--cache-from=type=gha --cache-to=type=gha"
           EOF
 
-      - name: Configure otp for the OCI image
+      - name: Build amd64
         run: |
-          sudo npm install --global --silent @bazel/buildozer
+          bazelisk build //packaging/docker-image:rabbitmq-amd64 \
+            --config=buildbuddy
 
-          buildozer 'set tars ["@otp_src_${{ matrix.otp_version_id }}//file"]' \
-            //packaging/docker-image:otp_source
-
-      - name: Build
+      - name: Build arm64
         run: |
-          bazelisk build //packaging/docker-image:rabbitmq \
-            --config=rbe-${{ matrix.otp_version_id }}
+          bazelisk build //packaging/docker-image:rabbitmq-arm64 \
+            --config=buildbuddy
 
       - name: Test
         run: |
           OCI_TESTS=$(bazel cquery 'tests(//packaging/docker-image/...)' | awk '{ print $1 }')
           bazelisk test ${OCI_TESTS} \
-            --config=rbe-${{ matrix.otp_version_id }}
-
-      - name: Load
-        run: |
-          bazelisk run //packaging/docker-image:rabbitmq \
-            --config=rbe-${{ matrix.otp_version_id }}
+            --config=buildbuddy
 
       - name: Check for Push Credentials
         id: authorized
@@ -98,6 +74,11 @@ jobs:
           else
             echo "PUSH=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Assemble Multi-Arch
+        run: |
+          bazelisk build //packaging/docker-image:rabbitmq \
+            --config=buildbuddy
 
       - name: Login to DockerHub
         if: steps.authorized.outputs.PUSH == 'true'
@@ -109,16 +90,16 @@ jobs:
       - name: Tag and Push
         if: steps.authorized.outputs.PUSH == 'true'
         run: |
-          TAG_1="${{ github.event.pull_request.head.sha || github.sha }}-${{ matrix.image_tag_suffix }}"
-          TAG_2="${GITHUB_REF##*/}-${{ matrix.image_tag_suffix }}"
+          TAG_1="${{ env.VERSION }}"
 
-          docker tag bazel/packaging/docker-image:rabbitmq \
-            pivotalrabbitmq/rabbitmq:${TAG_1}
-          docker tag bazel/packaging/docker-image:rabbitmq \
-            pivotalrabbitmq/rabbitmq:${TAG_2}
+          REF_NAME="${{ github.ref_name }}"
+          TAG_2="${REF_NAME//\//-}"
 
-          docker push pivotalrabbitmq/rabbitmq:${TAG_1}
-          docker push pivotalrabbitmq/rabbitmq:${TAG_2}
+          set -x
+          bazelisk run //packaging/docker-image:push \
+            --config=buildbuddy -- \
+              --tag ${TAG_1} \
+              --tag ${TAG_2}
 
   summary-oci:
     needs:
