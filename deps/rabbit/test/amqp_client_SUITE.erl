@@ -2230,11 +2230,13 @@ async_notify_settled_stream(Config) ->
     async_notify(settled, <<"stream">>, Config).
 
 async_notify_unsettled_classic_queue(Config) ->
-    %% TODO Bump old version in mixed version tests to 3.13.x,
-    %% require ff message_containers and always run this test case.
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers) of
-        ok -> async_notify(unsettled, <<"classic">>, Config);
-        {skip, _} = Skip -> Skip
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, credit_api_v2) of
+        ok ->
+            async_notify(unsettled, <<"classic">>, Config);
+        {skip, _} ->
+            {skip, "Skipping as this test will flake. Link flow control in classic "
+             "queues with credit API v1 is known to be broken: "
+             "https://github.com/rabbitmq/rabbitmq-server/issues/2597"}
     end.
 
 async_notify_unsettled_quorum_queue(Config) ->
