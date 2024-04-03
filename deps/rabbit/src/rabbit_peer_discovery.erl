@@ -392,15 +392,16 @@ query_node_props(Nodes) when Nodes =/= [] ->
     VMArgs3 = maybe_add_proto_dist_arguments(VMArgs2),
     VMArgs4 = maybe_add_inetrc_arguments(VMArgs3),
     VMArgs5 = maybe_add_tls_arguments(VMArgs4),
+    PeerStartArg0 = #{name => PeerName,
+                      args => VMArgs5,
+                      connection => standard_io,
+                      wait_boot => infinity},
     PeerStartArg = case Context of
                        #{nodename_type := longnames} ->
-                           #{name => PeerName,
-                             host => Suffix,
-                             longnames => true,
-                             args => VMArgs5};
+                           PeerStartArg0#{host => Suffix,
+                                          longnames => true};
                        _ ->
-                           #{name => PeerName,
-                             args => VMArgs5}
+                           PeerStartArg0
                    end,
     ?LOG_DEBUG("Peer discovery: peer node arguments: ~tp",
                [PeerStartArg]),
@@ -412,7 +413,7 @@ query_node_props(Nodes) when Nodes =/= [] ->
                [Peer],
                #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
             try
-                erpc:call(Peer, ?MODULE, do_query_node_props, [Nodes])
+                peer:call(Pid, ?MODULE, do_query_node_props, [Nodes], 180000)
             after
                 peer:stop(Pid)
             end;
@@ -658,6 +659,8 @@ query_node_props2([], NodesAndProps, ProxyGroupLeader) ->
     after 120_000 ->
               ok
     end,
+    ?assertEqual([], nodes()),
+    ?assert(length(NodesAndProps2) =< length(nodes(hidden))),
     NodesAndProps2.
 
 -spec get_node_start_time(Node, Unit, ProxyGroupLeader) -> StartTime when
