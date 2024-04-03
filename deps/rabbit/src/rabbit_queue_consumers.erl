@@ -48,7 +48,7 @@
              %% The limiter itself
              limiter,
              %% Internal flow control for queue -> writer
-             unsent_message_count,
+             unsent_message_count :: non_neg_integer(),
              link_states :: #{rabbit_types:ctag() => #link_state{}}
             }).
 
@@ -271,11 +271,11 @@ deliver(FetchFun, QName, ConsumersChanged,
             end
     end.
 
-deliver_to_consumer(FetchFun, E = {ChPid, Consumer}, QName) ->
-    C = lookup_ch(ChPid),
+deliver_to_consumer(FetchFun,
+                    E = {ChPid, Consumer = #consumer{tag = CTag}},
+                    QName) ->
+    C = #cr{link_states = LinkStates} = lookup_ch(ChPid),
     ChBlocked = is_ch_blocked(C),
-    LinkStates = C#cr.link_states,
-    CTag = Consumer#consumer.tag,
     case LinkStates of
         #{CTag := #link_state{delivery_count = DeliveryCount0,
                               credit = Credit} = LinkState0} ->
