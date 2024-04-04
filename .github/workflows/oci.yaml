@@ -151,6 +151,8 @@ jobs:
           docker buildx --help
 
           docker buildx build \
+            --cache-from=type=gha \
+            --cache-to=type=gha \
             ${PUSH_FLAG} \
             --tag ${{ steps.tag.outputs.full_tag }} \
             .
