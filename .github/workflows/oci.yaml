@@ -154,13 +154,17 @@ jobs:
             PUSH_FLAG=""
           fi
 
-          docker \
-            buildx build \
-              --cache-from=type=gha \
-              --cache-to=type=gha \
-              ${PUSH_FLAG} \
-              --tag ${{ steps.tag.outputs.full_tag }} \
-              .
+          docker buildx create \
+            --name container \
+            --driver=docker-container
+
+          docker buildx build \
+            --builder=container \
+            --cache-from=type=gha \
+            --cache-to=type=gha \
+            ${PUSH_FLAG} \
+            --tag ${{ steps.tag.outputs.full_tag }} \
+            .
 
   build-publish-dev-bazel:
     runs-on: ubuntu-latest
