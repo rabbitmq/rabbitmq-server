@@ -116,6 +116,9 @@ jobs:
     outputs:
       full_tag: ${{ steps.tag.outputs.full_tag }}
     steps:
+      - name: Install Docker
+        run: |
+          brew install docker
       - name: Download context
         uses: actions/download-artifact@v4
         with:
