@@ -118,7 +118,7 @@ jobs:
 
   build-arm64:
     needs: generate-context
-    runs-on: macos-latest
+    runs-on: macos-14
     outputs:
       full_tag: ${{ steps.tag.outputs.full_tag }}
     steps:
