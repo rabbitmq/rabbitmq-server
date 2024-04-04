@@ -148,6 +148,8 @@ jobs:
             PUSH_FLAG=""
           fi
 
+          docker buildx --help
+
           docker buildx build \
             --cache-from=type=gha \
             --cache-to=type=gha \
