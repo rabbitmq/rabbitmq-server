@@ -47,10 +47,14 @@ jobs:
       - name: Assemble Contenxt
         run: |
           mkdir ${{ env.CONTEXT_DIR }}
-          cp \
+          cp -r \
             rabbitmq-server/bazel-bin/package-generic-unix.tar.xz \
             rabbitmq-server/packaging/docker-image/* \
             ${{ env.CONTEXT_DIR }}
+
+          rm -r ${{ env.CONTEXT_DIR }}/test_configs
+          rm ${{ env.CONTEXT_DIR }}/BUILD.bazel
+          rm ${{ env.CONTEXT_DIR }}/Makefile
 
           tree ${{ env.CONTEXT_DIR }}
 
