@@ -825,6 +825,13 @@ can_use_discovered_nodes(_DiscoveredNodes, []) ->
 %%
 %% @private
 
+select_node_to_join([{Node, _Members, _StartTime, _IsReady} | _])
+  when Node =:= node() ->
+    ?LOG_INFO(
+       "Peer discovery: node '~ts' selected for auto-clustering",
+       [Node],
+       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+    Node;
 select_node_to_join([{Node, _Members, _StartTime, IsReady} | _])
   when IsReady =/= false ->
     ?LOG_INFO(
