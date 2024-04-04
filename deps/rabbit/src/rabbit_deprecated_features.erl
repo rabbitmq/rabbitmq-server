@@ -589,12 +589,12 @@ maybe_log_warning(FeatureName, Permitted) ->
 
 should_log_warning(FeatureName) ->
     Key = ?PT_DEPRECATION_WARNING_TS(FeatureName),
-    Now = erlang:timestamp(),
+    Now = erlang:monotonic_time(),
     try
         Last = persistent_term:get(Key),
-        Diff = timer:now_diff(Now, Last),
+        Diff = erlang:convert_time_unit(Now - Last, native, second),
         if
-            Diff >= 24 * 60 * 60 * 1000 * 1000 ->
+            Diff >= 24 * 60 * 60 ->
                 persistent_term:put(Key, Now),
                 true;
             true ->

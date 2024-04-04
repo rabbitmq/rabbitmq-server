@@ -880,21 +880,22 @@ cluster_nodes1(_, _, _, []) ->
     ok.
 
 handle_nodes_in_parallel(NodeConfigs, Fun) ->
-    T0 = erlang:timestamp(),
+    T0 = erlang:monotonic_time(),
     Parent = self(),
     Procs = [
              begin
                  timer:sleep(rand:uniform(1000)),
       spawn_link(fun() ->
-                         T1 = erlang:timestamp(),
+                         T1 = erlang:monotonic_time(),
                          Ret = Fun(NodeConfig),
-                         T2 = erlang:timestamp(),
+                         T2 = erlang:monotonic_time(),
                          ct:pal(
                            ?LOW_IMPORTANCE,
                            "Time to run ~tp for node ~ts: ~b us",
                           [Fun,
                            ?config(nodename, NodeConfig),
-                           timer:now_diff(T2, T1)]),
+                           erlang:convert_time_unit(
+                             T2 - T1, native, microsecond)]),
                          Parent ! {parallel_handling_ret,
                                    self(),
                                    NodeConfig,
@@ -905,11 +906,11 @@ handle_nodes_in_parallel(NodeConfigs, Fun) ->
     wait_for_node_handling(Procs, Fun, T0, []).
 
 wait_for_node_handling([], Fun, T0, Results) ->
-    T3 = erlang:timestamp(),
+    T3 = erlang:monotonic_time(),
     ct:pal(
       ?LOW_IMPORTANCE,
       "Time to run ~tp for all nodes: ~b us",
-      [Fun, timer:now_diff(T3, T0)]),
+      [Fun, erlang:convert_time_unit(T3 - T0, native, microsecond)]),
     Results;
 wait_for_node_handling(Procs, Fun, T0, Results) ->
     receive
