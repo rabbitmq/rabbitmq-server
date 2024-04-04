@@ -136,9 +136,8 @@ jobs:
 
           # Link the Docker Buildx plugin so it's understood by the docker CLI
           mkdir -p ~/.docker/cli-plugins
-          ln -sfn /usr/local/opt/docker-buildx/bin/docker-buildx ~/.docker/cli-plugins/docker-buildx
+          ln -sfn /opt/homebrew/lib/docker/cli-plugins/docker-buildx ~/.docker/cli-plugins/docker-buildx
 
-          export DOCKER_CLI_EXPERIMENTAL=enabled
           docker buildx install
       - name: Download context
         uses: actions/download-artifact@v4
