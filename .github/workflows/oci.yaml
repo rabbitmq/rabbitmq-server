@@ -124,9 +124,14 @@ jobs:
     steps:
       - name: Install Docker
         run: |
-          echo "Host Arch: $(uname -m)"
+          HOST_ARCH="$(uname -m)"
+          echo "Host Arch: $HOST_ARCH"
+          if [[ "$HOST_ARCH" != "arm64" ]]; then
+            echo "ERROR: Runner arch is not arm64"
+            exit 1
+          fi
 
-          brew install docker docker-buildx
+          brew install docker docker-buildx colima
 
           # Link the Docker Buildx plugin so it's understood by the docker CLI
           mkdir -p ~/.docker/cli-plugins
