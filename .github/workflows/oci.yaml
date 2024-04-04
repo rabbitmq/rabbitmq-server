@@ -107,7 +107,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
-      - name: Build and push by digest
+      - name: Push
         if: needs.generate-context.outputs.PUSH == 'true'
         run: |
           docker push ${{ steps.tag.outputs.full_tag }}
@@ -149,7 +149,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
-      - name: Build and push by digest
+      - name: Push
         if: needs.generate-context.outputs.PUSH == 'true'
         run: |
           docker push ${{ steps.tag.outputs.full_tag }}
