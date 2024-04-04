@@ -138,6 +138,7 @@ jobs:
           mkdir -p ~/.docker/cli-plugins
           ln -sfn /usr/local/opt/docker-buildx/bin/docker-buildx ~/.docker/cli-plugins/docker-buildx
 
+          export DOCKER_CLI_EXPERIMENTAL=enabled
           docker buildx install
       - name: Download context
         uses: actions/download-artifact@v4
