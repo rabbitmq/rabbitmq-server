@@ -123,9 +123,7 @@ jobs:
     steps:
       - name: Install Docker
         run: |
-          brew install \
-            docker \
-            docker-buildx
+          brew install --cask docker
       - name: Download context
         uses: actions/download-artifact@v4
         with:
@@ -150,13 +148,12 @@ jobs:
             PUSH_FLAG=""
           fi
 
-          docker --host=unix:///Users/runner/.docker/run/docker.sock \
-            buildx build \
-              --cache-from=type=gha \
-              --cache-to=type=gha \
-              ${PUSH_FLAG} \
-              --tag ${{ steps.tag.outputs.full_tag }} \
-              .
+          docker buildx build \
+            --cache-from=type=gha \
+            --cache-to=type=gha \
+            ${PUSH_FLAG} \
+            --tag ${{ steps.tag.outputs.full_tag }} \
+            .
 
   build-publish-dev-bazel:
     runs-on: ubuntu-latest
