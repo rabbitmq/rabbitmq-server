@@ -124,6 +124,8 @@ jobs:
       - name: Install Docker
         run: |
           brew install --cask docker
+
+          brew install docker-buildx
       - name: Download context
         uses: actions/download-artifact@v4
         with:
