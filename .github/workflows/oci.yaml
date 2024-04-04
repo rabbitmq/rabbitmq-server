@@ -149,7 +149,6 @@ jobs:
           fi
 
           docker buildx build \
-            --host=unix:///Users/runner/.docker/run/docker.sock
             --cache-from=type=gha \
             --cache-to=type=gha \
             ${PUSH_FLAG} \
