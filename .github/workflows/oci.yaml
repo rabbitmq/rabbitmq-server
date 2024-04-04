@@ -124,6 +124,8 @@ jobs:
     steps:
       - name: Install Docker
         run: |
+          echo "Host Arch: $(uname -m)"
+
           brew install docker docker-buildx
 
           # Link the Docker Buildx plugin so it's understood by the docker CLI
