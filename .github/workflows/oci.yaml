@@ -123,9 +123,8 @@ jobs:
     steps:
       - name: Install Docker
         run: |
-          brew install --cask docker
-
-          brew install docker-buildx
+          brew install docker
+          colima start
       - name: Download context
         uses: actions/download-artifact@v4
         with:
@@ -150,7 +149,7 @@ jobs:
             PUSH_FLAG=""
           fi
 
-          docker --host=unix:///Users/runner/.docker/run/docker.sock \
+          docker \
             buildx build \
               --cache-from=type=gha \
               --cache-to=type=gha \
