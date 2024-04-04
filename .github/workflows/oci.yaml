@@ -90,9 +90,15 @@ jobs:
         id: tag
         run: |
           echo "full_tag=${{ env.REGISTRY_IMAGE }}:${{ env.VERSION }}-amd64" | tee -a $GITHUB_OUTPUT
+      - name: Expose GitHub Runtime
+        uses: crazy-max/ghaction-github-runtime@v3
       - name: Docker build
         run: |
-          docker build . --tag ${{ steps.tag.outputs.full_tag }}
+          docker buildx build \
+            --cache-from=type=gha \
+            --cache-to=type=gha \
+            --tag ${{ steps.tag.outputs.full_tag }} \
+            .
       - name: Login to DockerHub
         if: needs.generate-context.outputs.PUSH == 'true'
         uses: docker/login-action@v3
@@ -118,9 +124,15 @@ jobs:
         id: tag
         run: |
           echo "full_tag=${{ env.REGISTRY_IMAGE }}:${{ env.VERSION }}-arm64" | tee -a $GITHUB_OUTPUT
+      - name: Expose GitHub Runtime
+        uses: crazy-max/ghaction-github-runtime@v3
       - name: Docker build
         run: |
-          docker build . --tag ${{ steps.tag.outputs.full_tag }}
+          docker buildx build \
+            --cache-from=type=gha \
+            --cache-to=type=gha \
+            --tag ${{ steps.tag.outputs.full_tag }} \
+            .
       - name: Login to DockerHub
         if: needs.generate-context.outputs.PUSH == 'true'
         uses: docker/login-action@v3
