@@ -101,33 +101,72 @@
     ], [rabbitmq_peer_discovery_k8s]
   }
 
-, {k8s_token_path, "cluster_formation.k8s.token_path = /a/b/c", [
+, {k8s_token_path, "cluster_formation.k8s.token_path = test/config_schema_SUITE_data/token.txt", [
         {rabbit, [
             {cluster_formation, [
                 {peer_discovery_k8s, [
-                    {k8s_token_path, "/a/b/c"}
+                    {k8s_token_path, "test/config_schema_SUITE_data/token.txt"}
                 ]}
             ]}
         ]}
     ], [rabbitmq_peer_discovery_k8s]
   }
 
-, {k8s_token_path, "cluster_formation.k8s.cert_path = /a/b/c", [
+, {k8s_ca_certificate_legacy_cert_path, "cluster_formation.k8s.cert_path = test/config_schema_SUITE_data/certs/cacert.pem", [
         {rabbit, [
             {cluster_formation, [
                 {peer_discovery_k8s, [
-                    {k8s_cert_path, "/a/b/c"}
+                    {k8s_cert_path, "test/config_schema_SUITE_data/certs/cacert.pem"}
                 ]}
             ]}
         ]}
     ], [rabbitmq_peer_discovery_k8s]
   }
 
-, {k8s_token_path, "cluster_formation.k8s.namespace_path = /a/b/c", [
+, {k8s_ca_certificate_modern_path, "cluster_formation.k8s.tls.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem", [
         {rabbit, [
             {cluster_formation, [
                 {peer_discovery_k8s, [
-                    {k8s_namespace_path, "/a/b/c"}
+                    {ssl_options, [
+                        {cacertfile, "test/config_schema_SUITE_data/certs/cacert.pem"}
+                    ]}
+                ]}
+            ]}
+        ]}
+    ], [rabbitmq_peer_discovery_k8s]
+  }
+
+, {k8s_client_certificate_modern_path, "cluster_formation.k8s.tls.certfile = test/config_schema_SUITE_data/certs/cert.pem", [
+        {rabbit, [
+            {cluster_formation, [
+                {peer_discovery_k8s, [
+                    {ssl_options, [
+                        {certfile, "test/config_schema_SUITE_data/certs/cert.pem"}
+                    ]}
+                ]}
+            ]}
+        ]}
+    ], [rabbitmq_peer_discovery_k8s]
+  }
+
+, {k8s_client_key_modern_path, "cluster_formation.k8s.tls.keyfile = test/config_schema_SUITE_data/certs/key.pem", [
+        {rabbit, [
+            {cluster_formation, [
+                {peer_discovery_k8s, [
+                    {ssl_options, [
+                        {keyfile, "test/config_schema_SUITE_data/certs/key.pem"}
+                    ]}
+                ]}
+            ]}
+        ]}
+    ], [rabbitmq_peer_discovery_k8s]
+  }
+
+, {k8s_namespace_path, "cluster_formation.k8s.namespace_path = test/config_schema_SUITE_data/namespace.txt", [
+        {rabbit, [
+            {cluster_formation, [
+                {peer_discovery_k8s, [
+                    {k8s_namespace_path, "test/config_schema_SUITE_data/namespace.txt"}
                 ]}
             ]}
         ]}

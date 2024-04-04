@@ -116,14 +116,29 @@ make_request() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     {ok, Token} = rabbit_misc:raw_read_file(get_config_key(k8s_token_path, M)),
     Token1 = binary:replace(Token, <<"\n">>, <<>>),
+
+    rabbit_log:debug("Will issue a Kubernetes API request client with the following settings: ~tp", [M]),
+
+    TLSClientOpts0 = maps:get(ssl_options, M, []),
+    LegacyCACertfilePath = get_config_key(k8s_cert_path, M),
+    %% merge legacy CA certificate file argument if TLSClientOpts does not have its modern counterpart set
+    TLSClientOpts = case proplists:get_value(cacertfile, TLSClientOpts0, undefined) of
+        undefined ->
+            [{cacertfile, LegacyCACertfilePath} | TLSClientOpts0];
+        _Other ->
+            TLSClientOpts0
+    end,
+
+    rabbit_log:debug("Will issue a Kubernetes API request client with the following TLS options: ~tp", [TLSClientOpts]),
+
     ?HTTPC_MODULE:get(
       get_config_key(k8s_scheme, M),
       get_config_key(k8s_host, M),
       get_config_key(k8s_port, M),
-      base_path(endpoints,get_config_key(k8s_service_name, M)),
+      base_path(endpoints, get_config_key(k8s_service_name, M)),
       [],
       [{"Authorization", "Bearer " ++ binary_to_list(Token1)}],
-      [{ssl, [{cacertfile, get_config_key(k8s_cert_path, M)}]}]).
+      [{ssl, TLSClientOpts}]).
 
 %% @spec node_name(k8s_endpoint) -> list()
 %% @doc Return a full rabbit node name, appending hostname suffix
