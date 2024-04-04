@@ -123,7 +123,12 @@ jobs:
     steps:
       - name: Install Docker
         run: |
-          brew install docker
+          brew install docker docker-buildx
+
+          # Link the Docker Buildx plugin so it's understood by the docker CLI
+          mkdir -p ~/.docker/cli-plugins
+          ln -sfn /usr/local/opt/docker-buildx/bin/docker-buildx ~/.docker/cli-plugins/docker-buildx
+
           colima start
       - name: Download context
         uses: actions/download-artifact@v4
