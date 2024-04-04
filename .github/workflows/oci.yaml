@@ -41,7 +41,8 @@ jobs:
         working-directory: rabbitmq-server
         run: |
           bazelisk build package-generic-unix \
-            --config=rbe-26_2
+            --config=rbe-26_2 \
+            --remote_download_toplevel
 
       - name: Assemble Contenxt
         run: |
