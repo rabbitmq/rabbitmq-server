@@ -1600,14 +1600,13 @@ drop_local(QNames, #state{subscriptions = Subs,
 drop_local(QNames, _) ->
     QNames.
 
-deliver_to_queues(Message0,
+deliver_to_queues(Message,
                   Options,
                   RoutedToQNames,
                   State0 = #state{queue_states = QStates0,
                                   cfg = #cfg{proto_ver = ProtoVer}}) ->
     Qs0 = rabbit_amqqueue:lookup_many(RoutedToQNames),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
-    Message = compat(Message0, State0),
     case rabbit_queue_type:deliver(Qs, Message, Options, QStates0) of
         {ok, QStates, Actions} ->
             rabbit_global_counters:messages_routed(ProtoVer, length(Qs)),
@@ -2544,18 +2543,4 @@ mc_env() ->
             #{};
         MqttX ->
             #{mqtt_x => MqttX}
-    end.
-
--spec compat(mc:state(), state()) -> mc:state().
-compat(McMqtt, #state{cfg = #cfg{exchange = XName}}) ->
-    case rabbit_feature_flags:is_enabled(message_containers) of
-        true ->
-            McMqtt;
-        false = FFState ->
-            #mqtt_msg{qos = Qos} = mc:protocol_state(McMqtt),
-            [RoutingKey] = mc:routing_keys(McMqtt),
-            McLegacy = mc:convert(mc_amqpl, McMqtt),
-            Content = mc:protocol_state(McLegacy),
-            {ok, BasicMsg} = mc_amqpl:message(XName, RoutingKey, Content, #{}, FFState),
-            rabbit_basic:add_header(<<"x-mqtt-publish-qos">>, byte, Qos, BasicMsg)
     end.

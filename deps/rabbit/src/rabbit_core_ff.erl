@@ -123,9 +123,7 @@
 -rabbit_feature_flag(
    {message_containers,
     #{desc          => "Message containers.",
-      %%TODO Once lower version node in mixed versions is bumped to 3.13,
-      %% make 'required' for upgrading AMQP 1.0 from 3.13 to 4.0
-      stability     => stable,
+      stability     => required,
       depends_on    => [feature_flags_v2]
      }}).
 

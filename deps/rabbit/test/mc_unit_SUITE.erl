@@ -371,7 +371,7 @@ amqpl_cc_amqp_bin_amqpl(_Config) ->
     Content = #content{properties = Props,
                        payload_fragments_rev = [<<"data">>]},
     X = rabbit_misc:r(<<"/">>, exchange, <<"exch">>),
-    {ok, Msg} = mc_amqpl:message(X, <<"apple">>, Content, #{}, true),
+    {ok, Msg} = mc_amqpl:message(X, <<"apple">>, Content, #{}),
 
     RoutingKeys =  [<<"apple">>, <<"q1">>, <<"q2">>],
     ?assertEqual(RoutingKeys, mc:routing_keys(Msg)),
@@ -663,11 +663,12 @@ amqp_amqpl_amqp_bodies(_Config) ->
          Ex = #resource{virtual_host = <<"/">>,
                         kind = exchange,
                         name = <<"ex">>},
-         {ok, LegacyMsg} = mc_amqpl:message(Ex, <<"rkey">>,
+         {ok, LegacyMsg} = mc_amqpl:message(Ex,
+                                            <<"rkey">>,
                                             #content{payload_fragments_rev =
                                                      lists:reverse(EncodedPayload),
                                                      properties = Props},
-                                            #{}, true),
+                                            #{}),
 
          AmqpMsg = mc:convert(mc_amqp, LegacyMsg),
          %% drop any non body sections

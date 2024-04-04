@@ -543,14 +543,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    name = "message_containers_SUITE",
-    size = "medium",
-    additional_beam = [
-        ":test_queue_utils_beam",
-    ],
-)
-
-rabbitmq_integration_suite(
     name = "metrics_SUITE",
     size = "medium",
     deps = [

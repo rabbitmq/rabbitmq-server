@@ -155,22 +155,15 @@ init_per_group(Group, Config) ->
     case lists:member({group, Group}, all()) of
         true ->
             ClusterSize = 3,
-            Config1 = rabbit_ct_helpers:set_config(Config, [
-                {rmq_nodename_suffix, Group},
-                {rmq_nodes_count, ClusterSize}
-              ]),
-            Config2 = rabbit_ct_helpers:run_steps(
-                        Config1,
-                        rabbit_ct_broker_helpers:setup_steps() ++
-                        rabbit_ct_client_helpers:setup_steps()),
-            case Config2 of
-                {skip, _} ->
-                    Config2;
-                _ ->
-                    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config2,
-                                                                     message_containers),
-                    Config2
-            end;
+            Config1 = rabbit_ct_helpers:set_config(
+                        Config, [
+                                 {rmq_nodename_suffix, Group},
+                                 {rmq_nodes_count, ClusterSize}
+                                ]),
+            rabbit_ct_helpers:run_steps(
+              Config1,
+              rabbit_ct_broker_helpers:setup_steps() ++
+              rabbit_ct_client_helpers:setup_steps());
         false ->
             rabbit_ct_helpers:run_steps(Config, [])
     end.

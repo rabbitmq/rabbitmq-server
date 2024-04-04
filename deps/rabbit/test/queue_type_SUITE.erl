@@ -90,9 +90,6 @@ init_per_group0(Group, Config) ->
                 _ ->
                     ok
             end,
-            EnableFF = rabbit_ct_broker_helpers:enable_feature_flag(Config2,
-                                                                    message_containers),
-            ct:pal("message_containers ff ~p", [EnableFF]),
             Config2
     end.
 

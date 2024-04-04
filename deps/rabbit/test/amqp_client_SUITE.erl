@@ -2216,12 +2216,7 @@ target_classic_queue_down(Config) ->
     ok = amqp10_client:close_connection(Connection).
 
 async_notify_settled_classic_queue(Config) ->
-    %% TODO Bump old version in mixed version tests to 3.13.x,
-    %% require ff message_containers and always run this test case.
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers) of
-        ok -> async_notify(settled, <<"classic">>, Config);
-        {skip, _} = Skip -> Skip
-    end.
+    async_notify(settled, <<"classic">>, Config).
 
 async_notify_settled_quorum_queue(Config) ->
     async_notify(settled, <<"quorum">>, Config).
@@ -2402,12 +2397,7 @@ link_flow_control(Config) ->
     ok = amqp10_client:close_connection(Connection).
 
 classic_queue_on_old_node(Config) ->
-    %% TODO Bump old version in mixed version tests to 3.13.x,
-    %% require ff message_containers and always run this test case.
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers) of
-        ok -> queue_and_client_different_nodes(1, 0, <<"classic">>, Config);
-        {skip, _} = Skip -> Skip
-    end.
+    queue_and_client_different_nodes(1, 0, <<"classic">>, Config).
 
 classic_queue_on_new_node(Config) ->
     queue_and_client_different_nodes(0, 1, <<"classic">>, Config).
