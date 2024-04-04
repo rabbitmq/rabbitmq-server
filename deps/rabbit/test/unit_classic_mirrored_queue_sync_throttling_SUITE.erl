@@ -66,7 +66,7 @@ append_to_acc(_Config) ->
                        payload_fragments_rev = [[<<"1234567890">>]]  %% 10 bytes
                       },
     ExName = rabbit_misc:r(<<>>, exchange, <<>>),
-    {ok, Msg} = mc_amqpl:message(ExName, <<>>, Content, #{id => 1}, true),
+    {ok, Msg} = mc_amqpl:message(ExName, <<>>, Content, #{id => 1}),
     BQDepth = 10,
     SyncThroughput_0 = 0,
     FoldAcc1 = {[], 0, {0, erlang:monotonic_time(), SyncThroughput_0}, {0, BQDepth}, erlang:monotonic_time()},

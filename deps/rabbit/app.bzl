@@ -2092,15 +2092,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )
-    erlang_bytecode(
-        name = "message_containers_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/message_containers_SUITE.erl"],
-        outs = ["test/message_containers_SUITE.beam"],
-        app_name = "rabbit",
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app"],
-    )
+
     erlang_bytecode(
         name = "metadata_store_clustering_SUITE_beam_files",
         testonly = True,
