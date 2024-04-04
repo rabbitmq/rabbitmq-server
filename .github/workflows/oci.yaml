@@ -123,6 +123,7 @@ jobs:
       full_tag: ${{ steps.tag.outputs.full_tag }}
     steps:
       - name: Install Docker
+        timeout-minutes: 10
         run: |
           HOST_ARCH="$(uname -m)"
           echo "Host Arch: $HOST_ARCH"
@@ -131,11 +132,11 @@ jobs:
             exit 1
           fi
 
-          HOMEBREW_NO_AUTO_UPDATE=1 brew install --cask docker
-          # sudo /Applications/Docker.app/Contents/MacOS/Docker --unattended --install-privileged-components
-          open -a /Applications/Docker.app --args --unattended --accept-license
-          echo "We are waiting for Docker to be up and running. It can take over 2 minutes..."
-          while ! /Applications/Docker.app/Contents/Resources/bin/docker info &>/dev/null; do sleep 1; done
+          brew install docker docker-buildx
+
+          # Link the Docker Buildx plugin so it's understood by the docker CLI
+          mkdir -p ~/.docker/cli-plugins
+          ln -sfn /usr/local/opt/docker-buildx/bin/docker-buildx ~/.docker/cli-plugins/docker-buildx
       - name: Download context
         uses: actions/download-artifact@v4
         with:
