@@ -94,23 +94,26 @@ jobs:
         uses: crazy-max/ghaction-github-runtime@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Docker build
-        run: |
-          docker buildx build \
-            --cache-from=type=gha \
-            --cache-to=type=gha \
-            --tag ${{ steps.tag.outputs.full_tag }} \
-            .
       - name: Login to DockerHub
         if: needs.generate-context.outputs.PUSH == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
-      - name: Push
-        if: needs.generate-context.outputs.PUSH == 'true'
+      - name: Docker build
         run: |
-          docker push ${{ steps.tag.outputs.full_tag }}
+          if [ "${{ needs.generate-context.outputs.PUSH }}" == "true" ]; then
+            PUSH_FLAG="--push"
+          else
+            PUSH_FLAG=""
+          fi
+
+          docker buildx build \
+            --cache-from=type=gha \
+            --cache-to=type=gha \
+            ${PUSH_FLAG} \
+            --tag ${{ steps.tag.outputs.full_tag }} \
+            .
 
   build-arm64:
     needs: generate-context
@@ -136,23 +139,27 @@ jobs:
           echo "full_tag=${{ env.REGISTRY_IMAGE }}:${{ env.VERSION }}-arm64" | tee -a $GITHUB_OUTPUT
       - name: Expose GitHub Runtime
         uses: crazy-max/ghaction-github-runtime@v3
-      - name: Docker build
-        run: |
-          docker buildx build \
-            --cache-from=type=gha \
-            --cache-to=type=gha \
-            --tag ${{ steps.tag.outputs.full_tag }} \
-            .
       - name: Login to DockerHub
         if: needs.generate-context.outputs.PUSH == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
-      - name: Push
-        if: needs.generate-context.outputs.PUSH == 'true'
+      - name: Docker build
         run: |
-          docker push ${{ steps.tag.outputs.full_tag }}
+          if [ "${{ needs.generate-context.outputs.PUSH }}" == "true" ]; then
+            PUSH_FLAG="--push"
+          else
+            PUSH_FLAG=""
+          fi
+
+          docker buildx build \
+            --host=unix:///Users/runner/.docker/run/docker.sock
+            --cache-from=type=gha \
+            --cache-to=type=gha \
+            ${PUSH_FLAG} \
+            --tag ${{ steps.tag.outputs.full_tag }} \
+            .
 
   build-publish-dev-bazel:
     runs-on: ubuntu-latest
