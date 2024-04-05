@@ -134,6 +134,9 @@ jobs:
 
           brew install docker docker-machine docker-buildx
 
+          set -x
+
+          /opt/homebrew/opt/docker-machine/bin/docker-machine create
           /opt/homebrew/opt/docker-machine/bin/docker-machine start default
 
           # Link the Docker Buildx plugin so it's understood by the docker CLI
