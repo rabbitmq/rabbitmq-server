@@ -21,13 +21,13 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
-    - name: WAIT FOR OCI IMAGE WORKFLOW
-      uses: lewagon/wait-on-check-action@v1.3.4
+    - uses: docker/metadata-action@v4
+      id: metadata
       with:
-        ref: ${{ github.ref }}
-        check-name: build-publish-dev-bazel
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
-        wait-interval: 30 # seconds
+        images: pivotalrabbitmq/rabbitmq
+    - uses: int128/wait-for-docker-image-action@v1
+      with:
+        tags: ${{ steps.metadata.outputs.tags }}
     - name: CONFIGURE BAZEL
       run: |
         cat << EOF >> user.bazelrc
