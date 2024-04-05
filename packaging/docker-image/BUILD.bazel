@@ -48,16 +48,21 @@ CONTEXT="$$(mktemp -d)"
 
 cp $(locations :context-files) "$$CONTEXT"
 
-BASE_IMAGE="bazel/packaging/base-image:rabbitmq-{arch}"
+BASE_IMAGE="localhost:5000/bazel/packaging/base-image:rabbitmq-{arch}"
 
 set -x
+
+docker run -d -p 5000:5000 --name registry registry
+trap 'catch $$?' EXIT
+catch() {{
+    docker stop registry
+    docker rm registry
+}}
 
 docker import \\
     --platform linux/{arch} \\
     "$(location //packaging/base-image:image-{arch}.tar)" \\
     $$BASE_IMAGE
-docker images $$BASE_IMAGE
-docker inspect --format='{{.Os}}/{{.Architecture}}' $$BASE_IMAGE
 
 docker buildx \\
     build \\
