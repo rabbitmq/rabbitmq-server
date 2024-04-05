@@ -1795,28 +1795,52 @@ incoming_message_interceptors(Config) ->
     Key = {rabbit, ?FUNCTION_NAME},
     ok = rpc(Config, persistent_term, put, [Key, [{set_header_timestamp, false}]]),
     Ch = rabbit_ct_client_helpers:open_channel(Config),
-    Payload = ClientId = QName = Topic = atom_to_binary(?FUNCTION_NAME),
-    declare_queue(Ch, QName, []),
-    bind(Ch, QName, Topic),
+    Payload = ClientId = Topic = atom_to_binary(?FUNCTION_NAME),
+    CQName = <<"my classic queue">>,
+    Stream = <<"my stream">>,
+    declare_queue(Ch, CQName, [{<<"x-queue-type">>, longstr, <<"classic">>}]),
+    declare_queue(Ch, Stream, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
+    bind(Ch, CQName, Topic),
+    bind(Ch, Stream, Topic),
     C = connect(ClientId, Config),
-    ok = emqtt:publish(C, Topic, Payload),
-    NowSecs = os:system_time(second),
-    NowMs = os:system_time(millisecond),
-    eventually(
-      ?_assertMatch(
-         {#'basic.get_ok'{},
-          #amqp_msg{payload = Payload,
-                    props = #'P_basic'{
-                               timestamp = Secs,
-                               headers = [{<<"timestamp_in_ms">>, long, Ms} | _XHeaders]
-                              }}}
-           when Ms < NowMs + 4000 andalso
-                Ms > NowMs - 4000 andalso
-                Secs < NowSecs + 4 andalso
-                Secs > NowSecs - 4,
-         amqp_channel:call(Ch, #'basic.get'{queue = QName}))),
 
-    delete_queue(Ch, QName),
+    NowSecs = os:system_time(second),
+    NowMillis = os:system_time(millisecond),
+    {ok, _} = emqtt:publish(C, Topic, Payload, qos1),
+
+    {#'basic.get_ok'{},
+     #amqp_msg{payload = Payload,
+               props = #'P_basic'{
+                          timestamp = Secs,
+                          headers = [{<<"timestamp_in_ms">>, long, Millis} | _]
+                         }}
+    } = amqp_channel:call(Ch, #'basic.get'{queue = CQName}),
+
+    ?assert(Secs < NowSecs + 4),
+    ?assert(Secs > NowSecs - 4),
+    ?assert(Millis < NowMillis + 4000),
+    ?assert(Millis > NowMillis - 4000),
+
+    #'basic.qos_ok'{}  = amqp_channel:call(Ch, #'basic.qos'{prefetch_count = 1}),
+    CTag = <<"my ctag">>,
+    #'basic.consume_ok'{} = amqp_channel:subscribe(
+                              Ch,
+                              #'basic.consume'{
+                                 queue = Stream,
+                                 consumer_tag = CTag,
+                                 arguments = [{<<"x-stream-offset">>, longstr, <<"first">>}]},
+                              self()),
+    receive {#'basic.deliver'{consumer_tag = CTag},
+             #amqp_msg{payload = Payload,
+                       props = #'P_basic'{
+                                  headers = [{<<"timestamp_in_ms">>, long, Millis} | _XHeaders]
+                                 }}} ->
+                ok
+    after 5000 -> ct:fail(missing_deliver)
+    end,
+
+    delete_queue(Ch, Stream),
+    delete_queue(Ch, CQName),
     true = rpc(Config, persistent_term, erase, [Key]),
     ok = emqtt:disconnect(C).
 

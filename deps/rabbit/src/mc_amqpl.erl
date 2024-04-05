@@ -148,6 +148,8 @@ convert_from(mc_amqp, Sections, _Env) ->
     %% Add remaining x- message annotations as headers
     XHeaders = lists:filtermap(fun({{symbol, <<"x-cc">>}, V}) ->
                                        {true, to_091(<<"CC">>, V)};
+                                  ({{symbol, <<"x-opt-rabbitmq-received-time">>}, {timestamp, Ts}}) ->
+                                       {true, {<<"timestamp_in_ms">>, long, Ts}};
                                   ({{symbol, <<"x-", _/binary>> = K}, V})
                                     when ?IS_SHORTSTR_LEN(K) ->
                                        case is_internal_header(K) of
