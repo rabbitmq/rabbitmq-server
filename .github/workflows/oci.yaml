@@ -14,7 +14,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
-  build-publish-dev-bazel:
+  generate-context:
     runs-on: ubuntu-latest
     env:
       CONTEXT_DIR: context
@@ -25,7 +25,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: rabbitmq-server
-
       - name: Configure Bazel
         working-directory: rabbitmq-server
         run: |
@@ -39,14 +38,12 @@ jobs:
             build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
             build:buildbuddy --color=yes
           EOF
-
       - name: Build package-generic-unix
         working-directory: rabbitmq-server
         run: |
           bazelisk build package-generic-unix \
             --config=rbe-26_2 \
             --remote_download_toplevel
-
       - name: Assemble Contenxt
         run: |
           mkdir ${{ env.CONTEXT_DIR }}
@@ -60,14 +57,12 @@ jobs:
           rm ${{ env.CONTEXT_DIR }}/Makefile
 
           tree ${{ env.CONTEXT_DIR }}
-
       - name: Upload context
         uses: actions/upload-artifact@v4
         with:
           name: context
           path: ${{ env.CONTEXT_DIR }}
           if-no-files-found: error
-
       - name: Check for Push Credentials
         id: authorized
         run: |
@@ -77,43 +72,116 @@ jobs:
             echo "PUSH=false" >> $GITHUB_OUTPUT
           fi
 
+  build-amd64:
+    needs: generate-context
+    runs-on: ubuntu-latest
+    outputs:
+      full_tag: ${{ steps.tag.outputs.full_tag }}
+    steps:
+      - name: Download context
+        uses: actions/download-artifact@v4
+        with:
+          name: context
+      - name: Compute Tag
+        id: tag
+        run: |
+          echo "full_tag=${{ env.REGISTRY_IMAGE }}:${{ env.VERSION }}-amd64" | tee -a $GITHUB_OUTPUT
       - name: Expose GitHub Runtime
         uses: crazy-max/ghaction-github-runtime@v3
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
       - name: Login to DockerHub
-        if: steps.authorized.outputs.PUSH == 'true'
+        if: needs.generate-context.outputs.PUSH == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
-
       - name: Docker build
         run: |
-          if [ "${{ steps.authorized.outputs.PUSH }}" == "true" ]; then
+          if [ "${{ needs.generate-context.outputs.PUSH }}" == "true" ]; then
             PUSH_FLAG="--push"
           else
             PUSH_FLAG=""
           fi
 
+          docker buildx build \
+            --cache-from=type=gha \
+            --cache-to=type=gha \
+            --platform=linux/amd64 \
+            ${PUSH_FLAG} \
+            --tag ${{ steps.tag.outputs.full_tag }} \
+            .
+
+  build-arm64:
+    needs: generate-context
+    runs-on: ubuntu-latest
+    outputs:
+      full_tag: ${{ steps.tag.outputs.full_tag }}
+    steps:
+      - name: Download context
+        uses: actions/download-artifact@v4
+        with:
+          name: context
+      - name: Compute Tag
+        id: tag
+        run: |
+          echo "full_tag=${{ env.REGISTRY_IMAGE }}:${{ env.VERSION }}-arm64" | tee -a $GITHUB_OUTPUT
+      - name: Expose GitHub Runtime
+        uses: crazy-max/ghaction-github-runtime@v3
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to DockerHub
+        if: needs.generate-context.outputs.PUSH == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - name: Docker build
+        run: |
+          if [ "${{ needs.generate-context.outputs.PUSH }}" == "true" ]; then
+            PUSH_FLAG="--push"
+          else
+            PUSH_FLAG=""
+          fi
+
+          docker buildx build \
+            --cache-from=type=gha \
+            --cache-to=type=gha \
+            --platform=linux/arm64 \
+            ${PUSH_FLAG} \
+            --tag ${{ steps.tag.outputs.full_tag }} \
+            .
+
+  build-publish-dev-bazel:
+    runs-on: ubuntu-latest
+    needs:
+      - generate-context
+      - build-amd64
+      - build-arm64
+    steps:
+      - name: Create and Push Manifest
+        if: needs.generate-context.outputs.PUSH == 'true'
+        run: |
           TAG_1="${{ env.VERSION }}"
 
           REF_NAME="${{ github.ref_name }}"
           TAG_2="${REF_NAME//\//-}"
 
-          docker buildx build \
-            --cache-from=type=gha \
-            --cache-to=type=gha \
-            --platform=linux/amd64,linux/arm64 \
-            ${PUSH_FLAG} \
-            --tag ${{ env.REGISTRY_IMAGE }}:$TAG_1 \
-            --tag ${{ env.REGISTRY_IMAGE }}:$TAG_2 \
-            ${{ env.CONTEXT_DIR }}
+          docker manifest create \
+            ${{ env.REGISTRY_IMAGE }}:${TAG_1} \
+            --amend ${{ needs.build-amd64.outputs.full_tag }} \
+            --amend ${{ needs.build-arm64.outputs.full_tag }}
+
+          docker manifest push ${{ env.REGISTRY_IMAGE }}:${TAG_1}
+
+          docker manifest create \
+            ${{ env.REGISTRY_IMAGE }}:${TAG_2} \
+            --amend ${{ needs.build-amd64.outputs.full_tag }} \
+            --amend ${{ needs.build-arm64.outputs.full_tag }}
+
+          docker manifest push ${{ env.REGISTRY_IMAGE }}:${TAG_2}
 
   summary-oci:
     needs:
