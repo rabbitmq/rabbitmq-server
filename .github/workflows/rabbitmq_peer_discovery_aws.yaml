@@ -28,6 +28,8 @@ jobs:
     - uses: int128/wait-for-docker-image-action@v1
       with:
         tags: ${{ steps.metadata.outputs.tags }}
+        timeout-seconds: 7200
+        polling-seconds: 30
     - name: CONFIGURE BAZEL
       run: |
         cat << EOF >> user.bazelrc
