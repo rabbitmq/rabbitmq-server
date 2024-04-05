@@ -95,8 +95,6 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY_IMAGE }}
-      - name: Expose GitHub Runtime
-        uses: crazy-max/ghaction-github-runtime@v3
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
