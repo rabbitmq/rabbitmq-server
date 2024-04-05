@@ -50,11 +50,10 @@ cp $(locations :context-files) "$$CONTEXT"
 
 BASE_IMAGE="bazel/packaging/base-image:rabbitmq-{arch}"
 
-docker images
 docker import \\
+    --platform linux/{arch} \\
     "$(location //packaging/base-image:image-{arch}.tar)" \\
     $$BASE_IMAGE
-docker images
 
 docker buildx \\
     build \\
