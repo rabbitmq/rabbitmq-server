@@ -132,7 +132,9 @@ jobs:
             exit 1
           fi
 
-          brew install docker docker-buildx
+          brew install docker docker-machine docker-buildx
+
+          /opt/homebrew/opt/docker-machine/bin/docker-machine start default
 
           # Link the Docker Buildx plugin so it's understood by the docker CLI
           mkdir -p ~/.docker/cli-plugins
