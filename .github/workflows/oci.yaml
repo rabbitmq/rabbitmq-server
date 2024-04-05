@@ -52,7 +52,7 @@ jobs:
             build:buildbuddy --color=yes
 
             build --action_env EXTRA_BUILDX_OPTS="--cache-from=type=gha --cache-to=type=gha"
-            build --action_env TEMP_REGISTRY="registry:5001"
+            # build --action_env TEMP_REGISTRY="registry:5001"
           EOF
 
       - name: Build package-generic-unix

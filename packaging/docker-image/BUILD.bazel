@@ -69,6 +69,7 @@ docker push $$BASE_IMAGE
 docker buildx \\
     build \\
     "$$CONTEXT" \\
+    --network=host \\
     --platform linux/{arch} \\
     --build-arg BASE_IMAGE="$$BASE_IMAGE" \\
     --build-arg RABBITMQ_VERSION="{rmq_version}" \\
