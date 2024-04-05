@@ -51,15 +51,31 @@ jobs:
             build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
             build:buildbuddy --color=yes
 
-            build --experimental_ui_max_stdouterr_bytes=4194304
             build --action_env EXTRA_BUILDX_OPTS="--cache-from=type=gha --cache-to=type=gha"
             build --action_env TEMP_REGISTRY="registry:5000"
           EOF
+
+      - name: Build package-generic-unix
+        run: |
+          bazelisk build :package-generic-unix \
+            --config=buildbuddy
+
+      - name: Build amd64 Base
+        run: |
+          bazelisk build //packaging/base-image:docker-build-amd64 \
+            --config=buildbuddy \
+            --experimental_ui_max_stdouterr_bytes=4194304
 
       - name: Build amd64
         run: |
           bazelisk build //packaging/docker-image:rabbitmq-amd64 \
             --config=buildbuddy
+
+      - name: Build arm64 Base
+        run: |
+          bazelisk build //packaging/base-image:docker-build-arm64 \
+            --config=buildbuddy \
+            --experimental_ui_max_stdouterr_bytes=4194304
 
       - name: Build arm64
         run: |
