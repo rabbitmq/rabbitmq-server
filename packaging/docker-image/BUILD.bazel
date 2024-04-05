@@ -48,7 +48,7 @@ CONTEXT="$$(mktemp -d)"
 
 cp $(locations :context-files) "$$CONTEXT"
 
-BASE_IMAGE="rabbitmq-base-image:rabbitmq-{arch}"
+BASE_IMAGE="bazel/packaging/base-image:rabbitmq-{arch}"
 
 set -x
 
