@@ -106,7 +106,7 @@ jobs:
 
           docker buildx build \
             --cache-from=type=gha \
-            --cache-to=type=gha \
+            --cache-to=type=gha,mode=max \
             --platform=linux/amd64 \
             ${PUSH_FLAG} \
             --tag ${{ steps.tag.outputs.full_tag }} \
@@ -148,7 +148,7 @@ jobs:
 
           docker buildx build \
             --cache-from=type=gha \
-            --cache-to=type=gha \
+            --cache-to=type=gha,mode=max \
             --platform=linux/arm64 \
             ${PUSH_FLAG} \
             --tag ${{ steps.tag.outputs.full_tag }} \
