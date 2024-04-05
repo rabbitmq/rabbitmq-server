@@ -64,6 +64,8 @@ docker import \\
     "$(location //packaging/base-image:image-{arch}.tar)" \\
     $$BASE_IMAGE
 
+docker push $$BASE_IMAGE
+
 docker buildx \\
     build \\
     "$$CONTEXT" \\
