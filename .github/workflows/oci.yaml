@@ -139,11 +139,6 @@ jobs:
           ln -sfn /opt/homebrew/lib/docker/cli-plugins/docker-buildx ~/.docker/cli-plugins/docker-buildx
 
           docker buildx install
-
-          docker context ls
-          docker context use default
-          docker ps
-          docker images
       - name: Download context
         uses: actions/download-artifact@v4
         with:
