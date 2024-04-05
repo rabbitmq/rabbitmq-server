@@ -9,17 +9,6 @@ load(
 )
 load("//:rabbitmq.bzl", "APP_VERSION")
 
-filegroup(
-    name = "context-files",
-    srcs = [
-        "10-defaults.conf",
-        "20-management_agent.disable_metrics_collector.conf",
-        "Dockerfile",
-        "docker-entrypoint.sh",
-        "//:package-generic-unix",
-    ],
-)
-
 _ARCHS = [
     "amd64",
     "arm64",
@@ -36,8 +25,7 @@ _TAGS = [
     genrule(
         name = "docker-build-%s" % arch,
         srcs = [
-            "//packaging/base-image:image-%s.tar" % arch,
-            ":context-files",
+            "Dockerfile",
         ],
         outs = [
             "image-%s.tar" % arch,
@@ -46,52 +34,30 @@ _TAGS = [
 
 CONTEXT="$$(mktemp -d)"
 
-cp $(locations :context-files) "$$CONTEXT"
-
-docker import \\
-    "$(location //packaging/base-image:image-{arch}.tar)" \\
-    bazel/packaging/base-image:rabbitmq-{arch}
+cp $(location Dockerfile) "$$CONTEXT"
 
 docker buildx \\
     build \\
     "$$CONTEXT" \\
     --platform linux/{arch} \\
-    --build-arg BASE_IMAGE="bazel/packaging/base-image:rabbitmq-{arch}" \\
-    --build-arg RABBITMQ_VERSION="{rmq_version}" \\
     --output type=tar,dest=$(location image-{arch}.tar) $${{EXTRA_BUILDX_OPTS:-}}
 """.format(
             arch = arch,
-            rmq_version = APP_VERSION,
         ),
         tags = _TAGS,
+        visibility = ["//packaging:__subpackages__"],
     )
     for arch in _ARCHS
 ]
-
-write_file(
-    name = "cmd",
-    out = "cmd.txt",
-    # must match Dockerfile
-    content = ["rabbitmq-server"],
-)
-
-write_file(
-    name = "entrypoint",
-    out = "entrypoint.txt",
-    # must match Dockerfile
-    content = ["docker-entrypoint.sh"],
-)
 
 [
     oci_image(
         name = "image-%s" % arch,
         architecture = arch,
-        cmd = ":cmd",
-        entrypoint = ":entrypoint",
         # must match Dockerfile
-        # docker inspect bazel/packaging/docker-image:rabbitmq-amd64
+        # docker inspect bazel/packaging/base-image:rabbitmq-amd64
         # after
-        # bazel run //packaging/docker-image:rabbitmq-amd64
+        # bazel run //packaging/base-image:rabbitmq-amd64
         # to check values
         env = {
             "PATH": "/opt/rabbitmq/sbin:/opt/erlang/bin:/opt/openssl/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
@@ -139,19 +105,10 @@ oci_tarball(
     tags = _TAGS,
 )
 
-[
-    container_structure_test(
-        name = "rabbitmq_test_%s" % arch,
-        configs = ["//packaging/docker-image/test_configs:rabbitmq_ubuntu.yaml"],
-        image = ":image-%s" % arch,
-        tags = _TAGS,
-    )
-    for arch in _ARCHS
-]
-
 oci_push(
     name = "push",
     image = ":image",
-    repository = "index.docker.io/pivotalrabbitmq/rabbitmq",
+    repository = "index.docker.io/pivotalrabbitmq/rabbitmq-base",
+    remote_tags = ["latest"],
     tags = _TAGS,
 )
