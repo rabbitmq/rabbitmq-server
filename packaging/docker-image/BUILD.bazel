@@ -57,6 +57,7 @@ docker import \\
     "$(location //packaging/base-image:image-{arch}.tar)" \\
     $$BASE_IMAGE
 docker images $$BASE_IMAGE
+docker inspect --format='{{.Os}}/{{.Architecture}}' $$BASE_IMAGE
 
 docker buildx \\
     build \\
