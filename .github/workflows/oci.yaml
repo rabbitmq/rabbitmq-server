@@ -24,6 +24,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: 'Login to GitHub Container Registry'
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -52,7 +59,7 @@ jobs:
             build:buildbuddy --color=yes
 
             build --action_env EXTRA_BUILDX_OPTS="--cache-from=type=gha --cache-to=type=gha"
-            build --action_env TEMP_REGISTRY="registry:5001"
+            build --action_env TEMP_REGISTRY="ghcr.io/rabbitmq/"
           EOF
 
       - name: Build package-generic-unix
