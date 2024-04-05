@@ -163,27 +163,49 @@ get_property(priority, Msg) ->
 convert_to(?MODULE, Msg, _Env) ->
     Msg;
 convert_to(TargetProto, Msg, Env) ->
-    TargetProto:convert_from(?MODULE,
-                             msg_to_sections(Msg, fun (X) -> X end),
-                             Env).
+    TargetProto:convert_from(?MODULE, msg_to_sections(Msg), Env).
 
 serialize(Sections) ->
     encode_bin(Sections).
 
+<<<<<<< HEAD
 protocol_state(Msg, Anns) ->
     #{?ANN_EXCHANGE := Exchange,
       ?ANN_ROUTING_KEYS := [RKey | _]} = Anns,
 
     %% any x-* annotations get added as message annotations
     AnnsToAdd = maps:filter(fun (Key, _) -> mc_util:is_x_header(Key) end, Anns),
-
-    MACFun = fun(MAC) ->
-                     add_message_annotations(
-                       AnnsToAdd#{<<"x-exchange">> => wrap(utf8, Exchange),
-                                  <<"x-routing-key">> => wrap(utf8, RKey)}, MAC)
+=======
+protocol_state(Msg0 = #msg{header = Header0,
+                           message_annotations = MA0}, Anns) ->
+    Redelivered = maps:get(redelivered, Anns, false),
+    FirstAcquirer = not Redelivered,
+    Header = case Header0 of
+                 undefined ->
+                     #'v1_0.header'{first_acquirer = FirstAcquirer};
+                 #'v1_0.header'{} ->
+                     Header0#'v1_0.header'{first_acquirer = FirstAcquirer}
              end,
 
-    msg_to_sections(Msg, MACFun).
+    MA = maps:fold(fun(?ANN_EXCHANGE, Exchange, L) ->
+                           maps_upsert(<<"x-exchange">>, {utf8, Exchange}, L);
+                      (?ANN_ROUTING_KEYS, RKeys, L) ->
+                           RKey = hd(RKeys),
+                           maps_upsert(<<"x-routing-key">>, {utf8, RKey}, L);
+                      (<<"x-", _/binary>> = K, V, L)
+                        when V =/= undefined ->
+                           %% any x-* annotations get added as message annotations
+                           maps_upsert(K, mc_util:infer_type(V), L);
+                      (<<"timestamp_in_ms">>, V, L) ->
+                           maps_upsert(<<"x-opt-rabbitmq-received-time">>, {timestamp, V}, L);
+                      (_, _, Acc) ->
+                           Acc
+                   end, MA0, Anns),
+>>>>>>> 71d1b3b455 (Respect message_interceptors.incoming.set_header_timestamp)
+
+    Msg = Msg0#msg{header = Header,
+                   message_annotations = MA},
+    msg_to_sections(Msg).
 
 prepare(_For, Msg) ->
     Msg.
@@ -192,13 +214,14 @@ prepare(_For, Msg) ->
 
 msg_to_sections(#msg{header = H,
                      delivery_annotations = DAC,
-                     message_annotations = MAC0,
+                     message_annotations = MAC,
                      properties = P,
                      application_properties = APC,
                      data = Data,
-                     footer = FC}, MacFun) ->
+                     footer = FC}) ->
     Tail = case FC of
-               [] -> [];
+               [] ->
+                   [];
                _ ->
                    [#'v1_0.footer'{content = FC}]
            end,
@@ -209,34 +232,40 @@ msg_to_sections(#msg{header = H,
                  Data ++ Tail
          end,
     S1 = case APC of
-             [] -> S0;
+             [] ->
+                 S0;
              _ ->
                  [#'v1_0.application_properties'{content = APC} | S0]
          end,
     S2 = case P of
-             undefined -> S1;
+             undefined ->
+                 S1;
              _ ->
                  [P | S1]
          end,
-    S3 = case MacFun(MAC0) of
-             [] -> S2;
-             MAC ->
+    S3 = case MAC of
+             [] ->
+                 S2;
+             _ ->
                  [#'v1_0.message_annotations'{content = MAC} | S2]
          end,
     S4 = case DAC of
-             [] -> S3;
+             [] ->
+                 S3;
              _ ->
                  [#'v1_0.delivery_annotations'{content = DAC} | S3]
          end,
     case H of
-        undefined -> S4;
+        undefined ->
+            S4;
         _ ->
             [H | S4]
     end.
 
-
-
-
+maps_upsert(Key, TaggedVal, KVList) ->
+    TaggedKey = {symbol, Key},
+    Elem = {TaggedKey, TaggedVal},
+    lists:keystore(TaggedKey, 1, KVList, Elem).
 
 encode_bin(undefined) ->
     <<>>;
@@ -344,22 +373,6 @@ decode([#'v1_0.amqp_value'{} = B | Rem], #msg{} = Msg) ->
     %% an amqp value can only be a singleton
     decode(Rem, Msg#msg{data = B}).
 
-add_message_annotations(Anns, MA0) ->
-    maps:fold(fun (K, V, Acc) ->
-                      map_add(symbol, K, mc_util:infer_type(V), Acc)
-              end, MA0, Anns).
-
-map_add(_T, _Key, undefined, Acc) ->
-    Acc;
-map_add(KeyType, Key, TaggedValue, Acc0) ->
-    TaggedKey = wrap(KeyType, Key),
-    lists_upsert({TaggedKey, TaggedValue}, Acc0).
-
-wrap(_Type, undefined) ->
-    undefined;
-wrap(Type, Val) ->
-    {Type, Val}.
-
 key_find(K, [{{_, K}, {_, V}} | _]) ->
     V;
 key_find(K, [_ | Rem]) ->
@@ -445,13 +458,3 @@ essential_properties(#msg{message_annotations = MA} = Msg) ->
                       Acc
               end, Anns, MA)
     end.
-
-lists_upsert(New, L) ->
-    lists_upsert(New, L, [], L).
-
-lists_upsert({Key, _} = New, [{Key, _} | Rem], Pref, _All) ->
-    lists:reverse(Pref, [New | Rem]);
-lists_upsert(New, [Item | Rem], Pref, All) ->
-    lists_upsert(New, Rem, [Item | Pref], All);
-lists_upsert(New, [], _Pref, All) ->
-    [New | All].
