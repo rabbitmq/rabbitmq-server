@@ -132,6 +132,8 @@ jobs:
             exit 1
           fi
 
+          brew install --cask virtualbox
+
           brew install docker docker-machine docker-buildx
 
           set -x
