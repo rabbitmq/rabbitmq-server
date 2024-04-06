@@ -1264,10 +1264,10 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     name = "amqp_auth_SUITE",
-    shard_count = 2,
     additional_beam = [
         ":test_event_recorder_beam",
     ],
+    shard_count = 2,
     runtime_deps = [
         "//deps/rabbitmq_amqp_client:erlang_app",
     ],
