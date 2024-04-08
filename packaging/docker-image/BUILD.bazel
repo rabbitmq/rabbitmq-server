@@ -36,6 +36,7 @@ _TAGS = [
     genrule(
         name = "docker-build-%s" % arch,
         srcs = [
+            "//packaging/base-image:image-%s.tar" % arch,
             ":context-files",
         ],
         outs = [
@@ -47,10 +48,27 @@ CONTEXT="$$(mktemp -d)"
 
 cp $(locations :context-files) "$$CONTEXT"
 
+BASE_IMAGE="$${{TEMP_REGISTRY:=}}rabbitmq-base:{arch}"
+
+set -x
+
+docker import \\
+    --platform linux/{arch} \\
+    "$(location //packaging/base-image:image-{arch}.tar)" \\
+    $$BASE_IMAGE
+
+if [[ -n "$${{TEMP_REGISTRY}}" ]]; then
+    DIGEST="$$(docker push $$BASE_IMAGE | sed -n 's/.*\\(sha256:[a-z0-9]*\\).*/\\1/p')"
+    # if we are pushing to the temp registry, then we use
+    # the digest to avoid race conditions on the tag
+    BASE_IMAGE="$${{TEMP_REGISTRY:=}}rabbitmq-base@$$DIGEST"
+fi
+
 docker buildx \\
     build \\
     "$$CONTEXT" \\
     --platform linux/{arch} \\
+    --build-arg BASE_IMAGE="$$BASE_IMAGE" \\
     --build-arg RABBITMQ_VERSION="{rmq_version}" \\
     --output type=tar,dest=$(location image-{arch}.tar) $${{EXTRA_BUILDX_OPTS:-}}
 """.format(
@@ -83,9 +101,9 @@ write_file(
         cmd = ":cmd",
         entrypoint = ":entrypoint",
         # must match Dockerfile
-        # docker inspect bazel/packaging/docker-image/docker-build:amd64
+        # docker inspect bazel/packaging/docker-image:rabbitmq-amd64
         # after
-        # bazel build //packaging/docker-image/docker-build:amd64
+        # bazel run //packaging/docker-image:rabbitmq-amd64
         # to check values
         env = {
             "PATH": "/opt/rabbitmq/sbin:/opt/erlang/bin:/opt/openssl/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
@@ -110,7 +128,7 @@ write_file(
     oci_tarball(
         name = "rabbitmq-%s" % arch,
         image = ":image-%s" % arch,
-        repo_tags = ["bazel/packaging/docker-image:rabbitmq-%s" % arch],
+        repo_tags = ["bazel/%s:rabbitmq-%s" % (package_name(), arch)],
         tags = _TAGS,
     )
     for arch in _ARCHS
@@ -129,7 +147,7 @@ oci_tarball(
     name = "rabbitmq",
     format = "oci",
     image = ":image",
-    repo_tags = ["bazel/packaging/docker-image:rabbitmq"],
+    repo_tags = ["bazel/%s:rabbitmq" % package_name()],
     tags = _TAGS,
 )
 
