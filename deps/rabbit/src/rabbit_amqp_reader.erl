@@ -147,10 +147,11 @@ recvloop(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
             throw({inet_error, Reason})
     end;
 recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
-    {Data, Rest} = split_binary(case Buf of
-                                    [B] -> B;
-                                    _   -> list_to_binary(lists:reverse(Buf))
-                                end, RecvLen),
+    Bin = case Buf of
+              [B] -> B;
+              _ -> list_to_binary(lists:reverse(Buf))
+          end,
+    {Data, Rest} = split_binary(Bin, RecvLen),
     recvloop(Deb, handle_input(State#v1.callback, Data,
                                State#v1{buf = [Rest],
                                         buf_len = BufLen - RecvLen})).
@@ -324,12 +325,9 @@ is_connection_frame(#'v1_0.open'{})  -> true;
 is_connection_frame(#'v1_0.close'{}) -> true;
 is_connection_frame(_)               -> false.
 
-%% TODO Handle depending on connection state
-%% TODO It'd be nice to only decode up to the descriptor
-
-handle_1_0_frame(Mode, Channel, Payload, State) ->
+handle_frame(Mode, Channel, Body, State) ->
     try
-        handle_1_0_frame0(Mode, Channel, Payload, State)
+        handle_frame0(Mode, Channel, Body, State)
     catch
         _:#'v1_0.error'{} = Reason ->
             handle_exception(State, 0, Reason);
@@ -346,41 +344,41 @@ handle_1_0_frame(Mode, Channel, Payload, State) ->
                                          [Reason, Trace]))
     end.
 
-%% Nothing specifies that connection methods have to be on a
-%% particular channel.
-handle_1_0_frame0(_Mode, Channel, Payload,
-                  State = #v1{connection_state = CS})
+%% Nothing specifies that connection methods have to be on a particular channel.
+handle_frame0(_Mode, Channel, Body,
+              State = #v1{connection_state = CS})
   when CS =:= closing orelse
        CS =:= closed ->
-    Sections = parse_1_0_frame(Payload, Channel),
-    case is_connection_frame(Sections) of
-        true  -> handle_1_0_connection_frame(Sections, State);
+    Performative = parse_frame_body(Body, Channel),
+    case is_connection_frame(Performative) of
+        true  -> handle_connection_frame(Performative, State);
         false -> State
     end;
-handle_1_0_frame0(Mode, Channel, Payload, State) ->
-    Sections = parse_1_0_frame(Payload, Channel),
-    case {Mode, is_connection_frame(Sections)} of
-        {amqp, true}  -> handle_1_0_connection_frame(Sections, State);
-        {amqp, false} -> handle_1_0_session_frame(Channel, Sections, State);
-        {sasl, false} -> handle_1_0_sasl_frame(Sections, State)
+handle_frame0(Mode, Channel, Body, State) ->
+    Performative = parse_frame_body(Body, Channel),
+    case {Mode, is_connection_frame(Performative)} of
+        {amqp, true}  -> handle_connection_frame(Performative, State);
+        {amqp, false} -> handle_session_frame(Channel, Performative, State);
+        {sasl, false} -> handle_sasl_frame(Performative, State)
     end.
 
-parse_1_0_frame(Payload, _Channel) ->
-    {PerfDesc, Rest} = amqp10_binary_parser:parse(Payload),
-    Perf = amqp10_framing:decode(PerfDesc),
+%% "The frame body is defined as a performative followed by an opaque payload." [2.3.2]
+parse_frame_body(Body, _Channel) ->
+    {DescribedPerformative, Payload} = amqp10_binary_parser:parse(Body),
+    Performative = amqp10_framing:decode(DescribedPerformative),
     ?DEBUG("~s Channel ~tp ->~n~tp~n~ts~n",
-           [?MODULE, _Channel, amqp10_framing:pprint(Perf),
-            case Rest of
+           [?MODULE, _Channel, amqp10_framing:pprint(Performative),
+            case Payload of
                 <<>> -> <<>>;
                 _    -> rabbit_misc:format(
-                          " followed by ~tp bytes of content", [size(Rest)])
+                          " followed by ~tb bytes of payload", [size(Payload)])
             end]),
-    case Rest of
-        <<>> -> Perf;
-        _    -> {Perf, Rest}
+    case Payload of
+        <<>> -> Performative;
+        _    -> {Performative, Payload}
     end.
 
-handle_1_0_connection_frame(
+handle_connection_frame(
   #'v1_0.open'{max_frame_size = ClientMaxFrame,
                channel_max = ClientChannelMax,
                idle_time_out = IdleTimeout,
@@ -499,7 +497,7 @@ handle_1_0_connection_frame(
               properties = server_properties()},
     ok = send_on_channel0(Sock, Open),
     State;
-handle_1_0_connection_frame(#'v1_0.close'{}, State0) ->
+handle_connection_frame(#'v1_0.close'{}, State0) ->
     State = State0#v1{connection_state = closing},
     close(undefined, State).
 
@@ -516,17 +514,17 @@ start_writer(#v1{helper_sup = SupPid,
     {ok, Pid} = supervisor:start_child(SupPid, ChildSpec),
     State#v1{writer = Pid}.
 
-handle_1_0_session_frame(Channel, Frame, #v1{tracked_channels = Channels} = State) ->
+handle_session_frame(Channel, Body, #v1{tracked_channels = Channels} = State) ->
     case Channels of
         #{Channel := SessionPid} ->
-            rabbit_amqp_session:process_frame(SessionPid, Frame),
+            rabbit_amqp_session:process_frame(SessionPid, Body),
             State;
         _ ->
             case ?IS_RUNNING(State) of
                 true ->
-                    case Frame of
+                    case Body of
                         #'v1_0.begin'{} ->
-                            send_to_new_1_0_session(Channel, Frame, State);
+                            send_to_new_session(Channel, Body, State);
                         _ ->
                             State
                     end;
@@ -534,16 +532,16 @@ handle_1_0_session_frame(Channel, Frame, #v1{tracked_channels = Channels} = Stat
                     throw({channel_frame_while_connection_not_running,
                            Channel,
                            State#v1.connection_state,
-                           Frame})
+                           Body})
             end
     end.
 
 %% TODO: write a proper ANONYMOUS plugin and unify with STOMP
-handle_1_0_sasl_frame(#'v1_0.sasl_init'{mechanism = {symbol, <<"ANONYMOUS">>},
-                                        hostname = _Hostname},
-                      #v1{connection_state = starting,
-                          connection = Connection,
-                          sock = Sock} = State0) ->
+handle_sasl_frame(#'v1_0.sasl_init'{mechanism = {symbol, <<"ANONYMOUS">>},
+                                    hostname = _Hostname},
+                  #v1{connection_state = starting,
+                      connection = Connection,
+                      sock = Sock} = State0) ->
     case default_user() of
         none ->
             silent_close_delay(),
@@ -559,12 +557,12 @@ handle_1_0_sasl_frame(#'v1_0.sasl_init'{mechanism = {symbol, <<"ANONYMOUS">>},
                               connection = Connection#v1_connection{auth_mechanism = anonymous}},
             switch_callback(State, handshake, 8)
     end;
-handle_1_0_sasl_frame(#'v1_0.sasl_init'{mechanism        = {symbol, Mechanism},
-                                        initial_response = {binary, Response},
-                                        hostname         = _Hostname},
-                      State0 = #v1{connection_state = starting,
-                                   connection       = Connection,
-                                   sock             = Sock}) ->
+handle_sasl_frame(#'v1_0.sasl_init'{mechanism        = {symbol, Mechanism},
+                                    initial_response = {binary, Response},
+                                    hostname         = _Hostname},
+                  State0 = #v1{connection_state = starting,
+                               connection       = Connection,
+                               sock             = Sock}) ->
     AuthMechanism = auth_mechanism_to_module(Mechanism, Sock),
     State = State0#v1{connection       =
                           Connection#v1_connection{
@@ -572,15 +570,15 @@ handle_1_0_sasl_frame(#'v1_0.sasl_init'{mechanism        = {symbol, Mechanism},
                             auth_state        = AuthMechanism:init(Sock)},
                       connection_state = securing},
     auth_phase_1_0(Response, State);
-handle_1_0_sasl_frame(#'v1_0.sasl_response'{response = {binary, Response}},
-                      State = #v1{connection_state = securing}) ->
+handle_sasl_frame(#'v1_0.sasl_response'{response = {binary, Response}},
+                  State = #v1{connection_state = securing}) ->
     auth_phase_1_0(Response, State);
-handle_1_0_sasl_frame(Frame, State) ->
-    throw({unexpected_1_0_sasl_frame, Frame, State}).
+handle_sasl_frame(Performative, State) ->
+    throw({unexpected_1_0_sasl_frame, Performative, State}).
 
 handle_input(handshake, <<"AMQP", 0, 1, 0, 0>>,
              #v1{connection_state = waiting_amqp0100} = State) ->
-    start_1_0_connection(amqp, State);
+    start_connection(amqp, State);
 
 handle_input({frame_header_1_0, Mode},
              Header = <<Size:32, DOff:8, Type:8, Channel:16>>,
@@ -606,11 +604,10 @@ handle_input({frame_header_1_0, Mode},
 handle_input({frame_header_1_0, _Mode}, Malformed, _State) ->
     throw({bad_1_0_header, Malformed});
 handle_input({frame_payload_1_0, Mode, DOff, Channel},
-            FrameBin, State) ->
+             FrameBin, State) ->
     SkipBits = (DOff * 32 - 64), % DOff = 4-byte words, we've read 8 already
-    <<Skip:SkipBits, FramePayload/binary>> = FrameBin,
-    Skip = Skip, %% hide warning when debug is off
-    handle_1_0_frame(Mode, Channel, FramePayload,
+    <<_Skip:SkipBits, FrameBody/binary>> = FrameBin,
+    handle_frame(Mode, Channel, FrameBody,
                      switch_callback(State, {frame_header_1_0, Mode}, 8));
 
 handle_input(Callback, Data, _State) ->
@@ -622,12 +619,12 @@ init(Mode, PackedState) ->
     {parent, Parent} = erlang:process_info(self(), parent),
     ok = rabbit_connection_sup:remove_connection_helper_sup(Parent, helper_sup_amqp_091),
     State0 = unpack_from_0_9_1(PackedState, Parent, HandshakeTimeout),
-    State = start_1_0_connection(Mode, State0),
+    State = start_connection(Mode, State0),
     %% By invoking recvloop here we become 1.0.
     recvloop(sys:debug_options([]), State).
 
-start_1_0_connection(Mode = sasl, State = #v1{sock = Sock}) ->
-    send_1_0_handshake(Sock, <<"AMQP",3,1,0,0>>),
+start_connection(Mode = sasl, State = #v1{sock = Sock}) ->
+    send_handshake(Sock, <<"AMQP",3,1,0,0>>),
     %% "The server mechanisms are ordered in decreasing level of preference." [5.3.3.1]
     Ms0 = [{symbol, atom_to_binary(M)} || M <- auth_mechanisms(Sock)],
     Ms1 = case default_user() of
@@ -637,37 +634,37 @@ start_1_0_connection(Mode = sasl, State = #v1{sock = Sock}) ->
     Ms2 = {array, symbol, Ms1},
     Ms = #'v1_0.sasl_mechanisms'{sasl_server_mechanisms = Ms2},
     ok = send_on_channel0(Sock, Ms, rabbit_amqp_sasl),
-    start_1_0_connection0(Mode, State);
+    start_connection0(Mode, State);
 
-start_1_0_connection(Mode = amqp,
-                     State = #v1{sock = Sock,
-                                 connection = C = #v1_connection{user = User}}) ->
+start_connection(Mode = amqp,
+                 State = #v1{sock = Sock,
+                             connection = C = #v1_connection{user = User}}) ->
     case User of
         none ->
             %% Client either skipped SASL layer or used SASL mechansim ANONYMOUS.
             case default_user() of
                 none ->
-                    send_1_0_handshake(Sock, <<"AMQP",3,1,0,0>>),
+                    send_handshake(Sock, <<"AMQP",3,1,0,0>>),
                     throw(banned_unauthenticated_connection);
                 NoAuthUsername ->
                     case rabbit_access_control:check_user_login(NoAuthUsername, []) of
                         {ok, NoAuthUser} ->
                             State1 = State#v1{connection = C#v1_connection{user = NoAuthUser}},
-                            send_1_0_handshake(Sock, <<"AMQP",0,1,0,0>>),
-                            start_1_0_connection0(Mode, State1);
+                            send_handshake(Sock, <<"AMQP",0,1,0,0>>),
+                            start_connection0(Mode, State1);
                         {refused, _, _, _} ->
-                            send_1_0_handshake(Sock, <<"AMQP",3,1,0,0>>),
+                            send_handshake(Sock, <<"AMQP",3,1,0,0>>),
                             throw(amqp1_0_default_user_missing)
                     end
             end;
         #user{} ->
             %% Client already got successfully authenticated by SASL.
-            send_1_0_handshake(Sock, <<"AMQP",0,1,0,0>>),
-            start_1_0_connection0(Mode, State)
+            send_handshake(Sock, <<"AMQP",0,1,0,0>>),
+            start_connection0(Mode, State)
     end.
 
-start_1_0_connection0(Mode, State0 = #v1{connection = Connection,
-                                         helper_sup = HelperSup}) ->
+start_connection0(Mode, State0 = #v1{connection = Connection,
+                                     helper_sup = HelperSup}) ->
     SessionSup = case Mode of
                      sasl ->
                          undefined;
@@ -686,7 +683,7 @@ start_1_0_connection0(Mode, State0 = #v1{connection = Connection,
                       connection = Connection#v1_connection{timeout = ?NORMAL_TIMEOUT}},
     switch_callback(State, {frame_header_1_0, Mode}, 8).
 
-send_1_0_handshake(Sock, Handshake) ->
+send_handshake(Sock, Handshake) ->
     ok = inet_op(fun () -> rabbit_net:send(Sock, Handshake) end).
 
 send_on_channel0(Sock, Method) ->
@@ -790,7 +787,7 @@ untrack_channel(ChannelNum, SessionPid, #v1{tracked_channels = Channels0} = Stat
             State
     end.
 
-send_to_new_1_0_session(
+send_to_new_session(
   ChannelNum, BeginFrame,
   #v1{session_sup = SessionSup,
       connection = #v1_connection{outgoing_max_frame_size = MaxFrame,

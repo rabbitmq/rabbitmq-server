@@ -836,7 +836,7 @@ handle_link_flow(#'v1_0.flow'{delivery_count = MaybeTheirDC,
                   {uint, DC} -> DC;
                   undefined -> ?INITIAL_DELIVERY_COUNT
               end,
-    LinkCredit = diff(add(TheirDC, TheirCredit), OurDC),
+    LinkCredit = amqp10_util:link_credit_snd(TheirDC, TheirCredit, OurDC),
     {ok, Link#link{link_credit = LinkCredit}};
 handle_link_flow(#'v1_0.flow'{delivery_count = TheirDC,
                               link_credit = {uint, TheirCredit},
@@ -1219,24 +1219,29 @@ handle_session_flow_pre_begin_test() ->
     ?assertEqual(998 - 51, State#state.remote_incoming_window).
 
 handle_link_flow_sender_test() ->
-    Handle = 45,
-    DeliveryCount = 55,
-    Link = #link{role = sender, output_handle = 99,
-                 link_credit = 0, delivery_count = DeliveryCount + 2},
-    Flow = #'v1_0.flow'{handle = {uint, Handle},
-                        link_credit = {uint, 42},
-                        delivery_count = {uint, DeliveryCount}
+    DeliveryCountRcv = 55,
+    DeliveryCountSnd = DeliveryCountRcv + 2,
+    LinkCreditRcv = 42,
+    Link = #link{role = sender,
+                 output_handle = 99,
+                 link_credit = 0,
+                 delivery_count = DeliveryCountSnd},
+    Flow = #'v1_0.flow'{handle = {uint, 45},
+                        link_credit = {uint, LinkCreditRcv},
+                        delivery_count = {uint, DeliveryCountRcv}
                        },
     {ok, Outcome} = handle_link_flow(Flow, Link),
     % see section 2.6.7
-    ?assertEqual(DeliveryCount + 42 - (DeliveryCount + 2), Outcome#link.link_credit),
+    ?assertEqual(DeliveryCountRcv + LinkCreditRcv - DeliveryCountSnd,
+                 Outcome#link.link_credit),
 
     % receiver does not yet know the delivery_count
     {ok, Outcome2} = handle_link_flow(Flow#'v1_0.flow'{delivery_count = undefined},
                                       Link),
     % using serial number arithmetic:
-    % ?INITIAL_DELIVERY_COUNT + 42 - (DeliveryCount + 2) = -18
-    ?assertEqual(-18, Outcome2#link.link_credit).
+    % ?INITIAL_DELIVERY_COUNT + LinkCreditRcv - DeliveryCountSnd = -18
+    % but we maintain a floor of zero
+    ?assertEqual(0, Outcome2#link.link_credit).
 
 handle_link_flow_sender_drain_test() ->
     Handle = 45,

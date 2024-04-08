@@ -293,8 +293,8 @@ start_link(ReaderPid, WriterPid, ChannelNum, FrameMax, User, Vhost, ConnName, Be
     Opts = [{hibernate_after, ?HIBERNATE_AFTER}],
     gen_server:start_link(?MODULE, Args, Opts).
 
-process_frame(Pid, Frame) ->
-    gen_server:cast(Pid, {frame, Frame}).
+process_frame(Pid, FrameBody) ->
+    gen_server:cast(Pid, {frame_body, FrameBody}).
 
 init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ConnName,
       #'v1_0.begin'{next_outgoing_id = ?UINT(RemoteNextOutgoingId),
@@ -385,10 +385,10 @@ handle_info({{'DOWN', QName}, _MRef, process, QPid, Reason},
             noreply(State)
     end.
 
-handle_cast({frame, Frame},
+handle_cast({frame_body, FrameBody},
             #state{cfg = #cfg{writer_pid = WriterPid,
                               channel_num = Ch}} = State0) ->
-    try handle_control(Frame, State0) of
+    try handle_control(FrameBody, State0) of
         {reply, Replies, State} when is_list(Replies) ->
             lists:foreach(fun (Reply) ->
                                   rabbit_amqp_writer:send_command(WriterPid, Ch, Reply)
@@ -1048,14 +1048,14 @@ handle_control(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
             end
     end;
 
-handle_control({Txfr = #'v1_0.transfer'{handle = ?UINT(Handle)}, MsgPart},
+handle_control({Performative = #'v1_0.transfer'{handle = ?UINT(Handle)}, Paylaod},
                State0 = #state{incoming_links = IncomingLinks}) ->
     {Flows, State1} = session_flow_control_received_transfer(State0),
 
     {Reply, State} =
     case IncomingLinks of
         #{Handle := Link0} ->
-            case incoming_link_transfer(Txfr, MsgPart, Link0, State1) of
+            case incoming_link_transfer(Performative, Paylaod, Link0, State1) of
                 {ok, Reply0, Link, State2} ->
                     {Reply0, State2#state{incoming_links = IncomingLinks#{Handle := Link}}};
                 {error, Reply0} ->
@@ -1065,7 +1065,7 @@ handle_control({Txfr = #'v1_0.transfer'{handle = ?UINT(Handle)}, MsgPart},
                     {Reply0, State1#state{incoming_links = maps:remove(Handle, IncomingLinks)}}
             end;
         _ ->
-            incoming_mgmt_link_transfer(Txfr, MsgPart, State1)
+            incoming_mgmt_link_transfer(Performative, Paylaod, State1)
     end,
     reply0(Reply ++ Flows, State);
 
@@ -1073,8 +1073,8 @@ handle_control({Txfr = #'v1_0.transfer'{handle = ?UINT(Handle)}, MsgPart},
 %% Although the AMQP message format [3.2] requires a body, it is valid to send a transfer frame without payload.
 %% For example, when a large multi transfer message is streamed using the ProtonJ2 client, the client could send
 %% a final #'v1_0.transfer'{more=false} frame without a payload.
-handle_control(Txfr = #'v1_0.transfer'{}, State) ->
-    handle_control({Txfr, <<>>}, State);
+handle_control(Performative = #'v1_0.transfer'{}, State) ->
+    handle_control({Performative, <<>>}, State);
 
 %% Flow control. These frames come with two pieces of information:
 %% the session window, and optionally, credit for a particular link.
@@ -1622,7 +1622,7 @@ handle_deliver(ConsumerTag, AckRequired,
             Mc = mc:set_annotation(redelivered, Redelivered, Mc1),
             Sections0 = mc:protocol_state(Mc),
             Sections = mc_amqp:serialize(Sections0),
-            ?DEBUG("~s Outbound content:~n  ~tp~n",
+            ?DEBUG("~s Outbound payload:~n  ~tp~n",
                    [?MODULE, [amqp10_framing:pprint(Section) ||
                               Section <- amqp10_framing:decode_bin(iolist_to_binary(Sections))]]),
             validate_message_size(Sections, MaxMessageSize),
@@ -1769,7 +1769,7 @@ incoming_mgmt_link_transfer(
                   delivery_tag = {binary, <<>>},
                   message_format = ?UINT(?MESSAGE_FORMAT),
                   settled = true},
-    ?DEBUG("~s Outbound content:~n  ~tp~n",
+    ?DEBUG("~s Outbound payload:~n  ~tp~n",
            [?MODULE, [amqp10_framing:pprint(Section) ||
                       Section <- amqp10_framing:decode_bin(iolist_to_binary(Response))]]),
     validate_message_size(Response, OutgoingMaxMessageSize),
@@ -1866,7 +1866,7 @@ incoming_link_transfer(
         #multi_transfer_msg{payload_fragments_rev = PFR,
                             delivery_id = FirstDeliveryId,
                             settled = FirstSettled} ->
-            MsgBin0 = iolist_to_binary(lists:reverse([MsgPart | PFR])),
+            MsgBin0 = list_to_binary(lists:reverse([MsgPart | PFR])),
             ok = validate_multi_transfer_delivery_id(MaybeDeliveryId, FirstDeliveryId),
             ok = validate_multi_transfer_settled(MaybeSettled, FirstSettled),
             {MsgBin0, FirstDeliveryId, FirstSettled}
@@ -1875,7 +1875,7 @@ incoming_link_transfer(
     validate_incoming_message_size(MsgBin),
 
     Sections = amqp10_framing:decode_bin(MsgBin),
-    ?DEBUG("~s Inbound content:~n  ~tp",
+    ?DEBUG("~s Inbound payload:~n  ~tp",
            [?MODULE, [amqp10_framing:pprint(Section) || Section <- Sections]]),
     Mc0 = mc:init(mc_amqp, Sections, #{}),
     case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, PermCache0) of
@@ -2251,7 +2251,7 @@ handle_outgoing_mgmt_link_flow_control(
     Drain = default(Drain0, false),
     Echo = default(Echo0, false),
     DeliveryCountRcv = delivery_count_rcv(MaybeDeliveryCountRcv),
-    LinkCreditSnd = link_credit_snd(DeliveryCountRcv, LinkCreditRcv, DeliveryCountSnd),
+    LinkCreditSnd = amqp10_util:link_credit_snd(DeliveryCountRcv, LinkCreditRcv, DeliveryCountSnd),
     {Count, Credit} = case Drain of
                           true -> {add(DeliveryCountSnd, LinkCreditSnd), 0};
                           false -> {DeliveryCountSnd, LinkCreditSnd}
@@ -2298,7 +2298,7 @@ handle_outgoing_link_flow_control(
             %% thanks to the queue event containing the consumer tag.
             State;
         {credit_api_v1, DeliveryCountSnd} ->
-            LinkCreditSnd = link_credit_snd(DeliveryCountRcv, LinkCreditRcv, DeliveryCountSnd),
+            LinkCreditSnd = amqp10_util:link_credit_snd(DeliveryCountRcv, LinkCreditRcv, DeliveryCountSnd),
             {ok, QStates, Actions} = rabbit_queue_type:credit_v1(QName, Ctag, LinkCreditSnd, Drain, QStates0),
             State1 = State0#state{queue_states = QStates},
             State = handle_queue_actions(Actions, State1),
@@ -2314,9 +2314,6 @@ delivery_count_rcv(undefined) ->
     %% receiver, i.e., the delivery-countsnd specified in the flow state carried
     %% by the initial attach frame from the sender to the receiver." [2.6.7]
     ?INITIAL_DELIVERY_COUNT.
-
-link_credit_snd(DeliveryCountRcv, LinkCreditRcv, DeliveryCountSnd) ->
-    diff(add(DeliveryCountRcv, LinkCreditRcv), DeliveryCountSnd).
 
 %% The AMQP 0.9.1 credit extension was poorly designed because a consumer granting
 %% credits to a queue has to synchronously wait for a credit reply from the queue:
@@ -2398,20 +2395,20 @@ default(Thing,    _Default) -> Thing.
 transfer_frames(Transfer, Sections, unlimited) ->
     [[Transfer, Sections]];
 transfer_frames(Transfer, Sections, MaxFrameSize) ->
-    %% TODO Ugh
-    TLen = iolist_size(amqp10_framing:encode_bin(Transfer)),
-    encode_frames(Transfer, Sections, MaxFrameSize - TLen, []).
+    PerformativeSize = iolist_size(amqp10_framing:encode_bin(Transfer)),
+    encode_frames(Transfer, Sections, MaxFrameSize - PerformativeSize, []).
 
-encode_frames(_T, _Msg, MaxContentLen, _Transfers) when MaxContentLen =< 0 ->
+encode_frames(_T, _Msg, MaxPayloadSize, _Transfers) when MaxPayloadSize =< 0 ->
     protocol_error(?V_1_0_AMQP_ERROR_FRAME_SIZE_TOO_SMALL,
-                   "Frame size is too small by ~tp bytes",
-                   [-MaxContentLen]);
-encode_frames(T, Msg, MaxContentLen, Transfers) ->
-    case iolist_size(Msg) > MaxContentLen of
+                   "Frame size is too small by ~b bytes",
+                   [-MaxPayloadSize]);
+encode_frames(T, Msg, MaxPayloadSize, Transfers) ->
+    case iolist_size(Msg) > MaxPayloadSize of
         true ->
-            <<Chunk:MaxContentLen/binary, Rest/binary>> = iolist_to_binary(Msg),
+            MsgBin = iolist_to_binary(Msg),
+            {Chunk, Rest} = split_binary(MsgBin, MaxPayloadSize),
             T1 = T#'v1_0.transfer'{more = true},
-            encode_frames(T, Rest, MaxContentLen, [[T1, Chunk] | Transfers]);
+            encode_frames(T, Rest, MaxPayloadSize, [[T1, Chunk] | Transfers]);
         false ->
             lists:reverse([[T, Msg] | Transfers])
     end.

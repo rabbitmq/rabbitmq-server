@@ -13,6 +13,7 @@ def all_beam_files(name = "all_beam_files"):
             "src/amqp10_binary_parser.erl",
             "src/amqp10_framing.erl",
             "src/amqp10_framing0.erl",
+            "src/amqp10_util.erl",
             "src/serial_number.erl",
         ],
         hdrs = [":public_and_private_hdrs"],
@@ -35,6 +36,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/amqp10_binary_parser.erl",
             "src/amqp10_framing.erl",
             "src/amqp10_framing0.erl",
+            "src/amqp10_util.erl",
             "src/serial_number.erl",
         ],
         hdrs = [":public_and_private_hdrs"],
@@ -64,6 +66,7 @@ def all_srcs(name = "all_srcs"):
             "src/amqp10_binary_parser.erl",
             "src/amqp10_framing.erl",
             "src/amqp10_framing0.erl",
+            "src/amqp10_util.erl",
             "src/serial_number.erl",
         ],
     )

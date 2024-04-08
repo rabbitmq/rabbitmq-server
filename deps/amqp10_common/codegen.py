@@ -87,8 +87,7 @@ def print_hrl(types, defines):
             for opt in d.options:
                 print_define(opt, d.source)
     print("""
--define(DESCRIBED, 0:8).
--define(DESCRIBED_BIN, <<?DESCRIBED>>).
+-define(DESCRIBED, 0).
 """)
 
 

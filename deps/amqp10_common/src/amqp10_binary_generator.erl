@@ -61,153 +61,165 @@
 -define(DOFF, 2).
 -define(VAR_1_LIMIT, 16#FF).
 
--spec build_frame(integer(), iolist()) -> iolist().
-build_frame(Channel, Payload) ->
-    build_frame(Channel, ?AMQP_FRAME_TYPE, Payload).
+-spec build_frame(non_neg_integer(), iolist()) -> iolist().
+build_frame(Channel, Body) ->
+    build_frame(Channel, ?AMQP_FRAME_TYPE, Body).
 
-build_frame(Channel, FrameType, Payload) ->
-    Size = iolist_size(Payload) + 8, % frame header and no extension
-    [ <<Size:32/unsigned, 2:8, FrameType:8, Channel:16/unsigned>>, Payload ].
+-spec build_frame(non_neg_integer(), non_neg_integer(), iolist()) -> iolist().
+build_frame(Channel, FrameType, Body) ->
+    Size = iolist_size(Body) + 8, % frame header and no extension
+    [<<Size:32, 2:8, FrameType:8, Channel:16>>, Body].
 
 build_heartbeat_frame() ->
     %% length is inclusive
     <<8:32, ?DOFF:8, ?AMQP_FRAME_TYPE:8, 0:16>>.
 
--spec generate(amqp10_type()) -> iolist().
-generate({described, Descriptor, Value}) ->
-    DescBin = generate(Descriptor),
-    ValueBin = generate(Value),
-    [ ?DESCRIBED_BIN, DescBin, ValueBin ];
+-spec generate(amqp10_type()) -> iodata().
+generate(Type) ->
+    case generate1(Type) of
+        Byte when is_integer(Byte) ->
+            [Byte];
+        IoData ->
+            IoData
+    end.
 
-generate(null)  -> <<16#40>>;
-generate(true)  -> <<16#41>>;
-generate(false) -> <<16#42>>;
-generate({boolean, true}) -> <<16#56, 16#01>>;
-generate({boolean, false}) -> <<16#56, 16#00>>;
+generate1({described, Descriptor, Value}) ->
+    DescBin = generate1(Descriptor),
+    ValueBin = generate1(Value),
+    [?DESCRIBED, DescBin, ValueBin];
+
+generate1(null)  -> 16#40;
+generate1(true)  -> 16#41;
+generate1(false) -> 16#42;
+generate1({boolean, true}) -> [16#56, 16#01];
+generate1({boolean, false}) -> [16#56, 16#00];
 
 %% some integral types have a compact encoding as a byte; this is in
 %% particular for the descriptors of AMQP types, which have the domain
 %% bits set to zero and values < 256.
-generate({ubyte,    V})                           -> <<16#50,V:8/unsigned>>;
-generate({ushort,   V})                           -> <<16#60,V:16/unsigned>>;
-generate({uint,     V}) when V =:= 0              -> <<16#43>>;
-generate({uint,     V}) when V < 256              -> <<16#52,V:8/unsigned>>;
-generate({uint,     V})                           -> <<16#70,V:32/unsigned>>;
-generate({ulong,    V}) when V =:= 0              -> <<16#44>>;
-generate({ulong,    V}) when V < 256              -> <<16#53,V:8/unsigned>>;
-generate({ulong,    V})                           -> <<16#80,V:64/unsigned>>;
-generate({byte,     V})                           -> <<16#51,V:8/signed>>;
-generate({short,    V})                           -> <<16#61,V:16/signed>>;
-generate({int,      V}) when V<128 andalso V>-129 -> <<16#54,V:8/signed>>;
-generate({int,      V})                           -> <<16#71,V:32/signed>>;
-generate({long,     V}) when V<128 andalso V>-129 -> <<16#55,V:8/signed>>;
-generate({long,     V})                           -> <<16#81,V:64/signed>>;
-generate({float,    V})                           -> <<16#72,V:32/float>>;
-generate({double,   V})                           -> <<16#82,V:64/float>>;
-generate({char,     V})                           -> <<16#73,V:4/binary>>;
-generate({timestamp,V})                           -> <<16#83,V:64/signed>>;
-generate({uuid,     V})                           -> <<16#98,V:16/binary>>;
+generate1({ubyte,    V})                           -> [16#50, V];
+generate1({ushort,   V})                           -> <<16#60,V:16/unsigned>>;
+generate1({uint,     V}) when V =:= 0              -> 16#43;
+generate1({uint,     V}) when V < 256              -> [16#52, V];
+generate1({uint,     V})                           -> <<16#70,V:32/unsigned>>;
+generate1({ulong,    V}) when V =:= 0              -> 16#44;
+generate1({ulong,    V}) when V < 256              -> [16#53, V];
+generate1({ulong,    V})                           -> <<16#80,V:64/unsigned>>;
+generate1({byte,     V})                           -> <<16#51,V:8/signed>>;
+generate1({short,    V})                           -> <<16#61,V:16/signed>>;
+generate1({int,      V}) when V<128 andalso V>-129 -> <<16#54,V:8/signed>>;
+generate1({int,      V})                           -> <<16#71,V:32/signed>>;
+generate1({long,     V}) when V<128 andalso V>-129 -> <<16#55,V:8/signed>>;
+generate1({long,     V})                           -> <<16#81,V:64/signed>>;
+generate1({float,    V})                           -> <<16#72,V:32/float>>;
+generate1({double,   V})                           -> <<16#82,V:64/float>>;
+generate1({char,     V})                           -> <<16#73,V:4/binary>>;
+generate1({timestamp,V})                           -> <<16#83,V:64/signed>>;
+generate1({uuid,     V})                           -> <<16#98,V:16/binary>>;
 
-generate({utf8, V}) when size(V) < ?VAR_1_LIMIT -> [<<16#a1,(size(V)):8>>,  V];
-generate({utf8, V})                             -> [<<16#b1,(size(V)):32>>, V];
-generate({symbol, V})                           -> [<<16#a3,(size(V)):8>>,  V];
-generate({binary, V}) ->
+generate1({utf8, V}) when size(V) < ?VAR_1_LIMIT -> [16#a1, size(V), V];
+generate1({utf8, V})                             -> [<<16#b1, (size(V)):32>>, V];
+generate1({symbol, V})                           -> [16#a3, size(V), V];
+generate1({binary, V}) ->
     Size = iolist_size(V),
-    if  Size < ?VAR_1_LIMIT -> [<<16#a0,Size:8>>,  V];
-        true                -> [<<16#b0,Size:32>>, V]
+    case Size < ?VAR_1_LIMIT  of
+        true ->
+            [16#a0, Size, V];
+        false ->
+            [<<16#b0, Size:32>>, V]
     end;
 
-generate({list, []}) ->
-    <<16#45>>;
-generate({list, List}) ->
+generate1({list, []}) ->
+    16#45;
+generate1({list, List}) ->
     Count = length(List),
-    Compound = lists:map(fun generate/1, List),
+    Compound = lists:map(fun generate1/1, List),
     S = iolist_size(Compound),
     %% If the list contains less than (256 - 1) elements and if the
     %% encoded size (including the encoding of "Count", thus S + 1
     %% in the test) is less than 256 bytes, we use the short form.
     %% Otherwise, we use the large form.
     if Count >= (256 - 1) orelse (S + 1) >= 256 ->
-            [<<16#d0, (S + 4):32/unsigned, Count:32/unsigned>>, Compound];
-        true ->
-            [<<16#c0, (S + 1):8/unsigned,  Count:8/unsigned>>,  Compound]
+           [<<16#d0, (S + 4):32, Count:32>>, Compound];
+       true ->
+           [16#c0, S + 1, Count, Compound]
     end;
 
-generate({map, ListOfPairs}) ->
+generate1({map, ListOfPairs}) ->
     Count = length(ListOfPairs) * 2,
     Compound = lists:map(fun ({Key, Val}) ->
-                                 [(generate(Key)),
-                                  (generate(Val))]
+                                 [(generate1(Key)),
+                                  (generate1(Val))]
                          end, ListOfPairs),
     S = iolist_size(Compound),
-    %% See generate({list, ...}) for an explanation of this test.
+    %% See generate1({list, ...}) for an explanation of this test.
     if Count >= (256 - 1) orelse (S + 1) >= 256 ->
-            [<<16#d1, (S + 4):32, Count:32>>, Compound];
-        true ->
-            [<<16#c1, (S + 1):8,  Count:8>>,  Compound]
+           [<<16#d1, (S + 4):32, Count:32>>, Compound];
+       true ->
+           [16#c1, S + 1, Count, Compound]
     end;
 
-generate({array, Type, List}) ->
+generate1({array, Type, List}) ->
     Count = length(List),
-    Body = iolist_to_binary([constructor(Type),
-                             [generate(Type, I) || I <- List]]),
-    S = size(Body),
-    %% See generate({list, ...}) for an explanation of this test.
+    Array = [constructor(Type),
+             [generate2(Type, I) || I <- List]],
+    S = iolist_size(Array),
+    %% See generate1({list, ...}) for an explanation of this test.
     if Count >= (256 - 1) orelse (S + 1) >= 256 ->
-            [<<16#f0, (S + 4):32/unsigned, Count:32/unsigned>>, Body];
-        true ->
-            [<<16#e0, (S + 1):8/unsigned,  Count:8/unsigned>>,  Body]
+           [<<16#f0, (S + 4):32, Count:32>>, Array];
+       true ->
+           [16#e0, S + 1,  Count, Array]
     end;
 
-generate({as_is, TypeCode, Bin}) ->
+generate1({as_is, TypeCode, Bin}) ->
     <<TypeCode, Bin>>.
 
 %% TODO again these are a stub to get SASL working. New codec? Will
 %% that ever happen? If not we really just need to split generate/1
 %% up into things like these...
 %% for these constructors map straight-forwardly
-constructor(symbol) -> <<16#b3>>;
-constructor(ubyte) -> <<16#50>>;
-constructor(ushort) -> <<16#60>>;
-constructor(short) -> <<16#61>>;
-constructor(uint) -> <<16#70>>;
-constructor(ulong) -> <<16#80>>;
-constructor(byte) -> <<16#51>>;
-constructor(int) -> <<16#71>>;
-constructor(long) -> <<16#81>>;
-constructor(float) -> <<16#72>>;
-constructor(double) -> <<16#82>>;
-constructor(char) -> <<16#73>>;
-constructor(timestamp) -> <<16#83>>;
-constructor(uuid) -> <<16#98>>;
-constructor(null) -> <<16#40>>;
-constructor(boolean) -> <<16#56>>;
-constructor(array) -> <<16#f0>>; % use large array type for all nested arrays
-constructor(utf8) -> <<16#b1>>;
+constructor(symbol) -> 16#b3;
+constructor(ubyte) -> 16#50;
+constructor(ushort) -> 16#60;
+constructor(short) -> 16#61;
+constructor(uint) -> 16#70;
+constructor(ulong) -> 16#80;
+constructor(byte) -> 16#51;
+constructor(int) -> 16#71;
+constructor(long) -> 16#81;
+constructor(float) -> 16#72;
+constructor(double) -> 16#82;
+constructor(char) -> 16#73;
+constructor(timestamp) -> 16#83;
+constructor(uuid) -> 16#98;
+constructor(null) -> 16#40;
+constructor(boolean) -> 16#56;
+constructor(array) -> 16#f0; % use large array type for all nested arrays
+constructor(utf8) -> 16#b1;
 constructor({described, Descriptor, Primitive}) ->
-    [<<16#00>>, generate(Descriptor), constructor(Primitive)].
+    [16#00, generate1(Descriptor), constructor(Primitive)].
 
 % returns io_list
-generate(symbol, {symbol, V}) -> [<<(size(V)):32>>, V];
-generate(utf8, {utf8, V}) -> [<<(size(V)):32>>, V];
-generate(boolean, true) -> <<16#01>>;
-generate(boolean, false) -> <<16#00>>;
-generate(boolean, {boolean, true}) -> <<16#01>>;
-generate(boolean, {boolean, false}) -> <<16#00>>;
-generate(ubyte, {ubyte, V}) -> <<V:8/unsigned>>;
-generate(byte, {byte, V}) -> <<V:8/signed>>;
-generate(ushort, {ushort, V}) -> <<V:16/unsigned>>;
-generate(short, {short, V}) -> <<V:16/signed>>;
-generate(uint, {uint, V}) -> <<V:32/unsigned>>;
-generate(int, {int, V}) -> <<V:32/signed>>;
-generate(ulong, {ulong, V}) -> <<V:64/unsigned>>;
-generate(long, {long, V}) -> <<V:64/signed>>;
-generate({described, D, P}, {described, D, V}) ->
-    generate(P, V);
-generate(array, {array, Type, List}) ->
+generate2(symbol, {symbol, V}) -> [<<(size(V)):32>>, V];
+generate2(utf8, {utf8, V}) -> [<<(size(V)):32>>, V];
+generate2(boolean, true) -> 16#01;
+generate2(boolean, false) -> 16#00;
+generate2(boolean, {boolean, true}) -> 16#01;
+generate2(boolean, {boolean, false}) -> 16#00;
+generate2(ubyte, {ubyte, V}) -> V;
+generate2(byte, {byte, V}) -> <<V:8/signed>>;
+generate2(ushort, {ushort, V}) -> <<V:16/unsigned>>;
+generate2(short, {short, V}) -> <<V:16/signed>>;
+generate2(uint, {uint, V}) -> <<V:32/unsigned>>;
+generate2(int, {int, V}) -> <<V:32/signed>>;
+generate2(ulong, {ulong, V}) -> <<V:64/unsigned>>;
+generate2(long, {long, V}) -> <<V:64/signed>>;
+generate2({described, D, P}, {described, D, V}) ->
+    generate2(P, V);
+generate2(array, {array, Type, List}) ->
     Count = length(List),
-    Body = iolist_to_binary([constructor(Type),
-                             [generate(Type, I) || I <- List]]),
-    S = size(Body),
-    %% See generate({list, ...}) for an explanation of this test.
-    [<<(S + 4):32/unsigned, Count:32/unsigned>>, Body].
+    Array = [constructor(Type),
+             [generate2(Type, I) || I <- List]],
+    S = iolist_size(Array),
+    %% See generate1({list, ...}) for an explanation of this test.
+    [<<(S + 4):32, Count:32>>, Array].

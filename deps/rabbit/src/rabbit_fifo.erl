@@ -2607,11 +2607,12 @@ initial_delivery_count(_) ->
 credit_api_v2(#consumer_cfg{meta = ConsumerMeta}) ->
     maps:is_key(initial_delivery_count, ConsumerMeta).
 
-%% AMQP 1.0 §2.6.7
 link_credit_snd(DeliveryCountRcv, LinkCreditRcv, DeliveryCountSnd, ConsumerCfg) ->
-    C = case credit_api_v2(ConsumerCfg) of
-            true -> diff(add(DeliveryCountRcv, LinkCreditRcv), DeliveryCountSnd);
-            false -> DeliveryCountRcv + LinkCreditRcv - DeliveryCountSnd
-        end,
-    %% C can be negative when receiver decreases credits while messages are in flight.
-    max(0, C).
+    case credit_api_v2(ConsumerCfg) of
+        true ->
+            amqp10_util:link_credit_snd(DeliveryCountRcv, LinkCreditRcv, DeliveryCountSnd);
+        false ->
+            C = DeliveryCountRcv + LinkCreditRcv - DeliveryCountSnd,
+            %% C can be negative when receiver decreases credits while messages are in flight.
+            max(0, C)
+    end.

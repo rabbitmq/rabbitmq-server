@@ -473,9 +473,8 @@ credit(QName, CTag, DeliveryCountRcv, LinkCreditRcv, Drain, Echo,
                       local_pid = LocalPid} = State0) ->
     case Readers of
         #{CTag := Str0 = #stream{delivery_count = DeliveryCountSnd}} ->
-            LinkCreditSnd = serial_number:diff(
-                              serial_number:add(DeliveryCountRcv, LinkCreditRcv),
-                              DeliveryCountSnd),
+            LinkCreditSnd = amqp10_util:link_credit_snd(
+                              DeliveryCountRcv, LinkCreditRcv, DeliveryCountSnd),
             Str1 = Str0#stream{credit = LinkCreditSnd},
             {Str2 = #stream{delivery_count = DeliveryCount,
                             credit = Credit,
