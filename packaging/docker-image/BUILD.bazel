@@ -58,7 +58,7 @@ docker import \\
     $$BASE_IMAGE
 
 if [[ -n "$${{TEMP_REGISTRY}}" ]]; then
-    docker push $$BASE_IMAGE
+    docker push --quiet $$BASE_IMAGE
     exit 1
     # if we are pushing to the temp registry, then we use
     # the digest to avoid race conditions on the tag
