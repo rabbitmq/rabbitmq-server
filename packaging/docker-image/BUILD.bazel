@@ -58,11 +58,11 @@ docker import \\
     $$BASE_IMAGE
 
 if [[ -n "$${{TEMP_REGISTRY}}" ]]; then
-    docker push --quiet $$BASE_IMAGE
+    DIGEST="$$(docker push $$BASE_IMAGE | sed -n 's/.*\\(sha256:[a-z0-9]*\\).*/\\1/p')"
+    echo "$$DIGEST"
     exit 1
     # if we are pushing to the temp registry, then we use
     # the digest to avoid race conditions on the tag
-    DIGEST="$$(docker images --no-trunc --quiet $$BASE_IMAGE)"
     BASE_IMAGE="$${{TEMP_REGISTRY:=}}rabbitmq-base@$$DIGEST"
 fi
 
