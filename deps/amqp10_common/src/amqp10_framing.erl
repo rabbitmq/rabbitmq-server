@@ -177,7 +177,7 @@ encode_bin(X) ->
     amqp10_binary_generator:generate(encode(X)).
 
 decode_bin(X) ->
-    [decode(PerfDesc) || PerfDesc <- amqp10_binary_parser:parse_all(X)].
+    [decode(DescribedPerformative) || DescribedPerformative <- amqp10_binary_parser:parse_all(X)].
 
 symbol_for(X) ->
     amqp10_framing0:symbol_for(X).

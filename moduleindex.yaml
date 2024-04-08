@@ -44,6 +44,7 @@ amqp10_common:
 - amqp10_binary_parser
 - amqp10_framing
 - amqp10_framing0
+- amqp10_util
 - serial_number
 aten:
 - aten

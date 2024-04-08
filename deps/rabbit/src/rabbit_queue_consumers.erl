@@ -485,10 +485,8 @@ process_credit(DeliveryCountRcv, LinkCredit, ChPid, CTag, State) ->
                                 _ ->
                                     %% credit API v2
                                     %% LinkCredit refers to LinkCreditRcv
-                                    %% See AMQP §2.6.7
-                                    serial_number:diff(
-                                      serial_number:add(DeliveryCountRcv, LinkCredit),
-                                      DeliveryCountSnd)
+                                    amqp10_util:link_credit_snd(
+                                      DeliveryCountRcv, LinkCredit, DeliveryCountSnd)
                             end,
             C = C0#cr{link_states = maps:update(CTag, LinkState#link_state{credit = LinkCreditSnd}, LinkStates)},
             case OldLinkCreditSnd > 0 orelse

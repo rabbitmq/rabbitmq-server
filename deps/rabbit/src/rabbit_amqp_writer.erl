@@ -38,6 +38,9 @@
 -define(CALL_TIMEOUT, 300_000).
 -define(AMQP_SASL_FRAME_TYPE, 1).
 
+-type performative() :: tuple().
+-type payload() :: iodata().
+
 %%%%%%%%%%%%%%%%%%
 %%% client API %%%
 %%%%%%%%%%%%%%%%%%
@@ -51,24 +54,24 @@ start_link(Sock, MaxFrame, ReaderPid) ->
 
 -spec send_command(pid(),
                    rabbit_types:channel_number(),
-                   rabbit_framing:amqp_method_record()) -> ok.
-send_command(Writer, ChannelNum, MethodRecord) ->
-    Request = {send_command, ChannelNum, MethodRecord},
+                   performative()) -> ok.
+send_command(Writer, ChannelNum, Performative) ->
+    Request = {send_command, ChannelNum, Performative},
     gen_server:cast(Writer, Request).
 
 -spec send_command(pid(),
                    rabbit_types:channel_number(),
-                   rabbit_framing:amqp_method_record(),
-                   rabbit_types:content()) -> ok.
-send_command(Writer, ChannelNum, MethodRecord, Content) ->
-    Request = {send_command, ChannelNum, MethodRecord, Content},
+                   performative(),
+                   payload()) -> ok.
+send_command(Writer, ChannelNum, Performative, Payload) ->
+    Request = {send_command, ChannelNum, Performative, Payload},
     gen_server:cast(Writer, Request).
 
 -spec send_command_sync(pid(),
                         rabbit_types:channel_number(),
-                        rabbit_framing:amqp_method_record()) -> ok.
-send_command_sync(Writer, ChannelNum, MethodRecord) ->
-    Request = {send_command, ChannelNum, MethodRecord},
+                        performative()) -> ok.
+send_command_sync(Writer, ChannelNum, Performative) ->
+    Request = {send_command, ChannelNum, Performative},
     gen_server:call(Writer, Request, ?CALL_TIMEOUT).
 
 %% Delete this function when feature flag credit_api_v2 becomes required.
@@ -76,17 +79,17 @@ send_command_sync(Writer, ChannelNum, MethodRecord) ->
                               rabbit_types:channel_number(),
                               pid(),
                               pid(),
-                              rabbit_framing:amqp_method_record(),
-                              rabbit_types:content()) -> ok.
-send_command_and_notify(Writer, ChannelNum, QueuePid, SessionPid, MethodRecord, Content) ->
-    Request = {send_command_and_notify, ChannelNum, QueuePid, SessionPid, MethodRecord, Content},
+                              performative(),
+                              payload()) -> ok.
+send_command_and_notify(Writer, ChannelNum, QueuePid, SessionPid, Performative, Payload) ->
+    Request = {send_command_and_notify, ChannelNum, QueuePid, SessionPid, Performative, Payload},
     gen_server:cast(Writer, Request).
 
 -spec internal_send_command(rabbit_net:socket(),
-                            rabbit_framing:amqp_method_record(),
+                            performative(),
                             amqp10_framing | rabbit_amqp_sasl) -> ok.
-internal_send_command(Sock, MethodRecord, Protocol) ->
-    Data = assemble_frame(0, MethodRecord, Protocol),
+internal_send_command(Sock, Performative, Protocol) ->
+    Data = assemble_frame(0, Performative, Protocol),
     ok = tcp_send(Sock, Data).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -102,20 +105,20 @@ init({Sock, MaxFrame, ReaderPid}) ->
     process_flag(message_queue_data, off_heap),
     {ok, State}.
 
-handle_cast({send_command, ChannelNum, MethodRecord}, State0) ->
-    State = internal_send_command_async(ChannelNum, MethodRecord, State0),
+handle_cast({send_command, ChannelNum, Performative}, State0) ->
+    State = internal_send_command_async(ChannelNum, Performative, State0),
     no_reply(State);
-handle_cast({send_command, ChannelNum, MethodRecord, Content}, State0) ->
-    State = internal_send_command_async(ChannelNum, MethodRecord, Content, State0),
+handle_cast({send_command, ChannelNum, Performative, Payload}, State0) ->
+    State = internal_send_command_async(ChannelNum, Performative, Payload, State0),
     no_reply(State);
 %% Delete below function clause when feature flag credit_api_v2 becomes required.
-handle_cast({send_command_and_notify, ChannelNum, QueuePid, SessionPid, MethodRecord, Content}, State0) ->
-    State = internal_send_command_async(ChannelNum, MethodRecord, Content, State0),
+handle_cast({send_command_and_notify, ChannelNum, QueuePid, SessionPid, Performative, Payload}, State0) ->
+    State = internal_send_command_async(ChannelNum, Performative, Payload, State0),
     rabbit_amqqueue:notify_sent(QueuePid, SessionPid),
     no_reply(State).
 
-handle_call({send_command, ChannelNum, MethodRecord}, _From, State0) ->
-    State1 = internal_send_command_async(ChannelNum, MethodRecord, State0),
+handle_call({send_command, ChannelNum, Performative}, _From, State0) ->
+    State1 = internal_send_command_async(ChannelNum, Performative, State0),
     State = flush(State1),
     {reply, ok, State}.
 
@@ -151,33 +154,20 @@ format_status(Status) ->
 no_reply(State) ->
     {noreply, State, 0}.
 
-internal_send_command_async(Channel, MethodRecord,
+internal_send_command_async(Channel, Performative,
                             State = #state{pending = Pending,
                                            pending_size = PendingSize}) ->
-    Frame = assemble_frame(Channel, MethodRecord),
+    Frame = assemble_frame(Channel, Performative),
     maybe_flush(State#state{pending = [Frame | Pending],
                             pending_size = PendingSize + iolist_size(Frame)}).
 
-internal_send_command_async(Channel, MethodRecord, Content,
+internal_send_command_async(Channel, Performative, Payload,
                             State = #state{max_frame_size = MaxFrame,
                                            pending = Pending,
                                            pending_size = PendingSize}) ->
-    Frames = assemble_frames(Channel, MethodRecord, Content, MaxFrame),
+    Frames = assemble_frame(Channel, Performative, Payload, MaxFrame),
     maybe_flush(State#state{pending = [Frames | Pending],
                             pending_size = PendingSize + iolist_size(Frames)}).
-
-%% Note: a transfer record can be followed by a number of other
-%% records to make a complete frame but unlike 0-9-1 we may have many
-%% content records. However, that's already been handled for us, we're
-%% just sending a chunk, so from this perspective it's just a binary.
-
-%%TODO respect MaxFrame
-assemble_frames(Channel, Performative, Content, _MaxFrame) ->
-    ?DEBUG("~s Channel ~tp <-~n~tp~n followed by ~tp bytes of content~n",
-           [?MODULE, Channel, amqp10_framing:pprint(Performative),
-            iolist_size(Content)]),
-    PerfBin = amqp10_framing:encode_bin(Performative),
-    amqp10_binary_generator:build_frame(Channel, [PerfBin, Content]).
 
 assemble_frame(Channel, Performative) ->
     assemble_frame(Channel, Performative, amqp10_framing).
@@ -192,6 +182,14 @@ assemble_frame(Channel, Performative, rabbit_amqp_sasl) ->
            [?MODULE, Channel, amqp10_framing:pprint(Performative)]),
     PerfBin = amqp10_framing:encode_bin(Performative),
     amqp10_binary_generator:build_frame(Channel, ?AMQP_SASL_FRAME_TYPE, PerfBin).
+
+%%TODO respect MaxFrame
+assemble_frame(Channel, Performative, Payload, _MaxFrame) ->
+    ?DEBUG("~s Channel ~tp <-~n~tp~n followed by ~tp bytes of payload~n",
+           [?MODULE, Channel, amqp10_framing:pprint(Performative),
+            iolist_size(Payload)]),
+    PerfIoData = amqp10_framing:encode_bin(Performative),
+    amqp10_binary_generator:build_frame(Channel, [PerfIoData, Payload]).
 
 tcp_send(Sock, Data) ->
     rabbit_misc:throw_on_error(

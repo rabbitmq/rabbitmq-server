@@ -72,8 +72,7 @@
 -type queue_type() :: rabbit_classic_queue | rabbit_quorum_queue | rabbit_stream_queue.
 %% see AMQP 1.0 §2.6.7
 -type delivery_count() :: sequence_no().
-%% Link credit can be negative, see AMQP 1.0 §2.6.7
--type credit() :: integer().
+-type credit() :: uint().
 
 -define(STATE, ?MODULE).
 
