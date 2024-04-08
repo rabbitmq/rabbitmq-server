@@ -78,6 +78,12 @@ format_queue_stats({disk_reads, _}) ->
     [];
 format_queue_stats({disk_writes, _}) ->
     [];
+format_queue_stats({members, Value}) ->
+    [{members, lists:sort(Value)}];
+format_queue_stats({online, Value}) ->
+    [{online, lists:sort(Value)}];
+format_queue_stats({open_files, Value}) ->
+    [{open_files, lists:sort(Value)}];
 format_queue_stats(Stat) ->
     [Stat].
 
@@ -112,6 +118,12 @@ format_queue_basic_stats({disk_reads, _}) ->
     [];
 format_queue_basic_stats({disk_writes, _}) ->
     [];
+format_queue_basic_stats({members, Value}) ->
+    [{members, lists:sort(Value)}];
+format_queue_basic_stats({online, Value}) ->
+    [{online, lists:sort(Value)}];
+format_queue_basic_stats({open_files, Value}) ->
+    [{open_files, lists:sort(Value)}];
 format_queue_basic_stats(Stat) ->
     [Stat].
 
