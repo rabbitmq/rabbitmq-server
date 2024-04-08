@@ -52,16 +52,17 @@ BASE_IMAGE="$${{TEMP_REGISTRY:=}}rabbitmq-base:{arch}"
 
 set -x
 
-SHA=$$(docker import \\
+docker import \\
     --platform linux/{arch} \\
     "$(location //packaging/base-image:image-{arch}.tar)" \\
-    $$BASE_IMAGE)
+    $$BASE_IMAGE
 
 if [[ -n "$${{TEMP_REGISTRY}}" ]]; then
     docker push $$BASE_IMAGE
     # if we are pushing to the temp registry, then we use
     # the digest to avoid race conditions on the tag
-    BASE_IMAGE="$${{TEMP_REGISTRY:=}}rabbitmq-base@$$SHA"
+    DIGEST="$$(docker images --no-trunc --quiet $$BASE_IMAGE)"
+    BASE_IMAGE="$${{TEMP_REGISTRY:=}}rabbitmq-base@$$DIGEST"
 fi
 
 docker buildx \\
