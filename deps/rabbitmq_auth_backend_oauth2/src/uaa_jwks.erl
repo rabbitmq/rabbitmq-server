@@ -1,5 +1,5 @@
 -module(uaa_jwks).
--export([get/2, ssl_options/1]).
+-export([get/2]).
 
 -spec get(string() | binary(), term()) -> {ok, term()} | {error, term()}.
 get(JwksUrl, SslOptions) ->
