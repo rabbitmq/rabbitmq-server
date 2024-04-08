@@ -15,7 +15,7 @@
   <properties>
     <paho.v5.version>[1.2.5,)</paho.v5.version>
     <paho.v3.version>[1.2.5,)</paho.v3.version>
-    <amqp-client.version>5.20.0</amqp-client.version>
+    <amqp-client.version>5.21.0</amqp-client.version>
     <junit.version>5.10.2</junit.version>
     <assertj.version>3.25.3</assertj.version>
     <logback.version>1.2.13</logback.version>
