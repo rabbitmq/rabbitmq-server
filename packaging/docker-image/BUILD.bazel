@@ -48,27 +48,22 @@ CONTEXT="$$(mktemp -d)"
 
 cp $(locations :context-files) "$$CONTEXT"
 
-BASE_IMAGE="$${{TEMP_REGISTRY:=}}rabbitmq-base:{arch}"
+BASE_IMAGE="ghcr.io/rabbitmq/rabbitmq-base"
 
 set -x
 
 docker import \\
     --platform linux/{arch} \\
     "$(location //packaging/base-image:image-{arch}.tar)" \\
-    $$BASE_IMAGE
+    $$BASE_IMAGE:{arch}
 
-if [[ -n "$${{TEMP_REGISTRY}}" ]]; then
-    DIGEST="$$(docker push $$BASE_IMAGE | sed -n 's/.*\\(sha256:[a-z0-9]*\\).*/\\1/p')"
-    # if we are pushing to the temp registry, then we use
-    # the digest to avoid race conditions on the tag
-    BASE_IMAGE="$${{TEMP_REGISTRY:=}}rabbitmq-base@$$DIGEST"
-fi
+DIGEST="$$(docker push $$BASE_IMAGE:{arch} | sed -n 's/.*\\(sha256:[a-z0-9]*\\).*/\\1/p')"
 
 docker buildx \\
     build \\
     "$$CONTEXT" \\
     --platform linux/{arch} \\
-    --build-arg BASE_IMAGE="$$BASE_IMAGE" \\
+    --build-arg BASE_IMAGE="$$BASE_IMAGE@$$DIGEST" \\
     --build-arg RABBITMQ_VERSION="{rmq_version}" \\
     --output type=tar,dest=$(location image-{arch}.tar) $${{EXTRA_BUILDX_OPTS:-}}
 """.format(
