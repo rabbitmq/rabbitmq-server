@@ -7,7 +7,7 @@
 
 -module(rabbit_mgmt_wm_queue_get).
 
--export([init/2, resource_exists/2, is_authorized/2,
+-export([init/2, resource_exists/2, is_authorized/2, allow_missing_post/2,
   allowed_methods/2, accept_content/2, content_types_provided/2,
   content_types_accepted/2]).
 -export([variances/2]).
@@ -35,6 +35,12 @@ resource_exists(ReqData, Context) ->
          _         -> true
      end, ReqData, Context}.
 
+allow_missing_post(ReqData, Context) ->
+     rabbit_mgmt_util:not_found(
+       rabbit_data_coercion:to_binary("vhost_not_found"),
+       ReqData,
+       Context).
+
 content_types_accepted(ReqData, Context) ->
    {[{'*', accept_content}], ReqData, Context}.
 
@@ -42,7 +48,7 @@ accept_content(ReqData, Context) ->
     rabbit_mgmt_util:post_respond(do_it(ReqData, Context)).
 
 do_it(ReqData0, Context) ->
-    VHost = rabbit_mgmt_util:vhost_or_bad_request(ReqData0, Context),
+    VHost = rabbit_mgmt_util:vhost(ReqData0),
     Q = rabbit_mgmt_util:id(queue, ReqData0),
     rabbit_mgmt_util:with_decode(
       [ackmode, count, encoding], ReqData0, Context,

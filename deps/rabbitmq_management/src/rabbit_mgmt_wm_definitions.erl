@@ -37,9 +37,12 @@ allowed_methods(ReqData, Context) ->
     {[<<"HEAD">>, <<"GET">>, <<"POST">>, <<"OPTIONS">>], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    case rabbit_mgmt_util:vhost_or_bad_request(ReqData, Context) of
+    case rabbit_mgmt_util:vhost(ReqData) of
         none ->
             all_definitions(ReqData, Context);
+        not_found ->
+            rabbit_mgmt_util:bad_request(rabbit_data_coercion:to_binary("vhost_not_found"),
+                                         ReqData, Context);
         VHost ->
             vhost_definitions(ReqData, VHost, Context)
     end.
