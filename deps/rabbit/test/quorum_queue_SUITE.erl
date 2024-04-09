@@ -3168,26 +3168,33 @@ delete_if_unused(Config) ->
 
 queue_ttl(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
+
+    %% Set policy to 10 seconds.
+    PolicyName = <<"my-queue-ttl-policy">>,
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, PolicyName, QQ, <<"queues">>,
+           [{<<"expires">>, 10000}]),
+    %% Set queue arg to 1 second.
+    QArgs = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+             {<<"x-expires">>, long, 1000}],
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                                  {<<"x-expires">>, long, 1000}])),
-    %% check queue no longer exists
+                 declare(Ch, QQ, QArgs)),
+    %% The minimum should take effect.
     ?awaitMatch(
        {'EXIT', {{shutdown,
                   {server_initiated_close,404,
                    <<"NOT_FOUND - no queue 'queue_ttl' in vhost '/'">>}},
                  _}},
-       catch amqp_channel:call(Ch, #'queue.declare'{queue = QQ,
-                                              passive = true,
-                                              durable = true,
-                                              auto_delete = false,
-                                              arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                                                           {<<"x-expires">>, long, 1000}]}),
-       30000),
-    ok.
+       catch amqp_channel:call(Ch, #'queue.declare'{
+                                      queue = QQ,
+                                      passive = true,
+                                      durable = true,
+                                      auto_delete = false,
+                                      arguments = QArgs}),
+       5_000),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName).
 
 consumer_priorities(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -3512,8 +3519,9 @@ leader_locator_policy(Config) ->
     Qs = [?config(queue_name, Config),
           ?config(alt_queue_name, Config),
           ?config(alt_2_queue_name, Config)],
+    PolicyName = <<"my-leader-locator">>,
     ok = rabbit_ct_broker_helpers:set_policy(
-           Config, 0, <<"my-leader-locator">>, <<"leader_locator_policy_.*">>, <<"queues">>,
+           Config, 0, PolicyName, <<"leader_locator_policy_.*">>, <<"queues">>,
            [{<<"queue-leader-locator">>, <<"balanced">>}]),
 
     Leaders = [begin
@@ -3527,7 +3535,7 @@ leader_locator_policy(Config) ->
     [?assertMatch(#'queue.delete_ok'{},
                   amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
      || Q <- Qs],
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"my-leader-locator">>),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName),
 
     ?assertEqual(3, length(lists:usort(Leaders))),
     ok.

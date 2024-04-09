@@ -309,7 +309,7 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
     MaxMemoryLength = args_policy_lookup(<<"max-in-memory-length">>, fun min/2, Q),
     MaxMemoryBytes = args_policy_lookup(<<"max-in-memory-bytes">>, fun min/2, Q),
     DeliveryLimit = args_policy_lookup(<<"delivery-limit">>, fun min/2, Q),
-    Expires = args_policy_lookup(<<"expires">>, fun policyHasPrecedence/2, Q),
+    Expires = args_policy_lookup(<<"expires">>, fun min/2, Q),
     MsgTTL = args_policy_lookup(<<"message-ttl">>, fun min/2, Q),
     #{name => Name,
       queue_resource => QName,
