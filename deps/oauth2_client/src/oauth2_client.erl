@@ -280,9 +280,11 @@ lookup_oauth_provider_from_keyconfig() ->
         ssl_options = extract_ssl_options_as_list(Map)
     }.
 
+
+
 -spec extract_ssl_options_as_list(#{atom() => any()}) -> proplists:proplist().
 extract_ssl_options_as_list(Map) ->
-    {Verify, CaCerts, CaCertFile} = case maps:get(peer_verification, Map, verify_peer) of
+    {Verify, CaCerts, CaCertFile} = case get_verify_or_peer_verification(Map, verify_peer) of
         verify_peer ->
             case maps:get(cacertfile, Map, undefined) of
                 undefined ->
@@ -321,6 +323,20 @@ extract_ssl_options_as_list(Map) ->
             [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]}];
         none ->
             []
+    end.
+
+% Replace peer_verification with verify to make it more consistent with other
+% ssl_options in RabbitMQ and Erlang's ssl options
+% Eventually, peer_verification will be removed. For now, both are allowed
+-spec get_verify_or_peer_verification(#{atom() => any()}, any()) -> proplists:proplist().
+get_verify_or_peer_verification(Ssl_options, Default) ->
+    case maps:get(verify, Ssl_options, undefined) of
+        undefined ->
+            case maps:get(peer_verification, Ssl_options, undefined) of
+                undefined -> Default;
+                PeerVerification -> PeerVerification
+            end;
+        Verify -> Verify
     end.
 
 lookup_oauth_provider_config(OAuth2ProviderId) ->
@@ -427,33 +443,10 @@ map_to_oauth_provider(PropList) when is_list(PropList) ->
         token_endpoint = proplists:get_value(token_endpoint, PropList),
         authorization_endpoint = proplists:get_value(authorization_endpoint, PropList, undefined),
         jwks_uri = proplists:get_value(jwks_uri, PropList, undefined),
-        ssl_options = map_ssl_options(proplists:get_value(https, PropList, undefined))
+        ssl_options = extract_ssl_options_as_list(maps:from_list(
+            proplists:get_value(https, PropList, [])))
     }.
 
-map_ssl_options(undefined) ->
-    [{verify, verify_none},
-        {depth, 10},
-        {fail_if_no_peer_cert, false},
-        {crl_check, false},
-        {crl_cache, {ssl_crl_cache, {internal, [{http, 10000}]}}}];
-map_ssl_options(Ssl_options) ->
-    Ssl_options1 = [{verify, proplists:get_value(verify, Ssl_options, verify_none)},
-        {depth, proplists:get_value(depth, Ssl_options, 10)},
-        {fail_if_no_peer_cert, proplists:get_value(fail_if_no_peer_cert, Ssl_options, false)},
-        {crl_check, proplists:get_value(crl_check, Ssl_options, false)},
-        {crl_cache, {ssl_crl_cache, {internal, [{http, 10000}]}}} | cacertfile(Ssl_options)],
-    case proplists:get_value(hostname_verification, Ssl_options, none) of
-        wildcard ->
-            [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]} | Ssl_options1];
-        none ->
-            Ssl_options1
-    end.
-
-cacertfile(Ssl_options) ->
-    case proplists:get_value(cacertfile, Ssl_options) of
-        undefined -> [];
-        CaCertFile -> [{cacertfile, CaCertFile}]
-    end.
 
 enrich_oauth_provider({ok, OAuthProvider}, TLSOptions) ->
     {ok, OAuthProvider#oauth_provider{ssl_options=TLSOptions}};

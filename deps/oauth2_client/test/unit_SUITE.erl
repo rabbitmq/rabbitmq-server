@@ -25,8 +25,11 @@ groups() ->
 [
   {ssl_options, [], [
     no_ssl_options_triggers_verify_peer,
-    peer_verification_verify_none,
-    peer_verification_verify_peer_with_cacertfile
+    choose_verify_over_peer_verification,
+    verify_set_to_verify_none,
+    peer_verification_set_to_verify_none,
+    peer_verification_set_to_verify_peer_with_cacertfile,
+    verify_set_to_verify_peer_with_cacertfile
   ]}
 ].
 
@@ -39,7 +42,29 @@ no_ssl_options_triggers_verify_peer(_) ->
     {cacerts, _CaCerts}
   ], oauth2_client:extract_ssl_options_as_list(#{})).
 
-peer_verification_verify_none(_) ->
+choose_verify_over_peer_verification(_) ->
+  Expected1 = [
+    {verify, verify_none}
+  ],
+  ?assertEqual(Expected1, oauth2_client:extract_ssl_options_as_list(
+    #{verify => verify_none, peer_verification => verify_peer })).
+
+verify_set_to_verify_none(_) ->
+  Expected1 = [
+    {verify, verify_none}
+  ],
+  ?assertEqual(Expected1, oauth2_client:extract_ssl_options_as_list(#{verify => verify_none})),
+
+  Expected2 = [
+    {verify, verify_none}
+  ],
+  ?assertEqual(Expected2, oauth2_client:extract_ssl_options_as_list(#{
+    verify => verify_none,
+    cacertfile => "/tmp"
+  })).
+
+
+peer_verification_set_to_verify_none(_) ->
   Expected1 = [
     {verify, verify_none}
   ],
@@ -54,7 +79,7 @@ peer_verification_verify_none(_) ->
   })).
 
 
-peer_verification_verify_peer_with_cacertfile(_) ->
+peer_verification_set_to_verify_peer_with_cacertfile(_) ->
   Expected = [
     {verify, verify_peer},
     {depth, 10},
@@ -65,4 +90,18 @@ peer_verification_verify_peer_with_cacertfile(_) ->
   ?assertEqual(Expected, oauth2_client:extract_ssl_options_as_list(#{
     cacertfile => "/tmp",
     peer_verification => verify_peer
+  })).
+
+
+verify_set_to_verify_peer_with_cacertfile(_) ->
+  Expected = [
+    {verify, verify_peer},
+    {depth, 10},
+    {crl_check,false},
+    {fail_if_no_peer_cert,false},
+    {cacertfile, "/tmp"}
+  ],
+  ?assertEqual(Expected, oauth2_client:extract_ssl_options_as_list(#{
+    cacertfile => "/tmp",
+    verify => verify_peer
   })).
