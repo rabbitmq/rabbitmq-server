@@ -83,7 +83,7 @@ start_rabbitmq_server() {
 stop_rabbitmq_server() {
     if test "$rabbitmq_server_pid"; then
         kill -TERM "$rabbitmq_server_pid"
-        wait "$rabbitmq_server_pid" || exit "$?"
+        wait "$rabbitmq_server_pid"
     fi
 }
 
@@ -129,23 +129,12 @@ else
     trap "stop_rabbitmq_server; exit 130" INT
 
     start_rabbitmq_server "$@" &
-    export rabbitmq_server_pid=$!
+    export rabbitmq_server_pid="$!"
 
     # Block until RabbitMQ exits or a signal is caught.
     # Waits for last command (which is start_rabbitmq_server)
-    #
-    # The "|| true" is here to work around an issue with Dash. Normally
-    # in a Bourne shell, if `wait` is interrupted by a signal, the
-    # signal handlers defined above are executed and the script
-    # terminates with the exit code of `wait` (unless the signal handler
-    # overrides that).
-    # In the case of Dash, it looks like `set -e` (set at the beginning
-    # of this script) gets precedence over signal handling. Therefore,
-    # when `wait` is interrupted, its exit code is non-zero and because
-    # of `set -e`, the script terminates immediately without running the
-    # signal handler. To work around this issue, we use "|| true" to
-    # force that statement to succeed and the signal handler to properly
-    # execute. Because the statement below has an exit code of 0, the
-    # signal handler has to restate the expected exit code.
-    wait "$rabbitmq_server_pid" || exit "$?"
+    # In a POSIX Bourne shell, if `wait` is interrupted by a signal, the signal
+    # handlers defined above are executed and the script terminates with the
+    # exit code of `wait` (unless the signal handler overrides that).
+    wait "$rabbitmq_server_pid"
 fi
