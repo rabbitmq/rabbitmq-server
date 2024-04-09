@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=pivotalrabbitmq/rabbitmq-base:latest
+ARG BASE_IMAGE=ghcr.io/rabbitmq/rabbitmq-base:amd64
 FROM ${BASE_IMAGE}
 
 ENV ERLANG_INSTALL_PATH_PREFIX /opt/erlang
