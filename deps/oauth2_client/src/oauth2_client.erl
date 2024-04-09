@@ -328,7 +328,7 @@ extract_ssl_options_as_list(Map) ->
 % Replace peer_verification with verify to make it more consistent with other
 % ssl_options in RabbitMQ and Erlang's ssl options
 % Eventually, peer_verification will be removed. For now, both are allowed
--spec get_verify_or_peer_verification(#{atom() => any()}, any()) -> proplists:proplist().
+-spec get_verify_or_peer_verification(#{atom() => any()}, verify_none | verify_peer ) -> verify_none | verify_peer.
 get_verify_or_peer_verification(Ssl_options, Default) ->
     case maps:get(verify, Ssl_options, undefined) of
         undefined ->
@@ -437,14 +437,13 @@ map_to_oauth_provider(Map) when is_map(Map) ->
         jwks_uri = maps:get(?RESPONSE_JWKS_URI, Map, undefined)
     };
 
-map_to_oauth_provider(PropList) when is_list(PropList) ->
+map_to_oauth_provider(PropList) when is_list(PropList) ->    
     #oauth_provider{
         issuer = proplists:get_value(issuer, PropList),
         token_endpoint = proplists:get_value(token_endpoint, PropList),
         authorization_endpoint = proplists:get_value(authorization_endpoint, PropList, undefined),
         jwks_uri = proplists:get_value(jwks_uri, PropList, undefined),
-        ssl_options = extract_ssl_options_as_list(maps:from_list(
-            proplists:get_value(https, PropList, [])))
+        ssl_options = extract_ssl_options_as_list(maps:from_list(proplists:get_value(https, PropList, [])))
     }.
 
 
