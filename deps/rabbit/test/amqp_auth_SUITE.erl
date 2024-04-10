@@ -660,7 +660,7 @@ sasl_failure(Mechanism, Config) ->
     Reason.
 
 vhost_absent(Config) ->
-    OpnConf = connection_config(Config, <<"vhost does not exist">>),
+    OpnConf = connection_config(Config, <<"this vhost does not exist">>),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     receive {amqp10_event, {connection, Connection, {closed, _}}} -> ok
     after 5000 -> ct:fail(missing_closed)
