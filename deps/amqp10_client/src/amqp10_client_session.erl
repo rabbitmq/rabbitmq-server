@@ -1033,8 +1033,8 @@ complete_partial_transfer(_Transfer, Payload,
      Link#link{partial_transfers = undefined}}.
 
 decode_as_msg(Transfer, Payload) ->
-    Records = amqp10_framing:decode_bin(Payload),
-    amqp10_msg:from_amqp_records([Transfer | Records]).
+    Sections = amqp10_framing:decode_bin(Payload),
+    amqp10_msg:from_amqp_records([Transfer | Sections]).
 
 amqp10_session_event(Evt) ->
     {amqp10_event, {session, self(), Evt}}.

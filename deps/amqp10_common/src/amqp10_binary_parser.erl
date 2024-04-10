@@ -7,6 +7,7 @@
 
 -module(amqp10_binary_parser).
 
+%%TODO consolidate parse/1 and parse_all/1 into a single function
 -export([parse/1, parse_all/1]).
 
 -include("amqp10_framing.hrl").
@@ -25,103 +26,89 @@ parse_all_int(Acc, {Value, Rest}) -> parse_all_int([Value | Acc], parse(Rest)).
 
 -spec parse(binary()) ->
     {amqp10_binary_generator:amqp10_type(), Rest :: binary()}.
-parse(<<?DESCRIBED,Rest/binary>>) ->
-    parse_described(Rest);
-parse(Rest) ->
-    parse_primitive0(Rest).
-
-parse_described(Bin) ->
-    {Descriptor, Rest1} = parse(Bin),
-    {Value, Rest2} = parse(Rest1),
-    {{described, Descriptor, Value}, Rest2}.
-
-parse_primitive0(<<Type, Rest/binary>>) ->
-    parse_primitive(Type, Rest).
-
-%% Constants
-parse_primitive(16#40, R) -> {null, R};
-parse_primitive(16#41, R) -> {true, R};
-parse_primitive(16#42, R) -> {false, R};
-parse_primitive(16#43, R) -> {{uint, 0}, R};
-parse_primitive(16#44, R) -> {{ulong, 0}, R};
-
+parse(<<?DESCRIBED, Bin/binary>>) ->
+    {Descriptor, Rest0} = parse(Bin),
+    {Value, Rest} = parse(Rest0),
+    {{described, Descriptor, Value}, Rest};
+parse(<<16#40, R/binary>>) -> {null, R};
+parse(<<16#41, R/binary>>) -> {true, R};
+parse(<<16#42, R/binary>>) -> {false, R};
+parse(<<16#43, R/binary>>) -> {{uint, 0}, R};
+parse(<<16#44, R/binary>>) -> {{ulong, 0}, R};
 %% Fixed-widths. Most integral types have a compact encoding as a byte.
-parse_primitive(16#50, <<V:8/unsigned,  R/binary>>) -> {{ubyte, V},      R};
-parse_primitive(16#51, <<V:8/signed,    R/binary>>) -> {{byte, V},       R};
-parse_primitive(16#52, <<V:8/unsigned,  R/binary>>) -> {{uint, V},       R};
-parse_primitive(16#53, <<V:8/unsigned,  R/binary>>) -> {{ulong, V},      R};
-parse_primitive(16#54, <<V:8/signed,    R/binary>>) -> {{int, V},        R};
-parse_primitive(16#55, <<V:8/signed,    R/binary>>) -> {{long, V},       R};
-parse_primitive(16#56, <<0:8/unsigned,  R/binary>>) -> {false,           R};
-parse_primitive(16#56, <<1:8/unsigned,  R/binary>>) -> {true,            R};
-parse_primitive(16#60, <<V:16/unsigned, R/binary>>) -> {{ushort, V},     R};
-parse_primitive(16#61, <<V:16/signed,   R/binary>>) -> {{short, V},      R};
-parse_primitive(16#70, <<V:32/unsigned, R/binary>>) -> {{uint, V},       R};
-parse_primitive(16#71, <<V:32/signed,   R/binary>>) -> {{int, V},        R};
-parse_primitive(16#72, <<V:32/float,    R/binary>>) -> {{float, V},      R};
-parse_primitive(16#73, <<Utf32:4/binary,R/binary>>) -> {{char, Utf32},   R};
-parse_primitive(16#80, <<V:64/unsigned, R/binary>>) -> {{ulong, V},      R};
-parse_primitive(16#81, <<V:64/signed,   R/binary>>) -> {{long, V},       R};
-parse_primitive(16#82, <<V:64/float,    R/binary>>) -> {{double, V},     R};
-parse_primitive(16#83, <<TS:64/signed,  R/binary>>) -> {{timestamp, TS}, R};
-parse_primitive(16#98, <<Uuid:16/binary,R/binary>>) -> {{uuid, Uuid},    R};
-
+parse(<<16#50, V:8/unsigned,  R/binary>>) -> {{ubyte, V},      R};
+parse(<<16#51, V:8/signed,    R/binary>>) -> {{byte, V},       R};
+parse(<<16#52, V:8/unsigned,  R/binary>>) -> {{uint, V},       R};
+parse(<<16#53, V:8/unsigned,  R/binary>>) -> {{ulong, V},      R};
+parse(<<16#54, V:8/signed,    R/binary>>) -> {{int, V},        R};
+parse(<<16#55, V:8/signed,    R/binary>>) -> {{long, V},       R};
+parse(<<16#56, 0:8/unsigned,  R/binary>>) -> {false,           R};
+parse(<<16#56, 1:8/unsigned,  R/binary>>) -> {true,            R};
+parse(<<16#60, V:16/unsigned, R/binary>>) -> {{ushort, V},     R};
+parse(<<16#61, V:16/signed,   R/binary>>) -> {{short, V},      R};
+parse(<<16#70, V:32/unsigned, R/binary>>) -> {{uint, V},       R};
+parse(<<16#71, V:32/signed,   R/binary>>) -> {{int, V},        R};
+parse(<<16#72, V:32/float,    R/binary>>) -> {{float, V},      R};
+parse(<<16#73, Utf32:4/binary,R/binary>>) -> {{char, Utf32},   R};
+parse(<<16#80, V:64/unsigned, R/binary>>) -> {{ulong, V},      R};
+parse(<<16#81, V:64/signed,   R/binary>>) -> {{long, V},       R};
+parse(<<16#82, V:64/float,    R/binary>>) -> {{double, V},     R};
+parse(<<16#83, TS:64/signed,  R/binary>>) -> {{timestamp, TS}, R};
+parse(<<16#98, Uuid:16/binary,R/binary>>) -> {{uuid, Uuid},    R};
 %% Variable-widths
-parse_primitive(16#a0,<<S:8/unsigned, V:S/binary,R/binary>>)-> {{binary, V}, R};
-parse_primitive(16#a1,<<S:8/unsigned, V:S/binary,R/binary>>)-> {{utf8, V},   R};
-parse_primitive(16#a3,<<S:8/unsigned, V:S/binary,R/binary>>)-> {{symbol, V}, R};
-parse_primitive(16#b3,<<S:32/unsigned,V:S/binary,R/binary>>)-> {{symbol, V}, R};
-parse_primitive(16#b0,<<S:32/unsigned,V:S/binary,R/binary>>)-> {{binary, V}, R};
-parse_primitive(16#b1,<<S:32/unsigned,V:S/binary,R/binary>>)-> {{utf8, V},   R};
-
+parse(<<16#a0, S:8/unsigned, V:S/binary,R/binary>>)-> {{binary, V}, R};
+parse(<<16#a1, S:8/unsigned, V:S/binary,R/binary>>)-> {{utf8, V},   R};
+parse(<<16#a3, S:8/unsigned, V:S/binary,R/binary>>)-> {{symbol, V}, R};
+parse(<<16#b3, S:32/unsigned,V:S/binary,R/binary>>)-> {{symbol, V}, R};
+parse(<<16#b0, S:32/unsigned,V:S/binary,R/binary>>)-> {{binary, V}, R};
+parse(<<16#b1, S:32/unsigned,V:S/binary,R/binary>>)-> {{utf8, V},   R};
 %% Compounds
-parse_primitive(16#45, R) ->
+parse(<<16#45, R/binary>>) ->
     {{list, []}, R};
-parse_primitive(16#c0,<<S:8/unsigned,CountAndValue:S/binary,R/binary>>) ->
-    {{list, parse_compound(8, CountAndValue)}, R};
-parse_primitive(16#c1,<<S:8/unsigned,CountAndValue:S/binary,R/binary>>) ->
-    List = parse_compound(8, CountAndValue),
-    {{map, mapify(List)}, R};
-parse_primitive(16#d0,<<S:32/unsigned,CountAndValue:S/binary,R/binary>>) ->
-    {{list, parse_compound(32, CountAndValue)}, R};
-parse_primitive(16#d1,<<S:32/unsigned,CountAndValue:S/binary,R/binary>>) ->
-    List = parse_compound(32, CountAndValue),
-    {{map, mapify(List)}, R};
-
+parse(<<16#c0, Size, Count, Value:(Size-1)/binary, R/binary>>) ->
+    %%TODO avoid lists:foldl => use recursion instead
+    {L, <<>>} = lists:foldl(fun(_, {AccL, AccBin}) ->
+                                    {V, Rest} = parse(AccBin),
+                                    {[V | AccL], Rest}
+                            end, {[], Value}, lists:seq(1, Count)),
+    {{list, lists:reverse(L)}, R};
+parse(<<16#c1, Size, Count, Value:(Size-1)/binary, R/binary>>) ->
+    {L, <<>>} = lists:foldl(fun(_, {AccL, AccBin}) ->
+                                    {V, Rest} = parse(AccBin),
+                                    {[V | AccL], Rest}
+                            end, {[], Value}, lists:seq(1, Count)),
+    {{map, mapify(lists:reverse(L))}, R};
+parse(<<16#d0, Size:32, Count:32, Value:(Size-4)/binary, R/binary>>) ->
+    {L, <<>>} = lists:foldl(fun(_, {AccL, AccBin}) ->
+                                    {V, Rest} = parse(AccBin),
+                                    {[V | AccL], Rest}
+                            end, {[], Value}, lists:seq(1, Count)),
+    {{list, lists:reverse(L)}, R};
+parse(<<16#d1, Size:32, Count:32, Value:(Size-4)/binary,R/binary>>) ->
+    {L, <<>>} = lists:foldl(fun(_, {AccL, AccBin}) ->
+                                    {V, Rest} = parse(AccBin),
+                                    {[V | AccL], Rest}
+                            end, {[], Value}, lists:seq(1, Count)),
+    {{map, mapify(lists:reverse(L))}, R};
 %% Arrays
-parse_primitive(16#e0,<<S:8/unsigned,CountAndV:S/binary,R/binary>>) ->
+parse(<<16#e0, S:8/unsigned,CountAndV:S/binary,R/binary>>) ->
     {parse_array(8, CountAndV), R};
-parse_primitive(16#f0,<<S:32/unsigned,CountAndV:S/binary,R/binary>>) ->
+parse(<<16#f0, S:32/unsigned,CountAndV:S/binary,R/binary>>) ->
     {parse_array(32, CountAndV), R};
-
 %% NaN or +-inf
-parse_primitive(16#72, <<V:32, R/binary>>) ->
+parse(<<16#72, V:32, R/binary>>) ->
     {{as_is, 16#72, <<V:32>>}, R};
-parse_primitive(16#82, <<V:64, R/binary>>) ->
+parse(<<16#82, V:64, R/binary>>) ->
     {{as_is, 16#82, <<V:64>>}, R};
-
 %% decimals
-parse_primitive(16#74, <<V:32, R/binary>>) ->
+parse(<<16#74, V:32, R/binary>>) ->
     {{as_is, 16#74, <<V:32>>}, R};
-parse_primitive(16#84, <<V:64, R/binary>>) ->
+parse(<<16#84, V:64, R/binary>>) ->
     {{as_is, 16#84, <<V:64>>}, R};
-parse_primitive(16#94, <<V:128, R/binary>>) ->
+parse(<<16#94, V:128, R/binary>>) ->
     {{as_is, 16#94, <<V:128>>}, R};
-
-parse_primitive(Type, _Bin) ->
-    throw({primitive_type_unsupported, Type, _Bin}).
-
-parse_compound(UnitSize, Bin) ->
-    <<Count:UnitSize, Bin1/binary>> = Bin,
-    parse_compound1(Count, Bin1, []).
-
-parse_compound1(0, <<>>, List) ->
-    lists:reverse(List);
-parse_compound1(_Left, <<>>, _List) ->
-    throw(compound_datatype_miscount);
-parse_compound1(Count, Bin, Acc) ->
-    {Value, Rest} = parse(Bin),
-    parse_compound1(Count - 1, Rest, [Value | Acc]).
+parse(<<Type, Bin/binary>>) ->
+    throw({primitive_type_unsupported, Type, Bin}).
 
 parse_array_primitive(16#40, <<_:8/unsigned, R/binary>>) -> {null, R};
 parse_array_primitive(16#41, <<_:8/unsigned, R/binary>>) -> {true, R};
@@ -129,7 +116,7 @@ parse_array_primitive(16#42, <<_:8/unsigned, R/binary>>) -> {false, R};
 parse_array_primitive(16#43, <<_:8/unsigned, R/binary>>) -> {{uint, 0}, R};
 parse_array_primitive(16#44, <<_:8/unsigned, R/binary>>) -> {{ulong, 0}, R};
 parse_array_primitive(ElementType, Data) ->
-    parse_primitive(ElementType, Data).
+    parse(<<ElementType, Data/binary>>).
 
 %% array structure is {array, Ctor, [Data]}
 %% e.g. {array, symbol, [<<"amqp:accepted:list">>]}

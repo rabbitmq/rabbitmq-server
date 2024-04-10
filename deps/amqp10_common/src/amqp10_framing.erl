@@ -173,11 +173,13 @@ encode_described(annotations, CodeNumber, Frame) ->
 encode(X) ->
     amqp10_framing0:encode(X).
 
+-spec encode_bin(term()) -> iodata().
 encode_bin(X) ->
     amqp10_binary_generator:generate(encode(X)).
 
-decode_bin(X) ->
-    [decode(DescribedPerformative) || DescribedPerformative <- amqp10_binary_parser:parse_all(X)].
+-spec decode_bin(binary()) -> [term()].
+decode_bin(Binary) ->
+    [decode(Section) || Section <- amqp10_binary_parser:parse_all(Binary)].
 
 symbol_for(X) ->
     amqp10_framing0:symbol_for(X).
