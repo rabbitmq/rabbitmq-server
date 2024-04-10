@@ -168,25 +168,7 @@ convert_to(TargetProto, Msg, Env) ->
 serialize(Sections) ->
     encode_bin(Sections).
 
-<<<<<<< HEAD
-protocol_state(Msg, Anns) ->
-    #{?ANN_EXCHANGE := Exchange,
-      ?ANN_ROUTING_KEYS := [RKey | _]} = Anns,
-
-    %% any x-* annotations get added as message annotations
-    AnnsToAdd = maps:filter(fun (Key, _) -> mc_util:is_x_header(Key) end, Anns),
-=======
-protocol_state(Msg0 = #msg{header = Header0,
-                           message_annotations = MA0}, Anns) ->
-    Redelivered = maps:get(redelivered, Anns, false),
-    FirstAcquirer = not Redelivered,
-    Header = case Header0 of
-                 undefined ->
-                     #'v1_0.header'{first_acquirer = FirstAcquirer};
-                 #'v1_0.header'{} ->
-                     Header0#'v1_0.header'{first_acquirer = FirstAcquirer}
-             end,
-
+protocol_state(Msg0 = #msg{message_annotations = MA0}, Anns) ->
     MA = maps:fold(fun(?ANN_EXCHANGE, Exchange, L) ->
                            maps_upsert(<<"x-exchange">>, {utf8, Exchange}, L);
                       (?ANN_ROUTING_KEYS, RKeys, L) ->
@@ -201,10 +183,7 @@ protocol_state(Msg0 = #msg{header = Header0,
                       (_, _, Acc) ->
                            Acc
                    end, MA0, Anns),
->>>>>>> 71d1b3b455 (Respect message_interceptors.incoming.set_header_timestamp)
-
-    Msg = Msg0#msg{header = Header,
-                   message_annotations = MA},
+    Msg = Msg0#msg{message_annotations = MA},
     msg_to_sections(Msg).
 
 prepare(_For, Msg) ->
