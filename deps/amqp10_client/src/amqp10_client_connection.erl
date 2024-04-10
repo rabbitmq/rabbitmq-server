@@ -283,7 +283,10 @@ open_sent(_EvtType, #'v1_0.open'{max_frame_size = MaybeMaxFrameSize,
 open_sent({call, From}, begin_session,
           #state{pending_session_reqs = PendingSessionReqs} = State) ->
     State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
-    {keep_state, State1}.
+    {keep_state, State1};
+open_sent(info, {'DOWN', MRef, _, _, _},
+          #state{reader_m_ref = MRef}) ->
+    {stop, {shutdown, reader_down}}.
 
 opened(_EvtType, heartbeat, State = #state{idle_time_out = T}) ->
     ok = send_heartbeat(State),
@@ -346,8 +349,7 @@ terminate(Reason, _StateName, #state{connection_sup = Sup,
     case Reason of
         normal -> sys:terminate(Sup, normal);
         _      -> ok
-    end,
-    ok.
+    end.
 
 code_change(_OldVsn, StateName, State, _Extra) ->
     {ok, StateName, State}.
