@@ -84,8 +84,7 @@ mqtt_init() ->
     TcpConfig = get_env(tcp_config, []),
 %    SslConfig = get_env(ssl_config, []),
     Routes = cowboy_router:compile([{'_', [
-        rabbit_web:ws_route(get_env(ws_path, "/ws")),
-        {"/web-mqtt-examples/[...]", cowboy_static, {priv_dir, rabbitmq_web_mqtt_examples, "", []}}
+        rabbit_web:ws_route(get_env(ws_path, "/ws"))
     ]}]),
     CowboyOpts0  = maps:from_list(get_env(cowboy_opts, [])),
     CowboyOpts = CowboyOpts0#{

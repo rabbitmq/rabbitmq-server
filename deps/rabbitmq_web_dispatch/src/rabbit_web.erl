@@ -22,6 +22,7 @@
 
 -export([start_listeners/3]).
 -export([get_websocket_config_for_ref/1]).
+-export([add_routes_to_listeners/2]).
 -export([ws_route/1]).
 
 %% We create listeners in sets. From the configuration
@@ -195,7 +196,8 @@ get_websocket_config_for_ref({ThisBaseRef, _, _, _}) ->
 %% It is occasionally necessary to update the list of routes
 %% for Web listeners. For example a use case could be for
 %% the Web-MQTT example application to add its routes to
-%% the existing Web-MQTT listener.
+%% the existing Web-MQTT listener. Another use case is
+%% a shared Web listener for all Web applications.
 %%
 %% Because listeners can be configured in sets (due to
 %% starting two listeners when using a dual IPv4/v6 stack),
@@ -203,9 +205,38 @@ get_websocket_config_for_ref({ThisBaseRef, _, _, _}) ->
 %% different routes on the same set of listeners, this
 %% function takes only a BaseRef and applies the changes
 %% to all the listeners it finds.
+%%
+%% Routes are expected to be unique and conflict-free.
+%% They are added at the end of the existing routes.
+%% An exception is made for the Websocket endpoint:
+%% there is no need to ensure the route is unique
+%% when using the ws_route/1 function.
 
-%update_listener_routes(BaseRef, fun(Dispatch) -> Dispatch end)
-%    todo.
+add_routes_to_listeners(BaseRef, AddedDispatch) ->
+    %% First we must get the list of listeners.
+    %% We query the ranch_server table directly.
+    %% Since we are already querying ranch_server,
+    %% we retrieve the protocol options at the same time.
+    Listeners = ets:select(ranch_server, [
+        {{{proto_opts, '$1'}, '$2'}, [{'==', BaseRef, {element, 1, '$1'}}], [{{'$1', '$2'}}]}
+    ]),
+    %% Then we go over each listener, updating the
+    %% routes one at a time.
+    lists:foreach(fun({Ref, ProtoOpts0}) ->
+        #{env := Env = #{dispatch := Dispatch0}} = ProtoOpts0,
+        Dispatch = merge_dispatches(Dispatch0, AddedDispatch),
+        ProtoOpts = ProtoOpts0#{env => Env#{dispatch => Dispatch}},
+        ranch:set_protocol_options(Ref, ProtoOpts)
+    end, Listeners),
+    ok.
+
+%% We currently expect the dispatch lists to use '_'
+%% for the host part of the dispatch. This code will
+%% need to be updated should we ever specify anything
+%% other than '_' for the host.
+
+merge_dispatches([{'_', [], Paths1}], [{'_', [], Paths2}]) ->
+    [{'_', [], Paths1 ++ Paths2}].
 
 %% We use a common module to initiate all Websocket connections.
 %% This module will select the appropriate Websocket handler
