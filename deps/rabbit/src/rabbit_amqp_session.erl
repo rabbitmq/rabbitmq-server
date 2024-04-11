@@ -1206,7 +1206,7 @@ handle_control(#'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
                                    last = Last0,
                                    state = Outcome,
                                    settled = DispositionSettled} = Disposition,
-               #state{outgoing_unsettled_map = UnsettledMap,
+               #state{outgoing_unsettled_map = UnsettledMap0,
                       queue_states = QStates0} = State0) ->
     Last = case Last0 of
                ?UINT(L) ->
@@ -1215,19 +1215,20 @@ handle_control(#'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
                    %% "If not set, this is taken to be the same as first." [2.7.6]
                    First
            end,
-    UnsettledMapSize = map_size(UnsettledMap),
+    UnsettledMapSize = map_size(UnsettledMap0),
     case UnsettledMapSize of
         0 ->
             {noreply, State0};
         _ ->
             DispositionRangeSize = diff(Last, First) + 1,
-            {Settled, UnsettledMap1} =
+            {Settled, UnsettledMap} =
             case DispositionRangeSize =< UnsettledMapSize of
                 true ->
                     %% It is cheaper to iterate over the range of settled delivery IDs.
-                    serial_number:foldl(fun settle_delivery_id/2, {#{}, UnsettledMap}, First, Last);
+                    serial_number:foldl(fun settle_delivery_id/2, {#{}, UnsettledMap0}, First, Last);
                 false ->
                     %% It is cheaper to iterate over the outgoing unsettled map.
+                    {Settled0, UnsettledList} =
                     maps:fold(
                       fun (DeliveryId,
                            #outgoing_unsettled{queue_name = QName,
@@ -1243,10 +1244,11 @@ handle_control(#'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
                                                       SettledAcc),
                                       {SettledAcc1, UnsettledAcc};
                                   false ->
-                                      {SettledAcc, UnsettledAcc#{DeliveryId => Unsettled}}
+                                      {SettledAcc, [{DeliveryId, Unsettled} | UnsettledAcc]}
                               end
                       end,
-                      {#{}, #{}}, UnsettledMap)
+                      {#{}, []}, UnsettledMap0),
+                    {Settled0, maps:from_list(UnsettledList)}
             end,
 
             SettleOp = settle_op_from_outcome(Outcome),
@@ -1263,7 +1265,7 @@ handle_control(#'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
                       end
               end, {QStates0, []}, Settled),
 
-            State1 = State0#state{outgoing_unsettled_map = UnsettledMap1,
+            State1 = State0#state{outgoing_unsettled_map = UnsettledMap,
                                   queue_states = QStates},
             Reply = case DispositionSettled of
                         true  -> [];
