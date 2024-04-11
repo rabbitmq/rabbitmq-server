@@ -128,10 +128,10 @@ routing_headers(Msg, Opts) ->
             true ->
                 message_annotations_as_simple_map(Msg);
             false ->
-                #{}
+                []
         end,
-    application_properties_as_simple_map(Msg, X).
-
+    List = application_properties_as_simple_map(Msg, X),
+    maps:from_list(List).
 
 get_property(durable, Msg) ->
     case Msg of
@@ -338,31 +338,30 @@ message_annotation(Key, #msg{message_annotations = Content},
     mc_util:amqp_map_get(Key, Content, Default).
 
 message_annotations_as_simple_map(#msg{message_annotations = []}) ->
-    #{};
+    [];
 message_annotations_as_simple_map(#msg{message_annotations = Content}) ->
     %% the section record format really is terrible
-    lists:foldl(fun ({{symbol, K}, {_T, V}}, Acc)
-                      when ?SIMPLE_VALUE(V) ->
-                        Acc#{K => V};
-                    (_, Acc)->
-                        Acc
-                end, #{}, Content).
+    lists:filtermap(fun({{symbol, K}, {_T, V}})
+                          when ?SIMPLE_VALUE(V) ->
+                            {true, {K, V}};
+                       (_) ->
+                            false
+                    end, Content).
 
-application_properties_as_simple_map(#msg{application_properties = []}, M) ->
-    M;
+application_properties_as_simple_map(#msg{application_properties = []}, L) ->
+    L;
 application_properties_as_simple_map(#msg{application_properties = Content},
-                                     M) ->
+                                     L) ->
     %% the section record format really is terrible
-    lists:foldl(fun
-                    ({{utf8, K}, {_T, V}}, Acc)
+    lists:foldl(fun({{utf8, K}, {_T, V}}, Acc)
                       when ?SIMPLE_VALUE(V) ->
-                        Acc#{K => V};
-                    ({{utf8, K}, V}, Acc)
-                      when V =:= undefined orelse is_boolean(V) ->
-                        Acc#{K => V};
-                    (_, Acc)->
+                        [{K, V} | Acc];
+                   ({{utf8, K}, V}, Acc)
+                     when V =:= undefined orelse is_boolean(V) ->
+                        [{K, V} | Acc];
+                   (_, Acc)->
                         Acc
-                end, M, Content).
+                end, L, Content).
 
 decode([], Acc) ->
     Acc;
