@@ -1323,7 +1323,7 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
     case maps:find(CTag0, ConsumerMapping) of
         error when CurrentConsumers >= MaxConsumers ->  % false when MaxConsumers is 'infinity'
             rabbit_misc:protocol_error(
-              not_allowed, "reached maximum (~ts) of consumers per channel", [MaxConsumers]);
+              not_allowed, "reached maximum (~B) of consumers per channel", [MaxConsumers]);
         error ->
             case {ReplyConsumer, NoAck} of
                 {none, true} ->
@@ -1382,7 +1382,7 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
     case maps:find(ConsumerTag, ConsumerMapping) of
         error when CurrentConsumers >= MaxConsumers ->  % false when MaxConsumers is 'infinity'
         rabbit_misc:protocol_error(
-              not_allowed, "reached maximum (~ts) of consumers per channel", [MaxConsumers]);
+              not_allowed, "reached maximum (~B) of consumers per channel", [MaxConsumers]);
         error ->
             QueueName = qbin_to_resource(QueueNameBin, VHostPath),
             check_read_permitted(QueueName, User, AuthzContext),
