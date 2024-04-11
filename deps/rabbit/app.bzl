@@ -548,6 +548,7 @@ def all_srcs(name = "all_srcs"):
         srcs = [
             "src/mirrored_supervisor.hrl",
             "src/rabbit_feature_flags.hrl",
+            "src/rabbit_ff_registry.hrl",
             "src/rabbit_fifo.hrl",
             "src/rabbit_fifo_dlx.hrl",
             "src/rabbit_fifo_v0.hrl",

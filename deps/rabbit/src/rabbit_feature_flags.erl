@@ -296,7 +296,8 @@
 
 -type inventory() :: #{applications := [atom()],
                        feature_flags := feature_flags(),
-                       states := feature_states()}.
+                       states := feature_states(),
+                       written_to_disk := boolean()}.
 
 -type cluster_inventory() :: #{feature_flags := feature_flags(),
                                applications_per_node :=
