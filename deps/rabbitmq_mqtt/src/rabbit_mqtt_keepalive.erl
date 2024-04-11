@@ -23,8 +23,12 @@
 init() ->
     disabled.
 
--spec start(IntervalSeconds :: non_neg_integer(), inet:socket()) -> ok.
+-spec start(IntervalSeconds :: non_neg_integer(), inet:socket() | rabbit_net:web_socket()) -> ok.
 start(0, _Sock) ->
+    ok;
+%% Temporarily disable the keep-alive mechanism for WebSocket.
+%% @todo Implement an alternative that doesn't require polling the socket.
+start(_, #{} = _WebSocket) ->
     ok;
 start(Seconds, Sock)
   when is_integer(Seconds) andalso Seconds > 0 ->

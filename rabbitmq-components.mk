@@ -113,8 +113,8 @@ dep_toke                              = git_rmq           toke $(current_rmq_ref
 # possible to work with rabbitmq-public-umbrella.
 
 dep_accept = hex 0.3.5
-dep_cowboy = hex 2.12.0
-dep_cowlib = hex 2.13.0
+dep_cowboy = git https://github.com/ninenines/cowboy master
+dep_cowlib = git https://github.com/ninenines/cowlib master
 dep_credentials_obfuscation = hex 3.4.0
 dep_khepri = hex 0.12.1
 dep_khepri_mnesia_migration = hex 0.4.0

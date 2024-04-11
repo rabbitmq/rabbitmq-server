@@ -7,7 +7,6 @@
 
 -module(rabbit_web_mqtt_handler).
 -behaviour(cowboy_websocket).
--behaviour(cowboy_sub_protocol).
 
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/logging.hrl").
@@ -25,15 +24,10 @@
 -export([conserve_resources/3]).
 -export([info/2]).
 
-%% cowboy_sub_protocol
--export([upgrade/4,
-         upgrade/5,
-         takeover/7]).
-
 -define(APP, rabbitmq_web_mqtt).
 
 -record(state, {
-          socket :: {rabbit_proxy_socket, any(), any()} | rabbit_net:socket(),
+          socket :: rabbit_net:web_socket(),
           parse_state = rabbit_mqtt_packet:init_state() :: rabbit_mqtt_packet:state(),
           proc_state = connect_packet_unprocessed :: connect_packet_unprocessed |
                                                      rabbit_mqtt_processor:state(),
@@ -53,47 +47,24 @@
 -define(CLOSE_PROTOCOL_ERROR, 1002).
 -define(CLOSE_UNACCEPTABLE_DATA_TYPE, 1003).
 
-%% cowboy_sub_protcol
-upgrade(Req, Env, Handler, HandlerState) ->
-    upgrade(Req, Env, Handler, HandlerState, #{}).
-
-upgrade(Req, Env, Handler, HandlerState, Opts) ->
-    cowboy_websocket:upgrade(Req, Env, Handler, HandlerState, Opts).
-
-takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, HandlerState}) ->
-    Sock = case HandlerState#state.socket of
-               undefined ->
-                   Socket;
-               ProxyInfo ->
-                   {rabbit_proxy_socket, Socket, ProxyInfo}
-           end,
-    cowboy_websocket:takeover(Parent, Ref, Socket, Transport, Opts, Buffer,
-                              {Handler, HandlerState#state{socket = Sock}}).
-
 %% cowboy_websocket
-init(Req, Opts) ->
-    case cowboy_req:parse_header(<<"sec-websocket-protocol">>, Req) of
-        undefined ->
-            no_supported_sub_protocol(undefined, Req);
-        Protocol ->
-            case lists:member(<<"mqtt">>, Protocol) of
-                false ->
-                    no_supported_sub_protocol(Protocol, Req);
-                true ->
-                    WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
-                    WsOpts  = maps:merge(#{compress => true}, WsOpts0),
-                    ShouldUseFHC = application:get_env(?APP, use_file_handle_cache, true),
-                    case ShouldUseFHC of
-                      true  -> ?LOG_INFO("Web MQTT: file handle cache use is enabled");
-                      false -> ?LOG_INFO("Web MQTT: file handle cache use is disabled")
-                    end,
-
-                    {?MODULE,
-                     cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, <<"mqtt">>, Req),
-                     #state{socket = maps:get(proxy_header, Req, undefined), should_use_fhc = ShouldUseFHC},
-                     WsOpts}
-            end
-    end.
+init(Req, _) ->
+    ?LOG_ERROR("Web MQTT: ~p", [Req]),
+    ShouldUseFHC = application:get_env(?APP, use_file_handle_cache, true),
+    case ShouldUseFHC of
+      true  -> ?LOG_INFO("Web MQTT: file handle cache use is enabled");
+      false -> ?LOG_INFO("Web MQTT: file handle cache use is disabled")
+    end,
+    State = #state{
+        socket = #{
+            peer => maps:get(peer, Req),
+            sock => maps:get(sock, Req),
+            cert => maps:get(cert, Req),
+            proxy_header => maps:get(proxy_header, Req, undefined)
+        },
+        should_use_fhc = ShouldUseFHC
+    },
+    {rabbit_web_ws_h, Req, State}.
 
 %% We cannot use a gen_server call, because the handler process is a
 %% special cowboy_websocket process (not a gen_server) which assumes

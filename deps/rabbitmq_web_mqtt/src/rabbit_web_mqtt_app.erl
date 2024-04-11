@@ -42,6 +42,7 @@ prep_stop(State) ->
 
 -spec stop(_) -> ok.
 stop(_State) ->
+    %% @todo Do the rabbit_web equivalent.
     _ = rabbit_networking:stop_ranch_listener_of_protocol(?TCP_PROTOCOL),
     _ = rabbit_networking:stop_ranch_listener_of_protocol(?TLS_PROTOCOL),
     ok.
@@ -78,20 +79,46 @@ emit_connection_info(Items, Ref, AggregatorPid, Pids) ->
 %%
 
 mqtt_init() ->
-    CowboyOpts0  = maps:from_list(get_env(cowboy_opts, [])),
-    CowboyWsOpts = maps:from_list(get_env(cowboy_ws_opts, [])),
+    CowboyWsOpts0 = maps:from_list(get_env(cowboy_ws_opts, [])),
+    CowboyWsOpts = CowboyWsOpts0#{compress => true},
     TcpConfig = get_env(tcp_config, []),
-    SslConfig = get_env(ssl_config, []),
+%    SslConfig = get_env(ssl_config, []),
     Routes = cowboy_router:compile([{'_', [
-        {get_env(ws_path, "/ws"), rabbit_web_mqtt_handler, [{ws_opts, CowboyWsOpts}]}
+        rabbit_web:ws_route(get_env(ws_path, "/ws")),
+        {"/web-mqtt-examples/[...]", cowboy_static, {priv_dir, rabbitmq_web_mqtt_examples, "", []}}
     ]}]),
+    CowboyOpts0  = maps:from_list(get_env(cowboy_opts, [])),
     CowboyOpts = CowboyOpts0#{
-                 env => #{dispatch => Routes},
-                 proxy_header => get_env(proxy_protocol, false),
-                 stream_handlers => [rabbit_web_mqtt_stream_handler, cowboy_stream_h]
-                },
-    start_tcp_listener(TcpConfig, CowboyOpts),
-    start_tls_listener(SslConfig, CowboyOpts).
+        env => #{dispatch => Routes},
+        proxy_header => get_env(proxy_protocol, false)
+    },
+    rabbit_web:start_listeners(rabbit_web_mqtt, #{
+        tcp => [listener_config(TcpConfig)],
+        tcp_opts => #{
+            socket_opts => TcpConfig,
+            max_connections => get_max_connections(),
+            num_acceptors => get_env(num_tcp_acceptors, 10),
+            num_conns_sups => get_env(num_conns_sup, 1)
+        },
+        websocket => #{
+            protocols => [<<"mqtt">>],
+            handler => rabbit_web_mqtt_handler,
+            opts => CowboyWsOpts
+        }
+    }, CowboyOpts).
+
+listener_config(Config) ->
+    Port = proplists:get_value(port, Config, 15675),
+    case proplists:get_value(ip, Config) of
+        undefined ->
+            Port;
+        IpStr ->
+            {normalize_ip(IpStr), Port}
+    end.
+
+
+%    start_tcp_listener(TcpConfig, CowboyOpts),
+%    start_tls_listener(SslConfig, CowboyOpts).
 
 start_tcp_listener([], _) -> ok;
 start_tcp_listener(TCPConf0, CowboyOpts) ->
