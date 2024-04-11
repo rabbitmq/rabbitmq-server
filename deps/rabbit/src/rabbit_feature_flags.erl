@@ -772,11 +772,17 @@ init() ->
     ok.
 
 -define(PT_TESTSUITE_ATTRS, {?MODULE, testsuite_feature_flags_attrs}).
+%% We must lock while making updates to the above persistent_term in order to
+%% make the updates atomic. Otherwise if two processes attempt to inject
+%% different flags at the same time, they might race and a flag could be
+%% mistakenly discarded.
+-define(LOCK_TESTSUITE_ATTRS, {?PT_TESTSUITE_ATTRS, self()}).
 
 inject_test_feature_flags(FeatureFlags) ->
     inject_test_feature_flags(FeatureFlags, true).
 
 inject_test_feature_flags(FeatureFlags, InitReg) ->
+    true = global:set_lock(?LOCK_TESTSUITE_ATTRS, [node()]),
     ExistingAppAttrs = module_attributes_from_testsuite(),
     FeatureFlagsPerApp0 = lists:foldl(
                             fun({Origin, Origin, FFlags}, Acc) ->
@@ -810,13 +816,17 @@ inject_test_feature_flags(FeatureFlags, InitReg) ->
       [FeatureFlags, AttributesFromTestsuite],
       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     ok = persistent_term:put(?PT_TESTSUITE_ATTRS, AttributesFromTestsuite),
+    true = global:del_lock(?LOCK_TESTSUITE_ATTRS, [node()]),
     case InitReg of
         true  -> rabbit_ff_registry_factory:initialize_registry();
         false -> ok
     end.
 
 clear_injected_test_feature_flags() ->
-    _ = persistent_term:erase(?PT_TESTSUITE_ATTRS),
+    _ = global:trans(
+          ?LOCK_TESTSUITE_ATTRS,
+          fun() -> persistent_term:erase(?PT_TESTSUITE_ATTRS) end,
+          [node()]),
     ok.
 
 module_attributes_from_testsuite() ->

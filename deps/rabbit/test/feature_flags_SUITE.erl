@@ -551,7 +551,9 @@ registry_concurrent_reloads(_Config) ->
     MRef = erlang:monitor(process, Spammer),
     unlink(Spammer),
     exit(Spammer, kill),
-    receive {'DOWN', MRef, process, Spammer, _} -> ok end.
+    receive {'DOWN', MRef, process, Spammer, _} -> ok end,
+    %% All feature flags appeared.
+    ?assertEqual(FinalFFList, ?list_ff(all)).
 
 registry_spammer(CurrentFeatureNames, FinalFeatureNames) ->
     %% Infinite loop.
