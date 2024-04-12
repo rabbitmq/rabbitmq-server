@@ -48,18 +48,6 @@ def _deps_symlinks(ctx):
     # special case symlinks for generated sources
     commands.append("")
     commands.append(_ln_command(
-        target = path_join("..", "..", "..", "bazel-bin", "deps", "rabbit_common", "include", "rabbit_framing.hrl"),
-        source = path_join("deps", "rabbit_common", "include", "rabbit_framing.hrl"),
-    ))
-    commands.append(_ln_command(
-        target = path_join("..", "..", "..", "bazel-bin", "deps", "rabbit_common", "src", "rabbit_framing_amqp_0_8.erl"),
-        source = path_join("deps", "rabbit_common", "src", "rabbit_framing_amqp_0_8.erl"),
-    ))
-    commands.append(_ln_command(
-        target = path_join("..", "..", "..", "bazel-bin", "deps", "rabbit_common", "src", "rabbit_framing_amqp_0_9_1.erl"),
-        source = path_join("deps", "rabbit_common", "src", "rabbit_framing_amqp_0_9_1.erl"),
-    ))
-    commands.append(_ln_command(
         target = path_join("..", "..", "..", "bazel-bin", "deps", "amqp10_common", "include", "amqp10_framing.hrl"),
         source = path_join("deps", "amqp10_common", "include", "amqp10_framing.hrl"),
     ))
