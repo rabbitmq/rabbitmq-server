@@ -168,6 +168,12 @@
  "rabbitmq_auth_backend_oauth2.key_config.peer_verification",
  [{datatype, {enum, [verify_peer, verify_none]}}]}.
 
+% Alias configuration variable. `auth_oauth2.https.peer_verification` will be soon deprecated
+{mapping,
+ "auth_oauth2.https.verify",
+ "rabbitmq_auth_backend_oauth2.key_config.verify",
+ [{datatype, {enum, [verify_peer, verify_none]}}]}.
+
 {mapping,
  "auth_oauth2.https.cacertfile",
  "rabbitmq_auth_backend_oauth2.key_config.cacertfile",
