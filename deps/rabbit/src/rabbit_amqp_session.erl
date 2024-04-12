@@ -1861,7 +1861,7 @@ incoming_link_transfer(
                              conn_name = ConnName,
                              channel_num = ChannelNum}}) ->
 
-    {MsgBin, DeliveryId, Settled} =
+    {PayloadBin, DeliveryId, Settled} =
     case MultiTransfer of
         undefined ->
             ?UINT(DeliveryId0) = MaybeDeliveryId,
@@ -1875,12 +1875,12 @@ incoming_link_transfer(
             {MsgBin0, FirstDeliveryId, FirstSettled}
     end,
     validate_transfer_rcv_settle_mode(RcvSettleMode, Settled),
-    validate_incoming_message_size(MsgBin),
+    validate_incoming_message_size(PayloadBin),
 
-    Sections = amqp10_framing:decode_bin(MsgBin),
-    ?DEBUG("~s Inbound payload:~n  ~tp",
-           [?MODULE, [amqp10_framing:pprint(Section) || Section <- Sections]]),
-    Mc0 = mc:init(mc_amqp, Sections, #{}),
+    % Sections = amqp10_framing:decode_bin(PayloadBin),
+    % ?DEBUG("~s Inbound payload:~n  ~tp",
+    %        [?MODULE, [amqp10_framing:pprint(Section) || Section <- Sections]]),
+    Mc0 = mc:init(mc_amqp, PayloadBin, #{}),
     case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, PermCache0) of
         {ok, X, RoutingKey, Mc1, PermCache} ->
             Mc = rabbit_message_interceptor:intercept(Mc1),

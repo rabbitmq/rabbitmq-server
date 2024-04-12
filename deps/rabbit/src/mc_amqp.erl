@@ -37,18 +37,27 @@
                          is_number(V) orelse
                          is_boolean(V)).
 
--type opt(T) :: T | undefined.
--type amqp10_data() :: [#'v1_0.amqp_sequence'{} | #'v1_0.data'{}] |
-                       #'v1_0.amqp_value'{}.
+%% Before storing the message on disk in classic queues and quorum queues,
+%% for better performance and less disk usage, we we clear fields with redundant content.
+-define(CLEARED, c).
+
+-type amqp10_data() :: [#'v1_0.amqp_sequence'{} | #'v1_0.data'{}] | #'v1_0.amqp_value'{}.
+-type amqp_map() :: [{term(), term()}].
+
 -record(msg,
         {
-         header :: opt(#'v1_0.header'{}),
-         delivery_annotations = []:: list(),
-         message_annotations = [] :: list(),
-         properties :: opt(#'v1_0.properties'{}),
-         application_properties = [] :: list(),
-         data = [] :: amqp10_data(),
-         footer = [] :: list()
+         %% We can clear this field before storage because we already set
+         %% the header fields we're interested in as mc annotations.
+         header :: none | ?CLEARED | #'v1_0.header'{},
+         delivery_annotations = [] :: amqp_map(),
+         message_annotations = [] :: amqp_map(),
+         %% We can clear properties and application_properties before storage
+         %% because they can be parsed from the bare message in bare_and_footer.
+         properties :: none | ?CLEARED | #'v1_0.properties'{},
+         application_properties = [] :: ?CLEARED | amqp_map(),
+         %% We must forward the bare message unaltered to preserve message
+         %% hashes on the binary encoding of the bare message [3.2].
+         bare_and_footer :: binary()
         }).
 
 -opaque state() :: #msg{}.
@@ -58,29 +67,19 @@
               message_section/0
              ]).
 
-%% TODO
-%% Up to 3.13 the parsed AMQP 1.0 message is never stored on disk.
-%% We want that to hold true for 4.0 as well to save disk space and disk I/O.
-%%
-%% As the essential annotations, durable, priority, ttl and delivery_count
-%% is all we are interested in it isn't necessary to keep hold of the
-%% incoming AMQP header inside the state
-%%
-%% Probably prepare(store, Msg) should serialize the message.
-%% mc:prepare(store, Msg) should also be called from rabbit_stream_queue after converting to mc_amqp.
-%%
-%% When we received the message via AMQP 1.0, our mc_amqp:state() should ideally store a binary of each section.
-%% This way, prepare(store, Msg) wouldn't need to serialize anything because there shouldn't be any changes
-%% in the sections between receiving via AMQP 1.0 and storing the message in queues.
-%%
-%% Also, we don't need to parse each section.
-%% For example, apart from validation we wouldn’t need to parse application properties at all - unless requested by the headers exchange.
-%% Ideally the parser could have a validate mode, that validated the section(s) but didn’t build up an erlang term representation of the data.
-%% Such a validation mode could be used for application properties. Message annotations might not need to be parsed either.
-%% So, message annotations and application properties should be parsed lazily, only if needed.
-%%
-%% Upon sending the message to clients, when converting from AMQP 1.0, the serialized message needs to be parsed into sections.
 init(Sections) when is_list(Sections) ->
+    Msg = decode(Sections, #msg{}),
+    init(Msg);
+init(Payload) when is_binary(Payload) ->
+    Sections = amqp10_framing:decode_bin(Payload, [server_mode]),
+    {value, {{pos, Pos}, _FirstBareMsgSection}} = lists:search(fun({{pos, _P}, _Sect}) ->
+                                                                       true;
+                                                                  (_Sect) ->
+                                                                       false
+                                                               end, Sections),
+    %% Assert the message contains a mandatory body.
+    {{pos, _}, body} = lists:last(Sections),
+    BareAndFooter = binary_part(Payload, Pos, byte_size(Payload) - Pos),
     Msg = decode(Sections, #msg{}),
     init(Msg);
 init(#msg{} = Msg) ->

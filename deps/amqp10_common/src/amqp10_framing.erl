@@ -7,8 +7,16 @@
 
 -module(amqp10_framing).
 
--export([encode/1, encode_described/3, decode/1, version/0,
-         symbol_for/1, number_for/1, encode_bin/1, decode_bin/1, pprint/1]).
+-export([version/0,
+         encode/1,
+         encode_described/3,
+         encode_bin/1,
+         decode/1,
+         decode_bin/1,
+         decode_bin/2,
+         symbol_for/1,
+         number_for/1, 
+         pprint/1]).
 
 %% debug
 -export([fill_from_list/2, fill_from_map/2]).
@@ -179,7 +187,15 @@ encode_bin(X) ->
 
 -spec decode_bin(binary()) -> [term()].
 decode_bin(Binary) ->
-    [decode(Section) || Section <- amqp10_binary_parser:parse_all(Binary)].
+    [decode(Section) || Section <- amqp10_binary_parser:parse_many(Binary, #{})].
+
+-spec decode_bin(binary(), amqp10_binary_parser:opts()) -> [term()].
+decode_bin(Binary, Opts) ->
+    lists:map(fun({Pos = {pos, _}, Section}) ->
+                      {Pos, decode(Section)};
+                 (Section) ->
+                      decode(Section)
+              end, amqp10_binary_parser:parse_many(Binary, Opts)).
 
 symbol_for(X) ->
     amqp10_framing0:symbol_for(X).

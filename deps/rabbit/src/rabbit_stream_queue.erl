@@ -1252,7 +1252,7 @@ parse_uncompressed_subbatch(
 
 entry_to_msg(Entry, Offset, #resource{kind = queue,
                                       name = QName}, Name, LocalPid) ->
-    Mc0 = mc:init(mc_amqp, amqp10_framing:decode_bin(Entry), #{}),
+    Mc0 = mc:init(mc_amqp, Entry, #{}),
     %% If exchange or routing_keys annotation isn't present the entry most likely came
     %% from the rabbitmq-stream plugin so we'll choose defaults that simulate use
     %% of the direct exchange.
