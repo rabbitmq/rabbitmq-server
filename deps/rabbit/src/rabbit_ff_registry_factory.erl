@@ -169,12 +169,23 @@ initialize_registry(NewSupportedFeatureFlags,
                     NewFeatureStates,
                     WrittenToDisk) ->
     try
+        true = global:set_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
+        ?LOG_DEBUG(
+           "Feature flags: acquired lock before initializing registry (~tp)",
+           [self()],
+           #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
         ok = maybe_initialize_registry(NewSupportedFeatureFlags,
                                        NewFeatureStates,
                                        WrittenToDisk)
     catch
         throw:{error, _} = Error2 ->
             Error2
+    after
+        ?LOG_DEBUG(
+           "Feature flags: releasing lock after initializing registry (~tp)",
+           [self()],
+           #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+        true = global:del_lock(?FF_REGISTRY_LOADING_LOCK, [node()])
     end.
 
 -spec maybe_initialize_registry(FeatureFlags,
