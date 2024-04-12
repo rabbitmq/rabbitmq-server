@@ -1693,11 +1693,8 @@ delivery_tag(MsgId = {Priority, Seq}, _)
 
 incoming_mgmt_link_transfer(
   #'v1_0.transfer'{
-     %% We only allow settled management requests
-     %% given that we are going to send a response anyway.
-     settled = true,
-     %% In the current implementation, we disallow large incoming management request messages.
-     more = false,
+     settled = Settled,
+     more = More,
      handle = IncomingHandle = ?UINT(IncomingHandleInt)},
   Request,
   #state{management_link_pairs = LinkPairs,
@@ -1712,15 +1709,19 @@ incoming_mgmt_link_transfer(
                     user = User,
                     reader_pid = ReaderPid}
         } = State0) ->
-
     IncomingLink0 = case maps:find(IncomingHandleInt, IncomingLinks) of
                         {ok, Link} ->
                             Link;
                         error ->
                             protocol_error(
-                              ?V_1_0_AMQP_ERROR_ILLEGAL_STATE,
+                              ?V_1_0_SESSION_ERROR_UNATTACHED_HANDLE,
                               "Unknown link handle: ~p", [IncomingHandleInt])
                     end,
+    %% We only allow settled management requests
+    %% given that we are going to send a response anyway.
+    true = Settled,
+    %% In the current implementation, we disallow large incoming management request messages.
+    false = More,
     #management_link{name = Name,
                      delivery_count = IncomingDeliveryCount0,
                      credit = IncomingCredit0,
