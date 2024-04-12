@@ -22,4 +22,6 @@ jobs:
     steps:
     - name: SUMMARY
       run: |
-        echo "SUCCESS"
+        cat << 'EOF' | jq -e 'map(.result == "success") | all(.)'
+        ${{ toJson(needs) }}
+        EOF
