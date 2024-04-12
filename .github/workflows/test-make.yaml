@@ -11,13 +11,86 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
+  test-internal-deps:
+    strategy:
+      matrix:
+        plugin:
+          - amqp10_client
+          - amqp10_common
+          - amqp_client
+          - oauth2_client
+          - rabbitmq_ct_client_helpers
+          - rabbitmq_ct_helpers
+          - rabbitmq_stream_common
+          - trust_store_http
+    uses: ./.github/workflows/test-plugin-make.yaml
+    with:
+      plugin: rabbit_common
   test-rabbit:
+    needs: test-internal-deps
     uses: ./.github/workflows/test-plugin-make.yaml
     with:
       plugin: rabbit
+  test-rabbitmq_cli:
+    needs: test-rabbit
+    uses: ./.github/workflows/test-plugin-make.yaml
+    with:
+      plugin: rabbitmq_cli
+  test-tier1:
+    needs:
+      - test-rabbit
+      - test-rabbitmq_cli
+    strategy:
+      matrix:
+        plugin:
+          - rabbitmq_amqp1_0
+          - rabbitmq_amqp_client
+          - rabbitmq_auth_backend_cache
+          - rabbitmq_auth_backend_http
+          - rabbitmq_auth_backend_ldap
+          - rabbitmq_auth_backend_oauth2
+          - rabbitmq_auth_mechanism_ssl
+          - rabbitmq_aws
+          - rabbitmq_consistent_hash_exchange
+          - rabbitmq_event_exchange
+          - rabbitmq_federation
+          - rabbitmq_federation_management
+          - rabbitmq_jms_topic_exchange
+          - rabbitmq_management
+          - rabbitmq_management_agent
+          - rabbitmq_mqtt
+          - rabbitmq_peer_discovery_aws
+          - rabbitmq_peer_discovery_common
+          - rabbitmq_peer_discovery_consul
+          - rabbitmq_peer_discovery_etcd
+          - rabbitmq_peer_discovery_k8s
+          - rabbitmq_prelaunch
+          - rabbitmq_prometheus
+          - rabbitmq_random_exchange
+          - rabbitmq_recent_history_exchange
+          - rabbitmq_sharding
+          - rabbitmq_shovel
+          - rabbitmq_shovel_management
+          - rabbitmq_stomp
+          - rabbitmq_stream
+          - rabbitmq_stream_management
+          - rabbitmq_top
+          - rabbitmq_tracing
+          - rabbitmq_trust_store
+          - rabbitmq_web_dispatch
+          - rabbitmq_web_mqtt
+          - rabbitmq_web_mqtt_examples
+          - rabbitmq_web_stomp
+          - rabbitmq_web_stomp_examples
+    uses: ./.github/workflows/test-plugin-make.yaml
+    with:
+      plugin: ${{ matrix.plugin }}
   summary-test-make:
     needs:
-    - test-rabbit
+      - test-internal-deps
+      - test-rabbit
+      - test-rabbitmq_cli
+      - test-tier1
     runs-on: ubuntu-latest
     steps:
     - name: SUMMARY
