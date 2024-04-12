@@ -7,7 +7,7 @@
 
 -module(rabbit_mgmt_wm_exchange_publish).
 
--export([init/2, resource_exists/2, is_authorized/2,
+-export([init/2, resource_exists/2, allow_missing_post/2, is_authorized/2,
          allowed_methods/2,  content_types_provided/2, accept_content/2,
          content_types_accepted/2]).
 -export([variances/2]).
@@ -31,9 +31,12 @@ content_types_provided(ReqData, Context) ->
 
 resource_exists(ReqData, Context) ->
     {case rabbit_mgmt_wm_exchange:exchange(ReqData) of
-         not_found -> false;
+         not_found -> raise_not_found(ReqData, Context);
          _         -> true
      end, ReqData, Context}.
+
+allow_missing_post(ReqData, Context) ->
+    {false, ReqData, Context}.
 
 content_types_accepted(ReqData, Context) ->
    {[{'*', accept_content}], ReqData, Context}.
@@ -100,6 +103,18 @@ bad({{coordinator_unavailable, _}, _}, ReqData, Context) ->
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
+
+raise_not_found(ReqData, Context) ->
+    ErrorMessage = case rabbit_mgmt_util:vhost(ReqData) of
+        not_found -> 
+            "vhost_not_found";
+        _ ->
+            "exchange_not_found"
+    end,
+    rabbit_mgmt_util:not_found(
+        rabbit_data_coercion:to_binary(ErrorMessage),
+        ReqData,
+        Context).
 
 %%--------------------------------------------------------------------
 
