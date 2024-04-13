@@ -142,7 +142,12 @@ delete() ->
        }).
 
 delete_in_mnesia() ->
-    mnesia:delete_table(?RH_TABLE).
+    case mnesia:delete_table(?RH_TABLE) of
+        {atomic, ok} ->
+            ok;
+        {aborted, Reason} ->
+            {error, Reason}
+    end.
 
 delete_in_khepri() ->
     rabbit_khepri:delete(khepri_recent_history_path()).
