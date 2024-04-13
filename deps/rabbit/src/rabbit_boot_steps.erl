@@ -34,12 +34,12 @@ find_steps() ->
     find_steps(loaded_applications()).
 
 find_steps(Apps) ->
-    T0 = erlang:timestamp(),
+    T0 = erlang:monotonic_time(),
     AttrsPerApp = rabbit_misc:rabbitmq_related_module_attributes(rabbit_boot_step),
-    T1 = erlang:timestamp(),
+    T1 = erlang:monotonic_time(),
     ?LOG_DEBUG(
       "Boot steps: time to find boot steps: ~tp us",
-      [timer:now_diff(T1, T0)],
+      [erlang:convert_time_unit(T1 - T0, native, microsecond)],
       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
     All = sort_boot_steps(AttrsPerApp),
     [Step || {App, _, _} = Step <- All, lists:member(App, Apps)].

@@ -830,7 +830,7 @@ query_supported_feature_flags() ->
     ?LOG_DEBUG(
       "Feature flags: query feature flags in loaded applications",
       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-    T0 = erlang:timestamp(),
+    T0 = erlang:monotonic_time(),
     %% We need to know the list of applications we scanned for feature flags.
     %% We can't derive that list of the returned feature flags because an
     %% application might be loaded/present and not have a specific feature
@@ -842,11 +842,11 @@ query_supported_feature_flags() ->
                     rabbit_deprecated_feature, ScannedApps),
     AttrsFromTestsuite = module_attributes_from_testsuite(),
     TestsuiteProviders = [App || {App, _, _} <- AttrsFromTestsuite],
-    T1 = erlang:timestamp(),
+    T1 = erlang:monotonic_time(),
     ?LOG_DEBUG(
       "Feature flags: time to find supported feature flags and deprecated "
       "features: ~tp us",
-      [timer:now_diff(T1, T0)],
+      [erlang:convert_time_unit(T1 - T0, native, microsecond)],
       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     AllAttributes = AttrsPerAppA ++ AttrsPerAppB ++ AttrsFromTestsuite,
     AllApps = lists:usort(ScannedApps ++ TestsuiteProviders),
