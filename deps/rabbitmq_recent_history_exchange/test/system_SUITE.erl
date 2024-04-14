@@ -41,7 +41,8 @@ all_tests() ->
      wrong_argument_type_test,
      no_store_test,
      e2e_test,
-     multinode_test
+     multinode_test,
+     lifecycle_test
     ].
 
 %% -------------------------------------------------------------------
@@ -233,6 +234,16 @@ multinode_test(Config) ->
     amqp_channel:call(Chan2, #'queue.delete' { queue = Q2 }),
 
     rabbit_ct_client_helpers:close_connection_and_channel(Conn2, Chan2),
+    ok.
+
+lifecycle_test(Config) ->
+    %% Ensure that the boot and cleanup steps run as expected and return 'ok'.
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config,
+           rabbit, stop_apps, [[rabbitmq_recent_history_exchange]]),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config,
+           rabbit, start_apps, [[rabbitmq_recent_history_exchange]]),
     ok.
 
 test0(Config, MakeMethod, MakeMsg, DeclareArgs, Queues, MsgCount, ExpectedCount) ->
