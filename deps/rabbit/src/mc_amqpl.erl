@@ -391,7 +391,9 @@ convert_to(mc_amqp, #content{payload_fragments_rev = Payload} = Content, Env) ->
 convert_to(_TargetProto, _Content, _Env) ->
     not_implemented.
 
-protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
+protocol_state(#content{properties = #'P_basic'{headers = H00,
+                                                priority = Priority0,
+                                                delivery_mode = DeliveryMode0} = B0} = C,
                Anns) ->
     %% Add any x- annotations as headers
     H0 = case H00 of
@@ -434,16 +436,38 @@ protocol_state(#content{properties = #'P_basic'{headers = H00} = B0} = C,
                          %% publishes
                          undefined;
                      #{ttl := Ttl} ->
-                         %% not sure this will ever happen
-                         %% as we only ever unset the expiry
                          integer_to_binary(Ttl);
                      _ ->
                          B0#'P_basic'.expiration
                  end,
-
-    B = B0#'P_basic'{timestamp = Timestamp,
+    Priority = case Priority0 of
+                   undefined ->
+                       case Anns of
+                           %% This branch is hit when a message with priority was originally
+                           %% published with AMQP to a classic or quorum queue.
+                           #{?ANN_PRIORITY := P} -> P;
+                           _ -> undefined
+                       end;
+                   _ ->
+                       Priority0
+               end,
+    DeliveryMode = case DeliveryMode0 of
+                       undefined ->
+                           %% This branch is hit when a message was originally
+                           %% published with AMQP to a classic or quorum queue.
+                           case Anns of
+                               #{?ANN_DURABLE := true} -> 2;
+                               #{?ANN_DURABLE := false} -> 1;
+                               _ -> 2
+                           end;
+                       _ ->
+                           DeliveryMode0
+                   end,
+    B = B0#'P_basic'{headers = Headers,
+                     delivery_mode = DeliveryMode,
+                     priority = Priority,
                      expiration = Expiration,
-                     headers = Headers},
+                     timestamp = Timestamp},
 
     C#content{properties = B,
               properties_bin = none};

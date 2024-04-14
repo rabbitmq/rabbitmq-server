@@ -685,18 +685,33 @@ amqp10_to_amqp091_header_conversion(Session,Ch, QName, Address) ->
                   "x-int" => 3,
                   "x-bool" => true},
                 OutMsg2),
-    ok = amqp10_client:send_msg(Sender, OutMsg3),
+    OutMsg = amqp10_msg:set_headers(
+               #{durable => true,
+                 priority => 7,
+                 ttl => 88000},
+               OutMsg3),
+    ok = amqp10_client:send_msg(Sender, OutMsg),
     ok = wait_for_accepts(1),
 
-    {ok, Headers} = amqp091_get_msg_headers(Ch, QName),
+    {#'basic.get_ok'{},
+     #amqp_msg{props = #'P_basic'{headers = Headers,
+                                  delivery_mode = DeliveryMode,
+                                  priority = Priority,
+                                  expiration = Expiration}}
+    } = amqp_channel:call(Ch, #'basic.get'{queue = QName, no_ack = true}),
 
+    %% assert application properties
     ?assertEqual({longstr, <<"string-val">>}, rabbit_misc:table_lookup(Headers, <<"string">>)),
     ?assertEqual({unsignedint, 2}, rabbit_misc:table_lookup(Headers, <<"int">>)),
     ?assertEqual({bool, false}, rabbit_misc:table_lookup(Headers, <<"bool">>)),
-
+    %% assert message annotations
     ?assertEqual({longstr, <<"string-value">>}, rabbit_misc:table_lookup(Headers, <<"x-string">>)),
     ?assertEqual({unsignedint, 3}, rabbit_misc:table_lookup(Headers, <<"x-int">>)),
-    ?assertEqual({bool, true}, rabbit_misc:table_lookup(Headers, <<"x-bool">>)).
+    ?assertEqual({bool, true}, rabbit_misc:table_lookup(Headers, <<"x-bool">>)),
+    %% assert headers
+    ?assertEqual(2, DeliveryMode),
+    ?assertEqual(7, Priority),
+    ?assertEqual(<<"88000">>, Expiration).
 
 amqp091_to_amqp10_header_conversion(Session, Ch, QName, Address) -> 
     Amqp091Headers = [{<<"x-forwarding">>, array, 
@@ -3450,11 +3465,6 @@ delete_queue(Session, QName) ->
                        Session, <<"delete queue">>),
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair).
-
-amqp091_get_msg_headers(Channel, QName) -> 
-    {#'basic.get_ok'{}, #amqp_msg{props = #'P_basic'{ headers= Headers}}}
-        = amqp_channel:call(Channel, #'basic.get'{queue = QName, no_ack = true}),
-    {ok, Headers}.
 
 create_amqp10_sender(Session, Address) -> 
     {ok, Sender} = amqp10_client:attach_sender_link(

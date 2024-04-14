@@ -364,6 +364,9 @@ handle_frame0(Mode, Channel, Body, State) ->
 
 %% "The frame body is defined as a performative followed by an opaque payload." [2.3.2]
 parse_frame_body(Body, _Channel) ->
+    %% TODO test binary_part() here instead of returning binaries in amqp10_binary_parser:parse/1.
+    %% The latter can return the number of bytes parsed instead.
+    %% This should remove all warnings from the parser when compiliation option bin_opt_info is set.
     {DescribedPerformative, Payload} = amqp10_binary_parser:parse(Body),
     Performative = amqp10_framing:decode(DescribedPerformative),
     ?DEBUG("~s Channel ~tp ->~n~tp~n~ts~n",

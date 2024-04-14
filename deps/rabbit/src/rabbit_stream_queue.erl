@@ -553,8 +553,7 @@ deliver0(MsgId, Msg,
 
 stream_message(Msg, FilteringSupported) ->
     McAmqp = mc:convert(mc_amqp, Msg),
-    Sections = mc:protocol_state(McAmqp),
-    MsgData = mc_amqp:serialize(Sections),
+    MsgData = mc:protocol_state(McAmqp),
     case FilteringSupported of
         true ->
             case mc:x_header(<<"x-stream-filter-value">>, McAmqp) of

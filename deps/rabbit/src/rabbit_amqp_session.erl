@@ -1622,11 +1622,10 @@ handle_deliver(ConsumerTag, AckRequired,
                           settled = SendSettled},
             Mc1 = mc:convert(mc_amqp, Mc0),
             Mc = mc:set_annotation(redelivered, Redelivered, Mc1),
-            Sections0 = mc:protocol_state(Mc),
-            Sections = mc_amqp:serialize(Sections0),
-            ?DEBUG("~s Outbound payload:~n  ~tp~n",
-                   [?MODULE, [amqp10_framing:pprint(Section) ||
-                              Section <- amqp10_framing:decode_bin(iolist_to_binary(Sections))]]),
+            Sections = mc:protocol_state(Mc),
+            % ?DEBUG("~s Outbound payload:~n  ~tp~n",
+            %        [?MODULE, [amqp10_framing:pprint(Section) ||
+            %                   Section <- amqp10_framing:decode_bin(iolist_to_binary(Sections))]]),
             validate_message_size(Sections, MaxMessageSize),
             Frames = transfer_frames(Transfer, Sections, MaxFrameSize),
             messages_delivered(Redelivered, QType),
@@ -1876,7 +1875,6 @@ incoming_link_transfer(
     end,
     validate_transfer_rcv_settle_mode(RcvSettleMode, Settled),
     validate_incoming_message_size(PayloadBin),
-
     % Sections = amqp10_framing:decode_bin(PayloadBin),
     % ?DEBUG("~s Inbound payload:~n  ~tp",
     %        [?MODULE, [amqp10_framing:pprint(Section) || Section <- Sections]]),

@@ -12,6 +12,10 @@
 -export([parse/1,
          parse_many/2]).
 
+-ifdef(TEST).
+-export([parse_many_slow/1]).
+-endif.
+
 %% TODO put often matched binary function clauses to the top?
 
 %% server_mode is a special parsing mode used by RabbitMQ when parsing
@@ -25,7 +29,7 @@
 %% AMQP 3.2.4 & 3.2.5
 -define(NUMERIC_DESCRIPTOR_IS_PROPERTIES_OR_APPLICATION_PROPERTIES(Code),
         Code =:= 16#73 orelse
-        Code =< 16#74).
+        Code =:= 16#74).
 -define(SYMBOLIC_DESCRIPTOR_IS_PROPERTIES_OR_APPLICATION_PROPERTIES(Name),
         Name =:= <<"amqp:properties:list">> orelse
         Name =:= <<"amqp:application-properties:map">>).
@@ -185,7 +189,6 @@ mapify([Key, Value | Rest]) ->
     [{Key, Value} | mapify(Rest)].
 
 -ifdef(TEST).
--export([parse_many_slow/1]).
 %% This is the old, slow, original parser implemenation before
 %% https://github.com/rabbitmq/rabbitmq-server/pull/4811
 %% where many sub binaries are being created.

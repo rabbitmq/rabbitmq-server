@@ -187,7 +187,7 @@ roundtrip(Term) ->
     Bin = iolist_to_binary(amqp10_binary_generator:generate(Term)),
     % generate returns an iolist but parse expects a binary
     ?assertEqual({Term, <<>>}, amqp10_binary_parser:parse(Bin)),
-    ?assertEqual([Term], amqp10_binary_parser:parse_many(Bin, #{})).
+    ?assertEqual([Term], amqp10_binary_parser:parse_many(Bin, [])).
 
 %% Return the roundtripped term.
 roundtrip_return(Term) ->
@@ -195,5 +195,5 @@ roundtrip_return(Term) ->
     %% We assert only that amqp10_binary_parser:parse/1 and
     %% amqp10_binary_parser:parse_all/1 return the same term.
     {RoundTripTerm, <<>>} = amqp10_binary_parser:parse(Bin),
-    ?assertEqual([RoundTripTerm], amqp10_binary_parser:parse_many(Bin, #{})),
+    ?assertEqual([RoundTripTerm], amqp10_binary_parser:parse_many(Bin, [])),
     RoundTripTerm.

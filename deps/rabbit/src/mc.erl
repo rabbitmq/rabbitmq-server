@@ -67,7 +67,8 @@
 -export_type([
               state/0,
               ann_key/0,
-              ann_value/0
+              ann_value/0,
+              annotations/0
              ]).
 
 -type proto_state() :: term().
