@@ -16,6 +16,18 @@
 -export([parse_many_slow/1]).
 -endif.
 
+%% §1.6
+-define(CODE_ULONG, 16#80).
+-define(CODE_SMALL_ULONG, 16#53).
+-define(CODE_SYM_8, 16#a3).
+-define(CODE_SYM_32, 16#b3).
+%% §3.2
+-define(DESCRIPTOR_CODE_PROPERTIES, 16#73).
+-define(DESCRIPTOR_CODE_APPLICATION_PROPERTIES, 16#74).
+-define(DESCRIPTOR_CODE_DATA, 16#75).
+-define(DESCRIPTOR_CODE_AMQP_SEQUENCE, 16#76).
+-define(DESCRIPTOR_CODE_AMQP_VALUE, 16#77).
+
 %% TODO put often matched binary function clauses to the top?
 
 %% server_mode is a special parsing mode used by RabbitMQ when parsing
@@ -25,22 +37,6 @@
 -type opts() :: [server_mode].
 
 -export_type([opts/0]).
-
-%% AMQP 3.2.4 & 3.2.5
--define(NUMERIC_DESCRIPTOR_IS_PROPERTIES_OR_APPLICATION_PROPERTIES(Code),
-        Code =:= 16#73 orelse
-        Code =:= 16#74).
--define(SYMBOLIC_DESCRIPTOR_IS_PROPERTIES_OR_APPLICATION_PROPERTIES(Name),
-        Name =:= <<"amqp:properties:list">> orelse
-        Name =:= <<"amqp:application-properties:map">>).
-%% AMQP 3.2.6 - 3.2.8
--define(NUMERIC_DESCRIPTOR_IS_BODY(Code),
-        Code >= 16#75 andalso
-        Code =< 16#77).
--define(SYMBOLIC_DESCRIPTOR_IS_BODY(Name),
-        Name =:= <<"amqp:data:binary">> orelse
-        Name =:= <<"amqp:amqp-sequence:list">> orelse
-        Name =:= <<"amqp:amqp-value:*">>).
 
 %% Parses only the 1st AMQP type (including possible nested AMQP types).
 -spec parse(binary()) ->
@@ -58,7 +54,7 @@ parse(<<16#44, R/binary>>) -> {{ulong, 0},  R};
 parse(<<16#50, V:8/unsigned,  R/binary>>) -> {{ubyte, V},      R};
 parse(<<16#51, V:8/signed,    R/binary>>) -> {{byte, V},       R};
 parse(<<16#52, V:8/unsigned,  R/binary>>) -> {{uint, V},       R};
-parse(<<16#53, V:8/unsigned,  R/binary>>) -> {{ulong, V},      R};
+parse(<<?CODE_SMALL_ULONG, V:8/unsigned,  R/binary>>) -> {{ulong, V}, R};
 parse(<<16#54, V:8/signed,    R/binary>>) -> {{int, V},        R};
 parse(<<16#55, V:8/signed,    R/binary>>) -> {{long, V},       R};
 parse(<<16#56, 0:8/unsigned,  R/binary>>) -> {false,           R};
@@ -69,7 +65,7 @@ parse(<<16#70, V:32/unsigned, R/binary>>) -> {{uint, V},       R};
 parse(<<16#71, V:32/signed,   R/binary>>) -> {{int, V},        R};
 parse(<<16#72, V:32/float,    R/binary>>) -> {{float, V},      R};
 parse(<<16#73, Utf32:4/binary,R/binary>>) -> {{char, Utf32},   R};
-parse(<<16#80, V:64/unsigned, R/binary>>) -> {{ulong, V},      R};
+parse(<<?CODE_ULONG, V:64/unsigned, R/binary>>) -> {{ulong, V},R};
 parse(<<16#81, V:64/signed,   R/binary>>) -> {{long, V},       R};
 parse(<<16#82, V:64/float,    R/binary>>) -> {{double, V},     R};
 parse(<<16#83, TS:64/signed,  R/binary>>) -> {{timestamp, TS}, R};
@@ -77,8 +73,8 @@ parse(<<16#98, Uuid:16/binary,R/binary>>) -> {{uuid, Uuid},    R};
 %% Variable-widths
 parse(<<16#a0, S:8, V:S/binary,R/binary>>)-> {{binary, V}, R};
 parse(<<16#a1, S:8, V:S/binary,R/binary>>)-> {{utf8, V},   R};
-parse(<<16#a3, S:8, V:S/binary,R/binary>>)-> {{symbol, V}, R};
-parse(<<16#b3, S:32,V:S/binary,R/binary>>)-> {{symbol, V}, R};
+parse(<<?CODE_SYM_8, S:8, V:S/binary,R/binary>>)-> {{symbol, V}, R};
+parse(<<?CODE_SYM_32, S:32,V:S/binary,R/binary>>)-> {{symbol, V}, R};
 parse(<<16#b0, S:32,V:S/binary,R/binary>>)-> {{binary, V}, R};
 parse(<<16#b1, S:32,V:S/binary,R/binary>>)-> {{utf8, V},   R};
 %% Compounds
@@ -164,8 +160,8 @@ parse_array2(Count, Type, Bin, Acc) ->
     {Value, Rest} = parse_array_primitive(Type, Bin),
     parse_array2(Count - 1, Type, Rest, [Value | Acc]).
 
-parse_constructor(16#a3) -> symbol;
-parse_constructor(16#b3) -> symbol;
+parse_constructor(?CODE_SYM_8) -> symbol;
+parse_constructor(?CODE_SYM_32) -> symbol;
 parse_constructor(16#a1) -> utf8;
 parse_constructor(16#b1) -> utf8;
 parse_constructor(16#50) -> ubyte;
@@ -174,7 +170,7 @@ parse_constructor(16#60) -> ushort;
 parse_constructor(16#61) -> short;
 parse_constructor(16#70) -> uint;
 parse_constructor(16#71) -> int;
-parse_constructor(16#80) -> ulong;
+parse_constructor(?CODE_ULONG) -> ulong;
 parse_constructor(16#81) -> long;
 parse_constructor(16#40) -> null;
 parse_constructor(16#56) -> boolean;
@@ -222,43 +218,59 @@ parse_many(Binary, Opts) ->
 pm(<<>>, _, _) ->
     [];
 
-%%TODO is it faster to remove all when guards and instead match dirctly in the function head?
-
+%% We avoid guard tests: they improve readability, but result in worse performance.
+%%
 %% In server mode, stop when we reach the message body (data or amqp-sequence or amqp-value section).
-pm(<<?DESCRIBED, 16#53, V:8, _Rest/binary>>, true, B)
-  when ?NUMERIC_DESCRIPTOR_IS_BODY(V) ->
+pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_DATA, _Rest/binary>>, true, B) ->
     reached_body(B);
-pm(<<?DESCRIBED, 16#80, V:64, _Rest/binary>>, true, B)
-  when ?NUMERIC_DESCRIPTOR_IS_BODY(V) ->
+pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_AMQP_SEQUENCE, _Rest/binary>>, true, B) ->
     reached_body(B);
-pm(<<?DESCRIBED, 16#a3, S:8, V:S/binary, _Rest/binary>>, true, B)
-  when ?SYMBOLIC_DESCRIPTOR_IS_BODY(V) ->
+pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_AMQP_VALUE, _Rest/binary>>, true, B) ->
     reached_body(B);
-pm(<<?DESCRIBED, 16#b3, S:32, V:S/binary, _Rest/binary>>, true, B)
-  when ?SYMBOLIC_DESCRIPTOR_IS_BODY(V) ->
+pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_DATA:64, _Rest/binary>>, true, B) ->
+    reached_body(B);
+pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_AMQP_SEQUENCE:64, _Rest/binary>>, true, B) ->
+    reached_body(B);
+pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_AMQP_VALUE:64, _Rest/binary>>, true, B) ->
+    reached_body(B);
+pm(<<?DESCRIBED, ?CODE_SYM_8, _S:8, "amqp:data:binary", _Rest/binary>>, true, B) ->
+    reached_body(B);
+pm(<<?DESCRIBED, ?CODE_SYM_8, _S:8, "amqp:amqp-sequence:list", _Rest/binary>>, true, B) ->
+    reached_body(B);
+pm(<<?DESCRIBED, ?CODE_SYM_8, _S:8, "amqp:amqp-value:*", _Rest/binary>>, true, B) ->
+    reached_body(B);
+pm(<<?DESCRIBED, ?CODE_SYM_32, _S:32, "amqp:data:binary", _Rest/binary>>, true, B) ->
+    reached_body(B);
+pm(<<?DESCRIBED, ?CODE_SYM_32, _S:32, "amqp:amqp-sequence:list", _Rest/binary>>, true, B) ->
+    reached_body(B);
+pm(<<?DESCRIBED, ?CODE_SYM_32, _S:32, "amqp:amqp-value:*", _Rest/binary>>, true, B) ->
     reached_body(B);
 
 %% In server mode, include number of bytes left for properties and application-properties sections.
-pm(<<?DESCRIBED, 16#53, V:8, Rest0/binary>>, O = true, B)
-  when ?NUMERIC_DESCRIPTOR_IS_PROPERTIES_OR_APPLICATION_PROPERTIES(V) ->
-    Descriptor = {ulong, V},
+pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_PROPERTIES, Rest0/binary>>, O = true, B) ->
     [Value | Rest] = pm(Rest0, O, B+3),
-    [{{pos, B}, {described, Descriptor, Value}} | Rest];
-pm(<<?DESCRIBED, 16#80, V:64, Rest0/binary>>, O = true, B)
-  when ?NUMERIC_DESCRIPTOR_IS_PROPERTIES_OR_APPLICATION_PROPERTIES(V) ->
-    Descriptor = {ulong, V},
+    [{{pos, B}, {described, {ulong, ?DESCRIPTOR_CODE_PROPERTIES}, Value}} | Rest];
+pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES, Rest0/binary>>, O = true, B) ->
+    [Value | Rest] = pm(Rest0, O, B+3),
+    [{{pos, B}, {described, {ulong, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES}, Value}} | Rest];
+pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_PROPERTIES:64, Rest0/binary>>, O = true, B) ->
     [Value | Rest] = pm(Rest0, O, B+10),
-    [{{pos, B}, {described, Descriptor, Value}} | Rest];
-pm(<<?DESCRIBED, 16#a3, S:8, V:S/binary, Rest0/binary>>, O = true, B)
-  when ?SYMBOLIC_DESCRIPTOR_IS_PROPERTIES_OR_APPLICATION_PROPERTIES(V) ->
-    Descriptor = {symbol, V},
-    [Value | Rest] = pm(Rest0, O, B+3+S),
-    [{{pos, B}, {described, Descriptor, Value}} | Rest];
-pm(<<?DESCRIBED, 16#b3, S:32, V:S/binary, Rest0/binary>>, O = true, B)
-  when ?SYMBOLIC_DESCRIPTOR_IS_PROPERTIES_OR_APPLICATION_PROPERTIES(V) ->
-    Descriptor = {symbol, V},
-    [Value | Rest] = pm(Rest0, O, B+6+S),
-    [{{pos, B}, {described, Descriptor, Value}} | Rest];
+    [{{pos, B}, {described, {ulong, ?DESCRIPTOR_CODE_PROPERTIES}, Value}} | Rest];
+pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES:64, Rest0/binary>>, O = true, B) ->
+    [Value | Rest] = pm(Rest0, O, B+10),
+    [{{pos, B}, {described, {ulong, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES}, Value}} | Rest];
+pm(<<?DESCRIBED, ?CODE_SYM_8, 20, "amqp:properties:list", Rest0/binary>>, O = true, B) ->
+    [Value | Rest] = pm(Rest0, O, B+23),
+    [{{pos, B}, {described, {symbol, <<"amqp:properties:list">>}, Value}} | Rest];
+pm(<<?DESCRIBED, ?CODE_SYM_8, 31, "amqp:application-properties:map", Rest0/binary>>, O = true, B) ->
+    [Value | Rest] = pm(Rest0, O, B+34),
+    [{{pos, B}, {described, {symbol, <<"amqp:application-properties:map">>}, Value}} | Rest];
+pm(<<?DESCRIBED, ?CODE_SYM_32, 20:32, "amqp:properties:list", Rest0/binary>>, O = true, B) ->
+    [Value | Rest] = pm(Rest0, O, B+26),
+    [{{pos, B}, {described, {symbol, <<"amqp:properties:list">>}, Value}} | Rest];
+pm(<<?DESCRIBED, ?CODE_SYM_32, 31:32, "amqp:application-properties:map", Rest0/binary>>, O = true, B) ->
+    [Value | Rest] = pm(Rest0, O, B+37),
+    [{{pos, B}, {described, {symbol, <<"amqp:application-properties:map">>}, Value}} | Rest];
 
 %% Described Types
 pm(<<?DESCRIBED, Rest0/binary>>, O, B) ->
@@ -276,7 +288,7 @@ pm(<<16#44, R/binary>>, O, B) -> [{ulong, 0} | pm(R, O, B+1)];
 pm(<<16#50, V:8/unsigned,  R/binary>>, O, B) -> [{ubyte, V} | pm(R, O, B+2)];
 pm(<<16#51, V:8/signed,    R/binary>>, O, B) -> [{byte, V} | pm(R, O, B+2)];
 pm(<<16#52, V:8/unsigned,  R/binary>>, O, B) -> [{uint, V} | pm(R, O, B+2)];
-pm(<<16#53, V:8/unsigned,  R/binary>>, O, B) -> [{ulong, V} | pm(R, O, B+2)];
+pm(<<?CODE_SMALL_ULONG, V:8/unsigned,  R/binary>>, O, B) -> [{ulong, V} | pm(R, O, B+2)];
 pm(<<16#54, V:8/signed,    R/binary>>, O, B) -> [{int, V} | pm(R, O, B+2)];
 pm(<<16#55, V:8/signed,    R/binary>>, O, B) -> [{long, V} | pm(R, O, B+2)];
 pm(<<16#56, 0:8/unsigned,  R/binary>>, O, B) -> [false | pm(R, O, B+2)];
@@ -287,7 +299,7 @@ pm(<<16#70, V:32/unsigned, R/binary>>, O, B) -> [{uint, V} | pm(R, O, B+5)];
 pm(<<16#71, V:32/signed,   R/binary>>, O, B) -> [{int, V} | pm(R, O, B+5)];
 pm(<<16#72, V:32/float,    R/binary>>, O, B) -> [{float, V} | pm(R, O, B+5)];
 pm(<<16#73, Utf32:4/binary,R/binary>>, O, B) -> [{char, Utf32} | pm(R, O, B+5)];
-pm(<<16#80, V:64/unsigned, R/binary>>, O, B) -> [{ulong, V} | pm(R, O, B+9)];
+pm(<<?CODE_ULONG, V:64/unsigned, R/binary>>, O, B) -> [{ulong, V} | pm(R, O, B+9)];
 pm(<<16#81, V:64/signed,   R/binary>>, O, B) -> [{long, V} | pm(R, O, B+9)];
 pm(<<16#82, V:64/float,    R/binary>>, O, B) -> [{double, V} | pm(R, O, B+9)];
 pm(<<16#83, TS:64/signed,  R/binary>>, O, B) -> [{timestamp, TS} | pm(R, O, B+9)];
@@ -295,8 +307,8 @@ pm(<<16#98, Uuid:16/binary,R/binary>>, O, B) -> [{uuid, Uuid} | pm(R, O, B+17)];
 %% Variable-widths
 pm(<<16#a0, S:8, V:S/binary,R/binary>>, O, B) -> [{binary, V} | pm(R, O, B+2+S)];
 pm(<<16#a1, S:8, V:S/binary,R/binary>>, O, B) -> [{utf8, V} | pm(R, O, B+2+S)];
-pm(<<16#a3, S:8, V:S/binary,R/binary>>, O, B) -> [{symbol, V} | pm(R, O, B+2+S)];
-pm(<<16#b3, S:32,V:S/binary,R/binary>>, O, B) -> [{symbol, V} | pm(R, O, B+5+S)];
+pm(<<?CODE_SYM_8, S:8, V:S/binary,R/binary>>, O, B) -> [{symbol, V} | pm(R, O, B+2+S)];
+pm(<<?CODE_SYM_32, S:32,V:S/binary,R/binary>>, O, B) -> [{symbol, V} | pm(R, O, B+5+S)];
 pm(<<16#b0, S:32,V:S/binary,R/binary>>, O, B) -> [{binary, V} | pm(R, O, B+5+S)];
 pm(<<16#b1, S:32,V:S/binary,R/binary>>, O, B) -> [{utf8, V} | pm(R, O, B+5+S)];
 %% Compounds
