@@ -105,11 +105,13 @@ init_per_group(multi_resource, Config) ->
       #{
         <<"one">> => [
           {issuer, strict_jwks_url(Config, "/")},
-          {jwks_uri, strict_jwks_url(Config, "/jwks1")}
+          {jwks_uri, strict_jwks_url(Config, "/jwks1")},
+          {https, [{verify, verify_none}]}
         ],
         <<"two">> => [
           {issuer, strict_jwks_url(Config, "/")},
-          {jwks_uri, strict_jwks_url(Config, "/jwks2")}
+          {jwks_uri, strict_jwks_url(Config, "/jwks2")},
+          {https, [{verify, verify_none}]}
         ]
       },
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_auth_backend_oauth2, resource_servers, ResourceServersConfig]),
