@@ -50,7 +50,7 @@ jobs:
     uses: ./.github/workflows/test-plugin-make.yaml
     with:
       trc: /home/runner/test-result-cache
-      plugin: rabbit_common
+      plugin: ${{ matrix.plugin }}
   test-rabbit:
     needs:
       - load-test-result-cache
