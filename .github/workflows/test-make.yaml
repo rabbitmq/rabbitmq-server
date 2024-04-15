@@ -28,6 +28,7 @@ jobs:
       - name: UPLOAD IT AS AN ARTIFACT
         uses: actions/upload-artifact@v4
         with:
+          name: test-result-cache-subdir
           path: |
             /home/runner/test-result-cache/${{ github.sha }}
           retention-days: 1
