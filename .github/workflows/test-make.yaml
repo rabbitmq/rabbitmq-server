@@ -25,12 +25,15 @@ jobs:
       - name: PREP CACHE DIR
         run: |
           mkdir -p /home/runner/test-result-cache/${{ github.sha }}
-          touch /home/runner/test-result-cache/${{ github.sha }}/when
+          touch /home/runner/test-result-cache/marker
       - name: UPLOAD IT AS AN ARTIFACT
         uses: actions/upload-artifact@v4
         with:
           name: test-result-cache-subdir
+          # force the archive to include the sha
+          # by controlling the common prefix
           path: |
+            /home/runner/test-result-cache/marker
             /home/runner/test-result-cache/${{ github.sha }}
           retention-days: 1
 
@@ -139,8 +142,8 @@ jobs:
       - name: UPDATE CACHE
         uses: actions/download-artifact@v4
         with:
-          pattern: /home/runner/test-result-cache/${{ github.sha }}/**/*
-          path: /home/runner/test-result-cache/${{ github.sha }}
+          pattern: ${{ github.sha }}/**/*
+          path: /home/runner/test-result-cache
           merge-multiple: true
       - name: PRINT RESULTS
         run: |
