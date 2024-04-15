@@ -138,6 +138,7 @@ jobs:
       - name: UPDATE CACHE
         uses: actions/download-artifact@v4
         with:
+          pattern: /home/runner/test-result-cache/${{ github.sha }}/**/*
           path: /home/runner/test-result-cache/${{ github.sha }}
           merge-multiple: true
       - name: PRINT RESULTS
