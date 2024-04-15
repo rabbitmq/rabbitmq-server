@@ -55,6 +55,7 @@ jobs:
         id: test
         if: steps.check.outputs.passed != 'true'
         run: |
+          set -x
           make -C deps/${{ inputs.plugin }} \
             tests \
             RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
