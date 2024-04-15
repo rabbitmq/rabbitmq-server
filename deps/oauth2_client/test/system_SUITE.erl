@@ -177,7 +177,7 @@ groups() ->
     ssl_connection_error,
     {group, with_all_oauth_provider_settings},
     {group, without_all_oauth_providers_settings}
-  ]} 
+  ]}
 ].
 
 init_per_suite(Config) ->
@@ -463,8 +463,14 @@ build_https_oauth_provider(CaCertFile) ->
   }.
 oauth_provider_to_proplist(#oauth_provider{ issuer = Issuer, token_endpoint = TokenEndpoint,
   ssl_options = SslOptions, jwks_uri = Jwks_url}) ->
-  [ { issuer, Issuer}, {token_endpoint, TokenEndpoint},
-    { https, SslOptions}, {jwks_url, Jwks_url} ].
+  [ { issuer, Issuer},
+    {token_endpoint, TokenEndpoint},
+    { https,
+        case SslOptions of
+            undefined -> [];
+            Value -> Value
+        end}, 
+    {jwks_url, Jwks_url} ].
 
 start_http_oauth_server(Port, Expectations) when is_list(Expectations) ->
   Dispatch = cowboy_router:compile([
