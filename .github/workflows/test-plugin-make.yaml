@@ -2,6 +2,9 @@ name: Test (make)
 on:
   workflow_call:
     inputs:
+      trc:
+        required: true
+        type: string
       plugin:
         required: true
         type: string
@@ -18,27 +21,55 @@ jobs:
           - mnesia
           - khepri
     timeout-minutes: 120
+    env:
+      SUCCESS_PATH: ${{ inputs.trc }}/${{ github.sha }}/${{ inputs.plugin }}/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
-    - name: SETUP ERLANG/ELIXIR
-      uses: erlef/setup-beam@v1
-      with:
-        otp-version: ${{ matrix.otp_version }}
-        elixir-version: 1.15
-    - name: BUILD
-      run: |
-        make \
-          RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
-    - name: TEST ${{ inputs.plugin }}
-      run: |
-        make -C deps/${{ inputs.plugin }} \
-          tests \
-          RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
-    - name: UPLOAD TEST ARTIFACTS
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: testlogs-${{ inputs.plugin }}-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          logs/*
+      - name: FETCH TEST RESULT CACHE
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ inputs.trc }}/${{ github.sha }}
+          merge-multiple: true
+      - name: CHECK IF ALREADY PASSED
+        id: check
+        run: |
+          if [[ -f ${{ env.SUCCESS_PATH }} ]]; then
+            echo "passed=true" | tee -a $GITHUB_OUTPUT
+          else
+            echo "passed=false" | tee -a $GITHUB_OUTPUT
+          fi
+      - name: CHECKOUT REPOSITORY
+        if: steps.check.outputs.passed != 'true'
+        uses: actions/checkout@v4
+      - name: SETUP ERLANG/ELIXIR
+        if: steps.check.outputs.passed != 'true'
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp_version }}
+          elixir-version: 1.15
+      - name: BUILD
+        if: steps.check.outputs.passed != 'true'
+        run: |
+          make \
+            RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+      - name: TEST ${{ inputs.plugin }}
+        id: test
+        if: steps.check.outputs.passed != 'true'
+        run: |
+          make -C deps/${{ inputs.plugin }} \
+            tests \
+            RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          mkdir -p $(dirname ${{ env.SUCCESS_PATH }})
+          echo "passed" > ${{ env.SUCCESS_PATH }}
+      - name: UPDATE CACHE
+        if: steps.test.outcome == 'success'
+        uses: actions/upload-artifact@v4.3.1
+        with:
+          path: |
+            ${{ env.SUCCESS_PATH }}
+      - name: UPLOAD TEST ARTIFACTS
+        if: always() && steps.check.outputs.passed != 'true'
+        uses: actions/upload-artifact@v4.3.1
+        with:
+          name: testlogs-${{ inputs.plugin }}-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+          path: |
+            logs/*

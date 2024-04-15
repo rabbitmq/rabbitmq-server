@@ -11,7 +11,30 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
+  load-test-result-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - name: MOUNT TEST RESULT CACHE
+        uses: actions/cache@v4.0.2
+        with:
+          path: /home/runner/test-result-cache/
+          key: ${{ runner.os }}-test-result-cache-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-test-result-cache-
+          save-always: true
+      - name: PREP CACHE DIR
+        run: |
+          mkdir -p /home/runner/test-result-cache/${{ github.sha }}
+      - name: UPLOAD IT AS AN ARTIFACT
+        uses: actions/upload-artifact@v4
+        with:
+          path: |
+            /home/runner/test-result-cache/${{ github.sha }}
+          retention-days: 1
+
   test-internal-deps:
+    needs:
+      - load-test-result-cache
     strategy:
       matrix:
         plugin:
@@ -25,19 +48,27 @@ jobs:
           - trust_store_http
     uses: ./.github/workflows/test-plugin-make.yaml
     with:
+      trc: /home/runner/test-result-cache
       plugin: rabbit_common
   test-rabbit:
-    needs: test-internal-deps
+    needs:
+      - load-test-result-cache
+      - test-internal-deps
     uses: ./.github/workflows/test-plugin-make.yaml
     with:
+      trc: /home/runner/test-result-cache
       plugin: rabbit
   test-rabbitmq_cli:
-    needs: test-rabbit
+    needs:
+      - load-test-result-cache
+      - test-rabbit
     uses: ./.github/workflows/test-plugin-make.yaml
     with:
+      trc: /home/runner/test-result-cache
       plugin: rabbitmq_cli
   test-tier1:
     needs:
+      - load-test-result-cache
       - test-rabbit
       - test-rabbitmq_cli
     strategy:
@@ -84,6 +115,7 @@ jobs:
           - rabbitmq_web_stomp_examples
     uses: ./.github/workflows/test-plugin-make.yaml
     with:
+      trc: /home/runner/test-result-cache
       plugin: ${{ matrix.plugin }}
   summary-test-make:
     needs:
@@ -93,8 +125,21 @@ jobs:
       - test-tier1
     runs-on: ubuntu-latest
     steps:
-    - name: SUMMARY
-      run: |
-        cat << 'EOF' | jq -e 'map(.result == "success") | all(.)'
-        ${{ toJson(needs) }}
-        EOF
+      - name: MOUNT TEST RESULT CACHE
+        uses: actions/cache@v4.0.2
+        with:
+          path: /home/runner/test-result-cache/
+          key: ${{ runner.os }}-test-result-cache-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-test-result-cache-
+          save-always: true
+      - name: UPDATE CACHE
+        uses: actions/download-artifact@v4
+        with:
+          path: /home/runner/test-result-cache//${{ github.sha }}
+          merge-multiple: true
+      - name: SUMMARY
+        run: |
+          cat << 'EOF' | jq -e 'map(.result == "success") | all(.)'
+          ${{ toJson(needs) }}
+          EOF
