@@ -1574,6 +1574,7 @@ handle_frame_pre_auth(Transport,
 
             send(Transport, S, Frame),
             %% FIXME check if vhost is alive (see rabbit_reader:is_vhost_alive/2)
+<<<<<<< HEAD
             Connection#stream_connection{connection_step = opened,
                                          virtual_host = VirtualHost}
         catch
@@ -1584,6 +1585,21 @@ handle_frame_pre_auth(Transport,
                                                #{}}}),
                 send(Transport, S, F),
                 Connection#stream_connection{connection_step = failure}
+=======
+
+            {_, Conn} = ensure_token_expiry_timer(User,
+                                                  Connection#stream_connection{connection_step = opened,
+                                                                               virtual_host = VirtualHost}),
+            Conn
+        catch exit:#amqp_error{explanation = Explanation} ->
+                  rabbit_log:warning("Opening connection failed: ~ts", [Explanation]),
+                  F = rabbit_stream_core:frame({response, CorrelationId,
+                                                {open,
+                                                 ?RESPONSE_VHOST_ACCESS_FAILURE,
+                                                 #{}}}),
+                  send(Transport, S, F),
+                  Connection#stream_connection{connection_step = failure}
+>>>>>>> 1f01500d1b (Print more logs when stream connection fails to open)
         end,
 
     {Connection1, State};
