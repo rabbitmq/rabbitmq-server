@@ -1120,6 +1120,8 @@ collect_inventory_on_nodes(Nodes, Timeout) ->
     Rets = inventory_rpcs(Nodes, Timeout),
     maps:fold(
       fun
+          (_Node, init_required, {ok, Inventory}) ->
+            {ok, Inventory};
           (Node,
            #{feature_flags := FeatureFlags1,
              applications := ScannedApps,
@@ -1144,12 +1146,20 @@ collect_inventory_on_nodes(Nodes, Timeout) ->
       end, {ok, Inventory0}, Rets).
 
 inventory_rpcs(Nodes, Timeout) ->
-    %% We must use `rabbit_ff_registry_wrapper' if it is available to avoid
-    %% any deadlock with the Code server. If it is unavailable, we fall back
-    %% to `rabbit_ff_registry'.
+    %% In the past, the feature flag registry in `rabbit_ff_registry' was
+    %% implemented with a module which was dynamically regenerated and
+    %% reloaded. To avoid deadlocks with the Code server we need to first call
+    %% into `rabbit_ff_registry_wrapper' if it is available. If it is
+    %% unavailable, we fall back to `rabbit_ff_registry'.
     %%
     %% See commit aacfa1978e24bcacd8de7d06a7c3c5d9d8bd098e and pull request
     %% #8155.
+    %%
+    %% In the long run, when compatibility with nodes that use module creation
+    %% for `rabbit_ff_registry' is no longer required, this block can be
+    %% replaced with a call of:
+    %%
+    %%     rpc_calls(Nodes, rabbit_ff_registry, inventory, []).
     Rets0 = rpc_calls(
               Nodes,
               rabbit_ff_registry_wrapper, inventory, [], Timeout),
