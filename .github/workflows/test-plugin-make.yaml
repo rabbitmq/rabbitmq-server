@@ -30,7 +30,7 @@ jobs:
       run: |
         make \
           RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
-    - name: TEST rabbit
+    - name: TEST ${{ inputs.plugin }}
       run: |
         make -C deps/${{ inputs.plugin }} \
           tests \
