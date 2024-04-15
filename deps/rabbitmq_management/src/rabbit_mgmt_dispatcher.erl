@@ -63,8 +63,18 @@ build_module_routes(Ignore) ->
     Routes = [Module:dispatcher() || Module <- modules(Ignore)],
     [{"/api" ++ Path, Mod, Args} || {Path, Mod, Args} <- lists:append(Routes)].
 
-modules(IgnoreApps) ->
-    [Module || {App, Module, Behaviours} <-
+modules(IgnoreApps0) ->
+    Apps0 = rabbit_misc:rabbitmq_related_apps(),
+    Apps = case IgnoreApps0 of
+               [] ->
+                   Apps0;
+               _ ->
+                   IgnoreApps = sets:from_list(IgnoreApps0, [{version, 2}]),
+                   lists:filter(
+                     fun(App) -> not sets:is_element(App, IgnoreApps) end,
+                     Apps0)
+           end,
+    [Module || {_App, Module, Behaviours} <-
                %% Sort rabbitmq_management modules first. This is
                %% a microoptimization because most files belong to
                %% this application. Making it first avoids several
@@ -76,8 +86,7 @@ modules(IgnoreApps) ->
                      (_, {rabbitmq_management, _, _}) -> false;
                      ({A, _, _}, {B, _, _})           -> A =< B
                  end,
-                 rabbit_misc:all_module_attributes(behaviour)),
-               not lists:member(App, IgnoreApps),
+                 rabbit_misc:module_attributes_from_apps(behaviour, Apps)),
                lists:member(rabbit_mgmt_extension, Behaviours)].
 
 module_app(Module) ->

@@ -1014,6 +1014,20 @@ do_run_postlaunch_phase(Plugins) ->
         ?LOG_DEBUG(""),
         ?LOG_DEBUG("== Plugins (postlaunch phase) =="),
 
+        %% Before loading plugins, set the prometheus collectors and
+        %% instrumenters to the empty list. By default, prometheus will attempt
+        %% to find all implementers of its collector and instrumenter
+        %% behaviours by scanning all available modules during application
+        %% start. This can take significant time (on the order of seconds) due
+        %% to the large number of modules available.
+        %%
+        %% * Collectors: the `rabbitmq_prometheus' plugin explicitly registers
+        %%   all collectors.
+        %% * Instrumenters: no instrumenters are used.
+        _ = application:load(prometheus),
+        ok = application:set_env(prometheus, collectors, [default]),
+        ok = application:set_env(prometheus, instrumenters, []),
+
         %% However, we want to run their boot steps and actually start
         %% them one by one, to ensure a dependency is fully started
         %% before a plugin which depends on it gets a chance to start.
