@@ -20,7 +20,7 @@ jobs:
         metadata_store:
           - mnesia
           - khepri
-    timeout-minutes: 120
+    timeout-minutes: 20
     env:
       SUCCESS_PATH: ${{ inputs.trc }}/${{ github.sha }}/${{ inputs.plugin }}/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
