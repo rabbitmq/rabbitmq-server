@@ -52,14 +52,35 @@ jobs:
         run: |
           make \
             RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
-      - name: TEST ${{ inputs.plugin }}
+      - name: XREF ${{ inputs.plugin }}
+        if: steps.check.outputs.passed != 'true'
+        run: |
+          make -C deps/${{ inputs.plugin }} \
+            xref \
+            RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+      - name: DIALYZE ${{ inputs.plugin }}
+        if: steps.check.outputs.passed != 'true'
+        run: |
+          make -C deps/${{ inputs.plugin }} \
+            dialyze \
+            RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+      - name: EUNIT ${{ inputs.plugin }}
+        if: steps.check.outputs.passed != 'true'
+        run: |
+          make -C deps/${{ inputs.plugin }} \
+            eunit \
+            RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+      - name: CT ${{ inputs.plugin }}
         id: test
         if: steps.check.outputs.passed != 'true'
         run: |
-          set -x
           make -C deps/${{ inputs.plugin }} \
-            tests \
+            ct \
             RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+      - name: RECORD SUCCESS ${{ inputs.plugin }}
+        if: steps.check.outputs.passed != 'true'
+        run: |
+          set -x
           mkdir -p $(dirname ${{ env.SUCCESS_PATH }})
           echo "passed" > ${{ env.SUCCESS_PATH }}
       - name: UPDATE CACHE
