@@ -25,6 +25,7 @@ jobs:
       - name: PREP CACHE DIR
         run: |
           mkdir -p /home/runner/test-result-cache/${{ github.sha }}
+          touch /home/runner/test-result-cache/${{ github.sha }}/when
       - name: UPLOAD IT AS AN ARTIFACT
         uses: actions/upload-artifact@v4
         with:
