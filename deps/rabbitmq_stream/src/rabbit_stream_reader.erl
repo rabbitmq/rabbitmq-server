@@ -1502,14 +1502,14 @@ handle_frame_pre_auth(Transport,
                                                   Connection#stream_connection{connection_step = opened,
                                                                                virtual_host = VirtualHost}),
             Conn
-        catch
-            exit:_ ->
-                F = rabbit_stream_core:frame({response, CorrelationId,
-                                              {open,
-                                               ?RESPONSE_VHOST_ACCESS_FAILURE,
-                                               #{}}}),
-                send(Transport, S, F),
-                Connection#stream_connection{connection_step = failure}
+        catch exit:#amqp_error{explanation = Explanation} ->
+                  rabbit_log:warning("Opening connection failed: ~ts", [Explanation]),
+                  F = rabbit_stream_core:frame({response, CorrelationId,
+                                                {open,
+                                                 ?RESPONSE_VHOST_ACCESS_FAILURE,
+                                                 #{}}}),
+                  send(Transport, S, F),
+                  Connection#stream_connection{connection_step = failure}
         end,
 
     {Connection1, State};
