@@ -73,4 +73,4 @@ jobs:
         with:
           name: testlogs-${{ inputs.plugin }}-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
           path: |
-            logs/*
+            deps/${{ inputs.plugin }}/logs/*
