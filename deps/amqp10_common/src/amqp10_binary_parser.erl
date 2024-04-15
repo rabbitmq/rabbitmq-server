@@ -28,7 +28,6 @@
 -define(DESCRIPTOR_CODE_AMQP_SEQUENCE, 16#76).
 -define(DESCRIPTOR_CODE_AMQP_VALUE, 16#77).
 
-%% TODO put often matched binary function clauses to the top?
 
 %% server_mode is a special parsing mode used by RabbitMQ when parsing
 %% AMQP message sections from an AMQP client. This mode:
@@ -218,15 +217,49 @@ parse_many(Binary, Opts) ->
 pm(<<>>, _, _) ->
     [];
 
+%% We put function clauses that are more likely to match to the top as this results in better performance.
+%% Constants.
+pm(<<16#40, R/binary>>, O, B) -> [null | pm(R, O, B+1)];
+pm(<<16#41, R/binary>>, O, B) -> [true | pm(R, O, B+1)];
+pm(<<16#42, R/binary>>, O, B) -> [false | pm(R, O, B+1)];
+pm(<<16#43, R/binary>>, O, B) -> [{uint, 0} | pm(R, O, B+1)];
+%% Fixed-widths.
+pm(<<16#44, R/binary>>, O, B)                            -> [{ulong, 0} | pm(R, O, B+1)];
+pm(<<16#50, V:8/unsigned,  R/binary>>, O, B)             -> [{ubyte, V} | pm(R, O, B+2)];
+pm(<<16#52, V:8/unsigned,  R/binary>>, O, B)             -> [{uint, V} | pm(R, O, B+2)];
+pm(<<?CODE_SMALL_ULONG, V:8/unsigned,  R/binary>>, O, B) -> [{ulong, V} | pm(R, O, B+2)];
+pm(<<16#70, V:32/unsigned, R/binary>>, O, B)             -> [{uint, V} | pm(R, O, B+5)];
+pm(<<?CODE_ULONG, V:64/unsigned, R/binary>>, O, B)       -> [{ulong, V} | pm(R, O, B+9)];
+%% Variable-widths
+pm(<<16#a0, S:8, V:S/binary,R/binary>>, O, B)            -> [{binary, V} | pm(R, O, B+2+S)];
+pm(<<16#a1, S:8, V:S/binary,R/binary>>, O, B)            -> [{utf8, V} | pm(R, O, B+2+S)];
+pm(<<?CODE_SYM_8, S:8, V:S/binary,R/binary>>, O, B)      -> [{symbol, V} | pm(R, O, B+2+S)];
+%% Compounds
+pm(<<16#45, R/binary>>, O, B) ->
+    [{list, []} | pm(R, O, B+1)];
+pm(<<16#c0, S:8,CountAndValue:S/binary,R/binary>>, O, B) ->
+    [{list, pm_compound(8, CountAndValue, O, B+2)} | pm(R, O, B+2+S)];
+pm(<<16#c1, S:8,CountAndValue:S/binary,R/binary>>, O, B) ->
+    List = pm_compound(8, CountAndValue, O, B+2),
+    [{map, mapify(List)} | pm(R, O, B+2+S)];
+
 %% We avoid guard tests: they improve readability, but result in worse performance.
 %%
-%% In server mode, stop when we reach the message body (data or amqp-sequence or amqp-value section).
+%% In server mode:
+%% * stop when we reach the message body (data or amqp-sequence or amqp-value section).
+%% * include number of bytes left for properties and application-properties sections.
 pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_DATA, _Rest/binary>>, true, B) ->
     reached_body(B);
 pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_AMQP_SEQUENCE, _Rest/binary>>, true, B) ->
     reached_body(B);
 pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_AMQP_VALUE, _Rest/binary>>, true, B) ->
     reached_body(B);
+pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_PROPERTIES, Rest0/binary>>, O = true, B) ->
+    [Value | Rest] = pm(Rest0, O, B+3),
+    [{{pos, B}, {described, {ulong, ?DESCRIPTOR_CODE_PROPERTIES}, Value}} | Rest];
+pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES, Rest0/binary>>, O = true, B) ->
+    [Value | Rest] = pm(Rest0, O, B+3),
+    [{{pos, B}, {described, {ulong, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES}, Value}} | Rest];
 pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_DATA:64, _Rest/binary>>, true, B) ->
     reached_body(B);
 pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_AMQP_SEQUENCE:64, _Rest/binary>>, true, B) ->
@@ -245,14 +278,6 @@ pm(<<?DESCRIBED, ?CODE_SYM_32, _S:32, "amqp:amqp-sequence:list", _Rest/binary>>,
     reached_body(B);
 pm(<<?DESCRIBED, ?CODE_SYM_32, _S:32, "amqp:amqp-value:*", _Rest/binary>>, true, B) ->
     reached_body(B);
-
-%% In server mode, include number of bytes left for properties and application-properties sections.
-pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_PROPERTIES, Rest0/binary>>, O = true, B) ->
-    [Value | Rest] = pm(Rest0, O, B+3),
-    [{{pos, B}, {described, {ulong, ?DESCRIPTOR_CODE_PROPERTIES}, Value}} | Rest];
-pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES, Rest0/binary>>, O = true, B) ->
-    [Value | Rest] = pm(Rest0, O, B+3),
-    [{{pos, B}, {described, {ulong, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES}, Value}} | Rest];
 pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_PROPERTIES:64, Rest0/binary>>, O = true, B) ->
     [Value | Rest] = pm(Rest0, O, B+10),
     [{{pos, B}, {described, {ulong, ?DESCRIPTOR_CODE_PROPERTIES}, Value}} | Rest];
@@ -276,53 +301,33 @@ pm(<<?DESCRIBED, ?CODE_SYM_32, 31:32, "amqp:application-properties:map", Rest0/b
 pm(<<?DESCRIBED, Rest0/binary>>, O, B) ->
     [Descriptor, Value | Rest] = pm(Rest0, O, B+1),
     [{described, Descriptor, Value} | Rest];
+
 %% Primitives Types
 %%
-%% Constants
-pm(<<16#40, R/binary>>, O, B) -> [null | pm(R, O, B+1)];
-pm(<<16#41, R/binary>>, O, B) -> [true | pm(R, O, B+1)];
-pm(<<16#42, R/binary>>, O, B) -> [false | pm(R, O, B+1)];
-pm(<<16#43, R/binary>>, O, B) -> [{uint, 0} | pm(R, O, B+1)];
-pm(<<16#44, R/binary>>, O, B) -> [{ulong, 0} | pm(R, O, B+1)];
-%% Fixed-widths. Most integral types have a compact encoding as a byte.
-pm(<<16#50, V:8/unsigned,  R/binary>>, O, B) -> [{ubyte, V} | pm(R, O, B+2)];
+%% Fixed-widths.
 pm(<<16#51, V:8/signed,    R/binary>>, O, B) -> [{byte, V} | pm(R, O, B+2)];
-pm(<<16#52, V:8/unsigned,  R/binary>>, O, B) -> [{uint, V} | pm(R, O, B+2)];
-pm(<<?CODE_SMALL_ULONG, V:8/unsigned,  R/binary>>, O, B) -> [{ulong, V} | pm(R, O, B+2)];
 pm(<<16#54, V:8/signed,    R/binary>>, O, B) -> [{int, V} | pm(R, O, B+2)];
 pm(<<16#55, V:8/signed,    R/binary>>, O, B) -> [{long, V} | pm(R, O, B+2)];
 pm(<<16#56, 0:8/unsigned,  R/binary>>, O, B) -> [false | pm(R, O, B+2)];
 pm(<<16#56, 1:8/unsigned,  R/binary>>, O, B) -> [true  | pm(R, O, B+2)];
 pm(<<16#60, V:16/unsigned, R/binary>>, O, B) -> [{ushort, V} | pm(R, O, B+3)];
 pm(<<16#61, V:16/signed,   R/binary>>, O, B) -> [{short, V} | pm(R, O, B+3)];
-pm(<<16#70, V:32/unsigned, R/binary>>, O, B) -> [{uint, V} | pm(R, O, B+5)];
 pm(<<16#71, V:32/signed,   R/binary>>, O, B) -> [{int, V} | pm(R, O, B+5)];
 pm(<<16#72, V:32/float,    R/binary>>, O, B) -> [{float, V} | pm(R, O, B+5)];
 pm(<<16#73, Utf32:4/binary,R/binary>>, O, B) -> [{char, Utf32} | pm(R, O, B+5)];
-pm(<<?CODE_ULONG, V:64/unsigned, R/binary>>, O, B) -> [{ulong, V} | pm(R, O, B+9)];
 pm(<<16#81, V:64/signed,   R/binary>>, O, B) -> [{long, V} | pm(R, O, B+9)];
 pm(<<16#82, V:64/float,    R/binary>>, O, B) -> [{double, V} | pm(R, O, B+9)];
 pm(<<16#83, TS:64/signed,  R/binary>>, O, B) -> [{timestamp, TS} | pm(R, O, B+9)];
 pm(<<16#98, Uuid:16/binary,R/binary>>, O, B) -> [{uuid, Uuid} | pm(R, O, B+17)];
 %% Variable-widths
-pm(<<16#a0, S:8, V:S/binary,R/binary>>, O, B) -> [{binary, V} | pm(R, O, B+2+S)];
-pm(<<16#a1, S:8, V:S/binary,R/binary>>, O, B) -> [{utf8, V} | pm(R, O, B+2+S)];
-pm(<<?CODE_SYM_8, S:8, V:S/binary,R/binary>>, O, B) -> [{symbol, V} | pm(R, O, B+2+S)];
 pm(<<?CODE_SYM_32, S:32,V:S/binary,R/binary>>, O, B) -> [{symbol, V} | pm(R, O, B+5+S)];
-pm(<<16#b0, S:32,V:S/binary,R/binary>>, O, B) -> [{binary, V} | pm(R, O, B+5+S)];
-pm(<<16#b1, S:32,V:S/binary,R/binary>>, O, B) -> [{utf8, V} | pm(R, O, B+5+S)];
+pm(<<16#b0, S:32,V:S/binary,R/binary>>, O, B)        -> [{binary, V} | pm(R, O, B+5+S)];
+pm(<<16#b1, S:32,V:S/binary,R/binary>>, O, B)        -> [{utf8, V} | pm(R, O, B+5+S)];
 %% Compounds
-pm(<<16#45, R/binary>>, O, B) ->
-    [{list, []} | pm(R, O, B+1)];
-pm(<<16#c0, S:8,CountAndValue:S/binary,R/binary>>, O, B) ->
-    [{list, pm_compound(8, CountAndValue, O, B)} | pm(R, O, B+2+S)];
-pm(<<16#c1, S:8,CountAndValue:S/binary,R/binary>>, O, B) ->
-    List = pm_compound(8, CountAndValue, O, B),
-    [{map, mapify(List)} | pm(R, O, B+2+S)];
 pm(<<16#d0, S:32,CountAndValue:S/binary,R/binary>>, O, B) ->
-    [{list, pm_compound(32, CountAndValue, O, B)} | pm(R, O, B+5+S)];
+    [{list, pm_compound(32, CountAndValue, O, B+5)} | pm(R, O, B+5+S)];
 pm(<<16#d1, S:32,CountAndValue:S/binary,R/binary>>, O, B) ->
-    List = pm_compound(32, CountAndValue, O, B),
+    List = pm_compound(32, CountAndValue, O, B+5),
     [{map, mapify(List)} | pm(R, O, B+5+S)];
 %% Arrays
 pm(<<16#e0, S:8,CountAndV:S/binary,R/binary>>, O, B) ->
@@ -344,10 +349,9 @@ pm(<<16#94, V:128, R/binary>>, O, B) ->
 pm(<<Type, _Bin/binary>>, _O, B) ->
     throw({primitive_type_unsupported, Type, {position, B}}).
 
-%%TODO inline this function
 pm_compound(UnitSize, Bin, O, B) ->
-    <<_Count:UnitSize, Bin1/binary>> = Bin,
-    pm(Bin1, O, B).
+    <<_IgnoreCount:UnitSize, Value/binary>> = Bin,
+    pm(Value, O, B + UnitSize div 8).
 
 reached_body(Position) ->
     [{{pos, Position}, body}].
