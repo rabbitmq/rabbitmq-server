@@ -44,6 +44,8 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-test.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
 
+PLT_APPS = eunit
+
 include rabbitmq-components.mk
 include erlang.mk
 
