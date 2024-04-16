@@ -23,7 +23,8 @@
 -import(rabbit_ct_broker_helpers,
         [rpc/4]).
 -import(rabbit_ct_helpers,
-        [eventually/3]).
+        [eventually/1,
+         eventually/3]).
 
 all() ->
     [{group, tests}].
@@ -88,7 +89,8 @@ end_per_testcase(Testcase, Config) ->
 mqtt_amqpl_mqtt(Config) ->
     Q = ClientId = atom_to_binary(?FUNCTION_NAME),
     Ch = rabbit_ct_client_helpers:open_channel(Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Q}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Q,
+                                                                   durable = true}),
     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue = Q,
                                                              exchange = <<"amq.topic">>,
                                                              routing_key = <<"my.topic">>}),
@@ -146,6 +148,14 @@ mqtt_amqpl_mqtt(Config) ->
                    lists:sort(UserProperty1))
     after 1000 -> ct:fail("did not receive reply")
     end,
+
+    %% Another message MQTT 5.0 to AMQP 0.9.1, this time with QoS 0
+    ok = emqtt:publish(C, <<"my/topic">>, RequestPayload, [{qos, 0}]),
+    eventually(
+      ?_assertMatch(
+         {#'basic.get_ok'{}, #amqp_msg{payload = RequestPayload,
+                                       props = #'P_basic'{delivery_mode = 1}}},
+         amqp_channel:call(Ch, #'basic.get'{queue = Q}))),
 
     ok = emqtt:disconnect(C).
 
