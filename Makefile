@@ -33,7 +33,7 @@ XREF_SCOPE = app deps
 
 # We add all the applications that are in non-standard paths
 # so they are included in the analyses as well.
-XREF_EXTRA_APP_DIRS = $(filter-out deps/rabbitmq_cli/_build/dev/lib/rabbit_common/,$(wildcard deps/rabbitmq_cli/_build/dev/lib/*/)) deps/rabbit/apps/rabbitmq_prelaunch/
+XREF_EXTRA_APP_DIRS = $(filter-out deps/rabbitmq_cli/_build/dev/lib/rabbit_common/,$(wildcard deps/rabbitmq_cli/_build/dev/lib/*/)) deps/rabbitmq_prelaunch/
 
 # For Elixir protocols the right fix is to include the consolidated/
 # folders in addition to ebin/. However this creates conflicts because
