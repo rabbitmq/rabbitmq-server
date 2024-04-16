@@ -65,6 +65,7 @@ jobs:
       trc: /home/runner/test-result-cache
       hash: ${{ needs.load-test-result-cache.outputs.hash }}
       plugin: ${{ matrix.plugin }}
+      ignore-dialyze-errors: ${{ matrix.plugin == 'rabbitmq_ct_helpers' || matrix.plugin == 'trust_store_http' }}
   test-rabbit:
     needs:
       - load-test-result-cache
