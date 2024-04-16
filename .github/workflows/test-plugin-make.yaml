@@ -5,6 +5,9 @@ on:
       trc:
         required: true
         type: string
+      hash:
+        required: true
+        type: string
       plugin:
         required: true
         type: string
@@ -22,7 +25,7 @@ jobs:
           - khepri
     timeout-minutes: 20
     env:
-      SUCCESS_PATH: ${{ inputs.trc }}/${{ github.sha }}/${{ inputs.plugin }}/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
+      SUCCESS_PATH: ${{ inputs.trc }}/${{ inputs.hash }}/${{ inputs.plugin }}/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
       - name: FETCH TEST RESULT CACHE
         uses: actions/download-artifact@v4

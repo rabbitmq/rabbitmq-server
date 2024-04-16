@@ -13,18 +13,24 @@ concurrency:
 jobs:
   load-test-result-cache:
     runs-on: ubuntu-latest
+    outputs:
+      hash: ${{ steps.hash.outputs.hash }}
     steps:
+      - name: COMPUTE REPO HASH
+        id: hash
+        run: |
+          echo "hash=${{ hashFiles('**/*', '!.github/**/*', '!*.bazel', '!*.bzl', '!BUILD.*') }}" | tee -a $GITHUB_OUTPUT
       - name: MOUNT TEST RESULT CACHE
         uses: actions/cache@v4.0.2
         with:
           path: /home/runner/test-result-cache/
-          key: ${{ runner.os }}-test-result-cache-${{ github.sha }}
+          key: ${{ runner.os }}-test-result-cache-${{ steps.hash.outputs.hash }}
           restore-keys: |
             ${{ runner.os }}-test-result-cache-
           save-always: true
       - name: PREP CACHE DIR
         run: |
-          mkdir -p /home/runner/test-result-cache/${{ github.sha }}
+          mkdir -p /home/runner/test-result-cache/${{ steps.hash.outputs.hash }}
           touch /home/runner/test-result-cache/marker
       - name: UPLOAD IT AS AN ARTIFACT
         uses: actions/upload-artifact@v4
@@ -34,7 +40,7 @@ jobs:
           # by controlling the common prefix
           path: |
             /home/runner/test-result-cache/marker
-            /home/runner/test-result-cache/${{ github.sha }}
+            /home/runner/test-result-cache/${{ steps.hash.outputs.hash }}
           retention-days: 1
 
   test-internal-deps:
@@ -54,6 +60,7 @@ jobs:
     uses: ./.github/workflows/test-plugin-make.yaml
     with:
       trc: /home/runner/test-result-cache
+      hash: ${{ needs.load-test-result-cache.outputs.hash }}
       plugin: ${{ matrix.plugin }}
   test-rabbit:
     needs:
@@ -62,6 +69,7 @@ jobs:
     uses: ./.github/workflows/test-plugin-make.yaml
     with:
       trc: /home/runner/test-result-cache
+      hash: ${{ needs.load-test-result-cache.outputs.hash }}
       plugin: rabbit
   test-rabbitmq_cli:
     needs:
@@ -70,6 +78,7 @@ jobs:
     uses: ./.github/workflows/test-plugin-make.yaml
     with:
       trc: /home/runner/test-result-cache
+      hash: ${{ needs.load-test-result-cache.outputs.hash }}
       plugin: rabbitmq_cli
   test-tier1:
     needs:
@@ -121,10 +130,12 @@ jobs:
     uses: ./.github/workflows/test-plugin-make.yaml
     with:
       trc: /home/runner/test-result-cache
+      hash: ${{ needs.load-test-result-cache.outputs.hash }}
       plugin: ${{ matrix.plugin }}
   summary-test-make:
     if: always()
     needs:
+      - load-test-result-cache
       - test-internal-deps
       - test-rabbit
       - test-rabbitmq_cli
@@ -135,21 +146,21 @@ jobs:
         uses: actions/cache@v4.0.2
         with:
           path: /home/runner/test-result-cache/
-          key: ${{ runner.os }}-test-result-cache-${{ github.sha }}
+          key: ${{ runner.os }}-test-result-cache-${{ needs.load-test-result-cache.outputs.hash }}
           restore-keys: |
             ${{ runner.os }}-test-result-cache-
           save-always: true
       - name: UPDATE CACHE
         uses: actions/download-artifact@v4
         with:
-          pattern: ${{ github.sha }}/**/*
+          pattern: ${{ needs.load-test-result-cache.outputs.hash }}/**/*
           path: /home/runner/test-result-cache
           merge-multiple: true
       - name: PRINT RESULTS
         run: |
           set -x
           ls /home/runner/test-result-cache
-          tree /home/runner/test-result-cache/${{ github.sha }}
+          tree /home/runner/test-result-cache/${{ needs.load-test-result-cache.outputs.hash }}
       - name: SUMMARY
         run: |
           cat << 'EOF' | jq -e 'map(.result == "success") | all(.)'
