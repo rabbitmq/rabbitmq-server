@@ -444,7 +444,8 @@ protocol_state(#content{properties = #'P_basic'{headers = H00,
                    undefined ->
                        case Anns of
                            %% This branch is hit when a message with priority was originally
-                           %% published with AMQP to a classic or quorum queue.
+                           %% published with AMQP to a classic or quorum queue because the
+                           %% AMQP header isn't stored on disk.
                            #{?ANN_PRIORITY := P} -> P;
                            _ -> undefined
                        end;
@@ -453,10 +454,10 @@ protocol_state(#content{properties = #'P_basic'{headers = H00,
                end,
     DeliveryMode = case DeliveryMode0 of
                        undefined ->
-                           %% This branch is hit when a message was originally
-                           %% published with AMQP to a classic or quorum queue.
+                           %% This branch is hit when a message was originally published with
+                           %% AMQP to a classic or quorum queue because the AMQP header isn't
+                           %% stored on disk.
                            case Anns of
-                               #{?ANN_DURABLE := true} -> 2;
                                #{?ANN_DURABLE := false} -> 1;
                                _ -> 2
                            end;

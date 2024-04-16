@@ -453,7 +453,14 @@ protocol_state(Msg = #mqtt_msg{props = Props0,
                     end
             end,
     [RoutingKey | _] = maps:get(?ANN_ROUTING_KEYS, Anns),
-    Msg#mqtt_msg{topic = rabbit_mqtt_util:amqp_to_mqtt(RoutingKey),
+    %% We rely on the mc annotation to tell whether the message is durable because if
+    %% the message was originally sent with AMQP, the AMQP header isn't stored on disk.
+    Qos = case Anns of
+              #{?ANN_DURABLE := false} -> ?QOS_0;
+              _ -> ?QOS_1
+          end,
+    Msg#mqtt_msg{qos = Qos,
+                 topic = rabbit_mqtt_util:amqp_to_mqtt(RoutingKey),
                  props = Props}.
 
 prepare(_For, #mqtt_msg{} = Msg) ->
