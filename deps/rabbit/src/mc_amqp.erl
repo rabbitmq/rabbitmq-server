@@ -385,13 +385,16 @@ is_empty(#'v1_0.footer'{content = []}) ->
 is_empty(_) ->
     false.
 
-message_annotation(_Key, #msg_body_encoded{message_annotations = []},
-                   Default) ->
-    Default;
-message_annotation(Key, #msg_body_encoded{message_annotations = Content},
-                   Default)
+message_annotation(Key, State, Default)
   when is_binary(Key) ->
-    mc_util:amqp_map_get(Key, Content, Default).
+    MA = case State of
+             #msg_body_decoded{message_annotations = MA0} -> MA0;
+             #msg_body_encoded{message_annotations = MA0} -> MA0
+         end,
+    case MA of
+        [] -> Default;
+        _ -> mc_util:amqp_map_get(Key, MA, Default)
+    end.
 
 message_annotations_as_simple_map(#msg_body_encoded{message_annotations = []}) ->
     [];

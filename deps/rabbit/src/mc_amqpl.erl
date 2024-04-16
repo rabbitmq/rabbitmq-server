@@ -443,29 +443,34 @@ protocol_state(#content{properties = #'P_basic'{headers = H00,
     Priority = case Priority0 of
                    undefined ->
                        case Anns of
-                           %% This branch is hit when a message with priority was originally
-                           %% published with AMQP to a classic or quorum queue because the
-                           %% AMQP header isn't stored on disk.
-                           #{?ANN_PRIORITY := P} -> P;
-                           _ -> undefined
+                           #{?ANN_PRIORITY := P} ->
+                               %% This branch is hit when a message with priority was originally
+                               %% published with AMQP to a classic or quorum queue because the
+                               %% AMQP header isn't stored on disk.
+                               P;
+                           _ ->
+                               undefined
                        end;
                    _ ->
                        Priority0
                end,
-    DeliveryMode = case DeliveryMode0 of
-                       undefined ->
-                           %% This branch is hit when a message was originally published with
-                           %% AMQP to a classic or quorum queue because the AMQP header isn't
-                           %% stored on disk.
-                           case Anns of
-                               #{?ANN_DURABLE := false} -> 1;
-                               _ -> 2
-                           end;
-                       _ ->
-                           DeliveryMode0
-                   end,
+    DelMode = case DeliveryMode0 of
+                  undefined ->
+                      case Anns of
+                          #{?ANN_DURABLE := false} ->
+                              %% Leave it undefined which is equivalent to 1.
+                              undefined;
+                          _ ->
+                              %% This branch is hit when a durable message was originally published
+                              %% with AMQP to a classic or quorum queue because the AMQP header isn't
+                              %% stored on disk.
+                              2
+                      end;
+                  _ ->
+                      DeliveryMode0
+              end,
     B = B0#'P_basic'{headers = Headers,
-                     delivery_mode = DeliveryMode,
+                     delivery_mode = DelMode,
                      priority = Priority,
                      expiration = Expiration,
                      timestamp = Timestamp},
