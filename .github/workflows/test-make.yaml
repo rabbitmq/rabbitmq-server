@@ -47,6 +47,7 @@ jobs:
     needs:
       - load-test-result-cache
     strategy:
+      fail-fast: false
       matrix:
         plugin:
           - amqp10_client
@@ -86,6 +87,7 @@ jobs:
       - test-rabbit
       - test-rabbitmq_cli
     strategy:
+      fail-fast: false
       matrix:
         plugin:
           - rabbitmq_amqp1_0
