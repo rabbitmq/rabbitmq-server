@@ -27,9 +27,9 @@ init(Msg = #mqtt_msg{qos = Qos,
   when is_integer(Qos) ->
     Anns0 = case Qos > 0 of
                 true ->
-                    #{?ANN_DURABLE => true};
+                    #{};
                 false ->
-                    #{}
+                    #{?ANN_DURABLE => false}
             end,
     Anns1 = case Props of
                 #{'Message-Expiry-Interval' := Seconds} ->
