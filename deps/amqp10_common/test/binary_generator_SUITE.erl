@@ -120,10 +120,11 @@ list(_Config) ->
     %% list:list0
     roundtrip({list, []}),
     %% list:list8
-    roundtrip({list, [{utf8, <<"hi">>},
+    roundtrip({list, [
+                      {utf8, <<"hi">>},
                       {int, 123},
                       {binary, <<"data">>},
-                      {array, int, [{int, 1}, {int, 2}, {int, 3}]},
+                      {array, int, [{int, 1}, {int, -2147483648}, {int, 2147483647}]},
                       {described,
                        {utf8, <<"URL">>},
                        {utf8, <<"http://example.org/hello-world">>}}
@@ -185,15 +186,15 @@ array(_Config) ->
 
 roundtrip(Term) ->
     Bin = iolist_to_binary(amqp10_binary_generator:generate(Term)),
-    % generate returns an iolist but parse expects a binary
-    ?assertEqual({Term, <<>>}, amqp10_binary_parser:parse(Bin)),
+    ?assertEqual({Term, size(Bin)}, amqp10_binary_parser:parse(Bin)),
     ?assertEqual([Term], amqp10_binary_parser:parse_many(Bin, [])).
 
 %% Return the roundtripped term.
 roundtrip_return(Term) ->
     Bin = iolist_to_binary(amqp10_binary_generator:generate(Term)),
     %% We assert only that amqp10_binary_parser:parse/1 and
-    %% amqp10_binary_parser:parse_all/1 return the same term.
-    {RoundTripTerm, <<>>} = amqp10_binary_parser:parse(Bin),
+    %% amqp10_binary_parser:parse_many/2 return the same term.
+    {RoundTripTerm, BytesParsed} = amqp10_binary_parser:parse(Bin),
+    ?assertEqual(size(Bin), BytesParsed),
     ?assertEqual([RoundTripTerm], amqp10_binary_parser:parse_many(Bin, [])),
     RoundTripTerm.

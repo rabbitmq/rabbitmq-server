@@ -70,7 +70,6 @@ roundtrip(_Config) ->
                     <<Acc/binary, B/binary>>
             end, <<>>, Terms),
 
-    ?assertEqual(Terms, amqp10_binary_parser:parse_many_slow(Bin)),
     ?assertEqual(Terms, amqp10_binary_parser:parse_many(Bin, [])).
 
 array_with_extra_input(_Config) ->
@@ -80,13 +79,10 @@ array_with_extra_input(_Config) ->
                 %% element type, input, accumulated result
                 65, <<105,45,70,73,5,101,110,45,85,83>>, [true,true]},
 
-    ?assertExit(Expected, amqp10_binary_parser:parse_many_slow(Bin)),
     ?assertExit(Expected, amqp10_binary_parser:parse_many(Bin, [])).
 
 unsupported_type(_Config) ->
     UnsupportedType = 16#02,
     Bin = <<UnsupportedType, "hey">>,
-    ?assertThrow({primitive_type_unsupported, UnsupportedType},
-                 amqp10_binary_parser:parse_many_slow(Bin)),
-    ?assertThrow({primitive_type_unsupported, UnsupportedType, {position, 0}},
-                 amqp10_binary_parser:parse_many(Bin, [])).
+    Expected = {primitive_type_unsupported, UnsupportedType, {position, 0}},
+    ?assertThrow(Expected, amqp10_binary_parser:parse_many(Bin, [])).

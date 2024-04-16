@@ -262,11 +262,17 @@ handle_input(expecting_frame_body, Data,
         {<<_:BodyLength/binary, Rest/binary>>, 0} ->
             % heartbeat
             handle_input(expecting_frame_header, Rest, State);
-        {<<FrameBody:BodyLength/binary, Rest/binary>>, _} ->
+        {<<Body:BodyLength/binary, Rest/binary>>, _} ->
             State1 = State#state{frame_state = undefined},
-            {PerfDesc, Payload} = amqp10_binary_parser:parse(FrameBody),
-            Perf = amqp10_framing:decode(PerfDesc),
-            State2 = route_frame(Channel, FrameType, {Perf, Payload}, State1),
+            BytesBody = size(Body),
+            {DescribedPerformative, BytesParsed} = amqp10_binary_parser:parse(Body),
+            Performative = amqp10_framing:decode(DescribedPerformative),
+            Payload = if BytesParsed < BytesBody ->
+                             binary_part(Body, BytesParsed, BytesBody - BytesParsed);
+                         BytesParsed =:= BytesBody ->
+                             no_payload
+                      end,
+            State2 = route_frame(Channel, FrameType, {Performative, Payload}, State1),
             handle_input(expecting_frame_header, Rest, State2);
         _ ->
             {ok, expecting_frame_body, Data, State}
@@ -294,8 +300,8 @@ route_frame(Channel, FrameType, {Performative, Payload} = Frame, State0) ->
                                                State0),
     ?DBG("FRAME -> ~tp ~tp~n ~tp", [Channel, DestinationPid, Performative]),
     case Payload of
-        <<>> -> ok = gen_statem:cast(DestinationPid, Performative);
-        _ -> ok = gen_statem:cast(DestinationPid, Frame)
+        no_payload -> gen_statem:cast(DestinationPid, Performative);
+        _ -> gen_statem:cast(DestinationPid, Frame)
     end,
     State.
 
