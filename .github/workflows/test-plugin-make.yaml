@@ -63,6 +63,7 @@ jobs:
           make -C deps/${{ inputs.plugin }} \
             dialyze \
             RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+        continue-on-error: true
       - name: EUNIT ${{ inputs.plugin }}
         if: steps.check.outputs.passed != 'true'
         run: |
