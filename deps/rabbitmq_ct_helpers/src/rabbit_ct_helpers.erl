@@ -612,7 +612,10 @@ ensure_ssl_certs(Config) ->
                       {verify, Verify},
                       {fail_if_no_peer_cert, FailIfNoPeerCert}
                     ]}]}),
-            set_config(Config1, {rmq_certsdir, CertsDir});
+            set_config(
+              Config1,
+              [{rmq_certsdir, CertsDir},
+               {rmq_certspwd, CertsPwd}]);
         _ ->
             {skip, "Failed to create SSL certificates"}
     end.

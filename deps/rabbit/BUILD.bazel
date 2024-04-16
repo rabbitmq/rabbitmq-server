@@ -577,6 +577,11 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+    name = "peer_discovery_tmp_hidden_node_SUITE",
+    size = "large",
+)
+
+rabbitmq_integration_suite(
     name = "per_user_connection_channel_limit_partitions_SUITE",
     size = "large",
 )
