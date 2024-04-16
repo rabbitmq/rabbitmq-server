@@ -27,6 +27,7 @@ all() -> [test_add,
           test_diff,
           test_foldl].
 
+-dialyzer({nowarn_function, test_add/1}).
 test_add(_Config) ->
     ?assertEqual(1, add(0, 1)),
     %% "Addition of a value outside the range
