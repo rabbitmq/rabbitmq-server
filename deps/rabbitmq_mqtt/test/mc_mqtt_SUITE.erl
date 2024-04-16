@@ -37,7 +37,8 @@ groups() ->
        mqtt_amqpl_alt,
        mqtt_amqp,
        mqtt_amqp_alt,
-       amqp_mqtt
+       amqp_mqtt,
+       is_persistent
       ]}
     ].
 
@@ -500,6 +501,19 @@ amqp_mqtt(_Config) ->
                           }
                 }, Mqtt),
     ok.
+
+is_persistent(_Config) ->
+    Msg0 = #mqtt_msg{qos = 0,
+                     topic = <<"my/topic">>,
+                     payload = <<>>},
+    Mc0 = mc:init(mc_mqtt, Msg0, #{}),
+    ?assertNot(mc:is_persistent(Mc0)),
+
+    Msg1 = #mqtt_msg{qos = 1,
+                     topic = <<"my/topic">>,
+                     payload = <<>>},
+    Mc1 = mc:init(mc_mqtt, Msg1, #{}),
+    ?assert(mc:is_persistent(Mc1)).
 
 mqtt_msg() ->
     #mqtt_msg{qos = 0,
