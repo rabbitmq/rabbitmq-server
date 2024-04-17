@@ -97,7 +97,8 @@ sub_groups() ->
        topic_read_permission,
        topic_write_permission,
        topic_write_permission_variable_expansion,
-       loopback_user_connects_from_remote_host
+       loopback_user_connects_from_remote_host,
+       connect_permission
       ]
      },
      {limit, [shuffle],
@@ -284,7 +285,8 @@ init_per_testcase(T, Config)
   when T =:= will_queue_create_permission_queue_read;
        T =:= will_queue_create_permission_exchange_write;
        T =:= will_queue_publish_permission_exchange_write;
-       T =:= will_queue_publish_permission_topic_write ->
+       T =:= will_queue_publish_permission_topic_write;
+       T =:= will_queue_delete_permission ->
     case ?config(mqtt_version, Config) of
         v4 -> {skip, "Will Delay Interval is an MQTT 5.0 feature"};
         v5 -> testcase_started(Config, T)
@@ -981,6 +983,12 @@ loopback_user_connects_from_remote_host(Config) ->
 
     true = rpc(Config, 0, meck, validate, [Mod]),
     ok = rpc(Config, 0, meck, unload, [Mod]).
+
+%% No specific configure, write, or read permissions should be required for only connecting.
+connect_permission(Config) ->
+    set_permissions("", "", "", Config),
+    C = open_mqtt_connection(Config),
+    ok = emqtt:disconnect(C).
 
 set_topic_permissions(WritePat, ReadPat, Config) ->
     rpc(Config, 0,

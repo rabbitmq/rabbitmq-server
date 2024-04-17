@@ -1846,30 +1846,32 @@ delete_queue(QName,
                                     user = User = #user{username = Username},
                                     authz_ctx = AuthzCtx}}) ->
     %% configure access to queue required for queue.delete
-    case check_resource_access(User, QName, configure, AuthzCtx) of
-        ok ->
-            case rabbit_amqqueue:with(
-                   QName,
-                   fun (Q) ->
-                           rabbit_queue_type:delete(Q, false, false, Username)
-                   end,
-                   fun (not_found) ->
-                           ok;
-                       ({absent, Q, crashed}) ->
-                           rabbit_classic_queue:delete_crashed(Q, Username);
-                       ({absent, Q, stopped}) ->
-                           rabbit_classic_queue:delete_crashed(Q, Username);
-                       ({absent, _Q, _Reason}) ->
-                           ok
-                   end) of
-                {ok, _N} ->
-                    ok;
-                ok ->
-                    ok
-            end;
-        {error, access_refused} = E ->
-            E
-    end.
+    %% We only check access if the queue actually exists.
+    rabbit_amqqueue:with(
+      QName,
+      fun (Q) ->
+              case check_resource_access(User, QName, configure, AuthzCtx) of
+                  ok ->
+                      {ok, _N} = rabbit_queue_type:delete(Q, false, false, Username),
+                      ok;
+                  Err ->
+                      Err
+              end
+      end,
+      fun (not_found) ->
+              ok;
+          ({absent, Q, State})
+            when State =:= crashed orelse
+                 State =:= stopped ->
+              case check_resource_access(User, QName, configure, AuthzCtx) of
+                  ok ->
+                      rabbit_classic_queue:delete_crashed(Q, Username);
+                  Err ->
+                      Err
+              end;
+          ({absent, _Q, _State}) ->
+              ok
+      end).
 
 -spec handle_pre_hibernate() -> ok.
 handle_pre_hibernate() ->
