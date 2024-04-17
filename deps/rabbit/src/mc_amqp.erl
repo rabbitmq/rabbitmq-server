@@ -77,6 +77,8 @@
 %% on disk representation in the future.
 -record(v1,
         {
+         %% TODO remove delivery annotations because
+         %% "Delivery annotations convey information from the sending peer to the receiving peer."
          delivery_annotations = [] :: amqp_map(),
          message_annotations = [] :: amqp_map(),
          bare_and_footer :: binary()

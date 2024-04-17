@@ -270,9 +270,8 @@ amqpl_amqp_bin_amqpl(_Config) ->
                        user_id = <<"banana">>,
                        app_id = <<"rmq">>
                       },
-    Payload = [<<"data">>],
     Content = #content{properties = Props,
-                       payload_fragments_rev = Payload},
+                       payload_fragments_rev = [<<"data">>]},
     Msg = mc:init(mc_amqpl, Content, annotations()),
 
     ?assertEqual(<<"exch">>, mc:exchange(Msg)),
@@ -291,9 +290,8 @@ amqpl_amqp_bin_amqpl(_Config) ->
 
     %% roundtrip to binary
     Msg10Pre = mc:convert(mc_amqp, Msg),
-    Sections = amqp10_framing:decode_bin(
-                 iolist_to_binary(amqp_serialize(Msg10Pre))),
-    Msg10 = mc:init(mc_amqp, Sections, #{}),
+    Payload = iolist_to_binary(mc:protocol_state(Msg10Pre)),
+    Msg10 = mc:init(mc_amqp, Payload, #{}),
     ?assertEqual(<<"exch">>, mc:exchange(Msg10)),
     ?assertEqual([<<"apple">>], mc:routing_keys(Msg10)),
     ?assertEqual(98, mc:priority(Msg10)),
@@ -308,6 +306,7 @@ amqpl_amqp_bin_amqpl(_Config) ->
     ?assertEqual(RoutingHeaders, mc:routing_headers(Msg10, [])),
     ?assert(is_integer(mc:get_annotation(rts, Msg10))),
 
+    Sections = amqp10_framing:decode_bin(Payload),
     [
      #'v1_0.header'{} = Hdr10,
      #'v1_0.message_annotations'{},
@@ -377,8 +376,7 @@ amqpl_cc_amqp_bin_amqpl(_Config) ->
     ?assertEqual(RoutingKeys, mc:routing_keys(Msg)),
 
     Msg10Pre = mc:convert(mc_amqp, Msg),
-    Sections = amqp10_framing:decode_bin(
-                 iolist_to_binary(amqp_serialize(Msg10Pre))),
+    Sections = iolist_to_binary(mc:protocol_state(Msg10Pre)),
     Msg10 = mc:init(mc_amqp, Sections, #{}),
     ?assertEqual(RoutingKeys, mc:routing_keys(Msg10)),
 
@@ -426,8 +424,9 @@ amqp_amqpl_unsupported_values_not_converted(_Config) ->
 
     P = #'v1_0.properties'{user_id = {binary, UserId}},
     D =  #'v1_0.data'{content = <<"data">>},
+    Payload = serialize_sections([P, AP, D]),
 
-    Msg = mc:init(mc_amqp, [P, AP, D], annotations()),
+    Msg = mc:init(mc_amqp, Payload, annotations()),
     MsgL = mc:convert(mc_amqpl, Msg),
     #content{properties = #'P_basic'{user_id = undefined,
                                      headers = HL}} = mc:protocol_state(MsgL),
@@ -444,17 +443,15 @@ amqp_amqpl_amqp_uuid_correlation_id(_Config) ->
     P = #'v1_0.properties'{correlation_id = {uuid, UUID},
                            message_id = {uuid, UUID}},
     D =  #'v1_0.data'{content = <<"data">>},
+    BareMsgIn = serialize_sections([P, D]),
 
-    Msg = mc:init(mc_amqp, [P, D], annotations()),
+    Msg = mc:init(mc_amqp, BareMsgIn, annotations()),
     MsgL = mc:convert(mc_amqpl, Msg),
     MsgOut = mc:convert(mc_amqp, MsgL),
 
-    ?assertEqual({uuid, UUID}, mc:correlation_id(MsgOut)),
-    ?assertEqual({uuid, UUID}, mc:message_id(MsgOut)),
-
-    ok.
-
-
+    [_HeaderSect, _MessageAnnotationsSect | BareMsgIoList] = mc:protocol_state(MsgOut),
+    BareMsgOut = iolist_to_binary(BareMsgIoList),
+    ?assertEqual(BareMsgIn, BareMsgOut).
 
 amqp_amqpl(_Config) ->
     H = #'v1_0.header'{priority = {ubyte, 3},
@@ -483,7 +480,7 @@ amqp_amqpl(_Config) ->
           thead(utf8, <<"a-string">>),
           thead(binary, <<"data">>),
           thead(symbol, <<"symbol">>),
-          thead(ubyte, 1),
+          thead(ubyte, 255),
           thead(short, 2),
           thead(ushort, 3),
           thead(uint, 4),
@@ -491,7 +488,7 @@ amqp_amqpl(_Config) ->
           thead(double, 5.0),
           thead(float, 6.0),
           thead(timestamp, 7000),
-          thead(byte, 128),
+          thead(byte, -128),
           thead(boolean, true),
           {{utf8, <<"boolean2">>}, false},
           {utf8(<<"null">>), null}
@@ -499,9 +496,10 @@ amqp_amqpl(_Config) ->
     A =  #'v1_0.application_properties'{content = AC},
     D =  #'v1_0.data'{content = <<"data">>},
 
-    Msg = mc:init(mc_amqp, [H, M, P, A, D], annotations()),
+    Payload = serialize_sections([H, M, P, A, D]),
+    Msg = mc:init(mc_amqp, Payload, annotations()),
     %% validate source data is serialisable
-    _ = amqp_serialize(Msg),
+    _ = mc:protocol_state(Msg),
 
     ?assertEqual(3, mc:priority(Msg)),
     ?assertEqual(true, mc:is_persistent(Msg)),
@@ -539,7 +537,7 @@ amqp_amqpl(_Config) ->
     ?assertMatch({_, longstr, <<"a-string">>}, header(<<"utf8">>, HL)),
     ?assertMatch({_, binary, <<"data">>}, header(<<"binary">>, HL)),
     ?assertMatch({_, longstr, <<"symbol">>}, header(<<"symbol">>, HL)),
-    ?assertMatch({_, unsignedbyte, 1}, header(<<"ubyte">>, HL)),
+    ?assertMatch({_, unsignedbyte, 255}, header(<<"ubyte">>, HL)),
     ?assertMatch({_, short, 2}, header(<<"short">>, HL)),
     ?assertMatch({_, unsignedshort, 3}, header(<<"ushort">>, HL)),
     ?assertMatch({_, unsignedint, 4}, header(<<"uint">>, HL)),
@@ -547,7 +545,7 @@ amqp_amqpl(_Config) ->
     ?assertMatch({_, double, 5.0}, header(<<"double">>, HL)),
     ?assertMatch({_, float, 6.0}, header(<<"float">>, HL)),
     ?assertMatch({_, timestamp, 7}, header(<<"timestamp">>, HL)),
-    ?assertMatch({_, byte, 128}, header(<<"byte">>, HL)),
+    ?assertMatch({_, byte, -128}, header(<<"byte">>, HL)),
     ?assertMatch({_, bool, true}, header(<<"boolean">>, HL)),
     ?assertMatch({_, bool, false}, header(<<"boolean2">>, HL)),
     ?assertMatch({_, void, undefined}, header(<<"null">>, HL)),
@@ -565,7 +563,8 @@ amqp_amqpl_message_id_ulong(_Config) ->
     P = #'v1_0.properties'{message_id = {ulong, Num},
                            correlation_id = {ulong, Num}},
     D =  #'v1_0.data'{content = <<"data">>},
-    Msg = mc:init(mc_amqp, [P, D], annotations()),
+    Payload = serialize_sections([P, D]),
+    Msg = mc:init(mc_amqp, Payload, annotations()),
     MsgL = mc:convert(mc_amqpl, Msg),
     ?assertEqual({utf8, ULong}, mc:message_id(MsgL)),
     ?assertEqual({utf8, ULong}, mc:correlation_id(MsgL)),
@@ -582,7 +581,8 @@ amqp_amqpl_amqp_message_id_uuid(_Config) ->
     P = #'v1_0.properties'{message_id = {uuid, UUId},
                            correlation_id = {uuid, UUId}},
     D =  #'v1_0.data'{content = <<"data">>},
-    Msg = mc:init(mc_amqp, [P, D], annotations()),
+    BareMsgIn = serialize_sections([P, D]),
+    Msg = mc:init(mc_amqp, BareMsgIn, annotations()),
     MsgL = mc:convert(mc_amqpl, Msg),
     ?assertEqual({utf8, Urn}, mc:message_id(MsgL)),
     ?assertEqual({utf8, Urn}, mc:correlation_id(MsgL)),
@@ -591,17 +591,17 @@ amqp_amqpl_amqp_message_id_uuid(_Config) ->
                             correlation_id = Urn}, Props),
     %% check roundtrip back
     Msg2 = mc:convert(mc_amqp, MsgL),
-    ?assertEqual({uuid, UUId}, mc:message_id(Msg2)),
-    ?assertEqual({uuid, UUId}, mc:correlation_id(Msg2)),
-    ok.
-
+    [_HeaderSect, _MessageAnnotationsSect | BareMsgIoList] = mc:protocol_state(Msg2),
+    BareMsgOut = iolist_to_binary(BareMsgIoList),
+    ?assertEqual(BareMsgIn, BareMsgOut).
 
 amqp_amqpl_message_id_large(_Config) ->
     Orig = binary:copy(<<"hi">>, 256),
     P = #'v1_0.properties'{message_id = {utf8, Orig},
                            correlation_id = {utf8, Orig}},
     D =  #'v1_0.data'{content = <<"data">>},
-    Msg = mc:init(mc_amqp, [P, D], annotations()),
+    Payload = serialize_sections([P, D]),
+    Msg = mc:init(mc_amqp, Payload, annotations()),
     MsgL = mc:convert(mc_amqpl, Msg),
     ?assertEqual(undefined, mc:message_id(MsgL)),
     ?assertEqual(undefined, mc:correlation_id(MsgL)),
@@ -615,7 +615,8 @@ amqp_amqpl_message_id_binary(_Config) ->
     P = #'v1_0.properties'{message_id = {binary, Orig},
                            correlation_id = {binary, Orig}},
     D =  #'v1_0.data'{content = <<"data">>},
-    Msg = mc:init(mc_amqp, [P, D], annotations()),
+    Payload = serialize_sections([P, D]),
+    Msg = mc:init(mc_amqp, Payload, annotations()),
     MsgL = mc:convert(mc_amqpl, Msg),
     ?assertEqual(undefined, mc:message_id(MsgL)),
     ?assertEqual(undefined, mc:correlation_id(MsgL)),
@@ -633,7 +634,8 @@ amqp_to_amqpl_data_body(_Config) ->
                              true -> Section;
                              false -> [Section]
                          end,
-              Mc0 = mc:init(mc_amqp, Sections, #{}),
+              Payload = serialize_sections(Sections),
+              Mc0 = mc:init(mc_amqp, Payload, #{}),
               Mc = mc:convert(mc_amqpl, Mc0),
               #content{payload_fragments_rev = PayFragRev} = mc:protocol_state(Mc),
               PayFrag = lists:reverse(PayFragRev),
@@ -656,48 +658,45 @@ amqp_amqpl_amqp_bodies(_Config) ->
                #'v1_0.amqp_sequence'{content = [{utf8, <<"two">>}]}
               ]
              ],
-
     [begin
-         EncodedPayload = amqp10_encode_bin(Payload),
-
+         EncodedBody = amqp10_encode_bin(Body),
          Ex = #resource{virtual_host = <<"/">>,
                         kind = exchange,
                         name = <<"ex">>},
          {ok, LegacyMsg} = mc_amqpl:message(Ex,
                                             <<"rkey">>,
                                             #content{payload_fragments_rev =
-                                                     lists:reverse(EncodedPayload),
+                                                     lists:reverse(EncodedBody),
                                                      properties = Props},
                                             #{}),
-
          AmqpMsg = mc:convert(mc_amqp, LegacyMsg),
          %% drop any non body sections
-         BodySections = lists:nthtail(3, mc:protocol_state(AmqpMsg)),
-
-         AssertBody = case is_list(Payload) of
-                          true ->
-                              Payload;
-                          false ->
-                              [Payload]
-                      end,
-         ?assertEqual(AssertBody, BodySections)
-     end || Payload <- Bodies],
+         [_HeaderSect, _MessageAnnotationsSect | BodySectionsIoList] = mc:protocol_state(AmqpMsg),
+         BodySectionsBin = iolist_to_binary(BodySectionsIoList),
+         BodySections = amqp10_framing:decode_bin(BodySectionsBin),
+         ExpectedBodySections = case is_list(Body) of
+                                    true -> Body;
+                                    false -> [Body]
+                                end,
+         ?assertEqual(ExpectedBodySections, BodySections)
+     end || Body <- Bodies],
     ok.
+
+%% Utility
 
 amqp10_encode_bin(L) when is_list(L) ->
     [iolist_to_binary(amqp10_framing:encode_bin(X)) || X <- L];
 amqp10_encode_bin(X) ->
-    [iolist_to_binary(amqp10_framing:encode_bin(X))].
+    amqp10_encode_bin([X]).
 
-%% Utility
+serialize_sections(Sections) ->
+    iolist_to_binary([amqp10_framing:encode_bin(S) || S <- Sections]).
 
 utf8(V) ->
     {utf8, V}.
+
 symbol(V) ->
     {symbol, V}.
-
-amqp_serialize(Msg) ->
-    mc_amqp:serialize(mc:protocol_state(Msg)).
 
 amqp_map_get(_K, []) ->
     undefined;

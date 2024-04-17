@@ -169,7 +169,8 @@ encode_described(map, CodeNumber,
 encode_described(map, CodeNumber,
                  #'v1_0.message_annotations'{content = Content}) ->
     {described, {ulong, CodeNumber}, {map, Content}};
-encode_described(map, CodeNumber, #'v1_0.footer'{content = Content}) ->
+encode_described(map, CodeNumber,
+                 #'v1_0.footer'{content = Content}) ->
     {described, {ulong, CodeNumber}, {map, Content}};
 encode_described(binary, CodeNumber, #'v1_0.data'{content = Content}) ->
     {described, {ulong, CodeNumber}, {binary, Content}};

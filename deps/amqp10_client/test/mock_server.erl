@@ -52,14 +52,15 @@ recv(Sock) ->
     {ok, <<Length:32/unsigned, 2:8/unsigned,
            _/unsigned, Ch:16/unsigned>>} = gen_tcp:recv(Sock, 8),
     {ok, Data} = gen_tcp:recv(Sock, Length - 8),
-    {PerfDesc, Payload} = amqp10_binary_parser:parse(Data),
+    {PerfDesc, BytesParsed} = amqp10_binary_parser:parse(Data),
     Perf = amqp10_framing:decode(PerfDesc),
+    Payload = binary_part(Data, BytesParsed, size(Data) - BytesParsed),
     {Ch, Perf, Payload}.
 
 amqp_step(Fun) ->
     fun (Sock) ->
             Recv = recv(Sock),
-            ct:pal("AMQP Step receieved ~tp~n", [Recv]),
+            ct:pal("AMQP Step received ~tp~n", [Recv]),
             case Fun(Recv) of
                 {_Ch, []} -> ok;
                 {Ch, {multi, Records}} ->
@@ -81,4 +82,4 @@ send_amqp_header_step(Sock) ->
 recv_amqp_header_step(Sock) ->
     ct:pal("Receiving AMQP protocol header"),
     {ok, R} = gen_tcp:recv(Sock, 8),
-    ct:pal("handshake Step receieved ~tp~n", [R]).
+    ct:pal("handshake Step received ~tp~n", [R]).
