@@ -309,19 +309,21 @@
 
 <%= format('publish', {'mode': 'queue', 'queue': queue}) %>
 
-<% if (!is_stream(queue)) { %>
 <div class="section-hidden">
   <h2>Get messages</h2>
   <div class="hider">
+    <% if (!is_stream(queue)) { %>
     <p>
       Warning: getting messages from a queue is a destructive action.
       <span class="help" id="message-get-requeue"></span>
     </p>
+    <% } %>
     <form action="#/queues/get" method="post">
       <input type="hidden" name="vhost" value="<%= fmt_string(queue.vhost) %>"/>
       <input type="hidden" name="name" value="<%= fmt_string(queue.name) %>"/>
       <input type="hidden" name="truncate" value="50000"/>
       <table class="form">
+        <% if (!is_stream(queue)) { %>
         <tr>
           <th><label>Ack Mode:</label></th>
           <td>
@@ -333,6 +335,7 @@
             </select>
           </td>
         </tr>
+        <% } %>
         <tr>
           <th><label>Encoding:</label></th>
           <td>
@@ -347,13 +350,18 @@
           <th><label>Messages:</label></th>
           <td><input type="text" name="count" value="1"/></td>
         </tr>
+        <% if (is_stream(queue)) { %>
+        <tr>
+          <th><label>Offset:</label></th>
+          <td><input type="text" name="offset" value="0"/></td>
+        </tr>
+        <% } %>
       </table>
       <input type="submit" value="Get Message(s)" />
     </form>
     <div id="msg-wrapper"></div>
   </div>
 </div>
-<% } %>
 
 <% if (is_user_policymaker) { %>
 <div class="section-hidden">

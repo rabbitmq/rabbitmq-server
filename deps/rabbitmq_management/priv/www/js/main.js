@@ -1286,7 +1286,11 @@ function get_msgs(params) {
     with_req('POST', path, JSON.stringify(params), function(resp) {
             var msgs = JSON.parse(resp.responseText);
             if (msgs.length == 0) {
-                show_popup('info', 'Queue is empty');
+                if ("offset" in params) {
+					show_popup('info', 'No messages in stream at given offset');
+				} else {
+					show_popup('info', 'Queue is empty');
+				}
             } else {
                 $('#msg-wrapper').slideUp(200);
                 replace_content('msg-wrapper', format('messages', {'msgs': msgs}));
