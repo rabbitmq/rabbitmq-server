@@ -1,0 +1,1498 @@
+name: Test rabbit
+on:
+  workflow_call:
+    inputs:
+      trc:
+        required: true
+        type: string
+      hash:
+        required: true
+        type: string
+      ignore-dialyze-errors:
+        type: boolean
+jobs:
+  test:
+    name: Test rabbit
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        otp_version:
+        - 26.2
+        metadata_store:
+        - mnesia
+        - khepri
+    timeout-minutes: 20
+    env:
+      SUCCESS_PATH: ${{ inputs.trc }}/${{ inputs.hash }}/rabbit/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
+    steps:
+    - name: FETCH TEST RESULT CACHE
+      uses: actions/download-artifact@v4
+      with:
+        name: test-result-cache-subdir
+        path: ${{ inputs.trc }}
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v4
+    - name: SETUP ERLANG/ELIXIR
+      uses: erlef/setup-beam@v1
+      with:
+        otp-version: ${{ matrix.otp_version }}
+        elixir-version: 1.15
+    - name: BUILD
+      run: |
+        make \
+          RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+        mkdir -p ${{ env.SUCCESS_PATH }}
+    - name: XREF
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/xref ]]; then
+          echo "xref already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              xref \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/xref
+        fi
+    - name: DIALYZE
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/dialyze ]]; then
+          echo "dialyze already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              dialyze \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/dialyze
+        fi
+      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+    - name: EUNIT
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
+          echo "eunit already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              eunit \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/eunit
+        fi
+    - name: CT amqp_address
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-amqp_address ]]; then
+          echo "ct-amqp_address already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-amqp_address \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-amqp_address
+        fi
+    - name: CT amqp_auth
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-amqp_auth ]]; then
+          echo "ct-amqp_auth already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-amqp_auth \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-amqp_auth
+        fi
+    - name: CT amqp_client
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-amqp_client ]]; then
+          echo "ct-amqp_client already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-amqp_client \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-amqp_client
+        fi
+    - name: CT amqp_credit_api_v2
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-amqp_credit_api_v2 ]]; then
+          echo "ct-amqp_credit_api_v2 already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-amqp_credit_api_v2 \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-amqp_credit_api_v2
+        fi
+    - name: CT amqp_proxy_protocol
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-amqp_proxy_protocol ]]; then
+          echo "ct-amqp_proxy_protocol already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-amqp_proxy_protocol \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-amqp_proxy_protocol
+        fi
+    - name: CT amqp_system
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-amqp_system ]]; then
+          echo "ct-amqp_system already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-amqp_system \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-amqp_system
+        fi
+    - name: CT amqqueue_backward_compatibility
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-amqqueue_backward_compatibility ]]; then
+          echo "ct-amqqueue_backward_compatibility already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-amqqueue_backward_compatibility \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-amqqueue_backward_compatibility
+        fi
+    - name: CT backing_queue
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-backing_queue ]]; then
+          echo "ct-backing_queue already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-backing_queue \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-backing_queue
+        fi
+    - name: CT bindings
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-bindings ]]; then
+          echo "ct-bindings already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-bindings \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-bindings
+        fi
+    - name: CT channel_interceptor
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-channel_interceptor ]]; then
+          echo "ct-channel_interceptor already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-channel_interceptor \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-channel_interceptor
+        fi
+    - name: CT channel_operation_timeout
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-channel_operation_timeout ]]; then
+          echo "ct-channel_operation_timeout already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-channel_operation_timeout \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-channel_operation_timeout
+        fi
+    - name: CT classic_queue_prop
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-classic_queue_prop ]]; then
+          echo "ct-classic_queue_prop already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-classic_queue_prop \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-classic_queue_prop
+        fi
+    - name: CT cli_forget_cluster_node
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-cli_forget_cluster_node ]]; then
+          echo "ct-cli_forget_cluster_node already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-cli_forget_cluster_node \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-cli_forget_cluster_node
+        fi
+    - name: CT cluster
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-cluster ]]; then
+          echo "ct-cluster already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-cluster \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-cluster
+        fi
+    - name: CT cluster_minority
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-cluster_minority ]]; then
+          echo "ct-cluster_minority already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-cluster_minority \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-cluster_minority
+        fi
+    - name: CT clustering_management
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-clustering_management ]]; then
+          echo "ct-clustering_management already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-clustering_management \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-clustering_management
+        fi
+    - name: CT clustering_recovery
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-clustering_recovery ]]; then
+          echo "ct-clustering_recovery already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-clustering_recovery \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-clustering_recovery
+        fi
+    - name: CT config_schema
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-config_schema ]]; then
+          echo "ct-config_schema already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-config_schema \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-config_schema
+        fi
+    - name: CT confirms_rejects
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-confirms_rejects ]]; then
+          echo "ct-confirms_rejects already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-confirms_rejects \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-confirms_rejects
+        fi
+    - name: CT consumer_timeout
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-consumer_timeout ]]; then
+          echo "ct-consumer_timeout already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-consumer_timeout \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-consumer_timeout
+        fi
+    - name: CT crashing_queues
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-crashing_queues ]]; then
+          echo "ct-crashing_queues already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-crashing_queues \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-crashing_queues
+        fi
+    - name: CT dead_lettering
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-dead_lettering ]]; then
+          echo "ct-dead_lettering already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-dead_lettering \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-dead_lettering
+        fi
+    - name: CT definition_import
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-definition_import ]]; then
+          echo "ct-definition_import already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-definition_import \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-definition_import
+        fi
+    - name: CT deprecated_features
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-deprecated_features ]]; then
+          echo "ct-deprecated_features already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-deprecated_features \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-deprecated_features
+        fi
+    - name: CT direct_exchange_routing_v2
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-direct_exchange_routing_v2 ]]; then
+          echo "ct-direct_exchange_routing_v2 already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-direct_exchange_routing_v2 \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-direct_exchange_routing_v2
+        fi
+    - name: CT disconnect_detected_during_alarm
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-disconnect_detected_during_alarm ]]; then
+          echo "ct-disconnect_detected_during_alarm already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-disconnect_detected_during_alarm \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-disconnect_detected_during_alarm
+        fi
+    - name: CT disk_monitor
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-disk_monitor ]]; then
+          echo "ct-disk_monitor already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-disk_monitor \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-disk_monitor
+        fi
+    - name: CT dynamic_ha
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-dynamic_ha ]]; then
+          echo "ct-dynamic_ha already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-dynamic_ha \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-dynamic_ha
+        fi
+    - name: CT dynamic_qq
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-dynamic_qq ]]; then
+          echo "ct-dynamic_qq already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-dynamic_qq \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-dynamic_qq
+        fi
+    - name: CT eager_sync
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-eager_sync ]]; then
+          echo "ct-eager_sync already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-eager_sync \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-eager_sync
+        fi
+    - name: CT exchanges
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-exchanges ]]; then
+          echo "ct-exchanges already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-exchanges \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-exchanges
+        fi
+    - name: CT feature_flags
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-feature_flags ]]; then
+          echo "ct-feature_flags already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-feature_flags \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-feature_flags
+        fi
+    - name: CT feature_flags_v2
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-feature_flags_v2 ]]; then
+          echo "ct-feature_flags_v2 already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-feature_flags_v2 \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-feature_flags_v2
+        fi
+    - name: CT feature_flags_with_unpriveleged_user
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-feature_flags_with_unpriveleged_user ]]; then
+          echo "ct-feature_flags_with_unpriveleged_user already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-feature_flags_with_unpriveleged_user \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-feature_flags_with_unpriveleged_user
+        fi
+    - name: CT list_consumers_sanity_check
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-list_consumers_sanity_check ]]; then
+          echo "ct-list_consumers_sanity_check already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-list_consumers_sanity_check \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-list_consumers_sanity_check
+        fi
+    - name: CT list_queues_online_and_offline
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-list_queues_online_and_offline ]]; then
+          echo "ct-list_queues_online_and_offline already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-list_queues_online_and_offline \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-list_queues_online_and_offline
+        fi
+    - name: CT logging
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-logging ]]; then
+          echo "ct-logging already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-logging \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-logging
+        fi
+    - name: CT lqueue
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-lqueue ]]; then
+          echo "ct-lqueue already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-lqueue \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-lqueue
+        fi
+    - name: CT maintenance_mode
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-maintenance_mode ]]; then
+          echo "ct-maintenance_mode already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-maintenance_mode \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-maintenance_mode
+        fi
+    - name: CT many_node_ha
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-many_node_ha ]]; then
+          echo "ct-many_node_ha already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-many_node_ha \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-many_node_ha
+        fi
+    - name: CT mc_unit
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-mc_unit ]]; then
+          echo "ct-mc_unit already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-mc_unit \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-mc_unit
+        fi
+    - name: CT message_size_limit
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-message_size_limit ]]; then
+          echo "ct-message_size_limit already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-message_size_limit \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-message_size_limit
+        fi
+    - name: CT metadata_store_clustering
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-metadata_store_clustering ]]; then
+          echo "ct-metadata_store_clustering already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-metadata_store_clustering \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-metadata_store_clustering
+        fi
+    - name: CT metadata_store_migration
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-metadata_store_migration ]]; then
+          echo "ct-metadata_store_migration already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-metadata_store_migration \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-metadata_store_migration
+        fi
+    - name: CT metadata_store_phase1
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-metadata_store_phase1 ]]; then
+          echo "ct-metadata_store_phase1 already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-metadata_store_phase1 \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-metadata_store_phase1
+        fi
+    - name: CT metrics
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-metrics ]]; then
+          echo "ct-metrics already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-metrics \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-metrics
+        fi
+    - name: CT mirrored_supervisor
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-mirrored_supervisor ]]; then
+          echo "ct-mirrored_supervisor already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-mirrored_supervisor \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-mirrored_supervisor
+        fi
+    - name: CT msg_store
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-msg_store ]]; then
+          echo "ct-msg_store already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-msg_store \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-msg_store
+        fi
+    - name: CT peer_discovery_classic_config
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-peer_discovery_classic_config ]]; then
+          echo "ct-peer_discovery_classic_config already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-peer_discovery_classic_config \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-peer_discovery_classic_config
+        fi
+    - name: CT peer_discovery_dns
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-peer_discovery_dns ]]; then
+          echo "ct-peer_discovery_dns already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-peer_discovery_dns \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-peer_discovery_dns
+        fi
+    - name: CT peer_discovery_tmp_hidden_node
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-peer_discovery_tmp_hidden_node ]]; then
+          echo "ct-peer_discovery_tmp_hidden_node already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-peer_discovery_tmp_hidden_node \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-peer_discovery_tmp_hidden_node
+        fi
+    - name: CT per_node_limit
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-per_node_limit ]]; then
+          echo "ct-per_node_limit already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-per_node_limit \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-per_node_limit
+        fi
+    - name: CT per_user_connection_channel_limit
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-per_user_connection_channel_limit ]]; then
+          echo "ct-per_user_connection_channel_limit already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-per_user_connection_channel_limit \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-per_user_connection_channel_limit
+        fi
+    - name: CT per_user_connection_channel_limit_partitions
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-per_user_connection_channel_limit_partitions ]]; then
+          echo "ct-per_user_connection_channel_limit_partitions already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-per_user_connection_channel_limit_partitions \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-per_user_connection_channel_limit_partitions
+        fi
+    - name: CT per_user_connection_channel_tracking
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-per_user_connection_channel_tracking ]]; then
+          echo "ct-per_user_connection_channel_tracking already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-per_user_connection_channel_tracking \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-per_user_connection_channel_tracking
+        fi
+    - name: CT per_user_connection_tracking
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-per_user_connection_tracking ]]; then
+          echo "ct-per_user_connection_tracking already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-per_user_connection_tracking \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-per_user_connection_tracking
+        fi
+    - name: CT per_vhost_connection_limit
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-per_vhost_connection_limit ]]; then
+          echo "ct-per_vhost_connection_limit already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-per_vhost_connection_limit \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-per_vhost_connection_limit
+        fi
+    - name: CT per_vhost_connection_limit_partitions
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-per_vhost_connection_limit_partitions ]]; then
+          echo "ct-per_vhost_connection_limit_partitions already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-per_vhost_connection_limit_partitions \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-per_vhost_connection_limit_partitions
+        fi
+    - name: CT per_vhost_msg_store
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-per_vhost_msg_store ]]; then
+          echo "ct-per_vhost_msg_store already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-per_vhost_msg_store \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-per_vhost_msg_store
+        fi
+    - name: CT per_vhost_queue_limit
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-per_vhost_queue_limit ]]; then
+          echo "ct-per_vhost_queue_limit already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-per_vhost_queue_limit \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-per_vhost_queue_limit
+        fi
+    - name: CT policy
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-policy ]]; then
+          echo "ct-policy already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-policy \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-policy
+        fi
+    - name: CT priority_queue
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-priority_queue ]]; then
+          echo "ct-priority_queue already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-priority_queue \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-priority_queue
+        fi
+    - name: CT priority_queue_recovery
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-priority_queue_recovery ]]; then
+          echo "ct-priority_queue_recovery already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-priority_queue_recovery \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-priority_queue_recovery
+        fi
+    - name: CT product_info
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-product_info ]]; then
+          echo "ct-product_info already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-product_info \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-product_info
+        fi
+    - name: CT proxy_protocol
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-proxy_protocol ]]; then
+          echo "ct-proxy_protocol already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-proxy_protocol \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-proxy_protocol
+        fi
+    - name: CT publisher_confirms_parallel
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-publisher_confirms_parallel ]]; then
+          echo "ct-publisher_confirms_parallel already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-publisher_confirms_parallel \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-publisher_confirms_parallel
+        fi
+    - name: CT queue_length_limits
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-queue_length_limits ]]; then
+          echo "ct-queue_length_limits already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-queue_length_limits \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-queue_length_limits
+        fi
+    - name: CT queue_master_location
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-queue_master_location ]]; then
+          echo "ct-queue_master_location already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-queue_master_location \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-queue_master_location
+        fi
+    - name: CT queue_parallel
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-queue_parallel ]]; then
+          echo "ct-queue_parallel already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-queue_parallel \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-queue_parallel
+        fi
+    - name: CT queue_type
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-queue_type ]]; then
+          echo "ct-queue_type already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-queue_type \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-queue_type
+        fi
+    - name: CT quorum_queue
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-quorum_queue ]]; then
+          echo "ct-quorum_queue already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-quorum_queue \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-quorum_queue
+        fi
+    - name: CT quorum_queue_member_reconciliation
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-quorum_queue_member_reconciliation ]]; then
+          echo "ct-quorum_queue_member_reconciliation already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-quorum_queue_member_reconciliation \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-quorum_queue_member_reconciliation
+        fi
+    - name: CT rabbit_access_control
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_access_control ]]; then
+          echo "ct-rabbit_access_control already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_access_control \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_access_control
+        fi
+    - name: CT rabbit_confirms
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_confirms ]]; then
+          echo "ct-rabbit_confirms already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_confirms \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_confirms
+        fi
+    - name: CT rabbit_core_metrics_gc
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_core_metrics_gc ]]; then
+          echo "ct-rabbit_core_metrics_gc already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_core_metrics_gc \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_core_metrics_gc
+        fi
+    - name: CT rabbit_cuttlefish
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_cuttlefish ]]; then
+          echo "ct-rabbit_cuttlefish already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_cuttlefish \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_cuttlefish
+        fi
+    - name: CT rabbit_db_binding
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_db_binding ]]; then
+          echo "ct-rabbit_db_binding already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_db_binding \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_db_binding
+        fi
+    - name: CT rabbit_db_exchange
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_db_exchange ]]; then
+          echo "ct-rabbit_db_exchange already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_db_exchange \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_db_exchange
+        fi
+    - name: CT rabbit_db_maintenance
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_db_maintenance ]]; then
+          echo "ct-rabbit_db_maintenance already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_db_maintenance \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_db_maintenance
+        fi
+    - name: CT rabbit_db_msup
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_db_msup ]]; then
+          echo "ct-rabbit_db_msup already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_db_msup \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_db_msup
+        fi
+    - name: CT rabbit_db_policy
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_db_policy ]]; then
+          echo "ct-rabbit_db_policy already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_db_policy \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_db_policy
+        fi
+    - name: CT rabbit_db_queue
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_db_queue ]]; then
+          echo "ct-rabbit_db_queue already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_db_queue \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_db_queue
+        fi
+    - name: CT rabbit_db_topic_exchange
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_db_topic_exchange ]]; then
+          echo "ct-rabbit_db_topic_exchange already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_db_topic_exchange \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_db_topic_exchange
+        fi
+    - name: CT rabbit_direct_reply_to_prop
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_direct_reply_to_prop ]]; then
+          echo "ct-rabbit_direct_reply_to_prop already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_direct_reply_to_prop \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_direct_reply_to_prop
+        fi
+    - name: CT rabbit_fifo
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_fifo ]]; then
+          echo "ct-rabbit_fifo already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_fifo \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_fifo
+        fi
+    - name: CT rabbit_fifo_dlx
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_fifo_dlx ]]; then
+          echo "ct-rabbit_fifo_dlx already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_fifo_dlx \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_fifo_dlx
+        fi
+    - name: CT rabbit_fifo_dlx_integration
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_fifo_dlx_integration ]]; then
+          echo "ct-rabbit_fifo_dlx_integration already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_fifo_dlx_integration \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_fifo_dlx_integration
+        fi
+    - name: CT rabbit_fifo_int
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_fifo_int ]]; then
+          echo "ct-rabbit_fifo_int already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_fifo_int \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_fifo_int
+        fi
+    - name: CT rabbit_fifo_prop
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_fifo_prop ]]; then
+          echo "ct-rabbit_fifo_prop already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_fifo_prop \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_fifo_prop
+        fi
+    - name: CT rabbit_fifo_v0
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_fifo_v0 ]]; then
+          echo "ct-rabbit_fifo_v0 already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_fifo_v0 \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_fifo_v0
+        fi
+    - name: CT rabbit_message_interceptor
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_message_interceptor ]]; then
+          echo "ct-rabbit_message_interceptor already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_message_interceptor \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_message_interceptor
+        fi
+    - name: CT rabbit_msg_record
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_msg_record ]]; then
+          echo "ct-rabbit_msg_record already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_msg_record \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_msg_record
+        fi
+    - name: CT rabbit_stream_coordinator
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_stream_coordinator ]]; then
+          echo "ct-rabbit_stream_coordinator already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_stream_coordinator \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_stream_coordinator
+        fi
+    - name: CT rabbit_stream_queue
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_stream_queue ]]; then
+          echo "ct-rabbit_stream_queue already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_stream_queue \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_stream_queue
+        fi
+    - name: CT rabbit_stream_sac_coordinator
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbit_stream_sac_coordinator ]]; then
+          echo "ct-rabbit_stream_sac_coordinator already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbit_stream_sac_coordinator \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbit_stream_sac_coordinator
+        fi
+    - name: CT rabbitmq_4_0_deprecations
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbitmq_4_0_deprecations ]]; then
+          echo "ct-rabbitmq_4_0_deprecations already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbitmq_4_0_deprecations \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbitmq_4_0_deprecations
+        fi
+    - name: CT rabbitmq_queues_cli_integration
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbitmq_queues_cli_integration ]]; then
+          echo "ct-rabbitmq_queues_cli_integration already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbitmq_queues_cli_integration \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbitmq_queues_cli_integration
+        fi
+    - name: CT rabbitmqctl_integration
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbitmqctl_integration ]]; then
+          echo "ct-rabbitmqctl_integration already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbitmqctl_integration \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbitmqctl_integration
+        fi
+    - name: CT rabbitmqctl_shutdown
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rabbitmqctl_shutdown ]]; then
+          echo "ct-rabbitmqctl_shutdown already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-rabbitmqctl_shutdown \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rabbitmqctl_shutdown
+        fi
+    - name: CT routing
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-routing ]]; then
+          echo "ct-routing already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-routing \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-routing
+        fi
+    - name: CT runtime_parameters
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-runtime_parameters ]]; then
+          echo "ct-runtime_parameters already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-runtime_parameters \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-runtime_parameters
+        fi
+    - name: CT signal_handling
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-signal_handling ]]; then
+          echo "ct-signal_handling already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-signal_handling \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-signal_handling
+        fi
+    - name: CT simple_ha
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-simple_ha ]]; then
+          echo "ct-simple_ha already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-simple_ha \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-simple_ha
+        fi
+    - name: CT single_active_consumer
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-single_active_consumer ]]; then
+          echo "ct-single_active_consumer already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-single_active_consumer \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-single_active_consumer
+        fi
+    - name: CT sync_detection
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-sync_detection ]]; then
+          echo "ct-sync_detection already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-sync_detection \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-sync_detection
+        fi
+    - name: CT term_to_binary_compat_prop
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-term_to_binary_compat_prop ]]; then
+          echo "ct-term_to_binary_compat_prop already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-term_to_binary_compat_prop \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-term_to_binary_compat_prop
+        fi
+    - name: CT topic_permission
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-topic_permission ]]; then
+          echo "ct-topic_permission already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-topic_permission \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-topic_permission
+        fi
+    - name: CT transactions
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-transactions ]]; then
+          echo "ct-transactions already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-transactions \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-transactions
+        fi
+    - name: CT unicode
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unicode ]]; then
+          echo "ct-unicode already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unicode \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unicode
+        fi
+    - name: CT unit_access_control
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_access_control ]]; then
+          echo "ct-unit_access_control already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_access_control \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_access_control
+        fi
+    - name: CT unit_access_control_authn_authz_context_propagation
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_access_control_authn_authz_context_propagation ]]; then
+          echo "ct-unit_access_control_authn_authz_context_propagation already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_access_control_authn_authz_context_propagation \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_access_control_authn_authz_context_propagation
+        fi
+    - name: CT unit_access_control_credential_validation
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_access_control_credential_validation ]]; then
+          echo "ct-unit_access_control_credential_validation already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_access_control_credential_validation \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_access_control_credential_validation
+        fi
+    - name: CT unit_amqp091_content_framing
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_amqp091_content_framing ]]; then
+          echo "ct-unit_amqp091_content_framing already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_amqp091_content_framing \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_amqp091_content_framing
+        fi
+    - name: CT unit_amqp091_server_properties
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_amqp091_server_properties ]]; then
+          echo "ct-unit_amqp091_server_properties already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_amqp091_server_properties \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_amqp091_server_properties
+        fi
+    - name: CT unit_app_management
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_app_management ]]; then
+          echo "ct-unit_app_management already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_app_management \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_app_management
+        fi
+    - name: CT unit_classic_mirrored_queue_sync_throttling
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_classic_mirrored_queue_sync_throttling ]]; then
+          echo "ct-unit_classic_mirrored_queue_sync_throttling already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_classic_mirrored_queue_sync_throttling \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_classic_mirrored_queue_sync_throttling
+        fi
+    - name: CT unit_classic_mirrored_queue_throughput
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_classic_mirrored_queue_throughput ]]; then
+          echo "ct-unit_classic_mirrored_queue_throughput already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_classic_mirrored_queue_throughput \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_classic_mirrored_queue_throughput
+        fi
+    - name: CT unit_cluster_formation_locking_mocks
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_cluster_formation_locking_mocks ]]; then
+          echo "ct-unit_cluster_formation_locking_mocks already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_cluster_formation_locking_mocks \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_cluster_formation_locking_mocks
+        fi
+    - name: CT unit_cluster_formation_sort_nodes
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_cluster_formation_sort_nodes ]]; then
+          echo "ct-unit_cluster_formation_sort_nodes already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_cluster_formation_sort_nodes \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_cluster_formation_sort_nodes
+        fi
+    - name: CT unit_collections
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_collections ]]; then
+          echo "ct-unit_collections already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_collections \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_collections
+        fi
+    - name: CT unit_config_value_encryption
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_config_value_encryption ]]; then
+          echo "ct-unit_config_value_encryption already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_config_value_encryption \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_config_value_encryption
+        fi
+    - name: CT unit_connection_tracking
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_connection_tracking ]]; then
+          echo "ct-unit_connection_tracking already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_connection_tracking \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_connection_tracking
+        fi
+    - name: CT unit_credit_flow
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_credit_flow ]]; then
+          echo "ct-unit_credit_flow already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_credit_flow \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_credit_flow
+        fi
+    - name: CT unit_disk_monitor
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_disk_monitor ]]; then
+          echo "ct-unit_disk_monitor already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_disk_monitor \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_disk_monitor
+        fi
+    - name: CT unit_file_handle_cache
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_file_handle_cache ]]; then
+          echo "ct-unit_file_handle_cache already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_file_handle_cache \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_file_handle_cache
+        fi
+    - name: CT unit_gen_server2
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_gen_server2 ]]; then
+          echo "ct-unit_gen_server2 already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_gen_server2 \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_gen_server2
+        fi
+    - name: CT unit_gm
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_gm ]]; then
+          echo "ct-unit_gm already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_gm \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_gm
+        fi
+    - name: CT unit_log_management
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_log_management ]]; then
+          echo "ct-unit_log_management already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_log_management \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_log_management
+        fi
+    - name: CT unit_operator_policy
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_operator_policy ]]; then
+          echo "ct-unit_operator_policy already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_operator_policy \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_operator_policy
+        fi
+    - name: CT unit_pg_local
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_pg_local ]]; then
+          echo "ct-unit_pg_local already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_pg_local \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_pg_local
+        fi
+    - name: CT unit_plugin_directories
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_plugin_directories ]]; then
+          echo "ct-unit_plugin_directories already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_plugin_directories \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_plugin_directories
+        fi
+    - name: CT unit_plugin_versioning
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_plugin_versioning ]]; then
+          echo "ct-unit_plugin_versioning already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_plugin_versioning \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_plugin_versioning
+        fi
+    - name: CT unit_policy_validators
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_policy_validators ]]; then
+          echo "ct-unit_policy_validators already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_policy_validators \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_policy_validators
+        fi
+    - name: CT unit_priority_queue
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_priority_queue ]]; then
+          echo "ct-unit_priority_queue already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_priority_queue \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_priority_queue
+        fi
+    - name: CT unit_queue_consumers
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_queue_consumers ]]; then
+          echo "ct-unit_queue_consumers already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_queue_consumers \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_queue_consumers
+        fi
+    - name: CT unit_quorum_queue
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_quorum_queue ]]; then
+          echo "ct-unit_quorum_queue already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_quorum_queue \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_quorum_queue
+        fi
+    - name: CT unit_stats_and_metrics
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_stats_and_metrics ]]; then
+          echo "ct-unit_stats_and_metrics already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_stats_and_metrics \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_stats_and_metrics
+        fi
+    - name: CT unit_supervisor2
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_supervisor2 ]]; then
+          echo "ct-unit_supervisor2 already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_supervisor2 \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_supervisor2
+        fi
+    - name: CT unit_vm_memory_monitor
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-unit_vm_memory_monitor ]]; then
+          echo "ct-unit_vm_memory_monitor already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-unit_vm_memory_monitor \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-unit_vm_memory_monitor
+        fi
+    - name: CT upgrade_preparation
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-upgrade_preparation ]]; then
+          echo "ct-upgrade_preparation already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-upgrade_preparation \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-upgrade_preparation
+        fi
+    - name: CT vhost
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-vhost ]]; then
+          echo "ct-vhost already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbit \
+              ct-vhost \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-vhost
+        fi
+    - name: SAVE CACHE COPY
+      uses: actions/upload-artifact@v4.3.1
+      with:
+        name: rabbit-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        path: |
+          ${{ inputs.trc }}
+    - name: UPLOAD TEST ARTIFACTS
+      if: always()
+      uses: actions/upload-artifact@v4.3.1
+      with:
+        name: testlogs-rabbit-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        path: deps/rabbit/logs/*

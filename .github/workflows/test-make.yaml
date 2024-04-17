@@ -70,11 +70,10 @@ jobs:
     needs:
       - load-test-result-cache
       - test-internal-deps
-    uses: ./.github/workflows/test-plugin-make.yaml
+    uses: ./.github/workflows/test-rabbit.yaml
     with:
       trc: /home/runner/test-result-cache
       hash: ${{ needs.load-test-result-cache.outputs.hash }}
-      plugin: rabbit
   test-rabbitmq_cli:
     needs:
       - load-test-result-cache

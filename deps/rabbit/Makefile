@@ -161,6 +161,7 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
+include ../../github-actions.mk
 
 ifeq ($(strip $(BATS)),)
 BATS := $(ERLANG_MK_TMP)/bats/bin/bats
