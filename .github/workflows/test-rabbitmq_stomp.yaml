@@ -1,0 +1,178 @@
+name: Test rabbitmq_stomp
+on:
+  workflow_call:
+    inputs:
+      trc:
+        required: true
+        type: string
+      hash:
+        required: true
+        type: string
+      ignore-dialyze-errors:
+        type: boolean
+jobs:
+  test:
+    name: Test rabbitmq_stomp
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        otp_version:
+        - 26.2
+        metadata_store:
+        - mnesia
+        - khepri
+    timeout-minutes: 180
+    env:
+      SUCCESS_PATH: ${{ inputs.trc }}/${{ inputs.hash }}/rabbitmq_stomp/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
+    steps:
+    - name: FETCH TEST RESULT CACHE
+      uses: actions/download-artifact@v4
+      with:
+        name: test-result-cache-subdir
+        path: ${{ inputs.trc }}
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v4
+    - name: SETUP ERLANG/ELIXIR
+      uses: erlef/setup-beam@v1
+      with:
+        otp-version: ${{ matrix.otp_version }}
+        elixir-version: 1.15
+    - name: BUILD
+      run: |
+        make \
+          RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+        mkdir -p ${{ env.SUCCESS_PATH }}
+    - name: XREF
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/xref ]]; then
+          echo "xref already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_stomp \
+              xref \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/xref
+        fi
+    - name: DIALYZE
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/dialyze ]]; then
+          echo "dialyze already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_stomp \
+              dialyze \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/dialyze
+        fi
+      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+    - name: EUNIT
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
+          echo "eunit already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_stomp \
+              eunit \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/eunit
+        fi
+    - name: CT command
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-command ]]; then
+          echo "ct-command already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_stomp \
+              ct-command \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-command
+        fi
+    - name: CT config_schema
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-config_schema ]]; then
+          echo "ct-config_schema already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_stomp \
+              ct-config_schema \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-config_schema
+        fi
+    - name: CT connections
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-connections ]]; then
+          echo "ct-connections already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_stomp \
+              ct-connections \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-connections
+        fi
+    - name: CT frame
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-frame ]]; then
+          echo "ct-frame already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_stomp \
+              ct-frame \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-frame
+        fi
+    - name: CT proxy_protocol
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-proxy_protocol ]]; then
+          echo "ct-proxy_protocol already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_stomp \
+              ct-proxy_protocol \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-proxy_protocol
+        fi
+    - name: CT python
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-python ]]; then
+          echo "ct-python already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_stomp \
+              ct-python \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-python
+        fi
+    - name: CT system
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-system ]]; then
+          echo "ct-system already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_stomp \
+              ct-system \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-system
+        fi
+    - name: CT topic
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-topic ]]; then
+          echo "ct-topic already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_stomp \
+              ct-topic \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-topic
+        fi
+    - name: CT util
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-util ]]; then
+          echo "ct-util already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_stomp \
+              ct-util \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-util
+        fi
+    - name: SAVE CACHE COPY
+      uses: actions/upload-artifact@v4.3.1
+      with:
+        name: trc-rabbitmq_stomp-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        path: |
+          ${{ inputs.trc }}
+    - name: UPLOAD TEST ARTIFACTS
+      if: always()
+      uses: actions/upload-artifact@v4.3.1
+      with:
+        name: testlogs-rabbitmq_stomp-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        path: deps/rabbitmq_stomp/logs/*

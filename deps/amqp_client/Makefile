@@ -55,6 +55,7 @@ PLT_APPS = ssl public_key
 
 include rabbitmq-components.mk
 include erlang.mk
+include github-actions.mk
 
 HEX_TARBALL_FILES += rabbitmq-components.mk \
 		     git-revisions.txt

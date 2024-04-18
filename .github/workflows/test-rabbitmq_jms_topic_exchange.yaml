@@ -1,0 +1,118 @@
+name: Test rabbitmq_jms_topic_exchange
+on:
+  workflow_call:
+    inputs:
+      trc:
+        required: true
+        type: string
+      hash:
+        required: true
+        type: string
+      ignore-dialyze-errors:
+        type: boolean
+jobs:
+  test:
+    name: Test rabbitmq_jms_topic_exchange
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        otp_version:
+        - 26.2
+        metadata_store:
+        - mnesia
+        - khepri
+    timeout-minutes: 180
+    env:
+      SUCCESS_PATH: ${{ inputs.trc }}/${{ inputs.hash }}/rabbitmq_jms_topic_exchange/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
+    steps:
+    - name: FETCH TEST RESULT CACHE
+      uses: actions/download-artifact@v4
+      with:
+        name: test-result-cache-subdir
+        path: ${{ inputs.trc }}
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v4
+    - name: SETUP ERLANG/ELIXIR
+      uses: erlef/setup-beam@v1
+      with:
+        otp-version: ${{ matrix.otp_version }}
+        elixir-version: 1.15
+    - name: BUILD
+      run: |
+        make \
+          RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+        mkdir -p ${{ env.SUCCESS_PATH }}
+    - name: XREF
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/xref ]]; then
+          echo "xref already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_jms_topic_exchange \
+              xref \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/xref
+        fi
+    - name: DIALYZE
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/dialyze ]]; then
+          echo "dialyze already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_jms_topic_exchange \
+              dialyze \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/dialyze
+        fi
+      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+    - name: EUNIT
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
+          echo "eunit already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_jms_topic_exchange \
+              eunit \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/eunit
+        fi
+    - name: CT rjms_topic_selector
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rjms_topic_selector ]]; then
+          echo "ct-rjms_topic_selector already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_jms_topic_exchange \
+              ct-rjms_topic_selector \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rjms_topic_selector
+        fi
+    - name: CT rjms_topic_selector_unit
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-rjms_topic_selector_unit ]]; then
+          echo "ct-rjms_topic_selector_unit already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_jms_topic_exchange \
+              ct-rjms_topic_selector_unit \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-rjms_topic_selector_unit
+        fi
+    - name: CT sjx_evaluation
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/ct-sjx_evaluation ]]; then
+          echo "ct-sjx_evaluation already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_jms_topic_exchange \
+              ct-sjx_evaluation \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/ct-sjx_evaluation
+        fi
+    - name: SAVE CACHE COPY
+      uses: actions/upload-artifact@v4.3.1
+      with:
+        name: trc-rabbitmq_jms_topic_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        path: |
+          ${{ inputs.trc }}
+    - name: UPLOAD TEST ARTIFACTS
+      if: always()
+      uses: actions/upload-artifact@v4.3.1
+      with:
+        name: testlogs-rabbitmq_jms_topic_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        path: deps/rabbitmq_jms_topic_exchange/logs/*

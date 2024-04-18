@@ -1,0 +1,88 @@
+name: Test rabbitmq_amqp1_0
+on:
+  workflow_call:
+    inputs:
+      trc:
+        required: true
+        type: string
+      hash:
+        required: true
+        type: string
+      ignore-dialyze-errors:
+        type: boolean
+jobs:
+  test:
+    name: Test rabbitmq_amqp1_0
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        otp_version:
+        - 26.2
+        metadata_store:
+        - mnesia
+        - khepri
+    timeout-minutes: 180
+    env:
+      SUCCESS_PATH: ${{ inputs.trc }}/${{ inputs.hash }}/rabbitmq_amqp1_0/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
+    steps:
+    - name: FETCH TEST RESULT CACHE
+      uses: actions/download-artifact@v4
+      with:
+        name: test-result-cache-subdir
+        path: ${{ inputs.trc }}
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v4
+    - name: SETUP ERLANG/ELIXIR
+      uses: erlef/setup-beam@v1
+      with:
+        otp-version: ${{ matrix.otp_version }}
+        elixir-version: 1.15
+    - name: BUILD
+      run: |
+        make \
+          RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+        mkdir -p ${{ env.SUCCESS_PATH }}
+    - name: XREF
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/xref ]]; then
+          echo "xref already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_amqp1_0 \
+              xref \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/xref
+        fi
+    - name: DIALYZE
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/dialyze ]]; then
+          echo "dialyze already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_amqp1_0 \
+              dialyze \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/dialyze
+        fi
+      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+    - name: EUNIT
+      run: |
+        if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
+          echo "eunit already passed for this key ${{ inputs.hash }}"
+        else
+          make -C deps/rabbitmq_amqp1_0 \
+              eunit \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.SUCCESS_PATH }}/eunit
+        fi
+    - name: SAVE CACHE COPY
+      uses: actions/upload-artifact@v4.3.1
+      with:
+        name: rabbitmq_amqp1_0-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        path: |
+          ${{ inputs.trc }}
+    - name: UPLOAD TEST ARTIFACTS
+      if: always()
+      uses: actions/upload-artifact@v4.3.1
+      with:
+        name: testlogs-rabbitmq_amqp1_0-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        path: deps/rabbitmq_amqp1_0/logs/*

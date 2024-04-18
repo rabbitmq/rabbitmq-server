@@ -47,6 +47,7 @@ dep_elvis_mk = git https://github.com/inaka/elvis.mk.git master
 
 include rabbitmq-components.mk
 include erlang.mk
+include github-actions.mk
 
 HEX_TARBALL_FILES += rabbitmq-components.mk \
 		     git-revisions.txt

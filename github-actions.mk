@@ -1,6 +1,6 @@
 YTT ?= ytt
 
-../../.github/workflows/test-$(PROJECT).yaml:
+../../.github/workflows/test-$(PROJECT).yaml: $(wildcard test/*_SUITE.erl) ../../.github/workflows/test-plugin.template.yaml
 	$(gen_verbose) $(YTT) \
 		--file ../../.github/workflows/test-plugin.template.yaml \
 		--data-value-yaml plugin=$(PROJECT) \

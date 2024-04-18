@@ -10,3 +10,4 @@ PLT_APPS = common_test
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
+include ../../github-actions.mk

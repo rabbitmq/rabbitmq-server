@@ -6,7 +6,7 @@ BUILD_WITHOUT_QUIC=1
 export BUILD_WITHOUT_QUIC
 
 LOCAL_DEPS = inets public_key
-BUILD_DEPS = rabbit_common oauth2_client
+BUILD_DEPS = rabbit_common
 DEPS = rabbit cowlib jose base64url oauth2_client
 TEST_DEPS = cowboy rabbitmq_web_dispatch rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client rabbitmq_mqtt emqtt
 
@@ -22,3 +22,4 @@ dep_emqtt = git https://github.com/rabbitmq/emqtt.git master
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
+include ../../github-actions.mk

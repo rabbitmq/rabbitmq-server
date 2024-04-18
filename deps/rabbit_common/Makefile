@@ -49,6 +49,7 @@ PLT_APPS += mnesia crypto ssl
 
 include rabbitmq-components.mk
 include erlang.mk
+include github-actions.mk
 
 HEX_TARBALL_FILES += rabbitmq-components.mk \
 		     git-revisions.txt \

@@ -11,9 +11,6 @@ on:
       hash:
         required: true
         type: string
-    #!   plugin:
-    #!     required: true
-    #!     type: string
       ignore-dialyze-errors:
         type: boolean
 jobs:
@@ -37,14 +34,6 @@ jobs:
         with:
           name: test-result-cache-subdir
           path: ${{ inputs.trc }}
-    #!   - name: CHECK IF ALREADY PASSED
-    #!     id: check
-    #!     run: |
-    #!       if [[ -f ${{ env.SUCCESS_PATH }} ]]; then
-    #!         echo "passed=true" | tee -a $GITHUB_OUTPUT
-    #!       else
-    #!         echo "passed=false" | tee -a $GITHUB_OUTPUT
-    #!       fi
       - name: CHECKOUT REPOSITORY
         uses: actions/checkout@v4
       - name: SETUP ERLANG/ELIXIR
@@ -103,7 +92,7 @@ jobs:
       - name: SAVE CACHE COPY
         uses: actions/upload-artifact@v4.3.1
         with:
-          name: (@= data.values.plugin @)-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+          name: trc-(@= data.values.plugin @)-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
           path: |
             ${{ inputs.trc }}
       - name: UPLOAD TEST ARTIFACTS

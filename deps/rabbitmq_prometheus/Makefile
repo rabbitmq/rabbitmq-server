@@ -25,6 +25,7 @@ endif
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
+include ../../github-actions.mk
 
 .PHONY: readme
 readme: # Preview README & live reload on edit

@@ -20,3 +20,4 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-macros.mk \
 
 include rabbitmq-components.mk
 include erlang.mk
+include github-actions.mk

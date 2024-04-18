@@ -14,3 +14,4 @@ TEST_DEPS = meck
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
+include ../../github-actions.mk

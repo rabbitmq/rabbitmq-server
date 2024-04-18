@@ -1,4 +1,4 @@
-name: Test (make)
+name: Test rabbitmq_cli
 on:
   workflow_call:
     inputs:
@@ -8,14 +8,11 @@ on:
       hash:
         required: true
         type: string
-      plugin:
-        required: true
-        type: string
       ignore-dialyze-errors:
         type: boolean
 jobs:
   test:
-    name: Test
+    name: Test rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -27,7 +24,7 @@ jobs:
           - khepri
     timeout-minutes: 20
     env:
-      SUCCESS_PATH: ${{ inputs.trc }}/${{ inputs.hash }}/${{ inputs.plugin }}/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
+      SUCCESS_PATH: ${{ inputs.trc }}/${{ inputs.hash }}/rabbitmq_cli/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
       - name: FETCH TEST RESULT CACHE
         uses: actions/download-artifact@v4
@@ -56,49 +53,30 @@ jobs:
         run: |
           make \
             RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
-      - name: XREF ${{ inputs.plugin }}
-        if: steps.check.outputs.passed != 'true'
-        run: |
-          make -C deps/${{ inputs.plugin }} \
-            xref \
-            RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
-      - name: DIALYZE ${{ inputs.plugin }}
-        if: steps.check.outputs.passed != 'true'
-        run: |
-          make -C deps/${{ inputs.plugin }} \
-            dialyze \
-            RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
-        continue-on-error: ${{ inputs.ignore-dialyze-errors }}
-      - name: EUNIT ${{ inputs.plugin }}
-        if: steps.check.outputs.passed != 'true'
-        run: |
-          make -C deps/${{ inputs.plugin }} \
-            eunit \
-            RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
-      - name: CT ${{ inputs.plugin }}
+      - name: TEST
         id: test
         if: steps.check.outputs.passed != 'true'
         run: |
-          make -C deps/${{ inputs.plugin }} \
-            ct \
+          make -C deps/rabbitmq_cli \
+            checks \
             RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
-      - name: RECORD SUCCESS ${{ inputs.plugin }}
+      - name: RECORD SUCCESS rabbitmq_cli
         if: steps.check.outputs.passed != 'true'
         run: |
           set -x
           mkdir -p $(dirname ${{ env.SUCCESS_PATH }})
           echo "passed" > ${{ env.SUCCESS_PATH }}
       - name: UPDATE CACHE
-        if: steps.test.outcome == 'success'
+        if: steps.check.outputs.passed != 'true'
         uses: actions/upload-artifact@v4.3.1
         with:
-          name: ${{ inputs.plugin }}-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+          name: rabbitmq_cli-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
           path: |
             ${{ inputs.trc }}
       - name: UPLOAD TEST ARTIFACTS
         if: always() && steps.check.outputs.passed != 'true'
         uses: actions/upload-artifact@v4.3.1
         with:
-          name: testlogs-${{ inputs.plugin }}-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+          name: testlogs-rabbitmq_cli-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
           path: |
-            deps/${{ inputs.plugin }}/logs/*
+            deps/rabbitmq_cli/logs/*
