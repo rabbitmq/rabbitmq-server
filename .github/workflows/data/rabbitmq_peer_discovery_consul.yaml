@@ -1,0 +1,5 @@
+---
+rabbitmq_peer_discovery_consul:
+  suites:
+  - config_schema
+  - rabbitmq_peer_discovery_consul

@@ -1,0 +1,7 @@
+---
+rabbitmq_web_mqtt:
+  suites:
+  - command
+  - config_schema
+  - proxy_protocol
+  - system

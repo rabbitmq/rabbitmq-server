@@ -1,0 +1,7 @@
+---
+rabbitmq_management_agent:
+  suites:
+  - exometer_slide
+  - metrics
+  - rabbit_mgmt_gc
+  - rabbit_mgmt_slide

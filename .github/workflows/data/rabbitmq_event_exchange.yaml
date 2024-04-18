@@ -1,0 +1,6 @@
+---
+rabbitmq_event_exchange:
+  suites:
+  - config_schema
+  - system
+  - unit

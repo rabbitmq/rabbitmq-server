@@ -1,0 +1,10 @@
+---
+rabbitmq_stream:
+  suites:
+  - commands
+  - config_schema
+  - protocol_interop
+  - rabbit_stream
+  - rabbit_stream_manager
+  - rabbit_stream_reader
+  - rabbit_stream_utils

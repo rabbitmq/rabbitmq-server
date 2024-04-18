@@ -1,0 +1,4 @@
+---
+rabbitmq_recent_history_exchange:
+  suites:
+  - system

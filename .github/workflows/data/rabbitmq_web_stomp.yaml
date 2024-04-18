@@ -1,0 +1,9 @@
+---
+rabbitmq_web_stomp:
+  suites:
+  - amqp_stomp
+  - config_schema
+  - cowboy_websocket
+  - proxy_protocol
+  - raw_websocket
+  - unit

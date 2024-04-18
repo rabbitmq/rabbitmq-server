@@ -1,0 +1,9 @@
+---
+rabbit_common:
+  suites:
+  - rabbit_env
+  - supervisor2
+  - unit
+  - unit_password_hashing
+  - unit_priority_queue
+  - worker_pool

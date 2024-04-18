@@ -1,0 +1,6 @@
+---
+rabbitmq_peer_discovery_etcd:
+  suites:
+  - config_schema
+  - system
+  - unit

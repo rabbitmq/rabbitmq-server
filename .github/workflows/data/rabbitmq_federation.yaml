@@ -1,0 +1,10 @@
+---
+rabbitmq_federation:
+  suites:
+  - exchange
+  - federation_status_command
+  - queue
+  - rabbit_federation_status
+  - restart_federation_link_command
+  - unit
+  - unit_inbroker

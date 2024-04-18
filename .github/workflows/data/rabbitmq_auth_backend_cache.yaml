@@ -1,0 +1,6 @@
+---
+rabbitmq_auth_backend_cache:
+  suites:
+  - config_schema
+  - rabbit_auth_backend_cache
+  - rabbit_auth_cache

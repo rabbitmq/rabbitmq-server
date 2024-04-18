@@ -1,0 +1,17 @@
+---
+rabbitmq_management:
+  suites:
+  - cache
+  - clustering
+  - clustering_prop
+  - config_schema
+  - listener_config
+  - rabbit_mgmt_http
+  - rabbit_mgmt_http_health_checks
+  - rabbit_mgmt_only_http
+  - rabbit_mgmt_rabbitmqadmin
+  - rabbit_mgmt_stats
+  - rabbit_mgmt_test_db
+  - rabbit_mgmt_test_unit
+  - rabbit_mgmt_wm_auth
+  - stats

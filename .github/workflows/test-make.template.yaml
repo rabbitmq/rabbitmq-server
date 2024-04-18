@@ -8,7 +8,173 @@
 #@   end
 #@   return names
 #@ end
+
+#@ def test_plugin(name, needs, suites):
+  test-(@= name @):
+    name: Test (@= name @)
+    needs: #@ needs
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        otp_version:
+        - 26.2
+        metadata_store:
+          - mnesia
+          - khepri
+    timeout-minutes: 180
+    env:
+      SUCCESS_PATH: ${{ inputs.trc }}/${{ inputs.hash }}/(@= name @)/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
+    steps:
+      - name: FETCH TEST RESULT CACHE
+        uses: actions/download-artifact@v4
+        with:
+          name: test-result-cache-subdir
+          path: ${{ inputs.trc }}
+      - name: CHECKOUT REPOSITORY
+        uses: actions/checkout@v4
+      - name: SETUP ERLANG/ELIXIR
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp_version }}
+          elixir-version: 1.15
+      - name: BUILD
+        run: |
+          make \
+            RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          mkdir -p ${{ env.SUCCESS_PATH }}
+      - name: XREF
+        run: |
+          if [[ -f ${{ env.SUCCESS_PATH }}/xref ]]; then
+            echo "xref already passed for this key ${{ inputs.hash }}"
+          else
+            make -C deps/(@= name @) \
+                xref \
+                RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+            touch ${{ env.SUCCESS_PATH }}/xref
+          fi
+      - name: DIALYZE
+        run: |
+          if [[ -f ${{ env.SUCCESS_PATH }}/dialyze ]]; then
+            echo "dialyze already passed for this key ${{ inputs.hash }}"
+          else
+            make -C deps/(@= name @) \
+                dialyze \
+                RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+            touch ${{ env.SUCCESS_PATH }}/dialyze
+          fi
+        continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      - name: EUNIT
+        run: |
+          if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
+            echo "eunit already passed for this key ${{ inputs.hash }}"
+          else
+            make -C deps/(@= name @) \
+                eunit \
+                RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+            touch ${{ env.SUCCESS_PATH }}/eunit
+          fi
+#@ for suite in suites:
+      - name: CT (@= suite @)
+        run: |
+          if [[ -f ${{ env.SUCCESS_PATH }}/ct-(@= suite @) ]]; then
+            echo "ct-(@= suite @) already passed for this key ${{ inputs.hash }}"
+          else
+            make -C deps/(@= name @) \
+                ct-(@= suite @) \
+                RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+            touch ${{ env.SUCCESS_PATH }}/ct-(@= suite @)
+          fi
+#@ end
+      - name: SAVE CACHE COPY
+        uses: actions/upload-artifact@v4.3.1
+        with:
+          name: trc-(@= name @)-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+          path: |
+            ${{ inputs.trc }}
+      - name: UPLOAD TEST ARTIFACTS
+        if: always()
+        uses: actions/upload-artifact@v4.3.1
+        with:
+          name: testlogs-(@= name @)-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+          path: deps/(@= name @)/logs/*
+#@ end
+
+#@ def test_cli(needs):
+  test-rabbitmq_cli:
+    name: Test rabbitmq_cli
+    needs: #@ needs
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        otp_version:
+        - 26.2
+        metadata_store:
+          - mnesia
+          - khepri
+    timeout-minutes: 20
+    env:
+      SUCCESS_PATH: ${{ inputs.trc }}/${{ inputs.hash }}/rabbitmq_cli/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
+    steps:
+      - name: FETCH TEST RESULT CACHE
+        uses: actions/download-artifact@v4
+        with:
+          name: test-result-cache-subdir
+          path: ${{ inputs.trc }}
+      - name: CHECK IF ALREADY PASSED
+        id: check
+        run: |
+          if [[ -f ${{ env.SUCCESS_PATH }} ]]; then
+            echo "passed=true" | tee -a $GITHUB_OUTPUT
+          else
+            echo "passed=false" | tee -a $GITHUB_OUTPUT
+          fi
+      - name: CHECKOUT REPOSITORY
+        if: steps.check.outputs.passed != 'true'
+        uses: actions/checkout@v4
+      - name: SETUP ERLANG/ELIXIR
+        if: steps.check.outputs.passed != 'true'
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp_version }}
+          elixir-version: 1.15
+      - name: BUILD
+        if: steps.check.outputs.passed != 'true'
+        run: |
+          make \
+            RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+      - name: TEST
+        id: test
+        if: steps.check.outputs.passed != 'true'
+        run: |
+          make -C deps/rabbitmq_cli \
+            checks \
+            RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+      - name: RECORD SUCCESS rabbitmq_cli
+        if: steps.check.outputs.passed != 'true'
+        run: |
+          set -x
+          mkdir -p $(dirname ${{ env.SUCCESS_PATH }})
+          echo "passed" > ${{ env.SUCCESS_PATH }}
+      - name: UPDATE CACHE
+        if: steps.check.outputs.passed != 'true'
+        uses: actions/upload-artifact@v4.3.1
+        with:
+          name: rabbitmq_cli-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+          path: |
+            ${{ inputs.trc }}
+      - name: UPLOAD TEST ARTIFACTS
+        if: always() && steps.check.outputs.passed != 'true'
+        uses: actions/upload-artifact@v4.3.1
+        with:
+          name: testlogs-rabbitmq_cli-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+          path: |
+            deps/rabbitmq_cli/logs/*
+#@ end
+
 ---
+#@ load("@ytt:template", "template")
 name: Test (make)
 on:
   push:
@@ -60,38 +226,12 @@ jobs:
             /home/runner/test-result-cache/${{ steps.hash.outputs.hash }}
           retention-days: 1
 #@ for plugin in data.values.internal_deps:
-  test-(@= plugin @):
-    needs:
-      - load-test-result-cache
-    uses: ./.github/workflows/test-(@= plugin @).yaml
-    with:
-      trc: /home/runner/test-result-cache
-      hash: ${{ needs.load-test-result-cache.outputs.hash }}
-      ignore-dialyze-errors: #@ plugin == 'rabbitmq_ct_helpers' or plugin == 'trust_store_http'
+  _: #@ template.replace(test_plugin(plugin, ["load-test-result-cache"], data.values[plugin].suites))
 #@ end
-  test-rabbit:
-    needs: #@ ["load-test-result-cache"] + job_names(data.values.internal_deps)
-    uses: ./.github/workflows/test-rabbit.yaml
-    with:
-      trc: /home/runner/test-result-cache
-      hash: ${{ needs.load-test-result-cache.outputs.hash }}
-  test-rabbitmq_cli:
-    needs:
-      - load-test-result-cache
-      - test-rabbit
-    uses: ./.github/workflows/test-rabbitmq_cli.yaml
-    with:
-      trc: /home/runner/test-result-cache
-      hash: ${{ needs.load-test-result-cache.outputs.hash }}
+  _: #@ template.replace(test_plugin("rabbit", ["load-test-result-cache"] + job_names(data.values.internal_deps), data.values.rabbit.suites))
+  _: #@ template.replace(test_cli(["load-test-result-cache", "test-rabbit"]))
 #@ for plugin in data.values.tier1_plugins:
-  test-(@= plugin @):
-    needs:
-      - load-test-result-cache
-      - test-rabbitmq_cli
-    uses: ./.github/workflows/test-(@= plugin @).yaml
-    with:
-      trc: /home/runner/test-result-cache
-      hash: ${{ needs.load-test-result-cache.outputs.hash }}
+  _: #@ template.replace(test_plugin(plugin, ["load-test-result-cache", "test-rabbitmq_cli"], data.values[plugin].suites))
 #@ end
   summary-test-make:
     if: always()

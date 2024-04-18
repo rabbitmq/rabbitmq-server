@@ -1,0 +1,5 @@
+---
+rabbitmq_web_dispatch:
+  suites:
+  - rabbit_web_dispatch
+  - rabbit_web_dispatch_unit

@@ -1,0 +1,5 @@
+---
+amqp10_client:
+  suites:
+  - msg
+  - system

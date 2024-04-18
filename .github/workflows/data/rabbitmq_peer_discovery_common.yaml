@@ -1,0 +1,4 @@
+---
+rabbitmq_peer_discovery_common:
+  suites:
+  - config_schema

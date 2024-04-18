@@ -1,0 +1,5 @@
+---
+rabbitmq_sharding:
+  suites:
+  - rabbit_hash_exchange
+  - rabbit_sharding

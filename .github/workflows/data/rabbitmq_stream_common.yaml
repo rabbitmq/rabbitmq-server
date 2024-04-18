@@ -1,0 +1,4 @@
+---
+rabbitmq_stream_common:
+  suites:
+  - rabbit_stream_core

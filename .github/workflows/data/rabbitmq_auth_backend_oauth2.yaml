@@ -1,0 +1,12 @@
+---
+rabbitmq_auth_backend_oauth2:
+  suites:
+  - add_signing_key_command
+  - add_uaa_key_command
+  - config_schema
+  - jwks
+  - rabbit_oauth2_config
+  - scope
+  - system
+  - unit
+  - wildcard_match

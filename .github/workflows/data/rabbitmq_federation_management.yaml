@@ -1,0 +1,4 @@
+---
+rabbitmq_federation_management:
+  suites:
+  - federation_mgmt

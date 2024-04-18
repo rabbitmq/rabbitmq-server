@@ -1,0 +1,3 @@
+---
+rabbitmq_ct_client_helpers:
+  suites: []

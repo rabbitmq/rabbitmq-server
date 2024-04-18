@@ -1,0 +1,13 @@
+---
+rabbitmq_shovel:
+  suites:
+  - amqp10
+  - amqp10_dynamic
+  - amqp10_shovel
+  - config
+  - configuration
+  - delete_shovel_command
+  - dynamic
+  - parameters
+  - rolling_upgrade
+  - shovel_status_command

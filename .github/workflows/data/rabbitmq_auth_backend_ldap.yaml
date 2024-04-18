@@ -1,0 +1,6 @@
+---
+rabbitmq_auth_backend_ldap:
+  suites:
+  - config_schema
+  - system
+  - unit

@@ -1,0 +1,3 @@
+---
+rabbitmq_auth_mechanism_ssl:
+  suites: []

@@ -1,0 +1,4 @@
+---
+rabbitmq_amqp_client:
+  suites:
+  - management

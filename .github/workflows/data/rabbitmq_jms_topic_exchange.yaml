@@ -1,0 +1,6 @@
+---
+rabbitmq_jms_topic_exchange:
+  suites:
+  - rjms_topic_selector
+  - rjms_topic_selector_unit
+  - sjx_evaluation

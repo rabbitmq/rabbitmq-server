@@ -1,0 +1,4 @@
+---
+rabbitmq_ct_helpers:
+  suites:
+  - terraform

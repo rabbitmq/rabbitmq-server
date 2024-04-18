@@ -1,0 +1,4 @@
+---
+rabbitmq_consistent_hash_exchange:
+  suites:
+  - rabbit_exchange_type_consistent_hash

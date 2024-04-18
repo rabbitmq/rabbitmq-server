@@ -1,0 +1,5 @@
+---
+oauth2_client:
+  suites:
+  - system
+  - unit

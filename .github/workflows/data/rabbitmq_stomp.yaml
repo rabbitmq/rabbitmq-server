@@ -1,0 +1,12 @@
+---
+rabbitmq_stomp:
+  suites:
+  - command
+  - config_schema
+  - connections
+  - frame
+  - proxy_protocol
+  - python
+  - system
+  - topic
+  - util

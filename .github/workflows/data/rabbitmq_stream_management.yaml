@@ -1,0 +1,4 @@
+---
+rabbitmq_stream_management:
+  suites:
+  - http

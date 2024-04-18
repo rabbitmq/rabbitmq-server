@@ -1,0 +1,6 @@
+---
+rabbitmq_auth_backend_http:
+  suites:
+  - auth
+  - config_schema
+  - unit

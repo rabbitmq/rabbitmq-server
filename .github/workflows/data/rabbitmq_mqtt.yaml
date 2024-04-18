@@ -1,0 +1,22 @@
+---
+rabbitmq_mqtt:
+  suites:
+  - auth
+  - cluster
+  - command
+  - config
+  - config_schema
+  - ff
+  - java
+  - mc_mqtt
+  - mqtt_machine
+  - packet_prop
+  - processor
+  - protocol_interop
+  - proxy_protocol
+  - rabbit_mqtt_confirms
+  - reader
+  - retainer
+  - shared
+  - util
+  - v5

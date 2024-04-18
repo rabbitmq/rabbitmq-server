@@ -1,0 +1,6 @@
+---
+rabbitmq_prometheus:
+  suites:
+  - config_schema
+  - prometheus_rabbitmq_federation_collector
+  - rabbit_prometheus_http

@@ -1,0 +1,6 @@
+---
+rabbitmq_shovel_management:
+  suites:
+  - http
+  - rabbit_shovel_mgmt
+  - rabbit_shovel_mgmt_util

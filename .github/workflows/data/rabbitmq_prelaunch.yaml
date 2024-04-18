@@ -1,0 +1,5 @@
+---
+rabbitmq_prelaunch:
+  suites:
+  - rabbit_logger_std_h
+  - rabbit_prelaunch_file

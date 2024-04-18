@@ -1,0 +1,5 @@
+---
+rabbitmq_trust_store:
+  suites:
+  - config_schema
+  - system

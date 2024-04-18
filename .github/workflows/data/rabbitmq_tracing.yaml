@@ -1,0 +1,4 @@
+---
+rabbitmq_tracing:
+  suites:
+  - rabbit_tracing
