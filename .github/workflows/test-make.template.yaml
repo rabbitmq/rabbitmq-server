@@ -24,13 +24,13 @@
           - khepri
     timeout-minutes: 180
     env:
-      SUCCESS_PATH: ${{ inputs.trc }}/${{ inputs.hash }}/(@= name @)/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
+      SUCCESS_PATH: /home/runner/test-result-cache/${{ needs.load-test-result-cache.outputs.hash }}/(@= name @)/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
       - name: FETCH TEST RESULT CACHE
         uses: actions/download-artifact@v4
         with:
           name: test-result-cache-subdir
-          path: ${{ inputs.trc }}
+          path: /home/runner/test-result-cache
       - name: CHECKOUT REPOSITORY
         uses: actions/checkout@v4
       - name: SETUP ERLANG/ELIXIR
@@ -46,7 +46,7 @@
       - name: XREF
         run: |
           if [[ -f ${{ env.SUCCESS_PATH }}/xref ]]; then
-            echo "xref already passed for this key ${{ inputs.hash }}"
+            echo "xref already passed for this key ${{ needs.load-test-result-cache.outputs.hash }}"
           else
             make -C deps/(@= name @) \
                 xref \
@@ -56,7 +56,7 @@
       - name: DIALYZE
         run: |
           if [[ -f ${{ env.SUCCESS_PATH }}/dialyze ]]; then
-            echo "dialyze already passed for this key ${{ inputs.hash }}"
+            echo "dialyze already passed for this key ${{ needs.load-test-result-cache.outputs.hash }}"
           else
             make -C deps/(@= name @) \
                 dialyze \
@@ -67,7 +67,7 @@
       - name: EUNIT
         run: |
           if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
-            echo "eunit already passed for this key ${{ inputs.hash }}"
+            echo "eunit already passed for this key ${{ needs.load-test-result-cache.outputs.hash }}"
           else
             make -C deps/(@= name @) \
                 eunit \
@@ -78,7 +78,7 @@
       - name: CT (@= suite @)
         run: |
           if [[ -f ${{ env.SUCCESS_PATH }}/ct-(@= suite @) ]]; then
-            echo "ct-(@= suite @) already passed for this key ${{ inputs.hash }}"
+            echo "ct-(@= suite @) already passed for this key ${{ needs.load-test-result-cache.outputs.hash }}"
           else
             make -C deps/(@= name @) \
                 ct-(@= suite @) \
@@ -91,7 +91,7 @@
         with:
           name: trc-(@= name @)-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
           path: |
-            ${{ inputs.trc }}
+            /home/runner/test-result-cache
       - name: UPLOAD TEST ARTIFACTS
         if: always()
         uses: actions/upload-artifact@v4.3.1
@@ -115,13 +115,13 @@
           - khepri
     timeout-minutes: 20
     env:
-      SUCCESS_PATH: ${{ inputs.trc }}/${{ inputs.hash }}/rabbitmq_cli/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
+      SUCCESS_PATH: /home/runner/test-result-cache/${{ needs.load-test-result-cache.outputs.hash }}/rabbitmq_cli/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
       - name: FETCH TEST RESULT CACHE
         uses: actions/download-artifact@v4
         with:
           name: test-result-cache-subdir
-          path: ${{ inputs.trc }}
+          path: /home/runner/test-result-cache
       - name: CHECK IF ALREADY PASSED
         id: check
         run: |
@@ -163,7 +163,7 @@
         with:
           name: rabbitmq_cli-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
           path: |
-            ${{ inputs.trc }}
+            /home/runner/test-result-cache
       - name: UPLOAD TEST ARTIFACTS
         if: always() && steps.check.outputs.passed != 'true'
         uses: actions/upload-artifact@v4.3.1
