@@ -109,7 +109,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -206,7 +206,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -313,7 +313,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -410,7 +410,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -507,7 +507,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -644,7 +644,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -721,7 +721,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: true
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -808,7 +808,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -895,7 +895,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: true
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -981,7 +981,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -2541,7 +2541,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -2629,7 +2629,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -2707,7 +2707,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -2815,7 +2815,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -2923,7 +2923,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -3031,7 +3031,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -3199,7 +3199,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -3277,7 +3277,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -3355,7 +3355,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -3443,7 +3443,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -3551,7 +3551,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -3699,7 +3699,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -3787,7 +3787,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -3895,7 +3895,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -4113,7 +4113,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -4231,7 +4231,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -4499,7 +4499,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -4607,7 +4607,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -4695,7 +4695,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -4793,7 +4793,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -4901,7 +4901,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -4999,7 +4999,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -5097,7 +5097,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -5205,7 +5205,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -5283,7 +5283,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -5371,7 +5371,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -5469,7 +5469,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -5647,7 +5647,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -5755,7 +5755,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -5923,7 +5923,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -6071,7 +6071,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -6159,7 +6159,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -6237,7 +6237,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -6325,7 +6325,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -6423,7 +6423,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -6521,7 +6521,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -6639,7 +6639,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -6717,7 +6717,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
@@ -6855,7 +6855,7 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/dialyze
         fi
-      continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+      continue-on-error: false
     - name: EUNIT
       run: |
         if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then

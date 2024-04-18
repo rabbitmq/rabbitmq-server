@@ -63,7 +63,7 @@
                 RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
             touch ${{ env.SUCCESS_PATH }}/dialyze
           fi
-        continue-on-error: ${{ inputs.ignore-dialyze-errors }}
+        continue-on-error: #@ name == "rabbitmq_ct_helpers" or name == "trust_store_http"
       - name: EUNIT
         run: |
           if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
