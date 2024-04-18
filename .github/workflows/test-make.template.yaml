@@ -195,6 +195,12 @@ jobs:
     steps:
       - name: CHECKOUT REPOSITORY
         uses: actions/checkout@v4
+      - name: SETUP ERLANG/ELIXIR
+        if: steps.check.outputs.passed != 'true'
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: 26.2
+          elixir-version: 1.15
       - name: ENSURE WORKFLOWS ARE UP TO DATE
         run: |
           make actions-workflows
