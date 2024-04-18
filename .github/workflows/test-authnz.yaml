@@ -101,7 +101,7 @@ jobs:
 
     - name: Upload Test Artifacts
       if: always()
-      uses: actions/upload-artifact@v4.3.1
+      uses: actions/upload-artifact@v4.3.2
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
         path: |
