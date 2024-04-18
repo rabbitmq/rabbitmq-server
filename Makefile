@@ -558,13 +558,18 @@ install-windows-docs: install-windows-erlapp
 		esac; \
 	done
 
-TESTED_PLUGINS := \
-	   amqp_client \
+INTERNAL_DEPS := \
 	   amqp10_client \
 	   amqp10_common \
+	   amqp_client \
 	   oauth2_client \
-	   rabbit \
 	   rabbit_common \
+	   rabbitmq_ct_client_helpers \
+	   rabbitmq_ct_helpers \
+	   rabbitmq_stream_common \
+	   trust_store_http
+
+TIER1_PLUGINS := \
 	   rabbitmq_amqp_client \
 	   rabbitmq_amqp1_0 \
 	   rabbitmq_auth_backend_cache \
@@ -574,8 +579,6 @@ TESTED_PLUGINS := \
 	   rabbitmq_auth_mechanism_ssl \
 	   rabbitmq_aws \
 	   rabbitmq_consistent_hash_exchange \
-	   rabbitmq_ct_client_helpers \
-	   rabbitmq_ct_helpers \
 	   rabbitmq_event_exchange \
 	   rabbitmq_federation \
 	   rabbitmq_federation_management \
@@ -597,7 +600,6 @@ TESTED_PLUGINS := \
 	   rabbitmq_shovel_management \
 	   rabbitmq_stomp \
 	   rabbitmq_stream \
-	   rabbitmq_stream_common \
 	   rabbitmq_stream_management \
 	   rabbitmq_top \
 	   rabbitmq_tracing \
@@ -606,14 +608,25 @@ TESTED_PLUGINS := \
 	   rabbitmq_web_mqtt \
 	   rabbitmq_web_mqtt_examples \
 	   rabbitmq_web_stomp \
-	   rabbitmq_web_stomp_examples \
-	   trust_store_http
+	   rabbitmq_web_stomp_examples
+
+TESTED_PLUGINS := $(INTERNAL_DEPS) rabbit $(TIER1_PLUGINS)
 
 PLUGIN_WORKFLOW_FILES := $(foreach p,$(TESTED_PLUGINS),.github/workflows/test-$p.yaml)
 
-.PHONY: actions-workflows $(PLUGIN_WORKFLOW_FILES)
+YTT ?= ytt
 
-actions-workflows: $(PLUGIN_WORKFLOW_FILES)
+.PHONY: actions-workflows .github/workflows/test-make.yaml $(PLUGIN_WORKFLOW_FILES)
+
+actions-workflows: .github/workflows/test-make.yaml $(PLUGIN_WORKFLOW_FILES)
+
+.github/workflows/test-make.yaml: .github/workflows/test-make.template.yaml
+	$(gen_verbose) $(YTT) \
+		--file .github/workflows/test-make.template.yaml \
+		--data-value-yaml internal_deps=[$(subst $(space),$(comma),$(foreach s,$(INTERNAL_DEPS),"$s"))] \
+		--data-value-yaml tier1_plugins=[$(subst $(space),$(comma),$(foreach s,$(TIER1_PLUGINS),"$s"))] \
+		| sed 's/^true:/on:/' \
+		| sed 's/pull_request: null/pull_request:/'> $@
 
 .github/workflows/test-%.yaml:
 	$(gen_verbose) $(MAKE) -C deps/$* ../../.github/workflows/test-$*.yaml
