@@ -45,7 +45,7 @@ ALT2_PGP_KEYSERVER ?= pgpkeys.uk
 all: dist
 
 dist:
-	cp $(GENERIC_UNIX_ARCHIVE) rabbitmq_server-$(VERSION).tar.xz
+	cp $(GENERIC_UNIX_ARCHIVE) package-generic-unix.tar.xz
 	xzcat $(GENERIC_UNIX_ARCHIVE) | tar xvf -
 	docker build --pull \
 	  --build-arg SKIP_PGP_VERIFY=$(SKIP_PGP_VERIFY) \
