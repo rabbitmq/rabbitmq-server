@@ -880,7 +880,10 @@ exec([Cmd | Args], Options) when is_list(Cmd) orelse is_binary(Cmd) ->
             Env1 = [
               begin
                   Key1 = format_arg(Key),
-                  Value1 = format_arg(Value),
+                  Value1 = case Value of
+                               false -> false;
+                               _     -> format_arg(Value)
+                           end,
                   Value2 = case is_binary(Value1) of
                                true  -> binary_to_list(Value1);
                                false -> Value1
@@ -894,8 +897,10 @@ exec([Cmd | Args], Options) when is_list(Cmd) orelse is_binary(Cmd) ->
                | proplists:delete(env, PortOptions1)],
               Log ++ "~n~nEnvironment variables:~n" ++
               string:join(
-                [rabbit_misc:format("  ~ts=~ts", [K, string:replace(V, "~", "~~", all)])
-                 || {K, V} <- Env1],
+                [rabbit_misc:format(
+                   "  ~ts=~ts",
+                   [K, string:replace(V, "~", "~~", all)])
+                 || {K, V} <- Env1, is_list(V) ],
                 "~n")
             }
     end,
