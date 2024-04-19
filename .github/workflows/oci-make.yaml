@@ -34,6 +34,7 @@ jobs:
           path: PACKAGES/rabbitmq-server-*.tar.xz
 
   build:
+    needs: build-package-generic-unix
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -133,6 +134,8 @@ jobs:
 
   summary-oci:
     needs:
+    - build-package-generic-unix
+    - build
     - merge
     runs-on: ubuntu-latest
     steps:
