@@ -192,23 +192,31 @@ amqpl_table_x_header_array_of_tbls(_Config) ->
     ok.
 
 amqpl_death_records(_Config) ->
-    Content = #content{class_id = 60,
-                       properties = #'P_basic'{headers = []},
-                       payload_fragments_rev = [<<"data">>]},
-    Msg0 = mc:prepare(store, mc:init(mc_amqpl, Content, annotations())),
+    Q = <<"my queue">>,
+    DLQ = <<"my dead letter queue">>,
 
-    Msg1 = mc:record_death(rejected, <<"q1">>, Msg0),
-    ?assertEqual([<<"q1">>], mc:death_queue_names(Msg1)),
-    ?assertMatch({{<<"q1">>, rejected},
+    Content0 = #content{class_id = 60,
+                        properties = #'P_basic'{headers = [],
+                                                expiration = <<"9999">>},
+                        payload_fragments_rev = [<<"data">>]},
+    Msg0 = mc:prepare(store, mc:init(mc_amqpl, Content0, annotations())),
+    Msg1 = mc:record_death(rejected, Q, Msg0),
+
+    %% Roundtrip simulates message being sent to and received from AMQP 0.9.1 client.
+    Content1 = mc:protocol_state(Msg1),
+    Msg2 = mc:init(mc_amqpl, Content1, annotations()),
+
+    ?assertEqual([Q], mc:death_queue_names(Msg2)),
+    ?assertMatch({{Q, rejected},
                   #death{exchange = <<"exch">>,
                          routing_keys = [<<"apple">>],
-                         count = 1}}, mc:last_death(Msg1)),
-    ?assertEqual(false, mc:is_death_cycle(<<"q1">>, Msg1)),
+                         count = 1}}, mc:last_death(Msg2)),
+    ?assertEqual(false, mc:is_death_cycle(Q, Msg2)),
 
-    #content{properties = #'P_basic'{headers = H1}} = mc:protocol_state(Msg1),
+    #content{properties = #'P_basic'{headers = H1}} = mc:protocol_state(Msg2),
     ?assertMatch({_, array, [_]}, header(<<"x-death">>, H1)),
-    ?assertMatch({_, longstr, <<"q1">>}, header(<<"x-first-death-queue">>, H1)),
-    ?assertMatch({_, longstr, <<"q1">>}, header(<<"x-last-death-queue">>, H1)),
+    ?assertMatch({_, longstr, Q}, header(<<"x-first-death-queue">>, H1)),
+    ?assertMatch({_, longstr, Q}, header(<<"x-last-death-queue">>, H1)),
     ?assertMatch({_, longstr, <<"exch">>}, header(<<"x-first-death-exchange">>, H1)),
     ?assertMatch({_, longstr, <<"exch">>}, header(<<"x-last-death-exchange">>, H1)),
     ?assertMatch({_, longstr, <<"rejected">>}, header(<<"x-first-death-reason">>, H1)),
@@ -216,24 +224,37 @@ amqpl_death_records(_Config) ->
     {_, array, [{table, T1}]} = header(<<"x-death">>, H1),
     ?assertMatch({_, long, 1}, header(<<"count">>, T1)),
     ?assertMatch({_, longstr, <<"rejected">>}, header(<<"reason">>, T1)),
-    ?assertMatch({_, longstr, <<"q1">>}, header(<<"queue">>, T1)),
+    ?assertMatch({_, longstr, Q}, header(<<"queue">>, T1)),
     ?assertMatch({_, longstr, <<"exch">>}, header(<<"exchange">>, T1)),
     ?assertMatch({_, timestamp, _}, header(<<"time">>, T1)),
     ?assertMatch({_, array, [{longstr, <<"apple">>}]}, header(<<"routing-keys">>, T1)),
+    ?assertMatch({_, longstr, <<"9999">>}, header(<<"original-expiration">>, T1)),
 
-
-    %% second dead letter, e.g. a ttl reason returning to source queue
-
+    %% 2nd dead letter, e.g. an expired reason returning to source queue
     %% record_death uses a timestamp for death record ordering, ensure
     %% it is definitely higher than the last timestamp taken
     timer:sleep(2),
-    Msg2 = mc:record_death(ttl, <<"dl">>, Msg1),
+    Msg3 = mc:record_death(expired, DLQ, Msg2),
 
-    #content{properties = #'P_basic'{headers = H2}} = mc:protocol_state(Msg2),
+    #content{properties = #'P_basic'{headers = H2}} = mc:protocol_state(Msg3),
     {_, array, [{table, T2a}, {table, T2b}]} = header(<<"x-death">>, H2),
-    ?assertMatch({_, longstr, <<"dl">>}, header(<<"queue">>, T2a)),
-    ?assertMatch({_, longstr, <<"q1">>}, header(<<"queue">>, T2b)),
-    ok.
+    ?assertMatch({_, longstr, DLQ}, header(<<"queue">>, T2a)),
+    ?assertMatch({_, longstr, Q}, header(<<"queue">>, T2b)),
+
+    %% 3rd dead letter
+    timer:sleep(2),
+    Msg4 = mc:record_death(rejected, Q, Msg3),
+
+    %% Roundtrip simulates message being sent to and received from AMQP 0.9.1 client.
+    Content2 = mc:protocol_state(Msg4),
+    Msg5 = mc:init(mc_amqpl, Content2, annotations()),
+
+    ?assertEqual([DLQ, Q],
+                 lists:sort(mc:death_queue_names(Msg5))),
+    ?assertMatch({{Q, rejected},
+                  #death{exchange = <<"exch">>,
+                         routing_keys = [<<"apple">>],
+                         count = 2}}, mc:last_death(Msg5)).
 
 header(K, H) ->
     rabbit_basic:header(K, H).

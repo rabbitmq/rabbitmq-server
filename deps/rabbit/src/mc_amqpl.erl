@@ -507,45 +507,6 @@ from_basic_message(#basic_message{content = Content,
 
 %% Internal
 
-deaths_to_headers(undefined, Headers) ->
-    Headers;
-deaths_to_headers(#deaths{records = Records}, Headers0) ->
-    %% sort records by the last timestamp
-    List = lists:sort(
-             fun({_, #death{anns = #{last_time := L1}}},
-                 {_, #death{anns = #{last_time := L2}}}) ->
-                     L1 < L2
-             end, maps:to_list(Records)),
-    Infos = lists:foldl(
-              fun ({{QName, Reason}, #death{anns = #{first_time := Ts} = DA,
-                                            exchange = Ex,
-                                            count = Count,
-                                            routing_keys = RoutingKeys}},
-                   Acc) ->
-                      %% The first routing key is the one specified in the
-                      %% basic.publish; all others are CC or BCC keys.
-                      RKs  = [hd(RoutingKeys) | rabbit_basic:header_routes(Headers0)],
-                      RKeys = [{longstr, Key} || Key <- RKs],
-                      ReasonBin = atom_to_binary(Reason, utf8),
-                      PerMsgTTL = case maps:get(ttl, DA, undefined) of
-                                      undefined -> [];
-                                      Ttl when is_integer(Ttl) ->
-                                          Expiration = integer_to_binary(Ttl),
-                                          [{<<"original-expiration">>, longstr,
-                                            Expiration}]
-                                  end,
-                      [{table, [{<<"count">>, long, Count},
-                                {<<"reason">>, longstr, ReasonBin},
-                                {<<"queue">>, longstr, QName},
-                                {<<"time">>, timestamp, Ts div 1000},
-                                {<<"exchange">>, longstr, Ex},
-                                {<<"routing-keys">>, array, RKeys}] ++ PerMsgTTL}
-                       | Acc]
-              end, [], List),
-    rabbit_misc:set_table_value(Headers0, <<"x-death">>, array, Infos).
-
-
-
 strip_header(#content{properties = #'P_basic'{headers = undefined}}
              = DecodedContent, _Key) ->
     DecodedContent;
@@ -695,10 +656,11 @@ message_id({utf8, S}, HKey, H0) ->
 message_id(undefined, _HKey, H) ->
     {H, undefined}.
 
-essential_properties(#content{} = C) ->
+essential_properties(#content{properties = Props}) ->
     #'P_basic'{delivery_mode = Mode,
                priority = Priority,
-               timestamp = TimestampRaw} = Props = C#content.properties,
+               timestamp = TimestampRaw,
+               headers = Headers} = Props,
     {ok, MsgTTL} = rabbit_basic:parse_expiration(Props),
     Timestamp = case TimestampRaw of
                     undefined ->
@@ -708,6 +670,8 @@ essential_properties(#content{} = C) ->
                         TimestampRaw * 1000
                 end,
     Durable = Mode == 2,
+    Deaths = headers_to_deaths(Headers),
+
     maps_put_truthy(
       ?ANN_PRIORITY, Priority,
       maps_put_truthy(
@@ -716,7 +680,93 @@ essential_properties(#content{} = C) ->
           ?ANN_TIMESTAMP, Timestamp,
           maps_put_falsy(
             ?ANN_DURABLE, Durable,
-            #{})))).
+            maps_put_truthy(
+              deaths, Deaths,
+              #{}))))).
+
+headers_to_deaths(undefined) ->
+    undefined;
+headers_to_deaths(Headers) ->
+    case lists:keymember(<<"x-death">>, 1, Headers) of
+        true ->
+            case rabbit_misc:amqp_table(Headers) of
+                #{<<"x-first-death-queue">> := FstQ,
+                  <<"x-first-death-reason">> := FstR,
+                  <<"x-last-death-queue">> := LastQ,
+                  <<"x-last-death-reason">> := LastR,
+                  <<"x-death">> := XDeathList} ->
+                    #deaths{first = {FstQ, binary_to_existing_atom(FstR)},
+                            last = {LastQ, binary_to_existing_atom(LastR)},
+                            records = recover_deaths(XDeathList, #{})};
+                _ ->
+                    undefined
+            end;
+        false ->
+            undefined
+    end.
+
+recover_deaths([], Acc) ->
+    Acc;
+recover_deaths([Map = #{<<"exchange">> := Exchange,
+                        <<"queue">> := Queue,
+                        <<"routing-keys">> := RKeys,
+                        <<"reason">> := ReasonBin,
+                        <<"count">> := Count,
+                        <<"time">> := Ts} | Rem], Acc) ->
+    Reason = binary_to_existing_atom(ReasonBin),
+    DA = #{first_time => Ts,
+           last_time => Ts},
+    DeathAnns = case Map of
+                    #{<<"original-expiration">> := Exp} ->
+                        DA#{ttl => binary_to_integer(Exp)};
+                    _ ->
+                        DA
+                end,
+    recover_deaths(Rem,
+                   Acc#{{Queue, Reason} =>
+                        #death{anns = DeathAnns,
+                               exchange = Exchange,
+                               count = Count,
+                               routing_keys = RKeys}});
+recover_deaths([_IgnoreInvalid | Rem], Acc) ->
+    recover_deaths(Rem, Acc).
+
+deaths_to_headers(undefined, Headers) ->
+    Headers;
+deaths_to_headers(#deaths{records = Records}, Headers0) ->
+    %% sort records by the last timestamp
+    List = lists:sort(
+             fun({_, #death{anns = #{last_time := L1}}},
+                 {_, #death{anns = #{last_time := L2}}}) ->
+                     L1 < L2
+             end, maps:to_list(Records)),
+    Infos = lists:foldl(
+              fun ({{QName, Reason}, #death{anns = #{last_time := Ts} = DA,
+                                            exchange = Ex,
+                                            count = Count,
+                                            routing_keys = RoutingKeys}},
+                   Acc) ->
+                      %% The first routing key is the one specified in the
+                      %% basic.publish; all others are CC or BCC keys.
+                      RKs  = [hd(RoutingKeys) | rabbit_basic:header_routes(Headers0)],
+                      RKeys = [{longstr, Key} || Key <- RKs],
+                      ReasonBin = atom_to_binary(Reason, utf8),
+                      PerMsgTTL = case maps:get(ttl, DA, undefined) of
+                                      undefined -> [];
+                                      Ttl when is_integer(Ttl) ->
+                                          Expiration = integer_to_binary(Ttl),
+                                          [{<<"original-expiration">>, longstr,
+                                            Expiration}]
+                                  end,
+                      [{table, [{<<"count">>, long, Count},
+                                {<<"reason">>, longstr, ReasonBin},
+                                {<<"queue">>, longstr, QName},
+                                {<<"time">>, timestamp, Ts div 1000},
+                                {<<"exchange">>, longstr, Ex},
+                                {<<"routing-keys">>, array, RKeys}] ++ PerMsgTTL}
+                       | Acc]
+              end, [], List),
+    rabbit_misc:set_table_value(Headers0, <<"x-death">>, array, Infos).
 
 %% headers that are added as annotations during conversions
 is_internal_header(<<"x-basic-", _/binary>>) ->
