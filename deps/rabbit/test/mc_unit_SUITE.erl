@@ -30,6 +30,7 @@ all_tests() ->
      amqpl_table_x_header,
      amqpl_table_x_header_array_of_tbls,
      amqpl_death_records,
+     is_death_cycle,
      amqpl_amqp_bin_amqpl,
      amqpl_cc_amqp_bin_amqpl,
      amqp_amqpl_amqp_uuid_correlation_id,
@@ -222,18 +223,90 @@ amqpl_death_records(_Config) ->
     ?assertMatch({_, array, [{longstr, <<"apple">>}]}, header(<<"routing-keys">>, T1)),
 
 
-    %% second dead letter, e.g. a ttl reason returning to source queue
+    %% second dead letter, e.g. an expired reason returning to source queue
 
     %% record_death uses a timestamp for death record ordering, ensure
     %% it is definitely higher than the last timestamp taken
     timer:sleep(2),
-    Msg2 = mc:record_death(ttl, <<"dl">>, Msg1),
+    Msg2 = mc:record_death(expired, <<"dl">>, Msg1),
 
     #content{properties = #'P_basic'{headers = H2}} = mc:protocol_state(Msg2),
     {_, array, [{table, T2a}, {table, T2b}]} = header(<<"x-death">>, H2),
     ?assertMatch({_, longstr, <<"dl">>}, header(<<"queue">>, T2a)),
     ?assertMatch({_, longstr, <<"q1">>}, header(<<"queue">>, T2b)),
     ok.
+
+is_death_cycle(_Config) ->
+    Content = #content{class_id = 60,
+                       properties = #'P_basic'{headers = []},
+                       payload_fragments_rev = [<<"data">>]},
+    Msg0 = mc:prepare(store, mc:init(mc_amqpl, Content, annotations())),
+
+    %% Test the followig topology:
+    %% Q1 --rejected--> Q2 --expired--> Q3 --expired-->
+    %% Q1 --rejected--> Q2 --expired--> Q3
+
+    Msg1 = mc:record_death(rejected, <<"q1">>, Msg0),
+    ?assertNot(mc:is_death_cycle(<<"q1">>, Msg1),
+               "A queue that dead letters to itself due to rejected is not considered a cycle."),
+    ?assertNot(mc:is_death_cycle(<<"q2">>, Msg1)),
+    ?assertNot(mc:is_death_cycle(<<"q3">>, Msg1)),
+
+    timer:sleep(3),
+    Msg2 = mc:record_death(expired, <<"q2">>, Msg1),
+    ?assertNot(mc:is_death_cycle(<<"q1">>, Msg2)),
+    ?assert(mc:is_death_cycle(<<"q2">>, Msg2),
+            "A queue that dead letters to itself due to expired is considered a cycle."),
+    ?assertNot(mc:is_death_cycle(<<"q3">>, Msg2)),
+
+    timer:sleep(3),
+    Msg3 = mc:record_death(expired, <<"q3">>, Msg2),
+    ?assertNot(mc:is_death_cycle(<<"q1">>, Msg3)),
+    ?assert(mc:is_death_cycle(<<"q2">>, Msg3)),
+    ?assert(mc:is_death_cycle(<<"q3">>, Msg3)),
+
+    timer:sleep(3),
+    Msg4 = mc:record_death(rejected, <<"q1">>, Msg3),
+    ?assertNot(mc:is_death_cycle(<<"q1">>, Msg4)),
+    ?assertNot(mc:is_death_cycle(<<"q2">>, Msg4)),
+    ?assertNot(mc:is_death_cycle(<<"q3">>, Msg4)),
+
+    timer:sleep(3),
+    Msg5 = mc:record_death(expired, <<"q2">>, Msg4),
+    ?assertNot(mc:is_death_cycle(<<"q1">>, Msg5)),
+    ?assert(mc:is_death_cycle(<<"q2">>, Msg5)),
+    ?assertNot(mc:is_death_cycle(<<"q3">>, Msg5)),
+
+    ?assertEqual([<<"q1">>, <<"q2">>, <<"q3">>],
+                 lists:sort(mc:death_queue_names(Msg5))),
+    ?assertMatch({{<<"q2">>, expired},
+                  #death{exchange = <<"exch">>,
+                         routing_keys = [<<"apple">>],
+                         count = 2,
+                         anns = #{first_time := FirstTime,
+                                  last_time := LastTime}}}
+                   when FirstTime < LastTime, mc:last_death(Msg5)),
+
+    #content{properties = #'P_basic'{headers = H}} = mc:protocol_state(Msg5),
+    ?assertMatch({_, longstr, <<"q1">>}, header(<<"x-first-death-queue">>, H)),
+    ?assertMatch({_, longstr, <<"q2">>}, header(<<"x-last-death-queue">>, H)),
+    ?assertMatch({_, longstr, <<"rejected">>}, header(<<"x-first-death-reason">>, H)),
+    ?assertMatch({_, longstr, <<"expired">>}, header(<<"x-last-death-reason">>, H)),
+
+    %% We expect the array to be ordered by recency.
+    {_, array, [{table, T1}, {table, T2}, {table, T3}]} = header(<<"x-death">>, H),
+
+    ?assertMatch({_, longstr, <<"q2">>}, header(<<"queue">>, T1)),
+    ?assertMatch({_, longstr, <<"expired">>}, header(<<"reason">>, T1)),
+    ?assertMatch({_, long, 2}, header(<<"count">>, T1)),
+
+    ?assertMatch({_, longstr, <<"q1">>}, header(<<"queue">>, T2)),
+    ?assertMatch({_, longstr, <<"rejected">>}, header(<<"reason">>, T2)),
+    ?assertMatch({_, long, 2}, header(<<"count">>, T2)),
+
+    ?assertMatch({_, longstr, <<"q3">>}, header(<<"queue">>, T3)),
+    ?assertMatch({_, longstr, <<"expired">>}, header(<<"reason">>, T3)),
+    ?assertMatch({_, long, 1}, header(<<"count">>, T3)).
 
 header(K, H) ->
     rabbit_basic:header(K, H).

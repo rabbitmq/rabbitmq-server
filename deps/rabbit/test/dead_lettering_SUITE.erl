@@ -28,6 +28,7 @@ groups() ->
                        dead_letter_nack_requeue,
                        dead_letter_nack_requeue_multiple,
                        dead_letter_reject,
+                       dead_letter_reject_expire_expire,
                        dead_letter_reject_many,
                        dead_letter_reject_requeue,
                        dead_letter_max_length_drop_head,
@@ -185,7 +186,7 @@ init_per_testcase(Testcase, Config) ->
             {skip, "dead_letter_headers_should_not_be_appended_for_republish isn't mixed versions compatible"};
         _ ->
             Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
-            Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~tp", [Group, Testcase])),
+            Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~p", [Group, Testcase])),
             Q2 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_2", [Group, Testcase])),
             Q3 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_3", [Group, Testcase])),
             Policy = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_policy", [Group, Testcase])),
@@ -376,6 +377,64 @@ dead_letter_reject(Config) ->
     _ = consume(Ch, QName, [P2, P3]),
     consume_empty(Ch, QName),
     ?assertEqual(1, counted(messages_dead_lettered_rejected_total, Config)).
+
+dead_letter_reject_expire_expire(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    %% In 3.13.0, and 3.13.1 there is a bug in mc:is_death_cycle/2 where the queue names matter.
+    %% The following queue names triggered the bug because they affect the order returned by maps:keys/1.
+    Q1 = <<"b">>,
+    Q2 = <<"a2">>,
+    Q3 = <<"a3">>,
+    Args = ?config(queue_args, Config),
+    Durable = ?config(queue_durable, Config),
+
+    %% Test the followig topology message flow:
+    %% Q1 --rejected--> Q2 --expired--> Q3 --expired-->
+    %% Q1 --rejected--> Q2 --expired--> Q3 --expired-->
+    %% Q1
+
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch,
+                              #'queue.declare'{
+                                 queue = Q1,
+                                 arguments = Args ++ [{<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                                      {<<"x-dead-letter-routing-key">>, longstr, Q2}],
+                                 durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch,
+                              #'queue.declare'{
+                                 queue = Q2,
+                                 arguments = Args ++ [{<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                                      {<<"x-dead-letter-routing-key">>, longstr, Q3},
+                                                      {<<"x-message-ttl">>, long, 5}],
+                                 durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch,
+                              #'queue.declare'{
+                                 queue = Q3,
+                                 arguments = Args ++ [{<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                                      {<<"x-dead-letter-routing-key">>, longstr, Q1},
+                                                      {<<"x-message-ttl">>, long, 5}],
+                                 durable = Durable}),
+
+    %% Send a single message.
+    P = <<"msg">>,
+    publish(Ch, Q1, [P]),
+    wait_for_messages(Config, [[Q1, <<"1">>, <<"1">>, <<"0">>]]),
+
+    %% Reject the 1st time.
+    [DTag1] = consume(Ch, Q1, [P]),
+    amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag1,
+                                          requeue      = false}),
+    %% Message should now flow from Q1 -> Q2 -> Q3 -> Q1
+    wait_for_messages(Config, [[Q1, <<"1">>, <<"1">>, <<"0">>]]),
+
+    %% Reject the 2nd time.
+    [DTag2] = consume(Ch, Q1, [P]),
+    amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag2,
+                                          requeue      = false}),
+    %% Message should again flow from Q1 -> Q2 -> Q3 -> Q1
+    wait_for_messages(Config, [[Q1, <<"1">>, <<"1">>, <<"0">>]]).
 
 %% 1) Many messages are rejected. They get dead-lettered in correct order.
 dead_letter_reject_many(Config) ->

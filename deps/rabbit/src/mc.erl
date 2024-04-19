@@ -409,8 +409,16 @@ record_death(Reason, SourceQueue, BasicMsg) ->
 
 
 -spec is_death_cycle(rabbit_misc:resource_name(), state()) -> boolean().
-is_death_cycle(TargetQueue, #?MODULE{annotations = #{deaths := Deaths}}) ->
-    is_cycle(TargetQueue, maps:keys(Deaths#deaths.records));
+is_death_cycle(TargetQueue, #?MODULE{annotations = #{deaths := #deaths{records = Recs}}}) ->
+    OldToNewDeaths = lists:sort(fun({_K1, #death{anns = #{last_time := T1}}},
+                                    {_K2, #death{anns = #{last_time := T2}}}) ->
+                                        T1 =< T2
+                                end, maps:to_list(Recs)),
+    OldToNewDeathKeys = lists:map(fun({Key, _Death}) ->
+                                          Key
+                                  end, OldToNewDeaths),
+    NewToOldDeathKeys = lists:reverse(OldToNewDeathKeys),
+    is_cycle(TargetQueue, NewToOldDeathKeys);
 is_death_cycle(_TargetQueue, #?MODULE{}) ->
     false;
 is_death_cycle(TargetQueue, BasicMsg) ->
