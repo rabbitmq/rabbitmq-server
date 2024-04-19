@@ -35,7 +35,7 @@ groups() ->
                        dead_letter_missing_exchange,
                        dead_letter_routing_key,
                        dead_letter_headers_should_be_appended_for_each_event,
-                       dead_letter_headers_should_not_be_appended_for_republish,
+                       dead_letter_headers_should_be_appended_for_republish,
                        dead_letter_routing_key_header_CC,
                        dead_letter_routing_key_header_BCC,
                        dead_letter_routing_key_cycle_max_length,
@@ -187,27 +187,21 @@ end_per_group(Group, Config) ->
     end.
 
 init_per_testcase(Testcase, Config) ->
-    IsMixed = rabbit_ct_helpers:is_mixed_versions(),
-    case Testcase of
-        dead_letter_headers_should_not_be_appended_for_republish when IsMixed ->
-            {skip, "dead_letter_headers_should_not_be_appended_for_republish isn't mixed versions compatible"};
-        _ ->
-            Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
-            Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~tp", [Group, Testcase])),
-            Q2 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_2", [Group, Testcase])),
-            Q3 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_3", [Group, Testcase])),
-            Policy = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_policy", [Group, Testcase])),
-            DLXExchange = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_dlx_exchange",
-                                                                       [Group, Testcase])),
-            Counters = get_global_counters(Config),
-            Config1 = rabbit_ct_helpers:set_config(Config, [{dlx_exchange, DLXExchange},
-                                                            {queue_name, Q},
-                                                            {queue_name_dlx, Q2},
-                                                            {queue_name_dlx_2, Q3},
-                                                            {policy, Policy},
-                                                            {counters, Counters}]),
-            rabbit_ct_helpers:testcase_started(Config1, Testcase)
-    end.
+    Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
+    Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~tp", [Group, Testcase])),
+    Q2 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_2", [Group, Testcase])),
+    Q3 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_3", [Group, Testcase])),
+    Policy = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_policy", [Group, Testcase])),
+    DLXExchange = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_dlx_exchange",
+                                                               [Group, Testcase])),
+    Counters = get_global_counters(Config),
+    Config1 = rabbit_ct_helpers:set_config(Config, [{dlx_exchange, DLXExchange},
+                                                    {queue_name, Q},
+                                                    {queue_name_dlx, Q2},
+                                                    {queue_name_dlx_2, Q3},
+                                                    {policy, Policy},
+                                                    {counters, Counters}]),
+    rabbit_ct_helpers:testcase_started(Config1, Testcase).
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
@@ -1137,7 +1131,7 @@ dead_letter_headers_should_be_appended_for_each_event(Config) ->
     ?assertEqual({longstr, Dlx1Name}, rabbit_misc:table_lookup(DeathDlx, <<"queue">>)),
     ok = rabbit_ct_client_helpers:close_connection(Conn).
 
-dead_letter_headers_should_not_be_appended_for_republish(Config) ->
+dead_letter_headers_should_be_appended_for_republish(Config) ->
     %% here we (re-)publish a message with the DL headers already set
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
@@ -1182,7 +1176,7 @@ dead_letter_headers_should_not_be_appended_for_republish(Config) ->
                                   props = #'P_basic'{headers = Headers2}}} =
         amqp_channel:call(Ch, #'basic.get'{queue = DlxName}),
 
-    {array, [{table, Death2}]} = rabbit_misc:table_lookup(Headers2, <<"x-death">>),
+    {array, [{table, Death2}, {table, _Death1}]} = rabbit_misc:table_lookup(Headers2, <<"x-death">>),
     ?assertEqual({longstr, <<"expired">>}, rabbit_misc:table_lookup(Death2, <<"reason">>)),
     ok = rabbit_ct_client_helpers:close_connection(Conn).
 
