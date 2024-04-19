@@ -9,19 +9,33 @@
 
 -module(system_SUITE).
 
--compile(export_all).
-
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -include("rabbit_peer_discovery_etcd.hrl").
 
--import(rabbit_data_coercion, [to_binary/1, to_integer/1]).
+-define(ETCD_GIT_REPO, "https://github.com/etcd-io/etcd.git").
+-define(ETCD_GIT_REF, "v3.5.13").
 
+-export([all/0,
+         groups/0,
+         init_per_suite/1,
+         end_per_suite/1,
+         init_per_group/2,
+         end_per_group/2,
+         init_per_testcase/2,
+         end_per_testcase/2,
+
+         etcd_connection_sanity_check_test/1,
+         init_opens_a_connection_test/1,
+         registration_with_locking_test/1,
+         start_one_member_at_a_time/1,
+         start_members_concurrently/1]).
 
 all() ->
     [
-     {group, v3_client}
+     {group, v3_client},
+     {group, clustering}
     ].
 
 groups() ->
@@ -30,46 +44,177 @@ groups() ->
                     etcd_connection_sanity_check_test,
                     init_opens_a_connection_test,
                     registration_with_locking_test
-                ]}
+                ]},
+     {clustering, [], [start_one_member_at_a_time,
+                       start_members_concurrently]}
     ].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config, [fun init_etcd/1]).
+    rabbit_ct_helpers:run_setup_steps(
+      Config,
+      [fun clone_etcd/1,
+       fun compile_etcd/1,
+       fun start_etcd/1]).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config, [fun stop_etcd/1]).
 
-init_etcd(Config) ->
-    DataDir = ?config(data_dir, Config),
-    PrivDir = ?config(priv_dir, Config),
-    TcpPort = 25389,
-    EtcdDir = filename:join([PrivDir, "etcd"]),
-    InitEtcd = filename:join([DataDir, "init-etcd.sh"]),
-    Cmd = [InitEtcd, EtcdDir, {"~b", [TcpPort]}],
-    case rabbit_ct_helpers:exec(Cmd) of
-        {ok, Stdout} ->
-            case re:run(Stdout, "^ETCD_PID=([0-9]+)$", [{capture, all_but_first, list}, multiline]) of
-                {match, [EtcdPid]} ->
-                    ct:pal(?LOW_IMPORTANCE, "etcd PID: ~ts~netcd is listening on: ~b", [EtcdPid, TcpPort]),
-                    rabbit_ct_helpers:set_config(Config, [{etcd_pid, EtcdPid},
-                                                          {etcd_endpoints, [rabbit_misc:format("localhost:~tp", [TcpPort])]},
-                                                          {etcd_port, TcpPort}]);
-                nomatch ->
-                    ct:pal(?HI_IMPORTANCE, "init-etcd.sh output did not match what's expected: ~tp", [Stdout])
-            end;
-        {error, Code, Reason} ->
-            ct:pal(?HI_IMPORTANCE, "init-etcd.sh exited with code ~tp: ~tp", [Code, Reason]),
-            _ = rabbit_ct_helpers:exec(["pkill", "-INT", "etcd"]),
-            {skip, "Failed to initialize etcd"}
-    end.
-
-stop_etcd(Config) ->
-    EtcdPid = ?config(etcd_pid, Config),
-    Cmd = ["kill", "-INT", EtcdPid],
-    _ = rabbit_ct_helpers:exec(Cmd),
+init_per_group(clustering, Config) ->
+    rabbit_ct_helpers:set_config(
+      Config,
+      [{rmq_nodes_count, 3},
+       {rmq_nodes_clustered, false}]);
+init_per_group(_Group, Config) ->
     Config.
 
+end_per_group(_Group, Config) ->
+    Config.
+
+init_per_testcase(Testcase, Config)
+  when Testcase =:= start_one_member_at_a_time orelse
+       Testcase =:= start_members_concurrently ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
+    ClusterSize = ?config(rmq_nodes_count, Config),
+    Config1 = rabbit_ct_helpers:set_config(
+                Config,
+                [{rmq_nodename_suffix, Testcase},
+                 {tcp_ports_base, {skip_n_nodes,
+                                   TestNumber * ClusterSize}}
+                ]),
+    Config2 = rabbit_ct_helpers:merge_app_env(
+                Config1, {rabbit, [{log, [{file, [{level, debug}]}]}]}),
+    Config3 = rabbit_ct_helpers:run_steps(
+                Config2,
+                rabbit_ct_broker_helpers:setup_steps() ++
+                rabbit_ct_client_helpers:setup_steps()),
+    try
+        _ = rabbit_ct_broker_helpers:rpc_all(
+              Config3, rabbit_peer_discovery_backend, api_version, []),
+        Config3
+    catch
+        error:{exception, undef,
+               [{rabbit_peer_discovery_backend, api_version, _, _} | _]} ->
+            Config4 = rabbit_ct_helpers:run_steps(
+                        Config3,
+                        rabbit_ct_client_helpers:teardown_steps() ++
+                        rabbit_ct_broker_helpers:teardown_steps()),
+            rabbit_ct_helpers:testcase_finished(Config4, Testcase),
+            {skip,
+             "Some nodes use the old discover->register order; "
+             "the testcase would likely fail"}
+    end;
+init_per_testcase(_Testcase, Config) ->
+    Config.
+
+end_per_testcase(Testcase, Config)
+  when Testcase =:= start_one_member_at_a_time orelse
+       Testcase =:= start_members_concurrently ->
+    Config1 = rabbit_ct_helpers:run_steps(
+                Config,
+                rabbit_ct_client_helpers:teardown_steps() ++
+                rabbit_ct_broker_helpers:teardown_steps()),
+    rabbit_ct_helpers:testcase_finished(Config1, Testcase);
+end_per_testcase(_Testcase, Config) ->
+    Config.
+
+clone_etcd(Config) ->
+    DataDir = ?config(data_dir, Config),
+    EtcdSrcdir = filename:join(DataDir, "etcd"),
+    Cmd = case filelib:is_dir(EtcdSrcdir) of
+              true ->
+                  ct:pal(
+                    "Checking out etcd Git reference, ref = ~s",
+                    [?ETCD_GIT_REF]),
+                  ["git", "-C", EtcdSrcdir,
+                   "checkout", ?ETCD_GIT_REF];
+              false ->
+                  ct:pal(
+                    "Cloning etcd Git repository, ref = ~s",
+                    [?ETCD_GIT_REF]),
+                  ["git", "clone",
+                   "--branch", ?ETCD_GIT_REF,
+                   ?ETCD_GIT_REPO, EtcdSrcdir]
+          end,
+    case rabbit_ct_helpers:exec(Cmd) of
+        {ok, _} ->
+            rabbit_ct_helpers:set_config(Config, {etcd_srcdir, EtcdSrcdir});
+        {error, _} ->
+            {skip, "Failed to clone etcd"}
+    end.
+
+compile_etcd(Config) ->
+    EtcdSrcdir = ?config(etcd_srcdir, Config),
+    ct:pal("Compiling etcd in ~ts", [EtcdSrcdir]),
+    Script0 = case os:type() of
+                  {win32, _} -> "build.bat";
+                  _          -> "build.sh"
+              end,
+    Script1 = filename:join(EtcdSrcdir, Script0),
+    Cmd = [Script1],
+    GOPATH = filename:join(EtcdSrcdir, "go"),
+    GOFLAGS = "-modcacherw",
+    Options = [{cd, EtcdSrcdir},
+               {env, [{"BINDIR", false},
+                      {"GOPATH", GOPATH},
+                      {"GOFLAGS", GOFLAGS}]}],
+    case rabbit_ct_helpers:exec(Cmd, Options) of
+        {ok, _} ->
+            EtcdExe = case os:type() of
+                          {win32, _} -> "etcd.exe";
+                          _          -> "etcd"
+                      end,
+            EtcdBin = filename:join([EtcdSrcdir, "bin", EtcdExe]),
+            ?assert(filelib:is_regular(EtcdBin)),
+            rabbit_ct_helpers:set_config(Config, {etcd_bin, EtcdBin});
+        {error, _} ->
+            {skip, "Failed to compile etcd"}
+    end.
+
+start_etcd(Config) ->
+    ct:pal("Starting etcd daemon"),
+    EtcdBin = ?config(etcd_bin, Config),
+    PrivDir = ?config(priv_dir, Config),
+    EtcdDataDir = filename:join(PrivDir, "data.etcd"),
+    EtcdName = ?MODULE_STRING,
+    EtcdHost = "localhost",
+    EtcdClientPort = 2379,
+    EtcdClientUrl = rabbit_misc:format(
+                      "http://~s:~b", [EtcdHost, EtcdClientPort]),
+    EtcdAdvPort = 2380,
+    EtcdAdvUrl = rabbit_misc:format(
+                   "http://~s:~b", [EtcdHost, EtcdAdvPort]),
+    Cmd = [EtcdBin,
+           "--data-dir", EtcdDataDir,
+           "--name", EtcdName,
+           "--initial-advertise-peer-urls", EtcdAdvUrl,
+           "--listen-peer-urls", EtcdAdvUrl,
+           "--advertise-client-urls", EtcdClientUrl,
+           "--listen-client-urls", EtcdClientUrl,
+           "--initial-cluster", EtcdName ++ "=" ++ EtcdAdvUrl,
+           "--initial-cluster-state", "new",
+           "--initial-cluster-token", "test-token",
+           "--log-level", "debug", "--log-outputs", "stdout"],
+    EtcdPid = spawn(fun() -> rabbit_ct_helpers:exec(Cmd) end),
+
+    EtcdEndpoint = rabbit_misc:format("~s:~b", [EtcdHost, EtcdClientPort]),
+    rabbit_ct_helpers:set_config(
+      Config,
+      [{etcd_pid, EtcdPid},
+       {etcd_endpoints, [EtcdEndpoint]}]).
+
+stop_etcd(Config) ->
+    case rabbit_ct_helpers:get_config(Config, etcd_pid) of
+        EtcdPid when is_pid(EtcdPid) ->
+            ct:pal(
+              "Stopping etcd daemon by killing control process ~p",
+              [EtcdPid]),
+            erlang:exit(EtcdPid, kill);
+        undefined ->
+            ok
+    end,
+    Config.
 
 %%
 %% Test cases
@@ -127,6 +272,98 @@ registration_with_locking_test(Config) ->
     after
         gen_statem:stop(Pid)
     end.
+
+start_one_member_at_a_time(Config) ->
+    Config1 = configure_peer_discovery(Config),
+
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config1, nodename),
+    lists:foreach(
+      fun(Node) ->
+              ?assertEqual(
+                 ok,
+                 rabbit_ct_broker_helpers:start_node(Config1, Node))
+      end, Nodes),
+
+    assert_full_cluster(Config1).
+
+start_members_concurrently(Config) ->
+    Config1 = configure_peer_discovery(Config),
+
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config1, nodename),
+    Parent = self(),
+    Pids = lists:map(
+             fun(Node) ->
+                     spawn_link(
+                       fun() ->
+                               receive
+                                   go ->
+                                       ?assertEqual(
+                                          ok,
+                                          rabbit_ct_broker_helpers:start_node(
+                                            Config1, Node)),
+                                       Parent ! started
+                               end
+                       end)
+             end, Nodes),
+
+    lists:foreach(fun(Pid) -> Pid ! go end, Pids),
+    lists:foreach(fun(_Pid) -> receive started -> ok end end, Pids),
+
+    assert_full_cluster(Config1).
+
+configure_peer_discovery(Config) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    lists:foreach(
+      fun(Node) ->
+              Members = lists:sort(
+                          rabbit_ct_broker_helpers:cluster_members_online(
+                            Config, Node)),
+              ?assertEqual([Node], Members)
+      end, Nodes),
+
+    lists:foreach(
+      fun(Node) ->
+              ?assertEqual(
+                 ok,
+                 rabbit_ct_broker_helpers:stop_broker(Config, Node)),
+              ?assertEqual(
+                 ok,
+                 rabbit_ct_broker_helpers:reset_node(Config, Node)),
+              ?assertEqual(
+                 ok,
+                 rabbit_ct_broker_helpers:stop_node(Config, Node))
+      end, Nodes),
+
+    Endpoints = ?config(etcd_endpoints, Config),
+    Config1 = rabbit_ct_helpers:merge_app_env(
+                Config,
+                {rabbit,
+                 [{cluster_formation,
+                   [{peer_discovery_backend, rabbit_peer_discovery_etcd},
+                    {peer_discovery_etcd,
+                     [{endpoints, Endpoints},
+                      {etcd_prefix, "rabbitmq"},
+                      {cluster_name, atom_to_list(?FUNCTION_NAME)}]}]}]}),
+    lists:foreach(
+      fun(Node) ->
+              ?assertEqual(
+                 ok,
+                 rabbit_ct_broker_helpers:rewrite_node_config_file(
+                   Config1, Node))
+      end, Nodes),
+
+    Config1.
+
+assert_full_cluster(Config) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ExpectedMembers = lists:sort(Nodes),
+    lists:foreach(
+      fun(Node) ->
+              Members = lists:sort(
+                          rabbit_ct_broker_helpers:cluster_members_online(
+                            Config, Node)),
+              ?assertEqual(ExpectedMembers, Members)
+      end, Nodes).
 
 %%
 %% Helpers
