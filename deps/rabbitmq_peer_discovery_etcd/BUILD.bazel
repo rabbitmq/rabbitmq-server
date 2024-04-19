@@ -99,7 +99,7 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     name = "system_SUITE",
-    size = "medium",
+    size = "large",
 )
 
 rabbitmq_suite(
