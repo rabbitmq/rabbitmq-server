@@ -27,6 +27,7 @@ jobs:
       - name: make source-dist
         run: |
           make source-dist
+          tar -tvf PACKAGES/rabbitmq-server-*.tar.xz
       - name: make package-generic-unix
         run: |
           make package-generic-unix
