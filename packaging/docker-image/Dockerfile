@@ -10,13 +10,14 @@ ENV RABBITMQ_DATA_DIR /var/lib/rabbitmq
 
 # Use the latest stable RabbitMQ release (https://www.rabbitmq.com/download.html)
 ARG RABBITMQ_VERSION=4.0.0
+ARG RABBITMQ_BUILD
 ENV RABBITMQ_VERSION=${RABBITMQ_VERSION}
 ENV RABBITMQ_HOME /opt/rabbitmq
 
 # Add RabbitMQ to PATH
 ENV PATH $RABBITMQ_HOME/sbin:$PATH
 
-COPY package-generic-unix.tar.xz /usr/local/src/rabbitmq-$RABBITMQ_VERSION.tar.xz
+COPY ${RABBITMQ_BUILD}.tar.xz /usr/local/src/rabbitmq-$RABBITMQ_VERSION.tar.xz
 
 # Install RabbitMQ
 RUN set -eux; \
