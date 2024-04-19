@@ -27,10 +27,12 @@ jobs:
       - name: make source-dist
         run: |
           make source-dist
-          ls -l PACKAGES
       - name: make package-generic-unix
         run: |
-          make package-generic-unix
+          V=$(echo PACKAGES/rabbitmq-server-*.tar.xz)
+          V=${V#PACKAGES/rabbitmq-server-}
+          V=${V%.tar.xz}
+          make package-generic-unix VERSION=$V
       - name: Upload package-generic-unix
         uses: actions/upload-artifact@v4.3.1
         with:
