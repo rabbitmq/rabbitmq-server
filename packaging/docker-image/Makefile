@@ -39,7 +39,7 @@ REPO ?= pivotalrabbitmq/rabbitmq
 all: dist
 
 dist:
-	cp $(GENERIC_UNIX_ARCHIVE) package-generic-unix.tar.xz
+	cp -f $(GENERIC_UNIX_ARCHIVE) package-generic-unix.tar.xz
 	docker build --pull \
 	  --build-arg RABBITMQ_VERSION=$(VERSION) \
 	  --tag $(REPO):$(IMAGE_TAG_1) \
