@@ -8,7 +8,6 @@ on:
       - '.github/workflows/update-otp-patches.yaml'
   workflow_dispatch:
 env:
-  VERSION: ${{ github.event.pull_request.head.sha || github.sha }}
   REGISTRY_IMAGE: pivotalrabbitmq/rabbitmq
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -24,15 +23,9 @@ jobs:
         with:
           otp-version: 26.2
           elixir-version: 1.15
-      - name: make source-dist
-        run: |
-          make source-dist
       - name: make package-generic-unix
         run: |
-          V=$(echo PACKAGES/rabbitmq-server-*.tar.xz)
-          V=${V#PACKAGES/rabbitmq-server-}
-          V=${V%.tar.xz}
-          make package-generic-unix VERSION=$V
+          make package-generic-unix
       - name: Upload package-generic-unix
         uses: actions/upload-artifact@v4.3.1
         with:
