@@ -34,24 +34,14 @@ endif
 IMAGE_TAG_1 ?= $(subst +,-,$(VERSION))
 endif
 
-OTP_VERSION ?= 25.0.4
-OTP_SHA256 ?= 05878cb51a64b33c86836b12a21903075c300409b609ad5e941ddb0feb8c2120
 REPO ?= pivotalrabbitmq/rabbitmq
-SKIP_PGP_VERIFY ?= false
-PGP_KEYSERVER ?= pgpkeys.eu
-ALT1_PGP_KEYSERVER ?= keyserver.ubuntu.com
-ALT2_PGP_KEYSERVER ?= pgpkeys.uk
 
 all: dist
 
 dist:
-	xzcat $(GENERIC_UNIX_ARCHIVE) | tar xvf -
+	cp $(GENERIC_UNIX_ARCHIVE) package-generic-unix.tar.xz
 	docker build --pull \
-	  --build-arg SKIP_PGP_VERIFY=$(SKIP_PGP_VERIFY) \
-	  --build-arg PGP_KEYSERVER=$(PGP_KEYSERVER) \
-	  --build-arg OTP_VERSION=$(OTP_VERSION) \
-	  --build-arg OTP_SHA256=$(OTP_SHA256) \
-	  --build-arg RABBITMQ_BUILD=rabbitmq_server-$(VERSION) \
+	  --build-arg RABBITMQ_VERSION=$(VERSION) \
 	  --tag $(REPO):$(IMAGE_TAG_1) \
 	  .
 
@@ -63,19 +53,4 @@ ifdef IMAGE_TAG_2
 endif
 
 clean:
-	rm -rf rabbitmq_server-*
-
-OTP_VERSION_MATCH ?= 25[0-9.]+
-define LATEST_STABLE_OTP_VERSION
-curl --silent --fail https://api.github.com/repos/erlang/otp/git/refs/tags | \
-  jq -r '.[].ref | sub("refs/tags/OTP.{1}";"") | match("^$(OTP_VERSION_MATCH)$$") | .string' | \
-  tail -n 1
-endef
-.PHONY: find-otp-sha256
-find-otp-sha256:
-	@printf "Version: " && \
-	export VERSION="$$($(LATEST_STABLE_OTP_VERSION))" && \
-	echo "$$VERSION" && \
-	printf "Checksum: " && \
-	wget --continue --quiet --output-document="/tmp/OTP-$$VERSION.tar.gz" "https://github.com/erlang/otp/archive/OTP-$$VERSION.tar.gz" && \
-	shasum -a 256 "/tmp/OTP-$$VERSION.tar.gz"
+	rm -f rabbitmq_server-*
