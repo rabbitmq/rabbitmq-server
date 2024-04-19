@@ -52,6 +52,7 @@ init() ->
 
     ensure_dir_exists(),
     rabbit_peer_discovery:maybe_init(),
+    rabbit_peer_discovery:maybe_register(),
 
     pre_init(IsVirgin),
 
@@ -77,7 +78,6 @@ init() ->
                "DB: initialization successeful",
                #{domain => ?RMQLOG_DOMAIN_DB}),
 
-            rabbit_peer_discovery:maybe_register(),
             init_finished(),
 
             ok;

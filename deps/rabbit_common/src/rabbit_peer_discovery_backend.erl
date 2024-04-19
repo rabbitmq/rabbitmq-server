@@ -57,3 +57,8 @@
 -callback unlock(Data :: term()) -> ok.
 
 -optional_callbacks([init/0]).
+
+-export([api_version/0]).
+
+api_version() ->
+    2.
