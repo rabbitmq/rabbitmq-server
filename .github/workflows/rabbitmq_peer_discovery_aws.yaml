@@ -21,13 +21,17 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
-    - name: WAIT FOR OCI IMAGE WORKFLOW
-      uses: lewagon/wait-on-check-action@v1.3.4
+    - uses: docker/metadata-action@v4
+      id: metadata
       with:
-        ref: ${{ github.ref }}
-        check-name: build-publish-dev-bazel
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
-        wait-interval: 30 # seconds
+        images: pivotalrabbitmq/rabbitmq
+        tags: |
+          type=sha,format=long
+    - uses: int128/wait-for-docker-image-action@v1
+      with:
+        tags: ${{ steps.metadata.outputs.tags }}
+        timeout-seconds: 3600
+        polling-seconds: 60
     - name: CONFIGURE BAZEL
       run: |
         cat << EOF >> user.bazelrc
@@ -51,6 +55,6 @@ jobs:
           --build_tests_only \
           --test_env AWS_ACCESS_KEY_ID=${{ secrets.CONCOURSE_AWS_ACCESS_KEY_ID }} \
           --test_env AWS_SECRET_ACCESS_KEY=${{ secrets.CONCOURSE_AWS_SECRET_ACCESS_KEY }} \
-          --test_env RABBITMQ_IMAGE="pivotalrabbitmq/rabbitmq:${{ github.sha }}" \
+          --test_env RABBITMQ_IMAGE="pivotalrabbitmq/rabbitmq:sha-${{ github.sha }}" \
           --test_env AWS_ECS_CLUSTER_NAME="rabbitmq-peer-discovery-aws-actions-${branch_or_tag//[._]/-}" \
           --verbose_failures
