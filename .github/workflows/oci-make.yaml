@@ -57,10 +57,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: package-generic-unix
-          path: PACKAGING
+          path: PACKAGES
       - name: Rename package-generic-unix
         run: |
-          cp PACKAGING/rabbitmq-server-*.tar.xz packaging/docker-image/
+          cp \
+            PACKAGES/rabbitmq-server-generic-unix-*.tar.xz \
+            packaging/docker-image/package-generic-unix.tar.xz
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
