@@ -324,11 +324,7 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
                   _ ->
                       [RKey]
               end,
-    Env = case rabbit_feature_flags:is_enabled(?FF_MC_DEATHS_V2) of
-              true -> #{};
-              false -> #{?FF_MC_DEATHS_V2 => false}
-          end,
-    Msg0 = mc:record_death(Reason, SourceQName, ConsumedMsg, Env),
+    Msg0 = mc:record_death(Reason, SourceQName, ConsumedMsg, ?MC_ENV),
     Msg1 = mc:set_ttl(undefined, Msg0),
     Msg2 = mc:set_annotation(?ANN_ROUTING_KEYS, DLRKeys, Msg1),
     Msg = mc:set_annotation(?ANN_EXCHANGE, DLXName, Msg2),

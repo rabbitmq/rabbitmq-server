@@ -5,7 +5,7 @@
 -include("mc.hrl").
 
 -export([
-         init/1,
+         init/2,
          size/1,
          x_header/2,
          property/2,
@@ -59,18 +59,18 @@
              ]).
 
 %% mc implementation
-init(Sections) when is_list(Sections) ->
+init(Sections, Env) when is_list(Sections) ->
     Msg = decode(Sections, #msg{}),
-    init(Msg);
-init(#msg{} = Msg) ->
+    init(Msg, Env);
+init(#msg{} = Msg, _Env) ->
     %% TODO: as the essential annotations, durable, priority, ttl and delivery_count
     %% is all we are interested in it isn't necessary to keep hold of the
     %% incoming AMQP header inside the state
     Anns = essential_properties(Msg),
     {Msg, Anns}.
 
-convert_from(?MODULE, Sections, _Env) ->
-    element(1, init(Sections));
+convert_from(?MODULE, Sections, Env) ->
+    element(1, init(Sections, Env));
 convert_from(_SourceProto, _, _Env) ->
     not_implemented.
 

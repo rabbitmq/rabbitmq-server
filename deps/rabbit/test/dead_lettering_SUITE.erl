@@ -36,7 +36,7 @@ groups() ->
                        dead_letter_missing_exchange,
                        dead_letter_routing_key,
                        dead_letter_headers_should_be_appended_for_each_event,
-                       dead_letter_headers_should_not_be_appended_for_republish,
+                       dead_letter_headers_should_be_appended_for_republish,
                        dead_letter_routing_key_header_CC,
                        dead_letter_routing_key_header_BCC,
                        dead_letter_routing_key_cycle_max_length,
@@ -56,7 +56,8 @@ groups() ->
                        dead_letter_routing_key_cycle_ttl,
                        dead_letter_headers_reason_expired,
                        dead_letter_headers_reason_expired_per_message,
-                       dead_letter_extra_bcc],
+                       dead_letter_extra_bcc,
+                       x_death_header_from_amqpl_client],
     DisabledMetricTests = [metric_maxlen,
                            metric_rejected,
                            metric_expired_queue_msg_ttl,
@@ -199,11 +200,6 @@ init_per_testcase(T, Config)
             %% * dead_letter_reject_expire_expire is known to fail due to https://github.com/rabbitmq/rabbitmq-server/issues/11159
             %% * stream is known to fail due to https://github.com/rabbitmq/rabbitmq-server/issues/11173
             Skip
-    end;
-init_per_testcase(dead_letter_headers_should_not_be_appended_for_republish = T, Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers) of
-        ok -> init_per_testcase0(T, Config);
-        {skip, _} = Skip -> Skip
     end;
 init_per_testcase(Testcase, Config) ->
     init_per_testcase0(Testcase, Config).
@@ -1218,7 +1214,7 @@ dead_letter_headers_should_be_appended_for_each_event(Config) ->
     ?assertEqual({longstr, Dlx1Name}, rabbit_misc:table_lookup(DeathDlx, <<"queue">>)),
     ok = rabbit_ct_client_helpers:close_connection(Conn).
 
-dead_letter_headers_should_not_be_appended_for_republish(Config) ->
+dead_letter_headers_should_be_appended_for_republish(Config) ->
     %% here we (re-)publish a message with the DL headers already set
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
@@ -1263,7 +1259,7 @@ dead_letter_headers_should_not_be_appended_for_republish(Config) ->
                                   props = #'P_basic'{headers = Headers2}}} =
         amqp_channel:call(Ch, #'basic.get'{queue = DlxName}),
 
-    {array, [{table, Death2}]} = rabbit_misc:table_lookup(Headers2, <<"x-death">>),
+    {array, [{table, Death2}, {table, _Death1}]} = rabbit_misc:table_lookup(Headers2, <<"x-death">>),
     ?assertEqual({longstr, <<"expired">>}, rabbit_misc:table_lookup(Death2, <<"reason">>)),
     ok = rabbit_ct_client_helpers:close_connection(Conn).
 
@@ -1580,6 +1576,48 @@ dead_letter_extra_bcc(Config) ->
     [_] = consume(Ch, TargetQ, [P]),
     [_] = consume(Ch, ExtraBCCQ, [P]),
     ok.
+
+%% Test case for https://github.com/rabbitmq/rabbitmq-server/issues/10709
+%% The Spring Cloud Stream RabbitMQ Binder Reference Guide recommends relying on the
+%% count field of the x-death header to determine how often a message was dead lettered
+%% in a loop involving RabbitMQ and an AMQP 0.9.1 client.
+%% This test therefore asserts that RabbitMQ interprets the x-death header if an AMQP 0.9.1
+%% clients (re)publishes a message with the x-death header set.
+%% This test case should only pass up to 3.13.
+%% Starting with 4.0, RabbitMQ won't interpret x-headers sent from clients anymore in any
+%% special way as x-headers "belong to the broker".
+x_death_header_from_amqpl_client(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    DLXQName = ?config(queue_name_dlx, Config),
+    declare_dead_letter_queues(Ch, Config, QName, DLXQName, [{<<"x-message-ttl">>, long, 0}]),
+
+    Payload = <<"my payload">>,
+    ok = amqp_channel:call(Ch,
+                           #'basic.publish'{routing_key = QName},
+                           #amqp_msg{payload = Payload}),
+    wait_for_messages(Config, [[DLXQName, <<"1">>, <<"1">>, <<"0">>]]),
+    {
+     #'basic.get_ok'{},
+     #amqp_msg{props = #'P_basic'{headers = Headers1}} = Msg1
+    } = amqp_channel:call(Ch, #'basic.get'{queue = DLXQName,
+                                           no_ack = true}),
+    {array, [{table, Death1}]} = rabbit_misc:table_lookup(Headers1, <<"x-death">>),
+    ?assertEqual({long, 1}, rabbit_misc:table_lookup(Death1, <<"count">>)),
+
+    ok = amqp_channel:call(Ch,
+                           #'basic.publish'{routing_key = QName},
+                           %% Re-publish the same message we received including the x-death header.
+                           Msg1),
+    wait_for_messages(Config, [[DLXQName, <<"1">>, <<"1">>, <<"0">>]]),
+    {
+     #'basic.get_ok'{},
+     #amqp_msg{payload = Payload,
+               props = #'P_basic'{headers = Headers2}}
+    } = amqp_channel:call(Ch, #'basic.get'{queue = DLXQName,
+                                           no_ack = true}),
+    {array, [{table, Death2}]} = rabbit_misc:table_lookup(Headers2, <<"x-death">>),
+    ?assertEqual({long, 2}, rabbit_misc:table_lookup(Death2, <<"count">>)).
 
 set_queue_options(QName, Options) ->
     rabbit_amqqueue:update(rabbit_misc:r(<<"/">>, queue, QName),

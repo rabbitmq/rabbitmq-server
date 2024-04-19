@@ -14,6 +14,11 @@
 -define(ANN_PRIORITY, p).
 
 -define(FF_MC_DEATHS_V2, message_containers_deaths_v2).
+-define(MC_ENV,
+        case rabbit_feature_flags:is_enabled(?FF_MC_DEATHS_V2) of
+            true -> #{};
+            false -> #{?FF_MC_DEATHS_V2 => false}
+        end).
 
 -type death_key() :: {SourceQueue :: rabbit_misc:resource_name(), rabbit_dead_letter:reason()}.
 -type death_anns() :: #{%% timestamp of the first time this message

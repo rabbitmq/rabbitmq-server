@@ -1721,6 +1721,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/unit_classic_mirrored_queue_sync_throttling_SUITE.erl"],
         outs = ["test/unit_classic_mirrored_queue_sync_throttling_SUITE.beam"],
+        hdrs = ["include/mc.hrl"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app"],

@@ -11,7 +11,7 @@
 -define(CONTENT_TYPE_AMQP, <<"message/vnd.rabbitmq.amqp">>).
 
 -export([
-         init/1,
+         init/2,
          size/1,
          x_header/2,
          property/2,
@@ -23,7 +23,7 @@
         ]).
 
 init(Msg = #mqtt_msg{qos = Qos,
-                     props = Props}) ->
+                     props = Props}, _Env) ->
     Anns0 = #{?ANN_DURABLE => durable(Qos)},
     Anns1 = case Props of
                 #{'Message-Expiry-Interval' := Seconds} ->
