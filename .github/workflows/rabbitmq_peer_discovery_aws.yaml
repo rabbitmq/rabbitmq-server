@@ -25,6 +25,8 @@ jobs:
       id: metadata
       with:
         images: pivotalrabbitmq/rabbitmq
+        tags: |
+          type=sha,format=long
     - uses: int128/wait-for-docker-image-action@v1
       with:
         tags: ${{ steps.metadata.outputs.tags }}
@@ -53,6 +55,6 @@ jobs:
           --build_tests_only \
           --test_env AWS_ACCESS_KEY_ID=${{ secrets.CONCOURSE_AWS_ACCESS_KEY_ID }} \
           --test_env AWS_SECRET_ACCESS_KEY=${{ secrets.CONCOURSE_AWS_SECRET_ACCESS_KEY }} \
-          --test_env RABBITMQ_IMAGE="pivotalrabbitmq/rabbitmq:${{ github.sha }}" \
+          --test_env RABBITMQ_IMAGE="pivotalrabbitmq/rabbitmq:sha-${{ github.sha }}" \
           --test_env AWS_ECS_CLUSTER_NAME="rabbitmq-peer-discovery-aws-actions-${branch_or_tag//[._]/-}" \
           --verbose_failures

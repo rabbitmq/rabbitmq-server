@@ -63,6 +63,10 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,format=long
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
@@ -119,6 +123,10 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,format=long
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
