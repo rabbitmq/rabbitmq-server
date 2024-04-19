@@ -399,7 +399,7 @@ recover_deaths([], Acc) ->
     Acc;
 recover_deaths([{map, Kvs} | Rem], Acc) ->
     Queue = key_find(<<"queue">>, Kvs),
-    Reason = binary_to_atom(key_find(<<"reason">>, Kvs)),
+    Reason = binary_to_existing_atom(key_find(<<"reason">>, Kvs)),
     DA0 = case key_find(<<"original-expiration">>, Kvs) of
               undefined ->
                   #{};
@@ -431,8 +431,8 @@ essential_properties(#msg{message_annotations = MA} = Msg) ->
                      {utf8, FstR} = message_annotation(<<"x-first-death-reason">>, Msg, Def),
                      {utf8, LastQ} = message_annotation(<<"x-last-death-queue">>, Msg, Def),
                      {utf8, LastR} = message_annotation(<<"x-last-death-reason">>, Msg, Def),
-                     #deaths{first = {FstQ, binary_to_atom(FstR)},
-                             last = {LastQ, binary_to_atom(LastR)},
+                     #deaths{first = {FstQ, binary_to_existing_atom(FstR)},
+                             last = {LastQ, binary_to_existing_atom(LastR)},
                              records = recover_deaths(DeathMaps, #{})};
                  _ ->
                      undefined
