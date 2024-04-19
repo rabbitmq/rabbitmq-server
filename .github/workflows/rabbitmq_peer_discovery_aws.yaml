@@ -21,13 +21,8 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
-<<<<<<< HEAD
-    - name: WAIT FOR OCI IMAGE WORKFLOW
-      uses: lewagon/wait-on-check-action@v1.3.3
-=======
     - uses: docker/metadata-action@v4
       id: metadata
->>>>>>> 4e720d7fe1 (Use make for OCI workflow (#11042))
       with:
         images: pivotalrabbitmq/rabbitmq
         tags: |
