@@ -85,8 +85,8 @@ jobs:
           context: packaging/docker-image
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-to: type=registry,ref=ghcr.io/rabbitmq/rabbitmq:buildcache,mode=max
-          cache-from: type=registry,ref=ghcr.io/rabbitmq/rabbitmq:buildcache
+          cache-to: type=registry,ref=ghcr.io/rabbitmq/rabbitmq:buildcache-${{ env.PLATFORM_PAIR }},mode=max
+          cache-from: type=registry,ref=ghcr.io/rabbitmq/rabbitmq:buildcache-${{ env.PLATFORM_PAIR }}
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
       - name: Export digest
         run: |
