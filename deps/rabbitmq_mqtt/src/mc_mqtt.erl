@@ -68,10 +68,10 @@ convert_from(mc_amqp, Sections, Env) ->
               amqp_encode(Val, Acc)
       end, {undefined, [], undefined, [], [], undefined}, Sections),
     Qos = case Header of
-              #'v1_0.header'{durable = true} ->
-                  ?QOS_1;
+              #'v1_0.header'{durable = false} ->
+                  ?QOS_0;
               _ ->
-                  ?QOS_0
+                  ?QOS_1
           end,
     Props0 = case AmqpProps of
                  #'v1_0.properties'{reply_to = {utf8, Address}} ->

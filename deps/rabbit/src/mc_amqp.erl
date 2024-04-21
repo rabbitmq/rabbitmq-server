@@ -146,11 +146,11 @@ get_property(durable, Msg) ->
             Durable;
         _ ->
             %% fallback in case the source protocol was old AMQP 0.9.1
-            case message_annotation(<<"x-basic-delivery-mode">>, Msg, 2) of
-                {ubyte, 2} ->
-                    true;
+            case message_annotation(<<"x-basic-delivery-mode">>, Msg, undefined) of
+                {ubyte, 1} ->
+                    false;
                 _ ->
-                    false
+                    true
             end
     end;
 get_property(timestamp, Msg) ->
@@ -195,7 +195,8 @@ protocol_state(Msg0 = #msg_body_decoded{header = Header0,
     FirstAcquirer = first_acquirer(Anns),
     Header = case Header0 of
                  undefined ->
-                     #'v1_0.header'{first_acquirer = FirstAcquirer};
+                     #'v1_0.header'{durable = true,
+                                    first_acquirer = FirstAcquirer};
                  #'v1_0.header'{} ->
                      Header0#'v1_0.header'{first_acquirer = FirstAcquirer}
              end,
@@ -211,7 +212,8 @@ protocol_state(#msg_body_encoded{header = Header0,
     FirstAcquirer = first_acquirer(Anns),
     Header = case Header0 of
                  undefined ->
-                     #'v1_0.header'{first_acquirer = FirstAcquirer};
+                     #'v1_0.header'{durable = true,
+                                    first_acquirer = FirstAcquirer};
                  #'v1_0.header'{} ->
                      Header0#'v1_0.header'{first_acquirer = FirstAcquirer}
              end,
