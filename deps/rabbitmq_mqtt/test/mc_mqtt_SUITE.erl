@@ -19,15 +19,11 @@ groups() ->
     [
      {tests, [shuffle],
       [roundtrip_amqp,
-       roundtrip_amqp_payload_format_indicator,
        roundtrip_amqp_response_topic,
        roundtrip_amqpl,
        roundtrip_amqpl_correlation,
        amqp_to_mqtt_amqp_value_section_binary,
        amqp_to_mqtt_amqp_value_section_list,
-       amqp_to_mqtt_amqp_value_section_null,
-       amqp_to_mqtt_amqp_value_section_int,
-       amqp_to_mqtt_amqp_value_section_boolean,
        roundtrip_amqp_user_property,
        roundtrip_amqpl_user_property,
        roundtrip_amqp_content_type,
@@ -108,18 +104,6 @@ roundtrip_amqp(_Config) ->
     %% We expect order to be maintained.
     ?assertMatch(#{'User-Property' := ExpectedUserProperty}, Props).
 
-%% The indicator that the Payload is UTF-8 encoded should not be lost when translating
-%% from MQTT 5.0 to AMQP 1.0 or vice versa.
-roundtrip_amqp_payload_format_indicator(_Config) ->
-    Msg0 = mqtt_msg(),
-    Msg = Msg0#mqtt_msg{payload = <<"🐇"/utf8>>,
-                        props = #{'Payload-Format-Indicator' => 1}},
-    #mqtt_msg{payload = Payload,
-              props = Props} = roundtrip(mc_amqp, Msg),
-    ?assertEqual(unicode:characters_to_binary("🐇"),
-                 iolist_to_binary(Payload)),
-    ?assertMatch(#{'Payload-Format-Indicator' := 1}, Props).
-
 roundtrip_amqp_response_topic(_Config) ->
     Topic = <<"/rabbit/🐇"/utf8>>,
     Msg0 = mqtt_msg(),
@@ -199,33 +183,6 @@ amqp_to_mqtt_amqp_value_section_list(_Config) ->
     ?assertEqual(#{'Content-Type' => <<"message/vnd.rabbitmq.amqp">>}, Props),
     ?assert(iolist_size(Payload) > 0).
 
-amqp_to_mqtt_amqp_value_section_null(_Config) ->
-    Val = amqp_value(null),
-    #mqtt_msg{props = Props,
-              payload = Payload} = amqp_to_mqtt([Val]),
-    ?assertEqual(#{'Payload-Format-Indicator' => 1}, Props),
-    ?assertEqual(0, iolist_size(Payload)).
-
-amqp_to_mqtt_amqp_value_section_int(_Config) ->
-    Val = amqp_value({int, -3}),
-    #mqtt_msg{props = Props,
-              payload = Payload} = amqp_to_mqtt([Val]),
-    ?assertEqual(#{'Payload-Format-Indicator' => 1}, Props),
-    ?assertEqual(<<"-3">>, iolist_to_binary(Payload)).
-
-amqp_to_mqtt_amqp_value_section_boolean(_Config) ->
-    Val1 = amqp_value(true),
-    #mqtt_msg{props = Props1,
-              payload = Payload1} = amqp_to_mqtt([Val1]),
-    ?assertEqual(#{'Payload-Format-Indicator' => 1}, Props1),
-    ?assertEqual(<<"true">>, iolist_to_binary(Payload1)),
-
-    Val2 = amqp_value(false),
-    #mqtt_msg{props = Props2,
-              payload = Payload2} = amqp_to_mqtt([Val2]),
-    ?assertEqual(#{'Payload-Format-Indicator' => 1}, Props2),
-    ?assertEqual(<<"false">>, iolist_to_binary(Payload2)).
-
 %% When converting from MQTT 5.0 to AMQP 1.0, we expect to lose some User Property.
 roundtrip_amqp_user_property(_Config) ->
     Msg0 = mqtt_msg(),
@@ -287,10 +244,10 @@ amqp_to_mqtt_reply_to(_Config) ->
 
 
 amqp_to_mqtt_footer(_Config) ->
-    Val = amqp_value({utf8, <<"hey">>}),
+    Body = <<"hey">>,
     Footer = #'v1_0.footer'{content = [{{symbol, <<"key">>}, {utf8, <<"value">>}}]},
     %% We can translate, but lose the footer.
-    #mqtt_msg{payload = Payload} = amqp_to_mqtt([Val, Footer]),
+    #mqtt_msg{payload = Payload} = amqp_to_mqtt([#'v1_0.data'{content = Body}, Footer]),
     ?assertEqual(<<"hey">>, iolist_to_binary(Payload)).
 
 mqtt_amqpl(_Config) ->
@@ -391,7 +348,6 @@ mqtt_amqp_alt(_Config) ->
     Mqtt0 = mqtt_msg(),
     Mqtt = Mqtt0#mqtt_msg{qos = 0,
                           props = #{'Content-Type' => <<"text/plain">>,
-                                    'Payload-Format-Indicator' => 1,
                                     'User-Property' =>
                                         [{<<"key-2">>, <<"val-2">>},
                                          {<<"key-1">>, <<"val-1">>},
@@ -418,7 +374,7 @@ mqtt_amqp_alt(_Config) ->
                                     correlation_id = {uuid, _}}, P),
     ?assertEqual({utf8, <<"val-1">>}, amqp_map_get(utf8(<<"key-1">>), AP)),
     ?assertEqual({utf8, <<"val-2">>}, amqp_map_get(utf8(<<"key-2">>), AP)),
-    ?assertMatch(#'v1_0.amqp_value'{content = {utf8, _}}, D),
+    ?assertEqual(#'v1_0.data'{content = <<>>}, D),
     ok.
 
 amqp_mqtt(_Config) ->

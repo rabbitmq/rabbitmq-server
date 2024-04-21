@@ -55,7 +55,7 @@ init(#content{} = Content0) ->
     Anns = essential_properties(Content),
     {strip_header(Content, ?DELETED_HEADER), Anns}.
 
-convert_from(mc_amqp, Sections, _Env) ->
+convert_from(mc_amqp, Sections, Env) ->
     {H, MAnn, Prop, AProp, BodyRev} =
         lists:foldl(
           fun
@@ -163,7 +163,35 @@ convert_from(mc_amqp, Sections, _Env) ->
                                        false
                                end, MA),
     {Headers1, MsgId091} = message_id(MsgId, <<"x-message-id">>, Headers0),
-    {Headers, CorrId091} = message_id(CorrId, <<"x-correlation-id">>, Headers1),
+    {Headers2, CorrId091} = message_id(CorrId, <<"x-correlation-id">>, Headers1),
+
+    Headers = case Env of
+                  #{message_containers_store_amqp_v1 := false} ->
+                      Headers3 = case AProp of
+                                     undefined ->
+                                         Headers2;
+                                     #'v1_0.application_properties'{} ->
+                                         APropBin = iolist_to_binary(amqp10_framing:encode_bin(AProp)),
+                                         [{?AMQP10_APP_PROPERTIES_HEADER, longstr, APropBin} | Headers2]
+                                 end,
+                      Headers4 = case Prop of
+                                     undefined ->
+                                         Headers3;
+                                     #'v1_0.properties'{} ->
+                                         PropBin = iolist_to_binary(amqp10_framing:encode_bin(Prop)),
+                                         [{?AMQP10_PROPERTIES_HEADER, longstr, PropBin} | Headers3]
+                                 end,
+                      Headers5 = case MAnn of
+                                     undefined ->
+                                         Headers4;
+                                     #'v1_0.message_annotations'{} ->
+                                         MAnnBin = iolist_to_binary(amqp10_framing:encode_bin(MAnn)),
+                                         [{?AMQP10_MESSAGE_ANNOTATIONS_HEADER, longstr, MAnnBin} | Headers4]
+                                 end,
+                      Headers5;
+                  _ ->
+                      Headers2
+              end,
 
     UserId1 = unwrap(UserId0),
     %% user-id is a binary type so we need to validate
