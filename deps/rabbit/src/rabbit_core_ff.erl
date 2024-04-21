@@ -170,3 +170,10 @@
     #{desc          => "Credit API v2 between queue clients and queue processes",
       stability     => stable
      }}).
+
+-rabbit_feature_flag(
+   {message_containers_store_amqp_v1,
+    #{desc          => "Support storing messages in message containers AMQP 1.0 disk format v1",
+      stability     => stable,
+      depends_on    => [message_containers]
+     }}).

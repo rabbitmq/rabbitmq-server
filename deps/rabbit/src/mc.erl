@@ -440,6 +440,14 @@ last_death(BasicMsg) ->
     mc_compat:last_death(BasicMsg).
 
 -spec prepare(read | store, state()) -> state().
+prepare(store, #?MODULE{protocol = mc_amqp} = State) ->
+    case rabbit_feature_flags:is_enabled(message_containers_store_amqp_v1) of
+        true ->
+            State#?MODULE{data = mc_amqp:prepare(store, State#?MODULE.data)};
+        false ->
+            State1 = convert(mc_amqpl, State),
+            State1#?MODULE{data = mc_amqpl:prepare(store, State1#?MODULE.data)}
+    end;
 prepare(For, #?MODULE{protocol = Proto,
                       data = Data} = State) ->
     State#?MODULE{data = Proto:prepare(For, Data)};
