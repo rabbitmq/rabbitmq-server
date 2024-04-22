@@ -15,18 +15,32 @@ concurrency:
 jobs:
   build-package-generic-unix:
     runs-on: ubuntu-latest
+    outputs:
+      authorized: ${{ steps.authorized.outputs.authorized }}
     steps:
+      - name: CHECK IF IMAGE WILL PUSH
+        id: authorized
+        run: |
+          if [ -n "${{ secrets.DOCKERHUB_PASSWORD }}" ]; then
+            echo "authorized=true" | tee -a $GITHUB_OUTPUT
+          else
+            echo "authorized=false" | tee -a $GITHUB_OUTPUT
+          fi
       - name: Checkout
+        if: steps.authorized.outputs.authorized == 'true'
         uses: actions/checkout@v4
       - name: Configure Erlang
+        if: steps.authorized.outputs.authorized == 'true'
         uses: erlef/setup-beam@v1
         with:
           otp-version: 26.2
           elixir-version: 1.15
       - name: make package-generic-unix
+        if: steps.authorized.outputs.authorized == 'true'
         run: |
           make package-generic-unix PROJECT_VERSION=3.13.0
       - name: Upload package-generic-unix
+        if: steps.authorized.outputs.authorized == 'true'
         uses: actions/upload-artifact@v4.3.1
         with:
           name: package-generic-unix
@@ -35,6 +49,7 @@ jobs:
   build:
     needs: build-package-generic-unix
     runs-on: ubuntu-latest
+    if: ${{ needs.build-package-generic-unix.outputs.authorized }} == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -106,9 +121,10 @@ jobs:
           retention-days: 1
 
   merge:
-    runs-on: ubuntu-latest
     needs:
       - build
+    runs-on: ubuntu-latest
+    if: ${{ needs.build-package-generic-unix.outputs.authorized }} == 'true'
     steps:
       - name: Download digests
         uses: actions/download-artifact@v4
