@@ -23,14 +23,8 @@
         ]).
 
 init(Msg = #mqtt_msg{qos = Qos,
-                     props = Props})
-  when is_integer(Qos) ->
-    Anns0 = case Qos > 0 of
-                true ->
-                    #{};
-                false ->
-                    #{?ANN_DURABLE => false}
-            end,
+                     props = Props}) ->
+    Anns0 = #{?ANN_DURABLE => durable(Qos)},
     Anns1 = case Props of
                 #{'Message-Expiry-Interval' := Seconds} ->
                     Anns0#{ttl => timer:seconds(Seconds),
@@ -289,7 +283,7 @@ convert_to(mc_amqp, #mqtt_msg{qos = Qos,
              [] -> S2;
              _ -> [#'v1_0.message_annotations'{content = MsgAnns} | S2]
          end,
-    S = [#'v1_0.header'{durable = Qos > 0} | S3],
+    S = [#'v1_0.header'{durable = durable(Qos)} | S3],
     mc_amqp:convert_from(mc_amqp, S, Env);
 convert_to(mc_amqpl, #mqtt_msg{qos = Qos,
                                props = Props,
@@ -558,3 +552,6 @@ amqp_encode(Data, Acc0) ->
     Bin = amqp10_framing:encode_bin(Data),
     Acc = setelement(5, Acc0, [Bin | element(5, Acc0)]),
     setelement(7, Acc, ?CONTENT_TYPE_AMQP).
+
+durable(?QOS_0) -> false;
+durable(?QOS_1) -> true.
