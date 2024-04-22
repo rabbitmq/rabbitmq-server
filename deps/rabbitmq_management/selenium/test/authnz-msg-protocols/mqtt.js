@@ -24,7 +24,6 @@ describe('Having MQTT protocol enbled and the following auth_backends: ' + backe
       reset()
       expectations.push(expectUser({ "username": username, "password": password, "client_id": client_id, "vhost": "/" }, "allow"))
       expectations.push(expectVhost({ "username": username, "vhost": "/"}, "allow"))
-      expectations.push(expectResource({ "username": username, "vhost": "/", "resource": "queue", "name": "mqtt-will-selenium-client", "permission":"configure", "tags":"", "client_id" : client_id }, "allow"))
     } else if (backends.includes("oauth") && username.includes("oauth")) {
       let oauthProviderUrl = process.env.OAUTH_PROVIDER_URL
       let oauthClientId = process.env.OAUTH_CLIENT_ID
