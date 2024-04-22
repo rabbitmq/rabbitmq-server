@@ -20,6 +20,7 @@ on:
     paths:
       - 'deps/rabbit/**'
       - 'deps/rabbitmq_auth_/**'
+      - 'deps/rabbitmq_mqtt/**'
       - 'deps/rabbitmq_management/selenium/full-suite-authnz-messaging'
       - 'deps/rabbitmq_management/selenium/suites/authnz-messaging'
       - 'deps/rabbitmq_management/selenium/test/authnz-msg-protocols'
