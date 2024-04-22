@@ -176,7 +176,6 @@ def all_beam_files(name = "all_beam_files"):
             "src/rabbit_mirror_queue_slave.erl",
             "src/rabbit_mirror_queue_sync.erl",
             "src/rabbit_mnesia.erl",
-            "src/rabbit_msg_record.erl",
             "src/rabbit_msg_store.erl",
             "src/rabbit_msg_store_ets_index.erl",
             "src/rabbit_msg_store_gc.erl",
@@ -445,7 +444,6 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/rabbit_mirror_queue_slave.erl",
             "src/rabbit_mirror_queue_sync.erl",
             "src/rabbit_mnesia.erl",
-            "src/rabbit_msg_record.erl",
             "src/rabbit_msg_store.erl",
             "src/rabbit_msg_store_ets_index.erl",
             "src/rabbit_msg_store_gc.erl",
@@ -733,7 +731,6 @@ def all_srcs(name = "all_srcs"):
             "src/rabbit_mirror_queue_slave.erl",
             "src/rabbit_mirror_queue_sync.erl",
             "src/rabbit_mnesia.erl",
-            "src/rabbit_msg_record.erl",
             "src/rabbit_msg_store.erl",
             "src/rabbit_msg_store_ets_index.erl",
             "src/rabbit_msg_store_gc.erl",
@@ -1417,15 +1414,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app"],
     )
-    erlang_bytecode(
-        name = "rabbit_msg_record_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/rabbit_msg_record_SUITE.erl"],
-        outs = ["test/rabbit_msg_record_SUITE.beam"],
-        app_name = "rabbit",
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp10_common:erlang_app", "//deps/rabbit_common:erlang_app"],
-    )
+
     erlang_bytecode(
         name = "rabbit_stream_coordinator_SUITE_beam_files",
         testonly = True,
