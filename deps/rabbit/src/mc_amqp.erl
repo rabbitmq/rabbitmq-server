@@ -45,7 +45,6 @@
 -record(msg_body_decoded,
         {
          header :: opt(#'v1_0.header'{}),
-         delivery_annotations = []:: list(),
          message_annotations = [] :: list(),
          properties :: opt(#'v1_0.properties'{}),
          application_properties = [] :: list(),
@@ -59,7 +58,6 @@
 -record(msg_body_encoded,
         {
          header :: opt(#'v1_0.header'{}),
-         delivery_annotations = [] :: amqp_map(),
          message_annotations = [] :: amqp_map(),
          properties :: opt(#'v1_0.properties'{}),
          application_properties = [] :: amqp_map(),
@@ -77,9 +75,6 @@
 %% on disk representation in the future.
 -record(v1,
         {
-         %% TODO remove delivery annotations because
-         %% "Delivery annotations convey information from the sending peer to the receiving peer."
-         delivery_annotations = [] :: amqp_map(),
          message_annotations = [] :: amqp_map(),
          bare_and_footer :: binary()
         }).
@@ -206,7 +201,6 @@ protocol_state(Msg0 = #msg_body_decoded{header = Header0,
     Sections = msg_to_sections(Msg),
     encode(Sections);
 protocol_state(#msg_body_encoded{header = Header0,
-                                 delivery_annotations = DA,
                                  message_annotations = MA0,
                                  bare_and_footer = BareAndFooter}, Anns) ->
     FirstAcquirer = first_acquirer(Anns),
@@ -218,10 +212,9 @@ protocol_state(#msg_body_encoded{header = Header0,
                      Header0#'v1_0.header'{first_acquirer = FirstAcquirer}
              end,
     MA = protocol_state_message_annotations(MA0, Anns),
-    Sections = to_sections(Header, DA, MA, []),
+    Sections = to_sections(Header, MA, []),
     [encode(Sections), BareAndFooter];
-protocol_state(#v1{delivery_annotations = DA,
-                   message_annotations = MA0,
+protocol_state(#v1{message_annotations = MA0,
                    bare_and_footer = BareAndFooter}, Anns) ->
     Durable = case Anns of
                   #{?ANN_DURABLE := D} -> D;
@@ -240,24 +233,21 @@ protocol_state(#v1{delivery_annotations = DA,
                             ttl = Ttl,
                             first_acquirer = first_acquirer(Anns)},
     MA = protocol_state_message_annotations(MA0, Anns),
-    Sections = to_sections(Header, DA, MA, []),
+    Sections = to_sections(Header, MA, []),
     [encode(Sections), BareAndFooter].
 
 prepare(read, Msg) ->
     Msg;
 prepare(store, Msg = #v1{}) ->
     Msg;
-prepare(store, #msg_body_encoded{delivery_annotations = DA,
-                                 message_annotations = MA,
+prepare(store, #msg_body_encoded{message_annotations = MA,
                                  bare_and_footer = BF}) ->
-    #v1{delivery_annotations = DA,
-        message_annotations = MA,
+    #v1{message_annotations = MA,
         bare_and_footer = BF}.
 
 %% internal
 
 msg_to_sections(#msg_body_decoded{header = H,
-                                  delivery_annotations = DAC,
                                   message_annotations = MAC,
                                   properties = P,
                                   application_properties = APC,
@@ -275,9 +265,8 @@ msg_to_sections(#msg_body_decoded{header = H,
             _ when is_list(Data) ->
                 Data ++ S0
         end,
-    to_sections(H, DAC, MAC, P, APC, S);
+    to_sections(H, MAC, P, APC, S);
 msg_to_sections(#msg_body_encoded{header = H,
-                                  delivery_annotations = DAC,
                                   message_annotations = MAC,
                                   properties = P,
                                   application_properties = APC,
@@ -288,15 +277,14 @@ msg_to_sections(#msg_body_encoded{header = H,
                                    byte_size(BareAndFooter) - BodyPos),
     %% TODO do not parse entire AMQP encoded amqp-value or amqp-sequence section body
     BodyAndFooter = amqp10_framing:decode_bin(BodyAndFooterBin),
-    to_sections(H, DAC, MAC, P, APC, BodyAndFooter);
-msg_to_sections(#v1{delivery_annotations = DAC,
-                    message_annotations = MAC,
+    to_sections(H, MAC, P, APC, BodyAndFooter);
+msg_to_sections(#v1{message_annotations = MAC,
                     bare_and_footer = BareAndFooterBin}) ->
     %% TODO do not parse entire AMQP encoded amqp-value or amqp-sequence section body
     BareAndFooter = amqp10_framing:decode_bin(BareAndFooterBin),
-    to_sections(undefined, DAC, MAC, BareAndFooter).
+    to_sections(undefined, MAC, BareAndFooter).
 
-to_sections(H, DAC, MAC, P, APC, Tail) ->
+to_sections(H, MAC, P, APC, Tail) ->
     S0 = case APC of
              [] ->
                  Tail;
@@ -309,20 +297,14 @@ to_sections(H, DAC, MAC, P, APC, Tail) ->
             _ ->
                 [P | S0]
         end,
-    to_sections(H, DAC, MAC, S).
+    to_sections(H, MAC, S).
 
-to_sections(H, DAC, MAC, Tail) ->
-    S0 = case MAC of
-             [] ->
-                 Tail;
-             _ ->
-                 [#'v1_0.message_annotations'{content = MAC} | Tail]
-         end,
-    S = case DAC of
+to_sections(H, MAC, Tail) ->
+    S = case MAC of
             [] ->
-                S0;
+                Tail;
             _ ->
-                [#'v1_0.delivery_annotations'{content = DAC} | S0]
+                [#'v1_0.message_annotations'{content = MAC} | Tail]
         end,
     case H of
         undefined ->
@@ -439,8 +421,8 @@ msg_body_decoded([#'v1_0.properties'{} = P | Rem], Msg) ->
     msg_body_decoded(Rem, Msg#msg_body_decoded{properties = P});
 msg_body_decoded([#'v1_0.application_properties'{content = APC} | Rem], Msg) ->
     msg_body_decoded(Rem, Msg#msg_body_decoded{application_properties = APC});
-msg_body_decoded([#'v1_0.delivery_annotations'{content = DAC} | Rem], Msg) ->
-    msg_body_decoded(Rem, Msg#msg_body_decoded{delivery_annotations = DAC});
+msg_body_decoded([_Ignore = #'v1_0.delivery_annotations'{} | Rem], Msg) ->
+    msg_body_decoded(Rem, Msg);
 msg_body_decoded([#'v1_0.data'{} = D | Rem], #msg_body_decoded{data = Body} = Msg)
   when is_list(Body) ->
     msg_body_decoded(Rem, Msg#msg_body_decoded{data = Body ++ [D]});
@@ -458,8 +440,8 @@ msg_body_encoded(Sections, Payload) ->
 
 msg_body_encoded([#'v1_0.header'{} = H | Rem], Payload, Msg) ->
     msg_body_encoded(Rem, Payload, Msg#msg_body_encoded{header = H});
-msg_body_encoded([#'v1_0.delivery_annotations'{content = DAC} | Rem], Payload, Msg) ->
-    msg_body_encoded(Rem, Payload, Msg#msg_body_encoded{delivery_annotations = DAC});
+msg_body_encoded([_Ignore = #'v1_0.delivery_annotations'{} | Rem], Payload, Msg) ->
+    msg_body_encoded(Rem, Payload, Msg);
 msg_body_encoded([#'v1_0.message_annotations'{content = MAC} | Rem], Payload, Msg) ->
     msg_body_encoded(Rem, Payload, Msg#msg_body_encoded{message_annotations = MAC});
 msg_body_encoded([{{pos, Pos}, #'v1_0.properties'{} = Props} | Rem], Payload, Msg) ->

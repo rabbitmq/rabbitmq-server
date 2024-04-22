@@ -67,8 +67,7 @@ convert_from(mc_amqp, Sections, Env) ->
               setelement(3, Acc, S);
          (#'v1_0.application_properties'{} = S, Acc) ->
               setelement(4, Acc, S);
-         (#'v1_0.delivery_annotations'{}, Acc) ->
-              %% delivery annotations not currently used
+         (_Ignore = #'v1_0.delivery_annotations'{}, Acc) ->
               Acc;
          (#'v1_0.footer'{} = S, Acc) ->
               setelement(6, Acc, S);
