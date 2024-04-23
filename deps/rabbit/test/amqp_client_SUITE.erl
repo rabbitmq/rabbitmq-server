@@ -102,7 +102,8 @@ groups() ->
        handshake_timeout,
        credential_expires,
        attach_to_exclusive_queue,
-       classic_priority_queue
+       classic_priority_queue,
+       dead_letter_headers_exchange
       ]},
 
      {cluster_size_3, [shuffle],
@@ -3331,6 +3332,75 @@ classic_priority_queue(Config) ->
     ok = amqp10_client:detach_link(Receiver2),
     ok = amqp10_client:detach_link(Sender),
     ok = delete_queue(Session, QName),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+dead_letter_headers_exchange(Config) ->
+    {Connection, Session, LinkPair} = init(Config),
+    QName1 = <<"q1">>,
+    QName2 = <<"q2">>,
+    {ok, _} = rabbitmq_amqp_client:declare_queue(
+                LinkPair,
+                QName1,
+                #{arguments => #{<<"x-dead-letter-exchange">> => {utf8, <<"amq.headers">>},
+                                 <<"x-message-ttl">> => {ulong, 0}}}),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName2, #{}),
+    ok =  rabbitmq_amqp_client:bind_queue(LinkPair, QName2, <<"amq.headers">>, <<>>,
+                                          #{<<"my key">> => {uint, 5},
+                                            <<"x-my key">> => {uint, 6},
+                                            <<"x-match">> => {utf8, <<"all-with-x">>}}),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(
+                     Session, <<"test-sender">>, <<"/queue/", QName1/binary>>),
+    wait_for_credit(Sender),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"my receiver">>, <<"/queue/", QName2/binary>>, settled),
+
+    %% Test M1 with properties section.
+    M1 = amqp10_msg:set_message_annotations(
+           #{<<"x-my key">> => 6},
+           amqp10_msg:set_properties(
+             #{message_id => <<"my ID">>},
+             amqp10_msg:set_application_properties(
+               #{<<"my key">> => 5},
+               amqp10_msg:new(<<"tag 1">>, <<"m1">>, false)))),
+    %% Test M2 without properties section.
+    M2 = amqp10_msg:set_message_annotations(
+           #{<<"x-my key">> => 6},
+           amqp10_msg:set_application_properties(
+             #{<<"my key">> => 5},
+             amqp10_msg:new(<<"tag 2">>, <<"m2">>, false))),
+    %% M3 should be dropped due to missing x-header.
+    M3 = amqp10_msg:set_application_properties(
+           #{<<"my key">> => 5},
+           amqp10_msg:new(<<"tag 3">>, <<"m3">>, false)),
+    %% M4 should be dropped due to missing header.
+    M4 = amqp10_msg:set_message_annotations(
+           #{<<"x-my key">> => 6},
+           amqp10_msg:new(<<"tag 4">>, <<"m4">>, false)),
+
+    [ok = amqp10_client:send_msg(Sender, M) || M <- [M1, M2, M3, M4]],
+    ok = wait_for_accepts(4),
+    flush(accepted),
+
+    ok = amqp10_client:flow_link_credit(Receiver, 4, never),
+    [Msg1, Msg2] = receive_messages(Receiver, 2),
+    ?assertEqual(<<"m1">>, amqp10_msg:body_bin(Msg1)),
+    ?assertEqual(<<"m2">>, amqp10_msg:body_bin(Msg2)),
+    ?assertEqual(#{message_id => <<"my ID">>}, amqp10_msg:properties(Msg1)),
+    ?assertEqual(0, maps:size(amqp10_msg:properties(Msg2))),
+
+    %% We expect M3 and M4 to get dropped.
+    %% Since the queue has no messages yet, we shouldn't receive any message.
+    receive Unexp -> ct:fail({unexpected, Unexp})
+    after 10 -> ok
+    end,
+
+    ok = amqp10_client:detach_link(Receiver),
+    ok = amqp10_client:detach_link(Sender),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName1),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName2),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = end_session_sync(Session),
     ok = amqp10_client:close_connection(Connection).
 

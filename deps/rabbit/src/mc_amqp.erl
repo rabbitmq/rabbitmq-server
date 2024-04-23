@@ -32,9 +32,16 @@
     #'v1_0.amqp_value'{} |
     #'v1_0.footer'{}.
 
--define(SIMPLE_VALUE(V), is_binary(V) orelse
-                         is_number(V) orelse
-                         is_boolean(V)).
+-define(MESSAGE_ANNOTATIONS_GUESS_SIZE, 100).
+
+-define(SIMPLE_VALUE(V),
+        is_binary(V) orelse
+        is_number(V) orelse
+        is_boolean(V)).
+
+%% A section that was omitted by the AMQP sender.
+%% We use an empty list as it is cheaper to serialize.
+-define(OMITTED_SECTION, []).
 
 -type amqp10_data() :: [#'v1_0.amqp_sequence'{} | #'v1_0.data'{}] | #'v1_0.amqp_value'{}.
 -type amqp_map() :: [{term(), term()}].
@@ -62,7 +69,7 @@
          properties :: opt(#'v1_0.properties'{}),
          application_properties = [] :: amqp_map(),
          bare_and_footer = uninit :: uninit | binary(),
-         %% byte position within bare_and_footer where body starts
+         bare_and_footer_application_properties_pos = ?OMITTED_SECTION :: non_neg_integer() | ?OMITTED_SECTION,
          bare_and_footer_body_pos = uninit :: uninit | non_neg_integer()
         }).
 
@@ -71,12 +78,18 @@
 %% header because the header fields we're interested in are already set as mc
 %% annotations. We store the original bare message unaltered to preserve
 %% message hashes on the binary encoding of the bare message [§3.2].
-%% The record is called v1 just in case we ever want to introduce a new v2
-%% on disk representation in the future.
+%% We store positions of where the properties, application-properties and body
+%% sections start to be able to parse only individual sections after reading
+%% the message back from a classic or quorum queue. The record is called v1
+%% just in case we ever want to introduce a new v2 on disk representation in
+%% the future.
 -record(v1,
         {
          message_annotations = [] :: amqp_map(),
-         bare_and_footer :: binary()
+         bare_and_footer :: binary(),
+         bare_and_footer_properties_pos :: 0 | ?OMITTED_SECTION,
+         bare_and_footer_application_properties_pos :: non_neg_integer() | ?OMITTED_SECTION,
+         bare_and_footer_body_pos :: non_neg_integer()
         }).
 
 -opaque state() :: #msg_body_decoded{} | #msg_body_encoded{} | #v1{}.
@@ -102,23 +115,48 @@ convert_to(?MODULE, Msg, _Env) ->
 convert_to(TargetProto, Msg, Env) ->
     TargetProto:convert_from(?MODULE, msg_to_sections(Msg), Env).
 
-size(#v1{bare_and_footer = Body}) ->
-    {_MetaSize = 0, byte_size(Body)}.
+size(#v1{message_annotations = MA,
+         bare_and_footer = Body}) ->
+    MetaSize = case MA of
+                   [] -> 0;
+                   _ -> ?MESSAGE_ANNOTATIONS_GUESS_SIZE
+               end,
+    {MetaSize, byte_size(Body)}.
 
 x_header(Key, Msg) ->
     message_annotation(Key, Msg, undefined).
 
-property(correlation_id, #msg_body_encoded{properties = #'v1_0.properties'{correlation_id = Corr}}) ->
+property(_Prop, #msg_body_encoded{properties = undefined}) ->
+    undefined;
+property(Prop, #msg_body_encoded{properties = Props}) ->
+    property0(Prop, Props);
+property(_Prop, #v1{bare_and_footer_properties_pos = ?OMITTED_SECTION}) ->
+    undefined;
+property(Prop, #v1{bare_and_footer = Bin,
+                   bare_and_footer_properties_pos = 0,
+                   bare_and_footer_application_properties_pos = ApPos,
+                   bare_and_footer_body_pos = BodyPos}) ->
+    PropsLen = case ApPos of
+                   ?OMITTED_SECTION -> BodyPos;
+                   _ -> ApPos
+               end,
+    PropsBin = binary_part(Bin, 0, PropsLen),
+    % assertion
+    {PropsDescribed, PropsLen} = amqp10_binary_parser:parse(PropsBin),
+    Props = amqp10_framing:decode(PropsDescribed),
+    property0(Prop, Props).
+
+property0(correlation_id, #'v1_0.properties'{correlation_id = Corr}) ->
     Corr;
-property(message_id, #msg_body_encoded{properties = #'v1_0.properties'{message_id = MsgId}}) ->
+property0(message_id, #'v1_0.properties'{message_id = MsgId}) ->
     MsgId;
-property(user_id, #msg_body_encoded{properties = #'v1_0.properties'{user_id = UserId}}) ->
+property0(user_id, #'v1_0.properties'{user_id = UserId}) ->
     UserId;
-property(subject, #msg_body_encoded{properties = #'v1_0.properties'{subject = Subject}}) ->
+property0(subject, #'v1_0.properties'{subject = Subject}) ->
     Subject;
-property(to, #msg_body_encoded{properties = #'v1_0.properties'{to = To}}) ->
+property0(to, #'v1_0.properties'{to = To}) ->
     To;
-property(_Prop, #msg_body_encoded{}) ->
+property0(_Prop, #'v1_0.properties'{}) ->
     undefined.
 
 routing_headers(Msg, Opts) ->
@@ -221,12 +259,18 @@ protocol_state(#v1{message_annotations = MA0,
                   _ -> true
               end,
     Priority = case Anns of
-                   #{?ANN_PRIORITY := P} -> {ubyte, P};
-                   _ -> undefined
+                   #{?ANN_PRIORITY := P}
+                     when is_integer(P) ->
+                       {ubyte, P};
+                   _ ->
+                       undefined
                end,
     Ttl = case Anns of
-              #{ttl := V} -> {uint, V};
-              _ -> undefined
+              #{ttl := T}
+                when is_integer(T) ->
+                  {uint, T};
+              _ ->
+                  undefined
           end,
     Header = #'v1_0.header'{durable = Durable,
                             priority = Priority,
@@ -240,10 +284,23 @@ prepare(read, Msg) ->
     Msg;
 prepare(store, Msg = #v1{}) ->
     Msg;
-prepare(store, #msg_body_encoded{message_annotations = MA,
-                                 bare_and_footer = BF}) ->
+prepare(store, #msg_body_encoded{
+                  message_annotations = MA,
+                  properties = Props,
+                  bare_and_footer = BF,
+                  bare_and_footer_application_properties_pos = AppPropsPos,
+                  bare_and_footer_body_pos = BodyPos})
+  when is_integer(BodyPos) ->
+    PropsPos = case Props of
+                   undefined -> ?OMITTED_SECTION;
+                   #'v1_0.properties'{} -> 0
+               end,
     #v1{message_annotations = MA,
-        bare_and_footer = BF}.
+        bare_and_footer = BF,
+        bare_and_footer_properties_pos = PropsPos,
+        bare_and_footer_application_properties_pos = AppPropsPos,
+        bare_and_footer_body_pos = BodyPos
+       }.
 
 %% internal
 
@@ -373,18 +430,21 @@ is_empty(_) ->
 
 message_annotation(Key, State, Default)
   when is_binary(Key) ->
-    MA = case State of
-             #msg_body_decoded{message_annotations = MA0} -> MA0;
-             #msg_body_encoded{message_annotations = MA0} -> MA0
-         end,
-    case MA of
+    case message_annotations(State) of
         [] -> Default;
-        _ -> mc_util:amqp_map_get(Key, MA, Default)
+        MA -> mc_util:amqp_map_get(Key, MA, Default)
     end.
 
-message_annotations_as_simple_map(#msg_body_encoded{message_annotations = []}) ->
-    [];
+message_annotations(#msg_body_decoded{message_annotations = L}) -> L;
+message_annotations(#msg_body_encoded{message_annotations = L}) -> L;
+message_annotations(#v1{message_annotations = L}) -> L.
+
 message_annotations_as_simple_map(#msg_body_encoded{message_annotations = Content}) ->
+    message_annotations_as_simple_map0(Content);
+message_annotations_as_simple_map(#v1{message_annotations = Content}) ->
+    message_annotations_as_simple_map0(Content).
+
+message_annotations_as_simple_map0(Content) ->
     %% the section record format really is terrible
     lists:filtermap(fun({{symbol, K}, {_T, V}})
                           when ?SIMPLE_VALUE(V) ->
@@ -393,10 +453,24 @@ message_annotations_as_simple_map(#msg_body_encoded{message_annotations = Conten
                             false
                     end, Content).
 
-application_properties_as_simple_map(#msg_body_encoded{application_properties = []}, L) ->
+application_properties_as_simple_map(
+  #msg_body_encoded{application_properties = Content}, L) ->
+    application_properties_as_simple_map0(Content, L);
+application_properties_as_simple_map(
+  #v1{bare_and_footer_application_properties_pos = ?OMITTED_SECTION}, L) ->
     L;
-application_properties_as_simple_map(#msg_body_encoded{application_properties = Content},
-                                     L) ->
+application_properties_as_simple_map(
+  #v1{bare_and_footer = Bin,
+      bare_and_footer_application_properties_pos = ApPos,
+      bare_and_footer_body_pos = BodyPos}, L) ->
+    ApLen = BodyPos - ApPos,
+    ApBin = binary_part(Bin, ApPos, ApLen),
+    % assertion
+    {ApDescribed, ApLen} = amqp10_binary_parser:parse(ApBin),
+    #'v1_0.application_properties'{content = Content} = amqp10_framing:decode(ApDescribed),
+    application_properties_as_simple_map0(Content, L).
+
+application_properties_as_simple_map0(Content, L) ->
     %% the section record format really is terrible
     lists:foldl(fun({{utf8, K}, {_T, V}}, Acc)
                       when ?SIMPLE_VALUE(V) ->
@@ -445,22 +519,30 @@ msg_body_encoded([_Ignore = #'v1_0.delivery_annotations'{} | Rem], Payload, Msg)
 msg_body_encoded([#'v1_0.message_annotations'{content = MAC} | Rem], Payload, Msg) ->
     msg_body_encoded(Rem, Payload, Msg#msg_body_encoded{message_annotations = MAC});
 msg_body_encoded([{{pos, Pos}, #'v1_0.properties'{} = Props} | Rem], Payload, Msg) ->
-    %% properties is the first bare message section
+    %% properties is the first bare message section.
     Bin = binary_part_bare_and_footer(Payload, Pos),
     msg_body_encoded(Rem, Pos, Msg#msg_body_encoded{properties = Props,
                                                     bare_and_footer = Bin});
 msg_body_encoded([{{pos, Pos}, #'v1_0.application_properties'{content = APC}} | Rem], Payload, Msg)
   when is_binary(Payload) ->
-    %% application-properties is the first bare message section
+    %% AMQP sender omitted properties section.
+    %% application-properties is the first bare message section.
     Bin = binary_part_bare_and_footer(Payload, Pos),
     msg_body_encoded(Rem, Pos, Msg#msg_body_encoded{application_properties = APC,
+                                                    bare_and_footer_application_properties_pos = 0,
                                                     bare_and_footer = Bin});
-msg_body_encoded([{{pos, _Pos}, #'v1_0.application_properties'{content = APC}} | Rem], BarePos, Msg)
+msg_body_encoded([{{pos, Pos}, #'v1_0.application_properties'{content = APC}} | Rem], BarePos, Msg)
   when is_integer(BarePos) ->
-    msg_body_encoded(Rem, BarePos, Msg#msg_body_encoded{application_properties = APC});
+    %% properties is the first bare message section.
+    %% application-properties is the second bare message section.
+    msg_body_encoded(Rem, BarePos, Msg#msg_body_encoded{
+                                     application_properties = APC,
+                                     bare_and_footer_application_properties_pos = Pos - BarePos
+                                    });
 %% Base case: we assert the last part contains the mandatory body:
 msg_body_encoded([{{pos, Pos}, body}], Payload, Msg)
   when is_binary(Payload) ->
+    %% AMQP sender omitted properties and application-properties sections.
     %% The body is the first bare message section.
     Bin = binary_part_bare_and_footer(Payload, Pos),
     Msg#msg_body_encoded{bare_and_footer = Bin,

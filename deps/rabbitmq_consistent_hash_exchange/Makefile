@@ -6,7 +6,7 @@ define PROJECT_APP_EXTRA_KEYS
 endef
 
 DEPS = rabbit_common rabbit khepri khepri_mnesia_migration
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client rabbitmq_amqp_client
 
 PLT_APPS += mnesia rabbitmqctl
 
