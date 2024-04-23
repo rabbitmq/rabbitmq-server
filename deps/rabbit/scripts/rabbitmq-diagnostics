@@ -22,11 +22,11 @@ set -a
 
 maybe_noinput='noinput'
 
-case "$1" in
-    observer)
+case "$@" in
+    *observer*)
         maybe_noinput='input'
         ;;
-    remote_shell)
+    *remote_shell*)
         maybe_noinput='input'
         ;;
     *)
