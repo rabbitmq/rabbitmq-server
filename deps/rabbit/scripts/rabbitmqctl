@@ -55,8 +55,8 @@ unset _tmp_help_requested
 
 maybe_noinput='noinput'
 
-case "$1" in
-    add_user)
+case "$@" in
+    *add_user*)
         if [ "$#" -eq 2 ]
         then
             # In this case, input is required to provide the password:
@@ -91,7 +91,7 @@ case "$1" in
             maybe_noinput='noinput'
         fi
         ;;
-    authenticate_user)
+    *authenticate_user*)
         if [ "$#" -eq 2 ]
         then
             # In this case, input is required to provide the password:
@@ -106,7 +106,7 @@ case "$1" in
             maybe_noinput='noinput'
         fi
         ;;
-    change_password)
+    *change_password*)
         maybe_noinput='input'
         if [ "$#" -gt 2 ]
         then
@@ -118,13 +118,13 @@ case "$1" in
             maybe_noinput='noinput'
         fi
         ;;
-    decode|encode)
+    *decode*|*encode*)
         # It is unlikely that these commands will be run in a shell script loop
         # with redirection, so always assume that stdin input is needed
         #
         maybe_noinput='input'
         ;;
-    eval)
+    *eval*)
         if [ "$#" -eq 1 ]
         then
             # If there is only one argument, 'eval', then input is required
@@ -134,7 +134,7 @@ case "$1" in
             maybe_noinput='input'
         fi
         ;;
-    hash_password)
+    *hash_password*)
         if [ "$#" -eq 1 ]
         then
             # If there is only one argument, 'hash_password', then input is required
