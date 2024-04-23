@@ -19,24 +19,39 @@ jobs:
           - 26_2
     timeout-minutes: 45
     steps:
+    - name: CHECK IF IMAGE WILL PUSH
+      id: authorized
+      run: |
+        if [ -n "${{ secrets.DOCKERHUB_PASSWORD }}" ]; then
+          echo "authorized=true" | tee -a $GITHUB_OUTPUT
+        else
+          echo "authorized=false" | tee -a $GITHUB_OUTPUT
+        fi
     - name: CHECKOUT REPOSITORY
+      if: steps.authorized.outputs.authorized == 'true'
       uses: actions/checkout@v4
     - uses: docker/metadata-action@v5
+      if: steps.authorized.outputs.authorized == 'true'
       id: metadata
       with:
         images: pivotalrabbitmq/rabbitmq
         tags: |
           type=sha,format=long
     - uses: int128/wait-for-docker-image-action@v1
+      if: steps.authorized.outputs.authorized == 'true'
       with:
         tags: ${{ steps.metadata.outputs.tags }}
         timeout-seconds: 3600
         polling-seconds: 60
     - name: CONFIGURE BAZEL
+      if: steps.authorized.outputs.authorized == 'true'
       run: |
+        if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
         cat << EOF >> user.bazelrc
           build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
-
+        EOF
+        fi
+        cat << EOF >> user.bazelrc
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
           build:buildbuddy --color=yes
@@ -44,6 +59,7 @@ jobs:
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
     - name: RUN INTEGRATION TESTS
+      if: steps.authorized.outputs.authorized == 'true'
       run: |
         sudo sysctl -w net.ipv4.tcp_keepalive_time=60
         sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
