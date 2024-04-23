@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 
-SELENIUM_DOCKER_IMAGE=selenium/standalone-chrome:103.0
+arch=$(uname -i)
+if [[ $arch == arm* ]]; then
+  SELENIUM_DOCKER_IMAGE=selenium/standalone-chrome:123.0
+else
+  SELENIUM_DOCKER_IMAGE=seleniarm/standalone-chromium:123.0
+fi 
 
 start_selenium() {
   begin "Starting selenium  ..."
