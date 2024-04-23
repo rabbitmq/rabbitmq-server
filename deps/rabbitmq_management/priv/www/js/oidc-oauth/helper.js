@@ -243,11 +243,23 @@ function oauth_completeLogin() {
 
 function oauth_initiateLogout() {
   if (oauth.sp_initiated) {
-    mgr.signoutRedirect()
+    mgr.metadataService.getEndSessionEndpoint().then(endpoint => {
+      if (endpoint == undefined) {
+        // Logout only from management UI 
+        mgr.removeUser().then(res => {
+          clear_auth()
+          oauth_redirectToLogin()
+        })
+      }else {
+        // OpenId Connect RP-Initiated Logout
+        mgr.signoutRedirect()
+      }
+    })
   } else {
     go_to_authority()
   }
 }
+
 function oauth_completeLogout() {
     clear_auth()
     mgr.signoutRedirectCallback().then(_ => oauth_redirectToLogin())
@@ -264,9 +276,6 @@ function validate_openid_configuration(payload) {
   }
   if (typeof payload.jwks_uri != 'string') {
     throw new Error("Missing jwks_uri")
-  }
-  if (typeof payload.end_session_endpoint != 'string') {
-    throw new Error("Missing end_session_endpoint")
   }
 
 }

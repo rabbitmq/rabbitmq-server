@@ -167,7 +167,7 @@ function start_app_login () {
       });
     }
   })
-  // TODO REFACTOR: this code can be simplified
+  
   if (oauth.enabled) {
     if (has_auth_credentials()) {
       check_login();
