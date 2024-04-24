@@ -456,9 +456,19 @@ vhost_deletion(Config) ->
                                false
                        end, Events))),
 
-        %% TODO: parameter_cleared and vhost_limits_cleared
-        %% ?assertMatch(#{name := PolicyName, vhost := VHost},
-        %%              proplists:get_value(policy_cleared, Events)),
+        ?assertMatch(
+          {value, {parameter_cleared, #{name := <<"limits">>,
+                                        vhost := VHost}}},
+          lists:search(
+            fun ({parameter_cleared, #{component := <<"vhost-limits">>}}) ->
+                    true;
+                (_Event) ->
+                    false
+            end, Events)),
+        ?assertMatch(#{name := <<"limits">>, vhost := VHost},
+                     proplists:get_value(vhost_limits_cleared, Events)),
+        ?assertMatch(#{name := PolicyName, vhost := VHost},
+                     proplists:get_value(policy_cleared, Events)),
 
         ?assertMatch(#{name := VHost,
                        user_who_performed_action := ActingUser},

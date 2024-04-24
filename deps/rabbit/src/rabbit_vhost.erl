@@ -284,8 +284,6 @@ delete(VHost, ActingUser) ->
         #exchange{name = Name} <- rabbit_exchange:list(VHost)],
     rabbit_log:info("Clearing policies and runtime parameters in vhost '~ts' because it's being deleted", [VHost]),
     _ = rabbit_runtime_parameters:clear_vhost(VHost, ActingUser),
-    _ = [rabbit_policy:delete(VHost, proplists:get_value(name, Info), ActingUser)
-         || Info <- rabbit_policy:list(VHost)],
     rabbit_log:debug("Removing vhost '~ts' from the metadata storage because it's being deleted", [VHost]),
     case rabbit_db_vhost:delete(VHost) of
         true ->
