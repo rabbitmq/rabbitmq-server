@@ -82,6 +82,7 @@
 -export([safe_ets_update_counter/3, safe_ets_update_counter/4, safe_ets_update_counter/5,
          safe_ets_update_element/3, safe_ets_update_element/4, safe_ets_update_element/5]).
 -export([is_even/1, is_odd/1]).
+-export([is_over_queue_node_limit/0, is_over_queue_node_limit/1]).
 
 -export([maps_any/2,
          maps_put_truthy/3,
@@ -1595,6 +1596,28 @@ is_even(N) ->
 -spec is_odd(integer()) -> boolean().
 is_odd(N) ->
     (N band 1) =:= 1.
+
+is_over_queue_node_limit() ->
+    is_over_queue_node_limit(node()).
+-spec is_over_queue_node_limit(node()) -> boolean() | {boolean(), integer()|infinity}.
+is_over_queue_node_limit(Node) ->
+%    QueueNodeLimit = rabbit_misc:get_env(rabbit, queue_max_per_node, infinity),
+    QueueNodeLimit = rpc_call(Node, ?MODULE, get_env, [rabbit, queue_max_per_node, infinity]),
+    case get_node_queue_hard_limit(QueueNodeLimit) of
+        infinity ->
+            {false, infinity};
+        NodeLimit ->
+            %% Only fetch this if a limit is set
+            QueueCount = length(rabbit_db_queue:get_all_by_node(Node)),
+            {QueueCount >= NodeLimit, NodeLimit}
+    end.
+
+-spec get_node_queue_hard_limit(infinity | list()) -> infinity | integer().
+get_node_queue_hard_limit(infinity) ->
+    infinity;
+get_node_queue_hard_limit(L) when is_list(L) ->
+    proplists:get_value(hard_limit, L, infinity).
+
 
 -spec maps_put_truthy(Key, Value, Map) -> Map when
       Map :: #{Key => Value}.

@@ -643,7 +643,24 @@ suggested_queue_nodes(Q, DefNode, AllNodes) when ?is_amqqueue(Q) ->
                     M:suggested_queue_nodes(
                       Params, MNode, SNodes, SSNodes, All);
                 _ ->
-                    {MNode, []}
+                    case rabbit_misc:is_over_queue_node_limit(MNode) of
+                        {false, _Limit} ->
+                            {MNode, []};
+                        {true, Limit} ->
+                            %% To get find any other node that might have room,
+                            All = case AllNodes of
+                                      L when is_list(L)     -> L;
+                                      F when is_function(F) -> F()
+                                  end,
+                            case [N || N <- All, false == element(1,rabbit_misc:is_over_queue_node_limit(N))] of
+                                [] ->
+                                    rabbit_misc:precondition_failed("cannot declare queue '~ts': "
+                                                                    "queue limit (~tp) on every node is reached.",
+                                                                    [rabbit_amqqueue:get_resource_name(amqqueue:get_name(Q)), Limit]);
+
+                                FreeNodes -> {hd(FreeNodes), []}
+                            end
+                    end
             end;
         _ ->
             {MNode, []}

@@ -903,6 +903,35 @@ end}.
  end
 }.
 
+
+{mapping, "queue_max_per_node.hard_limit", "rabbit.queue_max_per_node.hard_limit",
+  [{datatype, [{atom, infinity}, integer]}]}.
+
+{translation, "rabbit.queue_max_per_node.hard_limit",
+ fun(Conf) ->
+  case cuttlefish:conf_get("queue_max_per_node.hard_limit", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      infinity  -> infinity;
+      Val when is_integer(Val) andalso Val > 0 -> Val;
+      _         -> cuttlefish:invalid("should be positive integer or 'infinity'")
+  end
+ end
+}.
+
+{mapping, "queue_max_per_node.soft_limit", "rabbit.queue_max_per_node.soft_limit",
+  [{datatype, [{atom, infinity}, integer]}]}.
+
+{translation, "rabbit.queue_max_per_node.soft_limit",
+ fun(Conf) ->
+  case cuttlefish:conf_get("queue_max_per_node.soft_limit", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      infinity  -> infinity;
+      Val when is_integer(Val) andalso Val > 0 -> Val;
+      _         -> cuttlefish:invalid("should be positive integer or 'infinity'")
+  end
+ end
+}.
+
 %% Set the max allowed number of consumers per channel.
 %% `infinity` means "no limit".
 %%

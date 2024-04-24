@@ -224,6 +224,11 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
         Owner, ActingUser, Node) ->
     ok = check_declare_arguments(QueueName, Args),
     Type = get_queue_type(Args),
+
+    %% TODO: Here we need to check if its possible to declare the queue on this
+    %% node, and if not, find another node? If no other node, die. ONLY FOR NON
+    %% CLASSIC MIRROR QUEUES THAT ARE NOT EXCLUSIVE
+
     case rabbit_queue_type:is_enabled(Type) of
         true ->
             Q = amqqueue:new(QueueName,

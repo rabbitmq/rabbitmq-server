@@ -21,6 +21,7 @@
          get_all/1,
          get_all_by_type/1,
          get_all_by_type_and_node/3,
+         get_all_by_node/1,
          list/0,
          count/0,
          count/1,
@@ -821,6 +822,25 @@ get_all_by_type_and_node_in_khepri(VHostName, Type, Node) ->
     Pattern = amqqueue:pattern_match_on_type(Type),
     Qs = rabbit_db:list_in_khepri(khepri_queues_path() ++ [VHostName, rabbit_khepri:if_has_data([?KHEPRI_WILDCARD_STAR_STAR, #if_data_matches{pattern = Pattern}])]),
     [Q || Q <- Qs, amqqueue:qnode(Q) == Node].
+
+
+get_all_by_node(Node) ->
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun() -> get_all_by_node_in_mnesia(Node) end,
+        khepri => fun() -> get_all_by_node_in_khepri(Node) end
+       }).
+
+get_all_by_node_in_mnesia(Node) ->
+    mnesia:async_dirty(
+      fun () ->
+              qlc:e(qlc:q([Q || Q <- mnesia:table(?MNESIA_TABLE),
+                                amqqueue:qnode(Q) == Node]))
+      end).
+
+get_all_by_node_in_khepri(Node) ->
+    Qs = rabbit_db:list_in_khepri(khepri_queues_path()),
+    [Q || Q <- Qs, amqqueue:qnode(Q) == Node].
+
 
 %% -------------------------------------------------------------------
 %% create_or_get().
