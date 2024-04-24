@@ -203,8 +203,28 @@ clear_global(Key, ActingUser) ->
                           {user_who_performed_action, ActingUser}])
     end.
 
-clear_vhost(VHostName, _ActingUser) when is_binary(VHostName) ->
-    ok = rabbit_db_rtparams:delete(VHostName, '_', '_').
+clear_vhost(VHostName, ActingUser) when is_binary(VHostName) ->
+    case rabbit_db_rtparams:delete_vhost(VHostName) of
+        {ok, DeletedParams} ->
+            lists:foreach(
+              fun(#runtime_parameters{key = {_VHost, Component, Name}}) ->
+                      case lookup_component(Component) of
+                          {ok, Mod} ->
+                              event_notify(
+                                parameter_cleared, VHostName, Component,
+                                [{name, Name},
+                                 {user_who_performed_action, ActingUser}]),
+                              Mod:notify_clear(
+                                    VHostName, Component, Name, ActingUser),
+                              ok;
+                          _ ->
+                              ok
+                      end
+              end, DeletedParams),
+            ok;
+        {error, _} = Err ->
+            Err
+    end.
 
 clear_component(<<"policy">>, _) ->
     {error_string, "policies may not be cleared using this method"};

@@ -133,6 +133,7 @@
          clear_payload/1,
          delete/1, delete/2,
          delete_or_fail/1,
+         adv_delete_many/1,
 
          transaction/1,
          transaction/2,
@@ -949,6 +950,9 @@ delete_or_fail(Path) ->
         Error ->
             Error
     end.
+
+adv_delete_many(Path) ->
+    khepri_adv:delete_many(?STORE_ID, Path, ?DEFAULT_COMMAND_OPTIONS).
 
 put(PathPattern, Data) ->
     khepri:put(

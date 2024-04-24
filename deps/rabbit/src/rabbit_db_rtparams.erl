@@ -14,7 +14,8 @@
          get/1,
          get_or_set/2,
          get_all/0, get_all/2,
-         delete/1, delete/3]).
+         delete/1, delete/3,
+         delete_vhost/1]).
 
 -export([khepri_vhost_rp_path/3,
          khepri_global_rp_path/1,
@@ -339,6 +340,55 @@ delete_in_khepri(Key) ->
 delete_matching_in_khepri(VHostName, Comp, Name) ->
     Key = {?any(VHostName), ?any(Comp), ?any(Name)},
     delete_in_khepri(Key).
+
+%% -------------------------------------------------------------------
+%% delete_vhost().
+%% -------------------------------------------------------------------
+
+-spec delete_vhost(VHostName) -> Ret when
+      VHostName :: vhost:name(),
+      Ret :: {ok, Deletions} | {error, Reason :: any()},
+      Deletions :: [#runtime_parameters{}].
+%% @doc Deletes all runtime parameters belonging to the given virtual host.
+%%
+%% @returns an OK tuple containing the deleted runtime parameters if
+%% successful, or an error tuple otherwise.
+%%
+%% @private
+
+delete_vhost(VHostName) when is_binary(VHostName) ->
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun() -> delete_vhost_in_mnesia(VHostName) end,
+        khepri => fun() -> delete_vhost_in_khepri(VHostName) end}).
+
+delete_vhost_in_mnesia(VHostName) ->
+    rabbit_mnesia:execute_mnesia_transaction(
+      fun() ->
+              Deletions = delete_vhost_in_mnesia_tx(VHostName),
+              {ok, Deletions}
+      end).
+
+delete_vhost_in_mnesia_tx(VHostName) ->
+    Match = #runtime_parameters{key = {VHostName, '_', '_'},
+                                _   = '_'},
+    [begin
+         mnesia:delete(?MNESIA_TABLE, Key, write),
+         Record
+     end
+     || #runtime_parameters{key = Key} = Record
+        <- mnesia:match_object(?MNESIA_TABLE, Match, read)].
+
+delete_vhost_in_khepri(VHostName) ->
+    Path = khepri_vhost_rp_path(
+             VHostName, ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
+    case rabbit_khepri:adv_delete_many(Path) of
+        {ok, Props} ->
+            {ok, rabbit_khepri:collect_payloads(Props)};
+        {error, _} = Err ->
+            Err
+    end.
+
+%% -------------------------------------------------------------------
 
 khepri_rp_path() ->
     [?MODULE].
