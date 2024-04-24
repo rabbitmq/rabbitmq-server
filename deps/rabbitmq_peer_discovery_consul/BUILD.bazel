@@ -79,6 +79,11 @@ rabbitmq_integration_suite(
     name = "config_schema_SUITE",
 )
 
+rabbitmq_integration_suite(
+    name = "system_SUITE",
+    size = "large",
+)
+
 rabbitmq_suite(
     name = "rabbitmq_peer_discovery_consul_SUITE",
     size = "medium",
