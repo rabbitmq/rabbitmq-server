@@ -506,9 +506,15 @@ vhost_is_created_with_default_limits(Config) ->
     Env = [{vhosts, [{<<"id">>, Limits++Pattern}]}],
     ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, 0,
                             application, set_env, [rabbit, default_limits, Env])),
-    ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
-    ?assertEqual(Limits, rabbit_ct_broker_helpers:rpc(Config, 0,
-                            rabbit_vhost_limit, list, [VHost])).
+    try
+        ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
+        ?assertEqual(Limits, rabbit_ct_broker_helpers:rpc(Config, 0,
+                                rabbit_vhost_limit, list, [VHost]))
+    after
+        rabbit_ct_broker_helpers:rpc(
+          Config, 0,
+          application, unset_env, [rabbit, default_limits])
+    end.
 
 vhost_is_created_with_operator_policies(Config) ->
     VHost = <<"vhost1">>,
@@ -517,9 +523,15 @@ vhost_is_created_with_operator_policies(Config) ->
     Env = [{operator, [{PolicyName, Definition}]}],
     ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, 0,
                             application, set_env, [rabbit, default_policies, Env])),
-    ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
-    ?assertNotEqual(not_found, rabbit_ct_broker_helpers:rpc(Config, 0,
-                            rabbit_policy, lookup_op, [VHost, PolicyName])).
+    try
+        ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
+        ?assertNotEqual(not_found, rabbit_ct_broker_helpers:rpc(Config, 0,
+                                rabbit_policy, lookup_op, [VHost, PolicyName]))
+    after
+        rabbit_ct_broker_helpers:rpc(
+          Config, 0,
+          application, unset_env, [rabbit, default_policies])
+    end.
 
 vhost_is_created_with_default_user(Config) ->
     VHost = <<"vhost1">>,
