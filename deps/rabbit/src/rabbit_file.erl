@@ -244,7 +244,6 @@ recursive_delete1(Path) ->
         false -> case prim_file:delete(Path) of
                      ok              -> ok;
                      {error, enoent} -> ok; %% Path doesn't exist anyway
-                     {error, ebusy}  -> ok; %% Ignore (rabbitmq/rabbitmq-server#11047)
                      {error, Err}    -> {error, {Path, Err}}
                  end;
         true  -> case prim_file:list_dir(Path) of
@@ -259,6 +258,7 @@ recursive_delete1(Path) ->
                              ok ->
                                  case prim_file:del_dir(Path) of
                                      ok           -> ok;
+                                     {error, ebusy}  -> ok; %% Can't delete a mount point
                                      {error, Err} -> {error, {Path, Err}}
                                  end;
                              {error, _Err} = Error ->
