@@ -108,8 +108,16 @@
 -spec from_amqp_records([amqp10_client_types:amqp10_msg_record()]) ->
     amqp10_msg().
 from_amqp_records([#'v1_0.transfer'{} = Transfer | Records]) ->
-    lists:foldl(fun parse_from_amqp/2, #amqp10_msg{transfer = Transfer,
-                                                   body = unset}, Records).
+    case lists:foldl(fun parse_from_amqp/2,
+                     #amqp10_msg{transfer = Transfer,
+                                 body = unset},
+                     Records) of
+        #amqp10_msg{body = Body} = Msg
+          when is_list(Body) ->
+            Msg#amqp10_msg{body = lists:reverse(Body)};
+        Msg ->
+            Msg
+    end.
 
 -spec to_amqp_records(amqp10_msg()) -> [amqp10_client_types:amqp10_msg_record()].
 to_amqp_records(#amqp10_msg{transfer = T,
@@ -327,7 +335,7 @@ set_properties(Props, #amqp10_msg{properties = Current} = Msg) ->
     P = maps:fold(fun(message_id, {T, _V} = TypeVal, Acc) when T =:= ulong orelse
                                                                T =:= uuid orelse
                                                                T =:= binary orelse
-                                                               T =:= uf8 ->
+                                                               T =:= utf8 ->
                           Acc#'v1_0.properties'{message_id = TypeVal};
                      (message_id, V, Acc) when is_binary(V) ->
                           %% backward compat clause
@@ -421,7 +429,7 @@ wrap_ap_value(V) when is_binary(V) ->
 wrap_ap_value(V) when is_list(V) ->
     utf8(list_to_binary(V));
 wrap_ap_value(V) when is_atom(V) ->
-    utf8(atom_to_list(V)).
+    utf8(atom_to_binary(V)).
 
 
 %% LOCAL
@@ -444,10 +452,16 @@ parse_from_amqp(#'v1_0.application_properties'{} = APs, AmqpMsg) ->
     AmqpMsg#amqp10_msg{application_properties = APs};
 parse_from_amqp(#'v1_0.amqp_value'{} = Value, AmqpMsg) ->
     AmqpMsg#amqp10_msg{body = Value};
-parse_from_amqp(#'v1_0.amqp_sequence'{} = Seq, AmqpMsg) ->
-    AmqpMsg#amqp10_msg{body = [Seq]};
-parse_from_amqp(#'v1_0.data'{} = Data, AmqpMsg) ->
-    AmqpMsg#amqp10_msg{body = [Data]};
+parse_from_amqp(#'v1_0.amqp_sequence'{} = Seq, AmqpMsg = #amqp10_msg{body = Body0}) ->
+    Body = if Body0 =:= unset -> [Seq];
+              is_list(Body0) -> [Seq | Body0]
+           end,
+    AmqpMsg#amqp10_msg{body = Body};
+parse_from_amqp(#'v1_0.data'{} = Data, AmqpMsg = #amqp10_msg{body = Body0}) ->
+    Body = if Body0 =:= unset -> [Data];
+              is_list(Body0) -> [Data | Body0]
+           end,
+    AmqpMsg#amqp10_msg{body = Body};
 parse_from_amqp(#'v1_0.footer'{} = Header, AmqpMsg) ->
     AmqpMsg#amqp10_msg{footer = Header}.
 
