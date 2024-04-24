@@ -219,7 +219,6 @@ jobs:
           key: ${{ runner.os }}-test-result-cache-${{ steps.hash.outputs.hash }}
           restore-keys: |
             ${{ runner.os }}-test-result-cache-
-          save-always: true
       - name: PREP CACHE DIR
         run: |
           mkdir -p /home/runner/test-result-cache/${{ steps.hash.outputs.hash }}
@@ -233,7 +232,7 @@ jobs:
           path: |
             /home/runner/test-result-cache/marker
             /home/runner/test-result-cache/${{ steps.hash.outputs.hash }}
-          retention-days: 1
+          retention-days: 7
 #@ for plugin in data.values.internal_deps:
   _: #@ template.replace(test_plugin(plugin, ["load-test-result-cache"], data.values[plugin].suites))
 #@ end
@@ -254,6 +253,7 @@ jobs:
           key: ${{ runner.os }}-test-result-cache-${{ needs.load-test-result-cache.outputs.hash }}
           restore-keys: |
             ${{ runner.os }}-test-result-cache-
+          fail-on-cache-miss: true
           save-always: true
       - name: UPDATE CACHE
         uses: actions/download-artifact@v4
