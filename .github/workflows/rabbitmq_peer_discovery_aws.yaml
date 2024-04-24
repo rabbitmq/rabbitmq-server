@@ -30,12 +30,8 @@ jobs:
     - name: CHECKOUT REPOSITORY
       if: steps.authorized.outputs.authorized == 'true'
       uses: actions/checkout@v4
-<<<<<<< HEAD
-    - uses: docker/metadata-action@v4
-=======
     - uses: docker/metadata-action@v5
       if: steps.authorized.outputs.authorized == 'true'
->>>>>>> 07c97580bd (Make the OCI workflows conditional on push access)
       id: metadata
       with:
         images: pivotalrabbitmq/rabbitmq
