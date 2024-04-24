@@ -15,7 +15,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
 
   @info_keys ~w(name durable auto_delete
             arguments pid recoverable_slaves
-            recoverable_mirrors)a
+            recoverable_mirrors type)a
   @info_key_aliases [recoverable_mirrors: :recoverable_slaves]
 
   def info_keys(), do: @info_keys
