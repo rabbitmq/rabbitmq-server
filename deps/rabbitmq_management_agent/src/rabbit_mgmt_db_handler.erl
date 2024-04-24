@@ -92,6 +92,10 @@ handle_event(_, State) ->
 handle_info(_Info, State) ->
     {ok, State}.
 
+terminate(stop, _State) ->
+    %% if the node is stopping, we don't want to wait
+    %% 5 seconds for the statistics to get disabled
+    ok;
 terminate(_Arg, _State) ->
     ensure_statistics_disabled(),
     ok.
