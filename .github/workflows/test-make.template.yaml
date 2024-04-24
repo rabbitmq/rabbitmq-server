@@ -192,6 +192,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       hash: ${{ steps.hash.outputs.hash }}
+      previous_run_attempt: ${{ steps.previous-attempt.outputs.number }}
     steps:
       - name: CHECKOUT REPOSITORY
         uses: actions/checkout@v4
@@ -257,6 +258,10 @@ jobs:
         with:
           path: /home/runner/test-result-cache/
           key: ${{ runner.os }}-test-result-cache-${{ needs.load-test-result-cache.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ runner.os }}-test-result-cache-${{ needs.load-test-result-cache.outputs.hash }}-${{ github.run_number }}-${{ needs.load-test-result-cache.outputs.previous_run_attempt }}
+            ${{ runner.os }}-test-result-cache-${{ needs.load-test-result-cache.outputs.hash }}-${{ github.run_number }}-
+            ${{ runner.os }}-test-result-cache-${{ needs.load-test-result-cache.outputs.hash }}-
           save-always: true
       - name: UPDATE CACHE
         uses: actions/download-artifact@v4
