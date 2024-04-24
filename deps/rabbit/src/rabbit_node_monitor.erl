@@ -14,6 +14,7 @@
          cluster_status_filename/0, coordination_filename/0,
          stream_filename/0,
          quorum_filename/0, default_quorum_filename/0,
+         classic_filename/0,
          prepare_cluster_status_files/0,
          write_cluster_status/1, read_cluster_status/0,
          update_cluster_status/0, reset_cluster_status/0]).
@@ -82,6 +83,9 @@ quorum_filename() ->
 
 default_quorum_filename() ->
     filename:join(rabbit:data_dir(), "quorum").
+
+classic_filename() ->
+    filename:join(rabbit:data_dir(), "msg_stores").
 
 -spec prepare_cluster_status_files() -> 'ok' | no_return().
 
