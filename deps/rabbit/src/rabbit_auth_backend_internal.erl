@@ -17,8 +17,9 @@
 -export([add_user/3, add_user/4, add_user/5, delete_user/2, lookup_user/1, exists/1,
          change_password/3, clear_password/2,
          hash_password/2, change_password_hash/2, change_password_hash/3,
-         set_tags/3, set_permissions/6, clear_permissions/3, clear_permissions_for_vhost/2, set_permissions_globally/5,
-         set_topic_permissions/6, clear_topic_permissions/3, clear_topic_permissions/4, clear_topic_permissions_for_vhost/2,
+         set_tags/3, set_permissions/6, clear_permissions/3, set_permissions_globally/5,
+         set_topic_permissions/6, clear_topic_permissions/3, clear_topic_permissions/4,
+         clear_all_permissions_for_vhost/2,
          add_user_sans_validation/3, put_user/2, put_user/3,
          update_user/5,
          update_user_with_hash/5,
@@ -540,8 +541,35 @@ clear_permissions(Username, VirtualHost, ActingUser) ->
             erlang:raise(Class, Error, Stacktrace)
     end.
 
-clear_permissions_for_vhost(VirtualHost, _ActingUser) ->
-    rabbit_db_user:clear_matching_user_permissions('_', VirtualHost).
+-spec clear_all_permissions_for_vhost(VirtualHost, ActingUser) -> Ret when
+      VirtualHost :: rabbit_types:vhost(),
+      ActingUser :: rabbit_types:username(),
+      Ret :: ok | {error, Reason :: any()}.
+
+clear_all_permissions_for_vhost(VirtualHost, ActingUser) ->
+    case rabbit_db_user:clear_all_permissions_for_vhost(VirtualHost) of
+        {ok, Deletions} ->
+            lists:foreach(
+              fun (#topic_permission{topic_permission_key =
+                      #topic_permission_key{user_vhost =
+                         #user_vhost{username = Username}}}) ->
+                      rabbit_event:notify(
+                        topic_permission_deleted,
+                        [{user, Username},
+                         {vhost, VirtualHost},
+                         {user_who_performed_action, ActingUser}]);
+                  (#user_permission{user_vhost =
+                                    #user_vhost{username = Username}}) ->
+                      rabbit_event:notify(
+                        permission_deleted,
+                        [{user, Username},
+                         {vhost, VirtualHost},
+                         {user_who_performed_action, ActingUser}])
+              end, Deletions),
+            ok;
+        {error, _} = Err ->
+            Err
+    end.
 
 set_permissions_globally(Username, ConfigurePerm, WritePerm, ReadPerm, ActingUser) ->
     VirtualHosts = rabbit_vhost:list_names(),
@@ -641,9 +669,6 @@ clear_topic_permissions(Username, VirtualHost, Exchange, ActingUser) ->
                                [Exchange, Username, VirtualHost, Error]),
             erlang:raise(Class, Error, Stacktrace)
     end.
-
-clear_topic_permissions_for_vhost(VirtualHost, _ActingUser) ->
-    rabbit_db_user:clear_matching_topic_permissions('_', VirtualHost, '_').
 
 put_user(User, ActingUser) -> put_user(User, undefined, ActingUser).
 

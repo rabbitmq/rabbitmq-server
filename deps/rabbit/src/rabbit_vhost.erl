@@ -272,8 +272,7 @@ delete(VHost, ActingUser) ->
     %% calls would be responsible for the atomicity, not this code.
     %% Clear the permissions first to prohibit new incoming connections when deleting a vhost
     rabbit_log:info("Clearing permissions in vhost '~ts' because it's being deleted", [VHost]),
-    _ = rabbit_auth_backend_internal:clear_permissions_for_vhost(VHost, ActingUser),
-    _ = rabbit_auth_backend_internal:clear_topic_permissions_for_vhost(VHost, ActingUser),
+    ok = rabbit_auth_backend_internal:clear_all_permissions_for_vhost(VHost, ActingUser),
     rabbit_log:info("Deleting queues in vhost '~ts' because it's being deleted", [VHost]),
     QDelFun = fun (Q) -> rabbit_amqqueue:delete(Q, false, false, ActingUser) end,
     [begin
