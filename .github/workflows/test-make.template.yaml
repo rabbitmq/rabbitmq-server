@@ -26,6 +26,12 @@
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/(@= name @)/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+      #@ if name == "rabbit":
+      - name: INSTALL DOTNET
+        run: |
+          sudo apt-get update && \
+          sudo apt-get install -y dotnet-sdk-6.0
+      #@ end
       - name: RESTORE BUILT REPO
         uses: actions/cache@v4
         with:

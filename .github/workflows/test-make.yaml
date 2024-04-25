@@ -1037,6 +1037,10 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbit/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: INSTALL DOTNET
+      run: |
+        sudo apt-get update && \
+        sudo apt-get install -y dotnet-sdk-6.0
     - name: RESTORE BUILT REPO
       uses: actions/cache@v4
       with:
