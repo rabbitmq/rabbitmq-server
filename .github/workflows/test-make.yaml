@@ -41,6 +41,13 @@ jobs:
       run: |
         PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
         echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
+    - name: CACHE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+    - name: BUILD
+      run: |
+        make
   test-amqp10_client:
     name: Test amqp10_client
     needs:
@@ -58,6 +65,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/amqp10_client/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -71,8 +83,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -164,6 +174,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/amqp10_common/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -177,8 +192,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -280,6 +293,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/amqp_client/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -293,8 +311,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -386,6 +402,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/oauth2_client/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -399,8 +420,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -492,6 +511,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbit_common/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -505,8 +529,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -638,6 +660,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_ct_client_helpers/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -651,8 +678,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -724,6 +749,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_ct_helpers/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -737,8 +767,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -820,6 +848,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_stream_common/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -833,8 +866,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -916,6 +947,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/trust_store_http/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -929,8 +965,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -1011,6 +1045,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbit/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -1024,8 +1063,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -2508,6 +2545,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_cli/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -2525,9 +2567,6 @@ jobs:
         else
           echo "passed=false" | tee -a $GITHUB_OUTPUT
         fi
-    - name: CHECKOUT REPOSITORY
-      if: steps.check.outputs.passed != 'true'
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       if: steps.check.outputs.passed != 'true'
       uses: erlef/setup-beam@v1
@@ -2584,6 +2623,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_amqp_client/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -2597,8 +2641,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -2681,6 +2723,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_amqp1_0/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -2694,8 +2741,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -2768,6 +2813,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_auth_backend_cache/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -2781,8 +2831,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -2885,6 +2933,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_auth_backend_http/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -2898,8 +2951,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -3002,6 +3053,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_auth_backend_ldap/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -3015,8 +3071,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -3119,6 +3173,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_auth_backend_oauth2/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -3132,8 +3191,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -3296,6 +3353,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_auth_mechanism_ssl/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -3309,8 +3371,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -3383,6 +3443,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_aws/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -3396,8 +3461,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -3470,6 +3533,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_consistent_hash_exchange/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -3483,8 +3551,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -3567,6 +3633,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_event_exchange/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -3580,8 +3651,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -3684,6 +3753,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_federation/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -3697,8 +3771,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -3841,6 +3913,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_federation_management/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -3854,8 +3931,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -3938,6 +4013,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_jms_topic_exchange/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -3951,8 +4031,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -4055,6 +4133,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_management/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -4068,8 +4151,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -4282,6 +4363,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_management_agent/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -4295,8 +4381,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -4409,6 +4493,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_mqtt/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -4422,8 +4511,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -4686,6 +4773,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_peer_discovery_aws/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -4699,8 +4791,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -4803,6 +4893,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_peer_discovery_common/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -4816,8 +4911,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -4900,6 +4993,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_peer_discovery_consul/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -4913,8 +5011,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -5007,6 +5103,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_peer_discovery_etcd/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -5020,8 +5121,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -5124,6 +5223,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_peer_discovery_k8s/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -5137,8 +5241,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -5231,6 +5333,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_prelaunch/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -5244,8 +5351,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -5338,6 +5443,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_prometheus/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -5351,8 +5461,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -5455,6 +5563,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_random_exchange/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -5468,8 +5581,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -5542,6 +5653,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_recent_history_exchange/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -5555,8 +5671,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -5639,6 +5753,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_sharding/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -5652,8 +5771,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -5746,6 +5863,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_shovel/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -5759,8 +5881,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -5933,6 +6053,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_shovel_management/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -5946,8 +6071,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -6050,6 +6173,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_stomp/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -6063,8 +6191,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -6227,6 +6353,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_stream/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -6240,8 +6371,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -6384,6 +6513,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_stream_management/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -6397,8 +6531,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -6481,6 +6613,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_top/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -6494,8 +6631,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -6568,6 +6703,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_tracing/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -6581,8 +6721,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -6665,6 +6803,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_trust_store/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -6678,8 +6821,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -6772,6 +6913,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_web_dispatch/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -6785,8 +6931,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -6879,6 +7023,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_web_mqtt/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -6892,8 +7041,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -7006,6 +7153,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_web_mqtt_examples/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -7019,8 +7171,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -7093,6 +7243,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_web_stomp/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -7106,8 +7261,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -7240,6 +7393,11 @@ jobs:
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_web_stomp_examples/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+    - name: RESTORE BUILT REPO
+      uses: actions/cache@v4
+      with:
+        key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+        fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v3
       with:
@@ -7253,8 +7411,6 @@ jobs:
       run: |
         set -x
         tree /home/runner/test-result-cache
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:

@@ -26,6 +26,11 @@
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/(@= name @)/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+      - name: RESTORE BUILT REPO
+        uses: actions/cache@v4
+        with:
+          key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+          fail-on-cache-miss: true
       - name: RESTORE TEST RESULT CACHE
         uses: actions/cache/restore@v3
         with:
@@ -39,8 +44,6 @@
         run: |
           set -x
           tree /home/runner/test-result-cache
-      - name: CHECKOUT REPOSITORY
-        uses: actions/checkout@v4
       - name: SETUP ERLANG/ELIXIR
         uses: erlef/setup-beam@v1
         with:
@@ -126,6 +129,11 @@
     env:
       SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_cli/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
     steps:
+      - name: RESTORE BUILT REPO
+        uses: actions/cache@v4
+        with:
+          key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+          fail-on-cache-miss: true
       - name: RESTORE TEST RESULT CACHE
         uses: actions/cache/restore@v3
         with:
@@ -143,9 +151,6 @@
           else
             echo "passed=false" | tee -a $GITHUB_OUTPUT
           fi
-      - name: CHECKOUT REPOSITORY
-        if: steps.check.outputs.passed != 'true'
-        uses: actions/checkout@v4
       - name: SETUP ERLANG/ELIXIR
         if: steps.check.outputs.passed != 'true'
         uses: erlef/setup-beam@v1
@@ -231,6 +236,13 @@ jobs:
         run: |
           PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
           echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
+      - name: CACHE BUILT REPO
+        uses: actions/cache@v4
+        with:
+          key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+      - name: BUILD
+        run: |
+          make
 #@ for plugin in data.values.internal_deps:
   _: #@ template.replace(test_plugin(plugin, ["prepare"], data.values[plugin].suites))
 #@ end
