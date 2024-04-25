@@ -35,6 +35,10 @@
             ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-${{ github.run_number }}-${{ needs.prepare.outputs.previous_run_attempt }}
             ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-${{ github.run_number }}-
             ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-
+      - name: PRINT CACHED RESULTS
+        run: |
+          set -x
+          tree /home/runner/test-result-cache
       - name: CHECKOUT REPOSITORY
         uses: actions/checkout@v4
       - name: SETUP ERLANG/ELIXIR
