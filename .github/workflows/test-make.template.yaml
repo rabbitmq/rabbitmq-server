@@ -95,6 +95,7 @@
           fi
 #@ end
       - name: SAVE CACHE COPY
+        if: always()
         uses: actions/upload-artifact@v4.3.1
         with:
           name: trc-(@= name @)-${{ matrix.metadata_store }}-${{ matrix.otp_version }}

@@ -135,6 +135,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-system
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-amqp10_client-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -250,6 +251,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-serial_number
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-amqp10_common-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -355,6 +357,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-amqp_client-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -460,6 +463,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-oauth2_client-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -605,6 +609,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-worker_pool
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbit_common-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -690,6 +695,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_ct_client_helpers-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -785,6 +791,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-terraform
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_ct_helpers-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -880,6 +887,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_stream_core
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_stream_common-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -965,6 +973,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-trust_store_http-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -2469,6 +2478,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-vhost
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbit-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -2641,6 +2651,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-management
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_amqp_client-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -2727,6 +2738,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_amqp1_0-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -2843,6 +2855,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_auth_cache
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_auth_backend_cache-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -2959,6 +2972,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_auth_backend_http-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -3075,6 +3089,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_auth_backend_ldap-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -3251,6 +3266,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-wildcard_match
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_auth_backend_oauth2-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -3337,6 +3353,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_auth_mechanism_ssl-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -3423,6 +3440,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_aws-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -3519,6 +3537,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_exchange_type_consistent_hash
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_consistent_hash_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -3635,6 +3654,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_event_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -3791,6 +3811,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-unit_inbroker
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_federation-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -3887,6 +3908,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-federation_mgmt
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_federation_management-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -4003,6 +4025,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-sjx_evaluation
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_jms_topic_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -4229,6 +4252,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-stats
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_management-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -4355,6 +4379,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_mgmt_slide
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_management_agent-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -4631,6 +4656,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-v5
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_mqtt-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -4747,6 +4773,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_peer_discovery_aws-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -4843,6 +4870,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-config_schema
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_peer_discovery_common-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -4949,6 +4977,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-rabbitmq_peer_discovery_consul
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_peer_discovery_consul-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -5065,6 +5094,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_peer_discovery_etcd-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -5171,6 +5201,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-rabbitmq_peer_discovery_k8s
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_peer_discovery_k8s-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -5277,6 +5308,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_prelaunch_file
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_prelaunch-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -5393,6 +5425,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_prometheus_http
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_prometheus-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -5479,6 +5512,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_random_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -5575,6 +5609,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-system
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_recent_history_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -5681,6 +5716,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_sharding
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_sharding-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -5867,6 +5903,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-shovel_status_command
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_shovel-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -5983,6 +6020,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_shovel_mgmt_util
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_shovel_management-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -6159,6 +6197,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-util
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_stomp-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -6315,6 +6354,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_stream_utils
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_stream-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -6411,6 +6451,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-http
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_stream_management-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -6497,6 +6538,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_top-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -6593,6 +6635,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_tracing
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_tracing-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -6699,6 +6742,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-system
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_trust_store-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -6805,6 +6849,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_web_dispatch_unit
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_web_dispatch-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -6931,6 +6976,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-system
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_web_mqtt-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -7017,6 +7063,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_web_mqtt_examples-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -7163,6 +7210,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_web_stomp-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
@@ -7249,6 +7297,7 @@ jobs:
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
     - name: SAVE CACHE COPY
+      if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
         name: trc-rabbitmq_web_stomp_examples-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
