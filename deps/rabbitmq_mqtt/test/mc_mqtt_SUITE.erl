@@ -22,8 +22,7 @@ groups() ->
        roundtrip_amqp_response_topic,
        roundtrip_amqpl,
        roundtrip_amqpl_correlation,
-       amqp_to_mqtt_amqp_value_section_binary,
-       amqp_to_mqtt_amqp_value_section_list,
+       amqp_to_mqtt_body_sections,
        roundtrip_amqp_user_property,
        roundtrip_amqpl_user_property,
        roundtrip_amqp_content_type,
@@ -166,22 +165,28 @@ roundtrip_amqpl_correlation(_Config) ->
     ?assertMatch(#mqtt_msg{props = #{'Correlation-Data' := Correlation}},
                  roundtrip(mc_amqpl, Msg)).
 
-%% Binaries should be sent unmodified.
-amqp_to_mqtt_amqp_value_section_binary(_Config) ->
-    Val = amqp_value({binary, <<0, 255>>}),
-    #mqtt_msg{props = Props,
-              payload = Payload} = amqp_to_mqtt([Val]),
-    ?assertEqual(<<0, 255>>, iolist_to_binary(Payload)),
-    ?assertEqual(#{}, Props).
+amqp_to_mqtt_body_sections(_Config) ->
+    %% An amqp-value section should get AMQP encoded.
+    Body1 = [#'v1_0.amqp_value'{content = {list, [{uint, 3}]}}],
+    #mqtt_msg{props = #{'Content-Type' := <<"message/vnd.rabbitmq.amqp">>},
+              payload = Payload1} = amqp_to_mqtt(Body1),
+    ?assertEqual(Body1, amqp10_framing:decode_bin(iolist_to_binary(Payload1))),
 
-%% Lists cannot be converted to a text representation.
-%% They should be encoded using the AMQP 1.0 type system.
-amqp_to_mqtt_amqp_value_section_list(_Config) ->
-    Val = amqp_value({list, [{uint, 3}]}),
+    %% amqp-sequence sections should get AMQP encoded.
+    Body2 = [#'v1_0.amqp_sequence'{content = [true, false]},
+             #'v1_0.amqp_sequence'{content = [{binary, <<0, 255>>}]}],
+    #mqtt_msg{props = #{'Content-Type' := <<"message/vnd.rabbitmq.amqp">>},
+              payload = Payload2} = amqp_to_mqtt(Body2),
+    ?assertEqual(Body2, amqp10_framing:decode_bin(iolist_to_binary(Payload2))),
+
+    %% Binary data of multiple data sections should get concatenated.
+    Body3 = [#'v1_0.data'{content = <<0>>},
+             #'v1_0.data'{content = <<11, 10>>},
+             #'v1_0.data'{content = <<9>>}],
     #mqtt_msg{props = Props,
-              payload = Payload} = amqp_to_mqtt([Val]),
-    ?assertEqual(#{'Content-Type' => <<"message/vnd.rabbitmq.amqp">>}, Props),
-    ?assert(iolist_size(Payload) > 0).
+              payload = Payload3} = amqp_to_mqtt(Body3),
+    ?assertEqual(0, maps:size(Props)),
+    ?assertEqual(<<0, 11, 10, 9>>, iolist_to_binary(Payload3)).
 
 %% When converting from MQTT 5.0 to AMQP 1.0, we expect to lose some User Property.
 roundtrip_amqp_user_property(_Config) ->

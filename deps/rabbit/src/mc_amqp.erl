@@ -39,11 +39,19 @@
         is_number(V) orelse
         is_boolean(V)).
 
+%% §3.2
+-define(DESCRIPTOR_CODE_DATA, 16#75).
+-define(DESCRIPTOR_CODE_AMQP_SEQUENCE, 16#76).
+-define(DESCRIPTOR_CODE_AMQP_VALUE, 16#77).
+
 %% A section that was omitted by the AMQP sender.
 %% We use an empty list as it is cheaper to serialize.
 -define(OMITTED_SECTION, []).
 
 -type amqp10_data() :: [#'v1_0.amqp_sequence'{} | #'v1_0.data'{}] | #'v1_0.amqp_value'{}.
+-type body_descriptor_code() :: ?DESCRIPTOR_CODE_DATA |
+                                ?DESCRIPTOR_CODE_AMQP_SEQUENCE |
+                                ?DESCRIPTOR_CODE_AMQP_VALUE.
 -type amqp_map() :: [{term(), term()}].
 -type opt(T) :: T | undefined.
 
@@ -70,7 +78,8 @@
          application_properties = [] :: amqp_map(),
          bare_and_footer = uninit :: uninit | binary(),
          bare_and_footer_application_properties_pos = ?OMITTED_SECTION :: non_neg_integer() | ?OMITTED_SECTION,
-         bare_and_footer_body_pos = uninit :: uninit | non_neg_integer()
+         bare_and_footer_body_pos = uninit :: uninit | non_neg_integer(),
+         body_code = uninit :: uninit | body_descriptor_code()
         }).
 
 %% This representation is how we store the message on disk in classic queues
@@ -89,7 +98,8 @@
          bare_and_footer :: binary(),
          bare_and_footer_properties_pos :: 0 | ?OMITTED_SECTION,
          bare_and_footer_application_properties_pos :: non_neg_integer() | ?OMITTED_SECTION,
-         bare_and_footer_body_pos :: non_neg_integer()
+         bare_and_footer_body_pos :: non_neg_integer(),
+         body_code :: body_descriptor_code()
         }).
 
 -opaque state() :: #msg_body_decoded{} | #msg_body_encoded{} | #v1{}.
@@ -289,7 +299,8 @@ prepare(store, #msg_body_encoded{
                   properties = Props,
                   bare_and_footer = BF,
                   bare_and_footer_application_properties_pos = AppPropsPos,
-                  bare_and_footer_body_pos = BodyPos})
+                  bare_and_footer_body_pos = BodyPos,
+                  body_code = BodyCode})
   when is_integer(BodyPos) ->
     PropsPos = case Props of
                    undefined -> ?OMITTED_SECTION;
@@ -299,7 +310,8 @@ prepare(store, #msg_body_encoded{
         bare_and_footer = BF,
         bare_and_footer_properties_pos = PropsPos,
         bare_and_footer_application_properties_pos = AppPropsPos,
-        bare_and_footer_body_pos = BodyPos
+        bare_and_footer_body_pos = BodyPos,
+        body_code = BodyCode
        }.
 
 %% internal
@@ -310,17 +322,17 @@ msg_to_sections(#msg_body_decoded{header = H,
                                   application_properties = APC,
                                   data = Data,
                                   footer = FC}) ->
-    S0 = case FC of
-             [] ->
-                 [];
-             _ ->
-                 [#'v1_0.footer'{content = FC}]
+    S0 = case Data of
+             #'v1_0.amqp_value'{} ->
+                 [Data];
+             _ when is_list(Data) ->
+                 Data
          end,
-    S = case Data of
-            #'v1_0.amqp_value'{} ->
-                [Data | S0];
-            _ when is_list(Data) ->
-                Data ++ S0
+    S = case FC of
+            [] ->
+                S0;
+            _ ->
+                S0 ++ [#'v1_0.footer'{content = FC}]
         end,
     to_sections(H, MAC, P, APC, S);
 msg_to_sections(#msg_body_encoded{header = H,
@@ -328,18 +340,36 @@ msg_to_sections(#msg_body_encoded{header = H,
                                   properties = P,
                                   application_properties = APC,
                                   bare_and_footer = BareAndFooter,
-                                  bare_and_footer_body_pos = BodyPos}) ->
+                                  bare_and_footer_body_pos = BodyPos,
+                                  body_code = BodyCode}) ->
     BodyAndFooterBin = binary_part(BareAndFooter,
                                    BodyPos,
                                    byte_size(BareAndFooter) - BodyPos),
-    %% TODO do not parse entire AMQP encoded amqp-value or amqp-sequence section body
-    BodyAndFooter = amqp10_framing:decode_bin(BodyAndFooterBin),
+    BodyAndFooter = case BodyCode of
+                        ?DESCRIPTOR_CODE_DATA ->
+                            amqp10_framing:decode_bin(BodyAndFooterBin);
+                        _ ->
+                            [{amqp_encoded_body_and_footer, BodyAndFooterBin}]
+                    end,
     to_sections(H, MAC, P, APC, BodyAndFooter);
 msg_to_sections(#v1{message_annotations = MAC,
-                    bare_and_footer = BareAndFooterBin}) ->
-    %% TODO do not parse entire AMQP encoded amqp-value or amqp-sequence section body
+                    bare_and_footer = BareAndFooterBin,
+                    body_code = ?DESCRIPTOR_CODE_DATA}) ->
     BareAndFooter = amqp10_framing:decode_bin(BareAndFooterBin),
-    to_sections(undefined, MAC, BareAndFooter).
+    to_sections(undefined, MAC, BareAndFooter);
+msg_to_sections(#v1{message_annotations = MAC,
+                    bare_and_footer = BareAndFooter,
+                    bare_and_footer_body_pos = BodyPos
+                   }) ->
+    Tail = case BodyPos =:= 0 of
+               true ->
+                   [{amqp_encoded_body_and_footer, BareAndFooter}];
+               false ->
+                   {Bin, BodyAndFooterBin} = split_binary(BareAndFooter, BodyPos),
+                   Sections = amqp10_framing:decode_bin(Bin),
+                   Sections ++ [{amqp_encoded_body_and_footer, BodyAndFooterBin}]
+           end,
+    to_sections(undefined, MAC, Tail).
 
 to_sections(H, MAC, P, APC, Tail) ->
     S0 = case APC of
@@ -540,16 +570,18 @@ msg_body_encoded([{{pos, Pos}, #'v1_0.application_properties'{content = APC}} | 
                                      bare_and_footer_application_properties_pos = Pos - BarePos
                                     });
 %% Base case: we assert the last part contains the mandatory body:
-msg_body_encoded([{{pos, Pos}, body}], Payload, Msg)
+msg_body_encoded([{{pos, Pos}, {body, Code}}], Payload, Msg)
   when is_binary(Payload) ->
     %% AMQP sender omitted properties and application-properties sections.
     %% The body is the first bare message section.
     Bin = binary_part_bare_and_footer(Payload, Pos),
     Msg#msg_body_encoded{bare_and_footer = Bin,
-                         bare_and_footer_body_pos = 0};
-msg_body_encoded([{{pos, Pos}, body}], BarePos, Msg)
+                         bare_and_footer_body_pos = 0,
+                         body_code = Code};
+msg_body_encoded([{{pos, Pos}, {body, Code}}], BarePos, Msg)
   when is_integer(BarePos) ->
-    Msg#msg_body_encoded{bare_and_footer_body_pos = Pos - BarePos}.
+    Msg#msg_body_encoded{bare_and_footer_body_pos = Pos - BarePos,
+                         body_code = Code}.
 
 %% We extract the binary part of the payload exactly once when the bare message starts.
 binary_part_bare_and_footer(Payload, Start) ->

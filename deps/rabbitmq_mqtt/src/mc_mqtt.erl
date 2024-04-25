@@ -50,22 +50,32 @@ convert_from(mc_amqp, Sections, Env) ->
     lists:foldl(
       fun(#'v1_0.header'{} = S, Acc) ->
               setelement(1, Acc, S);
+         (_Ignore = #'v1_0.delivery_annotations'{}, Acc) ->
+              Acc;
          (#'v1_0.message_annotations'{content = List}, Acc) ->
               setelement(2, Acc, List);
          (#'v1_0.properties'{} = S, Acc) ->
               setelement(3, Acc, S);
          (#'v1_0.application_properties'{content = List}, Acc) ->
               setelement(4, Acc, List);
-         (#'v1_0.footer'{}, Acc) ->
-              Acc;
+         ({amqp_encoded_body_and_footer, Body}, Acc0) ->
+              %% assertions
+              [] = element(5, Acc0),
+              undefined = element(6, Acc0),
+              Acc = setelement(5, Acc0, [Body]),
+              setelement(6, Acc, ?CONTENT_TYPE_AMQP);
          (#'v1_0.data'{content = C}, Acc) ->
+              %% assertion
+              undefined = element(6, Acc),
               setelement(5, Acc, [C | element(5, Acc)]);
-         (#'v1_0.amqp_value'{content = {binary, Bin}}, Acc) ->
-              setelement(5, Acc, [Bin]);
-         (Val, Acc)
+         (Val, Acc0)
            when is_record(Val, 'v1_0.amqp_value') orelse
                 is_record(Val, 'v1_0.amqp_sequence') ->
-              amqp_encode(Val, Acc)
+              IoData = amqp10_framing:encode_bin(Val),
+              Acc = setelement(5, Acc0, [IoData | element(5, Acc0)]),
+              setelement(6, Acc, ?CONTENT_TYPE_AMQP);
+         (_Ignore = #'v1_0.footer'{}, Acc) ->
+              Acc
       end, {undefined, [], undefined, [], [], undefined}, Sections),
     Qos = case Header of
               #'v1_0.header'{durable = false} ->
@@ -119,14 +129,14 @@ convert_from(mc_amqp, Sections, Env) ->
                 [] -> Props2;
                 UserProp -> Props2#{'User-Property' => UserProp}
             end,
-    Payload = lists:flatten(lists:reverse(PayloadRev)),
+    Payload = lists:reverse(PayloadRev),
     #mqtt_msg{retain = false,
               qos = Qos,
               dup = false,
               props = Props,
               payload = Payload};
 convert_from(mc_amqpl, #content{properties = PBasic,
-                                payload_fragments_rev = Payload},
+                                payload_fragments_rev = PFR},
             _Env) ->
     #'P_basic'{expiration = Expiration,
                delivery_mode = DelMode,
@@ -178,7 +188,7 @@ convert_from(mc_amqpl, #content{properties = PBasic,
     #mqtt_msg{retain = false,
               qos = Qos,
               dup = false,
-              payload = lists:reverse(Payload),
+              payload = lists:reverse(PFR),
               props = P};
 convert_from(_SourceProto, _, _) ->
     not_implemented.
@@ -334,10 +344,9 @@ convert_to(mc_amqpl, #mqtt_msg{qos = Qos,
                     delivery_mode = DelMode,
                     correlation_id = CorrId,
                     expiration = Expiration},
-    PFR = case is_binary(Payload) of
-              true -> [Payload];
-              false -> lists:reverse(Payload)
-          end,
+    %% In practice, when converting from mc_mqtt to mc_amqpl, Payload will
+    %% be a single binary, in which case iolist_to_binary/1 is cheap.
+    PFR = [iolist_to_binary(Payload)],
     #content{class_id = 60,
              properties = BP,
              properties_bin = none,
@@ -545,11 +554,6 @@ amqp_to_utf8_string({T, _Val})
        %% Raw binary data is not UTF-8 encoded.
        T =:= binary ->
     cannot_convert.
-
-amqp_encode(Data, Acc0) ->
-    Bin = amqp10_framing:encode_bin(Data),
-    Acc = setelement(5, Acc0, [Bin | element(5, Acc0)]),
-    setelement(6, Acc, ?CONTENT_TYPE_AMQP).
 
 durable(?QOS_0) -> false;
 durable(?QOS_1) -> true.

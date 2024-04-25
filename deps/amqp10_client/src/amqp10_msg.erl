@@ -422,15 +422,17 @@ wrap_ap_value(true) ->
     {boolean, true};
 wrap_ap_value(false) ->
     {boolean, false};
-wrap_ap_value(V) when is_integer(V) ->
-    {uint, V};
 wrap_ap_value(V) when is_binary(V) ->
     utf8(V);
 wrap_ap_value(V) when is_list(V) ->
     utf8(list_to_binary(V));
 wrap_ap_value(V) when is_atom(V) ->
-    utf8(atom_to_binary(V)).
-
+    utf8(atom_to_binary(V));
+wrap_ap_value(V) when is_integer(V) ->
+    case V < 0 of
+        true -> {int, V};
+        false -> {uint, V}
+    end.
 
 %% LOCAL
 header_value(durable, undefined) -> false;

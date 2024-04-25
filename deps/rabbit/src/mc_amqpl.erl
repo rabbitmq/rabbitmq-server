@@ -61,42 +61,49 @@ convert_from(mc_amqp, Sections, Env) ->
     lists:foldl(
       fun(#'v1_0.header'{} = S, Acc) ->
               setelement(1, Acc, S);
+         (_Ignore = #'v1_0.delivery_annotations'{}, Acc) ->
+              Acc;
          (#'v1_0.message_annotations'{} = S, Acc) ->
               setelement(2, Acc, S);
          (#'v1_0.properties'{} = S, Acc) ->
               setelement(3, Acc, S);
          (#'v1_0.application_properties'{} = S, Acc) ->
               setelement(4, Acc, S);
-         (_Ignore = #'v1_0.delivery_annotations'{}, Acc) ->
-              Acc;
-         (#'v1_0.footer'{} = S, Acc) ->
-              setelement(6, Acc, S);
-         (undefined, Acc) ->
-              Acc;
-         (BodySection, Acc) ->
+         (BodySect, Acc)
+           when is_record(BodySect, 'v1_0.data') orelse
+                is_record(BodySect, 'v1_0.amqp_sequence') orelse
+                is_record(BodySect, 'v1_0.amqp_value') ->
               Body = element(5, Acc),
-              setelement(5, Acc, [BodySection | Body])
+              setelement(5, Acc, [BodySect | Body]);
+         (Body = {amqp_encoded_body_and_footer, _}, Acc) ->
+              %% assertions
+              [] = element(5, Acc),
+              setelement(5, Acc, Body);
+         (#'v1_0.footer'{} = S, Acc) ->
+              setelement(6, Acc, S)
       end,
       {undefined, undefined, undefined, undefined, [], undefined},
       Sections),
 
-    {PayloadRev, Type0} =
-        case BodyRev of
-            [#'v1_0.data'{content = Bin}] when is_binary(Bin) ->
-                {[Bin], undefined};
-            [#'v1_0.data'{content = Bin}] when is_list(Bin) ->
-                {lists:reverse(Bin), undefined};
-            _ ->
-                %% anything else needs to be encoded
-                %% TODO: This is potentially inefficient, but #content.payload_fragments_rev expects
-                %% currently a flat list of binaries. Can we make rabbit_writer work
-                %% with an iolist instead?
-                BinsRev = [begin
-                               IoList = amqp10_framing:encode_bin(X),
-                               erlang:iolist_to_binary(IoList)
-                           end || X <- BodyRev],
-                {BinsRev, ?AMQP10_TYPE}
-        end,
+    {PFR, Type0} = case BodyRev of
+                       [#'v1_0.data'{} | _] ->
+                           %% We assert that the body consists of one or more data sections.
+                           %% If there are multiple data sections, we concatenate the binary data.
+                           PFR0 = lists:map(
+                                    fun(#'v1_0.data'{content = Content}) ->
+                                            %% In practice, when converting from mc_amqp
+                                            %% to mc_amqpl, Content will be a single binary,
+                                            %% in which case iolist_to_binary/1 is cheap.
+                                            iolist_to_binary(Content)
+                                    end, BodyRev),
+                           {PFR0, undefined};
+                       {amqp_encoded_body_and_footer, BodyAndFooterBin} ->
+                           {[BodyAndFooterBin], ?AMQP10_TYPE};
+                       _ ->
+                           %% Anything else needs to be AMQP encoded.
+                           PFR0 = lists:map(fun amqp_encoded_binary/1, BodyRev),
+                           {PFR0, ?AMQP10_TYPE}
+                   end,
     #'v1_0.properties'{message_id = MsgId,
                        user_id = UserId0,
                        reply_to = ReplyTo0,
@@ -170,28 +177,28 @@ convert_from(mc_amqp, Sections, Env) ->
                                      undefined ->
                                          Headers2;
                                      #'v1_0.application_properties'{} ->
-                                         APropBin = iolist_to_binary(amqp10_framing:encode_bin(AProp)),
+                                         APropBin = amqp_encoded_binary(AProp),
                                          [{?AMQP10_APP_PROPERTIES_HEADER, longstr, APropBin} | Headers2]
                                  end,
                       Headers4 = case Prop of
                                      undefined ->
                                          Headers3;
                                      #'v1_0.properties'{} ->
-                                         PropBin = iolist_to_binary(amqp10_framing:encode_bin(Prop)),
+                                         PropBin = amqp_encoded_binary(Prop),
                                          [{?AMQP10_PROPERTIES_HEADER, longstr, PropBin} | Headers3]
                                  end,
                       Headers5 = case MAnn of
                                      undefined ->
                                          Headers4;
                                      #'v1_0.message_annotations'{} ->
-                                         MAnnBin = iolist_to_binary(amqp10_framing:encode_bin(MAnn)),
+                                         MAnnBin = amqp_encoded_binary(MAnn),
                                          [{?AMQP10_MESSAGE_ANNOTATIONS_HEADER, longstr, MAnnBin} | Headers4]
                                  end,
                       Headers6 = case Footer of
                                      undefined ->
                                          Headers5;
                                      #'v1_0.footer'{} ->
-                                         FootBin = iolist_to_binary(amqp10_framing:encode_bin(Footer)),
+                                         FootBin = amqp_encoded_binary(Footer),
                                          [{?AMQP10_FOOTER, longstr, FootBin} | Headers5]
                                  end,
                       Headers6;
@@ -210,7 +217,7 @@ convert_from(mc_amqp, Sections, Env) ->
                      undefined
              end,
 
-    BP = #'P_basic'{message_id =  MsgId091,
+    BP = #'P_basic'{message_id = MsgId091,
                     delivery_mode = DelMode,
                     expiration = Expiration,
                     user_id = UserId,
@@ -230,7 +237,7 @@ convert_from(mc_amqp, Sections, Env) ->
     #content{class_id = ?CLASS_ID,
              properties = BP,
              properties_bin = none,
-             payload_fragments_rev = PayloadRev};
+             payload_fragments_rev = PFR};
 convert_from(_SourceProto, _, _) ->
     not_implemented.
 
@@ -306,7 +313,7 @@ prepare(store, Content) ->
 
 convert_to(?MODULE, Content, _Env) ->
     Content;
-convert_to(mc_amqp, #content{payload_fragments_rev = Payload} = Content, Env) ->
+convert_to(mc_amqp, #content{payload_fragments_rev = PFR} = Content, Env) ->
     #content{properties = Props} = prepare(read, Content),
     #'P_basic'{message_id = MsgId0,
                expiration = Expiration,
@@ -414,9 +421,9 @@ convert_to(mc_amqp, #content{payload_fragments_rev = Payload} = Content, Env) ->
     BodySections = case Type of
                        ?AMQP10_TYPE ->
                            amqp10_framing:decode_bin(
-                             iolist_to_binary(lists:reverse(Payload)));
+                             iolist_to_binary(lists:reverse(PFR)));
                        _ ->
-                           [#'v1_0.data'{content = lists:reverse(Payload)}]
+                           [#'v1_0.data'{content = lists:reverse(PFR)}]
                    end,
     Tail = case amqp10_section_header(?AMQP10_FOOTER, Headers) of
                undefined ->
@@ -792,3 +799,6 @@ amqp10_section_header(Header, Headers) ->
         _ ->
             undefined
     end.
+
+amqp_encoded_binary(Section) ->
+    iolist_to_binary(amqp10_framing:encode_bin(Section)).

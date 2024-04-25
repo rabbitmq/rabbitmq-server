@@ -223,11 +223,11 @@ pm(<<16#c1, S:8,CountAndValue:S/binary,R/binary>>, O, B) ->
 %% * stop when we reach the message body (data or amqp-sequence or amqp-value section).
 %% * include number of bytes left for properties and application-properties sections.
 pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_DATA, _Rest/binary>>, true, B) ->
-    reached_body(B);
+    reached_body(B, ?DESCRIPTOR_CODE_DATA);
 pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_AMQP_SEQUENCE, _Rest/binary>>, true, B) ->
-    reached_body(B);
+    reached_body(B, ?DESCRIPTOR_CODE_AMQP_SEQUENCE);
 pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_AMQP_VALUE, _Rest/binary>>, true, B) ->
-    reached_body(B);
+    reached_body(B, ?DESCRIPTOR_CODE_AMQP_VALUE);
 pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_PROPERTIES, Rest0/binary>>, O = true, B) ->
     [Value | Rest] = pm(Rest0, O, B+3),
     [{{pos, B}, {described, {ulong, ?DESCRIPTOR_CODE_PROPERTIES}, Value}} | Rest];
@@ -235,23 +235,23 @@ pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES, Res
     [Value | Rest] = pm(Rest0, O, B+3),
     [{{pos, B}, {described, {ulong, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES}, Value}} | Rest];
 pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_DATA:64, _Rest/binary>>, true, B) ->
-    reached_body(B);
+    reached_body(B, ?DESCRIPTOR_CODE_DATA);
 pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_AMQP_SEQUENCE:64, _Rest/binary>>, true, B) ->
-    reached_body(B);
+    reached_body(B, ?DESCRIPTOR_CODE_AMQP_SEQUENCE);
 pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_AMQP_VALUE:64, _Rest/binary>>, true, B) ->
-    reached_body(B);
+    reached_body(B, ?DESCRIPTOR_CODE_AMQP_VALUE);
 pm(<<?DESCRIBED, ?CODE_SYM_8, _S:8, "amqp:data:binary", _Rest/binary>>, true, B) ->
-    reached_body(B);
+    reached_body(B, ?DESCRIPTOR_CODE_DATA);
 pm(<<?DESCRIBED, ?CODE_SYM_8, _S:8, "amqp:amqp-sequence:list", _Rest/binary>>, true, B) ->
-    reached_body(B);
+    reached_body(B, ?DESCRIPTOR_CODE_AMQP_SEQUENCE);
 pm(<<?DESCRIBED, ?CODE_SYM_8, _S:8, "amqp:amqp-value:*", _Rest/binary>>, true, B) ->
-    reached_body(B);
+    reached_body(B, ?DESCRIPTOR_CODE_AMQP_VALUE);
 pm(<<?DESCRIBED, ?CODE_SYM_32, _S:32, "amqp:data:binary", _Rest/binary>>, true, B) ->
-    reached_body(B);
+    reached_body(B, ?DESCRIPTOR_CODE_DATA);
 pm(<<?DESCRIBED, ?CODE_SYM_32, _S:32, "amqp:amqp-sequence:list", _Rest/binary>>, true, B) ->
-    reached_body(B);
+    reached_body(B, ?DESCRIPTOR_CODE_AMQP_SEQUENCE);
 pm(<<?DESCRIBED, ?CODE_SYM_32, _S:32, "amqp:amqp-value:*", _Rest/binary>>, true, B) ->
-    reached_body(B);
+    reached_body(B, ?DESCRIPTOR_CODE_AMQP_VALUE);
 pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_PROPERTIES:64, Rest0/binary>>, O = true, B) ->
     [Value | Rest] = pm(Rest0, O, B+10),
     [{{pos, B}, {described, {ulong, ?DESCRIPTOR_CODE_PROPERTIES}, Value}} | Rest];
@@ -327,5 +327,5 @@ pm_compound(UnitSize, Bin, O, B) ->
     <<_IgnoreCount:UnitSize, Value/binary>> = Bin,
     pm(Value, O, B + UnitSize div 8).
 
-reached_body(Position) ->
-    [{{pos, Position}, body}].
+reached_body(Position, DescriptorCode) ->
+    [{{pos, Position}, {body, DescriptorCode}}].

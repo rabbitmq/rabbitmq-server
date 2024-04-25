@@ -35,6 +35,8 @@ groups() ->
        mqtt_amqpl_mqtt,
        mqtt_amqp_mqtt,
        amqp_mqtt_amqp,
+       amqp_mqtt_qos0,
+       amqp_mqtt_qos1,
        mqtt_stomp_mqtt,
        mqtt_stream
       ]
@@ -344,6 +346,100 @@ amqp_mqtt_amqp(Config) ->
     ok = emqtt:disconnect(C),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
+
+%% Send messages with different AMQP body sections and
+%% consume via MQTT 5.0 with a QoS 0 subscription.
+amqp_mqtt_qos0(Config) ->
+    amqp_mqtt(0, Config).
+
+%% Send messages with different AMQP body sections and
+%% consume via MQTT 5.0 with a QoS 1 subscription.
+amqp_mqtt_qos1(Config) ->
+    amqp_mqtt(1, Config).
+
+amqp_mqtt(Qos, Config) ->
+    ClientId = Container = atom_to_binary(?FUNCTION_NAME),
+
+    C = connect(ClientId, Config),
+    {ok, _, [Qos]} = emqtt:subscribe(C, <<"my/topic">>, Qos),
+
+    Host = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    OpnConf = #{address => Host,
+                port => Port,
+                container_id => Container,
+                sasl => {plain, <<"guest">>, <<"guest">>}},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(
+                     Session, <<"sender">>, <<"/exchange/amq.topic/key/my.topic">>),
+    receive {amqp10_event, {link, Sender, credited}} -> ok
+    after 2000 -> ct:fail(credited_timeout)
+    end,
+
+    %% single amqp-value section
+    Body1 = #'v1_0.amqp_value'{content = {binary, <<0, 255>>}},
+    Body2 = #'v1_0.amqp_value'{content = false},
+    %% single amqp-sequene section
+    Body3 = [#'v1_0.amqp_sequence'{content = [{binary, <<0, 255>>}]}],
+    %% multiple amqp-sequene sections
+    Body4 = [#'v1_0.amqp_sequence'{content = [{long, -1}]},
+             #'v1_0.amqp_sequence'{content = [true, {utf8, <<"🐇"/utf8>>}]}],
+    %% single data section
+    Body5 = [#'v1_0.data'{content = <<0, 255>>}],
+    %% multiple data sections
+    Body6 = [#'v1_0.data'{content = <<0, 1>>},
+             #'v1_0.data'{content = <<2, 3>>}],
+
+    [ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<>>, Body, true)) ||
+     Body <- [Body1, Body2, Body3, Body4, Body5, Body6]],
+
+    ok = amqp10_client:detach_link(Sender),
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
+
+    receive {publish, MqttMsg1} ->
+                #{client_pid := C,
+                  qos := Qos,
+                  topic := <<"my/topic">>,
+                  payload := Payload1,
+                  properties := Props
+                 } = MqttMsg1,
+                ?assertEqual([Body1], amqp10_framing:decode_bin(Payload1)),
+                case rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                       Config, message_containers_store_amqp_v1) of
+                    true ->
+                        ?assertEqual({ok, <<"message/vnd.rabbitmq.amqp">>},
+                                     maps:find('Content-Type', Props));
+                    false ->
+                        ok
+                end
+    after 5000 -> ct:fail({missing_publish, ?LINE})
+    end,
+    receive {publish, #{payload := Payload2}} ->
+                ?assertEqual([Body2], amqp10_framing:decode_bin(Payload2))
+    after 5000 -> ct:fail({missing_publish, ?LINE})
+    end,
+    receive {publish, #{payload := Payload3}} ->
+                ?assertEqual(Body3, amqp10_framing:decode_bin(Payload3))
+    after 5000 -> ct:fail({missing_publish, ?LINE})
+    end,
+    receive {publish, #{payload := Payload4}} ->
+                ?assertEqual(Body4, amqp10_framing:decode_bin(Payload4))
+    after 5000 -> ct:fail({missing_publish, ?LINE})
+    end,
+    receive {publish, #{payload := Payload5}} ->
+                ?assertEqual(<<0, 255>>, Payload5)
+    after 5000 -> ct:fail({missing_publish, ?LINE})
+    end,
+    receive {publish, #{payload := Payload6}} ->
+                %% We expect that RabbitMQ concatenates the binaries of multiple data sections.
+                ?assertEqual(<<0, 1, 2, 3>>, Payload6)
+    after 5000 -> ct:fail({missing_publish, ?LINE})
+    end,
+
+    ok = emqtt:disconnect(C).
 
 mqtt_stomp_mqtt(Config) ->
     {ok, StompC0} = stomp_connect(Config),

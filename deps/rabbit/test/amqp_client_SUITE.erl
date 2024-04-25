@@ -52,6 +52,7 @@ groups() ->
        roundtrip_with_drain_quorum_queue,
        roundtrip_with_drain_stream,
        amqp_stream_amqpl,
+       amqp_quorum_queue_amqpl,
        message_headers_conversion,
        multiple_sessions,
        server_closes_link_classic_queue,
@@ -619,41 +620,149 @@ roundtrip_with_drain(Config, QueueType, QName)
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = amqp10_client:close_connection(Connection).
 
-%% Send a message with a body containing a single AMQP 1.0 value section
-%% to a stream and consume via AMQP 0.9.1.
 amqp_stream_amqpl(Config) ->
+    amqp_amqpl(<<"stream">>, Config).
+
+amqp_quorum_queue_amqpl(Config) ->
+    amqp_amqpl(<<"quorum">>, Config).
+
+%% Send messages with different body sections to a queue and consume via AMQP 0.9.1.
+amqp_amqpl(QType, Config) ->
     {Connection, Session, LinkPair} = init(Config),
     QName = atom_to_binary(?FUNCTION_NAME),
-    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, <<"stream">>}}},
-    {ok, #{type := <<"stream">>}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType}}},
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
 
     Address = <<"/amq/queue/", QName/binary>>,
-    {ok, Sender} = amqp10_client:attach_sender_link(
-                     Session, <<"test-sender">>, Address),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"test-sender">>, Address),
     wait_for_credit(Sender),
-    OutMsg = amqp10_msg:new(<<"my-tag">>, {'v1_0.amqp_value', {binary, <<0, 255>>}}, true),
-    ok = amqp10_client:send_msg(Sender, OutMsg),
-    flush("final"),
+
+    %% single amqp-value section
+    Body1 = #'v1_0.amqp_value'{content = {binary, <<0, 255>>}},
+    Body2 = #'v1_0.amqp_value'{content = false},
+    %% single amqp-sequene section
+    Body3 = [#'v1_0.amqp_sequence'{content = [{binary, <<0, 255>>}]}],
+    %% multiple amqp-sequene sections
+    Body4 = [#'v1_0.amqp_sequence'{content = [{long, -1}]},
+             #'v1_0.amqp_sequence'{content = [true, {utf8, <<"🐇"/utf8>>}]}],
+    %% single data section
+    Body5 = [#'v1_0.data'{content = <<0, 255>>}],
+    %% multiple data sections
+    Body6 = [#'v1_0.data'{content = <<0, 1>>},
+             #'v1_0.data'{content = <<2, 3>>}],
+
+    %% Send only body sections
+    [ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<>>, Body, true)) ||
+     Body <- [Body1, Body2, Body3, Body4, Body5, Body6]],
+    %% Send with application-properties
+    ok = amqp10_client:send_msg(
+           Sender,
+           amqp10_msg:set_application_properties(
+             #{"my int" => -2},
+             amqp10_msg:new(<<>>, Body1, true))),
+    %% Send with properties
+    CorrelationID = <<"my correlation ID">>,
+    ok = amqp10_client:send_msg(
+           Sender,
+           amqp10_msg:set_properties(
+             #{correlation_id => CorrelationID},
+             amqp10_msg:new(<<>>, Body1, true))),
+    %% Send with both properties and application-properties
+    ok = amqp10_client:send_msg(
+           Sender,
+           amqp10_msg:set_properties(
+             #{correlation_id => CorrelationID},
+             amqp10_msg:set_application_properties(
+               #{"my int" => -2},
+               amqp10_msg:new(<<>>, Body1, true)))),
+    %% Send with footer
+    Footer = #'v1_0.footer'{content = [{{symbol, <<"my footer">>}, {ubyte, 255}}]},
+    ok = amqp10_client:send_msg(
+           Sender,
+           amqp10_msg:from_amqp_records(
+             [#'v1_0.transfer'{delivery_tag = {binary, <<>>},
+                               settled = true,
+                               message_format = {uint, 0}},
+              Body1,
+              Footer])),
+
     ok = amqp10_client:detach_link(Sender),
+    flush(detached),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config),
     #'basic.qos_ok'{} =  amqp_channel:call(Ch, #'basic.qos'{global = false,
-                                                            prefetch_count = 1}),
+                                                            prefetch_count = 100}),
     CTag = <<"my-tag">>,
+    Args = case QType of
+               <<"stream">> -> [{<<"x-stream-offset">>, longstr, <<"first">>}];
+               <<"quorum">> -> []
+           end,
     #'basic.consume_ok'{} = amqp_channel:subscribe(
                               Ch,
                               #'basic.consume'{
                                  queue = QName,
                                  consumer_tag = CTag,
-                                 arguments = [{<<"x-stream-offset">>, longstr, <<"first">>}]},
+                                 arguments = Args},
                               self()),
-    receive
-        {#'basic.deliver'{consumer_tag = CTag,
-                          redelivered  = false},
-         #amqp_msg{props = #'P_basic'{type = <<"amqp-1.0">>}}} ->
-            ok
-    after 5000 ->
-              ct:fail(basic_deliver_timeout)
+
+    receive {#'basic.deliver'{consumer_tag = CTag,
+                              redelivered  = false},
+             #amqp_msg{payload = Payload1,
+                       props = #'P_basic'{type = <<"amqp-1.0">>}}} ->
+                ?assertEqual([Body1], amqp10_framing:decode_bin(Payload1))
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload2,
+                          props = #'P_basic'{type = <<"amqp-1.0">>}}} ->
+                ?assertEqual([Body2], amqp10_framing:decode_bin(Payload2))
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload3,
+                          props = #'P_basic'{type = <<"amqp-1.0">>}}} ->
+                ?assertEqual(Body3, amqp10_framing:decode_bin(Payload3))
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload4,
+                          props = #'P_basic'{type = <<"amqp-1.0">>}}} ->
+                ?assertEqual(Body4, amqp10_framing:decode_bin(Payload4))
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload5,
+                          props = #'P_basic'{type = undefined}}} ->
+                ?assertEqual(<<0, 255>>, Payload5)
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload6,
+                          props = #'P_basic'{type = undefined}}} ->
+                %% We expect that RabbitMQ concatenates the binaries of multiple data sections.
+                ?assertEqual(<<0, 1, 2, 3>>, Payload6)
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload7,
+                          props = #'P_basic'{headers = Headers7}}} ->
+                ?assertEqual([Body1], amqp10_framing:decode_bin(Payload7)),
+                ?assertEqual({signedint, -2}, rabbit_misc:table_lookup(Headers7, <<"my int">>))
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload8,
+                          props = #'P_basic'{correlation_id = Corr8}}} ->
+                ?assertEqual([Body1], amqp10_framing:decode_bin(Payload8)),
+                ?assertEqual(CorrelationID, Corr8)
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload9,
+                          props = #'P_basic'{headers = Headers9,
+                                             correlation_id = Corr9}}} ->
+                ?assertEqual([Body1], amqp10_framing:decode_bin(Payload9)),
+                ?assertEqual(CorrelationID, Corr9),
+                ?assertEqual({signedint, -2}, rabbit_misc:table_lookup(Headers9, <<"my int">>))
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload10}} ->
+                %% RabbitMQ converts the entire AMQP encoded body including the footer
+                %% to AMQP legacy payload.
+                ?assertEqual([Body1, Footer], amqp10_framing:decode_bin(Payload10))
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
     end,
 
     ok = rabbit_ct_client_helpers:close_channel(Ch),
