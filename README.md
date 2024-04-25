@@ -14,7 +14,7 @@ multi-protocol messaging and streaming broker. It supports:
 
 ## Installation
 
- * [Installation guides](https://rabbitmq.com/download.html) for various platforms
+ * [Installation guides](https://www.rabbitmq.com/docs/download) for various platforms
  * [Kubernetes Cluster Operator](https://rabbitmq.com/kubernetes/operator/operator-overview.html)
  * [Changelog](https://www.rabbitmq.com/changelog.html)
  * [Releases](https://github.com/rabbitmq/rabbitmq-server/releases) on GitHub
