@@ -36,7 +36,7 @@
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}
-          key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+          key: ${{ runner.os }}-make-cache-${{ needs.prepare.outputs.hash }}
           fail-on-cache-miss: true
       - name: RESTORE TEST RESULT CACHE
         uses: actions/cache/restore@v3
@@ -138,7 +138,7 @@
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}
-          key: ${{ runner.os }}-make-cache-${{ needs.load-test-result-cache.outputs.hash }}
+          key: ${{ runner.os }}-make-cache-${{ needs.prepare.outputs.hash }}
           fail-on-cache-miss: true
       - name: RESTORE TEST RESULT CACHE
         uses: actions/cache/restore@v3
@@ -154,7 +154,6 @@
           set -x
           tree /home/runner/test-result-cache
       - name: SETUP ERLANG/ELIXIR
-        if: steps.check.outputs.passed != 'true'
         uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ matrix.otp_version }}
@@ -164,7 +163,6 @@
           mkdir -p ${{ env.SUCCESS_PATH }}
       - name: TEST
         id: test
-        if: steps.check.outputs.passed != 'true'
         run: |
           if [[ -f ${{ env.SUCCESS_PATH }}/checks ]]; then
             echo "checks already passed for this key ${{ needs.prepare.outputs.hash }}"
