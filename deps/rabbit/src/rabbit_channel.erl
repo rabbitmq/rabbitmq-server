@@ -1069,7 +1069,7 @@ check_node_queue_limit(#resource{name = QueueName}, Args, none) ->
     Type = rabbit_amqqueue:get_queue_type(Args),
     case Type of
         %% For classic queues, we handle the queue limit check in rabbit_classic_queue:declare,
-        %% to check the limits in the other nodes of the cluster, if any.
+        %% to potentially create the queue on another node in the cluster, if any.
         rabbit_classic_queue ->
             ok;
         _ ->
@@ -2565,10 +2565,11 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
         {error, not_found} ->
             %% enforce the limit for newly declared queues only
             check_vhost_queue_limit(QueueName, VHostPath),
-
-            %% TODO: Here we need to check if its possible to declare the queue on this
-            %% node. If its exclussive, kill connection. If not exclusive, only channel
-            %% But, if it is non mirror classic queue, handle it in rabbit_amqqueue:declare instead?
+            %% Here we need to check if its possible to declare the queue on this
+            %% node. If its exclussive, we kill the channel then the connection.
+            %% If not exclusive, we only kill the channel.
+            %% If it is 'non mirror' classic queue, we handle the queue node limit
+            %% in rabbit_classic_queue:declare
             check_node_queue_limit(QueueName, Args, Owner),
             DlxKey = <<"x-dead-letter-exchange">>,
             case rabbit_misc:r_arg(VHostPath, exchange, Args, DlxKey) of

@@ -657,7 +657,7 @@ suggested_queue_nodes(Q, DefNode, AllNodes) when ?is_amqqueue(Q) ->
                                     rabbit_misc:precondition_failed("cannot declare queue '~ts': "
                                                                     "queue limit (~tp) on every node is reached.",
                                                                     [rabbit_amqqueue:get_resource_name(amqqueue:get_name(Q)), Limit]);
-
+                                %% Just pick any node that has free spots. Could optimize to take with most available or something.
                                 FreeNodes -> {hd(FreeNodes), []}
                             end
                     end
