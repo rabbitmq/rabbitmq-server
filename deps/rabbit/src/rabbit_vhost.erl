@@ -285,19 +285,19 @@ delete(VHost, ActingUser) ->
     rabbit_log:info("Clearing policies and runtime parameters in vhost '~ts' because it's being deleted", [VHost]),
     _ = rabbit_runtime_parameters:clear_vhost(VHost, ActingUser),
     rabbit_log:debug("Removing vhost '~ts' from the metadata storage because it's being deleted", [VHost]),
-    case rabbit_db_vhost:delete(VHost) of
-        true ->
-            ok = rabbit_event:notify(
-                   vhost_deleted,
-                   [{name, VHost},
-                    {user_who_performed_action, ActingUser}]);
-        false ->
-            ok
-    end,
+    Ret = case rabbit_db_vhost:delete(VHost) of
+             true ->
+                 ok = rabbit_event:notify(
+                        vhost_deleted,
+                        [{name, VHost},
+                         {user_who_performed_action, ActingUser}]);
+             false ->
+                 {error, {no_such_vhost, VHost}}
+         end,
     %% After vhost was deleted from the database, we try to stop vhost
     %% supervisors on all the nodes.
     rabbit_vhost_sup_sup:delete_on_all_nodes(VHost),
-    ok.
+    Ret.
 
 -spec put_vhost(vhost:name(),
     binary(),
