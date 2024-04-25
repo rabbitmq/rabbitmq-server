@@ -50,10 +50,8 @@
         with:
           otp-version: ${{ matrix.otp_version }}
           elixir-version: 1.15
-      - name: BUILD
+      - name: PREPARE
         run: |
-          make \
-            RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           mkdir -p ${{ env.SUCCESS_PATH }}
       - name: XREF
         run: |
@@ -145,47 +143,40 @@
             ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-${{ github.run_number }}-${{ needs.prepare.outputs.previous_run_attempt }}
             ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-${{ github.run_number }}-
             ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-
-      - name: CHECK IF ALREADY PASSED
-        id: check
+      - name: PRINT CACHED RESULTS
         run: |
-          if [[ -f ${{ env.SUCCESS_PATH }} ]]; then
-            echo "passed=true" | tee -a $GITHUB_OUTPUT
-          else
-            echo "passed=false" | tee -a $GITHUB_OUTPUT
-          fi
+          set -x
+          tree /home/runner/test-result-cache
       - name: SETUP ERLANG/ELIXIR
         if: steps.check.outputs.passed != 'true'
         uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ matrix.otp_version }}
           elixir-version: 1.15
-      - name: BUILD
-        if: steps.check.outputs.passed != 'true'
+      - name: PREPARE
         run: |
-          make \
-            RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          mkdir -p ${{ env.SUCCESS_PATH }}
       - name: TEST
         id: test
         if: steps.check.outputs.passed != 'true'
         run: |
-          make -C deps/rabbitmq_cli \
-            checks \
-            RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
-      - name: RECORD SUCCESS rabbitmq_cli
-        if: steps.check.outputs.passed != 'true'
-        run: |
-          set -x
-          mkdir -p $(dirname ${{ env.SUCCESS_PATH }})
-          echo "passed" > ${{ env.SUCCESS_PATH }}
-      - name: UPDATE CACHE
-        if: steps.check.outputs.passed != 'true'
+          if [[ -f ${{ env.SUCCESS_PATH }}/checks ]]; then
+            echo "checks already passed for this key ${{ needs.prepare.outputs.hash }}"
+          else
+            make -C deps/rabbitmq_cli \
+                checks \
+                RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+            touch ${{ env.SUCCESS_PATH }}/checks
+          fi
+      - name: SAVE CACHE COPY
+        if: always()
         uses: actions/upload-artifact@v4.3.1
         with:
-          name: rabbitmq_cli-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+          name: trc-rabbitmq_cli-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
           path: |
             /home/runner/test-result-cache
       - name: UPLOAD TEST ARTIFACTS
-        if: always() && steps.check.outputs.passed != 'true'
+        if: always()
         uses: actions/upload-artifact@v4.3.1
         with:
           name: testlogs-rabbitmq_cli-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
