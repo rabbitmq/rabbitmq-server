@@ -150,10 +150,14 @@ terminate({shutdown, autodelete}, State = #state{name = Name,
     _ = rabbit_runtime_parameters:clear(VHost, <<"shovel">>, ShovelName, ?SHOVEL_USER),
     rabbit_shovel_status:remove(Name),
     ok;
-terminate(shutdown, State) ->
+terminate(shutdown, State = #state{name = Name}) ->
     close_connections(State),
+    rabbit_shovel_status:remove(Name),
     ok;
-terminate(socket_closed_unexpectedly, State) ->
+terminate(socket_closed_unexpectedly, State = #state{name = Name}) ->
+    rabbit_log_shovel:error("Shovel ~ts is stopping because of the socket closed unexpectedly", [human_readable_name(Name)]),
+    rabbit_shovel_status:report(State#state.name, State#state.type,
+                                {terminated, "socket closed"}),
     close_connections(State),
     ok;
 terminate({'EXIT', heartbeat_timeout}, State = #state{name = Name}) ->
