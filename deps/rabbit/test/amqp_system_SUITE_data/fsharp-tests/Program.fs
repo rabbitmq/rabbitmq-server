@@ -273,10 +273,10 @@ module Test =
 
     let fragmentation uri =
         for frameSize, size in
-            [512u, 512
-             512u, 600
-             512u, 1024
-             1024u, 1024] do
+            [1024u, 1024
+             1024u, 1100
+             1024u, 2048
+             2048u, 2048] do
             let addr = Address uri
             let opn = Open(ContainerId = Guid.NewGuid().ToString(),
                            HostName = addr.Host, ChannelMax = 256us,
