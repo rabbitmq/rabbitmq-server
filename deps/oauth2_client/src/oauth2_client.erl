@@ -71,12 +71,17 @@ get_openid_configuration(IssuerURI, OpenIdConfigurationPath, TLSOptions) ->
 get_openid_configuration(IssuerURI, TLSOptions) ->
     get_openid_configuration(IssuerURI, ?DEFAULT_OPENID_CONFIGURATION_PATH, TLSOptions).
 
--spec get_expiration_time(successful_access_token_response()) -> {ok, integer()} | {error, missing_exp_field}.
-get_expiration_time(#successful_access_token_response{expires_in = ExpiresIn,
+-spec get_expiration_time(successful_access_token_response()) -> 
+    {ok, [{expires_in, integer() }| {exp, integer() }]} | {error, missing_exp_field}.
+get_expiration_time(#successful_access_token_response{expires_in = ExpiresInSec,
     access_token = AccessToken}) ->
-  case ExpiresIn of
-    undefined -> jwt_helper:get_expiration_time(jwt_helper:decode(AccessToken));
-    _ -> {ok, ExpiresIn}
+  case ExpiresInSec of
+    undefined -> 
+        case jwt_helper:get_expiration_time(jwt_helper:decode(AccessToken)) of 
+            {ok, Exp} -> {ok, [{exp, Exp}]};
+            {error, _} = Error -> Error 
+        end;
+    _ -> {ok, [{expires_in, ExpiresInSec}]}
   end.
 
 update_oauth_provider_endpoints_configuration(OAuthProvider) ->

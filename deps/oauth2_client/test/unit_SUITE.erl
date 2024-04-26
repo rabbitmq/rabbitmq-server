@@ -122,7 +122,7 @@ access_token_response_with_expires_in(_) ->
     access_token = EncodedToken,
     expires_in = ExpiresIn
   },
-  ?assertEqual({ok, ExpiresIn}, oauth2_client:get_expiration_time(AccessTokenResponse)).
+  ?assertEqual({ok, [{exoires_in, ExpiresIn}]}, oauth2_client:get_expiration_time(AccessTokenResponse)).
 
 access_token_response_with_exp_in_access_token(_) ->
   Jwk = ?UTIL_MOD:fixture_jwk(),
@@ -132,7 +132,7 @@ access_token_response_with_exp_in_access_token(_) ->
   AccessTokenResponse = #successful_access_token_response{
     access_token = EncodedToken
   },
-  ?assertEqual({ok, ExpiresIn}, oauth2_client:get_expiration_time(AccessTokenResponse)).
+  ?assertEqual({ok, [{exp, ExpiresIn}]}, oauth2_client:get_expiration_time(AccessTokenResponse)).
 
 access_token_response_without_expiration_time(_) ->
   Jwk = ?UTIL_MOD:fixture_jwk(),
