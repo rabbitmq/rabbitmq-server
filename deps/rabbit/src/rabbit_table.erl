@@ -9,6 +9,7 @@
 
 -export([
     create/0, create/2, ensure_local_copies/1, ensure_table_copy/3,
+    create_and_replicate_table/2,
     create_local_copy/2, wait_for_replicated/1, wait/1, wait/2,
     force_load/0, is_present/0, is_empty/0, needs_default_data/0,
     check_schema_integrity/1, clear_ram_only_tables/0, retry_timeout/0,
@@ -76,6 +77,7 @@ ensure_secondary_index(Table, Field) ->
 
 %% mnesia:table() and mnesia:storage_type() are not exported
 -type mnesia_table() :: atom().
+-type mnesia_table_definition() :: list().
 -type mnesia_storage_type() :: 'ram_copies' | 'disc_copies' | 'disc_only_copies'.
 
 -spec ensure_table_copy(mnesia_table(), node(), mnesia_storage_type()) ->
@@ -88,6 +90,44 @@ ensure_table_copy(TableName, Node, StorageType) ->
         {aborted, {already_exists, TableName, _}} -> ok;
         {aborted, Reason}                         -> {error, Reason}
     end.
+
+-spec create_and_replicate_table(mnesia_table(), mnesia_table_definition()) ->
+    ok | {error, any()}.
+create_and_replicate_table(TableName, TableDefinition) ->
+    try
+        rabbit_table:create(TableName, TableDefinition),
+        %% The call below makes sure this node has a copy of the table.
+        case rabbit_table:ensure_table_copy(TableName, node(), ram_copies) of
+            ok ->
+                %% Next, we try to fix other nodes in the cluster if they are
+                %% running a version of RabbitMQ which does not replicate the
+                %% table. All nodes must have a replica for Mnesia operations
+                %% to work properly. Therefore the code below is to make older
+                %% compatible with newer nodes.
+                Replicas = mnesia:table_info(TableName, all_nodes),
+                Members = rabbit_nodes:list_running(),
+                MissingOn = Members -- Replicas,
+                lists:foreach(
+                  fun(Node) ->
+                          %% Errors from adding a replica on those older nodes
+                          %% are ignored however. They should not be fatal. The
+                          %% problem will solve by itself once all nodes are
+                          %% upgraded.
+                          _ = rpc:call(
+                                Node,
+                                rabbit_table, ensure_table_copy,
+                                [TableName, Node, ram_copies])
+                  end, MissingOn),
+                ok;
+            Error ->
+                Error
+        end
+    catch throw:Reason  ->
+              rabbit_log:error(
+                "Failed to create ~tp table: ~tp",
+                [TableName, Reason])
+    end.
+
 
 %% This arity only exists for backwards compatibility with certain
 %% plugins. See https://github.com/rabbitmq/rabbitmq-clusterer/issues/19.
