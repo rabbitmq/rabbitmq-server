@@ -345,6 +345,15 @@ list_nodes_return_value_basic_test(_Config) ->
                                                            {consul_port, 8500}
                                                           ]}
                         ]),
+    meck:expect(rabbit_peer_discovery_httpc, put,
+             fun
+                 (_, _, _, "v1/session/create", _, _, _, _) ->
+                     Body = "{\"ID\":\"some-session-id\"}",
+                     rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body));
+                 (_, _, _, "v1/kv/rabbitmq/default/startup_lock", _, _, _, _) ->
+                     Body = "true",
+                     rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body))
+             end),
     meck:expect(rabbit_peer_discovery_httpc, get,
              fun(_, _, _, _, _, _, _) ->
                Body = "[{\"Node\": {\"Node\": \"rabbit2.internal.domain\", \"Address\": \"10.20.16.160\"}, \"Checks\": [{\"Node\": \"rabbit2.internal.domain\", \"CheckID\": \"service:rabbitmq\", \"Name\": \"Service \'rabbitmq\' check\", \"ServiceName\": \"rabbitmq\", \"Notes\": \"Connect to the port internally every 30 seconds\", \"Status\": \"passing\", \"ServiceID\": \"rabbitmq\", \"Output\": \"\"}, {\"Node\": \"rabbit2.internal.domain\", \"CheckID\": \"serfHealth\", \"Name\": \"Serf Health Status\", \"ServiceName\": \"\", \"Notes\": \"\", \"Status\": \"passing\", \"ServiceID\": \"\", \"Output\": \"Agent alive and reachable\"}], \"Service\": {\"Address\": \"\", \"Port\": 5672, \"ID\": \"rabbitmq\", \"Service\": \"rabbitmq\", \"Tags\": [\"amqp\"]}}, {\"Node\": {\"Node\": \"rabbit1.internal.domain\", \"Address\": \"10.20.16.159\"}, \"Checks\": [{\"Node\": \"rabbit1.internal.domain\", \"CheckID\": \"service:rabbitmq\", \"Name\": \"Service \'rabbitmq\' check\", \"ServiceName\": \"rabbitmq\", \"Notes\": \"Connect to the port internally every 30 seconds\", \"Status\": \"passing\", \"ServiceID\": \"rabbitmq\", \"Output\": \"\"}, {\"Node\": \"rabbit1.internal.domain\", \"CheckID\": \"serfHealth\", \"Name\": \"Serf Health Status\", \"ServiceName\": \"\", \"Notes\": \"\", \"Status\": \"passing\", \"ServiceID\": \"\", \"Output\": \"Agent alive and reachable\"}], \"Service\": {\"Address\": \"\", \"Port\": 5672, \"ID\": \"rabbitmq\", \"Service\": \"rabbitmq\", \"Tags\": [\"amqp\"]}}]",
@@ -364,6 +373,15 @@ list_nodes_return_value_basic_long_node_name_test(_Config) ->
                                                            {consul_port,         8500}
                                                           ]}
                         ]),
+    meck:expect(rabbit_peer_discovery_httpc, put,
+             fun
+                 (_, _, _, "v1/session/create", _, _, _, _) ->
+                     Body = "{\"ID\":\"some-session-id\"}",
+                     rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body));
+                 (_, _, _, "v1/kv/rabbitmq/default/startup_lock", _, _, _, _) ->
+                     Body = "true",
+                     rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body))
+             end),
     meck:expect(rabbit_peer_discovery_httpc, get,
              fun(_, _, _, _, _, _, _) ->
                Body = "[{\"Node\": {\"Node\": \"rabbit2\", \"Address\": \"10.20.16.160\"}, \"Checks\": [{\"Node\": \"rabbit2\", \"CheckID\": \"service:rabbitmq\", \"Name\": \"Service \'rabbitmq\' check\", \"ServiceName\": \"rabbitmq\", \"Notes\": \"Connect to the port internally every 30 seconds\", \"Status\": \"passing\", \"ServiceID\": \"rabbitmq\", \"Output\": \"\"}, {\"Node\": \"rabbit2\", \"CheckID\": \"serfHealth\", \"Name\": \"Serf Health Status\", \"ServiceName\": \"\", \"Notes\": \"\", \"Status\": \"passing\", \"ServiceID\": \"\", \"Output\": \"Agent alive and reachable\"}], \"Service\": {\"Address\": \"\", \"Port\": 5672, \"ID\": \"rabbitmq\", \"Service\": \"rabbitmq\", \"Tags\": [\"amqp\"]}}, {\"Node\": {\"Node\": \"rabbit1\", \"Address\": \"10.20.16.159\"}, \"Checks\": [{\"Node\": \"rabbit1\", \"CheckID\": \"service:rabbitmq\", \"Name\": \"Service \'rabbitmq\' check\", \"ServiceName\": \"rabbitmq\", \"Notes\": \"Connect to the port internally every 30 seconds\", \"Status\": \"passing\", \"ServiceID\": \"rabbitmq\", \"Output\": \"\"}, {\"Node\": \"rabbit1\", \"CheckID\": \"serfHealth\", \"Name\": \"Serf Health Status\", \"ServiceName\": \"\", \"Notes\": \"\", \"Status\": \"passing\", \"ServiceID\": \"\", \"Output\": \"Agent alive and reachable\"}], \"Service\": {\"Address\": \"\", \"Port\": 5672, \"ID\": \"rabbitmq\", \"Service\": \"rabbitmq\", \"Tags\": [\"amqp\"]}}]",
@@ -384,6 +402,15 @@ list_nodes_return_value_long_node_name_and_custom_domain_test(_Config) ->
                                                            {consul_domain,       "internal"}
                                                           ]}
                         ]),
+    meck:expect(rabbit_peer_discovery_httpc, put,
+             fun
+                 (_, _, _, "v1/session/create", _, _, _, _) ->
+                     Body = "{\"ID\":\"some-session-id\"}",
+                     rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body));
+                 (_, _, _, "v1/kv/rabbitmq/default/startup_lock", _, _, _, _) ->
+                     Body = "true",
+                     rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body))
+             end),
     meck:expect(rabbit_peer_discovery_httpc, get,
                 fun(_, _, _, _, _, _, _) ->
                         Body = "[{\"Node\": {\"Node\": \"rabbit2\", \"Address\": \"10.20.16.160\"}, \"Checks\": [{\"Node\": \"rabbit2\", \"CheckID\": \"service:rabbitmq\", \"Name\": \"Service \'rabbitmq\' check\", \"ServiceName\": \"rabbitmq\", \"Notes\": \"Connect to the port internally every 30 seconds\", \"Status\": \"passing\", \"ServiceID\": \"rabbitmq\", \"Output\": \"\"}, {\"Node\": \"rabbit2\", \"CheckID\": \"serfHealth\", \"Name\": \"Serf Health Status\", \"ServiceName\": \"\", \"Notes\": \"\", \"Status\": \"passing\", \"ServiceID\": \"\", \"Output\": \"Agent alive and reachable\"}], \"Service\": {\"Address\": \"\", \"Port\": 5672, \"ID\": \"rabbitmq\", \"Service\": \"rabbitmq\", \"Tags\": [\"amqp\"]}}, {\"Node\": {\"Node\": \"rabbit1\", \"Address\": \"10.20.16.159\"}, \"Checks\": [{\"Node\": \"rabbit1\", \"CheckID\": \"service:rabbitmq\", \"Name\": \"Service \'rabbitmq\' check\", \"ServiceName\": \"rabbitmq\", \"Notes\": \"Connect to the port internally every 30 seconds\", \"Status\": \"passing\", \"ServiceID\": \"rabbitmq\", \"Output\": \"\"}, {\"Node\": \"rabbit1\", \"CheckID\": \"serfHealth\", \"Name\": \"Serf Health Status\", \"ServiceName\": \"\", \"Notes\": \"\", \"Status\": \"passing\", \"ServiceID\": \"\", \"Output\": \"Agent alive and reachable\"}], \"Service\": {\"Address\": \"\", \"Port\": 5672, \"ID\": \"rabbitmq\", \"Service\": \"rabbitmq\", \"Tags\": [\"amqp\"]}}]",
@@ -405,6 +432,15 @@ list_nodes_return_value_srv_address_test(_Config) ->
                                                            {consul_port,         8500}
                                                           ]}
                         ]),
+    meck:expect(rabbit_peer_discovery_httpc, put,
+             fun
+                 (_, _, _, "v1/session/create", _, _, _, _) ->
+                     Body = "{\"ID\":\"some-session-id\"}",
+                     rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body));
+                 (_, _, _, "v1/kv/rabbitmq/default/startup_lock", _, _, _, _) ->
+                     Body = "true",
+                     rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body))
+             end),
     meck:expect(rabbit_peer_discovery_httpc, get,
              fun(_, _, _, _, _, _, _) ->
                Body = "[{\"Node\": {\"Node\": \"rabbit2.internal.domain\", \"Address\": \"10.20.16.160\"}, \"Checks\": [{\"Node\": \"rabbit2.internal.domain\", \"CheckID\": \"service:rabbitmq\", \"Name\": \"Service \'rabbitmq\' check\", \"ServiceName\": \"rabbitmq\", \"Notes\": \"Connect to the port internally every 30 seconds\", \"Status\": \"passing\", \"ServiceID\": \"rabbitmq:172.172.16.4.50\", \"Output\": \"\"}, {\"Node\": \"rabbit2.internal.domain\", \"CheckID\": \"serfHealth\", \"Name\": \"Serf Health Status\", \"ServiceName\": \"\", \"Notes\": \"\", \"Status\": \"passing\", \"ServiceID\": \"\", \"Output\": \"Agent alive and reachable\"}], \"Service\": {\"Address\": \"172.16.4.51\", \"Port\": 5672, \"ID\": \"rabbitmq:172.16.4.51\", \"Service\": \"rabbitmq\", \"Tags\": [\"amqp\"]}}, {\"Node\": {\"Node\": \"rabbit1.internal.domain\", \"Address\": \"10.20.16.159\"}, \"Checks\": [{\"Node\": \"rabbit1.internal.domain\", \"CheckID\": \"service:rabbitmq\", \"Name\": \"Service \'rabbitmq\' check\", \"ServiceName\": \"rabbitmq\", \"Notes\": \"Connect to the port internally every 30 seconds\", \"Status\": \"passing\", \"ServiceID\": \"rabbitmq\", \"Output\": \"\"}, {\"Node\": \"rabbit1.internal.domain\", \"CheckID\": \"serfHealth\", \"Name\": \"Serf Health Status\", \"ServiceName\": \"\", \"Notes\": \"\", \"Status\": \"passing\", \"ServiceID\": \"\", \"Output\": \"Agent alive and reachable\"}], \"Service\": {\"Address\": \"172.172.16.51\", \"Port\": 5672, \"ID\": \"rabbitmq:172.172.16.51\", \"Service\": \"rabbitmq\", \"Tags\": [\"amqp\"]}}]",
@@ -423,6 +459,15 @@ list_nodes_return_value_nodes_in_warning_state_included_test(_Config) ->
                                                            {consul_port,         8500}
                                                           ]}
                         ]),
+    meck:expect(rabbit_peer_discovery_httpc, put,
+             fun
+                 (_, _, _, "v1/session/create", _, _, _, _) ->
+                     Body = "{\"ID\":\"some-session-id\"}",
+                     rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body));
+                 (_, _, _, "v1/kv/rabbitmq/default/startup_lock", _, _, _, _) ->
+                     Body = "true",
+                     rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body))
+             end),
     meck:expect(rabbit_peer_discovery_httpc, get,
                 fun(_, _, _, _, [], _, _) ->
                         rabbit_json:try_decode(list_of_nodes_with_warnings());
@@ -443,6 +488,15 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
                                                            {consul_port,         8500}
                                                           ]}
                         ]),
+    meck:expect(rabbit_peer_discovery_httpc, put,
+             fun
+                 (_, _, _, "v1/session/create", _, _, _, _) ->
+                     Body = "{\"ID\":\"some-session-id\"}",
+                     rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body));
+                 (_, _, _, "v1/kv/rabbitmq/default/startup_lock", _, _, _, _) ->
+                     Body = "true",
+                     rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body))
+             end),
     meck:expect(rabbit_peer_discovery_httpc, get,
              fun(_, _, _, _, [], _, _) ->
                      rabbit_json:try_decode(list_of_nodes_with_warnings());
