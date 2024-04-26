@@ -39,12 +39,14 @@ validate(_VHost, <<"vhost-limits">>, Name, Term, _User) ->
 
 notify(VHost, <<"vhost-limits">>, <<"limits">>, Limits, ActingUser) ->
     rabbit_event:notify(vhost_limits_set, [{name, <<"limits">>},
+                                           {vhost, VHost},
                                            {user_who_performed_action, ActingUser}
                                            | Limits]),
     update_vhost(VHost, Limits).
 
 notify_clear(VHost, <<"vhost-limits">>, <<"limits">>, ActingUser) ->
     rabbit_event:notify(vhost_limits_cleared, [{name, <<"limits">>},
+                                               {vhost, VHost},
                                                {user_who_performed_action, ActingUser}]),
     %% If the function is called as a part of vhost deletion, the vhost can
     %% be already deleted.

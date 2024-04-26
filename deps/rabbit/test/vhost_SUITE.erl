@@ -33,6 +33,7 @@ groups() ->
         vhost_failure_forces_connection_closure,
         vhost_creation_idempotency,
         vhost_update_idempotency,
+        vhost_deletion,
         parse_tags
     ],
     ClusterSize2Tests = [
@@ -41,7 +42,8 @@ groups() ->
         vhost_failure_forces_connection_closure_on_failure_node,
         node_starts_with_dead_vhosts,
         node_starts_with_dead_vhosts_with_mirrors,
-        vhost_creation_idempotency
+        vhost_creation_idempotency,
+        vhost_deletion
     ],
     [
       {cluster_size_1_network, [], ClusterSize1Tests},
@@ -375,6 +377,128 @@ vhost_update_idempotency(Config) ->
         rabbit_ct_broker_helpers:delete_vhost(Config, VHost)
     end.
 
+vhost_deletion(Config) ->
+    VHost = <<"deletion-vhost">>,
+    ActingUser = <<"acting-user">>,
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    set_up_vhost(Config, VHost),
+
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VHost),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+
+    %% Declare some resources under the vhost. These should be deleted when the
+    %% vhost is deleted.
+    QName = <<"vhost-deletion-queue">>,
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Chan, #'queue.declare'{queue = QName, durable = true}),
+    XName = <<"vhost-deletion-exchange">>,
+    #'exchange.declare_ok'{} = amqp_channel:call(
+                                 Chan,
+                                 #'exchange.declare'{exchange = XName,
+                                                     durable = true,
+                                                     type = <<"direct">>}),
+    RoutingKey = QName,
+    #'queue.bind_ok'{} = amqp_channel:call(
+                           Chan,
+                           #'queue.bind'{exchange = XName,
+                                         queue = QName,
+                                         routing_key = RoutingKey}),
+    PolicyName = <<"ttl-policy">>,
+    rabbit_ct_broker_helpers:set_policy_in_vhost(
+      Config, Node, VHost,
+      PolicyName, <<"policy_ttl-queue">>, <<"all">>, [{<<"message-ttl">>, 20}],
+      ActingUser),
+
+    % Load the dummy event handler module on the node.
+    ok = rabbit_ct_broker_helpers:rpc(Config, Node, test_rabbit_event_handler, okay, []),
+    ok = rabbit_ct_broker_helpers:rpc(Config, Node, gen_event, add_handler,
+                                      [rabbit_event, test_rabbit_event_handler, []]),
+    try
+        rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+
+        Events0 = rabbit_ct_broker_helpers:rpc(Config, Node,
+                                               gen_event, call,
+                                               [rabbit_event, test_rabbit_event_handler, events, 1000]),
+        ct:pal(
+          ?LOW_IMPORTANCE,
+          "Events emitted during deletion: ~p", [lists:reverse(Events0)]),
+
+        %% Reorganize the event props into maps for easier matching.
+        Events = [{Type, maps:from_list(Props)} ||
+                  #event{type = Type, props = Props} <- Events0],
+
+        ?assertMatch(#{user := <<"guest">>, vhost := VHost},
+                     proplists:get_value(permission_deleted, Events)),
+
+        ?assertMatch(#{source_name := XName,
+                       source_kind := exchange,
+                       destination_name := QName,
+                       destination_kind := queue,
+                       routing_key := RoutingKey,
+                       vhost := VHost},
+                     proplists:get_value(binding_deleted, Events)),
+
+        ?assertMatch(#{name := #resource{name = QName,
+                                         kind = queue,
+                                         virtual_host = VHost}},
+                     proplists:get_value(queue_deleted, Events)),
+
+        ?assertEqual(
+          lists:sort([<<>>, <<"amq.direct">>, <<"amq.fanout">>, <<"amq.headers">>,
+                      <<"amq.match">>, <<"amq.rabbitmq.trace">>, <<"amq.topic">>,
+                      <<"vhost-deletion-exchange">>]),
+          lists:sort(lists:filtermap(
+                       fun ({exchange_deleted,
+                             #{name := #resource{name = Name}}}) ->
+                               {true, Name};
+                           (_Event) ->
+                               false
+                       end, Events))),
+
+        ?assertMatch(
+          {value, {parameter_cleared, #{name := <<"limits">>,
+                                        vhost := VHost}}},
+          lists:search(
+            fun ({parameter_cleared, #{component := <<"vhost-limits">>}}) ->
+                    true;
+                (_Event) ->
+                    false
+            end, Events)),
+        ?assertMatch(#{name := <<"limits">>, vhost := VHost},
+                     proplists:get_value(vhost_limits_cleared, Events)),
+        ?assertMatch(#{name := PolicyName, vhost := VHost},
+                     proplists:get_value(policy_cleared, Events)),
+
+        ?assertMatch(#{name := VHost,
+                       user_who_performed_action := ActingUser},
+                     proplists:get_value(vhost_deleted, Events)),
+        ?assertMatch(#{name := VHost,
+                       node := Node,
+                       user_who_performed_action := ?INTERNAL_USER},
+                     proplists:get_value(vhost_down, Events)),
+
+        ?assert(proplists:is_defined(channel_closed, Events)),
+        ?assert(proplists:is_defined(connection_closed, Events)),
+
+        %% VHost deletion is not idempotent - we return an error - but deleting
+        %% the same vhost again should not cause any more resources to be
+        %% deleted. So we should see no new events in the `rabbit_event'
+        %% handler.
+        ?assertEqual(
+          {error, {no_such_vhost, VHost}},
+          rabbit_ct_broker_helpers:delete_vhost(Config, VHost)),
+        ?assertEqual(
+          Events0,
+          rabbit_ct_broker_helpers:rpc(
+            Config, Node,
+            gen_event, call,
+            [rabbit_event, test_rabbit_event_handler, events, 1000]))
+    after
+        rabbit_ct_broker_helpers:rpc(Config, Node,
+                                     gen_event, delete_handler, [rabbit_event, test_rabbit_event_handler, []])
+    end.
+
 vhost_is_created_with_default_limits(Config) ->
     VHost = <<"vhost1">>,
     Limits = [{<<"max-connections">>, 10}, {<<"max-queues">>, 1}],
@@ -382,9 +506,15 @@ vhost_is_created_with_default_limits(Config) ->
     Env = [{vhosts, [{<<"id">>, Limits++Pattern}]}],
     ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, 0,
                             application, set_env, [rabbit, default_limits, Env])),
-    ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
-    ?assertEqual(Limits, rabbit_ct_broker_helpers:rpc(Config, 0,
-                            rabbit_vhost_limit, list, [VHost])).
+    try
+        ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
+        ?assertEqual(Limits, rabbit_ct_broker_helpers:rpc(Config, 0,
+                                rabbit_vhost_limit, list, [VHost]))
+    after
+        rabbit_ct_broker_helpers:rpc(
+          Config, 0,
+          application, unset_env, [rabbit, default_limits])
+    end.
 
 vhost_is_created_with_operator_policies(Config) ->
     VHost = <<"vhost1">>,
@@ -393,9 +523,15 @@ vhost_is_created_with_operator_policies(Config) ->
     Env = [{operator, [{PolicyName, Definition}]}],
     ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, 0,
                             application, set_env, [rabbit, default_policies, Env])),
-    ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
-    ?assertNotEqual(not_found, rabbit_ct_broker_helpers:rpc(Config, 0,
-                            rabbit_policy, lookup_op, [VHost, PolicyName])).
+    try
+        ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
+        ?assertNotEqual(not_found, rabbit_ct_broker_helpers:rpc(Config, 0,
+                                rabbit_policy, lookup_op, [VHost, PolicyName]))
+    after
+        rabbit_ct_broker_helpers:rpc(
+          Config, 0,
+          application, unset_env, [rabbit, default_policies])
+    end.
 
 vhost_is_created_with_default_user(Config) ->
     VHost = <<"vhost1">>,
