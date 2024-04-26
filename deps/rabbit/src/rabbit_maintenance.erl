@@ -58,47 +58,14 @@ boot() ->
     rabbit_log:info(
       "Creating table ~s for maintenance mode status",
       [TableName]),
-    try
-        rabbit_table:create(
-          TableName,
-          status_table_definition()),
-        %% The `rabbit_node_maintenance_states' table used to be global but not
-        %% replicated. This leads to various errors during RabbitMQ boot or
-        %% operations on the Mnesia database. The reason is the table existed
-        %% on a single node and, if that node was stopped or MIA, other nodes
-        %% may wait forever on that node for the table to be available.
-        %%
-        %% The call below makes sure this node has a copy of the table.
-        case rabbit_table:ensure_table_copy(TableName, node(), ram_copies) of
-            ok ->
-                %% Next, we try to fix other nodes in the cluster if they are
-                %% running a version of RabbitMQ which does not replicate the
-                %% table. All nodes must have a replica for Mnesia operations
-                %% to work properly. Therefore the code below is to make older
-                %% compatible with newer nodes.
-                Replicas = mnesia:table_info(TableName, all_nodes),
-                Members = rabbit_nodes:list_running(),
-                MissingOn = Members -- Replicas,
-                lists:foreach(
-                  fun(Node) ->
-                          %% Errors from adding a replica on those older nodes
-                          %% are ignored however. They should not be fatal. The
-                          %% problem will solve by itself once all nodes are
-                          %% upgraded.
-                          _ = rpc:call(
-                                Node,
-                                rabbit_table, ensure_table_copy,
-                                [TableName, Node, ram_copies])
-                  end, MissingOn),
-                ok;
-            Error ->
-                Error
-        end
-    catch throw:Reason  ->
-              rabbit_log:error(
-                "Failed to create maintenance status table: ~p",
-                [Reason])
-    end.
+    %% The `rabbit_node_maintenance_states' table used to be global but not
+    %% replicated. This leads to various errors during RabbitMQ boot or
+    %% operations on the Mnesia database. The reason is the table existed
+    %% on a single node and, if that node was stopped or MIA, other nodes
+    %% may wait forever on that node for the table to be available.
+    rabbit_table:create_and_replicate_table(
+      TableName,
+      status_table_definition()).
 
 %%
 %% API

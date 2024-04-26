@@ -55,14 +55,21 @@
 
 % Initialise database table for all exchanges of type <<"x-jms-topic">>
 setup_db_schema() ->
-  case mnesia:create_table( ?JMS_TOPIC_TABLE
-                          , [ {attributes, record_info(fields, ?JMS_TOPIC_RECORD)}
-                            , {record_name, ?JMS_TOPIC_RECORD}
-                            , {type, set} ]
-                          ) of
-    {atomic, ok} -> ok;
-    {aborted, {already_exists, ?JMS_TOPIC_TABLE}} -> ok
-  end.
+    TableName = ?JMS_TOPIC_TABLE,
+    TableDefinition = [{attributes, record_info(fields, ?JMS_TOPIC_RECORD)},
+                       {record_name, ?JMS_TOPIC_RECORD},
+                       {type, set}],
+    rabbit_log:info(
+      "Creating table ~ts for JMS topic exchange",
+      [TableName]),
+    %% The JMS topic exchange table must be available on all nodes.
+    %% If it existed on only one node, messages could not be published
+    %% to JMS topic exchanges and routed to topic subscribers if the node
+    %% was unavailable.
+    _ = rabbit_table:create_and_replicate_table(
+          TableName,
+          TableDefinition),
+    ok.
 
 %%----------------------------------------------------------------------------
 %% R E F E R E N C E   T Y P E   I N F O R M A T I O N
