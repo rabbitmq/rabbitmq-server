@@ -278,6 +278,7 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_util_beam",
     ],
+    shard_count = 2,
     runtime_deps = [
         "//deps/rabbitmq_amqp_client:erlang_app",
         "//deps/rabbitmq_stomp:erlang_app",

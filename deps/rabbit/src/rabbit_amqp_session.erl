@@ -1875,9 +1875,6 @@ incoming_link_transfer(
     end,
     validate_transfer_rcv_settle_mode(RcvSettleMode, Settled),
     validate_incoming_message_size(PayloadBin),
-    % Sections = amqp10_framing:decode_bin(PayloadBin),
-    % ?DEBUG("~s Inbound payload:~n  ~tp",
-    %        [?MODULE, [amqp10_framing:pprint(Section) || Section <- Sections]]),
     Mc0 = mc:init(mc_amqp, PayloadBin, #{}),
     case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, PermCache0) of
         {ok, X, RoutingKey, Mc1, PermCache} ->

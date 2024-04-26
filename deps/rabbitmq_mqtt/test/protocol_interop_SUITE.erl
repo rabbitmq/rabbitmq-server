@@ -19,7 +19,8 @@
 -include_lib("rabbitmq_stomp/include/rabbit_stomp_frame.hrl").
 
 -import(util,
-        [connect/2]).
+        [connect/2,
+         connect/4]).
 -import(rabbit_ct_broker_helpers,
         [rpc/4]).
 -import(rabbit_ct_helpers,
@@ -27,20 +28,23 @@
          eventually/3]).
 
 all() ->
-    [{group, tests}].
+    [{group, cluster_size_1},
+     {group, cluster_size_3}].
 
 groups() ->
-    [{tests, [shuffle],
+    [{cluster_size_1, [shuffle],
       [
        mqtt_amqpl_mqtt,
        mqtt_amqp_mqtt,
        amqp_mqtt_amqp,
-       amqp_mqtt_qos0,
-       amqp_mqtt_qos1,
        mqtt_stomp_mqtt,
        mqtt_stream
-      ]
-     }].
+      ]},
+     {cluster_size_3, [shuffle],
+      [
+       amqp_mqtt_qos0,
+       amqp_mqtt_qos1
+      ]}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -54,10 +58,15 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(_Group, Config0) ->
+init_per_group(Group, Config0) ->
+    Nodes = case Group of
+                cluster_size_1 -> 1;
+                cluster_size_3 -> 3
+            end,
     Config1 = rabbit_ct_helpers:set_config(
                 Config0,
-                {mqtt_version, v5}),
+                [{rmq_nodes_count, Nodes},
+                 {mqtt_version, v5}]),
     Config = rabbit_ct_helpers:run_steps(
                Config1,
                rabbit_ct_broker_helpers:setup_steps() ++
@@ -350,6 +359,8 @@ amqp_mqtt_amqp(Config) ->
 %% Send messages with different AMQP body sections and
 %% consume via MQTT 5.0 with a QoS 0 subscription.
 amqp_mqtt_qos0(Config) ->
+    %% We want to test that the old node can receive from an MQTT QoS 0 queue.
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, rabbit_mqtt_qos0_queue),
     amqp_mqtt(0, Config).
 
 %% Send messages with different AMQP body sections and
@@ -360,7 +371,8 @@ amqp_mqtt_qos1(Config) ->
 amqp_mqtt(Qos, Config) ->
     ClientId = Container = atom_to_binary(?FUNCTION_NAME),
 
-    C = connect(ClientId, Config),
+    %% Connect MQTT subscriber to the old node.
+    C = connect(ClientId, Config, 1, []),
     {ok, _, [Qos]} = emqtt:subscribe(C, <<"my/topic">>, Qos),
 
     Host = ?config(rmq_hostname, Config),
@@ -392,7 +404,10 @@ amqp_mqtt(Qos, Config) ->
     Body6 = [#'v1_0.data'{content = <<0, 1>>},
              #'v1_0.data'{content = <<2, 3>>}],
 
-    [ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<>>, Body, true)) ||
+    [ok = amqp10_client:send_msg(Sender,
+                                 amqp10_msg:set_headers(
+                                   #{durable => true},
+                                   amqp10_msg:new(<<>>, Body, true))) ||
      Body <- [Body1, Body2, Body3, Body4, Body5, Body6]],
 
     ok = amqp10_client:detach_link(Sender),
