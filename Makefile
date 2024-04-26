@@ -620,7 +620,7 @@ actions-workflows: .github/workflows/test-make.yaml
 
 .PHONY: .github/workflows/test-make.yaml
 
-.github/workflows/test-make.yaml: .github/workflows/test-make.template.yaml $(PLUGIN_SUITES_FILES)
+.github/workflows/test-make.yaml: .github/workflows/templates/test-make.template.yaml $(PLUGIN_SUITES_FILES)
 	$(gen_verbose) $(YTT) \
 		--file $< \
 		$(foreach f,$(PLUGIN_SUITES_FILES),--data-values-file $f) \
