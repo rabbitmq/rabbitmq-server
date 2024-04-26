@@ -68,21 +68,30 @@ list_nodes() ->
                    {ok, {[], disc}}
            end,
     Fun2 = fun(Proplist) ->
-                   M = maps:from_list(Proplist),
-                   Path = rabbit_peer_discovery_httpc:build_path([v1, health, service, service_name()]),
-                   HttpOpts = http_options(M),
-                   case rabbit_peer_discovery_httpc:get(get_config_key(consul_scheme, M),
-                                                        get_config_key(consul_host, M),
-                                                        get_integer_config_key(consul_port, M),
-                                                        Path,
-                                                        list_nodes_query_args(),
-                                                        maybe_add_acl([]),
-                                                        HttpOpts) of
-                       {ok, Nodes} ->
-                           IncludeWithWarnings = get_config_key(consul_include_nodes_with_warnings, M),
-                           Result = extract_nodes(
-                                      filter_nodes(Nodes, IncludeWithWarnings)),
-                           {ok, {Result, disc}};
+                   case internal_lock() of
+                       {ok, Priv} ->
+                           try
+                               M = maps:from_list(Proplist),
+                               Path = rabbit_peer_discovery_httpc:build_path([v1, health, service, service_name()]),
+                               HttpOpts = http_options(M),
+                               case rabbit_peer_discovery_httpc:get(get_config_key(consul_scheme, M),
+                                                                    get_config_key(consul_host, M),
+                                                                    get_integer_config_key(consul_port, M),
+                                                                    Path,
+                                                                    list_nodes_query_args(),
+                                                                    maybe_add_acl([]),
+                                                                    HttpOpts) of
+                                   {ok, Nodes} ->
+                                       IncludeWithWarnings = get_config_key(consul_include_nodes_with_warnings, M),
+                                       Result = extract_nodes(
+                                                  filter_nodes(Nodes, IncludeWithWarnings)),
+                                       {ok, {Result, disc}};
+                                   {error, _} = Error ->
+                                       Error
+                               end
+                           after
+                               internal_unlock(Priv)
+                           end;
                        {error, _} = Error ->
                            Error
                    end
@@ -164,9 +173,20 @@ post_registration() ->
     ok.
 
 -spec lock(Nodes :: [node()]) ->
-    {ok, Data :: term()} | {error, Reason :: string()}.
+    not_supported.
 
 lock(_Nodes) ->
+    not_supported.
+
+-spec unlock(Data :: term()) -> ok.
+
+unlock(_Data) ->
+    ok.
+
+-spec internal_lock() ->
+    {ok, Data :: term()} | {error, Reason :: string()}.
+
+internal_lock() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     ?LOG_DEBUG(
        "Effective Consul peer discovery configuration: ~tp", [M],
@@ -179,13 +199,13 @@ lock(_Nodes) ->
             EndTime = Now + get_config_key(lock_wait_time, M),
             lock(TRef, SessionId, Now, EndTime);
         {error, Reason} ->
-            {error, lists:flatten(io_lib:format("Error while creating a session, reason: ~ts",
+            {error, lists:flatten(io_lib:format("Error while creating a session, reason: ~0p",
                                                 [Reason]))}
     end.
 
--spec unlock({SessionId :: string(), TRef :: timer:tref()}) -> ok.
+-spec internal_unlock({SessionId :: string(), TRef :: timer:tref()}) -> ok.
 
-unlock({SessionId, TRef}) ->
+internal_unlock({SessionId, TRef}) ->
     _ = timer:cancel(TRef),
     ?LOG_DEBUG(
        "Stopped session renewal",
@@ -620,7 +640,7 @@ wait_for_list_nodes(N) ->
 %% Create a session to be acquired for a common key
 %% @end
 %%--------------------------------------------------------------------
--spec create_session(atom(), pos_integer()) -> {ok, string()} | {error, Reason::string()}.
+-spec create_session(atom(), pos_integer()) -> {ok, string()} | {error, Reason::any()}.
 create_session(Name, TTL) ->
     case consul_session_create([], maybe_add_acl([]),
                                [{'Name', Name},
@@ -705,7 +725,7 @@ start_session_ttl_updater(SessionId) ->
 %% Tries to acquire lock. If the lock is held by someone else, waits until it
 %% is released, or too much time has passed
 %% @end
--spec lock(timer:tref(), string(), pos_integer(), pos_integer()) -> {ok, string()} | {error, string()}.
+-spec lock(timer:tref(), string(), pos_integer(), pos_integer()) -> {ok, {SessionId :: string(), TRef :: timer:tref()}} | {error, string()}.
 lock(TRef, _, Now, EndTime) when EndTime < Now ->
     _ = timer:cancel(TRef),
     {error, "Acquiring lock taking too long, bailing out"};
