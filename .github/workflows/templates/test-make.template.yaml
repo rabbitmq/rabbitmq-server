@@ -36,17 +36,17 @@
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}
-          key: ${{ runner.os }}-make-cache-${{ needs.prepare.outputs.hash }}
+          key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
           fail-on-cache-miss: true
       - name: RESTORE TEST RESULT CACHE
         uses: actions/cache/restore@v3
         with:
           path: /home/runner/test-result-cache/
-          key: ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+          key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
           restore-keys: |
-            ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-${{ github.run_number }}-${{ needs.prepare.outputs.previous_run_attempt }}
-            ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-${{ github.run_number }}-
-            ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-
+            ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+            ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
+            ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
       - name: PRINT CACHED RESULTS
         run: |
           set -x
@@ -59,20 +59,10 @@
       - name: PREPARE
         run: |
           mkdir -p ${{ env.SUCCESS_PATH }}
-      - name: XREF
-        run: |
-          if [[ -f ${{ env.SUCCESS_PATH }}/xref ]]; then
-            echo "xref already passed for this key ${{ needs.prepare.outputs.hash }}"
-          else
-            make -C deps/(@= name @) \
-                xref \
-                RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
-            touch ${{ env.SUCCESS_PATH }}/xref
-          fi
       - name: DIALYZE
         run: |
           if [[ -f ${{ env.SUCCESS_PATH }}/dialyze ]]; then
-            echo "dialyze already passed for this key ${{ needs.prepare.outputs.hash }}"
+            echo "dialyze already passed for this key ${{ needs.xref.outputs.hash }}"
           else
             make -C deps/(@= name @) \
                 dialyze \
@@ -83,7 +73,7 @@
       - name: EUNIT
         run: |
           if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
-            echo "eunit already passed for this key ${{ needs.prepare.outputs.hash }}"
+            echo "eunit already passed for this key ${{ needs.xref.outputs.hash }}"
           else
             make -C deps/(@= name @) \
                 eunit \
@@ -94,7 +84,7 @@
       - name: CT (@= suite @)
         run: |
           if [[ -f ${{ env.SUCCESS_PATH }}/ct-(@= suite @) ]]; then
-            echo "ct-(@= suite @) already passed for this key ${{ needs.prepare.outputs.hash }}"
+            echo "ct-(@= suite @) already passed for this key ${{ needs.xref.outputs.hash }}"
           else
             make -C deps/(@= name @) \
                 ct-(@= suite @) \
@@ -138,17 +128,17 @@
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}
-          key: ${{ runner.os }}-make-cache-${{ needs.prepare.outputs.hash }}
+          key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
           fail-on-cache-miss: true
       - name: RESTORE TEST RESULT CACHE
         uses: actions/cache/restore@v3
         with:
           path: /home/runner/test-result-cache/
-          key: ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+          key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
           restore-keys: |
-            ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-${{ github.run_number }}-${{ needs.prepare.outputs.previous_run_attempt }}
-            ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-${{ github.run_number }}-
-            ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-
+            ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+            ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
+            ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
       - name: PRINT CACHED RESULTS
         run: |
           set -x
@@ -165,7 +155,7 @@
         id: test
         run: |
           if [[ -f ${{ env.SUCCESS_PATH }}/checks ]]; then
-            echo "checks already passed for this key ${{ needs.prepare.outputs.hash }}"
+            echo "checks already passed for this key ${{ needs.xref.outputs.hash }}"
           else
             make -C deps/rabbitmq_cli \
                 checks \
@@ -203,7 +193,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
-  prepare:
+  xref:
     runs-on: ubuntu-latest
     outputs:
       hash: ${{ steps.hash.outputs.hash }}
@@ -241,28 +231,31 @@ jobs:
       - name: BUILD
         run: |
           make
+      - name: XREF
+        run: |
+          make xref
 #@ for plugin in data.values.internal_deps:
-  _: #@ template.replace(test_plugin(plugin, ["prepare"], data.values[plugin].suites))
+  _: #@ template.replace(test_plugin(plugin, ["xref"], data.values[plugin].suites))
 #@ end
-  _: #@ template.replace(test_plugin("rabbit", ["prepare"] + job_names(data.values.internal_deps), data.values.rabbit.suites))
-  _: #@ template.replace(test_cli(["prepare", "test-rabbit"]))
+  _: #@ template.replace(test_plugin("rabbit", ["xref"] + job_names(data.values.internal_deps), data.values.rabbit.suites))
+  _: #@ template.replace(test_cli(["xref", "test-rabbit"]))
 #@ for plugin in data.values.tier1_plugins:
-  _: #@ template.replace(test_plugin(plugin, ["prepare", "test-rabbitmq_cli"], data.values[plugin].suites))
+  _: #@ template.replace(test_plugin(plugin, ["xref", "test-rabbitmq_cli"], data.values[plugin].suites))
 #@ end
   summary-test-make:
     if: always()
-    needs: #@ ["prepare", "test-rabbit", "test-rabbitmq_cli"] + job_names(data.values.internal_deps + data.values.tier1_plugins)
+    needs: #@ ["xref", "test-rabbit", "test-rabbitmq_cli"] + job_names(data.values.internal_deps + data.values.tier1_plugins)
     runs-on: ubuntu-latest
     steps:
       - name: RESTORE TEST RESULT CACHE
         uses: actions/cache/restore@v3
         with:
           path: /home/runner/test-result-cache/
-          key: ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+          key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
           restore-keys: |
-            ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-${{ github.run_number }}-${{ needs.prepare.outputs.previous_run_attempt }}
-            ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-${{ github.run_number }}-
-            ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-
+            ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+            ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
+            ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
       - name: UPDATE CACHE
         uses: actions/download-artifact@v4
         with:
@@ -277,7 +270,7 @@ jobs:
         uses: actions/cache/save@v3
         with:
           path: /home/runner/test-result-cache/
-          key: ${{ runner.os }}-test-result-cache-${{ needs.prepare.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+          key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
       - name: SUMMARY
         run: |
           cat << 'EOF' | jq -e 'map(.result == "success") | all(.)'
