@@ -82,8 +82,7 @@ stop_child({VHost, ShovelName} = Name) ->
                     TmpExpId = temp_experimental_id(Name),
                     _ = stop_and_delete_child(TmpExpId),
                     ok
-            end,
-            rabbit_shovel_status:remove(Name)
+            end
     end,
     rabbit_shovel_locks:unlock(LockId),
     ok.
