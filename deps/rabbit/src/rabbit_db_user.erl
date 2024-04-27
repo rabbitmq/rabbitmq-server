@@ -28,7 +28,8 @@
          set_topic_permissions/1,
          clear_topic_permissions/3,
          clear_matching_topic_permissions/3,
-         delete/1]).
+         delete/1,
+         clear_all_permissions_for_vhost/1]).
 
 -export([khepri_users_path/0,
          khepri_user_path/1,
@@ -547,6 +548,57 @@ clear_matching_user_permissions_in_khepri(Username, VHostName) ->
 
 any('_') -> ?KHEPRI_WILDCARD_STAR;
 any(Value) -> Value.
+
+%% -------------------------------------------------------------------
+%% clear_all_permissions_for_vhost().
+%% -------------------------------------------------------------------
+
+-spec clear_all_permissions_for_vhost(VHostName) -> Ret when
+      VHostName :: vhost:name(),
+      Ret :: {ok, DeletedPermissions} | {error, Reason :: any()},
+      DeletedPermissions :: [#topic_permission{} | #user_permission{}].
+%% @doc Transactionally deletes all user and topic permissions for a virtual
+%% host, returning any permissions that were deleted.
+%%
+%% @returns an OK-tuple with the deleted permissions or an error tuple if the
+%% operation could not be completed.
+%%
+%% @private
+
+clear_all_permissions_for_vhost(VHostName) when is_binary(VHostName) ->
+    rabbit_khepri:handle_fallback(
+      #{mnesia =>
+        fun() -> clear_all_permissions_for_vhost_in_mnesia(VHostName) end,
+        khepri =>
+        fun() -> clear_all_permissions_for_vhost_in_khepri(VHostName) end}).
+
+clear_all_permissions_for_vhost_in_mnesia(VHostName) ->
+    rabbit_mnesia:execute_mnesia_transaction(
+      fun() ->
+              Deletions =
+              clear_matching_topic_permissions_in_mnesia_tx(
+                '_', VHostName, '_') ++
+                  clear_matching_user_permissions_in_mnesia_tx(
+                    '_', VHostName),
+              {ok, Deletions}
+      end).
+
+clear_all_permissions_for_vhost_in_khepri(VHostName) ->
+    rabbit_khepri:transaction(
+      fun() ->
+              UserPermissionsPath = khepri_user_permission_path(
+                                      ?KHEPRI_WILDCARD_STAR, VHostName),
+              TopicPermissionsPath = khepri_topic_permission_path(
+                                       ?KHEPRI_WILDCARD_STAR, VHostName,
+                                       ?KHEPRI_WILDCARD_STAR),
+              {ok, UserProps} = khepri_tx_adv:delete_many(UserPermissionsPath),
+              {ok, TopicProps} = khepri_tx_adv:delete_many(
+                                   TopicPermissionsPath),
+              Deletions = rabbit_khepri:collect_payloads(
+                            TopicProps,
+                            rabbit_khepri:collect_payloads(UserProps)),
+              {ok, Deletions}
+      end, rw).
 
 %% -------------------------------------------------------------------
 %% get_topic_permissions().
