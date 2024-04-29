@@ -1,0 +1,1 @@
+../../rabbitmq_federation/test/rabbit_federation_test_util.erl

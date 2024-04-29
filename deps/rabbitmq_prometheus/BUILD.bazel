@@ -103,7 +103,7 @@ rabbitmq_integration_suite(
     name = "prometheus_rabbitmq_federation_collector_SUITE",
     size = "small",
     additional_beam = [
-        "//deps/rabbitmq_federation:test/rabbit_federation_test_util.beam",  #keep
+        "test/rabbit_federation_test_util.beam",  #keep
         "test/rabbitmq_prometheus_collector_test_proxy.beam",  #keep
     ],
 )

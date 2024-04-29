@@ -144,3 +144,13 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         app_name = "rabbitmq_prometheus",
         erlc_opts = "//:test_erlc_opts",
     )
+    erlang_bytecode(
+        name = "test_rabbit_federation_test_util_beam",
+        testonly = True,
+        srcs = ["test/rabbit_federation_test_util.erl"],
+        outs = ["test/rabbit_federation_test_util.beam"],
+        hdrs = ["test/rabbit_federation.hrl"],
+        app_name = "rabbitmq_prometheus",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/amqp_client:erlang_app"],
+    )

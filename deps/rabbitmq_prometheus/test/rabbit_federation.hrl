@@ -1,0 +1,1 @@
+../../rabbitmq_federation/include/rabbit_federation.hrl
