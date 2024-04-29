@@ -59,6 +59,7 @@ groups() ->
                                             delete_member_queue_not_found,
                                             delete_member,
                                             delete_member_not_a_member,
+                                            delete_member_member_already_deleted,
                                             node_removal_is_quorum_critical]
                        ++ memory_tests()},
                       {cluster_size_3, [], [
@@ -1954,6 +1955,32 @@ delete_member_not_a_member(Config) ->
     ?assertEqual(ok,
                  rpc:call(Server, rabbit_quorum_queue, delete_member,
                           [<<"/">>, QQ, Server])).
+
+delete_member_member_already_deleted(Config) ->
+    [Server, Server2] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    NServers = length(Servers),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    RaName = ra_name(QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?awaitMatch(NServers, count_online_nodes(Server, <<"/">>, QQ), ?DEFAULT_AWAIT),
+    ServerId = {RaName, Server},
+    ServerId2 = {RaName, Server2},
+    %% use are APU directory to simulate situation where the ra:remove_server/2
+    %% call timed out but later succeeded
+    ?assertMatch(ok,
+                 rpc:call(Server2, ra, leave_and_terminate,
+                          [quorum_queues, ServerId, ServerId2])),
+
+    %% idempotent by design
+    ?assertEqual(ok,
+                 rpc:call(Server, rabbit_quorum_queue, delete_member,
+                          [<<"/">>, QQ, Server2])),
+    {ok, Q} = rpc:call(Server, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
+    #{nodes := Nodes} = amqqueue:get_type_state(Q),
+    ?assertEqual(1, length(Nodes)),
+    ok.
 
 delete_member_during_node_down(Config) ->
     [Server, DownServer, Remove] = Servers = rabbit_ct_broker_helpers:get_node_configs(

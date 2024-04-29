@@ -128,7 +128,7 @@
 -define(START_CLUSTER_RPC_TIMEOUT, 60_000). %% needs to be longer than START_CLUSTER_TIMEOUT
 -define(TICK_TIMEOUT, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
--define(ADD_MEMBER_TIMEOUT, 5000).
+-define(MEMBER_CHANGE_TIMEOUT, 20_000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
 
 %%----------- QQ policies ---------------------------------------------------
@@ -1199,7 +1199,7 @@ add_member(Q, Node) ->
     add_member(Q, Node, promotable).
 
 add_member(Q, Node, Membership) ->
-    add_member(Q, Node, Membership, ?ADD_MEMBER_TIMEOUT).
+    add_member(Q, Node, Membership, ?MEMBER_CHANGE_TIMEOUT).
 
 add_member(VHost, Name, Node, Timeout) when is_binary(VHost) ->
     %% NOTE needed to pass mixed cluster tests.
@@ -1276,8 +1276,11 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
             %% deleting the last member is not allowed
             {error, last_node};
         Members ->
-            case ra:remove_member(Members, ServerId) of
-                {ok, _, _Leader} ->
+            case ra:remove_member(Members, ServerId, ?MEMBER_CHANGE_TIMEOUT) of
+                Res when element(1, Res) == ok orelse
+                         Res == {error, not_member} ->
+                    %% if not a member we can still proceed with updating the
+                    %% mnesia record and clean up server if still running
                     Fun = fun(Q1) ->
                                   update_type_state(
                                     Q1,
