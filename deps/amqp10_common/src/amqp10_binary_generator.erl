@@ -40,7 +40,7 @@
     {symbol, binary()} |
     {binary, binary()} |
     {list, [amqp10_type()]} |
-    {map, [{amqp10_prim(), amqp10_prim()}]} | %% TODO: make map a map
+    {map, [{amqp10_prim(), amqp10_prim()}]} |
     {array, amqp10_ctor(), [amqp10_type()]}.
 
 -type amqp10_described() ::
@@ -113,16 +113,20 @@ generate1({long,     V}) when V<128 andalso V>-129 -> <<16#55,V:8/signed>>;
 generate1({long,     V})                           -> <<16#81,V:64/signed>>;
 generate1({float,    V})                           -> <<16#72,V:32/float>>;
 generate1({double,   V})                           -> <<16#82,V:64/float>>;
-generate1({char,     V})                           -> <<16#73,V:4/binary>>;
+generate1({char,V}) when V>=0 andalso V=<16#10ffff -> <<16#73,V:32>>;
+%% AMQP timestamp is "64-bit two's-complement integer representing milliseconds since the unix epoch".
+%% For small integers (i.e. values that can be stored in a single word),
+%% Erlang uses two’s complement to represent the signed integers.
 generate1({timestamp,V})                           -> <<16#83,V:64/signed>>;
 generate1({uuid,     V})                           -> <<16#98,V:16/binary>>;
 
-generate1({utf8, V}) when size(V) < ?VAR_1_LIMIT -> [16#a1, size(V), V];
-generate1({utf8, V})                             -> [<<16#b1, (size(V)):32>>, V];
-generate1({symbol, V})                           -> [16#a3, size(V), V];
+generate1({utf8, V}) when size(V) =< ?VAR_1_LIMIT   -> [16#a1, size(V), V];
+generate1({utf8, V})                                -> [<<16#b1, (size(V)):32>>, V];
+generate1({symbol, V}) when size(V) =< ?VAR_1_LIMIT -> [16#a3, size(V), V];
+generate1({symbol, V})                              -> [<<16#b3, (size(V)):32>>, V];
 generate1({binary, V}) ->
     Size = iolist_size(V),
-    case Size < ?VAR_1_LIMIT  of
+    case Size =< ?VAR_1_LIMIT  of
         true ->
             [16#a0, Size, V];
         false ->
@@ -195,6 +199,7 @@ constructor(uuid) -> 16#98;
 constructor(null) -> 16#40;
 constructor(boolean) -> 16#56;
 constructor(array) -> 16#f0; % use large array type for all nested arrays
+constructor(binary) -> 16#b0;
 constructor(utf8) -> 16#b1;
 constructor({described, Descriptor, Primitive}) ->
     [16#00, generate1(Descriptor), constructor(Primitive)].
@@ -202,10 +207,13 @@ constructor({described, Descriptor, Primitive}) ->
 % returns io_list
 generate2(symbol, {symbol, V}) -> [<<(size(V)):32>>, V];
 generate2(utf8, {utf8, V}) -> [<<(size(V)):32>>, V];
+generate2(binary, {binary, V}) -> [<<(size(V)):32>>, V];
 generate2(boolean, true) -> 16#01;
 generate2(boolean, false) -> 16#00;
 generate2(boolean, {boolean, true}) -> 16#01;
 generate2(boolean, {boolean, false}) -> 16#00;
+generate2(null, null) -> 16#40;
+generate2(char, {char,V}) when V>=0 andalso V=<16#10ffff -> <<V:32>>;
 generate2(ubyte, {ubyte, V}) -> V;
 generate2(byte, {byte, V}) -> <<V:8/signed>>;
 generate2(ushort, {ushort, V}) -> <<V:16/unsigned>>;
@@ -214,6 +222,10 @@ generate2(uint, {uint, V}) -> <<V:32/unsigned>>;
 generate2(int, {int, V}) -> <<V:32/signed>>;
 generate2(ulong, {ulong, V}) -> <<V:64/unsigned>>;
 generate2(long, {long, V}) -> <<V:64/signed>>;
+generate2(float, {float, V}) -> <<V:32/float>>;
+generate2(double, {double, V}) -> <<V:64/float>>;
+generate2(timestamp, {timestamp,V}) -> <<V:64/signed>>;
+generate2(uuid, {uuid, V}) -> <<V:16/binary>>;
 generate2({described, D, P}, {described, D, V}) ->
     generate2(P, V);
 generate2(array, {array, Type, List}) ->

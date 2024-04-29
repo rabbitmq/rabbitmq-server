@@ -3656,8 +3656,8 @@ footer_checksum(FooterOpt, Config) ->
             #'v1_0.data'{content = <<"m6 b">>},
             #'v1_0.footer'{
                content = [
-                          {{symbol, <<"x-opt-rabbit">>}, {char, unicode:characters_to_binary("🐇", utf8, utf32)}},
-                          {{symbol, <<"x-opt-carrot">>}, {char, unicode:characters_to_binary("🥕", utf8, utf32)}}
+                          {{symbol, <<"x-opt-rabbit">>}, {char, $🐇}},
+                          {{symbol, <<"x-opt-carrot">>}, {char, $🥕}}
                          ]}]),
     ok = amqp10_client:send_msg(Sender, M6),
     ok = wait_for_settlement(<<"t6">>),
@@ -3665,8 +3665,8 @@ footer_checksum(FooterOpt, Config) ->
     {ok, Msg6} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m6 a">>, <<"m6 b">>], amqp10_msg:body(Msg6)),
     ?assertMatch(#{ExpectedKey := _,
-                   <<"x-opt-rabbit">> := <<"🐇"/utf32>>,
-                   <<"x-opt-carrot">> := <<"🥕"/utf32>>},
+                   <<"x-opt-rabbit">> := $🐇,
+                   <<"x-opt-carrot">> := $🥕},
                  amqp10_msg:footer(Msg6)),
 
     %% We only sanity check here that the footer annotation we received from the server

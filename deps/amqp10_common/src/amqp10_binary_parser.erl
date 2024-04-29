@@ -33,7 +33,6 @@
 
 -export_type([opts/0]).
 
-
 %% Parses only the 1st AMQP type (including possible nested AMQP types).
 -spec parse(binary()) ->
     {amqp10_binary_generator:amqp10_type(), BytesParsed :: non_neg_integer()}.
@@ -64,7 +63,7 @@ parse(<<16#61, V:16/signed,   _/binary>>, B) -> {{short, V},      B+3};
 parse(<<16#70, V:32/unsigned, _/binary>>, B) -> {{uint, V},       B+5};
 parse(<<16#71, V:32/signed,   _/binary>>, B) -> {{int, V},        B+5};
 parse(<<16#72, V:32/float,    _/binary>>, B) -> {{float, V},      B+5};
-parse(<<16#73, Utf32:4/binary,_/binary>>, B) -> {{char, Utf32},   B+5};
+parse(<<16#73, V:32,          _/binary>>, B) -> {{char, V},       B+5};
 parse(<<?CODE_ULONG, V:64/unsigned, _/binary>>, B) -> {{ulong, V},B+9};
 parse(<<16#81, V:64/signed,   _/binary>>, B) -> {{long, V},       B+9};
 parse(<<16#82, V:64/float,    _/binary>>, B) -> {{double, V},     B+9};
@@ -110,15 +109,6 @@ parse(<<16#94, V:128, _/binary>>, B) ->
 parse(<<Type, _/binary>>, B) ->
     throw({primitive_type_unsupported, Type, {position, B}}).
 
-parse_array_primitive(16#40, <<_:8/unsigned, _/binary>>) -> {null, 1};
-parse_array_primitive(16#41, <<_:8/unsigned, _/binary>>) -> {true, 1};
-parse_array_primitive(16#42, <<_:8/unsigned, _/binary>>) -> {false, 1};
-parse_array_primitive(16#43, <<_:8/unsigned, _/binary>>) -> {{uint, 0}, 1};
-parse_array_primitive(16#44, <<_:8/unsigned, _/binary>>) -> {{ulong, 0}, 1};
-parse_array_primitive(ElementType, Data) ->
-    {Val, B} = parse(<<ElementType, Data/binary>>),
-    {Val, B-1}.
-
 %% array structure is {array, Ctor, [Data]}
 %% e.g. {array, symbol, [<<"amqp:accepted:list">>]}
 parse_array(UnitSize, Bin) ->
@@ -150,7 +140,9 @@ parse_array2(Count, Type, Bin, Acc) ->
 
 parse_constructor(?CODE_SYM_8) -> symbol;
 parse_constructor(?CODE_SYM_32) -> symbol;
+parse_constructor(16#a0) -> binary;
 parse_constructor(16#a1) -> utf8;
+parse_constructor(16#b0) -> binary;
 parse_constructor(16#b1) -> utf8;
 parse_constructor(16#50) -> ubyte;
 parse_constructor(16#51) -> byte;
@@ -158,14 +150,28 @@ parse_constructor(16#60) -> ushort;
 parse_constructor(16#61) -> short;
 parse_constructor(16#70) -> uint;
 parse_constructor(16#71) -> int;
+parse_constructor(16#72) -> float;
+parse_constructor(16#73) -> char;
+parse_constructor(16#82) -> double;
 parse_constructor(?CODE_ULONG) -> ulong;
 parse_constructor(16#81) -> long;
 parse_constructor(16#40) -> null;
 parse_constructor(16#56) -> boolean;
 parse_constructor(16#f0) -> array;
+parse_constructor(16#83) -> timestamp;
+parse_constructor(16#98) -> uuid;
 parse_constructor(0) -> described; %%TODO add test with descriptor in constructor
 parse_constructor(X) ->
     exit({failed_to_parse_constructor, X}).
+
+parse_array_primitive(16#40, <<_:8/unsigned, _/binary>>) -> {null, 1};
+parse_array_primitive(16#41, <<_:8/unsigned, _/binary>>) -> {true, 1};
+parse_array_primitive(16#42, <<_:8/unsigned, _/binary>>) -> {false, 1};
+parse_array_primitive(16#43, <<_:8/unsigned, _/binary>>) -> {{uint, 0}, 1};
+parse_array_primitive(16#44, <<_:8/unsigned, _/binary>>) -> {{ulong, 0}, 1};
+parse_array_primitive(ElementType, Data) ->
+    {Val, B} = parse(<<ElementType, Data/binary>>),
+    {Val, B-1}.
 
 mapify([]) ->
     [];
@@ -220,8 +226,8 @@ pm(<<16#c1, S:8,CountAndValue:S/binary,R/binary>>, O, B) ->
 %% We avoid guard tests: they improve readability, but result in worse performance.
 %%
 %% In server mode:
-%% * stop when we reach the message body (data or amqp-sequence or amqp-value section).
-%% * include number of bytes left for properties and application-properties sections.
+%% * Stop when we reach the message body (data or amqp-sequence or amqp-value section).
+%% * Include byte positions for parsed bare message sections.
 pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_DATA, _Rest/binary>>, true, B) ->
     reached_body(B, ?DESCRIPTOR_CODE_DATA);
 pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_AMQP_SEQUENCE, _Rest/binary>>, true, B) ->
@@ -288,7 +294,7 @@ pm(<<16#60, V:16/unsigned, R/binary>>, O, B) -> [{ushort, V} | pm(R, O, B+3)];
 pm(<<16#61, V:16/signed,   R/binary>>, O, B) -> [{short, V} | pm(R, O, B+3)];
 pm(<<16#71, V:32/signed,   R/binary>>, O, B) -> [{int, V} | pm(R, O, B+5)];
 pm(<<16#72, V:32/float,    R/binary>>, O, B) -> [{float, V} | pm(R, O, B+5)];
-pm(<<16#73, Utf32:4/binary,R/binary>>, O, B) -> [{char, Utf32} | pm(R, O, B+5)];
+pm(<<16#73, V:32,          R/binary>>, O, B) -> [{char, V} | pm(R, O, B+5)];
 pm(<<16#81, V:64/signed,   R/binary>>, O, B) -> [{long, V} | pm(R, O, B+9)];
 pm(<<16#82, V:64/float,    R/binary>>, O, B) -> [{double, V} | pm(R, O, B+9)];
 pm(<<16#83, TS:64/signed,  R/binary>>, O, B) -> [{timestamp, TS} | pm(R, O, B+9)];

@@ -113,7 +113,7 @@ utf8(_Config) ->
     ok.
 
 char(_Config) ->
-    roundtrip({char, <<$A/utf32>>}),
+    roundtrip({char, $🎉}),
     ok.
 
 list(_Config) ->

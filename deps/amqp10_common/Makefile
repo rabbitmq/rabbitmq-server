@@ -26,6 +26,7 @@ endef
 
 DIALYZER_OPTS += --src -r test -DTEST
 BUILD_DEPS = rabbit_common
+TEST_DEPS = rabbitmq_ct_helpers proper
 
 # Variables and recipes in development.*.mk are meant to be used from
 # any Git clone. They are excluded from the files published to Hex.pm.
