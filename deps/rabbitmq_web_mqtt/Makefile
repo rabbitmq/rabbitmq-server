@@ -21,7 +21,7 @@ LOCAL_DEPS = ssl
 DEPS = rabbit_common rabbit cowboy rabbitmq_mqtt
 TEST_DEPS = emqtt rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management
 
-PLT_APPS += rabbitmqctl elixir
+PLT_APPS += rabbitmqctl elixir cowlib
 
 # FIXME: Add Ranch as a BUILD_DEPS to be sure the correct version is picked.
 # See rabbitmq-components.mk.
