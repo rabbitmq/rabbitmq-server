@@ -47,7 +47,7 @@ LOCAL_DEPS = ssl
 DEPS = ranch rabbit_common rabbit ra amqp10_common
 TEST_DEPS = emqtt ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management rabbitmq_web_mqtt amqp_client rabbitmq_consistent_hash_exchange rabbitmq_amqp1_0 amqp10_client rabbitmq_stomp rabbitmq_stream
 
-PLT_APPS += rabbitmqctl
+PLT_APPS += rabbitmqctl elixir
 
 dep_ct_helper = git https://github.com/extend/ct_helper.git master
 dep_emqtt = git https://github.com/rabbitmq/emqtt.git master
