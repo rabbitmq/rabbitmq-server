@@ -16,6 +16,8 @@ endif
 
 DIALYZER_OPTS ?= -Werror_handling
 
+dialyze: ERL_LIBS := $(ERL_LIBS):$(DEPS_DIR):$(DEPS_DIR)/rabbitmq_cli/_build/dev/lib:$(dir $(shell elixir --eval ":io.format '~s~n', [:code.lib_dir :elixir ]"))
+
 # --------------------------------------------------------------------
 # %-on-concourse dependencies.
 # --------------------------------------------------------------------
