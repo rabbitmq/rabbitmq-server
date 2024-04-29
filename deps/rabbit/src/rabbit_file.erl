@@ -258,6 +258,7 @@ recursive_delete1(Path) ->
                              ok ->
                                  case prim_file:del_dir(Path) of
                                      ok           -> ok;
+                                     {error, ebusy}  -> ok; %% Can't delete a mount point
                                      {error, Err} -> {error, {Path, Err}}
                                  end;
                              {error, _Err} = Error ->

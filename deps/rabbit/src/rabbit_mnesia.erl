@@ -1042,6 +1042,7 @@ mnesia_and_msg_store_files() ->
              rabbit_node_monitor:coordination_filename(),
              rabbit_node_monitor:stream_filename(),
              rabbit_node_monitor:default_quorum_filename(),
+             rabbit_node_monitor:classic_filename(),
              rabbit_node_monitor:quorum_filename(),
              rabbit_feature_flags:enabled_feature_flags_list_file(),
              rabbit_khepri:dir()],
