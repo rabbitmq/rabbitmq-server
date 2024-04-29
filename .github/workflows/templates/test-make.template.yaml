@@ -240,7 +240,7 @@ jobs:
   _: #@ template.replace(test_plugin("rabbit", ["xref"] + job_names(data.values.internal_deps), data.values.rabbit.suites))
   _: #@ template.replace(test_cli(["xref", "test-rabbit"]))
 #@ for plugin in data.values.tier1_plugins:
-  _: #@ template.replace(test_plugin(plugin, ["xref", "test-rabbitmq_cli"], data.values[plugin].suites))
+  _: #@ template.replace(test_plugin(plugin, ["xref"], data.values[plugin].suites))
 #@ end
   summary-test-make:
     if: always()

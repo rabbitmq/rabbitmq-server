@@ -2499,7 +2499,6 @@ jobs:
     name: Test rabbitmq_amqp_client
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -2588,7 +2587,6 @@ jobs:
     name: Test rabbitmq_amqp1_0
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -2667,7 +2665,6 @@ jobs:
     name: Test rabbitmq_auth_backend_cache
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -2776,7 +2773,6 @@ jobs:
     name: Test rabbitmq_auth_backend_http
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -2885,7 +2881,6 @@ jobs:
     name: Test rabbitmq_auth_backend_ldap
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -2994,7 +2989,6 @@ jobs:
     name: Test rabbitmq_auth_backend_oauth2
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -3163,7 +3157,6 @@ jobs:
     name: Test rabbitmq_auth_mechanism_ssl
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -3242,7 +3235,6 @@ jobs:
     name: Test rabbitmq_aws
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -3321,7 +3313,6 @@ jobs:
     name: Test rabbitmq_consistent_hash_exchange
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -3410,7 +3401,6 @@ jobs:
     name: Test rabbitmq_event_exchange
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -3519,7 +3509,6 @@ jobs:
     name: Test rabbitmq_federation
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -3668,7 +3657,6 @@ jobs:
     name: Test rabbitmq_federation_management
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -3757,7 +3745,6 @@ jobs:
     name: Test rabbitmq_jms_topic_exchange
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -3866,7 +3853,6 @@ jobs:
     name: Test rabbitmq_management
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -4085,7 +4071,6 @@ jobs:
     name: Test rabbitmq_management_agent
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -4204,7 +4189,6 @@ jobs:
     name: Test rabbitmq_mqtt
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -4473,7 +4457,6 @@ jobs:
     name: Test rabbitmq_peer_discovery_aws
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -4582,7 +4565,6 @@ jobs:
     name: Test rabbitmq_peer_discovery_common
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -4671,7 +4653,6 @@ jobs:
     name: Test rabbitmq_peer_discovery_consul
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -4770,7 +4751,6 @@ jobs:
     name: Test rabbitmq_peer_discovery_etcd
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -4879,7 +4859,6 @@ jobs:
     name: Test rabbitmq_peer_discovery_k8s
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -4978,7 +4957,6 @@ jobs:
     name: Test rabbitmq_prelaunch
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -5077,7 +5055,6 @@ jobs:
     name: Test rabbitmq_prometheus
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -5186,7 +5163,6 @@ jobs:
     name: Test rabbitmq_random_exchange
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -5265,7 +5241,6 @@ jobs:
     name: Test rabbitmq_recent_history_exchange
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -5354,7 +5329,6 @@ jobs:
     name: Test rabbitmq_sharding
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -5453,7 +5427,6 @@ jobs:
     name: Test rabbitmq_shovel
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -5632,7 +5605,6 @@ jobs:
     name: Test rabbitmq_shovel_management
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -5741,7 +5713,6 @@ jobs:
     name: Test rabbitmq_stomp
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -5910,7 +5881,6 @@ jobs:
     name: Test rabbitmq_stream
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -6059,7 +6029,6 @@ jobs:
     name: Test rabbitmq_stream_management
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -6148,7 +6117,6 @@ jobs:
     name: Test rabbitmq_top
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -6227,7 +6195,6 @@ jobs:
     name: Test rabbitmq_tracing
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -6316,7 +6283,6 @@ jobs:
     name: Test rabbitmq_trust_store
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -6415,7 +6381,6 @@ jobs:
     name: Test rabbitmq_web_dispatch
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -6514,7 +6479,6 @@ jobs:
     name: Test rabbitmq_web_mqtt
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -6633,7 +6597,6 @@ jobs:
     name: Test rabbitmq_web_mqtt_examples
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -6712,7 +6675,6 @@ jobs:
     name: Test rabbitmq_web_stomp
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -6851,7 +6813,6 @@ jobs:
     name: Test rabbitmq_web_stomp_examples
     needs:
     - xref
-    - test-rabbitmq_cli
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
