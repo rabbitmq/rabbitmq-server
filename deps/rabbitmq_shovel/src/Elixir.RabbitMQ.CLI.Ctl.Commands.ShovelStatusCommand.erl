@@ -61,7 +61,7 @@ banner(_, #{node := Node}) ->
                              atom_to_binary(Node, utf8)]).
 
 run(_Args, #{node := Node}) ->
-    case rabbit_misc:rpc_call(Node, rabbit_shovel_status, status, []) of
+    case rabbit_misc:rpc_call(Node, rabbit_shovel_status, cluster_status, []) of
         {badrpc, _} = Error ->
             Error;
         Status ->
