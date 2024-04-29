@@ -23,6 +23,7 @@
 
 -define(COORD_WAL_MAX_SIZE_B, 64_000_000).
 -define(QUORUM_AER_MAX_RPC_SIZE, 16).
+-define(QUORUM_DEFAULT_WAL_MAX_ENTRIES, 500_000).
 
 -spec setup() -> ok | no_return().
 
@@ -111,13 +112,22 @@ get_config(quorum_queues = RaSystem) ->
     DefaultConfig = get_default_config(),
     Checksums = application:get_env(rabbit, quorum_compute_checksums, true),
     WalChecksums = application:get_env(rabbit, quorum_wal_compute_checksums, Checksums),
-    SegmentChecksums = application:get_env(rabbit, quorum_segment_compute_checksums, Checksums),
+    SegmentChecksums = application:get_env(rabbit, quorum_segment_compute_checksums,
+                                           Checksums),
+    WalMaxEntries = case DefaultConfig of
+                        #{wal_max_entries := MaxEntries}
+                          when is_integer(MaxEntries) ->
+                            MaxEntries;
+                        _ ->
+                            ?QUORUM_DEFAULT_WAL_MAX_ENTRIES
+                    end,
     AERBatchSize = application:get_env(rabbit, quorum_max_append_entries_rpc_batch_size,
                                        ?QUORUM_AER_MAX_RPC_SIZE),
-    CompressMemTables = application:get_env(rabbit, quorum_compress_mem_tables, false),
+    CompressMemTables = application:get_env(rabbit, quorum_compress_mem_tables, true),
     DefaultConfig#{name => RaSystem,
                    default_max_append_entries_rpc_batch_size => AERBatchSize,
                    wal_compute_checksums => WalChecksums,
+                   wal_max_entries => WalMaxEntries,
                    segment_compute_checksums => SegmentChecksums,
                    compress_mem_tables => CompressMemTables};
 get_config(coordination = RaSystem) ->
