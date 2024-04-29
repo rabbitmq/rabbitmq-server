@@ -489,12 +489,14 @@ quantile_estimator:
 ra:
 - ra
 - ra_app
+- ra_aux
 - ra_bench
 - ra_counters
 - ra_dbg
 - ra_directory
 - ra_env
 - ra_ets_queue
+- ra_file
 - ra_file_handle
 - ra_flru
 - ra_leaderboard
@@ -523,6 +525,7 @@ ra:
 - ra_snapshot
 - ra_sup
 - ra_system
+- ra_system_recover
 - ra_system_sup
 - ra_systems_sup
 rabbit:
