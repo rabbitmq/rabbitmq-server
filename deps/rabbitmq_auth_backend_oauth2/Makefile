@@ -10,6 +10,8 @@ BUILD_DEPS = rabbit_common oauth2_client
 DEPS = rabbit cowlib jose base64url oauth2_client
 TEST_DEPS = cowboy rabbitmq_web_dispatch rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client rabbitmq_mqtt emqtt
 
+PLT_APPS += rabbitmqctl
+
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
