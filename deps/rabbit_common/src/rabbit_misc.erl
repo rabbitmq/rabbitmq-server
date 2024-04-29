@@ -82,7 +82,7 @@
 -export([safe_ets_update_counter/3, safe_ets_update_counter/4, safe_ets_update_counter/5,
          safe_ets_update_element/3, safe_ets_update_element/4, safe_ets_update_element/5]).
 -export([is_even/1, is_odd/1]).
--export([is_over_queue_node_limit/0, is_over_queue_node_limit/1]).
+-export([is_over_queue_node_limit/0, is_over_queue_node_limit/1, get_queue_count_and_limit_per_node/1]).
 
 -export([maps_any/2,
          maps_put_truthy/3,
@@ -1618,6 +1618,23 @@ get_node_queue_hard_limit(infinity) ->
 get_node_queue_hard_limit(L) when is_list(L) ->
     proplists:get_value(hard_limit, L, infinity).
 
+get_queue_count_and_limit_per_node(Nodes) ->
+    PNode = maps:from_keys(Nodes, {0, infinity}),
+    NodesWithLimit = maps:map(fun(N, {C, _L}) ->
+                                      Limit = get_node_queue_hard_limit(rpc_call(N, ?MODULE, get_env, [rabbit, queue_max_per_node, infinity])),
+                                      {C, Limit, false}
+                              end, PNode),
+    NodesWithQCountAndLimit = lists:foldl(fun(Q, Map) ->
+                                                  Key = amqqueue:qnode(Q),
+                                                  {V, L, _} = maps:get(Key, Map),
+                                                  maps:put(Key, {V +1, L, over_limit(V+1, L)}, Map) end,
+                                          NodesWithLimit, rabbit_db_queue:get_all()),
+    NodesWithQCountAndLimit.
+
+over_limit(_, infinity) ->
+    false;
+over_limit(C, L) ->
+    C >= L.
 
 -spec maps_put_truthy(Key, Value, Map) -> Map when
       Map :: #{Key => Value}.

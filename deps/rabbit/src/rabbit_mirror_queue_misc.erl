@@ -643,22 +643,24 @@ suggested_queue_nodes(Q, DefNode, AllNodes) when ?is_amqqueue(Q) ->
                     M:suggested_queue_nodes(
                       Params, MNode, SNodes, SSNodes, All);
                 _ ->
-                    case rabbit_misc:is_over_queue_node_limit(MNode) of
-                        {false, _Limit} ->
+                    All = case AllNodes of
+                              L when is_list(L)     -> L;
+                              F when is_function(F) -> F()
+                          end,
+                    NodesWithQueueCountAndLimits = rabbit_misc:get_queue_count_and_limit_per_node(All),
+                    case maps:get(MNode, NodesWithQueueCountAndLimits) of
+                        {_Count, _Limit, false} ->
                             {MNode, []};
-                        {true, Limit} ->
+                        {_Count, _Limit, true} ->
                             %% To get find any other node that might have room,
-                            All = case AllNodes of
-                                      L when is_list(L)     -> L;
-                                      F when is_function(F) -> F()
-                                  end,
-                            case [N || N <- All, false == element(1,rabbit_misc:is_over_queue_node_limit(N))] of
-                                [] ->
+                            FreeNodes = #{K => V || K := {_C, _L, OverLimit} = V <- NodesWithQueueCountAndLimits, not(OverLimit)},
+                            case maps:next(maps:iterator(FreeNodes)) of
+                                {FreeNode, _, _} ->
+                                    {FreeNode, []};
+                                none ->
                                     rabbit_misc:precondition_failed("cannot declare queue '~ts': "
                                                                     "queue limit (~tp) on every node is reached.",
-                                                                    [rabbit_amqqueue:get_resource_name(amqqueue:get_name(Q)), Limit]);
-                                %% Just pick any node that has free spots. Could optimize to take with most available or something.
-                                FreeNodes -> {hd(FreeNodes), []}
+                                                                    [rabbit_amqqueue:get_resource_name(amqqueue:get_name(Q)), 666])
                             end
                     end
             end;
