@@ -6,6 +6,8 @@ PROJECT_MOD = rabbit_prelaunch_app
 DEPS = rabbit_common cuttlefish thoas
 dep_cuttlefish = hex 3.1.0
 
+PLT_APPS += runtime_tools eunit osiris systemd
+
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk
 
 include ../../rabbitmq-components.mk
