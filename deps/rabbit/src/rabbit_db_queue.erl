@@ -1027,7 +1027,8 @@ set_many_in_khepri(Qs) ->
       Queue :: amqqueue:amqqueue(),
       FilterFun :: fun((Queue) -> boolean()),
       QName :: rabbit_amqqueue:name(),
-      Ret :: {[QName], [Deletions :: rabbit_binding:deletions()]}.
+      Ret :: {[QName], [Deletions :: rabbit_binding:deletions()]}
+             | rabbit_khepri:timeout_error().
 %% @doc Deletes all transient queues that match `FilterFun'.
 %%
 %% @private
@@ -1088,26 +1089,59 @@ delete_transient_in_khepri(FilterFun) ->
     %% process might call itself. Instead we can fetch all of the transient
     %% queues with `get_many' and then filter and fold the results outside of
     %% Khepri's Ra server process.
-    case rabbit_khepri:get_many(PathPattern) of
-        {ok, Qs} ->
-            Items = maps:fold(
-                     fun(Path, Queue, Acc) when ?is_amqqueue(Queue) ->
-                             case FilterFun(Queue) of
-                                 true ->
-                                     QueueName = khepri_queue_path_to_name(
-                                                   Path),
-                                     case delete_in_khepri(QueueName, false) of
-                                         ok ->
-                                             Acc;
-                                         Deletions ->
-                                             [{QueueName, Deletions} | Acc]
-                                     end;
-                                 false ->
-                                     Acc
-                             end
-                     end, [], Qs),
-            {QueueNames, Deletions} = lists:unzip(Items),
-            {QueueNames, lists:flatten(Deletions)};
+    case rabbit_khepri:adv_get_many(PathPattern) of
+        {ok, Props} ->
+            Qs = maps:fold(
+                   fun(Path0, #{data := Q, payload_version := Vsn}, Acc)
+                       when ?is_amqqueue(Q) ->
+                           case FilterFun(Q) of
+                               true ->
+                                   Path = khepri_path:combine_with_conditions(
+                                            Path0,
+                                            [#if_payload_version{version = Vsn}]),
+                                   QName = amqqueue:get_name(Q),
+                                   [{Path, QName} | Acc];
+                               false ->
+                                   Acc
+                           end
+                   end, [], Props),
+            do_delete_transient_queues_in_khepri(Qs, FilterFun);
+        {error, _} = Error ->
+            Error
+    end.
+
+do_delete_transient_queues_in_khepri([], _FilterFun) ->
+    %% If there are no changes to make, avoid performing a transaction. When
+    %% Khepri is in a minority this avoids a long timeout waiting for the
+    %% transaction command to be processed. Otherwise it avoids appending a
+    %% somewhat large transaction command to Khepri's log.
+    {[], []};
+do_delete_transient_queues_in_khepri(Qs, FilterFun) ->
+    Res = rabbit_khepri:transaction(
+            fun() ->
+                    rabbit_misc:fold_while_ok(
+                      fun({Path, QName}, Acc) ->
+                              %% Also see `delete_in_khepri/2'.
+                              case khepri_tx_adv:delete(Path) of
+                                  {ok, #{data := _}} ->
+                                      Deletions = rabbit_db_binding:delete_for_destination_in_khepri(
+                                                    QName, false),
+                                      {ok, [{QName, Deletions} | Acc]};
+                                  {ok, _} ->
+                                      {ok, Acc};
+                                  {error, _} = Error ->
+                                      Error
+                              end
+                      end, [], Qs)
+            end),
+    case Res of
+        {ok, Items} ->
+            {QNames, Deletions} = lists:unzip(Items),
+            {QNames, lists:flatten(Deletions)};
+        {error, {khepri, mismatching_node, _}} ->
+            %% One of the queues changed while attempting to update all
+            %% queues. Retry the operation.
+            delete_transient_in_khepri(FilterFun);
         {error, _} = Error ->
             Error
     end.
@@ -1382,6 +1416,3 @@ khepri_queues_path() ->
 
 khepri_queue_path(#resource{virtual_host = VHost, name = Name}) ->
     [?MODULE, queues, VHost, Name].
-
-khepri_queue_path_to_name([?MODULE, queues, VHost, Name]) ->
-    rabbit_misc:r(VHost, queue, Name).
