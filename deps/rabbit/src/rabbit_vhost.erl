@@ -200,7 +200,7 @@ do_add(Name, Metadata, ActingUser) ->
     {NewOrNot, VHost} = rabbit_db_vhost:create_or_get(Name, DefaultLimits, Metadata),
     case NewOrNot of
         new ->
-            rabbit_log:info("Inserted a virtual host record ~tp", [VHost]);
+            rabbit_log:debug("Inserted a virtual host record ~tp", [VHost]);
         existing ->
             ok
     end,
