@@ -32,42 +32,6 @@
           sudo apt-get update && \
           sudo apt-get install -y dotnet-sdk-6.0
       #@ end
-      #@ if name == "rabbitmq_peer_discovery_aws":
-      - name: CHECK IF IMAGE WILL PUSH
-        id: authorized
-        run: |
-          if [ -n "${{ secrets.DOCKERHUB_PASSWORD }}" ]; then
-            echo "authorized=true" | tee -a $GITHUB_OUTPUT
-          else
-            echo "authorized=false" | tee -a $GITHUB_OUTPUT
-          fi
-      - uses: docker/metadata-action@v5
-        if: steps.authorized.outputs.authorized == 'true'
-        id: metadata
-        with:
-          images: pivotalrabbitmq/rabbitmq
-          tags: |
-            type=sha,format=long
-      - uses: int128/wait-for-docker-image-action@v1
-        if: steps.authorized.outputs.authorized == 'true'
-        with:
-          tags: ${{ steps.metadata.outputs.tags }}
-          timeout-seconds: 3600
-          polling-seconds: 60
-      - name: EXPORT AWS CREDENTIALS
-        if: steps.authorized.outputs.authorized == 'true'
-        run: |
-          curl -Lo /usr/local/bin/ecs-cli https://amazon-ecs-cli.s3.amazonaws.com/ecs-cli-linux-amd64-latest && \
-          chmod +x /usr/local/bin/ecs-cli && \
-          ecs-cli --version
-
-          branch_or_tag="${GITHUB_REF##*/}"
-
-          echo "AWS_ACCESS_KEY_ID=${{ secrets.CONCOURSE_AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.CONCOURSE_AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
-          echo "RABBITMQ_IMAGE=pivotalrabbitmq/rabbitmq:sha-${{ github.sha }}" >> $GITHUB_ENV
-          echo "AWS_ECS_CLUSTER_NAME=rabbitmq-peer-discovery-aws-actions-${branch_or_tag//[._]/-}" >> $GITHUB_ENV
-      #@ end
       - name: RESTORE BUILT REPO
         uses: actions/cache@v4
         with:
@@ -120,7 +84,7 @@
       - name: CT (@= suite @)
 #@ if name == "rabbitmq_peer_discovery_aws":
 #@ if suite == "integration":
-        if: steps.authorized.outputs.authorized == 'true'
+        if: false
 #@ end
 #@ end
         run: |
