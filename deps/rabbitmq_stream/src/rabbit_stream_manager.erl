@@ -889,11 +889,12 @@ delete_super_stream_exchange(VirtualHost, Name, Username) ->
     case rabbit_stream_utils:enforce_correct_name(Name) of
         {ok, CorrectName} ->
             ExchangeName = rabbit_misc:r(VirtualHost, exchange, CorrectName),
-            case rabbit_exchange:delete(ExchangeName, false, Username) of
-                {error, not_found} ->
-                    ok;
+            case rabbit_exchange:ensure_deleted(
+                   ExchangeName, false, Username) of
                 ok ->
-                    ok
+                    ok;
+                {error, timeout} = Err ->
+                    Err
             end;
         error ->
             {error, validation_failed}

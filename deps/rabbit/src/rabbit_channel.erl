@@ -2512,13 +2512,16 @@ handle_method(#'exchange.delete'{exchange  = ExchangeNameBin,
     check_not_default_exchange(ExchangeName),
     check_exchange_deletion(ExchangeName),
     check_configure_permitted(ExchangeName, User, AuthzContext),
-    case rabbit_exchange:delete(ExchangeName, IfUnused, Username) of
-        {error, not_found} ->
+    case rabbit_exchange:ensure_deleted(ExchangeName, IfUnused, Username) of
+        ok ->
             ok;
         {error, in_use} ->
             rabbit_misc:precondition_failed("~ts in use", [rabbit_misc:rs(ExchangeName)]);
-        ok ->
-            ok
+        {error, timeout} ->
+            rabbit_misc:protocol_error(
+              internal_error,
+              "failed to delete exchange '~ts' due to a timeout",
+              [rabbit_misc:rs(ExchangeName)])
     end;
 handle_method(#'queue.purge'{queue = QueueNameBin},
               ConnPid, AuthzContext, _CollectorPid, VHostPath, User) ->

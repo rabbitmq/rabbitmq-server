@@ -285,8 +285,15 @@ handle_http_req(<<"DELETE">>,
     ok = prohibit_default_exchange(XName),
     ok = prohibit_reserved_amq(XName),
     PermCache = check_resource_access(XName, configure, User, PermCache0),
-    _ = rabbit_exchange:delete(XName, false, Username),
-    {<<"204">>, null, {PermCache, TopicPermCache}};
+    case rabbit_exchange:ensure_deleted(XName, false, Username) of
+        ok ->
+            {<<"204">>, null, {PermCache, TopicPermCache}};
+        {error, timeout} ->
+            throw(
+              <<"500">>,
+              "failed to delete exchange '~ts' due to a timeout",
+              [XNameBin])
+    end;
 
 handle_http_req(<<"POST">>,
                 [<<"bindings">>],
