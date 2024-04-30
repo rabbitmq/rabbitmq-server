@@ -76,18 +76,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -137,13 +139,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-system
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-amqp10_client-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -174,18 +169,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -245,13 +242,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-serial_number
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-amqp10_common-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -282,18 +272,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -343,13 +335,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-amqp_client-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -380,18 +365,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -441,13 +428,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-oauth2_client-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -478,18 +458,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -579,13 +561,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-worker_pool
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbit_common-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -616,18 +591,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -657,13 +634,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_ct_client_helpers-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -694,18 +664,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -745,13 +717,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-terraform
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_ct_helpers-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -782,18 +747,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -833,13 +800,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_stream_core
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_stream_common-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -870,18 +830,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -911,13 +873,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-trust_store_http-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -961,18 +916,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -2412,13 +2369,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-vhost
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbit-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -2450,18 +2400,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -2481,13 +2433,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/checks
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_cli-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -2519,18 +2464,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -2570,13 +2517,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-management
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_amqp_client-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -2607,18 +2547,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -2648,13 +2590,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_amqp1_0-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -2685,18 +2620,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -2756,13 +2693,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_auth_cache
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_auth_backend_cache-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -2793,18 +2723,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -2864,13 +2796,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_auth_backend_http-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -2901,18 +2826,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -2972,13 +2899,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_auth_backend_ldap-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3009,18 +2929,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -3140,13 +3062,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-wildcard_match
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_auth_backend_oauth2-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3177,18 +3092,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -3218,13 +3135,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_auth_mechanism_ssl-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3255,18 +3165,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -3296,13 +3208,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_aws-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3333,18 +3238,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -3384,13 +3291,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_exchange_type_consistent_hash
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_consistent_hash_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3421,18 +3321,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -3492,13 +3394,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_event_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3529,18 +3424,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -3640,13 +3537,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-unit_inbroker
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_federation-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3677,18 +3567,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -3728,13 +3620,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-federation_mgmt
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_federation_management-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3765,18 +3650,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -3836,13 +3723,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-sjx_evaluation
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_jms_topic_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3873,18 +3753,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -4054,13 +3936,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-stats
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_management-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4091,18 +3966,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -4172,13 +4049,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_mgmt_slide
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_management_agent-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4209,18 +4079,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -4440,13 +4312,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-v5
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_mqtt-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4477,18 +4342,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -4549,13 +4416,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_peer_discovery_aws-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4586,18 +4446,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -4637,13 +4499,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-config_schema
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_peer_discovery_common-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4674,18 +4529,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -4735,13 +4592,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbitmq_peer_discovery_consul
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_peer_discovery_consul-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4772,18 +4622,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -4843,13 +4695,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_peer_discovery_etcd-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4880,18 +4725,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -4941,13 +4788,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbitmq_peer_discovery_k8s
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_peer_discovery_k8s-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4978,18 +4818,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -5039,13 +4881,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_prelaunch_file
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_prelaunch-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5076,18 +4911,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -5147,13 +4984,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_prometheus_http
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_prometheus-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5184,18 +5014,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -5225,13 +5057,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_random_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5262,18 +5087,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -5313,13 +5140,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-system
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_recent_history_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5350,18 +5170,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -5411,13 +5233,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_sharding
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_sharding-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5448,18 +5263,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -5589,13 +5406,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-shovel_status_command
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_shovel-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5626,18 +5436,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -5697,13 +5509,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_shovel_mgmt_util
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_shovel_management-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5734,18 +5539,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -5865,13 +5672,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-util
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_stomp-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5902,18 +5702,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -6013,13 +5815,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_stream_utils
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_stream-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6050,18 +5845,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -6101,13 +5898,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-http
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_stream_management-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6138,18 +5928,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -6179,13 +5971,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_top-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6216,18 +6001,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -6267,13 +6054,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_tracing
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_tracing-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6304,18 +6084,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -6365,13 +6147,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-system
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_trust_store-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6402,18 +6177,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -6463,13 +6240,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_web_dispatch_unit
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_web_dispatch-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6500,18 +6270,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -6581,13 +6353,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-system
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_web_mqtt-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6618,18 +6383,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -6659,13 +6426,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_web_mqtt_examples-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6696,18 +6456,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -6797,13 +6559,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_web_stomp-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6834,18 +6589,20 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
+      uses: actions/cache@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-
+        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
         tree /home/runner/test-result-cache
+      continue-on-error: true
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -6875,13 +6632,6 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
-    - name: SAVE CACHE COPY
-      if: always()
-      uses: actions/upload-artifact@v4.3.1
-      with:
-        name: trc-rabbitmq_web_stomp_examples-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-        path: |
-          /home/runner/test-result-cache
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6944,30 +6694,6 @@ jobs:
     - test-rabbitmq_web_stomp_examples
     runs-on: ubuntu-latest
     steps:
-    - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache/restore@v3
-      with:
-        path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
-        restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-
-    - name: UPDATE CACHE
-      uses: actions/download-artifact@v4
-      with:
-        pattern: trc-*
-        path: /home/runner/test-result-cache
-        merge-multiple: true
-    - name: PRINT RESULTS
-      run: |
-        set -x
-        tree /home/runner/test-result-cache
-    - name: SAVE TEST RESULT CACHE
-      uses: actions/cache/save@v3
-      with:
-        path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: SUMMARY
       run: |
         cat << 'EOF' | jq -e 'map(.result == "success") | all(.)'
