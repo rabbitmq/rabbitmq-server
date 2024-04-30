@@ -340,7 +340,8 @@ delete_queues() ->
      || Q <- rabbit_amqqueue:list()].
 
 delete_exchange(Name) ->
-    _ = rabbit_exchange:delete(rabbit_misc:r(<<"/">>, exchange, Name), false, <<"dummy">>).
+    ok = rabbit_exchange:ensure_deleted(
+           rabbit_misc:r(<<"/">>, exchange, Name), false, <<"dummy">>).
 
 declare(Ch, Q, Args) ->
     declare(Ch, Q, Args, true).

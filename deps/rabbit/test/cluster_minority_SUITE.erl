@@ -24,6 +24,7 @@ groups() ->
      {client_operations, [], [open_connection,
                               open_channel,
                               declare_exchange,
+                              delete_exchange,
                               declare_binding,
                               delete_binding,
                               declare_queue,
@@ -100,6 +101,8 @@ init_per_group(Group, Config0) when Group == client_operations;
             #'exchange.bind_ok'{} = amqp_channel:call(Ch, #'exchange.bind'{destination = <<"amq.fanout">>,
                                                                            source = <<"amq.direct">>,
                                                                            routing_key = <<"binding-to-be-deleted">>}),
+            %% To be used in delete_exchange
+            #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = <<"exchange-to-be-deleted">>}),
 
             %% Lower the default Khepri command timeout. By default this is set
             %% to 30s in `rabbit_khepri:setup/1' which makes the cases in this
@@ -156,6 +159,12 @@ declare_exchange(Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, A),
     ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 541, _}}}, _},
                 amqp_channel:call(Ch, #'exchange.declare'{exchange = <<"test-exchange">>})).
+
+delete_exchange(Config) ->
+    [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, A),
+    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 541, _}}}, _},
+                amqp_channel:call(Ch, #'exchange.delete'{exchange = <<"exchange-to-be-deleted">>})).
 
 declare_binding(Config) ->
     [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

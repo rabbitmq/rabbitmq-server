@@ -275,7 +275,7 @@ delete(VHost, ActingUser) ->
          assert_benign(rabbit_amqqueue:with(Name, QDelFun), ActingUser)
      end || Q <- rabbit_amqqueue:list(VHost)],
     rabbit_log:info("Deleting exchanges in vhost '~ts' because it's being deleted", [VHost]),
-    [assert_benign(rabbit_exchange:delete(Name, false, ActingUser), ActingUser) ||
+    [ok = rabbit_exchange:ensure_deleted(Name, false, ActingUser) ||
         #exchange{name = Name} <- rabbit_exchange:list(VHost)],
     rabbit_log:info("Clearing policies and runtime parameters in vhost '~ts' because it's being deleted", [VHost]),
     _ = rabbit_runtime_parameters:clear_vhost(VHost, ActingUser),

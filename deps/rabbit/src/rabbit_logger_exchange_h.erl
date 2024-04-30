@@ -196,7 +196,16 @@ unconfigure_exchange(
                                       virtual_host = VHost} = Exchange,
                 setup_proc := Pid}}) ->
     Pid ! stop,
-    _ = rabbit_exchange:delete(Exchange, false, ?INTERNAL_USER),
+    case rabbit_exchange:ensure_deleted(Exchange, false, ?INTERNAL_USER) of
+        ok ->
+            ok;
+        {error, timeout} ->
+            ?LOG_ERROR(
+              "Could not delete exchange '~ts' in vhost '~ts' due to a timeout",
+              [Name, VHost],
+              #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+            ok
+    end,
     ?LOG_INFO(
        "Logging to exchange '~ts' in vhost '~ts' disabled",
        [Name, VHost],
