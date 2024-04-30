@@ -89,7 +89,7 @@
          maps_put_falsy/3
         ]).
 -export([remote_sup_child/2]).
--export([for_each_while_ok/2]).
+-export([for_each_while_ok/2, fold_while_ok/3]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -1655,3 +1655,24 @@ for_each_while_ok(Fun, [Elem | Rest]) ->
     end;
 for_each_while_ok(_, []) ->
     ok.
+
+-spec fold_while_ok(FoldFun, Acc, List) -> Ret when
+      FoldFun :: fun((Element, Acc) -> {ok, Acc} | {error, ErrReason}),
+      Element :: any(),
+      List :: Element,
+      Ret :: {ok, Acc} | {error, ErrReason}.
+%% @doc Calls the given `FoldFun' on each element of the given `List' and the
+%% accumulator value, short-circuiting if the function returns `{error,_}'.
+%%
+%% @returns the first `{error,_}' returned by `FoldFun' or `{ok,Acc}' if
+%% `FoldFun' never returns an error tuple.
+
+fold_while_ok(Fun, Acc0, [Elem | Rest]) ->
+    case Fun(Elem, Acc0) of
+        {ok, Acc} ->
+            fold_while_ok(Fun, Acc, Rest);
+        {error, _} = Error ->
+            Error
+    end;
+fold_while_ok(_Fun, Acc, []) ->
+    {ok, Acc}.
