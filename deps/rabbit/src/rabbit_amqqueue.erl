@@ -224,10 +224,12 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
         Owner, ActingUser, Node) ->
     ok = check_declare_arguments(QueueName, Args),
     Type = get_queue_type(Args),
-
-    %% TODO: Here we need to check if its possible to declare the queue on this
-    %% node, and if not, find another node? If no other node, die. ONLY FOR NON
-    %% CLASSIC MIRROR QUEUES THAT ARE NOT EXCLUSIVE
+    %% Here we need to check if its possible to declare the queue on this
+    %% node. If its exclussive, we kill the channel then the connection.
+    %% If not exclusive, we only kill the channel.
+    %% If it is 'non mirror' classic queue, we handle the queue node limit
+    %% in rabbit_classic_queue:declare
+    ok = check_node_queue_limit(QueueName, Type, Owner),
 
     case rabbit_queue_type:is_enabled(Type) of
         true ->
@@ -1126,6 +1128,44 @@ check_queue_type(Val, _Args) when is_binary(Val) ->
     end;
 check_queue_type(_Val, _Args) ->
     {error, invalid_queue_type}.
+
+check_node_queue_limit(#resource{name = QueueName}, Type, none) ->
+    case Type of
+        %% For classic queues, we handle the queue limit check in rabbit_classic_queue:declare,
+        %% to potentially create the queue on another node in the cluster, if any.
+        rabbit_classic_queue ->
+            ok;
+        _ ->
+            case rabbit_misc:is_over_queue_node_limit() of
+                {true, NodeLimit} ->
+                    rabbit_misc:precondition_failed("cannot declare queue '~ts': "
+                                                    "queue limit (~tp) on node is reached.",
+                                                    [QueueName, NodeLimit]);
+                {false, _} ->
+                    ok
+            end
+    end;
+check_node_queue_limit(#resource{name = QueueName}, _, PID) when is_pid(PID) ->
+    case rabbit_misc:is_over_queue_node_limit() of
+        {true, NodeLimit} ->
+            %% maybe not ideal, but is there a better way to 'close' a connection from within a channel?
+            ChannelPid = self(),
+            spawn(fun() ->
+                          Ref = erlang:monitor(process, ChannelPid),
+                          %% Wait for the channel to finish its rejection before killing the connection
+                          receive
+                              {'DOWN', Ref, process, ChannelPid, _Reason} ->
+                                  rabbit_networking:close_connection(PID, "foobar")
+                          after 5000 ->
+                                  ok
+                          end
+                  end),
+            rabbit_misc:precondition_failed("cannot declare exclusive queue '~ts': "
+                                            "queue limit (~tp) on node is reached. Closing connection...",
+                                            [QueueName, NodeLimit]);
+        {false, _} ->
+            ok
+    end.
 
 -spec list() -> [amqqueue:amqqueue()].
 
