@@ -1601,7 +1601,7 @@ is_over_queue_node_limit() ->
     is_over_queue_node_limit(node()).
 -spec is_over_queue_node_limit(node()) -> boolean() | {boolean(), integer()|infinity}.
 is_over_queue_node_limit(Node) ->
-%    QueueNodeLimit = rabbit_misc:get_env(rabbit, queue_max_per_node, infinity),
+    %% QueueNodeLimit = rabbit_misc:get_env(rabbit, queue_max_per_node, infinity),
     QueueNodeLimit = rpc_call(Node, ?MODULE, get_env, [rabbit, queue_max_per_node, infinity]),
     case get_node_queue_hard_limit(QueueNodeLimit) of
         infinity ->
