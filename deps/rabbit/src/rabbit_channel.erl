@@ -1065,45 +1065,45 @@ check_vhost_queue_limit(#resource{name = QueueName}, VHost) ->
 
   end.
 
-check_node_queue_limit(#resource{name = QueueName}, Args, none) ->
-    case rabbit_misc:table_lookup(Args, <<"x-queue-type">>) of
-        undefined ->
-            ok;
-        {_, <<"classic">>} ->
-        %% For classic queues, we handle the queue limit check in rabbit_classic_queue:declare,
-        %% to potentially create the queue on another node in the cluster, if any.
-            ok;
-        _ ->
-            case rabbit_misc:is_over_queue_node_limit() of
-                {true, NodeLimit} ->
-                    rabbit_misc:precondition_failed("cannot declare queue '~ts': "
-                                                    "queue limit (~tp) on node is reached.",
-                                                    [QueueName, NodeLimit]);
-                {false, _} ->
-                    ok
-            end
-    end;
-check_node_queue_limit(#resource{name = QueueName}, _, PID) when is_pid(PID) ->
-    case rabbit_misc:is_over_queue_node_limit() of
-        {true, NodeLimit} ->
-            %% maybe not ideal, but is there a better way to 'close' a connection from within a channel?
-            ChannelPid = self(),
-            spawn(fun() ->
-                          Ref = erlang:monitor(process, ChannelPid),
-                          %% Wait for the channel to finish its rejection before killing the connection
-                          receive
-                              {'DOWN', Ref, process, ChannelPid, _Reason} ->
-                                  rabbit_networking:close_connection(PID, "foobar")
-                          after 5000 ->
-                                  ok
-                          end
-                  end),
-            rabbit_misc:precondition_failed("cannot declare exclusive queue '~ts': "
-                                            "queue limit (~tp) on node is reached. Closing connection...",
-                                            [QueueName, NodeLimit]);
-        {false, _} ->
-            ok
-    end.
+%% check_node_queue_limit(#resource{name = QueueName}, Args, none) ->
+%%     case rabbit_misc:table_lookup(Args, <<"x-queue-type">>) of
+%%         undefined ->
+%%             ok;
+%%         {_, <<"classic">>} ->
+%%         %% For classic queues, we handle the queue limit check in rabbit_classic_queue:declare,
+%%         %% to potentially create the queue on another node in the cluster, if any.
+%%             ok;
+%%         _ ->
+%%             case rabbit_misc:is_over_queue_node_limit() of
+%%                 {true, NodeLimit} ->
+%%                     rabbit_misc:precondition_failed("cannot declare queue '~ts': "
+%%                                                     "queue limit (~tp) on node is reached.",
+%%                                                     [QueueName, NodeLimit]);
+%%                 {false, _} ->
+%%                     ok
+%%             end
+%%     end;
+%% check_node_queue_limit(#resource{name = QueueName}, _, PID) when is_pid(PID) ->
+%%     case rabbit_misc:is_over_queue_node_limit() of
+%%         {true, NodeLimit} ->
+%%             %% maybe not ideal, but is there a better way to 'close' a connection from within a channel?
+%%             ChannelPid = self(),
+%%             spawn(fun() ->
+%%                           Ref = erlang:monitor(process, ChannelPid),
+%%                           %% Wait for the channel to finish its rejection before killing the connection
+%%                           receive
+%%                               {'DOWN', Ref, process, ChannelPid, _Reason} ->
+%%                                   rabbit_networking:close_connection(PID, "foobar")
+%%                           after 5000 ->
+%%                                   ok
+%%                           end
+%%                   end),
+%%             rabbit_misc:precondition_failed("cannot declare exclusive queue '~ts': "
+%%                                             "queue limit (~tp) on node is reached. Closing connection...",
+%%                                             [QueueName, NodeLimit]);
+%%         {false, _} ->
+%%             ok
+%%     end.
 
 qbin_to_resource(QueueNameBin, VHostPath) ->
     name_to_resource(queue, QueueNameBin, VHostPath).
@@ -2571,7 +2571,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
             %% If not exclusive, we only kill the channel.
             %% If it is 'non mirror' classic queue, we handle the queue node limit
             %% in rabbit_classic_queue:declare
-            check_node_queue_limit(QueueName, Args, Owner),
+            %% check_node_queue_limit(QueueName, Args, Owner),
             DlxKey = <<"x-dead-letter-exchange">>,
             case rabbit_misc:r_arg(VHostPath, exchange, Args, DlxKey) of
                undefined ->
