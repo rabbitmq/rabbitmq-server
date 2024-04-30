@@ -1848,7 +1848,12 @@ on_node_up(_Node) ->
 on_node_down(Node) ->
     {Time, Ret} = timer:tc(fun() -> rabbit_db_queue:delete_transient(filter_transient_queues_to_delete(Node)) end),
     case Ret of
-        ok -> ok;
+        {error, timeout} ->
+            %% This type of failure is only possible with Khepri but transient
+            %% entities are going away as Khepri stabilizes.
+            rabbit_log:warning("Failed to delete transient queues on node "
+                               "down due to a timeout"),
+            ok;
         {QueueNames, Deletions} ->
             case length(QueueNames) of
                 0 -> ok;
