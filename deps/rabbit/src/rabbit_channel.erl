@@ -2522,6 +2522,11 @@ handle_method(#'exchange.delete'{exchange  = ExchangeNameBin,
             ok;
         {error, in_use} ->
             rabbit_misc:precondition_failed("~ts in use", [rabbit_misc:rs(ExchangeName)]);
+        {error, timeout} ->
+            rabbit_misc:protocol_error(
+              internal_error,
+              "Could not delete exchange '~ts' due to timeout",
+              [rabbit_misc:rs(ExchangeName)]);
         ok ->
             ok
     end;

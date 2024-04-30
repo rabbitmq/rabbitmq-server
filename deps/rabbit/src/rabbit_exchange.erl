@@ -453,9 +453,13 @@ cons_if_present(XName, L) ->
 
 -spec delete
         (name(),  'true', rabbit_types:username()) ->
-                    'ok'| rabbit_types:error('not_found' | 'in_use');
+                    'ok'
+                    | rabbit_types:error('not_found' | 'in_use')
+                    | rabbit_khepri:timeout_error();
         (name(), 'false', rabbit_types:username()) ->
-                    'ok' | rabbit_types:error('not_found').
+                    'ok'
+                    | rabbit_types:error('not_found')
+                    | rabbit_khepri:timeout_error().
 
 delete(XName, IfUnused, Username) ->
     try

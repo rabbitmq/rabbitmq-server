@@ -555,7 +555,10 @@ next_serial_in_khepri_tx(#exchange{name = XName}) ->
       Exchange :: rabbit_types:exchange(),
       Binding :: rabbit_types:binding(),
       Deletions :: dict:dict(),
-      Ret :: {error, not_found} | {error, in_use} | {deleted, Exchange, [Binding], Deletions}.
+      Ret :: {error, not_found}
+             | {error, in_use}
+             | {deleted, Exchange, [Binding], Deletions}
+             | rabbit_khepri:timeout_error().
 %% @doc Deletes an exchange record from the database. If `IfUnused' is set
 %% to `true', it is only deleted when there are no bindings present on the
 %% exchange.

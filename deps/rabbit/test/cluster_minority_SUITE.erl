@@ -24,6 +24,7 @@ groups() ->
      {client_operations, [], [open_connection,
                               open_channel,
                               declare_exchange,
+                              delete_exchange,
                               declare_binding,
                               delete_binding,
                               declare_queue,
@@ -89,6 +90,8 @@ init_per_group(Group, Config0) when Group == client_operations;
             %% To be used in consume_from_queue
             #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = <<"test-queue">>,
                                                                            arguments = [{<<"x-queue-type">>, longstr, <<"classic">>}]}),
+            %% To be used in delete_exchange
+            #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = <<"exchange-to-be-deleted">>}),
             %% To be used in delete_binding
             #'exchange.bind_ok'{} = amqp_channel:call(Ch, #'exchange.bind'{destination = <<"amq.fanout">>,
                                                                            source = <<"amq.direct">>,
@@ -149,6 +152,12 @@ declare_exchange(Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, A),
     ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 541, _}}}, _},
                 amqp_channel:call(Ch, #'exchange.declare'{exchange = <<"test-exchange">>})).
+
+delete_exchange(Config) ->
+    [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, A),
+    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 541, _}}}, _},
+                amqp_channel:call(Ch, #'exchange.delete'{exchange = <<"exchange-to-be-deleted">>})).
 
 declare_binding(Config) ->
     [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
