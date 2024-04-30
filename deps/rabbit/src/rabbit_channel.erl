@@ -2471,7 +2471,12 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                 {error, queue_limit_exceeded, Reason, ReasonArgs} ->
                     rabbit_misc:precondition_failed(Reason, ReasonArgs);
                 {protocol_error, ErrorType, Reason, ReasonArgs} ->
-                    rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs)
+                    rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs);
+                {error, timeout} ->
+                    rabbit_misc:protocol_error(
+                      internal_error,
+                      "Could not declare queue '~ts' due to timeout",
+                      [rabbit_misc:rs(QueueName)])
             end;
         {error, {absent, Q, Reason}} ->
             rabbit_amqqueue:absent(Q, Reason)

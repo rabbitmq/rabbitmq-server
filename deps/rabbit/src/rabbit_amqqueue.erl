@@ -176,6 +176,7 @@ find_local_durable_queues(VHostName) ->
     {'new', amqqueue:amqqueue(), rabbit_fifo_client:state()} |
     {'absent', amqqueue:amqqueue(), absent_reason()} |
     {'error', Type :: atom(), Reason :: string(), Args :: term()} |
+    {'error', Err :: term()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
     declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser, node()).
@@ -195,6 +196,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
     {'absent', amqqueue:amqqueue(), absent_reason()} |
     {'error', Type :: atom(), Reason :: string(), Args :: term()} |
+    {'error', Err :: term()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
         Owner, ActingUser, Node) ->
@@ -251,8 +253,13 @@ get_queue_type(Args, DefaultQueueType) ->
             rabbit_queue_type:discover(V)
     end.
 
--spec internal_declare(amqqueue:amqqueue(), boolean()) ->
-    {created | existing, amqqueue:amqqueue()} | queue_absent().
+-spec internal_declare(Q, Recover) -> Ret when
+      Q :: amqqueue:amqqueue(),
+      Recover :: boolean(),
+      Ret :: {created, amqqueue:amqqueue()}
+             | {existing, amqqueue:amqqueue()}
+             | queue_absent()
+             | rabbit_khepri:timeout_error().
 
 internal_declare(Q, Recover) ->
     do_internal_declare(Q, Recover).
@@ -284,7 +291,7 @@ update(Name, Fun) ->
 ensure_rabbit_queue_record_is_initialized(Q) ->
     store_queue(Q).
 
--spec store_queue(amqqueue:amqqueue()) -> 'ok'.
+-spec store_queue(amqqueue:amqqueue()) -> 'ok' | {error, timeeout}.
 
 store_queue(Q0) ->
     Q = rabbit_queue_decorator:set(Q0),

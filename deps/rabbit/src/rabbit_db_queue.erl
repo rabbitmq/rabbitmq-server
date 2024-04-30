@@ -823,7 +823,10 @@ get_all_by_type_and_node_in_khepri(VHostName, Type, Node) ->
 
 -spec create_or_get(Queue) -> Ret when
       Queue :: amqqueue:amqqueue(),
-      Ret :: {created, Queue} | {existing, Queue} | {absent, Queue, nodedown}.
+      Ret :: {created, Queue}
+             | {existing, Queue}
+             | {absent, Queue, nodedown}
+             | rabbit_khepri:timeout_error().
 %% @doc Writes a queue record if it doesn't exist already or returns the existing one
 %%
 %% @returns the existing record if there is one in the database already, or the newly
@@ -872,8 +875,9 @@ create_or_get_in_khepri(Q) ->
 %% set().
 %% -------------------------------------------------------------------
 
--spec set(Queue) -> ok when
-      Queue :: amqqueue:amqqueue().
+-spec set(Queue) -> Ret when
+      Queue :: amqqueue:amqqueue(),
+      Ret :: ok | rabbit_khepri:timeout_error().
 %% @doc Writes a queue record. If the queue is durable, it writes both instances:
 %% durable and transient. For the durable one, it resets decorators.
 %% The transient one is left as it is.
