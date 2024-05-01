@@ -1770,11 +1770,14 @@ single_active_consumer(QType, Config) ->
 %% field of the DETACH frame and therefore handles every DETACH frame as closed. Since the link is closed,
 %% we expect every outstanding delivery to be requeued.
 %%
-%% In addition to consumer cancellation, detaching a link therefore causes in flight deliveries to be requeued.
+%% In addition to consumer cancellation, detaching a link therefore causes in
+%% flight deliveries to be requeued.
 %%
-%% Note that this behaviour is different from merely consumer cancellation in AMQP legacy:
-%% "After a consumer is cancelled there will be no future deliveries dispatched to it. Note that there can
-%% still be "in flight" deliveries dispatched previously. Cancelling a consumer will neither discard nor requeue them."
+%% Note that this behaviour is different from merely consumer cancellation in
+%% AMQP legacy:
+%% "After a consumer is cancelled there will be no future deliveries dispatched to it.
+%% Note that there can still be "in flight" deliveries dispatched previously.
+%% Cancelling a consumer will neither discard nor requeue them."
 %% [https://www.rabbitmq.com/consumers.html#unsubscribing]
 detach_requeues(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),

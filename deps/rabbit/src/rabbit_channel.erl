@@ -1454,8 +1454,9 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
                    fun () -> {error, not_found} end,
                    fun () ->
                            rabbit_queue_type:cancel(
-                             Q, ConsumerTag, ok_msg(NoWait, OkMsg),
-                             Username, QueueStates0)
+                             Q, #{consumer_tag => ConsumerTag,
+                                  ok_msg => ok_msg(NoWait, OkMsg),
+                                  user => Username}, QueueStates0)
                    end) of
                 {ok, QueueStates} ->
                     rabbit_global_counters:consumer_deleted(amqp091),

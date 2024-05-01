@@ -16,6 +16,7 @@
          init/2,
          checkout/4,
          cancel_checkout/2,
+         cancel_checkout/3,
          enqueue/3,
          enqueue/4,
          dequeue/4,
@@ -459,6 +460,9 @@ credit(ConsumerTag, DeliveryCount, Credit, Drain, Echo,
     State = State0#state{consumers = CDels},
     {send_command(ServerId, undefined, Cmd, normal, State), []}.
 
+cancel_checkout(ConsumerTag, State) ->
+    cancel_checkout(ConsumerTag, cancel, State).
+
 %% @doc Cancels a checkout with the rabbit_fifo queue  for the consumer tag
 %%
 %% This is a synchronous call. I.e. the call will block until the command
@@ -468,18 +472,35 @@ credit(ConsumerTag, DeliveryCount, Credit, Drain, Echo,
 %% @param State The {@module} state.
 %%
 %% @returns `{ok, State}' or `{error | timeout, term()}'
--spec cancel_checkout(rabbit_types:ctag(), state()) ->
+-spec cancel_checkout(rabbit_types:ctag(), Reason :: cancel | remove, state()) ->
     {ok, state()} | {error | timeout, term()}.
-cancel_checkout(ConsumerTag, #state{consumers = Consumers} = State0) ->
+cancel_checkout(ConsumerTag, Reason,
+                #state{consumers = Consumers,
+                       unsent_commands = Unsent} = State0)
+  when is_atom(Reason) ->
     case Consumers of
-        #{ConsumerTag := #consumer{}} ->
+        #{ConsumerTag := #consumer{key = Cid}} ->
             Servers = sorted_servers(State0),
             ConsumerId = {ConsumerTag, self()},
-            %% TODO: send any pending commands for consumer
-            %% checkout always uses the ConsumerId, rather than the key
-            Cmd = rabbit_fifo:make_checkout(ConsumerId, cancel, #{}),
-            State = State0#state{consumers = maps:remove(ConsumerTag, Consumers)},
-            case try_process_command(Servers, Cmd, State0) of
+            %% send any pending commands for consumer before cancelling
+            Commands = case Unsent of
+                           #{Cid := {Settled, Returns, Discards}} ->
+                                 add_command(Cid, settle, Settled,
+                                             add_command(Cid, return, Returns,
+                                                         add_command(Cid, discard,
+                                                                     Discards, [])));
+                           _ ->
+                               []
+                       end,
+            ServerId = pick_server(State0),
+            %% send all the settlements, discards and returns
+            State1 = lists:foldl(fun (C, S0) ->
+                                        send_command(ServerId, undefined, C,
+                                                     normal, S0)
+                                end, State0, Commands),
+            Cmd = rabbit_fifo:make_checkout(ConsumerId, Reason, #{}),
+            State = State1#state{consumers = maps:remove(ConsumerTag, Consumers)},
+            case try_process_command(Servers, Cmd, State) of
                 {ok, _, Leader} ->
                     {ok, State#state{leader = Leader}};
                 Err ->
