@@ -17,8 +17,9 @@ The RabbitMQ Core team at Broadcom has no obligation to reply to any message or 
 The following groups of users are eligible for community support:
 
  * Users who regularly contribute to RabbitMQ development (a definition of "contribution" is provided at the end of this document)
- * Users who provide detailed and well researched issue reports, including responsibly disclosed security vulnerabilities
+ * Users who use [the most recent release series](https://www.rabbitmq.com/release-information) and provide detailed and well researched issue reports, including responsibly disclosed security vulnerabilities
 
+All other users without a [commercial license](https://tanzu.vmware.com/rabbitmq) **are not eligible** for community support.
 
 ### Exceptions: Reports that Will Always Be Investigated
 
