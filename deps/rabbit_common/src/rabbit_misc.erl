@@ -1621,20 +1621,27 @@ get_node_queue_hard_limit(L) when is_list(L) ->
 get_queue_count_and_limit_per_node(Nodes) ->
     PNode = maps:from_keys(Nodes, {0, infinity}),
     NodesWithLimit = maps:map(fun(N, {C, _L}) ->
-                                      Limit = get_node_queue_hard_limit(rpc_call(N, ?MODULE, get_env, [rabbit, queue_max_per_node, infinity])),
+                                       Limit = get_node_queue_hard_limit(rpc_call(N, ?MODULE, get_env, [rabbit, queue_max_per_node, infinity])),
                                       {C, Limit, false}
                               end, PNode),
-    NodesWithQCountAndLimit = lists:foldl(fun(Q, Map) ->
-                                                  Key = amqqueue:qnode(Q),
-                                                  {V, L, _} = maps:get(Key, Map),
-                                                  maps:put(Key, {V +1, L, over_limit(V+1, L)}, Map) end,
-                                          NodesWithLimit, rabbit_db_queue:get_all()),
-    NodesWithQCountAndLimit.
+    AllQs = rabbit_db_queue:get_all(),
 
-over_limit(_, infinity) ->
-    false;
-over_limit(C, L) ->
-    C >= L.
+    OverLimitFun = fun(_, infinity) ->
+                           false;
+                      (C, L) ->
+                           C >= L
+                   end,
+
+    lists:foldl(fun(Q, Map) ->
+                        Key = amqqueue:qnode(Q),
+                        case maps:get(Key, Map, no_such_key) of
+                            {V, L, _} ->
+                                maps:put(Key, {V +1, L, OverLimitFun(V+1, L)}, Map);
+                            no_such_key ->
+                                Map
+                        end
+                end,
+                NodesWithLimit, AllQs).
 
 -spec maps_put_truthy(Key, Value, Map) -> Map when
       Map :: #{Key => Value}.
