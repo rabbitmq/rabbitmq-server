@@ -1,21 +1,24 @@
 Thank you for using RabbitMQ.
 
-**STOP NOW AND READ THIS** BEFORE OPENING A NEW ISSUE ON GITHUB
+**STOP NOW AND READ THIS** before proceeding, or your issue will be moved to Discussions
+and deleted.
 
-Unless you are CERTAIN you have found a reproducible problem in RabbitMQ or
-have a **specific, actionable** suggestion for our team, you must first ask
-your question or discuss your suspected issue on the mailing list:
+Please read https://github.com/rabbitmq/rabbitmq-server/blob/main/COMMUNITY_SUPPORT.md
+and https://github.com/rabbitmq/rabbitmq-server/blob/main/CONTRIBUTING.md#github-issues
+first.
 
-https://groups.google.com/forum/#!forum/rabbitmq-users
+Unless you are **certain** that you are eligible for community support from the core team, please direct your
+questions to https://github.com/rabbitmq/rabbitmq-server/discussions and https://rabbitmq.com/discord/.
 
-Team RabbitMQ does not use GitHub issues for discussions, investigations, root
-cause analysis and so on.
+Issues that lack key relevant information, such as
 
-Please take the time to read the CONTRIBUTING.md document for instructions on
-how to effectively ask a question or report a suspected issue:
+ * RabbitMQ and Erlang versions used
+ * The operating system used and its version (distribution)
+ * Client library (and any "higher level" libraries or frameworks used) used and their versions
+ * **Specific and detailed** steps to set up an environment where the behavior can be reproduced
 
-https://github.com/rabbitmq/rabbitmq-server/blob/main/CONTRIBUTING.md#github-issues
+will be moved to Discussions and then deleted.
 
-Following these rules **will save time** for both you and RabbitMQ's maintainers.
-
-Thank you.
+RabbitMQ Core Team does use GitHub issues for questions and discussions. Root cause analysis
+and technical operations guidance will ONLY will provided to those eligible per
+https://github.com/rabbitmq/rabbitmq-server/blob/main/COMMUNITY_SUPPORT.md.

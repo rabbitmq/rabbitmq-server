@@ -5,9 +5,6 @@ If it fixes a bug or resolves a feature request, be sure to link to that issue.
 
 A pull request that doesn't explain **why** the change was made has a much lower chance of being accepted.
 
-If English isn't your first language, don't worry about it and try to communicate the problem you are trying to solve to the best of your abilities.
-As long as we can understand the intent, it's all good.
-
 ## Types of Changes
 
 What types of changes does your code introduce to this project?
@@ -37,4 +34,5 @@ This is simply a reminder of what we are going to look for before merging your c
 
 ## Further Comments
 
-If this is a relatively large or complex change, kick off the discussion by explaining why you chose the solution you did and what alternatives you considered, etc.
+If this is a relatively large or complex change, kick off the discussion by explaining why you chose the solution
+you did and what alternatives you considered, etc.
