@@ -5,6 +5,10 @@ cn: module
 olcModuleLoad: back_mdb.la
 
 # Create directory database
+dn: olcBackend=mdb,cn=config
+objectClass: olcBackendConfig
+olcBackend: mdb
+
 dn: olcDatabase=mdb,cn=config
 objectClass: olcDatabaseConfig
 objectClass: olcMdbConfig
