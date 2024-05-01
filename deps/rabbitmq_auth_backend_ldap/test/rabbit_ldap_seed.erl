@@ -158,10 +158,7 @@ peter() ->
                        "organizationalPerson",
                        "person"]},
       {"loginShell", ["/bin/bash"]},
-      {"userPassword", ["password"]},
-      {"memberOf", ["cn=wheel,ou=groups,dc=rabbitmq,dc=com",
-                    "cn=staff,ou=groups,dc=rabbitmq,dc=com",
-                    "cn=people,ou=groups,dc=rabbitmq,dc=com"]}]}.
+      {"userPassword", ["password"]}]}.
 
 carol() ->
     {"uid=carol,ou=people,dc=rabbitmq,dc=com",
