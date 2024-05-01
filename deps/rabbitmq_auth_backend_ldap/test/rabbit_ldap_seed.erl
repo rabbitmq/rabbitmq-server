@@ -8,6 +8,7 @@
 -module(rabbit_ldap_seed).
 
 -include_lib("eldap/include/eldap.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -export([seed/1,delete/1]).
 
@@ -32,16 +33,21 @@ rabbitmq_com() ->
 
 delete(Logon) ->
     H = connect(Logon),
-    eldap:delete(H, "ou=test,dc=rabbitmq,dc=com"),
-    eldap:delete(H, "ou=test,ou=vhosts,dc=rabbitmq,dc=com"),
-    eldap:delete(H, "ou=vhosts,dc=rabbitmq,dc=com"),
-    [ eldap:delete(H, P) || {P, _} <- groups() ],
-    [ eldap:delete(H, P) || {P, _} <- people() ],
-    eldap:delete(H, "ou=groups,dc=rabbitmq,dc=com"),
-    eldap:delete(H, "ou=people,dc=rabbitmq,dc=com"),
-    eldap:delete(H, "dc=rabbitmq,dc=com"),
-    eldap:close(H),
+    assert_benign(eldap:delete(H, "ou=test,dc=rabbitmq,dc=com")),
+    assert_benign(eldap:delete(H, "ou=test,ou=vhosts,dc=rabbitmq,dc=com")),
+    assert_benign(eldap:delete(H, "ou=vhosts,dc=rabbitmq,dc=com")),
+    [ assert_benign(eldap:delete(H, P)) || {P, _} <- groups() ],
+    [ assert_benign(eldap:delete(H, P)) || {P, _} <- people() ],
+    assert_benign(eldap:delete(H, "ou=groups,dc=rabbitmq,dc=com")),
+    assert_benign(eldap:delete(H, "ou=people,dc=rabbitmq,dc=com")),
+    assert_benign(eldap:delete(H, "dc=rabbitmq,dc=com")),
+    ok = eldap:close(H),
     ok.
+
+assert_benign({error,noSuchObject}) ->
+    ok;
+assert_benign(Other) ->
+    ?assertEqual(ok, Other).
 
 people() ->
     [ bob(),
