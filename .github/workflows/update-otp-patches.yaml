@@ -6,7 +6,7 @@ on:
 jobs:
   update-toolchains:
     name: Update OTP Versions
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       max-parallel: 1
       fail-fast: false
