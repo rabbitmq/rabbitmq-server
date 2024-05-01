@@ -192,7 +192,11 @@ add(H, {A, B}) ->
     ok = eldap:add(H, A, B).
 
 connect({Host, Port}) ->
-    {ok, H} = eldap:open([Host], [{port, Port}]),
+    LogOpts = [],
+    %% This can be swapped with the line above to add verbose logging of the
+    %% LDAP operations used for seeding.
+    %% LogOpts = [{log, fun(_Level, FormatString, FormatArgs) -> ct:pal(FormatString, FormatArgs) end}],
+    {ok, H} = eldap:open([Host], [{port, Port} | LogOpts]),
     ok = eldap:simple_bind(H, "cn=admin,dc=rabbitmq,dc=com", "admin"),
     H.
 
