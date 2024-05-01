@@ -133,7 +133,7 @@
 -define(DELETE_TIMEOUT, 5000).
 -define(MEMBER_CHANGE_TIMEOUT, 20_000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
--define(UNLIMITED_PREFETCH_COUNT, 2000). %% something large for ra
+% -define(UNLIMITED_PREFETCH_COUNT, 2000). %% something large for ra
 
 %%----------- QQ policies ---------------------------------------------------
 

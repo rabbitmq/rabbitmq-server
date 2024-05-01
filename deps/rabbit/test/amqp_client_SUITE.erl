@@ -2076,9 +2076,11 @@ single_active_consumer(QType, Config) ->
 %% In addition to consumer cancellation, detaching a link therefore causes in flight deliveries to be requeued.
 %% That's okay given that AMQP receivers can stop a link (figure 2.46) before detaching.
 %%
-%% Note that this behaviour is different from merely consumer cancellation in AMQP legacy:
-%% "After a consumer is cancelled there will be no future deliveries dispatched to it. Note that there can
-%% still be "in flight" deliveries dispatched previously. Cancelling a consumer will neither discard nor requeue them."
+%% Note that this behaviour is different from merely consumer cancellation in
+%% AMQP legacy:
+%% "After a consumer is cancelled there will be no future deliveries dispatched to it.
+%% Note that there can still be "in flight" deliveries dispatched previously.
+%% Cancelling a consumer will neither discard nor requeue them."
 %% [https://www.rabbitmq.com/consumers.html#unsubscribing]
 detach_requeues_one_session_classic_queue(Config) ->
     detach_requeue_one_session(<<"classic">>, Config).

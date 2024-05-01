@@ -598,6 +598,18 @@ down_with_noproc_consumer_returns_unsettled_test(Config) ->
     ?ASSERT_EFF({monitor, process, _}, Effects),
     ok.
 
+removed_consumer_returns_unsettled_test(Config) ->
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State0, _} = enq(Config, 1, 1, second, test_init(test)),
+    {State1, #{key := CKey},
+     [{monitor, process, _Pid} | _]} = checkout(Config, ?LINE, Cid, 1, State0),
+    Remove = rabbit_fifo:make_checkout(Cid, remove, #{}),
+    {State2, _, _} = apply(meta(Config, 3), Remove, State1),
+    {_State, #{key := CKey2}, Effects} = checkout(Config, ?LINE, Cid, 1, State2),
+    ?assertNotEqual(CKey, CKey2),
+    ?ASSERT_EFF({monitor, process, _}, Effects),
+    ok.
+
 down_with_noconnection_marks_suspect_and_node_is_monitored_test(Config) ->
     Pid = spawn(fun() -> ok end),
     Cid = {?FUNCTION_NAME_B, Pid},
