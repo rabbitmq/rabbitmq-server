@@ -856,6 +856,7 @@ handle_dead_rabbit(Node, State) ->
     %% statements on *one* node, rather than all of them.
     ok = rabbit_amqqueue:on_node_down(Node),
     ok = rabbit_alarm:on_node_down(Node),
+    ok = rabbit_quorum_queue_periodic_membership_reconciliation:on_node_down(Node),
     State1 = case rabbit_khepri:is_enabled() of
                  true  -> State;
                  false -> on_node_down_using_mnesia(Node, State)
@@ -865,7 +866,6 @@ handle_dead_rabbit(Node, State) ->
 on_node_down_using_mnesia(Node, State = #state{partitions = Partitions,
                                                autoheal   = Autoheal}) ->
     ok = rabbit_mnesia:on_node_down(Node),
-    ok = rabbit_quorum_queue_periodic_membership_reconciliation:on_node_down(Node),
     %% If we have been partitioned, and we are now in the only remaining
     %% partition, we no longer care about partitions - forget them. Note
     %% that we do not attempt to deal with individual (other) partitions
