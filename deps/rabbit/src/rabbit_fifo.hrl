@@ -80,7 +80,7 @@
                           credited | simple_prefetch} |
 
                          {dequeue, settled | unsettled} |
-                         cancel |
+                         cancel | remove |
                          %% new v4 format
                          {once | auto, credit_mode()}.
 
