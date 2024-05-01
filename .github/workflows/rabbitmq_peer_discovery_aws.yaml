@@ -4,7 +4,7 @@ on:
 jobs:
   peer-discovery-aws-integration-test:
     name: Integration Test
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         otp_version_id:
