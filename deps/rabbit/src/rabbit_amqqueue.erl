@@ -1772,8 +1772,10 @@ basic_consume(Q, NoAck, ChPid, LimiterPid,
                    rabbit_queue_type:state()) ->
     {ok, rabbit_queue_type:state()} | {error, term()}.
 basic_cancel(Q, ConsumerTag, OkMsg, ActingUser, QStates) ->
-    rabbit_queue_type:cancel(Q, ConsumerTag,
-                             OkMsg, ActingUser, QStates).
+    %% TODO: is this function used anywhere?
+    rabbit_queue_type:cancel(Q, #{consumer_tag => ConsumerTag,
+                                  ok_msg => OkMsg,
+                                  user => ActingUser}, QStates).
 
 -spec notify_decorators(amqqueue:amqqueue()) -> 'ok'.
 

@@ -37,7 +37,7 @@
          close/1,
          update/2,
          consume/3,
-         cancel/5,
+         cancel/3,
          handle_event/3,
          deliver/3,
          settle/5,
@@ -276,7 +276,9 @@ consume_backwards_compat({credited, credit_api_v1}, Args) ->
      [{<<"x-credit">>, table, [{<<"credit">>, long, 0},
                                {<<"drain">>,  bool, false}]} | Args]}.
 
-cancel(Q, ConsumerTag, OkMsg, ActingUser, State) ->
+cancel(Q, #{consumer_tag := ConsumerTag,
+            user := ActingUser} = Spec, State) ->
+    OkMsg = maps:get(ok_msg, Spec, undefined),
     QPid = amqqueue:get_pid(Q),
     case delegate:invoke(QPid, {gen_server2, call,
                                 [{basic_cancel, self(), ConsumerTag,

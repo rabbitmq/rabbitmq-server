@@ -31,6 +31,9 @@ all_tests() ->
      dequeue,
      discard,
      cancel_checkout,
+     cancel_checkout_with_remove,
+     cancel_checkout_with_pending_using_cancel_reason,
+     cancel_checkout_with_pending_using_remove_reason,
      lost_delivery,
      credit_api_v1,
      credit_api_v2,
@@ -413,6 +416,62 @@ cancel_checkout(Config) ->
     {F5, _} = rabbit_fifo_client:return(<<"tag">>, [0], F4),
     {ok, _, {_, _, _, _, m1}, F5} =
         rabbit_fifo_client:dequeue(ClusterName, <<"d1">>, settled, F5),
+    ok.
+
+cancel_checkout_with_remove(Config) ->
+    ClusterName = ?config(cluster_name, Config),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterName, [ServerId]),
+    F0 = rabbit_fifo_client:init([ServerId], 4),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, m1, F0),
+    {ok, _, F2} = rabbit_fifo_client:checkout(<<"tag">>, {simple_prefetch, 10},
+                                              #{}, F1),
+    {_, _, F3} = process_ra_events(receive_ra_events(1, 1), ClusterName, F2,
+                                   [], [], fun (_, S) -> S end),
+    {ok, F4} = rabbit_fifo_client:cancel_checkout(<<"tag">>, remove, F3),
+    %% settle here to prove that message is returned by "remove" cancellation
+    %% and not settled by late settlement
+    {F5, _} = rabbit_fifo_client:settle(<<"tag">>, [0], F4),
+    {ok, _, {_, _, _, _, m1}, F5} =
+        rabbit_fifo_client:dequeue(ClusterName, <<"d1">>, settled, F5),
+    ok.
+
+cancel_checkout_with_pending_using_cancel_reason(Config) ->
+    cancel_checkout_with_pending(Config, cancel).
+
+cancel_checkout_with_pending_using_remove_reason(Config) ->
+    cancel_checkout_with_pending(Config, remove).
+
+cancel_checkout_with_pending(Config, Reason) ->
+    ClusterName = ?config(cluster_name, Config),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterName, [ServerId]),
+    F0 = rabbit_fifo_client:init([ServerId], 4),
+    F1 = lists:foldl(
+           fun (Num, Acc0) ->
+                   {ok, Acc, _} = rabbit_fifo_client:enqueue(ClusterName, Num, Acc0),
+                   Acc
+           end, F0, lists:seq(1, 10)),
+    receive_ra_events(10, 0),
+    {ok, _, F2} = rabbit_fifo_client:checkout(<<"tag">>, {simple_prefetch, 10},
+                                              #{}, F1),
+    {Msgs, _, F3} = process_ra_events(receive_ra_events(0, 1), ClusterName, F2,
+                                      [], [], fun (_, S) -> S end),
+    %% settling each individually should cause the client to enter the "slow"
+    %% state where settled msg ids are buffered internally waiting for
+    %% applied events
+    F4 = lists:foldl(
+           fun({_Q, _, MsgId, _, _}, Acc0) ->
+                   {Acc, _} = rabbit_fifo_client:settle(<<"tag">>, [MsgId], Acc0),
+                   Acc
+           end, F3, Msgs),
+
+    {ok, _F4} = rabbit_fifo_client:cancel_checkout(<<"tag">>, Reason, F4),
+    timer:sleep(100),
+    {ok, Overview, _} = ra:member_overview(ServerId),
+    ?assertMatch(#{machine := #{num_messages := 0,
+                                num_consumers := 0}}, Overview),
+    flush(),
     ok.
 
 lost_delivery(Config) ->

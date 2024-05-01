@@ -477,13 +477,15 @@ apply(#{index := Index,
             end
     end;
 apply(#{index := Idx} = Meta,
-      #checkout{spec = cancel,
-                consumer_id = ConsumerId}, State0) ->
+      #checkout{spec = Spec,
+                consumer_id = ConsumerId}, State0)
+  when Spec == cancel orelse
+       Spec == remove ->
     case consumer_key_from_id(ConsumerId, State0) of
         {ok, ConsumerKey} ->
             {State1, Effects1} = activate_next_consumer(
                                    cancel_consumer(Meta, ConsumerKey, State0, [],
-                                                   consumer_cancel)),
+                                                   Spec)),
             Reply = {ok, consumer_cancel_info(ConsumerKey, State1)},
             {State, _, Effects} = checkout(Meta, State0, State1, Effects1),
             update_smallest_raft_index(Idx, Reply, State, Effects);
@@ -1536,14 +1538,14 @@ maybe_return_all(#{system_time := Ts} = Meta, ConsumerKey,
                  #consumer{cfg = CCfg} = Consumer, S0,
                  Effects0, Reason) ->
     case Reason of
-        consumer_cancel ->
+        cancel ->
             {update_or_remove_con(
                Meta, ConsumerKey,
                Consumer#consumer{cfg = CCfg#consumer_cfg{lifetime = once},
                                  credit = 0,
                                  status = cancelled},
                S0), Effects0};
-        down ->
+        _ ->
             {S1, Effects1} = return_all(Meta, S0, Effects0, ConsumerKey, Consumer),
             {S1#?STATE{consumers = maps:remove(ConsumerKey, S1#?STATE.consumers),
                        last_active = Ts},
@@ -2436,9 +2438,16 @@ make_enqueue(Pid, Seq, Msg) ->
 make_register_enqueuer(Pid) ->
     #register_enqueuer{pid = Pid}.
 
--spec make_checkout(consumer_id(),
-                    checkout_spec(), consumer_meta()) -> protocol().
-make_checkout({_, _} = ConsumerId, Spec, Meta) ->
+-spec make_checkout(consumer_id(), checkout_spec(), consumer_meta()) ->
+    protocol().
+make_checkout({_, _} = ConsumerId, Spec0, Meta) ->
+    Spec = case is_v4() of
+               false when Spec0 == remove ->
+                   %% if v4 is not active, fall back to cancel spec
+                   make_checkout(ConsumerId, cancel, Meta);
+               _ ->
+                   Spec0
+           end,
     #checkout{consumer_id = ConsumerId,
               spec = Spec, meta = Meta}.
 
