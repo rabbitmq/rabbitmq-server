@@ -24,6 +24,16 @@ bazel_dep(
 )
 
 bazel_dep(
+    name = "rules_oci",
+    version = "1.7.4",
+)
+
+bazel_dep(
+    name = "container_structure_test",
+    version = "1.16.0",
+)
+
+bazel_dep(
     name = "gazelle",
     version = "0.33.0",
     repo_name = "bazel_gazelle",

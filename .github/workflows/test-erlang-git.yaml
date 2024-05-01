@@ -10,15 +10,7 @@ jobs:
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v3
-    - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v3.2.5
-      with:
-        path: "/home/runner/repo-cache/"
-        key: ${{ runner.os }}-repo-cache-${{ hashFiles('MODULE.bazel','WORKSPACE','bazel/bzlmod/secondary_umbrella.bzl') }}
-        restore-keys: |
-          ${{ runner.os }}-repo-cache-
-        save-always: true
+      uses: actions/checkout@v4
     - name: CONFIGURE BAZEL
       run: |
         if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
@@ -29,9 +21,7 @@ jobs:
         cat << EOF >> user.bazelrc
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
-          build:buildbuddy --repository_cache=/home/runner/repo-cache/
           build:buildbuddy --color=yes
-          build:buildbuddy --disk_cache=
 
           build:rbe --platforms=//bazel/platforms:erlang_linux_git_master_platform
         EOF
