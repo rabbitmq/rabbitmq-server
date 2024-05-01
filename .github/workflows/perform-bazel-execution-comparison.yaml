@@ -9,7 +9,7 @@ on:
 jobs:
   run-a:
     name: Run A
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         erlang_version:
@@ -44,7 +44,7 @@ jobs:
   run-b:
     name: Run B
     needs: run-a
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         erlang_version:
@@ -79,7 +79,7 @@ jobs:
   parse-logs:
     name: Parse Logs
     needs: [run-a, run-b]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
     - name: CHECKOUT BAZEL
       uses: actions/checkout@v4
