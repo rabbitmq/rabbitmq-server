@@ -1151,6 +1151,7 @@ handle_control(Detach = #'v1_0.detach'{handle = ?UINT(HandleInt)},
                       %% becomes available for re-use once a link is closed): This will result in the same consumer tag,
                       %% and we ideally disallow "updating" an AMQP consumer.
                       Spec = #{consumer_tag => Ctag,
+                               reason => remove,
                                user => Username},
                       case rabbit_queue_type:cancel(Q, Spec, QStates0) of
                           {ok, QStates1} ->
