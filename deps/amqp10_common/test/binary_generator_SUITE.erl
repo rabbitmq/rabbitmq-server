@@ -109,7 +109,7 @@ numerals(_Config) ->
 
 utf8(_Config) ->
     roundtrip({utf8, <<"hi">>}),
-    roundtrip({utf8, binary:copy(<<"asdfghjk">>, 64)}),
+    roundtrip({utf8, binary:copy(<<"abcdefgh">>, 64)}),
     ok.
 
 char(_Config) ->
@@ -169,15 +169,42 @@ array(_Config) ->
     ?assertEqual({array, boolean, [true, false]},
                  roundtrip_return({array, boolean, [{boolean, true}, {boolean, false}]})),
 
-    % array of arrays
-    % TODO: does the inner type need to be consistent across the array?
+    %% array of arrays
     roundtrip({array, array, []}),
     roundtrip({array, array, [{array, symbol, [{symbol, <<"ANONYMOUS">>}]}]}),
+    roundtrip({array, array, [{array, symbol, [{symbol, <<"ANONYMOUS">>}]},
+                              {array, symbol, [{symbol, <<"sym1">>},
+                                               {symbol, <<"sym2">>}]}]}),
+
+    %% array of lists
+    roundtrip({array, list, []}),
+    roundtrip({array, list, [{list, [{symbol, <<"sym">>}]},
+                             {list, [null,
+                                     {described,
+                                      {utf8, <<"URL">>},
+                                      {utf8, <<"http://example.org/hello-world">>}}]},
+                             {list, []},
+                             {list, [true, false, {byte, -128}]}
+                            ]}),
+
+    %% array of maps
+    roundtrip({array, map, []}),
+    roundtrip({array, map, [{map, [{{symbol, <<"k1">>}, {utf8, <<"v1">>}}]},
+                            {map, []},
+                            {map, [{{described,
+                                     {utf8, <<"URL">>},
+                                     {utf8, <<"http://example.org/hello-world">>}},
+                                    {byte, -1}},
+                                   {{int, 0}, {ulong, 0}}
+                                  ]}
+                           ]}),
 
     Desc = {utf8, <<"URL">>},
-    roundtrip({array, {described, Desc, utf8},
-               [{described, Desc, {utf8, <<"http://example.org/hello">>}}]}),
     roundtrip({array, {described, Desc, utf8}, []}),
+    roundtrip({array, {described, Desc, utf8},
+               [{described, Desc, {utf8, <<"http://example.org/hello1">>}},
+                {described, Desc, {utf8, <<"http://example.org/hello2">>}}]}),
+
     %% array:array32
     roundtrip({array, boolean, [true || _ <- lists:seq(1, 256)]}),
     ok.

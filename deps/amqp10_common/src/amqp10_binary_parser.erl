@@ -5,6 +5,12 @@
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% NB: When compiling this file with "ERL_COMPILER_OPTIONS=bin_opt_info"
+%% make sure that all code outputs "OPTIMIZED: match context reused",
+%% i.e. neither "BINARY CREATED" nor "NOT OPTIMIZED" should be output.
+%% The only exception are arrays since arrays aren't used in the hot path.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -module(amqp10_binary_parser).
 
 -include("amqp10_framing.hrl").
@@ -72,8 +78,8 @@ parse(<<16#98, Uuid:16/binary,_/binary>>, B) -> {{uuid, Uuid},    B+17};
 %% Variable-widths
 parse(<<16#a0, S:8, V:S/binary,_/binary>>, B)-> {{binary, V}, B+2+S};
 parse(<<16#a1, S:8, V:S/binary,_/binary>>, B)-> {{utf8, V},   B+2+S};
-parse(<<?CODE_SYM_8, S:8, V:S/binary,_/binary>>, B)-> {{symbol, V}, B+2+S};
-parse(<<?CODE_SYM_32, S:32,V:S/binary,_/binary>>, B)-> {{symbol, V}, B+5+S};
+parse(<<?CODE_SYM_8, S:8, V:S/binary,_/binary>>, B) -> {{symbol, V}, B+2+S};
+parse(<<?CODE_SYM_32, S:32,V:S/binary,_/binary>>, B) -> {{symbol, V}, B+5+S};
 parse(<<16#b0, S:32,V:S/binary,_/binary>>, B)-> {{binary, V}, B+5+S};
 parse(<<16#b1, S:32,V:S/binary,_/binary>>, B)-> {{utf8, V},   B+5+S};
 %% Compounds
@@ -157,10 +163,12 @@ parse_constructor(?CODE_ULONG) -> ulong;
 parse_constructor(16#81) -> long;
 parse_constructor(16#40) -> null;
 parse_constructor(16#56) -> boolean;
-parse_constructor(16#f0) -> array;
 parse_constructor(16#83) -> timestamp;
 parse_constructor(16#98) -> uuid;
-parse_constructor(0) -> described; %%TODO add test with descriptor in constructor
+parse_constructor(16#d0) -> list;
+parse_constructor(16#d1) -> map;
+parse_constructor(16#f0) -> array;
+parse_constructor(0) -> described;
 parse_constructor(X) ->
     exit({failed_to_parse_constructor, X}).
 
@@ -177,12 +185,6 @@ mapify([]) ->
     [];
 mapify([Key, Value | Rest]) ->
     [{Key, Value} | mapify(Rest)].
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% NB: When compiling this file with "ERL_COMPILER_OPTIONS=bin_opt_info"
-%% make sure that all code below here outputs only "OPTIMIZED: match context reused"!
-%% Neither "BINARY CREATED" nor "NOT OPTIMIZED" must be output!
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Parses all AMQP types (or, in server_mode, stops when the body is reached).
 %% This is an optimisation over calling parse/1 repeatedly.
