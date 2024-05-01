@@ -82,7 +82,6 @@
 -export([safe_ets_update_counter/3, safe_ets_update_counter/4, safe_ets_update_counter/5,
          safe_ets_update_element/3, safe_ets_update_element/4, safe_ets_update_element/5]).
 -export([is_even/1, is_odd/1]).
--export([is_over_queue_node_limit/0, is_over_queue_node_limit/1, get_queue_count_and_limit_per_node/1]).
 
 -export([maps_any/2,
          maps_put_truthy/3,
@@ -1596,52 +1595,6 @@ is_even(N) ->
 -spec is_odd(integer()) -> boolean().
 is_odd(N) ->
     (N band 1) =:= 1.
-
-is_over_queue_node_limit() ->
-    is_over_queue_node_limit(node()).
--spec is_over_queue_node_limit(node()) -> boolean() | {boolean(), integer()|infinity}.
-is_over_queue_node_limit(Node) ->
-    %% QueueNodeLimit = rabbit_misc:get_env(rabbit, queue_max_per_node, infinity),
-    QueueNodeLimit = rpc_call(Node, ?MODULE, get_env, [rabbit, queue_max_per_node, infinity]),
-    case get_node_queue_hard_limit(QueueNodeLimit) of
-        infinity ->
-            {false, infinity};
-        NodeLimit ->
-            %% Only fetch this if a limit is set
-            QueueCount = length(rabbit_db_queue:get_all_by_node(Node)),
-            {QueueCount >= NodeLimit, NodeLimit}
-    end.
-
--spec get_node_queue_hard_limit(infinity | list()) -> infinity | integer().
-get_node_queue_hard_limit(infinity) ->
-    infinity;
-get_node_queue_hard_limit(L) when is_list(L) ->
-    proplists:get_value(hard_limit, L, infinity).
-
-get_queue_count_and_limit_per_node(Nodes) ->
-    PNode = maps:from_keys(Nodes, {0, infinity}),
-    NodesWithLimit = maps:map(fun(N, {C, _L}) ->
-                                       Limit = get_node_queue_hard_limit(rpc_call(N, ?MODULE, get_env, [rabbit, queue_max_per_node, infinity])),
-                                      {C, Limit, false}
-                              end, PNode),
-    AllQs = rabbit_db_queue:get_all(),
-
-    OverLimitFun = fun(_, infinity) ->
-                           false;
-                      (C, L) ->
-                           C >= L
-                   end,
-
-    lists:foldl(fun(Q, Map) ->
-                        Key = amqqueue:qnode(Q),
-                        case maps:get(Key, Map, no_such_key) of
-                            {V, L, _} ->
-                                maps:put(Key, {V +1, L, OverLimitFun(V+1, L)}, Map);
-                            no_such_key ->
-                                Map
-                        end
-                end,
-                NodesWithLimit, AllQs).
 
 -spec maps_put_truthy(Key, Value, Map) -> Map when
       Map :: #{Key => Value}.

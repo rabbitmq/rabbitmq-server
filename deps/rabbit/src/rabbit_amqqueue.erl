@@ -75,6 +75,7 @@
 -export([queue/1, queue_names/1]).
 
 -export([kill_queue/2, kill_queue/3, kill_queue_hard/2, kill_queue_hard/3]).
+-export([is_over_queue_node_limit/0, is_over_queue_node_limit/1, get_queue_count_and_limit_per_node/1]).
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
@@ -1136,7 +1137,7 @@ check_node_queue_limit(#resource{name = QueueName}, Type, none) ->
         rabbit_classic_queue ->
             ok;
         _ ->
-            case rabbit_misc:is_over_queue_node_limit() of
+            case is_over_queue_node_limit() of
                 {true, NodeLimit} ->
                     rabbit_misc:precondition_failed("cannot declare queue '~ts': "
                                                     "queue limit (~tp) on node is reached.",
@@ -1146,7 +1147,7 @@ check_node_queue_limit(#resource{name = QueueName}, Type, none) ->
             end
     end;
 check_node_queue_limit(#resource{name = QueueName}, _, PID) when is_pid(PID) ->
-    case rabbit_misc:is_over_queue_node_limit() of
+    case is_over_queue_node_limit() of
         {true, NodeLimit} ->
             %% maybe not ideal, but is there a better way to 'close' a connection from within a channel?
             ChannelPid = self(),
@@ -1166,6 +1167,60 @@ check_node_queue_limit(#resource{name = QueueName}, _, PID) when is_pid(PID) ->
         {false, _} ->
             ok
     end.
+
+is_over_queue_node_limit() ->
+    is_over_queue_node_limit(node()).
+-spec is_over_queue_node_limit(node()) -> boolean() | {boolean(), integer()|infinity}.
+is_over_queue_node_limit(Node) ->
+    %% QueueNodeLimit = rabbit_misc:get_env(rabbit, queue_max_per_node, infinity),
+    QueueNodeLimit = rabbit_misc:rpc_call(Node, ?MODULE, get_env, [rabbit, queue_max_per_node, infinity]),
+    case get_node_queue_hard_limit(QueueNodeLimit) of
+        infinity ->
+            {false, infinity};
+        NodeLimit ->
+            %% Only fetch this if a limit is set
+            QueueCount = length(rabbit_db_queue:get_all_by_node(Node)),
+            {QueueCount >= NodeLimit, NodeLimit}
+    end.
+
+-spec get_node_queue_hard_limit(infinity | list()) -> infinity | integer().
+get_node_queue_hard_limit(infinity) ->
+    infinity;
+get_node_queue_hard_limit(L) when is_list(L) ->
+    proplists:get_value(hard_limit, L, infinity).
+
+-spec get_queue_count_and_limit_per_node([node()]) -> map().
+get_queue_count_and_limit_per_node(Nodes) ->
+    PNode = maps:from_keys(Nodes, {0, infinity}),
+    NodesWithLimit =
+        maps:map(fun(N, {C, _L}) ->
+                         Limit =
+                             get_node_queue_hard_limit(
+                               rabbit_misc:rpc_call(N,
+                                                    ?MODULE,
+                                                    get_env,
+                                                    [rabbit, queue_max_per_node, infinity])),
+                         {C, Limit, false}
+                 end, PNode),
+    AllQs = rabbit_db_queue:get_all(),
+
+    OverLimitFun = fun(_, infinity) ->
+                           false;
+                      (C, L) ->
+                           C >= L
+                   end,
+
+    lists:foldl(fun(Q, Map) ->
+                        Key = amqqueue:qnode(Q),
+                        case maps:get(Key, Map, no_such_key) of
+                            {V, L, _} ->
+                                maps:put(Key, {V +1, L, OverLimitFun(V+1, L)}, Map);
+                            no_such_key ->
+                                Map
+                        end
+                end,
+                NodesWithLimit, AllQs).
+
 
 -spec list() -> [amqqueue:amqqueue()].
 

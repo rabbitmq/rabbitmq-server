@@ -647,7 +647,7 @@ suggested_queue_nodes(Q, DefNode, AllNodes) when ?is_amqqueue(Q) ->
                               L when is_list(L)     -> L;
                               F when is_function(F) -> F()
                           end,
-                    NodesWithQueueCountAndLimits = rabbit_misc:get_queue_count_and_limit_per_node(All),
+                    NodesWithQueueCountAndLimits = rabbit_amqqueue:get_queue_count_and_limit_per_node(All),
                     case maps:get(MNode, NodesWithQueueCountAndLimits) of
                         {_Count, _Limit, false} ->
                             {MNode, []};
