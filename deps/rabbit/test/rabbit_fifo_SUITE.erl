@@ -67,7 +67,10 @@ end_per_testcase(_Group, _Config) ->
 -define(ASSERT_EFF(EfxPat, Guard, Effects),
         ?assert(lists:any(fun (EfxPat) when Guard -> true;
                               (_) -> false
-                          end, Effects))).
+                          end, Effects),
+                lists:flatten(io_lib:format("Expected to find effect matching "
+                                            "pattern '~s' in effect list '~0p'",
+                                            [??EfxPat, Effects])))).
 
 -define(ASSERT_NO_EFF(EfxPat, Effects),
         ?assert(not lists:any(fun (EfxPat) -> true;
