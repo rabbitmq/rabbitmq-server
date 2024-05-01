@@ -2,13 +2,13 @@
 dn: cn=module,cn=config
 objectclass: olcModuleList
 cn: module
-olcModuleLoad: back_bdb.la
+olcModuleLoad: back_mdb.la
 
 # Create directory database
-dn: olcDatabase=bdb,cn=config
+dn: olcDatabase=mdb,cn=config
 objectClass: olcDatabaseConfig
-objectClass: olcBdbConfig
-olcDatabase: bdb
+objectClass: olcMdbConfig
+olcDatabase: mdb
 # Domain name (e.g. rabbitmq.com)
 olcSuffix: dc=rabbitmq,dc=com
 # Location on system where database is stored
