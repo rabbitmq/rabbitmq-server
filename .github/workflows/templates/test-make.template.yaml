@@ -212,7 +212,7 @@ jobs:
       - name: COMPUTE REPO HASH
         id: hash
         run: |
-          echo "hash=${{ hashFiles('**/*', '!.github/**/*', '!*.bazel', '!*.bzl', '!BUILD.*') }}" | tee -a $GITHUB_OUTPUT
+          echo "hash=${{ hashFiles('**', '!WORKSPACE', '!.github/**', '!**.bazel', '!**.bzl', '!**/BUILD.*') }}" | tee -a $GITHUB_OUTPUT
       - name: COMPUTE PREVIOUS RUN ATTEPMT
         id: previous-attempt
         run: |
