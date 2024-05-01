@@ -235,12 +235,14 @@ erl_eval(
     name = "otp_version",
     outs = ["otp_version.txt"],
     expression = """{ok, Version} = file:read_file(filename:join([code:root_dir(), "releases", erlang:system_info(otp_release), "OTP_VERSION"])), file:write_file(os:getenv("OUTS"), Version), halt().""",
+    visibility = ["//visibility:public"],
 )
 
 iex_eval(
     name = "elixir_version",
     outs = ["elixir_version.txt"],
     expression = """File.write!(System.get_env("OUTS"), System.version()); System.halt()""",
+    visibility = ["//visibility:public"],
 )
 
 filegroup(
