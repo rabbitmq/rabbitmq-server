@@ -142,9 +142,7 @@ init_per_group(Group, Config) ->
                                               base_conf_ldap(LdapPort,
                                                              idle_timeout(Group),
                                                              pool_size(Group))),
-    Logon = {"localhost", LdapPort},
-    rabbit_ldap_seed:delete(Logon),
-    rabbit_ldap_seed:seed(Logon),
+    rabbit_ldap_seed:seed({"localhost", LdapPort}),
     Config4 = rabbit_ct_helpers:set_config(Config3, {ldap_port, LdapPort}),
 
     rabbit_ct_helpers:run_steps(Config4,
