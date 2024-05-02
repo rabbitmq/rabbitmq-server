@@ -155,7 +155,9 @@ registration_body_simple_case(_Config) ->
                        {'Check',
                          [{'Notes', ?CONSUL_CHECK_NOTES},
                           {'TTL',   '30s'},
-                          {'Status', 'passing'}]}],
+                          {'Status', 'passing'}]},
+                       {'Meta',
+                        [{<<"erlang-node-name">>, atom_to_binary(node())}]}],
     ?assertEqual(Expectation, rabbit_peer_discovery_consul:build_registration_body()).
 
 registration_body_svc_addr_set_via_env_var(_Config) ->
@@ -167,7 +169,9 @@ registration_body_svc_addr_set_via_env_var(_Config) ->
                    {'Check',
                     [{'Notes', ?CONSUL_CHECK_NOTES},
                      {'TTL',   '30s'},
-                     {'Status', 'passing'}]}],
+                     {'Status', 'passing'}]},
+                   {'Meta',
+                    [{<<"erlang-node-name">>, atom_to_binary(node())}]}],
     ?assertEqual(Expectation, rabbit_peer_discovery_consul:build_registration_body()).
 
 registration_body_svc_ttl_set_via_env_var(_Config) ->
@@ -178,7 +182,9 @@ registration_body_svc_ttl_set_via_env_var(_Config) ->
                    {'Check',
                     [{'Notes', ?CONSUL_CHECK_NOTES},
                      {'TTL',   '257s'},
-                     {'Status', 'passing'}]}],
+                     {'Status', 'passing'}]},
+                   {'Meta',
+                    [{<<"erlang-node-name">>, atom_to_binary(node())}]}],
     ?assertEqual(Expectation, rabbit_peer_discovery_consul:build_registration_body()).
 
 registration_body_svc_tags_set_via_env_var(_Config) ->
@@ -190,7 +196,9 @@ registration_body_svc_tags_set_via_env_var(_Config) ->
                     [{'Notes', ?CONSUL_CHECK_NOTES},
                      {'TTL',   '30s'},
                      {'Status', 'passing'}]},
-                   {'Tags',['urlprefix-:5672 proto=tcp',mq,'mq server']}],
+                   {'Tags',['urlprefix-:5672 proto=tcp',mq,'mq server']},
+                   {'Meta',
+                    [{<<"erlang-node-name">>, atom_to_binary(node())}]}],
     ?assertEqual(Expectation, rabbit_peer_discovery_consul:build_registration_body()).
 
 registration_body_deregister_after_set_via_env_var(_Config) ->
@@ -202,7 +210,9 @@ registration_body_deregister_after_set_via_env_var(_Config) ->
                     [{'Notes', ?CONSUL_CHECK_NOTES},
                      {'TTL','30s'},
                      {'Status', 'passing'},
-                     {'DeregisterCriticalServiceAfter','520s'}]}],
+                     {'DeregisterCriticalServiceAfter','520s'}]},
+                   {'Meta',
+                    [{<<"erlang-node-name">>, atom_to_binary(node())}]}],
     ?assertEqual(Expectation, rabbit_peer_discovery_consul:build_registration_body()).
 
 registration_body_ttl_and_deregister_after_both_unset_via_env_var(_Config) ->
@@ -210,7 +220,9 @@ registration_body_ttl_and_deregister_after_both_unset_via_env_var(_Config) ->
     os:putenv("CONSUL_SVC_TTL", ""),
     Expectation = [{'ID', 'rabbitmq'},
                    {'Name', rabbitmq},
-                   {'Port', 5672}],
+                   {'Port', 5672},
+                   {'Meta',
+                    [{<<"erlang-node-name">>, atom_to_binary(node())}]}],
     ?assertEqual(Expectation, rabbit_peer_discovery_consul:build_registration_body()).
 
 %% "deregister after" won't be enabled if TTL isn't set
@@ -219,7 +231,9 @@ registration_body_ttl_unset_and_deregister_after_set_via_env_var(_Config) ->
     os:putenv("CONSUL_SVC_TTL", ""),
     Expectation = [{'ID', 'rabbitmq'},
                    {'Name', rabbitmq},
-                   {'Port', 5672}],
+                   {'Port', 5672},
+                   {'Meta',
+                    [{<<"erlang-node-name">>, atom_to_binary(node())}]}],
     ?assertEqual(Expectation, rabbit_peer_discovery_consul:build_registration_body()).
 
 service_id_all_defaults_test(_Config) ->
@@ -450,7 +464,8 @@ registration_with_all_default_values_test(_Config) ->
               ?assertEqual("v1/agent/service/register", Path),
               ?assertEqual([], Args),
               ?assertEqual([], Headers),
-              Expect = <<"{\"ID\":\"rabbitmq\",\"Name\":\"rabbitmq\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"}}">>,
+              Node = atom_to_binary(node()),
+              Expect = <<"{\"ID\":\"rabbitmq\",\"Name\":\"rabbitmq\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"},\"Meta\":{\"erlang-node-name\":\"", Node/binary, "\"}}">>,
               ?assertEqual(Expect, Body),
               {ok, []}
             end),
@@ -467,7 +482,8 @@ registration_with_cluster_name_test(_Config) ->
               ?assertEqual("v1/agent/service/register", Path),
               ?assertEqual([], Args),
               ?assertEqual([], Headers),
-              Expect = <<"{\"ID\":\"rabbitmq\",\"Name\":\"rabbitmq\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"},\"Tags\":[\"test-rabbit\"]}">>,
+              Node = atom_to_binary(node()),
+              Expect = <<"{\"ID\":\"rabbitmq\",\"Name\":\"rabbitmq\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"},\"Tags\":[\"test-rabbit\"],\"Meta\":{\"cluster\":\"test-rabbit\",\"erlang-node-name\":\"", Node/binary, "\"}}">>,
               ?assertEqual(Expect, Body),
               {ok, []}
             end),
@@ -484,7 +500,8 @@ registration_without_acl_token_test(_Config) ->
               ?assertEqual("v1/agent/service/register", Path),
               ?assertEqual([], Args),
               ?assertEqual([], Headers),
-              Expect = <<"{\"ID\":\"rabbit:10.0.0.1\",\"Name\":\"rabbit\",\"Address\":\"10.0.0.1\",\"Port\":5671,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"}}">>,
+              Node = atom_to_binary(node()),
+              Expect = <<"{\"ID\":\"rabbit:10.0.0.1\",\"Name\":\"rabbit\",\"Address\":\"10.0.0.1\",\"Port\":5671,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"},\"Meta\":{\"erlang-node-name\":\"", Node/binary, "\"}}">>,
               ?assertEqual(Expect, Body),
               {ok, []}
             end),
@@ -506,7 +523,8 @@ registration_with_acl_token_test(_Config) ->
               ?assertEqual("v1/agent/service/register", Path),
               ?assertEqual([], Args),
               ?assertEqual([], Headers),
-              Expect = <<"{\"ID\":\"rabbit:10.0.0.1\",\"Name\":\"rabbit\",\"Address\":\"10.0.0.1\",\"Port\":5671,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"}}">>,
+              Node = atom_to_binary(node()),
+              Expect = <<"{\"ID\":\"rabbit:10.0.0.1\",\"Name\":\"rabbit\",\"Address\":\"10.0.0.1\",\"Port\":5671,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"},\"Meta\":{\"erlang-node-name\":\"", Node/binary, "\"}}">>,
               ?assertEqual(Expect, Body),
               {ok, []}
             end),
@@ -531,7 +549,8 @@ registration_with_auto_addr_test(_Config) ->
                ?assertEqual("v1/agent/service/register", Path),
                ?assertEqual([], Args),
                ?assertEqual([{"X-Consul-Token", "token-value"}], Headers),
-               Expect = <<"{\"ID\":\"rabbitmq:bob\",\"Name\":\"rabbitmq\",\"Address\":\"bob\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"}}">>,
+              Node = atom_to_binary(node()),
+               Expect = <<"{\"ID\":\"rabbitmq:bob\",\"Name\":\"rabbitmq\",\"Address\":\"bob\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"},\"Meta\":{\"erlang-node-name\":\"", Node/binary, "\"}}">>,
                ?assertEqual(Expect, Body),
                {ok, []}
              end),
@@ -555,7 +574,8 @@ registration_with_auto_addr_from_nodename_test(_Config) ->
               ?assertEqual("v1/agent/service/register", Path),
               ?assertEqual([], Args),
               ?assertEqual([{"X-Consul-Token", "token-value"}], Headers),
-              Expect = <<"{\"ID\":\"rabbitmq:bob.consul.node\",\"Name\":\"rabbitmq\",\"Address\":\"bob.consul.node\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"}}">>,
+              Node = atom_to_binary(node()),
+              Expect = <<"{\"ID\":\"rabbitmq:bob.consul.node\",\"Name\":\"rabbitmq\",\"Address\":\"bob.consul.node\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"},\"Meta\":{\"erlang-node-name\":\"", Node/binary, "\"}}">>,
               ?assertEqual(Expect, Body),
               {ok, []}
             end),
@@ -583,7 +603,8 @@ registration_with_auto_addr_nic_test(_Config) ->
               ?assertEqual("v1/agent/service/register", Path),
               ?assertEqual([], Args),
               ?assertEqual([{"X-Consul-Token", "token-value"}], Headers),
-              Expect = <<"{\"ID\":\"rabbitmq:172.16.4.50\",\"Name\":\"rabbitmq\",\"Address\":\"172.16.4.50\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"}}">>,
+              Node = atom_to_binary(node()),
+              Expect = <<"{\"ID\":\"rabbitmq:172.16.4.50\",\"Name\":\"rabbitmq\",\"Address\":\"172.16.4.50\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"},\"Meta\":{\"erlang-node-name\":\"", Node/binary, "\"}}">>,
               ?assertEqual(Expect, Body),
               {ok, []}
             end),
@@ -611,7 +632,8 @@ registration_with_auto_addr_nic_issue_12_test(_Config) ->
               ?assertEqual("v1/agent/service/register", Path),
               ?assertEqual([], Args),
               ?assertEqual([{"X-Consul-Token", "token-value"}], Headers),
-              Expect = <<"{\"ID\":\"rabbitmq:172.16.4.50\",\"Name\":\"rabbitmq\",\"Address\":\"172.16.4.50\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"}}">>,
+              Node = atom_to_binary(node()),
+              Expect = <<"{\"ID\":\"rabbitmq:172.16.4.50\",\"Name\":\"rabbitmq\",\"Address\":\"172.16.4.50\",\"Port\":5672,\"Check\":{\"Notes\":\"RabbitMQ Consul-based peer discovery plugin TTL check\",\"TTL\":\"30s\",\"Status\":\"passing\"},\"Meta\":{\"erlang-node-name\":\"", Node/binary, "\"}}">>,
               ?assertEqual(Expect, Body),
               {ok, []}
             end),
