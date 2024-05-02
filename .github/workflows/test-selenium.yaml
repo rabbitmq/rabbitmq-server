@@ -49,18 +49,8 @@ jobs:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: ${{ matrix.elixir_version }}
 
-    - name: Mount Bazel Cache
-      uses: actions/cache@v4.0.2
-      with:
-        path: "/home/runner/repo-cache/"
-        key: ${{ runner.os }}-repo-cache-${{ hashFiles('MODULE.bazel','WORKSPACE','bazel/bzlmod/secondary_umbrella.bzl') }}
-        restore-keys: |
-          ${{ runner.os }}-repo-cache-
-
     - name: Configure Bazel
       run: |
-        ERLANG_HOME="$(dirname $(dirname $(which erl)))"
-        ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
         if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
         cat << EOF >> user.bazelrc
           build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
@@ -69,20 +59,12 @@ jobs:
         cat << EOF >> user.bazelrc
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
-          build:buildbuddy --repository_cache=/home/runner/repo-cache/
           build:buildbuddy --color=yes
-          build:buildbuddy --disk_cache=
-
-          build:buildbuddy --remote_download_toplevel
-
-          build --@rules_erlang//:erlang_version=${{ matrix.erlang_version }}
-          build --@rules_erlang//:erlang_home=${ERLANG_HOME}
-          build --//:elixir_home=${ELIXIR_HOME}
         EOF
 
     - name: Build & Load RabbitMQ OCI
       run: |
-        bazelisk run packaging/docker-image:rabbitmq \
+        bazelisk run packaging/docker-image:rabbitmq-amd64 \
           --config=buildbuddy
 
     - name: Configure Docker Network
@@ -96,7 +78,7 @@ jobs:
 
     - name: Run Suites
       run: |
-        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq ${SELENIUM_DIR}/run-suites.sh
+        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq-amd64 ${SELENIUM_DIR}/run-suites.sh
 
     - name: Upload Test Artifacts
       if: always()
