@@ -15,7 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       hash: ${{ steps.hash.outputs.hash }}
-      previous_run_attempt: ${{ steps.previous-attempt.outputs.number }}
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
@@ -36,11 +35,6 @@ jobs:
       id: hash
       run: |
         echo "hash=${{ hashFiles('**', '!WORKSPACE', '!.github/**', '!**.bazel', '!**.bzl', '!**/BUILD.*') }}" | tee -a $GITHUB_OUTPUT
-    - name: COMPUTE PREVIOUS RUN ATTEPMT
-      id: previous-attempt
-      run: |
-        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
-        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: CACHE BUILT REPO
       uses: actions/cache@v4
       with:
@@ -75,13 +69,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-
     - name: PRINT CACHED RESULTS
@@ -172,13 +171,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-
     - name: PRINT CACHED RESULTS
@@ -279,13 +283,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-
     - name: PRINT CACHED RESULTS
@@ -376,13 +385,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-
     - name: PRINT CACHED RESULTS
@@ -473,13 +487,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-
     - name: PRINT CACHED RESULTS
@@ -610,13 +629,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-
     - name: PRINT CACHED RESULTS
@@ -687,13 +711,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-
     - name: PRINT CACHED RESULTS
@@ -774,13 +803,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-
     - name: PRINT CACHED RESULTS
@@ -861,13 +895,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-
     - name: PRINT CACHED RESULTS
@@ -951,13 +990,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-
     - name: PRINT CACHED RESULTS
@@ -2439,13 +2483,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-
     - name: PRINT CACHED RESULTS
@@ -2507,13 +2556,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-
     - name: PRINT CACHED RESULTS
@@ -2594,13 +2648,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-
     - name: PRINT CACHED RESULTS
@@ -2671,13 +2730,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-
     - name: PRINT CACHED RESULTS
@@ -2778,13 +2842,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-
     - name: PRINT CACHED RESULTS
@@ -2885,13 +2954,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-
     - name: PRINT CACHED RESULTS
@@ -2992,13 +3066,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-
     - name: PRINT CACHED RESULTS
@@ -3159,13 +3238,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-
     - name: PRINT CACHED RESULTS
@@ -3236,13 +3320,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-
     - name: PRINT CACHED RESULTS
@@ -3313,13 +3402,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-
     - name: PRINT CACHED RESULTS
@@ -3400,13 +3494,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-
     - name: PRINT CACHED RESULTS
@@ -3507,13 +3606,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-
     - name: PRINT CACHED RESULTS
@@ -3654,13 +3758,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-
     - name: PRINT CACHED RESULTS
@@ -3741,13 +3850,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-
     - name: PRINT CACHED RESULTS
@@ -3848,13 +3962,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-
     - name: PRINT CACHED RESULTS
@@ -4065,13 +4184,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-
     - name: PRINT CACHED RESULTS
@@ -4182,13 +4306,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-
     - name: PRINT CACHED RESULTS
@@ -4449,13 +4578,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-
     - name: PRINT CACHED RESULTS
@@ -4557,13 +4691,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-
     - name: PRINT CACHED RESULTS
@@ -4644,13 +4783,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-
     - name: PRINT CACHED RESULTS
@@ -4741,13 +4885,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-
     - name: PRINT CACHED RESULTS
@@ -4848,13 +4997,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-
     - name: PRINT CACHED RESULTS
@@ -4945,13 +5099,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-
     - name: PRINT CACHED RESULTS
@@ -5042,13 +5201,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-
     - name: PRINT CACHED RESULTS
@@ -5149,13 +5313,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-
     - name: PRINT CACHED RESULTS
@@ -5226,13 +5395,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-
     - name: PRINT CACHED RESULTS
@@ -5313,13 +5487,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-
     - name: PRINT CACHED RESULTS
@@ -5410,13 +5589,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-
     - name: PRINT CACHED RESULTS
@@ -5587,13 +5771,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-
     - name: PRINT CACHED RESULTS
@@ -5694,13 +5883,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-
     - name: PRINT CACHED RESULTS
@@ -5861,13 +6055,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-
     - name: PRINT CACHED RESULTS
@@ -6008,13 +6207,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-
     - name: PRINT CACHED RESULTS
@@ -6095,13 +6299,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-
     - name: PRINT CACHED RESULTS
@@ -6172,13 +6381,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-
     - name: PRINT CACHED RESULTS
@@ -6259,13 +6473,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-
     - name: PRINT CACHED RESULTS
@@ -6356,13 +6575,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-
     - name: PRINT CACHED RESULTS
@@ -6453,13 +6677,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-
     - name: PRINT CACHED RESULTS
@@ -6570,13 +6799,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-
     - name: PRINT CACHED RESULTS
@@ -6647,13 +6881,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-
     - name: PRINT CACHED RESULTS
@@ -6784,13 +7023,18 @@ jobs:
         path: ${{ github.workspace }}
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
+    - name: COMPUTE PREVIOUS RUN ATTEPMT
+      id: previous-attempt
+      run: |
+        PREVIOUS_ATTEMPT=$((${{ fromJSON(github.run_attempt) }} - 1))
+        echo "number=$PREVIOUS_ATTEMPT" | tee -a $GITHUB_OUTPUT
     - name: RESTORE TEST RESULT CACHE
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-
     - name: PRINT CACHED RESULTS
