@@ -17,9 +17,7 @@
         ]).
 
 -import(rabbit_misc,
-        [maps_put_truthy/3,
-         maps_put_falsy/3
-        ]).
+        [maps_put_truthy/3]).
 
 -type message_section() ::
     #'v1_0.header'{} |
@@ -184,8 +182,6 @@ get_property(durable, Msg) ->
     case Msg of
         #msg_body_encoded{header = #'v1_0.header'{durable = Durable}}
           when is_boolean(Durable) ->
-            Durable;
-        #msg_body_encoded{header = #'v1_0.header'{durable = {boolean, Durable}}} ->
             Durable;
         _ ->
             %% fallback in case the source protocol was old AMQP 0.9.1
@@ -644,17 +640,16 @@ essential_properties(#msg_body_encoded{message_annotations = MA} = Msg) ->
                  _ ->
                      undefined
              end,
-    Anns = maps_put_falsy(
-             ?ANN_DURABLE, Durable,
+    Anns0 = #{?ANN_DURABLE => Durable},
+    Anns = maps_put_truthy(
+             ?ANN_PRIORITY, Priority,
              maps_put_truthy(
-               ?ANN_PRIORITY, Priority,
+               ?ANN_TIMESTAMP, Timestamp,
                maps_put_truthy(
-                 ?ANN_TIMESTAMP, Timestamp,
+                 ttl, Ttl,
                  maps_put_truthy(
-                   ttl, Ttl,
-                   maps_put_truthy(
-                     deaths, Deaths,
-                     #{}))))),
+                   deaths, Deaths,
+                   Anns0)))),
     case MA of
         [] ->
             Anns;
