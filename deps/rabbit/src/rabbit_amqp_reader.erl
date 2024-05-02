@@ -367,13 +367,6 @@ parse_frame_body(Body, _Channel) ->
     BytesBody = size(Body),
     {DescribedPerformative, BytesParsed} = amqp10_binary_parser:parse(Body),
     Performative = amqp10_framing:decode(DescribedPerformative),
-    % ?DEBUG("~s Channel ~tp ->~n~tp~n~ts~n",
-    %        [?MODULE, _Channel, amqp10_framing:pprint(Performative),
-    %         case Payload of
-    %             <<>> -> <<>>;
-    %             _    -> rabbit_misc:format(
-    %                       " followed by ~tb bytes of payload", [size(Payload)])
-    %         end]),
     if BytesParsed < BytesBody ->
            Payload = binary_part(Body, BytesParsed, BytesBody - BytesParsed),
            {Performative, Payload};

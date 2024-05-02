@@ -19,17 +19,6 @@
 -import(rabbit_misc,
         [maps_put_truthy/3]).
 
--type message_section() ::
-    #'v1_0.header'{} |
-    #'v1_0.delivery_annotations'{} |
-    #'v1_0.message_annotations'{} |
-    #'v1_0.properties'{} |
-    #'v1_0.application_properties'{} |
-    #'v1_0.data'{} |
-    #'v1_0.amqp_sequence'{} |
-    #'v1_0.amqp_value'{} |
-    #'v1_0.footer'{}.
-
 -define(MESSAGE_ANNOTATIONS_GUESS_SIZE, 100).
 
 -define(SIMPLE_VALUE(V),
@@ -50,7 +39,12 @@
 -type body_descriptor_code() :: ?DESCRIPTOR_CODE_DATA |
                                 ?DESCRIPTOR_CODE_AMQP_SEQUENCE |
                                 ?DESCRIPTOR_CODE_AMQP_VALUE.
--type amqp_map() :: [{term(), term()}].
+%% §3.2.5
+-type application_properties() :: [{Key :: {utf8, binary()},
+                                    Val :: term()}].
+%% §3.2.10
+-type amqp_annotations() :: [{Key :: {symbol, binary()} | {ulong, non_neg_integer()},
+                              Val :: term()}].
 -type opt(T) :: T | undefined.
 
 %% This representation is used when the message was originally sent with
@@ -67,13 +61,13 @@
 
 %% This representation is used when we received the message from
 %% an AMQP client or when we read the message from a stream.
-%% This message was parsed up to the section preceding the body.
+%% This message was parsed only until the start of the body.
 -record(msg_body_encoded,
         {
          header :: opt(#'v1_0.header'{}),
-         message_annotations = [] :: amqp_map(),
+         message_annotations = [] :: amqp_annotations(),
          properties :: opt(#'v1_0.properties'{}),
-         application_properties = [] :: amqp_map(),
+         application_properties = [] :: application_properties(),
          bare_and_footer = uninit :: uninit | binary(),
          bare_and_footer_application_properties_pos = ?OMITTED_SECTION :: non_neg_integer() | ?OMITTED_SECTION,
          bare_and_footer_body_pos = uninit :: uninit | non_neg_integer(),
@@ -92,7 +86,7 @@
 %% the future.
 -record(v1,
         {
-         message_annotations = [] :: amqp_map(),
+         message_annotations = [] :: amqp_annotations(),
          bare_and_footer :: binary(),
          bare_and_footer_properties_pos :: 0 | ?OMITTED_SECTION,
          bare_and_footer_application_properties_pos :: non_neg_integer() | ?OMITTED_SECTION,
@@ -102,19 +96,16 @@
 
 -opaque state() :: #msg_body_decoded{} | #msg_body_encoded{} | #v1{}.
 
--export_type([
-              state/0,
-              message_section/0
-             ]).
+-export_type([state/0]).
 
-init(Payload) when is_binary(Payload) ->
+init(Payload) ->
     Sections = amqp10_framing:decode_bin(Payload, [server_mode]),
-    Msg = msg_body_encoded(Sections, Payload),
+    Msg = msg_body_encoded(Sections, Payload, #msg_body_encoded{}),
     Anns = essential_properties(Msg),
     {Msg, Anns}.
 
 convert_from(?MODULE, Sections, _Env) when is_list(Sections) ->
-    msg_body_decoded(Sections);
+    msg_body_decoded(Sections, #msg_body_decoded{});
 convert_from(_SourceProto, _, _Env) ->
     not_implemented.
 
@@ -396,7 +387,8 @@ to_sections(H, MAC, Tail) ->
             [H | S]
     end.
 
--spec protocol_state_message_annotations(amqp_map(), mc:annotations()) -> amqp_map().
+-spec protocol_state_message_annotations(amqp_annotations(), mc:annotations()) ->
+    amqp_annotations().
 protocol_state_message_annotations(MA, Anns) ->
     maps:fold(
       fun(?ANN_EXCHANGE, Exchange, L) ->
@@ -508,35 +500,29 @@ application_properties_as_simple_map0(Content, L) ->
                         Acc
                 end, L, Content).
 
-msg_body_decoded(Sections) ->
-    msg_body_decoded(Sections, #msg_body_decoded{}).
-
 msg_body_decoded([], Acc) ->
     Acc;
 msg_body_decoded([#'v1_0.header'{} = H | Rem], Msg) ->
     msg_body_decoded(Rem, Msg#msg_body_decoded{header = H});
+msg_body_decoded([_Ignore = #'v1_0.delivery_annotations'{} | Rem], Msg) ->
+    msg_body_decoded(Rem, Msg);
 msg_body_decoded([#'v1_0.message_annotations'{content = MAC} | Rem], Msg) ->
     msg_body_decoded(Rem, Msg#msg_body_decoded{message_annotations = MAC});
 msg_body_decoded([#'v1_0.properties'{} = P | Rem], Msg) ->
     msg_body_decoded(Rem, Msg#msg_body_decoded{properties = P});
 msg_body_decoded([#'v1_0.application_properties'{content = APC} | Rem], Msg) ->
     msg_body_decoded(Rem, Msg#msg_body_decoded{application_properties = APC});
-msg_body_decoded([_Ignore = #'v1_0.delivery_annotations'{} | Rem], Msg) ->
-    msg_body_decoded(Rem, Msg);
 msg_body_decoded([#'v1_0.data'{} = D | Rem], #msg_body_decoded{data = Body} = Msg)
   when is_list(Body) ->
     msg_body_decoded(Rem, Msg#msg_body_decoded{data = Body ++ [D]});
 msg_body_decoded([#'v1_0.amqp_sequence'{} = D | Rem], #msg_body_decoded{data = Body} = Msg)
   when is_list(Body) ->
     msg_body_decoded(Rem, Msg#msg_body_decoded{data = Body ++ [D]});
-msg_body_decoded([#'v1_0.footer'{content = FC} | Rem], Msg) ->
-    msg_body_decoded(Rem, Msg#msg_body_decoded{footer = FC});
 msg_body_decoded([#'v1_0.amqp_value'{} = B | Rem], #msg_body_decoded{} = Msg) ->
     %% an amqp value can only be a singleton
-    msg_body_decoded(Rem, Msg#msg_body_decoded{data = B}).
-
-msg_body_encoded(Sections, Payload) ->
-    msg_body_encoded(Sections, Payload, #msg_body_encoded{}).
+    msg_body_decoded(Rem, Msg#msg_body_decoded{data = B});
+msg_body_decoded([#'v1_0.footer'{content = FC} | Rem], Msg) ->
+    msg_body_decoded(Rem, Msg#msg_body_decoded{footer = FC}).
 
 msg_body_encoded([#'v1_0.header'{} = H | Rem], Payload, Msg) ->
     msg_body_encoded(Rem, Payload, Msg#msg_body_encoded{header = H});

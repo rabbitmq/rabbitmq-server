@@ -33,7 +33,7 @@
 
 %% server_mode is a special parsing mode used by RabbitMQ when parsing
 %% AMQP message sections from an AMQP client. This mode:
-%% 1. stops parsing when the body is reached, and
+%% 1. stops parsing when the body starts, and
 %% 2. returns the start byte position of each parsed bare message section.
 -type opts() :: [server_mode].
 
