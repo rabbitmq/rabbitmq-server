@@ -110,35 +110,18 @@ erlang_config.internal_erlang_from_github_release(
 )
 
 erlang_config.internal_erlang_from_github_release(
-<<<<<<< HEAD
     name = "26",
     sha256 = "47853ea9230643a0a31004433f07a71c1b92d6e0094534f629e3b75dbc62f193",
     version = "26.0.2",
-=======
-    name = "26_1",
-    sha256 = "f1074cf3a54f1f87e66027d5abebab2fa76a0243453fa58bc5f30d0ce0313921",
-    version = "26.1.2",
     extra_make_opts = ["-j 4"],
-)
-
-erlang_config.internal_erlang_from_github_release(
-    name = "26_2",
-    sha256 = "d537ff4ac5d8c1cb507aedaf7198fc1f155ea8aa65a8d83edb35c2802763cc28",
-    version = "26.2.2",
-    extra_make_opts = ["-j 4"],
->>>>>>> d531418a64 (Use rules_erlang 3.15.0)
 )
 
 erlang_config.internal_erlang_from_http_archive(
     name = "git_master",
     strip_prefix = "otp-master",
     url = "https://github.com/erlang/otp/archive/refs/heads/master.tar.gz",
-<<<<<<< HEAD
-    version = "master",
-=======
     version = "27",
     extra_make_opts = ["-j 4"],
->>>>>>> d531418a64 (Use rules_erlang 3.15.0)
 )
 
 use_repo(
