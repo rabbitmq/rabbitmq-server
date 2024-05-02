@@ -186,8 +186,22 @@ sync_desired_cluster(Backend, RetriesLeft, RetryDelay) ->
                #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
             ok;
         {ok, {DiscoveredNodes, NodeType}} ->
-            NodesAndProps = query_node_props(DiscoveredNodes),
-            case can_use_discovered_nodes(DiscoveredNodes, NodesAndProps) of
+            NodeAlreadySelected = is_atom(DiscoveredNodes),
+            NodesAndProps = case NodeAlreadySelected of
+                                true ->
+                                    ?LOG_DEBUG(
+                                       "Peer discovery: node '~ts' already "
+                                       "selected by backend",
+                                       [DiscoveredNodes],
+                                       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+                                    query_node_props([DiscoveredNodes]);
+                                false ->
+                                    query_node_props(DiscoveredNodes)
+                            end,
+            CanUse = (
+              NodeAlreadySelected orelse
+              can_use_discovered_nodes(DiscoveredNodes, NodesAndProps)),
+            case CanUse of
                 true ->
                     case select_node_to_join(NodesAndProps) of
                         SelectedNode when SelectedNode =/= false ->
@@ -249,8 +263,9 @@ retry_sync_desired_cluster(_Backend, 0, _RetryDelay) ->
     ok.
 
 -spec discover_cluster_nodes() -> {ok, Discovery} when
-      Discovery :: {DiscoveredNodes, NodeType},
+      Discovery :: {DiscoveredNodes | SelectedNode, NodeType},
       DiscoveredNodes :: [node()],
+      SelectedNode :: node(),
       NodeType :: rabbit_types:node_type().
 %% @doc Queries the peer discovery backend to discover nodes.
 %%
@@ -262,10 +277,11 @@ discover_cluster_nodes() ->
 
 -spec discover_cluster_nodes(Backend) -> Ret when
       Backend :: backend(),
-      Discovery :: {DiscoveredNodes, NodeType},
-      DiscoveredNodes :: [node()],
-      NodeType :: rabbit_types:node_type(),
       Ret :: {ok, Discovery} | {error, Reason},
+      Discovery :: {DiscoveredNodes | SelectedNode, NodeType},
+      DiscoveredNodes :: [node()],
+      SelectedNode :: node(),
+      NodeType :: rabbit_types:node_type(),
       Reason :: any().
 %% @private
 
@@ -295,7 +311,7 @@ discover_cluster_nodes(Backend) ->
 
 -spec check_discovered_nodes_list_validity(DiscoveredNodes, NodeType) ->
     Ret when
-      DiscoveredNodes :: [node()],
+      DiscoveredNodes :: [node()] | node(),
       NodeType :: rabbit_types:node_type(),
       Ret :: ok.
 %% @private
@@ -309,6 +325,12 @@ check_discovered_nodes_list_validity(DiscoveredNodes, NodeType)
     case BadNodenames of
         [] -> ok;
         _  -> e({invalid_cluster_node_names, BadNodenames})
+    end;
+check_discovered_nodes_list_validity(SelectedNode, NodeType)
+  when NodeType =:= disc orelse NodeType =:= disk orelse NodeType =:= ram ->
+    case is_atom(SelectedNode) of
+        true  -> ok;
+        false -> e({invalid_cluster_node_names, SelectedNode})
     end;
 check_discovered_nodes_list_validity(DiscoveredNodes, BadNodeType)
   when is_list(DiscoveredNodes) ->
@@ -836,7 +858,7 @@ can_use_discovered_nodes(_DiscoveredNodes, []) ->
     false.
 
 -spec select_node_to_join(NodesAndProps) -> SelectedNode when
-      NodesAndProps :: [node_and_props()],
+      NodesAndProps :: nonempty_list(node_and_props()),
       SelectedNode :: node() | false.
 %% @doc Selects the node to join among the sorted list of nodes.
 %%
@@ -1140,10 +1162,10 @@ unlock(Backend, Data) ->
                 {Nodes :: [node()],
                  NodeType :: rabbit_types:node_type()} |
                 {ok, Nodes :: [node()]} |
-                {ok, {Nodes :: [node()],
+                {ok, {Nodes :: [node()] | node(),
                       NodeType :: rabbit_types:node_type()}} |
                 {error, Reason :: string()}) ->
-    {ok, {Nodes :: [node()], NodeType :: rabbit_types:node_type()}} |
+    {ok, {Nodes :: [node()] | node(), NodeType :: rabbit_types:node_type()}} |
     {error, Reason :: string()}.
 
 normalize(Nodes) when is_list(Nodes) ->
@@ -1154,6 +1176,9 @@ normalize({ok, Nodes}) when is_list(Nodes) ->
   {ok, {Nodes, disc}};
 normalize({ok, {Nodes, NodeType}}) when is_list(Nodes) andalso is_atom(NodeType) ->
   {ok, {Nodes, NodeType}};
+normalize({ok, {Node, NodeType}})
+  when is_atom(Node) andalso is_atom(NodeType) ->
+  {ok, {Node, NodeType}};
 normalize({error, Reason}) ->
   {error, Reason}.
 
