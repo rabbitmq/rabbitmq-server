@@ -9,6 +9,10 @@
 #@   return names
 #@ end
 
+#@ def cache_prefix(name):
+#@  return "${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-"+name+"-${{ matrix.metadata_store }}-${{ matrix.otp_version }}"
+#@ end
+
 #@ def test_plugin(name, needs, suites):
   test-(@= name @):
     name: Test (@= name @)
@@ -24,7 +28,7 @@
           - khepri
     timeout-minutes: 180
     env:
-      SUCCESS_PATH: /home/runner/test-result-cache/(@= name @)/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
+      CACHE_PATH: /home/runner/test-result-cache
     steps:
       #@ if name == "rabbit":
       - name: INSTALL DOTNET
@@ -46,12 +50,12 @@
       - name: RESTORE TEST RESULT CACHE
         uses: actions/cache/restore@v4
         with:
-          path: /home/runner/test-result-cache/
-          key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-(@= name @)-${{ github.run_number }}-${{ github.run_attempt }}
+          path: ${{ env.CACHE_PATH }}
+          key: (@= cache_prefix(name) @)-${{ github.run_number }}-${{ github.run_attempt }}
           restore-keys: |
-            ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-(@= name @)-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-            ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-(@= name @)-${{ github.run_number }}-
-            ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-(@= name @)-
+            (@= cache_prefix(name) @)-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+            (@= cache_prefix(name) @)-${{ github.run_number }}-
+            (@= cache_prefix(name) @)-
       - name: PRINT CACHED RESULTS
         run: |
           set -x
@@ -64,27 +68,27 @@
           elixir-version: 1.15
       - name: PREPARE
         run: |
-          mkdir -p ${{ env.SUCCESS_PATH }}
+          mkdir -p ${{ env.CACHE_PATH }}
       - name: DIALYZE
         run: |
-          if [[ -f ${{ env.SUCCESS_PATH }}/dialyze ]]; then
+          if [[ -f ${{ env.CACHE_PATH }}/dialyze ]]; then
             echo "dialyze already passed for this key ${{ needs.xref.outputs.hash }}"
           else
             make -C deps/(@= name @) \
                 dialyze \
                 RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
-            touch ${{ env.SUCCESS_PATH }}/dialyze
+            touch ${{ env.CACHE_PATH }}/dialyze
           fi
         continue-on-error: #@ name == "rabbitmq_ct_helpers" or name == "trust_store_http"
       - name: EUNIT
         run: |
-          if [[ -f ${{ env.SUCCESS_PATH }}/eunit ]]; then
+          if [[ -f ${{ env.CACHE_PATH }}/eunit ]]; then
             echo "eunit already passed for this key ${{ needs.xref.outputs.hash }}"
           else
             make -C deps/(@= name @) \
                 eunit \
                 RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
-            touch ${{ env.SUCCESS_PATH }}/eunit
+            touch ${{ env.CACHE_PATH }}/eunit
           fi
 #@ for suite in suites:
       - name: CT (@= suite @)
@@ -94,20 +98,20 @@
 #@ end
 #@ end
         run: |
-          if [[ -f ${{ env.SUCCESS_PATH }}/ct-(@= suite @) ]]; then
+          if [[ -f ${{ env.CACHE_PATH }}/ct-(@= suite @) ]]; then
             echo "ct-(@= suite @) already passed for this key ${{ needs.xref.outputs.hash }}"
           else
             make -C deps/(@= name @) \
                 ct-(@= suite @) \
                 RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
-            touch ${{ env.SUCCESS_PATH }}/ct-(@= suite @)
+            touch ${{ env.CACHE_PATH }}/ct-(@= suite @)
           fi
 #@ end
       - name: SAVE TEST RESULT CACHE
         uses: actions/cache/save@v4
         with:
           path: /home/runner/test-result-cache/
-          key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-(@= name @)-${{ github.run_number }}-${{ github.run_attempt }}
+          key: (@= cache_prefix(name) @)-${{ github.run_number }}-${{ github.run_attempt }}
       - name: UPLOAD TEST ARTIFACTS
         if: always()
         uses: actions/upload-artifact@v4.3.1
@@ -131,7 +135,7 @@
           - khepri
     timeout-minutes: 20
     env:
-      SUCCESS_PATH: /home/runner/test-result-cache/rabbitmq_cli/${{ matrix.metadata_store }}/${{ matrix.otp_version }}
+      CACHE_PATH: /home/runner/test-result-cache
     steps:
       - name: RESTORE BUILT REPO
         uses: actions/cache@v4
@@ -147,12 +151,12 @@
       - name: RESTORE TEST RESULT CACHE
         uses: actions/cache/restore@v4
         with:
-          path: /home/runner/test-result-cache/
-          key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-${{ github.run_number }}-${{ github.run_attempt }}
+          path: ${{ env.CACHE_PATH }}
+          key: (@= cache_prefix('rabbitmq_cli') @)-${{ github.run_number }}-${{ github.run_attempt }}
           restore-keys: |
-            ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-            ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-${{ github.run_number }}-
-            ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-
+            (@= cache_prefix('rabbitmq_cli') @)-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+            (@= cache_prefix('rabbitmq_cli') @)-${{ github.run_number }}-
+            (@= cache_prefix('rabbitmq_cli') @)-
       - name: PRINT CACHED RESULTS
         run: |
           set -x
@@ -165,23 +169,23 @@
           elixir-version: 1.15
       - name: PREPARE
         run: |
-          mkdir -p ${{ env.SUCCESS_PATH }}
+          mkdir -p ${{ env.CACHE_PATH }}
       - name: TEST
         id: test
         run: |
-          if [[ -f ${{ env.SUCCESS_PATH }}/checks ]]; then
+          if [[ -f ${{ env.CACHE_PATH }}/checks ]]; then
             echo "checks already passed for this key ${{ needs.xref.outputs.hash }}"
           else
             make -C deps/rabbitmq_cli \
                 checks \
                 RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
-            touch ${{ env.SUCCESS_PATH }}/checks
+            touch ${{ env.CACHE_PATH }}/checks
           fi
       - name: SAVE TEST RESULT CACHE
         uses: actions/cache/save@v4
         with:
           path: /home/runner/test-result-cache/
-          key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-${{ github.run_number }}-${{ github.run_attempt }}
+          key: (@= cache_prefix('rabbitmq_cli') @)-${{ github.run_number }}-${{ github.run_attempt }}
       - name: UPLOAD TEST ARTIFACTS
         if: always()
         uses: actions/upload-artifact@v4.3.1
