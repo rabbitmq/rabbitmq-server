@@ -66,7 +66,7 @@ list_nodes() ->
            end,
     Fun2 = fun(Proplist) ->
                    M = maps:from_list(Proplist),
-                   Path = rabbit_peer_discovery_httpc:build_path([v1, health, service, get_config_key(consul_svc, M)]),
+                   Path = rabbit_peer_discovery_httpc:build_path([v1, health, service, service_name()]),
                    HttpOpts = http_options(M),
                    case rabbit_peer_discovery_httpc:get(get_config_key(consul_scheme, M),
                                                         get_config_key(consul_host, M),
@@ -335,8 +335,7 @@ registration_body_add_id() ->
 
 -spec registration_body_add_name(Payload :: list()) -> list().
 registration_body_add_name(Payload) ->
-  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-  Name = rabbit_data_coercion:to_atom(get_config_key(consul_svc, M)),
+  Name = rabbit_data_coercion:to_atom(service_name()),
   lists:append(Payload, [{'Name', Name}]).
 
 -spec registration_body_maybe_add_address(Payload :: list())
@@ -484,13 +483,23 @@ service_address(_, false, NIC, _) ->
 -spec service_id() -> string().
 service_id() ->
   M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-  service_id(get_config_key(consul_svc, M),
-             service_address()).
+  case get_config_key(consul_svc_id, M) of
+      "undefined" ->
+          service_id(get_config_key(consul_svc, M),
+                     service_address());
+      ID ->
+          ID
+  end.
 
 -spec service_id(Name :: string(), Address :: string()) -> string().
 service_id(Service, "undefined") -> Service;
 service_id(Service, Address) ->
   string:join([Service, Address], ":").
+
+-spec service_name() -> string().
+service_name() ->
+  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+  get_config_key(consul_svc, M).
 
 -spec service_ttl(TTL :: integer()) -> string().
 service_ttl(Value) ->

@@ -69,6 +69,11 @@
                                                    env_variable  = "CONSUL_SVC_ADDR_NODENAME",
                                                    default_value = false
                                                   },
+          consul_svc_id                      => #peer_discovery_config_entry_meta{
+                                                   type          = string,
+                                                   env_variable  = "CONSUL_SVC_ID",
+                                                   default_value = "undefined"
+                                                  },
           consul_svc_port                    => #peer_discovery_config_entry_meta{
                                                    type          = integer,
                                                    env_variable  = "CONSUL_SVC_PORT",
