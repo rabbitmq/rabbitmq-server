@@ -2,9 +2,12 @@ PROJECT = oauth2_client
 PROJECT_DESCRIPTION = OAuth2 client from the RabbitMQ Project
 PROJECT_MOD = oauth2_client_app
 
-DEPS = rabbit rabbit_common
+BUILD_DEPS = rabbit
+DEPS = rabbit_common
 TEST_DEPS = rabbitmq_ct_helpers cowboy
 LOCAL_DEPS = ssl inets crypto public_key
+
+PLT_APPS = rabbit
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-macros.mk \
