@@ -34,6 +34,9 @@
 
 -define(CONSUL_CHECK_NOTES, "RabbitMQ Consul-based peer discovery plugin TTL check").
 
+-define(META_KEY_CLUSTER_NAME, <<"cluster">>).
+-define(META_KEY_ERLANG_NODENAME, <<"erlang-node-name">>).
+
 %%
 %% API
 %%
@@ -260,15 +263,21 @@ extract_nodes(Data) -> extract_nodes(Data, []).
     -> list().
 extract_nodes([], Nodes)    -> Nodes;
 extract_nodes([H | T], Nodes) ->
-  Service  = maps:get(<<"Service">>, H),
-  Value    = maps:get(<<"Address">>, Service),
-  NodeName = case ?UTIL_MODULE:as_string(Value) of
-    "" ->
-      NodeData = maps:get(<<"Node">>, H),
-      Node = maps:get(<<"Node">>, NodeData),
-      maybe_add_domain(?UTIL_MODULE:node_name(Node));
-    Address ->
-      ?UTIL_MODULE:node_name(Address)
+  Service = maps:get(<<"Service">>, H),
+  Meta = maps:get(<<"Meta">>, Service, #{}),
+  NodeName = case Meta of
+    #{?META_KEY_ERLANG_NODENAME := Node} ->
+      binary_to_atom(Node);
+    _ ->
+      Value = maps:get(<<"Address">>, Service),
+      case ?UTIL_MODULE:as_string(Value) of
+        "" ->
+          NodeData = maps:get(<<"Node">>, H),
+          Node = maps:get(<<"Node">>, NodeData),
+          maybe_add_domain(?UTIL_MODULE:node_name(Node));
+        Address ->
+          ?UTIL_MODULE:node_name(Address)
+      end
   end,
   extract_nodes(T, lists:merge(Nodes, [NodeName])).
 
@@ -417,24 +426,19 @@ registration_body_maybe_add_tag(Payload, Cluster, Tags) ->
 
 -spec registration_body_maybe_add_meta(Payload :: list()) -> list().
 registration_body_maybe_add_meta(Payload) ->
-  M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-  ClusterName = get_config_key(cluster_name, M),
-  Meta = ?UTIL_MODULE:as_list(get_config_key(consul_svc_meta, M)),
-  registration_body_maybe_add_meta(Payload, ClusterName, Meta).
-
--spec registration_body_maybe_add_meta(Payload :: list(),
-                                       ClusterName :: string(),
-                                       Meta :: list()) -> list().
-registration_body_maybe_add_meta(Payload, "default", []) ->
-  Payload;
-registration_body_maybe_add_meta(Payload, "default", Meta) ->
-  lists:append(Payload, [{<<"meta">>, Meta}]);
-registration_body_maybe_add_meta(Payload, _ClusterName, []) ->
-  Payload;
-registration_body_maybe_add_meta(Payload, ClusterName, Meta) ->
-  Merged = maps:to_list(maps:merge(#{<<"cluster">> => rabbit_data_coercion:to_binary(ClusterName)}, maps:from_list(Meta))),
-  lists:append(Payload, [{<<"meta">>, Merged}]).
-
+    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    Meta0 = ?UTIL_MODULE:as_list(get_config_key(consul_svc_meta, M)),
+    Meta1 = maps:from_list(Meta0),
+    Meta2 = Meta1#{?META_KEY_ERLANG_NODENAME => atom_to_binary(node())},
+    Meta3 = case get_config_key(cluster_name, M) of
+                "default" ->
+                    Meta2;
+                ClusterName ->
+                    ClusterName1 = rabbit_data_coercion:to_binary(ClusterName),
+                    Meta2#{?META_KEY_CLUSTER_NAME => ClusterName1}
+            end,
+    Merged = maps:to_list(Meta3),
+    lists:append(Payload, [{'Meta', Merged}]).
 
 -spec validate_addr_parameters(false | true, false | true) -> false | true.
 validate_addr_parameters(false, true) ->
