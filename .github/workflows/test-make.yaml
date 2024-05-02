@@ -56,7 +56,7 @@ jobs:
     name: Test amqp10_client
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -76,7 +76,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-${{ github.run_number }}-${{ github.run_attempt }}
@@ -84,7 +84,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -139,6 +138,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-system
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -149,7 +153,7 @@ jobs:
     name: Test amqp10_common
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -169,7 +173,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-${{ github.run_number }}-${{ github.run_attempt }}
@@ -177,7 +181,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -242,6 +245,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-serial_number
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -252,7 +260,7 @@ jobs:
     name: Test amqp_client
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -272,7 +280,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-${{ github.run_number }}-${{ github.run_attempt }}
@@ -280,7 +288,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -335,6 +342,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -345,7 +357,7 @@ jobs:
     name: Test oauth2_client
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -365,7 +377,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-${{ github.run_number }}-${{ github.run_attempt }}
@@ -373,7 +385,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -428,6 +439,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -438,7 +454,7 @@ jobs:
     name: Test rabbit_common
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -458,7 +474,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-${{ github.run_number }}-${{ github.run_attempt }}
@@ -466,7 +482,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -561,6 +576,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-worker_pool
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -571,7 +591,7 @@ jobs:
     name: Test rabbitmq_ct_client_helpers
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -591,7 +611,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-${{ github.run_number }}-${{ github.run_attempt }}
@@ -599,7 +619,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -634,6 +653,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -644,7 +668,7 @@ jobs:
     name: Test rabbitmq_ct_helpers
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -664,7 +688,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-${{ github.run_number }}-${{ github.run_attempt }}
@@ -672,7 +696,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -717,6 +740,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-terraform
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -727,7 +755,7 @@ jobs:
     name: Test rabbitmq_stream_common
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -747,7 +775,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-${{ github.run_number }}-${{ github.run_attempt }}
@@ -755,7 +783,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -800,6 +827,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_stream_core
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -810,7 +842,7 @@ jobs:
     name: Test trust_store_http
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -830,7 +862,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-${{ github.run_number }}-${{ github.run_attempt }}
@@ -838,7 +870,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -873,6 +904,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -892,7 +928,7 @@ jobs:
     - test-rabbitmq_ct_helpers
     - test-rabbitmq_stream_common
     - test-trust_store_http
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -916,7 +952,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-${{ github.run_number }}-${{ github.run_attempt }}
@@ -924,7 +960,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -2369,6 +2404,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-vhost
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -2380,7 +2420,7 @@ jobs:
     needs:
     - xref
     - test-rabbit
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -2400,7 +2440,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-${{ github.run_number }}-${{ github.run_attempt }}
@@ -2408,7 +2448,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -2433,6 +2472,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/checks
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -2444,7 +2488,7 @@ jobs:
     name: Test rabbitmq_amqp_client
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -2464,7 +2508,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-${{ github.run_number }}-${{ github.run_attempt }}
@@ -2472,7 +2516,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -2517,6 +2560,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-management
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -2527,7 +2575,7 @@ jobs:
     name: Test rabbitmq_amqp1_0
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -2547,7 +2595,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-${{ github.run_number }}-${{ github.run_attempt }}
@@ -2555,7 +2603,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -2590,6 +2637,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -2600,7 +2652,7 @@ jobs:
     name: Test rabbitmq_auth_backend_cache
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -2620,7 +2672,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-${{ github.run_number }}-${{ github.run_attempt }}
@@ -2628,7 +2680,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -2693,6 +2744,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_auth_cache
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -2703,7 +2759,7 @@ jobs:
     name: Test rabbitmq_auth_backend_http
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -2723,7 +2779,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-${{ github.run_number }}-${{ github.run_attempt }}
@@ -2731,7 +2787,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -2796,6 +2851,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -2806,7 +2866,7 @@ jobs:
     name: Test rabbitmq_auth_backend_ldap
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -2826,7 +2886,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-${{ github.run_number }}-${{ github.run_attempt }}
@@ -2834,7 +2894,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -2899,6 +2958,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -2909,7 +2973,7 @@ jobs:
     name: Test rabbitmq_auth_backend_oauth2
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -2929,7 +2993,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-${{ github.run_number }}-${{ github.run_attempt }}
@@ -2937,7 +3001,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -3062,6 +3125,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-wildcard_match
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3072,7 +3140,7 @@ jobs:
     name: Test rabbitmq_auth_mechanism_ssl
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -3092,7 +3160,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-${{ github.run_number }}-${{ github.run_attempt }}
@@ -3100,7 +3168,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -3135,6 +3202,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3145,7 +3217,7 @@ jobs:
     name: Test rabbitmq_aws
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -3165,7 +3237,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-${{ github.run_number }}-${{ github.run_attempt }}
@@ -3173,7 +3245,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -3208,6 +3279,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3218,7 +3294,7 @@ jobs:
     name: Test rabbitmq_consistent_hash_exchange
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -3238,7 +3314,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-${{ github.run_number }}-${{ github.run_attempt }}
@@ -3246,7 +3322,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -3291,6 +3366,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_exchange_type_consistent_hash
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3301,7 +3381,7 @@ jobs:
     name: Test rabbitmq_event_exchange
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -3321,7 +3401,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-${{ github.run_number }}-${{ github.run_attempt }}
@@ -3329,7 +3409,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -3394,6 +3473,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3404,7 +3488,7 @@ jobs:
     name: Test rabbitmq_federation
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -3424,7 +3508,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-${{ github.run_number }}-${{ github.run_attempt }}
@@ -3432,7 +3516,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -3537,6 +3620,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-unit_inbroker
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3547,7 +3635,7 @@ jobs:
     name: Test rabbitmq_federation_management
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -3567,7 +3655,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-${{ github.run_number }}-${{ github.run_attempt }}
@@ -3575,7 +3663,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -3620,6 +3707,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-federation_mgmt
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3630,7 +3722,7 @@ jobs:
     name: Test rabbitmq_jms_topic_exchange
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -3650,7 +3742,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-${{ github.run_number }}-${{ github.run_attempt }}
@@ -3658,7 +3750,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -3723,6 +3814,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-sjx_evaluation
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3733,7 +3829,7 @@ jobs:
     name: Test rabbitmq_management
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -3753,7 +3849,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-${{ github.run_number }}-${{ github.run_attempt }}
@@ -3761,7 +3857,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -3936,6 +4031,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-stats
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3946,7 +4046,7 @@ jobs:
     name: Test rabbitmq_management_agent
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -3966,7 +4066,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-${{ github.run_number }}-${{ github.run_attempt }}
@@ -3974,7 +4074,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -4049,6 +4148,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_mgmt_slide
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4059,7 +4163,7 @@ jobs:
     name: Test rabbitmq_mqtt
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -4079,7 +4183,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-${{ github.run_number }}-${{ github.run_attempt }}
@@ -4087,7 +4191,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -4312,6 +4415,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-v5
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4322,7 +4430,7 @@ jobs:
     name: Test rabbitmq_peer_discovery_aws
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -4342,7 +4450,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-${{ github.run_number }}-${{ github.run_attempt }}
@@ -4350,7 +4458,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -4416,6 +4523,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4426,7 +4538,7 @@ jobs:
     name: Test rabbitmq_peer_discovery_common
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -4446,7 +4558,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-${{ github.run_number }}-${{ github.run_attempt }}
@@ -4454,7 +4566,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -4499,6 +4610,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-config_schema
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4509,7 +4625,7 @@ jobs:
     name: Test rabbitmq_peer_discovery_consul
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -4529,7 +4645,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-${{ github.run_number }}-${{ github.run_attempt }}
@@ -4537,7 +4653,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -4592,6 +4707,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbitmq_peer_discovery_consul
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4602,7 +4722,7 @@ jobs:
     name: Test rabbitmq_peer_discovery_etcd
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -4622,7 +4742,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-${{ github.run_number }}-${{ github.run_attempt }}
@@ -4630,7 +4750,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -4695,6 +4814,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4705,7 +4829,7 @@ jobs:
     name: Test rabbitmq_peer_discovery_k8s
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -4725,7 +4849,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-${{ github.run_number }}-${{ github.run_attempt }}
@@ -4733,7 +4857,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -4788,6 +4911,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbitmq_peer_discovery_k8s
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4798,7 +4926,7 @@ jobs:
     name: Test rabbitmq_prelaunch
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -4818,7 +4946,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-${{ github.run_number }}-${{ github.run_attempt }}
@@ -4826,7 +4954,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -4881,6 +5008,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_prelaunch_file
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4891,7 +5023,7 @@ jobs:
     name: Test rabbitmq_prometheus
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -4911,7 +5043,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-${{ github.run_number }}-${{ github.run_attempt }}
@@ -4919,7 +5051,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -4984,6 +5115,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_prometheus_http
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4994,7 +5130,7 @@ jobs:
     name: Test rabbitmq_random_exchange
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -5014,7 +5150,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-${{ github.run_number }}-${{ github.run_attempt }}
@@ -5022,7 +5158,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5057,6 +5192,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5067,7 +5207,7 @@ jobs:
     name: Test rabbitmq_recent_history_exchange
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -5087,7 +5227,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-${{ github.run_number }}-${{ github.run_attempt }}
@@ -5095,7 +5235,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5140,6 +5279,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-system
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5150,7 +5294,7 @@ jobs:
     name: Test rabbitmq_sharding
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -5170,7 +5314,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-${{ github.run_number }}-${{ github.run_attempt }}
@@ -5178,7 +5322,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5233,6 +5376,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_sharding
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5243,7 +5391,7 @@ jobs:
     name: Test rabbitmq_shovel
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -5263,7 +5411,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-${{ github.run_number }}-${{ github.run_attempt }}
@@ -5271,7 +5419,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5406,6 +5553,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-shovel_status_command
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5416,7 +5568,7 @@ jobs:
     name: Test rabbitmq_shovel_management
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -5436,7 +5588,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-${{ github.run_number }}-${{ github.run_attempt }}
@@ -5444,7 +5596,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5509,6 +5660,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_shovel_mgmt_util
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5519,7 +5675,7 @@ jobs:
     name: Test rabbitmq_stomp
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -5539,7 +5695,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-${{ github.run_number }}-${{ github.run_attempt }}
@@ -5547,7 +5703,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5672,6 +5827,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-util
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5682,7 +5842,7 @@ jobs:
     name: Test rabbitmq_stream
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -5702,7 +5862,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-${{ github.run_number }}-${{ github.run_attempt }}
@@ -5710,7 +5870,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5815,6 +5974,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_stream_utils
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5825,7 +5989,7 @@ jobs:
     name: Test rabbitmq_stream_management
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -5845,7 +6009,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-${{ github.run_number }}-${{ github.run_attempt }}
@@ -5853,7 +6017,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5898,6 +6061,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-http
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5908,7 +6076,7 @@ jobs:
     name: Test rabbitmq_top
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -5928,7 +6096,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-${{ github.run_number }}-${{ github.run_attempt }}
@@ -5936,7 +6104,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5971,6 +6138,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5981,7 +6153,7 @@ jobs:
     name: Test rabbitmq_tracing
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -6001,7 +6173,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-${{ github.run_number }}-${{ github.run_attempt }}
@@ -6009,7 +6181,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -6054,6 +6225,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_tracing
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6064,7 +6240,7 @@ jobs:
     name: Test rabbitmq_trust_store
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -6084,7 +6260,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-${{ github.run_number }}-${{ github.run_attempt }}
@@ -6092,7 +6268,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -6147,6 +6322,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-system
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6157,7 +6337,7 @@ jobs:
     name: Test rabbitmq_web_dispatch
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -6177,7 +6357,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-${{ github.run_number }}-${{ github.run_attempt }}
@@ -6185,7 +6365,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -6240,6 +6419,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-rabbit_web_dispatch_unit
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6250,7 +6434,7 @@ jobs:
     name: Test rabbitmq_web_mqtt
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -6270,7 +6454,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-${{ github.run_number }}-${{ github.run_attempt }}
@@ -6278,7 +6462,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -6353,6 +6536,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-system
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6363,7 +6551,7 @@ jobs:
     name: Test rabbitmq_web_mqtt_examples
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -6383,7 +6571,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-${{ github.run_number }}-${{ github.run_attempt }}
@@ -6391,7 +6579,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -6426,6 +6613,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6436,7 +6628,7 @@ jobs:
     name: Test rabbitmq_web_stomp
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -6456,7 +6648,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-${{ github.run_number }}-${{ github.run_attempt }}
@@ -6464,7 +6656,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -6559,6 +6750,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/ct-unit
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6569,7 +6765,7 @@ jobs:
     name: Test rabbitmq_web_stomp_examples
     needs:
     - xref
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -6589,7 +6785,7 @@ jobs:
         key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
         fail-on-cache-miss: true
     - name: RESTORE TEST RESULT CACHE
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: /home/runner/test-result-cache/
         key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-${{ github.run_number }}-${{ github.run_attempt }}
@@ -6597,7 +6793,6 @@ jobs:
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-${{ github.run_number }}-${{ needs.xref.outputs.previous_run_attempt }}
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-${{ github.run_number }}-
           ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-
-        save-always: true
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -6632,6 +6827,11 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.SUCCESS_PATH }}/eunit
         fi
+    - name: SAVE TEST RESULT CACHE
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/test-result-cache/
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
