@@ -7,15 +7,6 @@
 ## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 ##
 
-import sys
-import subprocess
-
-# implement pip as a subprocess:
-subprocess.check_call([sys.executable, '-m', 'pip', 'install',
-                       'stomp.py==8.1.0'])
-subprocess.check_call([sys.executable, '-m', 'pip', 'install',
-                       'pika==1.1.0'])
-
 import unittest
 import sys
 import os
