@@ -1156,7 +1156,8 @@ check_node_queue_limit(#resource{name = QueueName}, _, PID) when is_pid(PID) ->
                           %% Wait for the channel to finish its rejection before killing the connection
                           receive
                               {'DOWN', Ref, process, ChannelPid, _Reason} ->
-                                  rabbit_networking:close_connection(PID, "foobar")
+                                  rabbit_networking:close_connection(PID,
+                                                                     "Queue limit reached when declaring exclusive queue, closing connection.")
                           after 5000 ->
                                   ok
                           end
