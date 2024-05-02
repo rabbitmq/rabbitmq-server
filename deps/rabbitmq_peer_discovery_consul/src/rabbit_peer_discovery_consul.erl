@@ -83,8 +83,9 @@ list_nodes() ->
                                                                     HttpOpts) of
                                    {ok, Nodes} ->
                                        IncludeWithWarnings = get_config_key(consul_include_nodes_with_warnings, M),
-                                       Result = extract_nodes(
-                                                  filter_nodes(Nodes, IncludeWithWarnings)),
+                                       Result = extract_node(
+                                                  sort_nodes(
+                                                    filter_nodes(Nodes, IncludeWithWarnings))),
                                        {ok, {Result, disc}};
                                    {error, _} = Error ->
                                        Error
@@ -276,13 +277,24 @@ filter_nodes(Nodes, Warn) ->
     false -> Nodes
   end.
 
--spec extract_nodes(ConsulResult :: [#{binary() => term()}]) -> list().
-extract_nodes(Data) -> extract_nodes(Data, []).
+-spec sort_nodes(ConsulResult :: [#{binary() => term()}]) -> [#{binary() => term()}].
+sort_nodes(Nodes) ->
+  lists:sort(
+    fun(NodeA, NodeB) ->
+        IndexA = maps:get(
+                   <<"CreateIndex">>,
+                   maps:get(<<"Service">>, NodeA, #{}), undefined),
+        IndexB = maps:get(
+                   <<"CreateIndex">>,
+                   maps:get(<<"Service">>, NodeB, #{}), undefined),
+        %% `undefined' is always greater than an integer, so we are fine here.
+        IndexA =< IndexB
+    end, Nodes).
 
--spec extract_nodes(ConsulResult :: [#{binary() => term()}], Nodes :: list())
-    -> list().
-extract_nodes([], Nodes)    -> Nodes;
-extract_nodes([H | T], Nodes) ->
+-spec extract_node(ConsulResult :: [#{binary() => term()}]) -> list().
+extract_node([]) ->
+    [];
+extract_node([H | _]) ->
   Service = maps:get(<<"Service">>, H),
   Meta = maps:get(<<"Meta">>, Service, #{}),
   NodeName = case Meta of
@@ -299,7 +311,7 @@ extract_nodes([H | T], Nodes) ->
           ?UTIL_MODULE:node_name(Address)
       end
   end,
-  extract_nodes(T, lists:merge(Nodes, [NodeName])).
+  NodeName.
 
 -spec maybe_add_acl(QArgs :: list()) -> list().
 maybe_add_acl(List) ->
