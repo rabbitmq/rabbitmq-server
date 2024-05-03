@@ -260,15 +260,9 @@ feature_flag_name(_) ->
     undefined.
 
 default() ->
-    case rabbit_misc:get_env(rabbit,
-                             default_queue_type,
-                             classic)
-    of
-        quorum -> rabbit_quorum_queue;
-        classic -> rabbit_classic_queue;
-        stream -> rabbit_stream_queue;
-        _ -> rabbit_classic_queue
-    end.
+    rabbit_misc:get_env(rabbit,
+                        default_queue_type,
+                        rabbit_classic_queue).
 
 %% is a specific queue type implementation enabled
 -spec is_enabled(module()) -> boolean().
