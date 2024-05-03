@@ -655,12 +655,16 @@ encode_sections(Sections, FooterOpt) ->
     FooterEncoded = amqp10_framing:encode_bin(Footer),
     [PreBareEncoded, BareEncoded, FooterEncoded].
 
-is_bare_message_section(#'v1_0.properties'{})             -> true;
-is_bare_message_section(#'v1_0.application_properties'{}) -> true;
-is_bare_message_section(#'v1_0.data'{})                   -> true;
-is_bare_message_section(#'v1_0.amqp_sequence'{})          -> true;
-is_bare_message_section(#'v1_0.amqp_value'{})             -> true;
-is_bare_message_section(_Section)                         -> false.
+is_bare_message_section(#'v1_0.header'{}) ->
+    false;
+is_bare_message_section(#'v1_0.delivery_annotations'{}) ->
+    false;
+is_bare_message_section(#'v1_0.message_annotations'{}) ->
+    false;
+is_bare_message_section(#'v1_0.footer'{}) ->
+    false;
+is_bare_message_section(_Section) ->
+    true.
 
 send_flow_link(OutHandle,
                #'v1_0.flow'{link_credit = {uint, Credit}} = Flow0, RenewWhenBelow,
