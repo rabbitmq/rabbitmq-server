@@ -2511,6 +2511,10 @@ end}.
   end
 }.
 
+{mapping, "default_queue_type", "rabbit.default_queue_type", [
+  {datatype, {enum, [quorum, classic, stream]}}]}.
+
+
 %%
 %% Backing queue version
 %%
