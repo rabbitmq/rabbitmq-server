@@ -19,15 +19,10 @@ groups() ->
     [
      {tests, [shuffle],
       [roundtrip_amqp,
-       roundtrip_amqp_payload_format_indicator,
        roundtrip_amqp_response_topic,
        roundtrip_amqpl,
        roundtrip_amqpl_correlation,
-       amqp_to_mqtt_amqp_value_section_binary,
-       amqp_to_mqtt_amqp_value_section_list,
-       amqp_to_mqtt_amqp_value_section_null,
-       amqp_to_mqtt_amqp_value_section_int,
-       amqp_to_mqtt_amqp_value_section_boolean,
+       amqp_to_mqtt_body_sections,
        roundtrip_amqp_user_property,
        roundtrip_amqpl_user_property,
        roundtrip_amqp_content_type,
@@ -108,18 +103,6 @@ roundtrip_amqp(_Config) ->
     %% We expect order to be maintained.
     ?assertMatch(#{'User-Property' := ExpectedUserProperty}, Props).
 
-%% The indicator that the Payload is UTF-8 encoded should not be lost when translating
-%% from MQTT 5.0 to AMQP 1.0 or vice versa.
-roundtrip_amqp_payload_format_indicator(_Config) ->
-    Msg0 = mqtt_msg(),
-    Msg = Msg0#mqtt_msg{payload = <<"🐇"/utf8>>,
-                        props = #{'Payload-Format-Indicator' => 1}},
-    #mqtt_msg{payload = Payload,
-              props = Props} = roundtrip(mc_amqp, Msg),
-    ?assertEqual(unicode:characters_to_binary("🐇"),
-                 iolist_to_binary(Payload)),
-    ?assertMatch(#{'Payload-Format-Indicator' := 1}, Props).
-
 roundtrip_amqp_response_topic(_Config) ->
     Topic = <<"/rabbit/🐇"/utf8>>,
     Msg0 = mqtt_msg(),
@@ -182,49 +165,28 @@ roundtrip_amqpl_correlation(_Config) ->
     ?assertMatch(#mqtt_msg{props = #{'Correlation-Data' := Correlation}},
                  roundtrip(mc_amqpl, Msg)).
 
-%% Binaries should be sent unmodified.
-amqp_to_mqtt_amqp_value_section_binary(_Config) ->
-    Val = amqp_value({binary, <<0, 255>>}),
+amqp_to_mqtt_body_sections(_Config) ->
+    %% An amqp-value section should get AMQP encoded.
+    Body1 = [#'v1_0.amqp_value'{content = {list, [{uint, 3}]}}],
+    #mqtt_msg{props = #{'Content-Type' := <<"message/vnd.rabbitmq.amqp">>},
+              payload = Payload1} = amqp_to_mqtt(Body1),
+    ?assertEqual(Body1, amqp10_framing:decode_bin(iolist_to_binary(Payload1))),
+
+    %% amqp-sequence sections should get AMQP encoded.
+    Body2 = [#'v1_0.amqp_sequence'{content = [true, false]},
+             #'v1_0.amqp_sequence'{content = [{binary, <<0, 255>>}]}],
+    #mqtt_msg{props = #{'Content-Type' := <<"message/vnd.rabbitmq.amqp">>},
+              payload = Payload2} = amqp_to_mqtt(Body2),
+    ?assertEqual(Body2, amqp10_framing:decode_bin(iolist_to_binary(Payload2))),
+
+    %% Binary data of multiple data sections should get concatenated.
+    Body3 = [#'v1_0.data'{content = <<0>>},
+             #'v1_0.data'{content = <<11, 10>>},
+             #'v1_0.data'{content = <<9>>}],
     #mqtt_msg{props = Props,
-              payload = Payload} = amqp_to_mqtt([Val]),
-    ?assertEqual(<<0, 255>>, iolist_to_binary(Payload)),
-    ?assertEqual(#{}, Props).
-
-%% Lists cannot be converted to a text representation.
-%% They should be encoded using the AMQP 1.0 type system.
-amqp_to_mqtt_amqp_value_section_list(_Config) ->
-    Val = amqp_value({list, [{uint, 3}]}),
-    #mqtt_msg{props = Props,
-              payload = Payload} = amqp_to_mqtt([Val]),
-    ?assertEqual(#{'Content-Type' => <<"message/vnd.rabbitmq.amqp">>}, Props),
-    ?assert(iolist_size(Payload) > 0).
-
-amqp_to_mqtt_amqp_value_section_null(_Config) ->
-    Val = amqp_value(null),
-    #mqtt_msg{props = Props,
-              payload = Payload} = amqp_to_mqtt([Val]),
-    ?assertEqual(#{'Payload-Format-Indicator' => 1}, Props),
-    ?assertEqual(0, iolist_size(Payload)).
-
-amqp_to_mqtt_amqp_value_section_int(_Config) ->
-    Val = amqp_value({int, -3}),
-    #mqtt_msg{props = Props,
-              payload = Payload} = amqp_to_mqtt([Val]),
-    ?assertEqual(#{'Payload-Format-Indicator' => 1}, Props),
-    ?assertEqual(<<"-3">>, iolist_to_binary(Payload)).
-
-amqp_to_mqtt_amqp_value_section_boolean(_Config) ->
-    Val1 = amqp_value(true),
-    #mqtt_msg{props = Props1,
-              payload = Payload1} = amqp_to_mqtt([Val1]),
-    ?assertEqual(#{'Payload-Format-Indicator' => 1}, Props1),
-    ?assertEqual(<<"true">>, iolist_to_binary(Payload1)),
-
-    Val2 = amqp_value(false),
-    #mqtt_msg{props = Props2,
-              payload = Payload2} = amqp_to_mqtt([Val2]),
-    ?assertEqual(#{'Payload-Format-Indicator' => 1}, Props2),
-    ?assertEqual(<<"false">>, iolist_to_binary(Payload2)).
+              payload = Payload3} = amqp_to_mqtt(Body3),
+    ?assertEqual(0, maps:size(Props)),
+    ?assertEqual(<<0, 11, 10, 9>>, iolist_to_binary(Payload3)).
 
 %% When converting from MQTT 5.0 to AMQP 1.0, we expect to lose some User Property.
 roundtrip_amqp_user_property(_Config) ->
@@ -287,10 +249,10 @@ amqp_to_mqtt_reply_to(_Config) ->
 
 
 amqp_to_mqtt_footer(_Config) ->
-    Val = amqp_value({utf8, <<"hey">>}),
-    Footer = #'v1_0.footer'{content = [{symbol, <<"key">>}, {utf8, <<"value">>}]},
+    Body = <<"hey">>,
+    Footer = #'v1_0.footer'{content = [{{symbol, <<"key">>}, {utf8, <<"value">>}}]},
     %% We can translate, but lose the footer.
-    #mqtt_msg{payload = Payload} = amqp_to_mqtt([Val, Footer]),
+    #mqtt_msg{payload = Payload} = amqp_to_mqtt([#'v1_0.data'{content = Body}, Footer]),
     ?assertEqual(<<"hey">>, iolist_to_binary(Payload)).
 
 mqtt_amqpl(_Config) ->
@@ -372,18 +334,15 @@ mqtt_amqp(_Config) ->
      #'v1_0.message_annotations'{content = MA},
      P,
      #'v1_0.application_properties'{content = AP},
-     D] =
-        mc:protocol_state(Msg),
+     D] = amqp10_framing:decode_bin(iolist_to_binary(mc:protocol_state(Msg))),
 
-    ?assertMatch(#'v1_0.data'{content = _}, D),
     ?assertMatch(#'v1_0.header'{durable = true}, H),
+    ?assertEqual({utf8, <<"apple">>}, amqp_map_get(symbol(<<"x-stream-filter">>), MA)),
     ?assertMatch(#'v1_0.properties'{content_type = {symbol, <<"text/plain">>},
                                     correlation_id = {binary, <<"banana">>}}, P),
-
-    ?assertEqual({utf8, <<"apple">>}, amqp_map_get(symbol(<<"x-stream-filter">>), MA)),
     ?assertEqual({utf8, <<"val-1">>}, amqp_map_get(utf8(<<"key-1">>), AP)),
     ?assertEqual({utf8, <<"val-2">>}, amqp_map_get(utf8(<<"key-2">>), AP)),
-
+    ?assertMatch(#'v1_0.data'{content = _}, D),
     ok.
 
 mqtt_amqp_alt(_Config) ->
@@ -394,7 +353,6 @@ mqtt_amqp_alt(_Config) ->
     Mqtt0 = mqtt_msg(),
     Mqtt = Mqtt0#mqtt_msg{qos = 0,
                           props = #{'Content-Type' => <<"text/plain">>,
-                                    'Payload-Format-Indicator' => 1,
                                     'User-Property' =>
                                         [{<<"key-2">>, <<"val-2">>},
                                          {<<"key-1">>, <<"val-1">>},
@@ -413,18 +371,15 @@ mqtt_amqp_alt(_Config) ->
      #'v1_0.message_annotations'{content = MA},
      P,
      #'v1_0.application_properties'{content = AP},
-     D] = mc:protocol_state(Msg),
-
-    ?assertMatch(#'v1_0.amqp_value'{content = {utf8, _}}, D),
+     D] = amqp10_framing:decode_bin(iolist_to_binary(mc:protocol_state(Msg))),
 
     ?assertMatch(#'v1_0.header'{durable = false}, H),
+    ?assertEqual({utf8, <<"apple">>}, amqp_map_get(symbol(<<"x-stream-filter">>), MA)),
     ?assertMatch(#'v1_0.properties'{content_type = {symbol, <<"text/plain">>},
                                     correlation_id = {uuid, _}}, P),
-
-    ?assertEqual({utf8, <<"apple">>}, amqp_map_get(symbol(<<"x-stream-filter">>), MA)),
     ?assertEqual({utf8, <<"val-1">>}, amqp_map_get(utf8(<<"key-1">>), AP)),
     ?assertEqual({utf8, <<"val-2">>}, amqp_map_get(utf8(<<"key-2">>), AP)),
-
+    ?assertEqual(#'v1_0.data'{content = <<>>}, D),
     ok.
 
 amqp_mqtt(_Config) ->
@@ -452,7 +407,7 @@ amqp_mqtt(_Config) ->
           thead(utf8, <<"a-string">>),
           thead(binary, <<"data">>),
           thead(symbol, <<"symbol">>),
-          thead(ubyte, 1),
+          thead(ubyte, 255),
           thead(short, 2),
           thead(ushort, 3),
           thead(uint, 4),
@@ -460,7 +415,7 @@ amqp_mqtt(_Config) ->
           thead(double, 5.0),
           thead(float, 6.0),
           thead(timestamp, 7000),
-          thead(byte, 128),
+          thead(byte, -128),
           {{utf8, <<"boolean1">>}, true},
           {{utf8, <<"boolean2">>}, false},
           {utf8(<<"null">>), null}
@@ -470,37 +425,36 @@ amqp_mqtt(_Config) ->
 
     Anns = #{?ANN_EXCHANGE => <<"exch">>,
              ?ANN_ROUTING_KEYS => [<<"apple">>]},
-    AMsg = mc:init(mc_amqp, [H, M, P, A, D], Anns),
+    Payload = iolist_to_binary([amqp10_framing:encode_bin(Section) || Section <- [H, M, P, A, D]]),
+    AMsg = mc:init(mc_amqp, Payload, Anns),
     Msg = mc:convert(mc_mqtt, AMsg, Env),
     ?assertMatch({uuid, CorrUUId}, mc:correlation_id(Msg)),
     Mqtt = mc:protocol_state(Msg),
     ?assertMatch(
-       #mqtt_msg{qos = 1,
-                 props = #{'Content-Type' := <<"text/plain">>,
-                           'User-Property' :=
-                               [{<<"x-stream-filter">>,<<"apple">>},
-                                {<<"long">>,<<"5">>},
-                                {<<"ulong">>,<<"5">>},
-                                {<<"utf8">>,<<"a-string">>},
-                                {<<"symbol">>,<<"symbol">>},
-                                {<<"ubyte">>,<<"1">>},
-                                {<<"short">>,<<"2">>},
-                                {<<"ushort">>,<<"3">>},
-                                {<<"uint">>,<<"4">>},
-                                {<<"int">>,<<"4">>},
-                                {<<"double">>,
-                                 <<"5.00000000000000000000e+00">>},
-                                {<<"float">>,
-                                 <<"6.00000000000000000000e+00">>},
-                                {<<"timestamp">>,<<"7">>},
-                                {<<"byte">>,<<"128">>},
-                                {<<"boolean1">>,<<"true">>},
-                                {<<"boolean2">>,<<"false">>},
-                                {<<"null">>,<<>>}],
-                           'Correlation-Data' := CorrIdOut
-                          }
-                }, Mqtt),
-    ok.
+       #mqtt_msg{
+          qos = 1,
+          props = #{'Content-Type' := <<"text/plain">>,
+                    'User-Property' := [{<<"x-stream-filter">>,<<"apple">>},
+                                        {<<"long">>,<<"5">>},
+                                        {<<"ulong">>,<<"5">>},
+                                        {<<"utf8">>,<<"a-string">>},
+                                        {<<"symbol">>,<<"symbol">>},
+                                        {<<"ubyte">>,<<"255">>},
+                                        {<<"short">>,<<"2">>},
+                                        {<<"ushort">>,<<"3">>},
+                                        {<<"uint">>,<<"4">>},
+                                        {<<"int">>,<<"4">>},
+                                        {<<"double">>,
+                                         <<"5.00000000000000000000e+00">>},
+                                        {<<"float">>,
+                                         <<"6.00000000000000000000e+00">>},
+                                        {<<"timestamp">>,<<"7">>},
+                                        {<<"byte">>,<<"-128">>},
+                                        {<<"boolean1">>,<<"true">>},
+                                        {<<"boolean2">>,<<"false">>},
+                                        {<<"null">>,<<>>}],
+                    'Correlation-Data' := CorrIdOut}},
+       Mqtt).
 
 is_persistent(_Config) ->
     Msg0 = #mqtt_msg{qos = 0,
@@ -535,7 +489,8 @@ amqp_to_mqtt(Sections) ->
 
 amqp_to_mqtt(Sections, Env) ->
     Anns = #{?ANN_ROUTING_KEYS => [<<"apple">>]},
-    Mc0 = mc:init(mc_amqp, Sections, Anns),
+    Payload = iolist_to_binary([amqp10_framing:encode_bin(S) || S <- Sections]),
+    Mc0 = mc:init(mc_amqp, Payload, Anns),
     Mc = mc:convert(mc_mqtt, Mc0, Env),
     mc:protocol_state(Mc).
 

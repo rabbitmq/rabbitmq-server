@@ -46,45 +46,44 @@ init(Msg = #mqtt_msg{qos = Qos,
     {Msg, Anns}.
 
 convert_from(mc_amqp, Sections, Env) ->
-    {Header, MsgAnns, AmqpProps, AppProps, PayloadRev,
-     PayloadFormatIndicator, ContentType} =
+    {Header, MsgAnns, AmqpProps, AppProps, PayloadRev, ContentType} =
     lists:foldl(
       fun(#'v1_0.header'{} = S, Acc) ->
               setelement(1, Acc, S);
+         (_Ignore = #'v1_0.delivery_annotations'{}, Acc) ->
+              Acc;
          (#'v1_0.message_annotations'{content = List}, Acc) ->
               setelement(2, Acc, List);
          (#'v1_0.properties'{} = S, Acc) ->
               setelement(3, Acc, S);
          (#'v1_0.application_properties'{content = List}, Acc) ->
               setelement(4, Acc, List);
-         (#'v1_0.footer'{}, Acc) ->
-              Acc;
+         ({amqp_encoded_body_and_footer, Body}, Acc0) ->
+              %% assertions
+              [] = element(5, Acc0),
+              undefined = element(6, Acc0),
+              Acc = setelement(5, Acc0, [Body]),
+              setelement(6, Acc, ?CONTENT_TYPE_AMQP);
          (#'v1_0.data'{content = C}, Acc) ->
+              %% assertion
+              undefined = element(6, Acc),
               setelement(5, Acc, [C | element(5, Acc)]);
-         (#'v1_0.amqp_value'{content = {binary, Bin}}, Acc) ->
-              setelement(5, Acc, [Bin]);
-         (#'v1_0.amqp_value'{content = C} = Val, Acc) ->
-              case amqp_to_utf8_string(C) of
-                  cannot_convert ->
-                      amqp_encode(Val, Acc);
-                  String ->
-                      Acc1 = setelement(5, Acc, [String]),
-                      setelement(6, Acc1, true)
-              end;
-         (#'v1_0.amqp_sequence'{} = Seq, Acc) ->
-              amqp_encode(Seq, Acc)
-      end, {undefined, [], undefined, [], [], false, undefined}, Sections),
+         (Val, Acc0)
+           when is_record(Val, 'v1_0.amqp_value') orelse
+                is_record(Val, 'v1_0.amqp_sequence') ->
+              IoData = amqp10_framing:encode_bin(Val),
+              Acc = setelement(5, Acc0, [IoData | element(5, Acc0)]),
+              setelement(6, Acc, ?CONTENT_TYPE_AMQP);
+         (_Ignore = #'v1_0.footer'{}, Acc) ->
+              Acc
+      end, {undefined, [], undefined, [], [], undefined}, Sections),
     Qos = case Header of
-              #'v1_0.header'{durable = true} ->
-                  ?QOS_1;
+              #'v1_0.header'{durable = false} ->
+                  ?QOS_0;
               _ ->
-                  ?QOS_0
+                  ?QOS_1
           end,
-    Props0 = case PayloadFormatIndicator of
-                 true -> #{'Payload-Format-Indicator' => 1};
-                 false -> #{}
-             end,
-    Props1 = case AmqpProps of
+    Props0 = case AmqpProps of
                  #'v1_0.properties'{reply_to = {utf8, Address}} ->
                      MqttX = maps:get(mqtt_x, Env, ?DEFAULT_MQTT_EXCHANGE),
                      case Address of
@@ -93,29 +92,29 @@ convert_from(mc_amqp, Sections, Env) ->
                            "/key/",
                            RoutingKey/binary>> ->
                              MqttTopic = rabbit_mqtt_util:amqp_to_mqtt(RoutingKey),
-                             Props0#{'Response-Topic' => MqttTopic};
+                             #{'Response-Topic' => MqttTopic};
                          _ ->
-                             Props0
+                             #{}
                      end;
+                 _ ->
+                     #{}
+             end,
+    Props1 = case AmqpProps of
+                 #'v1_0.properties'{correlation_id = {_Type, _Val} = Corr} ->
+                     Props0#{'Correlation-Data' => correlation_id(Corr)};
                  _ ->
                      Props0
              end,
-    Props2 = case AmqpProps of
-                 #'v1_0.properties'{correlation_id = {_Type, _Val} = Corr} ->
-                     Props1#{'Correlation-Data' => correlation_id(Corr)};
-                 _ ->
-                     Props1
-             end,
-    Props3 = case ContentType of
+    Props2 = case ContentType of
                  undefined ->
                      case AmqpProps of
                          #'v1_0.properties'{content_type = {symbol, ContentType1}} ->
-                             Props2#{'Content-Type' => rabbit_data_coercion:to_binary(ContentType1)};
+                             Props1#{'Content-Type' => rabbit_data_coercion:to_binary(ContentType1)};
                          _ ->
-                             Props2
+                             Props1
                      end;
                  _ ->
-                     Props2#{'Content-Type' => ContentType}
+                     Props1#{'Content-Type' => ContentType}
              end,
     UserProp0 = lists:filtermap(fun({{symbol, <<"x-", _/binary>> = Key}, Val}) ->
                                         filter_map_amqp_to_utf8_string(Key, Val);
@@ -127,17 +126,17 @@ convert_from(mc_amqp, Sections, Env) ->
                                         filter_map_amqp_to_utf8_string(Key, Val)
                                 end, AppProps),
     Props = case UserProp0 ++ UserProp1 of
-                [] -> Props3;
-                UserProp -> Props3#{'User-Property' => UserProp}
+                [] -> Props2;
+                UserProp -> Props2#{'User-Property' => UserProp}
             end,
-    Payload = lists:flatten(lists:reverse(PayloadRev)),
+    Payload = lists:reverse(PayloadRev),
     #mqtt_msg{retain = false,
               qos = Qos,
               dup = false,
               props = Props,
               payload = Payload};
 convert_from(mc_amqpl, #content{properties = PBasic,
-                                payload_fragments_rev = Payload},
+                                payload_fragments_rev = PFR},
             _Env) ->
     #'P_basic'{expiration = Expiration,
                delivery_mode = DelMode,
@@ -189,7 +188,7 @@ convert_from(mc_amqpl, #content{properties = PBasic,
     #mqtt_msg{retain = false,
               qos = Qos,
               dup = false,
-              payload = lists:reverse(Payload),
+              payload = lists:reverse(PFR),
               props = P};
 convert_from(_SourceProto, _, _) ->
     not_implemented.
@@ -199,15 +198,7 @@ convert_to(?MODULE, Msg, _Env) ->
 convert_to(mc_amqp, #mqtt_msg{qos = Qos,
                               props = Props,
                               payload = Payload}, Env) ->
-    Body = case Props of
-               #{'Payload-Format-Indicator' := 1}
-                 when is_binary(Payload) ->
-                   #'v1_0.amqp_value'{content = {utf8, Payload}};
-               _ ->
-                   #'v1_0.data'{content = Payload}
-           end,
-    S0 = [Body],
-
+    S0 = [#'v1_0.data'{content = Payload}],
     %% x- prefixed MQTT User Properties go into Message Annotations.
     %% All other MQTT User Properties go into Application Properties.
     %% MQTT User Property allows duplicate keys, while AMQP maps don't.
@@ -353,10 +344,9 @@ convert_to(mc_amqpl, #mqtt_msg{qos = Qos,
                     delivery_mode = DelMode,
                     correlation_id = CorrId,
                     expiration = Expiration},
-    PFR = case is_binary(Payload) of
-              true -> [Payload];
-              false -> lists:reverse(Payload)
-          end,
+    %% In practice, when converting from mc_mqtt to mc_amqpl, Payload will
+    %% be a single binary, in which case iolist_to_binary/1 is cheap.
+    PFR = [iolist_to_binary(Payload)],
     #content{class_id = 60,
              properties = BP,
              properties_bin = none,
@@ -415,7 +405,8 @@ routing_headers(#mqtt_msg{}, _Opts) ->
     #{}.
 
 protocol_state(Msg = #mqtt_msg{props = Props0,
-                               topic = Topic}, Anns) ->
+                               topic = Topic,
+                               qos = Qos0}, Anns) ->
     %% Remove any PUBLISH or Will Properties that are not forwarded unaltered.
     Props1 = maps:remove('Message-Expiry-Interval', Props0),
     {WillDelay, Props2} = case maps:take('Will-Delay-Interval', Props1) of
@@ -453,7 +444,22 @@ protocol_state(Msg = #mqtt_msg{props = Props0,
                     end
             end,
     [RoutingKey | _] = maps:get(?ANN_ROUTING_KEYS, Anns),
-    Msg#mqtt_msg{topic = rabbit_mqtt_util:amqp_to_mqtt(RoutingKey),
+    %% We rely on the mc annotation to tell whether the message is durable because if
+    %% the message was originally sent with AMQP, the AMQP header isn't stored on disk.
+    Qos = case Anns of
+              #{?ANN_DURABLE := false} ->
+                  ?QOS_0;
+              #{?ANN_DURABLE := true} ->
+                  ?QOS_1;
+              _ ->
+                  %% If the mc durable annotation isn't set, the message might be durable
+                  %% or not depending on whether the message was sent before or after
+                  %% https://github.com/rabbitmq/rabbitmq-server/pull/11012 (3.13.2)
+                  %% Hence, we rely on the QoS from the mqtt_msg.
+                  Qos0
+          end,
+    Msg#mqtt_msg{qos = Qos,
+                 topic = rabbit_mqtt_util:amqp_to_mqtt(RoutingKey),
                  props = Props}.
 
 prepare(_For, #mqtt_msg{} = Msg) ->
@@ -548,11 +554,6 @@ amqp_to_utf8_string({T, _Val})
        %% Raw binary data is not UTF-8 encoded.
        T =:= binary ->
     cannot_convert.
-
-amqp_encode(Data, Acc0) ->
-    Bin = amqp10_framing:encode_bin(Data),
-    Acc = setelement(5, Acc0, [Bin | element(5, Acc0)]),
-    setelement(7, Acc, ?CONTENT_TYPE_AMQP).
 
 durable(?QOS_0) -> false;
 durable(?QOS_1) -> true.

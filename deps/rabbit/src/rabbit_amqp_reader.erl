@@ -66,8 +66,8 @@
          connection :: #v1_connection{},
          connection_state :: pre_init | starting | waiting_amqp0100 | securing | running | closing | closed,
          callback :: handshake |
-                     {frame_header_1_0, protocol()} |
-                     {frame_payload_1_0, protocol(), DataOffset :: pos_integer(), channel_number()},
+                     {frame_header, protocol()} |
+                     {frame_body, protocol(), DataOffset :: pos_integer(), channel_number()},
          recv_len :: non_neg_integer(),
          pending_recv :: boolean(),
          buf :: list(),
@@ -364,18 +364,14 @@ handle_frame0(Mode, Channel, Body, State) ->
 
 %% "The frame body is defined as a performative followed by an opaque payload." [2.3.2]
 parse_frame_body(Body, _Channel) ->
-    {DescribedPerformative, Payload} = amqp10_binary_parser:parse(Body),
+    BytesBody = size(Body),
+    {DescribedPerformative, BytesParsed} = amqp10_binary_parser:parse(Body),
     Performative = amqp10_framing:decode(DescribedPerformative),
-    ?DEBUG("~s Channel ~tp ->~n~tp~n~ts~n",
-           [?MODULE, _Channel, amqp10_framing:pprint(Performative),
-            case Payload of
-                <<>> -> <<>>;
-                _    -> rabbit_misc:format(
-                          " followed by ~tb bytes of payload", [size(Payload)])
-            end]),
-    case Payload of
-        <<>> -> Performative;
-        _    -> {Performative, Payload}
+    if BytesParsed < BytesBody ->
+           Payload = binary_part(Body, BytesParsed, BytesBody - BytesParsed),
+           {Performative, Payload};
+       BytesParsed =:= BytesBody ->
+           Performative
     end.
 
 handle_connection_frame(
@@ -580,7 +576,7 @@ handle_input(handshake, <<"AMQP", 0, 1, 0, 0>>,
              #v1{connection_state = waiting_amqp0100} = State) ->
     start_connection(amqp, State);
 
-handle_input({frame_header_1_0, Mode},
+handle_input({frame_header, Mode},
              Header = <<Size:32, DOff:8, Type:8, Channel:16>>,
              State) when DOff >= 2 ->
     case {Mode, Type} of
@@ -599,16 +595,18 @@ handle_input({frame_header_1_0, Mode},
                                "frame size (~b bytes) > maximum frame size (~b bytes)",
                                [Size, MaxFrameSize]));
        true ->
-           switch_callback(State, {frame_payload_1_0, Mode, DOff, Channel}, Size - 8)
+           switch_callback(State, {frame_body, Mode, DOff, Channel}, Size - 8)
     end;
-handle_input({frame_header_1_0, _Mode}, Malformed, _State) ->
+handle_input({frame_header, _Mode}, Malformed, _State) ->
     throw({bad_1_0_header, Malformed});
-handle_input({frame_payload_1_0, Mode, DOff, Channel},
+handle_input({frame_body, Mode, DOff, Channel},
              FrameBin, State) ->
-    SkipBits = (DOff * 32 - 64), % DOff = 4-byte words, we've read 8 already
-    <<_Skip:SkipBits, FrameBody/binary>> = FrameBin,
+    %% Figure 2.16
+    %% DOff = 4-byte words minus 8 bytes we've already read
+    ExtendedHeaderSize = (DOff * 32 - 64),
+    <<_IgnoreExtendedHeader:ExtendedHeaderSize, FrameBody/binary>> = FrameBin,
     handle_frame(Mode, Channel, FrameBody,
-                     switch_callback(State, {frame_header_1_0, Mode}, 8));
+                 switch_callback(State, {frame_header, Mode}, 8));
 
 handle_input(Callback, Data, _State) ->
     throw({bad_input, Callback, Data}).
@@ -681,7 +679,7 @@ start_connection0(Mode, State0 = #v1{connection = Connection,
     State = State0#v1{session_sup = SessionSup,
                       connection_state = starting,
                       connection = Connection#v1_connection{timeout = ?NORMAL_TIMEOUT}},
-    switch_callback(State, {frame_header_1_0, Mode}, 8).
+    switch_callback(State, {frame_header, Mode}, 8).
 
 send_handshake(Sock, Handshake) ->
     ok = inet_op(fun () -> rabbit_net:send(Sock, Handshake) end).

@@ -84,6 +84,7 @@
 % http://www.amqp.org/specification/1.0/filters
 -type filter() :: #{binary() => binary() | map() | list(binary())}.
 -type max_message_size() :: undefined | non_neg_integer().
+-type footer_opt() :: crc32 | adler32.
 
 -type attach_args() :: #{name => binary(),
                          role => attach_role(),
@@ -92,7 +93,8 @@
                          filter => filter(),
                          properties => amqp10_client_types:properties(),
                          max_message_size => max_message_size(),
-                         handle => output_handle()
+                         handle => output_handle(),
+                         footer_opt => footer_opt()
                         }.
 
 -type transfer_error() :: {error,
@@ -131,7 +133,8 @@
          drain = false :: boolean(),
          partial_transfers :: undefined | {#'v1_0.transfer'{}, [binary()]},
          auto_flow :: never | {auto, RenewWhenBelow :: pos_integer(), Credit :: pos_integer()},
-         incoming_unsettled = #{} :: #{delivery_number() => ok}
+         incoming_unsettled = #{} :: #{delivery_number() => ok},
+         footer_opt :: footer_opt() | undefined
         }).
 
 -record(state,
@@ -197,8 +200,8 @@ detach(Session, Handle) ->
 -spec transfer(pid(), amqp10_msg:amqp10_msg(), timeout()) ->
     ok | transfer_error().
 transfer(Session, Amqp10Msg, Timeout) ->
-    [Transfer | Records] = amqp10_msg:to_amqp_records(Amqp10Msg),
-    gen_statem:call(Session, {transfer, Transfer, Records}, Timeout).
+    [Transfer | Sections] = amqp10_msg:to_amqp_records(Amqp10Msg),
+    gen_statem:call(Session, {transfer, Transfer, Sections}, Timeout).
 
 flow(Session, Handle, Flow, RenewWhenBelow) ->
     gen_statem:cast(Session, {flow_link, Handle, Flow, RenewWhenBelow}).
@@ -378,14 +381,14 @@ mapped(cast, {Transfer0 = #'v1_0.transfer'{handle = {uint, InHandle}},
               Payload0}, State0) ->
     {ok, #link{target = {pid, TargetPid},
                ref = LinkRef,
-               incoming_unsettled = Unsettled
+               incoming_unsettled = Unsettled,
+               footer_opt = FooterOpt
               } = Link0} = find_link_by_input_handle(InHandle, State0),
 
     {Transfer = #'v1_0.transfer'{settled = Settled,
                                  delivery_id = {uint, DeliveryId}},
      Payload, Link1} = complete_partial_transfer(Transfer0, Payload0, Link0),
 
-    Msg = decode_as_msg(Transfer, Payload),
     Link2 = case Settled of
                 true ->
                     Link1;
@@ -394,27 +397,42 @@ mapped(cast, {Transfer0 = #'v1_0.transfer'{handle = {uint, InHandle}},
                     %% then the settled flag MUST be interpreted as being false." [2.7.5]
                     Link1#link{incoming_unsettled = Unsettled#{DeliveryId => ok}}
             end,
-    % link bookkeeping
-    % notify when credit is exhausted (link_credit = 0)
-    % detach the Link with a transfer-limit-exceeded error code if further
-    % transfers are received
-    case book_transfer_received(State0, Link2) of
-        {ok, Link3, State1} ->
-            % deliver
-            TargetPid ! {amqp10_msg, LinkRef, Msg},
-            State = auto_flow(Link3, State1),
-            {keep_state, State};
-        {credit_exhausted, Link3, State} ->
-            TargetPid ! {amqp10_msg, LinkRef, Msg},
-            notify_credit_exhausted(Link3),
-            {keep_state, State};
-        {transfer_limit_exceeded, Link3, State} ->
-            logger:warning("transfer_limit_exceeded for link ~tp", [Link3]),
-            Link = detach_with_error_cond(Link3, State,
-                                           ?V_1_0_LINK_ERROR_TRANSFER_LIMIT_EXCEEDED),
-            {keep_state, update_link(Link, State)}
+    case decode_as_msg(Transfer, Payload, FooterOpt) of
+        {ok, Msg} ->
+            % link bookkeeping
+            % notify when credit is exhausted (link_credit = 0)
+            % detach the Link with a transfer-limit-exceeded error code if further
+            % transfers are received
+            case book_transfer_received(State0, Link2) of
+                {ok, Link3, State1} ->
+                    % deliver
+                    TargetPid ! {amqp10_msg, LinkRef, Msg},
+                    State = auto_flow(Link3, State1),
+                    {keep_state, State};
+                {credit_exhausted, Link3, State} ->
+                    TargetPid ! {amqp10_msg, LinkRef, Msg},
+                    notify_credit_exhausted(Link3),
+                    {keep_state, State};
+                {transfer_limit_exceeded, Link3, State} ->
+                    logger:warning("transfer_limit_exceeded for link ~tp", [Link3]),
+                    Link = detach_with_error_cond(Link3,
+                                                  State,
+                                                  ?V_1_0_LINK_ERROR_TRANSFER_LIMIT_EXCEEDED,
+                                                  undefined),
+                    {keep_state, update_link(Link, State)}
+            end;
+        {checksum_error, Expected, Actual} ->
+            Description = lists:flatten(
+                            io_lib:format(
+                              "~s checksum error: expected ~b, actual ~b",
+                              [FooterOpt, Expected, Actual])),
+            logger:warning("deteaching link ~tp due to ~s", [Link2, Description]),
+            Link = detach_with_error_cond(Link2,
+                                          State0,
+                                          ?V_1_0_AMQP_ERROR_DECODE_ERROR,
+                                          {utf8, unicode:characters_to_binary(Description)}),
+            {keep_state, update_link(Link, State0)}
     end;
-
 
 % role=true indicates the disposition is from a `receiver`. i.e. from the
 % clients point of view these are dispositions relating to `sender`links
@@ -451,19 +469,19 @@ mapped(cast, Frame, State) ->
                              [Frame, State]),
     {keep_state, State};
 mapped({call, From},
-       {transfer, _Transfer, _Parts},
+       {transfer, _Transfer, _Sections},
        #state{remote_incoming_window = Window})
   when Window =< 0 ->
     {keep_state_and_data, {reply, From, {error, remote_incoming_window_exceeded}}};
 mapped({call, From},
-       {transfer, _Transfer, _Parts},
+       {transfer, _Transfer, _Sections},
        #state{remote_incoming_window = Window})
   when Window =< 0 ->
     {keep_state_and_data, {reply, From, {error, remote_incoming_window_exceeded}}};
 mapped({call, From = {Pid, _}},
        {transfer, #'v1_0.transfer'{handle = {uint, OutHandle},
                                    delivery_tag = {binary, DeliveryTag},
-                                   settled = false} = Transfer0, Parts},
+                                   settled = false} = Transfer0, Sections},
        #state{outgoing_delivery_id = DeliveryId, links = Links,
               outgoing_unsettled = Unsettled} = State) ->
     case Links of
@@ -471,9 +489,10 @@ mapped({call, From = {Pid, _}},
             {keep_state_and_data, {reply, From, {error, half_attached}}};
         #{OutHandle := #link{link_credit = LC}} when LC =< 0 ->
             {keep_state_and_data, {reply, From, {error, insufficient_credit}}};
-        #{OutHandle := Link = #link{max_message_size = MaxMessageSize}} ->
+        #{OutHandle := Link = #link{max_message_size = MaxMessageSize,
+                                    footer_opt = FooterOpt}} ->
             Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(DeliveryId)},
-            case send_transfer(Transfer, Parts, MaxMessageSize, State) of
+            case send_transfer(Transfer, Sections, FooterOpt, MaxMessageSize, State) of
                 {ok, NumFrames} ->
                     State1 = State#state{outgoing_unsettled = Unsettled#{DeliveryId => {DeliveryTag, Pid}}},
                     {keep_state, book_transfer_send(NumFrames, Link, State1), {reply, From, ok}};
@@ -486,16 +505,17 @@ mapped({call, From = {Pid, _}},
     end;
 mapped({call, From},
        {transfer, #'v1_0.transfer'{handle = {uint, OutHandle}} = Transfer0,
-        Parts}, #state{outgoing_delivery_id = DeliveryId,
+        Sections}, #state{outgoing_delivery_id = DeliveryId,
                        links = Links} = State) ->
     case Links of
         #{OutHandle := #link{input_handle = undefined}} ->
             {keep_state_and_data, {reply, From, {error, half_attached}}};
         #{OutHandle := #link{link_credit = LC}} when LC =< 0 ->
             {keep_state_and_data, {reply, From, {error, insufficient_credit}}};
-        #{OutHandle := Link = #link{max_message_size = MaxMessageSize}} ->
+        #{OutHandle := Link = #link{max_message_size = MaxMessageSize,
+                                    footer_opt = FooterOpt}} ->
             Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(DeliveryId)},
-            case send_transfer(Transfer, Parts, MaxMessageSize, State) of
+            case send_transfer(Transfer, Sections, FooterOpt, MaxMessageSize, State) of
                 {ok, NumFrames} ->
                     {keep_state, book_transfer_send(NumFrames, Link, State), {reply, From, ok}};
                 Error ->
@@ -586,26 +606,65 @@ send(Record, #state{socket = Socket} = State) ->
     Frame = encode_frame(Record, State),
     socket_send(Socket, Frame).
 
-send_transfer(Transfer0, Parts0, MaxMessageSize, #state{socket = Socket,
-                                                        channel = Channel,
-                                                        connection_config = Config}) ->
+send_transfer(Transfer0, Sections0, FooterOpt, MaxMessageSize,
+              #state{socket = Socket,
+                     channel = Channel,
+                     connection_config = Config}) ->
     OutMaxFrameSize = maps:get(outgoing_max_frame_size, Config),
     Transfer = amqp10_framing:encode_bin(Transfer0),
     TransferSize = iolist_size(Transfer),
-    Parts = [amqp10_framing:encode_bin(P) || P <- Parts0],
-    PartsBin = iolist_to_binary(Parts),
+    Sections = encode_sections(Sections0, FooterOpt),
+    SectionsBin = iolist_to_binary(Sections),
     if is_integer(MaxMessageSize) andalso
        MaxMessageSize > 0 andalso
-       byte_size(PartsBin) > MaxMessageSize ->
+       byte_size(SectionsBin) > MaxMessageSize ->
            {error, message_size_exceeded};
        true ->
            % TODO: this does not take the extended header into account
            % see: 2.3
            MaxPayloadSize = OutMaxFrameSize - TransferSize - ?FRAME_HEADER_SIZE,
-           Frames = build_frames(Channel, Transfer0, PartsBin, MaxPayloadSize, []),
+           Frames = build_frames(Channel, Transfer0, SectionsBin, MaxPayloadSize, []),
            ok = socket_send(Socket, Frames),
            {ok, length(Frames)}
     end.
+
+encode_sections(Sections, undefined) ->
+    [amqp10_framing:encode_bin(S) || S <- Sections];
+encode_sections(Sections, FooterOpt) ->
+    {Bare, NoBare} = lists:partition(fun is_bare_message_section/1, Sections),
+    {FooterL, PreBare} = lists:partition(fun(#'v1_0.footer'{}) ->
+                                                 true;
+                                            (_) ->
+                                                 false
+                                         end, NoBare),
+    PreBareEncoded = [amqp10_framing:encode_bin(S) || S <- PreBare],
+    BareEncoded = [amqp10_framing:encode_bin(S) || S <- Bare],
+    {Key, Checksum} = case FooterOpt of
+                          crc32 ->
+                              {<<"x-opt-crc-32">>, erlang:crc32(BareEncoded)};
+                          adler32 ->
+                              {<<"x-opt-adler-32">>, erlang:adler32(BareEncoded)}
+                      end,
+    Ann = {{symbol, Key}, {uint, Checksum}},
+    Footer = case FooterL of
+                 [] ->
+                     #'v1_0.footer'{content = [Ann]};
+                 [F = #'v1_0.footer'{content = Content}] ->
+                     F#'v1_0.footer'{content = [Ann | Content]}
+             end,
+    FooterEncoded = amqp10_framing:encode_bin(Footer),
+    [PreBareEncoded, BareEncoded, FooterEncoded].
+
+is_bare_message_section(#'v1_0.header'{}) ->
+    false;
+is_bare_message_section(#'v1_0.delivery_annotations'{}) ->
+    false;
+is_bare_message_section(#'v1_0.message_annotations'{}) ->
+    false;
+is_bare_message_section(#'v1_0.footer'{}) ->
+    false;
+is_bare_message_section(_Section) ->
+    true.
 
 send_flow_link(OutHandle,
                #'v1_0.flow'{link_credit = {uint, Credit}} = Flow0, RenewWhenBelow,
@@ -742,8 +801,9 @@ send_detach(Send, {detach, OutHandle}, _From, State = #state{links = Links}) ->
             {{error, link_not_found}, State}
     end.
 
-detach_with_error_cond(Link = #link{output_handle = OutHandle}, State, Cond) ->
-    Err = #'v1_0.error'{condition = Cond},
+detach_with_error_cond(Link = #link{output_handle = OutHandle}, State, Cond, Description) ->
+    Err = #'v1_0.error'{condition = Cond,
+                        description = Description},
     Detach = #'v1_0.detach'{handle = uint(OutHandle),
                             closed = true,
                             error = Err},
@@ -798,7 +858,8 @@ send_attach(Send, #{name := Name, role := RoleTuple} = Args, {FromPid, _},
                  auto_flow = never,
                  target = LinkTarget,
                  delivery_count = unpack(InitialDeliveryCount),
-                 max_message_size = unpack(MaxMessageSize)},
+                 max_message_size = unpack(MaxMessageSize),
+                 footer_opt = maps:get(footer_opt, Args, undefined)},
 
     {State#state{links = Links#{OutHandle => Link},
                  next_link_handle = NextLinkHandle,
@@ -1032,9 +1093,54 @@ complete_partial_transfer(_Transfer, Payload,
     {T, iolist_to_binary(lists:reverse([Payload | Payloads])),
      Link#link{partial_transfers = undefined}}.
 
-decode_as_msg(Transfer, Payload) ->
-    Records = amqp10_framing:decode_bin(Payload),
-    amqp10_msg:from_amqp_records([Transfer | Records]).
+decode_as_msg(Transfer, Payload, undefined) ->
+    Sections = amqp10_framing:decode_bin(Payload),
+    {ok, amqp10_msg:from_amqp_records([Transfer | Sections])};
+decode_as_msg(Transfer, Payload, FooterOpt) ->
+    PosSections = decode_sections([], Payload, size(Payload), 0),
+    Sections = lists:map(fun({_Pos, S}) -> S end, PosSections),
+    Msg = amqp10_msg:from_amqp_records([Transfer | Sections]),
+    OkMsg = {ok, Msg},
+    case lists:last(PosSections) of
+        {PosFooter, #'v1_0.footer'{content = Content}}
+          when is_list(Content) ->
+            Key = case FooterOpt of
+                      crc32 -> <<"x-opt-crc-32">>;
+                      adler32 -> <<"x-opt-adler-32">>
+                  end,
+            case lists:search(fun({{symbol, K}, {uint, _Checksum}})
+                                    when K =:= Key ->
+                                      true;
+                                 (_) ->
+                                      false
+                              end, Content) of
+                {value, {{symbol, Key}, {uint, Expected}}} ->
+                    {value, {PosBare, _}} = lists:search(fun({_Pos, S}) ->
+                                                                 is_bare_message_section(S)
+                                                         end, PosSections),
+                    BareBin = binary_part(Payload, PosBare, PosFooter - PosBare),
+                    case erlang:FooterOpt(BareBin) of
+                        Expected -> OkMsg;
+                        Actual -> {checksum_error, Expected, Actual}
+                    end;
+                false ->
+                    OkMsg
+            end;
+        _ ->
+            OkMsg
+    end.
+
+decode_sections(PosSections, _Payload, PayloadSize, PayloadSize) ->
+    lists:reverse(PosSections);
+decode_sections(PosSections, Payload, PayloadSize, Parsed)
+  when PayloadSize > Parsed ->
+    Bin = binary_part(Payload, Parsed, PayloadSize - Parsed),
+    {Described, NumBytes} = amqp10_binary_parser:parse(Bin),
+    Section = amqp10_framing:decode(Described),
+    decode_sections([{Parsed, Section} | PosSections],
+                    Payload,
+                    PayloadSize,
+                    Parsed + NumBytes).
 
 amqp10_session_event(Evt) ->
     {amqp10_event, {session, self(), Evt}}.
@@ -1143,7 +1249,8 @@ format_status(Status = #{data := Data0}) ->
                         drain = Drain,
                         partial_transfers = PartialTransfers0,
                         auto_flow = AutoFlow,
-                        incoming_unsettled = IncomingUnsettled
+                        incoming_unsettled = IncomingUnsettled,
+                        footer_opt = FooterOpt
                        }) ->
                       PartialTransfers = case PartialTransfers0 of
                                              undefined ->
@@ -1166,7 +1273,8 @@ format_status(Status = #{data := Data0}) ->
                         drain => Drain,
                         partial_transfers => PartialTransfers,
                         auto_flow => AutoFlow,
-                        incoming_unsettled => maps:size(IncomingUnsettled)
+                        incoming_unsettled => maps:size(IncomingUnsettled),
+                        footer_opt => FooterOpt
                        }
               end, Links0),
     Data = #{channel => Channel,

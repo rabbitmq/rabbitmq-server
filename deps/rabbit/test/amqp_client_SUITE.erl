@@ -52,6 +52,7 @@ groups() ->
        roundtrip_with_drain_quorum_queue,
        roundtrip_with_drain_stream,
        amqp_stream_amqpl,
+       amqp_quorum_queue_amqpl,
        message_headers_conversion,
        multiple_sessions,
        server_closes_link_classic_queue,
@@ -102,7 +103,9 @@ groups() ->
        handshake_timeout,
        credential_expires,
        attach_to_exclusive_queue,
-       classic_priority_queue
+       classic_priority_queue,
+       dead_letter_headers_exchange,
+       immutable_bare_message
       ]},
 
      {cluster_size_3, [shuffle],
@@ -173,6 +176,14 @@ init_per_testcase(T, Config)
         false ->
             {skip, "Receiving with drain from quorum queues in credit API v1 have a known "
              "bug that they reply with send_drained before delivering the message."}
+    end;
+init_per_testcase(T = immutable_bare_message, Config) ->
+    case rpc(Config, rabbit_feature_flags, is_enabled, [message_containers_store_amqp_v1]) of
+        true ->
+            rabbit_ct_helpers:testcase_started(Config, T);
+        false ->
+            {skip, "RabbitMQ is known to wrongfully modify the bare message with feature "
+             "flag message_containers_store_amqp_v1 disabled"}
     end;
 init_per_testcase(T, Config)
   when T =:= classic_queue_on_new_node orelse
@@ -609,41 +620,149 @@ roundtrip_with_drain(Config, QueueType, QName)
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = amqp10_client:close_connection(Connection).
 
-%% Send a message with a body containing a single AMQP 1.0 value section
-%% to a stream and consume via AMQP 0.9.1.
 amqp_stream_amqpl(Config) ->
+    amqp_amqpl(<<"stream">>, Config).
+
+amqp_quorum_queue_amqpl(Config) ->
+    amqp_amqpl(<<"quorum">>, Config).
+
+%% Send messages with different body sections to a queue and consume via AMQP 0.9.1.
+amqp_amqpl(QType, Config) ->
     {Connection, Session, LinkPair} = init(Config),
     QName = atom_to_binary(?FUNCTION_NAME),
-    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, <<"stream">>}}},
-    {ok, #{type := <<"stream">>}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType}}},
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
 
     Address = <<"/amq/queue/", QName/binary>>,
-    {ok, Sender} = amqp10_client:attach_sender_link(
-                     Session, <<"test-sender">>, Address),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"test-sender">>, Address),
     wait_for_credit(Sender),
-    OutMsg = amqp10_msg:new(<<"my-tag">>, {'v1_0.amqp_value', {binary, <<0, 255>>}}, true),
-    ok = amqp10_client:send_msg(Sender, OutMsg),
-    flush("final"),
+
+    %% single amqp-value section
+    Body1 = #'v1_0.amqp_value'{content = {binary, <<0, 255>>}},
+    Body2 = #'v1_0.amqp_value'{content = false},
+    %% single amqp-sequene section
+    Body3 = [#'v1_0.amqp_sequence'{content = [{binary, <<0, 255>>}]}],
+    %% multiple amqp-sequene sections
+    Body4 = [#'v1_0.amqp_sequence'{content = [{long, -1}]},
+             #'v1_0.amqp_sequence'{content = [true, {utf8, <<"🐇"/utf8>>}]}],
+    %% single data section
+    Body5 = [#'v1_0.data'{content = <<0, 255>>}],
+    %% multiple data sections
+    Body6 = [#'v1_0.data'{content = <<0, 1>>},
+             #'v1_0.data'{content = <<2, 3>>}],
+
+    %% Send only body sections
+    [ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<>>, Body, true)) ||
+     Body <- [Body1, Body2, Body3, Body4, Body5, Body6]],
+    %% Send with application-properties
+    ok = amqp10_client:send_msg(
+           Sender,
+           amqp10_msg:set_application_properties(
+             #{"my int" => -2},
+             amqp10_msg:new(<<>>, Body1, true))),
+    %% Send with properties
+    CorrelationID = <<"my correlation ID">>,
+    ok = amqp10_client:send_msg(
+           Sender,
+           amqp10_msg:set_properties(
+             #{correlation_id => CorrelationID},
+             amqp10_msg:new(<<>>, Body1, true))),
+    %% Send with both properties and application-properties
+    ok = amqp10_client:send_msg(
+           Sender,
+           amqp10_msg:set_properties(
+             #{correlation_id => CorrelationID},
+             amqp10_msg:set_application_properties(
+               #{"my int" => -2},
+               amqp10_msg:new(<<>>, Body1, true)))),
+    %% Send with footer
+    Footer = #'v1_0.footer'{content = [{{symbol, <<"my footer">>}, {ubyte, 255}}]},
+    ok = amqp10_client:send_msg(
+           Sender,
+           amqp10_msg:from_amqp_records(
+             [#'v1_0.transfer'{delivery_tag = {binary, <<>>},
+                               settled = true,
+                               message_format = {uint, 0}},
+              Body1,
+              Footer])),
+
     ok = amqp10_client:detach_link(Sender),
+    flush(detached),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config),
     #'basic.qos_ok'{} =  amqp_channel:call(Ch, #'basic.qos'{global = false,
-                                                            prefetch_count = 1}),
+                                                            prefetch_count = 100}),
     CTag = <<"my-tag">>,
+    Args = case QType of
+               <<"stream">> -> [{<<"x-stream-offset">>, longstr, <<"first">>}];
+               <<"quorum">> -> []
+           end,
     #'basic.consume_ok'{} = amqp_channel:subscribe(
                               Ch,
                               #'basic.consume'{
                                  queue = QName,
                                  consumer_tag = CTag,
-                                 arguments = [{<<"x-stream-offset">>, longstr, <<"first">>}]},
+                                 arguments = Args},
                               self()),
-    receive
-        {#'basic.deliver'{consumer_tag = CTag,
-                          redelivered  = false},
-         #amqp_msg{props = #'P_basic'{type = <<"amqp-1.0">>}}} ->
-            ok
-    after 5000 ->
-              ct:fail(basic_deliver_timeout)
+
+    receive {#'basic.deliver'{consumer_tag = CTag,
+                              redelivered  = false},
+             #amqp_msg{payload = Payload1,
+                       props = #'P_basic'{type = <<"amqp-1.0">>}}} ->
+                ?assertEqual([Body1], amqp10_framing:decode_bin(Payload1))
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload2,
+                          props = #'P_basic'{type = <<"amqp-1.0">>}}} ->
+                ?assertEqual([Body2], amqp10_framing:decode_bin(Payload2))
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload3,
+                          props = #'P_basic'{type = <<"amqp-1.0">>}}} ->
+                ?assertEqual(Body3, amqp10_framing:decode_bin(Payload3))
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload4,
+                          props = #'P_basic'{type = <<"amqp-1.0">>}}} ->
+                ?assertEqual(Body4, amqp10_framing:decode_bin(Payload4))
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload5,
+                          props = #'P_basic'{type = undefined}}} ->
+                ?assertEqual(<<0, 255>>, Payload5)
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload6,
+                          props = #'P_basic'{type = undefined}}} ->
+                %% We expect that RabbitMQ concatenates the binaries of multiple data sections.
+                ?assertEqual(<<0, 1, 2, 3>>, Payload6)
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload7,
+                          props = #'P_basic'{headers = Headers7}}} ->
+                ?assertEqual([Body1], amqp10_framing:decode_bin(Payload7)),
+                ?assertEqual({signedint, -2}, rabbit_misc:table_lookup(Headers7, <<"my int">>))
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload8,
+                          props = #'P_basic'{correlation_id = Corr8}}} ->
+                ?assertEqual([Body1], amqp10_framing:decode_bin(Payload8)),
+                ?assertEqual(CorrelationID, Corr8)
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload9,
+                          props = #'P_basic'{headers = Headers9,
+                                             correlation_id = Corr9}}} ->
+                ?assertEqual([Body1], amqp10_framing:decode_bin(Payload9)),
+                ?assertEqual(CorrelationID, Corr9),
+                ?assertEqual({signedint, -2}, rabbit_misc:table_lookup(Headers9, <<"my int">>))
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload10}} ->
+                %% RabbitMQ converts the entire AMQP encoded body including the footer
+                %% to AMQP legacy payload.
+                ?assertEqual([Body1, Footer], amqp10_framing:decode_bin(Payload10))
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
     end,
 
     ok = rabbit_ct_client_helpers:close_channel(Ch),
@@ -685,18 +804,33 @@ amqp10_to_amqp091_header_conversion(Session,Ch, QName, Address) ->
                   "x-int" => 3,
                   "x-bool" => true},
                 OutMsg2),
-    ok = amqp10_client:send_msg(Sender, OutMsg3),
+    OutMsg = amqp10_msg:set_headers(
+               #{durable => true,
+                 priority => 7,
+                 ttl => 88000},
+               OutMsg3),
+    ok = amqp10_client:send_msg(Sender, OutMsg),
     ok = wait_for_accepts(1),
 
-    {ok, Headers} = amqp091_get_msg_headers(Ch, QName),
+    {#'basic.get_ok'{},
+     #amqp_msg{props = #'P_basic'{headers = Headers,
+                                  delivery_mode = DeliveryMode,
+                                  priority = Priority,
+                                  expiration = Expiration}}
+    } = amqp_channel:call(Ch, #'basic.get'{queue = QName, no_ack = true}),
 
+    %% assert application properties
     ?assertEqual({longstr, <<"string-val">>}, rabbit_misc:table_lookup(Headers, <<"string">>)),
     ?assertEqual({unsignedint, 2}, rabbit_misc:table_lookup(Headers, <<"int">>)),
     ?assertEqual({bool, false}, rabbit_misc:table_lookup(Headers, <<"bool">>)),
-
+    %% assert message annotations
     ?assertEqual({longstr, <<"string-value">>}, rabbit_misc:table_lookup(Headers, <<"x-string">>)),
     ?assertEqual({unsignedint, 3}, rabbit_misc:table_lookup(Headers, <<"x-int">>)),
-    ?assertEqual({bool, true}, rabbit_misc:table_lookup(Headers, <<"x-bool">>)).
+    ?assertEqual({bool, true}, rabbit_misc:table_lookup(Headers, <<"x-bool">>)),
+    %% assert headers
+    ?assertEqual(2, DeliveryMode),
+    ?assertEqual(7, Priority),
+    ?assertEqual(<<"88000">>, Expiration).
 
 amqp091_to_amqp10_header_conversion(Session, Ch, QName, Address) -> 
     Amqp091Headers = [{<<"x-forwarding">>, array, 
@@ -3319,6 +3453,238 @@ classic_priority_queue(Config) ->
     ok = end_session_sync(Session),
     ok = amqp10_client:close_connection(Connection).
 
+dead_letter_headers_exchange(Config) ->
+    {Connection, Session, LinkPair} = init(Config),
+    QName1 = <<"q1">>,
+    QName2 = <<"q2">>,
+    {ok, _} = rabbitmq_amqp_client:declare_queue(
+                LinkPair,
+                QName1,
+                #{arguments => #{<<"x-dead-letter-exchange">> => {utf8, <<"amq.headers">>},
+                                 <<"x-message-ttl">> => {ulong, 0}}}),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName2, #{}),
+    ok =  rabbitmq_amqp_client:bind_queue(LinkPair, QName2, <<"amq.headers">>, <<>>,
+                                          #{<<"my key">> => {uint, 5},
+                                            <<"x-my key">> => {uint, 6},
+                                            <<"x-match">> => {utf8, <<"all-with-x">>}}),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(
+                     Session, <<"test-sender">>, <<"/queue/", QName1/binary>>),
+    wait_for_credit(Sender),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"my receiver">>, <<"/queue/", QName2/binary>>, settled),
+
+    %% Test M1 with properties section.
+    M1 = amqp10_msg:set_message_annotations(
+           #{<<"x-my key">> => 6},
+           amqp10_msg:set_properties(
+             #{message_id => <<"my ID">>},
+             amqp10_msg:set_application_properties(
+               #{<<"my key">> => 5},
+               amqp10_msg:new(<<"tag 1">>, <<"m1">>, false)))),
+    %% Test M2 without properties section.
+    M2 = amqp10_msg:set_message_annotations(
+           #{<<"x-my key">> => 6},
+           amqp10_msg:set_application_properties(
+             #{<<"my key">> => 5},
+             amqp10_msg:new(<<"tag 2">>, <<"m2">>, false))),
+    %% M3 should be dropped due to missing x-header.
+    M3 = amqp10_msg:set_application_properties(
+           #{<<"my key">> => 5},
+           amqp10_msg:new(<<"tag 3">>, <<"m3">>, false)),
+    %% M4 should be dropped due to missing header.
+    M4 = amqp10_msg:set_message_annotations(
+           #{<<"x-my key">> => 6},
+           amqp10_msg:new(<<"tag 4">>, <<"m4">>, false)),
+
+    [ok = amqp10_client:send_msg(Sender, M) || M <- [M1, M2, M3, M4]],
+    ok = wait_for_accepts(4),
+    flush(accepted),
+
+    ok = amqp10_client:flow_link_credit(Receiver, 4, never),
+    [Msg1, Msg2] = receive_messages(Receiver, 2),
+    ?assertEqual(<<"m1">>, amqp10_msg:body_bin(Msg1)),
+    ?assertEqual(<<"m2">>, amqp10_msg:body_bin(Msg2)),
+    ?assertEqual(#{message_id => <<"my ID">>}, amqp10_msg:properties(Msg1)),
+    ?assertEqual(0, maps:size(amqp10_msg:properties(Msg2))),
+
+    %% We expect M3 and M4 to get dropped.
+    %% Since the queue has no messages yet, we shouldn't receive any message.
+    receive Unexp -> ct:fail({unexpected, Unexp})
+    after 10 -> ok
+    end,
+
+    ok = amqp10_client:detach_link(Receiver),
+    ok = amqp10_client:detach_link(Sender),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName1),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName2),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+%% This test asserts the following §3.2 requirement:
+%% "The bare message is immutable within the AMQP network. That is, none of the sections can be
+%% changed by any node acting as an AMQP intermediary. If a section of the bare message is
+%% omitted, one MUST NOT be inserted by an intermediary. The exact encoding of sections of the
+%% bare message MUST NOT be modified. This preserves message hashes, HMACs and signatures based
+%% on the binary encoding of the bare message."
+immutable_bare_message(Config) ->
+    footer_checksum(crc32, Config),
+    footer_checksum(adler32, Config).
+
+footer_checksum(FooterOpt, Config) ->
+    ExpectedKey = case FooterOpt of
+                      crc32 -> <<"x-opt-crc-32">>;
+                      adler32 -> <<"x-opt-adler-32">>
+                  end,
+
+    {Connection, Session, LinkPair} = init(Config),
+    QName = atom_to_binary(FooterOpt),
+    Addr = <<"/queue/", QName/binary>>,
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+    RecvAttachArgs = #{name => <<"my receiver">>,
+                       role => {receiver, #{address => Addr,
+                                            durable => configuration}, self()},
+                       snd_settle_mode => settled,
+                       rcv_settle_mode => first,
+                       filter => #{},
+                       footer_opt => FooterOpt},
+    SndAttachArgs = #{name => <<"my sender">>,
+                      role => {sender, #{address => Addr,
+                                         durable => configuration}},
+                      snd_settle_mode => settled,
+                      rcv_settle_mode => first,
+                      footer_opt => FooterOpt},
+    {ok, Receiver} = amqp10_client:attach_link(Session, RecvAttachArgs),
+    {ok, Sender} = amqp10_client:attach_link(Session, SndAttachArgs),
+    wait_for_credit(Sender),
+
+    Now = erlang:system_time(millisecond),
+    %% with properties and application-properties
+    M1 = amqp10_msg:set_headers(
+           #{durable => true,
+             priority => 7,
+             ttl => 100_000},
+           amqp10_msg:set_delivery_annotations(
+             #{"a" => "b"},
+             amqp10_msg:set_message_annotations(
+               #{"x-string" => "string-value",
+                 "x-int" => 3,
+                 "x-bool" => true},
+               amqp10_msg:set_properties(
+                 #{message_id => {ulong, 999},
+                   user_id => <<"guest">>,
+                   to => Addr,
+                   subject => <<"high prio">>,
+                   reply_to => <<"/queue/a">>,
+                   correlation_id => <<"correlation">>,
+                   content_type => <<"text/plain">>,
+                   content_encoding => <<"some encoding">>,
+                   absolute_expiry_time => Now + 100_000,
+                   creation_time => Now,
+                   group_id => <<"my group ID">>,
+                   group_sequence => 16#ff_ff_ff_ff,
+                   reply_to_group_id => <<"other group ID">>},
+                 amqp10_msg:set_application_properties(
+                   #{"string" => "string-val",
+                     "int" => 2,
+                     "true" => true,
+                     "false" => false},
+                   amqp10_msg:new(<<"t1">>, <<"m1">>)))))),
+    ok = amqp10_client:send_msg(Sender, M1),
+    ok = wait_for_settlement(<<"t1">>),
+
+    {ok, Msg1} = amqp10_client:get_msg(Receiver),
+    ?assertEqual(<<"m1">>, amqp10_msg:body_bin(Msg1)),
+
+    %% without properties
+    M2 = amqp10_msg:set_application_properties(
+           #{"string" => "string-val",
+             "int" => 2,
+             "true" => true,
+             "false" => false},
+           amqp10_msg:new(<<"t2">>, <<"m2">>)),
+    ok = amqp10_client:send_msg(Sender, M2),
+    ok = wait_for_settlement(<<"t2">>),
+
+    {ok, Msg2} = amqp10_client:get_msg(Receiver),
+    ?assertEqual(<<"m2">>, amqp10_msg:body_bin(Msg2)),
+
+    %% bare message consists of single data section
+    M3 = amqp10_msg:new(<<"t3">>, <<"m3">>),
+    ok = amqp10_client:send_msg(Sender, M3),
+    ok = wait_for_settlement(<<"t3">>),
+
+    {ok, Msg3} = amqp10_client:get_msg(Receiver),
+    ?assertEqual(<<"m3">>, amqp10_msg:body_bin(Msg3)),
+
+    %% bare message consists of multiple data sections
+    M4 = amqp10_msg:new(<<"t4">>, [#'v1_0.data'{content = <<"m4 a">>},
+                                   #'v1_0.data'{content = <<"m4 b">>}]),
+    ok = amqp10_client:send_msg(Sender, M4),
+    ok = wait_for_settlement(<<"t4">>),
+
+    {ok, Msg4} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m4 a">>, <<"m4 b">>], amqp10_msg:body(Msg4)),
+
+    %% bare message consists of multiple sequence sections
+    M5 = amqp10_msg:new(<<"t5">>,
+                        [#'v1_0.amqp_sequence'{content = [{ubyte, 255}]},
+                         %% Our serialiser uses 2 byte boolean encoding
+                         #'v1_0.amqp_sequence'{content = [{boolean, true}, {boolean, false}]},
+                         %% Our serialiser uses 1 byte boolean encoding
+                         #'v1_0.amqp_sequence'{content = [true, false, undefined]}]),
+    ok = amqp10_client:send_msg(Sender, M5),
+    ok = wait_for_settlement(<<"t5">>),
+
+    {ok, Msg5} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([#'v1_0.amqp_sequence'{content = [{ubyte, 255}]},
+                  %% Our parser returns the Erlang boolean term.
+                  %% However, the important assertion is that RabbitMQ sent us back
+                  %% the bare message unmodified, i.e. that the checksum holds.
+                  #'v1_0.amqp_sequence'{content = [true, false]},
+                  #'v1_0.amqp_sequence'{content = [true, false, undefined]}],
+                 amqp10_msg:body(Msg5)),
+
+    %% with footer
+    M6 = amqp10_msg:from_amqp_records(
+           [#'v1_0.transfer'{delivery_tag = {binary, <<"t6">>},
+                             settled = false,
+                             message_format = {uint, 0}},
+            #'v1_0.properties'{correlation_id = {ulong, 16#ff_ff_ff_ff_ff_ff_ff_ff}},
+            #'v1_0.data'{content = <<"m6 a">>},
+            #'v1_0.data'{content = <<"m6 b">>},
+            #'v1_0.footer'{
+               content = [
+                          {{symbol, <<"x-opt-rabbit">>}, {char, $🐇}},
+                          {{symbol, <<"x-opt-carrot">>}, {char, $🥕}}
+                         ]}]),
+    ok = amqp10_client:send_msg(Sender, M6),
+    ok = wait_for_settlement(<<"t6">>),
+
+    {ok, Msg6} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m6 a">>, <<"m6 b">>], amqp10_msg:body(Msg6)),
+    ?assertMatch(#{ExpectedKey := _,
+                   <<"x-opt-rabbit">> := $🐇,
+                   <<"x-opt-carrot">> := $🥕},
+                 amqp10_msg:footer(Msg6)),
+
+    %% We only sanity check here that the footer annotation we received from the server
+    %% contains a checksum. The AMQP Erlang client library will assert for us that the
+    %% received checksum matches the actual checksum.
+    lists:foreach(fun(Msg) ->
+                          Map = amqp10_msg:footer(Msg),
+                          {ok, Checksum} = maps:find(ExpectedKey, Map),
+                          ?assert(is_integer(Checksum))
+                  end, [Msg1, Msg2, Msg3, Msg4, Msg5, Msg6]),
+
+    ok = amqp10_client:detach_link(Receiver),
+    ok = amqp10_client:detach_link(Sender),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
 %% internal
 %%
 
@@ -3450,11 +3816,6 @@ delete_queue(Session, QName) ->
                        Session, <<"delete queue">>),
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair).
-
-amqp091_get_msg_headers(Channel, QName) -> 
-    {#'basic.get_ok'{}, #amqp_msg{props = #'P_basic'{ headers= Headers}}}
-        = amqp_channel:call(Channel, #'basic.get'{queue = QName, no_ack = true}),
-    {ok, Headers}.
 
 create_amqp10_sender(Session, Address) -> 
     {ok, Sender} = amqp10_client:attach_sender_link(

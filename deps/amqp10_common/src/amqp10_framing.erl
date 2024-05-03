@@ -7,8 +7,16 @@
 
 -module(amqp10_framing).
 
--export([encode/1, encode_described/3, decode/1, version/0,
-         symbol_for/1, number_for/1, encode_bin/1, decode_bin/1, pprint/1]).
+-export([version/0,
+         encode/1,
+         encode_described/3,
+         encode_bin/1,
+         decode/1,
+         decode_bin/1,
+         decode_bin/2,
+         symbol_for/1,
+         number_for/1,
+         pprint/1]).
 
 %% debug
 -export([fill_from_list/2, fill_from_map/2]).
@@ -161,7 +169,8 @@ encode_described(map, CodeNumber,
 encode_described(map, CodeNumber,
                  #'v1_0.message_annotations'{content = Content}) ->
     {described, {ulong, CodeNumber}, {map, Content}};
-encode_described(map, CodeNumber, #'v1_0.footer'{content = Content}) ->
+encode_described(map, CodeNumber,
+                 #'v1_0.footer'{content = Content}) ->
     {described, {ulong, CodeNumber}, {map, Content}};
 encode_described(binary, CodeNumber, #'v1_0.data'{content = Content}) ->
     {described, {ulong, CodeNumber}, {binary, Content}};
@@ -173,11 +182,21 @@ encode_described(annotations, CodeNumber, Frame) ->
 encode(X) ->
     amqp10_framing0:encode(X).
 
+-spec encode_bin(term()) -> iodata().
 encode_bin(X) ->
     amqp10_binary_generator:generate(encode(X)).
 
-decode_bin(X) ->
-    [decode(DescribedPerformative) || DescribedPerformative <- amqp10_binary_parser:parse_all(X)].
+-spec decode_bin(binary()) -> [term()].
+decode_bin(Binary) ->
+    [decode(Section) || Section <- amqp10_binary_parser:parse_many(Binary, [])].
+
+-spec decode_bin(binary(), amqp10_binary_parser:opts()) -> [term()].
+decode_bin(Binary, Opts) ->
+    lists:map(fun({Pos = {pos, _}, Section}) ->
+                      {Pos, decode(Section)};
+                 (Section) ->
+                      decode(Section)
+              end, amqp10_binary_parser:parse_many(Binary, Opts)).
 
 symbol_for(X) ->
     amqp10_framing0:symbol_for(X).

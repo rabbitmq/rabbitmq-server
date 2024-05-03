@@ -19,7 +19,8 @@
 -include_lib("rabbitmq_stomp/include/rabbit_stomp_frame.hrl").
 
 -import(util,
-        [connect/2]).
+        [connect/2,
+         connect/4]).
 -import(rabbit_ct_broker_helpers,
         [rpc/4]).
 -import(rabbit_ct_helpers,
@@ -27,18 +28,23 @@
          eventually/3]).
 
 all() ->
-    [{group, tests}].
+    [{group, cluster_size_1},
+     {group, cluster_size_3}].
 
 groups() ->
-    [{tests, [shuffle],
+    [{cluster_size_1, [shuffle],
       [
        mqtt_amqpl_mqtt,
        mqtt_amqp_mqtt,
        amqp_mqtt_amqp,
        mqtt_stomp_mqtt,
        mqtt_stream
-      ]
-     }].
+      ]},
+     {cluster_size_3, [shuffle],
+      [
+       amqp_mqtt_qos0,
+       amqp_mqtt_qos1
+      ]}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -52,10 +58,15 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(_Group, Config0) ->
+init_per_group(Group, Config0) ->
+    Nodes = case Group of
+                cluster_size_1 -> 1;
+                cluster_size_3 -> 3
+            end,
     Config1 = rabbit_ct_helpers:set_config(
                 Config0,
-                {mqtt_version, v5}),
+                [{rmq_nodes_count, Nodes},
+                 {mqtt_version, v5}]),
     Config = rabbit_ct_helpers:run_steps(
                Config1,
                rabbit_ct_broker_helpers:setup_steps() ++
@@ -196,8 +207,7 @@ mqtt_amqp_mqtt(Config) ->
                             #{'Content-Type' => ContentType,
                               'Correlation-Data' => Correlation,
                               'Response-Topic' => MqttResponseTopic,
-                              'User-Property' => UserProperty,
-                              'Payload-Format-Indicator' => 1},
+                              'User-Property' => UserProperty},
                             RequestPayload, [{qos, 1}]),
 
     {ok, Msg1} = amqp10_client:get_msg(Receiver),
@@ -225,8 +235,7 @@ mqtt_amqp_mqtt(Config) ->
       reply_to := ReplyToAddress} = amqp10_msg:properties(Msg1),
     ?assertEqual(<<"/exchange/amq.topic/key/response.topic">>, ReplyToAddress),
 
-    %% Thanks to the 'Payload-Format-Indicator', we get a single utf8 value.
-    ?assertEqual(#'v1_0.amqp_value'{content = {utf8, RequestPayload}}, amqp10_msg:body(Msg1)),
+    ?assertEqual(RequestPayload, amqp10_msg:body_bin(Msg1)),
 
     ok = amqp10_client:settle_msg(Receiver, Msg1, accepted),
     ok = amqp10_client:detach_link(Receiver),
@@ -245,7 +254,7 @@ mqtt_amqp_mqtt(Config) ->
 
     DTag = <<"my-dtag">>,
     ReplyPayload = <<"my response">>,
-    Msg2a = amqp10_msg:new(DTag, #'v1_0.amqp_value'{content = {utf8, ReplyPayload}}),
+    Msg2a = amqp10_msg:new(DTag, #'v1_0.data'{content = ReplyPayload}),
     Msg2b = amqp10_msg:set_properties(
               #{correlation_id => Correlation,
                 content_type => ContentType},
@@ -271,9 +280,8 @@ mqtt_amqp_mqtt(Config) ->
                      payload := ReplyPayload,
                      properties := #{'Content-Type' := ContentType,
                                      'Correlation-Data' := Correlation,
-                                     'Subscription-Identifier' := 999,
-                                     %% since the AMQP 1.0 client sent UTF-8
-                                     'Payload-Format-Indicator' := 1}},
+                                     'Subscription-Identifier' := 999}
+                    },
                    MqttMsg)
     after 1000 -> ct:fail("did not receive reply")
     end,
@@ -314,21 +322,29 @@ amqp_mqtt_amqp(Config) ->
                amqp10_msg:new(<<>>, RequestBody, true))),
     ok = amqp10_client:send_msg(Sender, Msg1),
 
-    RespTopic = receive {publish, MqttMsg} ->
-                            ct:pal("Received MQTT message:~n~p", [MqttMsg]),
-                            #{client_pid := C,
-                              qos := 1,
-                              topic := <<"t/1">>,
-                              payload := RequestBody,
-                              properties := #{'Correlation-Data' := Correlation,
-                                              'Response-Topic' := ResponseTopic}} = MqttMsg,
-                            ResponseTopic
-                after 2000 -> ct:fail("did not receive request")
-                end,
+    ResponseTopic = <<"t/2">>,
+    receive {publish, MqttMsg} ->
+                ct:pal("Received MQTT message:~n~p", [MqttMsg]),
+                #{client_pid := C,
+                  qos := 1,
+                  topic := <<"t/1">>,
+                  payload := RequestBody,
+                  properties := Props = #{'Correlation-Data' := Correlation}
+                 } = MqttMsg,
+                case rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                       Config, message_containers_store_amqp_v1) of
+                    true ->
+                        ?assertEqual({ok, ResponseTopic},
+                                     maps:find('Response-Topic', Props));
+                    false ->
+                        ok
+                end
+    after 2000 -> ct:fail("did not receive request")
+    end,
 
     %% MQTT 5.0 to AMQP 1.0
     RespBody = <<"my response">>,
-    {ok, _} = emqtt:publish(C, RespTopic,
+    {ok, _} = emqtt:publish(C, ResponseTopic,
                             #{'Correlation-Data' => Correlation},
                             RespBody, [{qos, 1}]),
 
@@ -339,6 +355,106 @@ amqp_mqtt_amqp(Config) ->
     ok = emqtt:disconnect(C),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
+
+%% Send messages with different AMQP body sections and
+%% consume via MQTT 5.0 with a QoS 0 subscription.
+amqp_mqtt_qos0(Config) ->
+    %% We want to test that the old node can receive from an MQTT QoS 0 queue.
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, rabbit_mqtt_qos0_queue),
+    amqp_mqtt(0, Config).
+
+%% Send messages with different AMQP body sections and
+%% consume via MQTT 5.0 with a QoS 1 subscription.
+amqp_mqtt_qos1(Config) ->
+    amqp_mqtt(1, Config).
+
+amqp_mqtt(Qos, Config) ->
+    ClientId = Container = atom_to_binary(?FUNCTION_NAME),
+
+    %% Connect MQTT subscriber to the old node.
+    C = connect(ClientId, Config, 1, []),
+    {ok, _, [Qos]} = emqtt:subscribe(C, <<"my/topic">>, Qos),
+
+    Host = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    OpnConf = #{address => Host,
+                port => Port,
+                container_id => Container,
+                sasl => {plain, <<"guest">>, <<"guest">>}},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(
+                     Session, <<"sender">>, <<"/exchange/amq.topic/key/my.topic">>),
+    receive {amqp10_event, {link, Sender, credited}} -> ok
+    after 2000 -> ct:fail(credited_timeout)
+    end,
+
+    %% single amqp-value section
+    Body1 = #'v1_0.amqp_value'{content = {binary, <<0, 255>>}},
+    Body2 = #'v1_0.amqp_value'{content = false},
+    %% single amqp-sequene section
+    Body3 = [#'v1_0.amqp_sequence'{content = [{binary, <<0, 255>>}]}],
+    %% multiple amqp-sequene sections
+    Body4 = [#'v1_0.amqp_sequence'{content = [{long, -1}]},
+             #'v1_0.amqp_sequence'{content = [true, {utf8, <<"🐇"/utf8>>}]}],
+    %% single data section
+    Body5 = [#'v1_0.data'{content = <<0, 255>>}],
+    %% multiple data sections
+    Body6 = [#'v1_0.data'{content = <<0, 1>>},
+             #'v1_0.data'{content = <<2, 3>>}],
+
+    [ok = amqp10_client:send_msg(Sender,
+                                 amqp10_msg:set_headers(
+                                   #{durable => true},
+                                   amqp10_msg:new(<<>>, Body, true))) ||
+     Body <- [Body1, Body2, Body3, Body4, Body5, Body6]],
+
+    ok = amqp10_client:detach_link(Sender),
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
+
+    receive {publish, MqttMsg1} ->
+                #{client_pid := C,
+                  qos := Qos,
+                  topic := <<"my/topic">>,
+                  payload := Payload1,
+                  properties := Props
+                 } = MqttMsg1,
+                ?assertEqual([Body1], amqp10_framing:decode_bin(Payload1)),
+                case rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                       Config, message_containers_store_amqp_v1) of
+                    true ->
+                        ?assertEqual({ok, <<"message/vnd.rabbitmq.amqp">>},
+                                     maps:find('Content-Type', Props));
+                    false ->
+                        ok
+                end
+    after 5000 -> ct:fail({missing_publish, ?LINE})
+    end,
+    receive {publish, #{payload := Payload2}} ->
+                ?assertEqual([Body2], amqp10_framing:decode_bin(Payload2))
+    after 5000 -> ct:fail({missing_publish, ?LINE})
+    end,
+    receive {publish, #{payload := Payload3}} ->
+                ?assertEqual(Body3, amqp10_framing:decode_bin(Payload3))
+    after 5000 -> ct:fail({missing_publish, ?LINE})
+    end,
+    receive {publish, #{payload := Payload4}} ->
+                ?assertEqual(Body4, amqp10_framing:decode_bin(Payload4))
+    after 5000 -> ct:fail({missing_publish, ?LINE})
+    end,
+    receive {publish, #{payload := Payload5}} ->
+                ?assertEqual(<<0, 255>>, Payload5)
+    after 5000 -> ct:fail({missing_publish, ?LINE})
+    end,
+    receive {publish, #{payload := Payload6}} ->
+                %% We expect that RabbitMQ concatenates the binaries of multiple data sections.
+                ?assertEqual(<<0, 1, 2, 3>>, Payload6)
+    after 5000 -> ct:fail({missing_publish, ?LINE})
+    end,
+
+    ok = emqtt:disconnect(C).
 
 mqtt_stomp_mqtt(Config) ->
     {ok, StompC0} = stomp_connect(Config),
@@ -459,8 +575,7 @@ mqtt_stream(Config) ->
                             #{'Content-Type' => ContentType,
                               'Correlation-Data' => Correlation,
                               'Response-Topic' => <<"response/topic">>,
-                              'User-Property' => UserProperty,
-                              'Payload-Format-Indicator' => 1},
+                              'User-Property' => UserProperty},
                             Payload, [{qos, 1}]),
     ok = emqtt:disconnect(C),
 
@@ -532,10 +647,7 @@ mqtt_stream(Config) ->
     ?assertEqual(#{<<"rabbit🐇"/utf8>> => <<"carrot🥕"/utf8>>,
                    <<"key">> => <<"val">>},
                  amqp10_msg:application_properties(Msg)),
-    %% We excpet the body to be a single AMQP 1.0 value section where the value is a string
-    %% because we set the MQTT 5.0 Payload-Format-Indicator.
-    ?assertEqual({'v1_0.amqp_value', {utf8, Payload}},
-                 amqp10_msg:body(Msg)).
+    ?assertEqual(Payload, amqp10_msg:body_bin(Msg)).
 
 %% -------------------------------------------------------------------
 %% Helpers

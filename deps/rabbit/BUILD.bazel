@@ -787,15 +787,6 @@ rabbitmq_suite(
 )
 
 rabbitmq_suite(
-    name = "rabbit_msg_record_SUITE",
-    size = "medium",
-    deps = [
-        "//deps/amqp10_common:erlang_app",
-        "//deps/rabbit_common:erlang_app",
-    ],
-)
-
-rabbitmq_suite(
     name = "mc_unit_SUITE",
     size = "small",
     deps = [

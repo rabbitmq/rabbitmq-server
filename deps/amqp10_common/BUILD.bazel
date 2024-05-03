@@ -110,15 +110,24 @@ dialyze(
 
 rabbitmq_suite(
     name = "binary_generator_SUITE",
+    size = "small",
 )
 
 rabbitmq_suite(
     name = "binary_parser_SUITE",
+    size = "small",
 )
 
 rabbitmq_suite(
     name = "serial_number_SUITE",
     size = "small",
+)
+
+rabbitmq_suite(
+    name = "prop_SUITE",
+    deps = [
+        "//deps/rabbitmq_ct_helpers:erlang_app",
+    ],
 )
 
 assert_suites()

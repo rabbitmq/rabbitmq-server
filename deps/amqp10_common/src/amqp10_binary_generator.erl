@@ -40,7 +40,7 @@
     {symbol, binary()} |
     {binary, binary()} |
     {list, [amqp10_type()]} |
-    {map, [{amqp10_prim(), amqp10_prim()}]} | %% TODO: make map a map
+    {map, [{amqp10_prim(), amqp10_prim()}]} |
     {array, amqp10_ctor(), [amqp10_type()]}.
 
 -type amqp10_described() ::
@@ -113,16 +113,20 @@ generate1({long,     V}) when V<128 andalso V>-129 -> <<16#55,V:8/signed>>;
 generate1({long,     V})                           -> <<16#81,V:64/signed>>;
 generate1({float,    V})                           -> <<16#72,V:32/float>>;
 generate1({double,   V})                           -> <<16#82,V:64/float>>;
-generate1({char,     V})                           -> <<16#73,V:4/binary>>;
+generate1({char,V}) when V>=0 andalso V=<16#10ffff -> <<16#73,V:32>>;
+%% AMQP timestamp is "64-bit two's-complement integer representing milliseconds since the unix epoch".
+%% For small integers (i.e. values that can be stored in a single word),
+%% Erlang uses two’s complement to represent the signed integers.
 generate1({timestamp,V})                           -> <<16#83,V:64/signed>>;
 generate1({uuid,     V})                           -> <<16#98,V:16/binary>>;
 
-generate1({utf8, V}) when size(V) < ?VAR_1_LIMIT -> [16#a1, size(V), V];
-generate1({utf8, V})                             -> [<<16#b1, (size(V)):32>>, V];
-generate1({symbol, V})                           -> [16#a3, size(V), V];
+generate1({utf8, V}) when size(V) =< ?VAR_1_LIMIT   -> [16#a1, size(V), V];
+generate1({utf8, V})                                -> [<<16#b1, (size(V)):32>>, V];
+generate1({symbol, V}) when size(V) =< ?VAR_1_LIMIT -> [16#a3, size(V), V];
+generate1({symbol, V})                              -> [<<16#b3, (size(V)):32>>, V];
 generate1({binary, V}) ->
     Size = iolist_size(V),
-    case Size < ?VAR_1_LIMIT  of
+    case Size =< ?VAR_1_LIMIT  of
         true ->
             [16#a0, Size, V];
         false ->
@@ -145,12 +149,12 @@ generate1({list, List}) ->
            [16#c0, S + 1, Count, Compound]
     end;
 
-generate1({map, ListOfPairs}) ->
-    Count = length(ListOfPairs) * 2,
+generate1({map, KvList}) ->
+    Count = length(KvList) * 2,
     Compound = lists:map(fun ({Key, Val}) ->
                                  [(generate1(Key)),
                                   (generate1(Val))]
-                         end, ListOfPairs),
+                         end, KvList),
     S = iolist_size(Compound),
     %% See generate1({list, ...}) for an explanation of this test.
     if Count >= (256 - 1) orelse (S + 1) >= 256 ->
@@ -168,16 +172,12 @@ generate1({array, Type, List}) ->
     if Count >= (256 - 1) orelse (S + 1) >= 256 ->
            [<<16#f0, (S + 4):32, Count:32>>, Array];
        true ->
-           [16#e0, S + 1,  Count, Array]
+           [16#e0, S + 1, Count, Array]
     end;
 
 generate1({as_is, TypeCode, Bin}) ->
     <<TypeCode, Bin>>.
 
-%% TODO again these are a stub to get SASL working. New codec? Will
-%% that ever happen? If not we really just need to split generate/1
-%% up into things like these...
-%% for these constructors map straight-forwardly
 constructor(symbol) -> 16#b3;
 constructor(ubyte) -> 16#50;
 constructor(ushort) -> 16#60;
@@ -194,18 +194,23 @@ constructor(timestamp) -> 16#83;
 constructor(uuid) -> 16#98;
 constructor(null) -> 16#40;
 constructor(boolean) -> 16#56;
-constructor(array) -> 16#f0; % use large array type for all nested arrays
+constructor(binary) -> 16#b0;
 constructor(utf8) -> 16#b1;
+constructor(list) -> 16#d0;  % use large list type for all array elements
+constructor(map) -> 16#d1;   % use large map type for all array elements
+constructor(array) -> 16#f0; % use large array type for all nested arrays
 constructor({described, Descriptor, Primitive}) ->
     [16#00, generate1(Descriptor), constructor(Primitive)].
 
-% returns io_list
 generate2(symbol, {symbol, V}) -> [<<(size(V)):32>>, V];
 generate2(utf8, {utf8, V}) -> [<<(size(V)):32>>, V];
+generate2(binary, {binary, V}) -> [<<(size(V)):32>>, V];
 generate2(boolean, true) -> 16#01;
 generate2(boolean, false) -> 16#00;
 generate2(boolean, {boolean, true}) -> 16#01;
 generate2(boolean, {boolean, false}) -> 16#00;
+generate2(null, null) -> 16#40;
+generate2(char, {char,V}) when V>=0 andalso V=<16#10ffff -> <<V:32>>;
 generate2(ubyte, {ubyte, V}) -> V;
 generate2(byte, {byte, V}) -> <<V:8/signed>>;
 generate2(ushort, {ushort, V}) -> <<V:16/unsigned>>;
@@ -214,12 +219,28 @@ generate2(uint, {uint, V}) -> <<V:32/unsigned>>;
 generate2(int, {int, V}) -> <<V:32/signed>>;
 generate2(ulong, {ulong, V}) -> <<V:64/unsigned>>;
 generate2(long, {long, V}) -> <<V:64/signed>>;
+generate2(float, {float, V}) -> <<V:32/float>>;
+generate2(double, {double, V}) -> <<V:64/float>>;
+generate2(timestamp, {timestamp,V}) -> <<V:64/signed>>;
+generate2(uuid, {uuid, V}) -> <<V:16/binary>>;
 generate2({described, D, P}, {described, D, V}) ->
     generate2(P, V);
+generate2(list, {list, List}) ->
+    Count = length(List),
+    Compound = lists:map(fun generate1/1, List),
+    S = iolist_size(Compound),
+    [<<(S + 4):32, Count:32>>, Compound];
+generate2(map, {map, KvList}) ->
+    Count = length(KvList) * 2,
+    Compound = lists:map(fun ({Key, Val}) ->
+                                 [(generate1(Key)),
+                                  (generate1(Val))]
+                         end, KvList),
+    S = iolist_size(Compound),
+    [<<(S + 4):32, Count:32>>, Compound];
 generate2(array, {array, Type, List}) ->
     Count = length(List),
     Array = [constructor(Type),
              [generate2(Type, I) || I <- List]],
     S = iolist_size(Array),
-    %% See generate1({list, ...}) for an explanation of this test.
     [<<(S + 4):32, Count:32>>, Array].

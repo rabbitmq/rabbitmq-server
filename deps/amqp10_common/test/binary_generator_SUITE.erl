@@ -109,21 +109,22 @@ numerals(_Config) ->
 
 utf8(_Config) ->
     roundtrip({utf8, <<"hi">>}),
-    roundtrip({utf8, binary:copy(<<"asdfghjk">>, 64)}),
+    roundtrip({utf8, binary:copy(<<"abcdefgh">>, 64)}),
     ok.
 
 char(_Config) ->
-    roundtrip({char, <<$A/utf32>>}),
+    roundtrip({char, $🎉}),
     ok.
 
 list(_Config) ->
     %% list:list0
     roundtrip({list, []}),
     %% list:list8
-    roundtrip({list, [{utf8, <<"hi">>},
+    roundtrip({list, [
+                      {utf8, <<"hi">>},
                       {int, 123},
                       {binary, <<"data">>},
-                      {array, int, [{int, 1}, {int, 2}, {int, 3}]},
+                      {array, int, [{int, 1}, {int, -2147483648}, {int, 2147483647}]},
                       {described,
                        {utf8, <<"URL">>},
                        {utf8, <<"http://example.org/hello-world">>}}
@@ -168,15 +169,42 @@ array(_Config) ->
     ?assertEqual({array, boolean, [true, false]},
                  roundtrip_return({array, boolean, [{boolean, true}, {boolean, false}]})),
 
-    % array of arrays
-    % TODO: does the inner type need to be consistent across the array?
+    %% array of arrays
     roundtrip({array, array, []}),
     roundtrip({array, array, [{array, symbol, [{symbol, <<"ANONYMOUS">>}]}]}),
+    roundtrip({array, array, [{array, symbol, [{symbol, <<"ANONYMOUS">>}]},
+                              {array, symbol, [{symbol, <<"sym1">>},
+                                               {symbol, <<"sym2">>}]}]}),
+
+    %% array of lists
+    roundtrip({array, list, []}),
+    roundtrip({array, list, [{list, [{symbol, <<"sym">>}]},
+                             {list, [null,
+                                     {described,
+                                      {utf8, <<"URL">>},
+                                      {utf8, <<"http://example.org/hello-world">>}}]},
+                             {list, []},
+                             {list, [true, false, {byte, -128}]}
+                            ]}),
+
+    %% array of maps
+    roundtrip({array, map, []}),
+    roundtrip({array, map, [{map, [{{symbol, <<"k1">>}, {utf8, <<"v1">>}}]},
+                            {map, []},
+                            {map, [{{described,
+                                     {utf8, <<"URL">>},
+                                     {utf8, <<"http://example.org/hello-world">>}},
+                                    {byte, -1}},
+                                   {{int, 0}, {ulong, 0}}
+                                  ]}
+                           ]}),
 
     Desc = {utf8, <<"URL">>},
-    roundtrip({array, {described, Desc, utf8},
-               [{described, Desc, {utf8, <<"http://example.org/hello">>}}]}),
     roundtrip({array, {described, Desc, utf8}, []}),
+    roundtrip({array, {described, Desc, utf8},
+               [{described, Desc, {utf8, <<"http://example.org/hello1">>}},
+                {described, Desc, {utf8, <<"http://example.org/hello2">>}}]}),
+
     %% array:array32
     roundtrip({array, boolean, [true || _ <- lists:seq(1, 256)]}),
     ok.
@@ -185,15 +213,15 @@ array(_Config) ->
 
 roundtrip(Term) ->
     Bin = iolist_to_binary(amqp10_binary_generator:generate(Term)),
-    % generate returns an iolist but parse expects a binary
-    ?assertEqual({Term, <<>>}, amqp10_binary_parser:parse(Bin)),
-    ?assertEqual([Term], amqp10_binary_parser:parse_all(Bin)).
+    ?assertEqual({Term, size(Bin)}, amqp10_binary_parser:parse(Bin)),
+    ?assertEqual([Term], amqp10_binary_parser:parse_many(Bin, [])).
 
 %% Return the roundtripped term.
 roundtrip_return(Term) ->
     Bin = iolist_to_binary(amqp10_binary_generator:generate(Term)),
     %% We assert only that amqp10_binary_parser:parse/1 and
-    %% amqp10_binary_parser:parse_all/1 return the same term.
-    {RoundTripTerm, <<>>} = amqp10_binary_parser:parse(Bin),
-    ?assertEqual([RoundTripTerm], amqp10_binary_parser:parse_all(Bin)),
+    %% amqp10_binary_parser:parse_many/2 return the same term.
+    {RoundTripTerm, BytesParsed} = amqp10_binary_parser:parse(Bin),
+    ?assertEqual(size(Bin), BytesParsed),
+    ?assertEqual([RoundTripTerm], amqp10_binary_parser:parse_many(Bin, [])),
     RoundTripTerm.
