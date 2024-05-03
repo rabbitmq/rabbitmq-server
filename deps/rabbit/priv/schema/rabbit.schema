@@ -2512,7 +2512,19 @@ end}.
 }.
 
 {mapping, "default_queue_type", "rabbit.default_queue_type", [
-  {datatype, {enum, [quorum, classic, stream]}}]}.
+    {datatype, atom}
+]}.
+
+{translation, "rabbit.default_queue_type",
+fun(Conf) ->
+    case cuttlefish:conf_get("default_queue_type", Conf, rabbit_classic_queue) of
+        classic        -> rabbit_classic_queue;
+        quorum         -> rabbit_quorum_queue;
+        stream         -> rabbit_stream_queue;
+        Module         -> Module
+    end
+end}.
+
 
 
 %%
