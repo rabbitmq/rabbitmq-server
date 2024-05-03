@@ -608,7 +608,26 @@ promote_slave([SPid | SPids]) ->
 
 -spec initial_queue_node(amqqueue:amqqueue(), node()) -> node().
 
-initial_queue_node(Q, DefNode) ->
+initial_queue_node(Q, DefNode0) ->
+    All = rabbit_nodes:list_running(),
+    NodesWithQueueCountAndLimits = rabbit_amqqueue:get_queue_count_and_limit_per_node(All),
+    DefNode = case maps:get(DefNode0, NodesWithQueueCountAndLimits, undefined) of
+                  {_Count, _Limit, false} ->
+                      DefNode0;
+                  {_Count, _Limit, true} ->
+                      %% To find any other node that might have room,
+                      FreeNodes = #{K => V || K := {_C, _L, OverLimit} = V <- NodesWithQueueCountAndLimits, not(OverLimit)},
+                      case maps:next(maps:iterator(FreeNodes)) of
+                          {FreeNode, _, _} ->
+                              FreeNode;
+                          none ->
+                              rabbit_misc:precondition_failed("cannot declare queue '~ts': "
+                                                              "queue limit on every node is reached.",
+                                                              [rabbit_amqqueue:get_resource_name(amqqueue:get_name(Q))])
+                      end;
+                  undefined ->
+                      DefNode0
+              end,
     {MNode, _SNodes} = suggested_queue_nodes(Q, DefNode, fun rabbit_nodes:list_running/0),
     MNode.
 
@@ -643,28 +662,7 @@ suggested_queue_nodes(Q, DefNode, AllNodes) when ?is_amqqueue(Q) ->
                     M:suggested_queue_nodes(
                       Params, MNode, SNodes, SSNodes, All);
                 _ ->
-                    All = case AllNodes of
-                              L when is_list(L)     -> L;
-                              F when is_function(F) -> F()
-                          end,
-                    NodesWithQueueCountAndLimits = rabbit_amqqueue:get_queue_count_and_limit_per_node(All),
-                    case maps:get(MNode, NodesWithQueueCountAndLimits, undefined) of
-                        {_Count, _Limit, false} ->
-                            {MNode, []};
-                        {_Count, _Limit, true} ->
-                            %% To find any other node that might have room,
-                            FreeNodes = #{K => V || K := {_C, _L, OverLimit} = V <- NodesWithQueueCountAndLimits, not(OverLimit)},
-                            case maps:next(maps:iterator(FreeNodes)) of
-                                {FreeNode, _, _} ->
-                                    {FreeNode, []};
-                                none ->
-                                    rabbit_misc:precondition_failed("cannot declare queue '~ts': "
-                                                                    "queue limit on every node is reached.",
-                                                                    [rabbit_amqqueue:get_resource_name(amqqueue:get_name(Q))])
-                            end;
-                        undefined ->
-                            {MNode, []}
-                    end
+                    {MNode, []}
             end;
         _ ->
             {MNode, []}
