@@ -275,7 +275,9 @@ feature_flag_name(_) ->
     undefined.
 
 default() ->
-    rabbit_classic_queue.
+    rabbit_misc:get_env(rabbit,
+                        default_queue_type,
+                        rabbit_classic_queue).
 
 -spec to_binary(module()) -> binary().
 to_binary(rabbit_classic_queue) ->
