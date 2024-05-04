@@ -237,7 +237,9 @@ feature_flag_name(_) ->
     undefined.
 
 default() ->
-    rabbit_classic_queue.
+    rabbit_misc:get_env(rabbit,
+                        default_queue_type,
+                        rabbit_classic_queue).
 
 %% is a specific queue type implementation enabled
 -spec is_enabled(module()) -> boolean().
