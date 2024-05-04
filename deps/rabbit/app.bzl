@@ -2153,3 +2153,78 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
+<<<<<<< HEAD
+=======
+
+    erlang_bytecode(
+        name = "test_event_recorder_beam",
+        testonly = True,
+        srcs = ["test/event_recorder.erl"],
+        outs = ["test/event_recorder.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/rabbit_common:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "amqp_auth_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/amqp_auth_SUITE.erl"],
+        outs = ["test/amqp_auth_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/amqp10_common:erlang_app", "//deps/amqp_client:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "amqp_client_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/amqp_client_SUITE.erl"],
+        outs = ["test/amqp_client_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/amqp10_common:erlang_app", "//deps/amqp_client:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "amqp_credit_api_v2_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/amqp_credit_api_v2_SUITE.erl"],
+        outs = ["test/amqp_credit_api_v2_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/amqp_client:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "amqp_proxy_protocol_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/amqp_proxy_protocol_SUITE.erl"],
+        outs = ["test/amqp_proxy_protocol_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+    )
+    erlang_bytecode(
+        name = "amqp_system_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/amqp_system_SUITE.erl"],
+        outs = ["test/amqp_system_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/rabbit_common:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "amqp_address_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/amqp_address_SUITE.erl"],
+        outs = ["test/amqp_address_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/amqp10_common:erlang_app", "//deps/rabbitmq_amqp_client:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "message_containers_deaths_v2_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/message_containers_deaths_v2_SUITE.erl"],
+        outs = ["test/message_containers_deaths_v2_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
+    )
+>>>>>>> 6b300a2f34 (Fix dead lettering)

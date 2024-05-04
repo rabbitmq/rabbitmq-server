@@ -164,3 +164,27 @@
       stability => stable,
       depends_on => [quorum_queue]
      }}).
+<<<<<<< HEAD
+=======
+
+-rabbit_feature_flag(
+   {credit_api_v2,
+    #{desc          => "Credit API v2 between queue clients and queue processes",
+      stability     => stable
+     }}).
+
+-rabbit_feature_flag(
+   {message_containers_store_amqp_v1,
+    #{desc          => "Support storing messages in message containers AMQP 1.0 disk format v1",
+      stability     => stable,
+      depends_on    => [message_containers]
+     }}).
+
+-rabbit_feature_flag(
+   {message_containers_deaths_v2,
+    #{desc          => "Bug fix for dead letter cycle detection",
+      doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/11159",
+      stability     => stable,
+      depends_on    => [message_containers]
+     }}).
+>>>>>>> 6b300a2f34 (Fix dead lettering)

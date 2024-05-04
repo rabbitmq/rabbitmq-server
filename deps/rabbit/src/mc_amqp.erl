@@ -241,6 +241,32 @@ msg_to_sections(#msg{header = H,
             [H | S4]
     end.
 
+<<<<<<< HEAD
+=======
+-spec protocol_state_message_annotations(amqp_annotations(), mc:annotations()) ->
+    amqp_annotations().
+protocol_state_message_annotations(MA, Anns) ->
+    maps:fold(
+      fun(?ANN_EXCHANGE, Exchange, L) ->
+              maps_upsert(<<"x-exchange">>, {utf8, Exchange}, L);
+         (?ANN_ROUTING_KEYS, RKeys, L) ->
+              RKey = hd(RKeys),
+              maps_upsert(<<"x-routing-key">>, {utf8, RKey}, L);
+         (<<"x-", _/binary>> = K, V, L)
+           when V =/= undefined ->
+              %% any x-* annotations get added as message annotations
+              maps_upsert(K, mc_util:infer_type(V), L);
+         (<<"timestamp_in_ms">>, V, L) ->
+              maps_upsert(<<"x-opt-rabbitmq-received-time">>, {timestamp, V}, L);
+         (deaths, Deaths, L)
+           when is_list(Deaths) ->
+              Maps = encode_deaths(Deaths),
+              maps_upsert(<<"x-opt-deaths">>, {array, map, Maps}, L);
+         (_, _, Acc) ->
+              Acc
+      end, MA, Anns).
+
+>>>>>>> 6b300a2f34 (Fix dead lettering)
 maps_upsert(Key, TaggedVal, KVList) ->
     TaggedKey = {symbol, Key},
     Elem = {TaggedKey, TaggedVal},
@@ -352,6 +378,7 @@ decode([#'v1_0.amqp_value'{} = B | Rem], #msg{} = Msg) ->
     %% an amqp value can only be a singleton
     decode(Rem, Msg#msg{data = B}).
 
+<<<<<<< HEAD
 key_find(K, [{{_, K}, {_, V}} | _]) ->
     V;
 key_find(K, [_ | Rem]) ->
@@ -380,12 +407,49 @@ recover_deaths([{map, Kvs} | Rem], Acc) ->
                                exchange = key_find(<<"exchange">>, Kvs),
                                count = key_find(<<"count">>, Kvs),
                                routing_keys = RKeys}}).
+=======
+-spec first_acquirer(mc:annotations()) -> boolean().
+first_acquirer(Anns) ->
+    Redelivered = case Anns of
+                      #{redelivered := R} -> R;
+                      _ -> false
+                  end,
+    not Redelivered.
+
+encode_deaths(Deaths) ->
+    lists:map(
+      fun({{Queue, Reason},
+           #death{exchange = Exchange,
+                  routing_keys = RoutingKeys,
+                  count = Count,
+                  anns = Anns = #{first_time := FirstTime,
+                                  last_time := LastTime}}}) ->
+              RKeys = [{utf8, Rk} || Rk <- RoutingKeys],
+              Map0 = [
+                      {{symbol, <<"queue">>}, {utf8, Queue}},
+                      {{symbol, <<"reason">>}, {symbol, atom_to_binary(Reason)}},
+                      {{symbol, <<"count">>}, {ulong, Count}},
+                      {{symbol, <<"first-time">>}, {timestamp, FirstTime}},
+                      {{symbol, <<"last-time">>}, {timestamp, LastTime}},
+                      {{symbol, <<"exchange">>}, {utf8, Exchange}},
+                      {{symbol, <<"routing-keys">>}, {array, utf8, RKeys}}
+                     ],
+              Map = case Anns of
+                        #{ttl := Ttl} ->
+                            [{{symbol, <<"ttl">>}, {uint, Ttl}} | Map0];
+                        _ ->
+                            Map0
+                    end,
+              {map, Map}
+      end, Deaths).
+>>>>>>> 6b300a2f34 (Fix dead lettering)
 
 essential_properties(#msg{message_annotations = MA} = Msg) ->
     Durable = get_property(durable, Msg),
     Priority = get_property(priority, Msg),
     Timestamp = get_property(timestamp, Msg),
     Ttl = get_property(ttl, Msg),
+<<<<<<< HEAD
 
     Deaths = case message_annotation(<<"x-death">>, Msg, undefined) of
                  {list, DeathMaps}  ->
@@ -403,15 +467,25 @@ essential_properties(#msg{message_annotations = MA} = Msg) ->
              end,
     Anns = maps_put_falsy(
              ?ANN_DURABLE, Durable,
+=======
+    Anns0 = #{?ANN_DURABLE => Durable},
+    Anns = maps_put_truthy(
+             ?ANN_PRIORITY, Priority,
+>>>>>>> 6b300a2f34 (Fix dead lettering)
              maps_put_truthy(
                ?ANN_PRIORITY, Priority,
                maps_put_truthy(
+<<<<<<< HEAD
                  ?ANN_TIMESTAMP, Timestamp,
                  maps_put_truthy(
                    ttl, Ttl,
                    maps_put_truthy(
                      deaths, Deaths,
                      #{}))))),
+=======
+                 ttl, Ttl,
+                 Anns0))),
+>>>>>>> 6b300a2f34 (Fix dead lettering)
     case MA of
         [] ->
             Anns;
