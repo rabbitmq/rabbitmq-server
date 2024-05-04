@@ -177,3 +177,11 @@
       stability     => stable,
       depends_on    => [message_containers]
      }}).
+
+-rabbit_feature_flag(
+   {message_containers_deaths_v2,
+    #{desc          => "Bug fix for dead letter cycle detection",
+      doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/11159",
+      stability     => stable,
+      depends_on    => [message_containers]
+     }}).

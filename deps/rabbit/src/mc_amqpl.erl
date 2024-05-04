@@ -157,6 +157,8 @@ convert_from(mc_amqp, Sections, Env) ->
                                        {true, to_091(<<"CC">>, V)};
                                   ({{symbol, <<"x-opt-rabbitmq-received-time">>}, {timestamp, Ts}}) ->
                                        {true, {<<"timestamp_in_ms">>, long, Ts}};
+                                  ({{symbol, <<"x-opt-deaths">>}, V}) ->
+                                       convert_from_amqp_deaths(V);
                                   ({{symbol, <<"x-", _/binary>> = K}, V})
                                     when ?IS_SHORTSTR_LEN(K) ->
                                        case is_internal_header(K) of
@@ -447,8 +449,12 @@ protocol_state(#content{properties = #'P_basic'{headers = H00,
              _ ->
                  H00
          end,
-    Deaths = maps:get(deaths, Anns, undefined),
-    Headers0 = deaths_to_headers(Deaths, H0),
+    Headers0 = case Anns of
+                   #{deaths := Deaths} ->
+                       deaths_to_headers(Deaths, H0);
+                   _ ->
+                       H0
+               end,
     Headers1 = maps:fold(
                  fun (<<"x-", _/binary>> = Key, Val, H) when is_integer(Val) ->
                          [{Key, long, Val} | H];
@@ -568,44 +574,74 @@ from_basic_message(#basic_message{content = Content,
 
 %% Internal
 
-deaths_to_headers(undefined, Headers) ->
-    Headers;
-deaths_to_headers(#deaths{records = Records}, Headers0) ->
-    %% sort records by the last timestamp
-    List = lists:sort(
-             fun({_, #death{anns = #{last_time := L1}}},
-                 {_, #death{anns = #{last_time := L2}}}) ->
-                     L1 < L2
-             end, maps:to_list(Records)),
-    Infos = lists:foldl(
-              fun ({{QName, Reason}, #death{anns = #{first_time := Ts} = DA,
-                                            exchange = Ex,
-                                            count = Count,
-                                            routing_keys = RoutingKeys}},
-                   Acc) ->
-                      %% The first routing key is the one specified in the
-                      %% basic.publish; all others are CC or BCC keys.
-                      RKs  = [hd(RoutingKeys) | rabbit_basic:header_routes(Headers0)],
-                      RKeys = [{longstr, Key} || Key <- RKs],
-                      ReasonBin = atom_to_binary(Reason, utf8),
-                      PerMsgTTL = case maps:get(ttl, DA, undefined) of
-                                      undefined -> [];
-                                      Ttl when is_integer(Ttl) ->
-                                          Expiration = integer_to_binary(Ttl),
-                                          [{<<"original-expiration">>, longstr,
-                                            Expiration}]
-                                  end,
-                      [{table, [{<<"count">>, long, Count},
-                                {<<"reason">>, longstr, ReasonBin},
-                                {<<"queue">>, longstr, QName},
-                                {<<"time">>, timestamp, Ts div 1000},
-                                {<<"exchange">>, longstr, Ex},
-                                {<<"routing-keys">>, array, RKeys}] ++ PerMsgTTL}
-                       | Acc]
-              end, [], List),
+deaths_to_headers(Deaths, Headers0) ->
+    Infos = case Deaths of
+                #deaths{records = Records} ->
+                    %% sort records by the last timestamp
+                    List = lists:sort(
+                             fun({_, #death{anns = #{last_time := L1}}},
+                                 {_, #death{anns = #{last_time := L2}}}) ->
+                                     L1 =< L2
+                             end, maps:to_list(Records)),
+                    lists:foldl(fun(Record, Acc) ->
+                                        Table = death_table(Record),
+                                        [Table | Acc]
+                                end, [], List);
+                _ ->
+                    lists:map(fun death_table/1, Deaths)
+            end,
     rabbit_misc:set_table_value(Headers0, <<"x-death">>, array, Infos).
 
+convert_from_amqp_deaths({array, map, Maps}) ->
+    L = lists:map(
+          fun({map, KvList}) ->
+                  {Ttl, KvList1} = case KvList of
+                                       [{{symbol, <<"ttl">>}, {uint, Ttl0}} | Tail] ->
+                                           {Ttl0, Tail};
+                                       _ ->
+                                           {undefined, KvList}
+                                   end,
+                  [
+                   {{symbol, <<"queue">>}, {utf8, Queue}},
+                   {{symbol, <<"reason">>}, {symbol, Reason}},
+                   {{symbol, <<"count">>}, {ulong, Count}},
+                   {{symbol, <<"first-time">>}, {timestamp, FirstTime}},
+                   {{symbol, <<"last-time">>}, {timestamp, _LastTime}},
+                   {{symbol, <<"exchange">>}, {utf8, Exchange}},
+                   {{symbol, <<"routing-keys">>}, {array, utf8, RKeys0}}
+                  ] = KvList1,
+                  RKeys = [Key || {utf8, Key} <- RKeys0],
+                  death_table(Queue, Reason, Exchange, RKeys, Count, FirstTime, Ttl)
+          end, Maps),
+    {true, {<<"x-death">>, array, L}};
+convert_from_amqp_deaths(_IgnoreUnknownValue) ->
+    false.
 
+death_table({{QName, Reason},
+             #death{exchange = Exchange,
+                    routing_keys = RoutingKeys,
+                    count = Count,
+                    anns = DeathAnns = #{first_time := FirstTime}}}) ->
+    death_table(QName, Reason, Exchange, RoutingKeys, Count, FirstTime,
+                maps:get(ttl, DeathAnns, undefined)).
+
+death_table(QName, Reason, Exchange, RoutingKeys, Count, FirstTime, Ttl) ->
+    L0 = [
+          {<<"count">>, long, Count},
+          {<<"reason">>, longstr, rabbit_data_coercion:to_binary(Reason)},
+          {<<"queue">>, longstr, QName},
+          {<<"time">>, timestamp, FirstTime div 1000},
+          {<<"exchange">>, longstr, Exchange},
+          {<<"routing-keys">>, array, [{longstr, Key} || Key <- RoutingKeys]}
+         ],
+    L = case Ttl of
+            undefined ->
+                L0;
+            _ ->
+                Expiration = integer_to_binary(Ttl),
+                [{<<"original-expiration">>, longstr, Expiration} | L0]
+        end,
+    {table, L}.
 
 strip_header(#content{properties = #'P_basic'{headers = undefined}}
              = DecodedContent, _Key) ->
