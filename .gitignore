@@ -96,3 +96,6 @@ callgrand*
 
 .vscode
 .idea
+
+# present in main and v3.13.x but not this branch
+deps/rabbit/test/amqp_system_SUITE_data/
