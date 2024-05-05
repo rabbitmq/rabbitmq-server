@@ -50,10 +50,10 @@ jobs:
             build --action_env EXTRA_BUILDX_OPTS="--cache-from=type=gha --cache-to=type=gha"
           EOF
 
-      - name: Build amd64
-        run: |
-          bazelisk build //packaging/docker-image:rabbitmq-amd64 \
-            --config=buildbuddy
+      # - name: Build amd64
+      #   run: |
+      #     bazelisk build //packaging/docker-image:rabbitmq-amd64 \
+      #       --config=buildbuddy
 
       # - name: Build arm64
       #   run: |
