@@ -17,13 +17,13 @@ server releases. It is organized in the following way:
 * To create a source archive and all supported packages, with a given version:
 
     ```
-    make packages PROJECT_VERSION=3.13.0-rc.3
+    make packages PROJECT_VERSION=3.12.14
     ```
 
 * To create all suported packages from an existing source archive:
 
     ```
-    make -C packaging SOURCE_DIST_FILE=/path/to/rabbitmq-server-3.13.0-rc.3.tar.xz
+    make -C packaging SOURCE_DIST_FILE=/path/to/rabbitmq-server-3.12.14.tar.xz
     ```
 
 The standalone package is different because it embeds the build
@@ -35,7 +35,7 @@ build host:
 ```
 make package-standalone-macosx
 # or
-make -C packaging package-standalone-macosx SOURCE_DIST_FILE=/path/to/rabbitmq-server-3.13.0-rc.3.tar.xz
+make -C packaging package-standalone-macosx SOURCE_DIST_FILE=/path/to/rabbitmq-server-3.12.14.tar.xz
 ```
 
 The instructions in the [`PKG_LINUX.md`](PKG_LINUX.md) document include a
@@ -57,7 +57,7 @@ based on the last tag and the current HEAD.
 
 Here is an example with an explicit version:
 ```
-make source-dist PROJECT_VERSION=3.13.0-rc.3
+make source-dist PROJECT_VERSION=3.12.14
 ```
 
 The version is automatically propagated to the broker and plugins so
@@ -66,7 +66,7 @@ they all advertise the same version.
 The result is then available in the `PACKAGES` subdirectory. You can
 override the output directory with the `PACKAGES_DIR` variable:
 ```
-make source-dist PROJDCT_VERSION=3.13.0-rc.3 \
+make source-dist PROJDCT_VERSION=3.12.14 \
   PACKAGES_DIR=/tmp
 ```
 
@@ -77,7 +77,7 @@ By default, two archives are produced:
 You can ask for more/different types by specifying the
 `SOURCE_DIST_SUFFIXES` variable:
 ```
-make source-dist PROJECT_VERSION=3.13.0-rc.3 \
+make source-dist PROJECT_VERSION=3.12.14 \
   SOURCE_DIST_SUFFIXES='tar.xz tar.gz'
 ```
 
@@ -95,7 +95,7 @@ list of plugins is in the `plugins.mk` file.
 You can override this list by setting the `PLUGINS` variable to the list
 you want:
 ```
-make source-dist PROJECT_VERSION=3.13.0-rc.3 \
+make source-dist PROJECT_VERSION=3.12.14 \
   PLUGINS='rabbitmq_shovel rabbitmq_rabbitmq_shovel_management'
 ```
 
@@ -122,7 +122,7 @@ This has the following rules:
 If you want the source archive to be created automatically, use the
 top-level `Makefile`:
 ```
-make package-$type PROJECT_VERSION=3.13.0-rc.3 ...
+make package-$type PROJECT_VERSION=3.12.14 ...
 ```
 
 Packages are written to `PACKAGES_DIR`, like the source archive.
@@ -146,7 +146,7 @@ with the `VERSION` variable:
 ```
 make -C packaging package-generic-unix \
   SOURCE_DIST_FILE=rabbitmq-server.tar.xz \
-  VERSION=3.13.0-rc.3
+  VERSION=3.12.14
 ```
 
 ### Debian package
@@ -166,7 +166,7 @@ with the `VERSION` variable:
 ```
 make -C packaging package-deb \
   SOURCE_DIST_FILE=rabbitmq-server.tar.xz \
-  VERSION=3.13.0-rc.3
+  VERSION=3.12.14
 ```
 
 By default, the package version is converted from `VERSION` with
@@ -176,7 +176,7 @@ above). If you want to override that conversion, you can specify the
 ```
 make -C packaging package-deb \
   SOURCE_DIST_FILE=rabbitmq-server.tar.xz \
-  VERSION=3.13.0-rc.3
+  VERSION=3.12.14
   DEBIAN_VERSION=3.13.0~rc.1
 ```
 
@@ -247,7 +247,7 @@ only fine if the version is a semver-based version (eg. 3.13.0-pre.3 or
 `PRODUCT_VERSION` variable:
 
 ```
-make package-windows PROJECT_VERSION=3.13.0-rc.3 PRODUCT_VERSION=3.13.0.0
+make package-windows PROJECT_VERSION=3.12.14 PRODUCT_VERSION=3.13.0.0
 ```
 
 To build the Windows package using a Windows machine, follow the
@@ -281,5 +281,5 @@ Another possibility is to specify the Windows *product version* and
 rely on automatic conversion for Debian and RPM packages (or use the
 `DEBIAN_VERSION` and `RPM_VERSION` variables), but this is untested:
 ```
-make packages PROJECT_VERSION=3.13.0-rc.3 PRODUCT_VERSION=3.13.0.0
+make packages PROJECT_VERSION=3.12.14 PRODUCT_VERSION=3.13.0.0
 ```
