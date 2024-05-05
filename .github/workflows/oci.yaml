@@ -55,10 +55,10 @@ jobs:
           bazelisk build //packaging/docker-image:rabbitmq-amd64 \
             --config=buildbuddy
 
-      - name: Build arm64
-        run: |
-          bazelisk build //packaging/docker-image:rabbitmq-arm64 \
-            --config=buildbuddy
+      # - name: Build arm64
+      #   run: |
+      #     bazelisk build //packaging/docker-image:rabbitmq-arm64 \
+      #       --config=buildbuddy
 
       - name: Test
         run: |

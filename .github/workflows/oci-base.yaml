@@ -16,7 +16,7 @@ jobs:
         uses: docker/setup-qemu-action@v2
         with:
           image: tonistiigi/binfmt:latest
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64 #,linux/arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
@@ -52,7 +52,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: packaging/base-image
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64 #,linux/arm64
           pull: true
           push: ${{ steps.authorized.outputs.PUSH }}
           tags: |
