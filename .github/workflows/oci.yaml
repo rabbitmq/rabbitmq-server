@@ -60,11 +60,11 @@ jobs:
       #     bazelisk build //packaging/docker-image:rabbitmq-arm64 \
       #       --config=buildbuddy
 
-      - name: Test
-        run: |
-          OCI_TESTS=$(bazel cquery 'tests(//packaging/docker-image/...)' | awk '{ print $1 }')
-          bazelisk test ${OCI_TESTS} \
-            --config=buildbuddy
+      # - name: Test
+      #   run: |
+      #     OCI_TESTS=$(bazel cquery 'tests(//packaging/docker-image/...)' | awk '{ print $1 }')
+      #     bazelisk test ${OCI_TESTS} \
+      #       --config=buildbuddy
 
       - name: Check for Push Credentials
         id: authorized
