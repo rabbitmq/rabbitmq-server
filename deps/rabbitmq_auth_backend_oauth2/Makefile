@@ -15,7 +15,6 @@ PLT_APPS += rabbitmqctl
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
-dep_jose = git https://github.com/michaelklishin/erlang-jose mk-thoas-support
 dep_base64url = hex 1.0.1
 
 dep_emqtt = git https://github.com/rabbitmq/emqtt.git master
