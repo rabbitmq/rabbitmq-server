@@ -25,7 +25,6 @@
          count/1,
          create_or_get/1,
          set/1,
-         set_many/1,
          delete/2,
          update/2,
          update_decorators/2,
@@ -961,52 +960,6 @@ set_in_mnesia_tx(DurableQ, Q) ->
 set_in_khepri(Q) ->
     Path = khepri_queue_path(amqqueue:get_name(Q)),
     rabbit_khepri:put(Path, Q).
-
-%% -------------------------------------------------------------------
-%% set_many().
-%% -------------------------------------------------------------------
-
--spec set_many([Queue]) -> ok when
-      Queue :: amqqueue:amqqueue().
-%% @doc Writes a list of durable queue records.
-%%
-%% It is responsibility of the calling function to ensure all records are
-%% durable.
-%%
-%% @private
-
-set_many(Qs) ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> set_many_in_mnesia(Qs) end,
-        khepri => fun() -> set_many_in_khepri(Qs) end
-       }).
-
-set_many_in_mnesia(Qs) ->
-    {atomic, ok} =
-        %% Just to be nested in forget_node_for_queue
-        mnesia:transaction(
-          fun() ->
-                  [begin
-                       true = amqqueue:is_durable(Q),
-                       ok = mnesia:write(?MNESIA_DURABLE_TABLE, Q, write)
-                   end || Q <- Qs],
-                  ok
-          end),
-    ok.
-
-set_many_in_khepri(Qs) ->
-    rabbit_khepri:transaction(
-      fun() ->
-              [begin
-                   true = amqqueue:is_durable(Q),
-                   Path = khepri_queue_path(amqqueue:get_name(Q)),
-                   case khepri_tx:put(Path, Q) of
-                       ok      -> ok;
-                       Error   -> khepri_tx:abort(Error)
-                   end
-               end || Q <- Qs]
-      end),
-    ok.
 
 %% -------------------------------------------------------------------
 %% delete_transient().
