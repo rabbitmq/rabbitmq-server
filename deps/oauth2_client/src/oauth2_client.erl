@@ -74,15 +74,15 @@ get_openid_configuration(IssuerURI, TLSOptions) ->
 -spec get_expiration_time(successful_access_token_response()) -> 
     {ok, [{expires_in, integer() }| {exp, integer() }]} | {error, missing_exp_field}.
 get_expiration_time(#successful_access_token_response{expires_in = ExpiresInSec,
-    access_token = AccessToken}) ->
-  case ExpiresInSec of
-    undefined -> 
-        case jwt_helper:get_expiration_time(jwt_helper:decode(AccessToken)) of 
-            {ok, Exp} -> {ok, [{exp, Exp}]};
-            {error, _} = Error -> Error 
-        end;
-    _ -> {ok, [{expires_in, ExpiresInSec}]}
-  end.
+        access_token = AccessToken}) ->
+    case ExpiresInSec of
+        undefined -> 
+            case jwt_helper:get_expiration_time(jwt_helper:decode(AccessToken)) of 
+                {ok, Exp} -> {ok, [{exp, Exp}]};
+                {error, _} = Error -> Error 
+            end;
+        _ -> {ok, [{expires_in, ExpiresInSec}]}
+    end.
 
 update_oauth_provider_endpoints_configuration(OAuthProvider) ->
     LockId = lock(),
