@@ -3,4 +3,5 @@ amqp10_common:
   suites:
   - binary_generator
   - binary_parser
+  - prop
   - serial_number

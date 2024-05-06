@@ -92,7 +92,6 @@ rabbit:
   - rabbit_fifo_prop
   - rabbit_fifo_v0
   - rabbit_message_interceptor
-  - rabbit_msg_record
   - rabbit_stream_coordinator
   - rabbit_stream_queue
   - rabbit_stream_sac_coordinator

@@ -239,6 +239,16 @@ jobs:
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.CACHE_PATH }}/ct-binary_parser
         fi
+    - name: CT prop
+      run: |
+        if [[ -f ${{ env.CACHE_PATH }}/ct-prop ]]; then
+          echo "ct-prop already passed for this key ${{ needs.xref.outputs.hash }}"
+        else
+          make -C deps/amqp10_common \
+              ct-prop \
+              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
+          touch ${{ env.CACHE_PATH }}/ct-prop
+        fi
     - name: CT serial_number
       run: |
         if [[ -f ${{ env.CACHE_PATH }}/ct-serial_number ]]; then
@@ -1947,16 +1957,6 @@ jobs:
               ct-rabbit_message_interceptor \
               RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
           touch ${{ env.CACHE_PATH }}/ct-rabbit_message_interceptor
-        fi
-    - name: CT rabbit_msg_record
-      run: |
-        if [[ -f ${{ env.CACHE_PATH }}/ct-rabbit_msg_record ]]; then
-          echo "ct-rabbit_msg_record already passed for this key ${{ needs.xref.outputs.hash }}"
-        else
-          make -C deps/rabbit \
-              ct-rabbit_msg_record \
-              RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
-          touch ${{ env.CACHE_PATH }}/ct-rabbit_msg_record
         fi
     - name: CT rabbit_stream_coordinator
       run: |
