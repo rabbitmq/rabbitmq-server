@@ -13,5 +13,7 @@ $(PROJECT):
 endef
 endif
 
+.PHONY: ../../.github/workflows/data/$(PROJECT).yaml
+
 ../../.github/workflows/data/$(PROJECT).yaml: $(wildcard test/*_SUITE.erl)
 	$(file > $@,$(suites_yaml))
