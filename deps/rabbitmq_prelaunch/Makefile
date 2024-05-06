@@ -4,7 +4,6 @@ PROJECT_VERSION = 1.0.0
 PROJECT_MOD = rabbit_prelaunch_app
 
 DEPS = rabbit_common cuttlefish thoas
-dep_cuttlefish = hex 3.1.0
 
 PLT_APPS += runtime_tools eunit osiris systemd
 
