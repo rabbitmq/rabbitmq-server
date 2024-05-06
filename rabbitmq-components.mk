@@ -116,6 +116,12 @@ dep_accept = hex 0.3.5
 dep_cowboy = hex 2.12.0
 dep_cowlib = hex 2.13.0
 dep_credentials_obfuscation = hex 3.4.0
+<<<<<<< HEAD
+=======
+dep_cuttlefish = hex 3.1.0
+dep_gen_batch_server = hex 0.8.8
+dep_jose = git https://github.com/michaelklishin/erlang-jose mk-thoas-support
+>>>>>>> ef3888220a (jose dependency belongs to rabbitmq-components.mk)
 dep_khepri = hex 0.13.0
 dep_khepri_mnesia_migration = hex 0.4.0
 dep_looking_glass = git https://github.com/rabbitmq/looking_glass.git main
