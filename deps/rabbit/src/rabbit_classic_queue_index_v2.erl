@@ -1125,8 +1125,11 @@ queue_index_walker({next, Gatherer}) when is_pid(Gatherer) ->
         empty ->
             ok = gatherer:stop(Gatherer),
             finished;
+        %% From v1 index walker. @todo Remove when no longer possible to convert from v1.
         {value, {MsgId, Count}} ->
-            {MsgId, Count, {next, Gatherer}}
+            {MsgId, Count, {next, Gatherer}};
+        {value, MsgIds} ->
+            {MsgIds, {next, Gatherer}}
     end.
 
 queue_index_walker_reader(#resource{ virtual_host = VHost } = Name, Gatherer) ->
@@ -1153,27 +1156,30 @@ queue_index_walker_segment(F, Gatherer) ->
         {ok, <<?MAGIC:32,?VERSION:8,
                FromSeqId:64/unsigned,ToSeqId:64/unsigned,
                _/bits>>} ->
-            queue_index_walker_segment(Fd, Gatherer, 0, ToSeqId - FromSeqId);
+            queue_index_walker_segment(Fd, Gatherer, 0, ToSeqId - FromSeqId, []);
         _ ->
             %% Invalid segment file. Skip.
             ok
     end,
     ok = file:close(Fd).
 
-queue_index_walker_segment(_, _, N, N) ->
+queue_index_walker_segment(_, Gatherer, N, N, Acc) ->
     %% We reached the end of the segment file.
+    gatherer:sync_in(Gatherer, Acc),
     ok;
-queue_index_walker_segment(Fd, Gatherer, N, Total) ->
+queue_index_walker_segment(Fd, Gatherer, N, Total, Acc) ->
     case file:read(Fd, ?ENTRY_SIZE) of
         %% We found a non-ack persistent entry. Gather it.
         {ok, <<1,_:7,1:1,_,1,Id:16/binary,_/bits>>} ->
-            gatherer:sync_in(Gatherer, {Id, 1}),
-            queue_index_walker_segment(Fd, Gatherer, N + 1, Total);
+            queue_index_walker_segment(Fd, Gatherer, N + 1, Total, [Id|Acc]);
         %% We found an ack, a transient entry or a non-entry. Skip it.
         {ok, _} ->
-            queue_index_walker_segment(Fd, Gatherer, N + 1, Total);
+            queue_index_walker_segment(Fd, Gatherer, N + 1, Total, Acc);
         %% We reached the end of a partial segment file.
+        eof when Acc =:= [] ->
+            ok;
         eof ->
+            gatherer:sync_in(Gatherer, Acc),
             ok
     end.
 
