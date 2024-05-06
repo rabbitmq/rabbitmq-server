@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 -module(oauth2_client).
--export([get_access_token/2,
+-export([get_access_token/2, get_expiration_time/1,
         refresh_access_token/2,
         get_oauth_provider/1, get_oauth_provider/2,
         extract_ssl_options_as_list/1
@@ -70,6 +70,19 @@ get_openid_configuration(IssuerURI, OpenIdConfigurationPath, TLSOptions) ->
 -spec get_openid_configuration(uri_string:uri_string(), ssl:tls_option() | []) ->  {ok, oauth_provider()} | {error, term()}.
 get_openid_configuration(IssuerURI, TLSOptions) ->
     get_openid_configuration(IssuerURI, ?DEFAULT_OPENID_CONFIGURATION_PATH, TLSOptions).
+
+-spec get_expiration_time(successful_access_token_response()) -> 
+    {ok, [{expires_in, integer() }| {exp, integer() }]} | {error, missing_exp_field}.
+get_expiration_time(#successful_access_token_response{expires_in = ExpiresInSec,
+        access_token = AccessToken}) ->
+    case ExpiresInSec of
+        undefined -> 
+            case jwt_helper:get_expiration_time(jwt_helper:decode(AccessToken)) of 
+                {ok, Exp} -> {ok, [{exp, Exp}]};
+                {error, _} = Error -> Error 
+            end;
+        _ -> {ok, [{expires_in, ExpiresInSec}]}
+    end.
 
 update_oauth_provider_endpoints_configuration(OAuthProvider) ->
     LockId = lock(),
