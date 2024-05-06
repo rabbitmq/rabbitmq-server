@@ -331,12 +331,10 @@ is_server_named_allowed(Args) ->
     Type = get_queue_type(Args),
     rabbit_queue_type:is_server_named_allowed(Type).
 
--spec lookup
-        (name()) ->
-            rabbit_types:ok(amqqueue:amqqueue()) |
-            rabbit_types:error('not_found');
-        ([name()]) ->
-            [amqqueue:amqqueue()].
+-spec lookup(QueueName) -> Ret when
+      QueueName :: name(),
+      Ret :: rabbit_types:ok(amqqueue:amqqueue())
+             | rabbit_types:error('not_found').
 
 lookup(Name) when is_record(Name, resource) ->
     rabbit_db_queue:get(Name).
