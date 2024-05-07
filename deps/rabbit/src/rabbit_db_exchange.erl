@@ -480,8 +480,9 @@ peek_serial_in_khepri(XName) ->
 %% next_serial().
 %% -------------------------------------------------------------------
 
--spec next_serial(ExchangeName) -> Serial when
+-spec next_serial(ExchangeName) -> Ret when
       ExchangeName :: rabbit_exchange:name(),
+      Ret :: Serial | no_return(),
       Serial :: integer().
 %% @doc Returns the next serial number and increases it.
 %%
@@ -511,39 +512,30 @@ next_serial_in_mnesia_tx(XName) ->
     Serial.
 
 next_serial_in_khepri(XName) ->
-    %% Just storing the serial number is enough, no need to keep #exchange_serial{}
-    Path = khepri_exchange_serial_path(XName),
-    Ret1 = rabbit_khepri:adv_get(Path),
-    case Ret1 of
-        {ok, #{data := Serial,
-               payload_version := Vsn}} ->
-            UpdatePath =
-                khepri_path:combine_with_conditions(
-                  Path, [#if_payload_version{version = Vsn}]),
-            case rabbit_khepri:put(UpdatePath, Serial + 1) of
-                ok ->
-                    Serial;
-                {error, {khepri, mismatching_node, _}} ->
-                    next_serial_in_khepri(XName);
-                Err ->
-                    Err
-            end;
-        _ ->
-            Serial = 1,
-            ok = rabbit_khepri:put(Path, Serial + 1),
+    Ret = rabbit_khepri:transaction(
+            fun() ->
+                    next_serial_in_khepri_tx(XName)
+            end, rw),
+    case Ret of
+        {error, Reason} ->
+            erlang:error(Reason);
+        Serial ->
             Serial
     end.
 
 -spec next_serial_in_khepri_tx(Exchange) -> Serial when
-      Exchange :: rabbit_types:exchange(),
+      Exchange :: rabbit_types:exchange() | rabbit_exchange:name(),
       Serial :: integer().
 
 next_serial_in_khepri_tx(#exchange{name = XName}) ->
+    next_serial_in_khepri_tx(XName);
+next_serial_in_khepri_tx(#resource{} = XName) ->
     Path = khepri_exchange_serial_path(XName),
     Serial = case khepri_tx:get(Path) of
                  {ok, Serial0} -> Serial0;
                  _ -> 1
              end,
+    %% Just storing the serial number is enough, no need to keep #exchange_serial{}
     ok = khepri_tx:put(Path, Serial + 1),
     Serial.
 
