@@ -402,8 +402,9 @@ create_or_get_in_khepri(#exchange{name = XName} = X) ->
 %% set().
 %% -------------------------------------------------------------------
 
--spec set([Exchange]) -> ok when
-      Exchange :: rabbit_types:exchange().
+-spec set([Exchange]) -> Ret when
+      Exchange :: rabbit_types:exchange(),
+      Ret :: ok | rabbit_khepri:timeout_error().
 %% @doc Writes the exchange records.
 %%
 %% @returns ok.
@@ -419,16 +420,16 @@ set(Xs) ->
 set_in_mnesia(Xs) when is_list(Xs) ->
     rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
-              [mnesia:write(rabbit_durable_exchange, X, write) || X <- Xs]
-      end),
-    ok.
+              _ = [mnesia:write(rabbit_durable_exchange, X, write) || X <- Xs],
+              ok
+      end).
 
 set_in_khepri(Xs) when is_list(Xs) ->
     rabbit_khepri:transaction(
       fun() ->
-              [set_in_khepri_tx(X) || X <- Xs]
-      end, rw),
-    ok.
+              _ = [set_in_khepri_tx(X) || X <- Xs],
+              ok
+      end, rw).
 
 set_in_khepri_tx(X) ->
     Path = khepri_exchange_path(X#exchange.name),
