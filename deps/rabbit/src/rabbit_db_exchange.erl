@@ -256,9 +256,10 @@ count_in_khepri() ->
 %% update().
 %% -------------------------------------------------------------------
 
--spec update(ExchangeName, UpdateFun) -> ok when
+-spec update(ExchangeName, UpdateFun) -> Ret when
       ExchangeName :: rabbit_exchange:name(),
-      UpdateFun :: fun((Exchange) -> Exchange).
+      UpdateFun :: fun((Exchange) -> Exchange),
+      Ret :: ok | rabbit_khepri:timeout_error().
 %% @doc Updates an existing exchange record using the result of
 %% `UpdateFun'.
 %%
