@@ -470,9 +470,10 @@ set_user_permissions_in_khepri_tx(Username, VHostName, UserPermission) ->
 %% clear_user_permissions().
 %% -------------------------------------------------------------------
 
--spec clear_user_permissions(Username, VHostName) -> ok when
+-spec clear_user_permissions(Username, VHostName) -> Ret when
       Username :: internal_user:username(),
-      VHostName :: vhost:name().
+      VHostName :: vhost:name(),
+      Ret :: ok | no_return().
 %% @doc Clears the user permissions of the given user in the given virtual
 %% host.
 %%
@@ -499,8 +500,8 @@ clear_user_permissions_in_mnesia_tx(Username, VHostName) ->
 clear_user_permissions_in_khepri(Username, VHostName) ->
     Path = khepri_user_permission_path(Username, VHostName),
     case rabbit_khepri:delete(Path) of
-        ok      -> ok;
-        Error   -> khepri_tx:abort(Error)
+        ok -> ok;
+        {error, _} = Error -> erlang:error(Error)
     end.
 
 %% -------------------------------------------------------------------
