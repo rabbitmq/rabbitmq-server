@@ -781,7 +781,7 @@ exists_in_khepri(Name) ->
 %% clear().
 %% -------------------------------------------------------------------
 
--spec clear() -> ok.
+-spec clear() -> ok | no_return().
 %% @doc Deletes all exchanges.
 %%
 %% @private
@@ -805,7 +805,7 @@ clear_in_khepri() ->
 khepri_delete(Path) ->
     case rabbit_khepri:delete(Path) of
         ok -> ok;
-        Error -> throw(Error)
+        {error, _} = Error -> erlang:error(Error)
     end.
 
 %% -------------------------------------------------------------------
