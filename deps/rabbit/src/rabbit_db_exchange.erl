@@ -637,11 +637,12 @@ delete_in_khepri(X = #exchange{name = XName}, OnlyDurable, RemoveBindingsForSour
 %% delete_serial().
 %% -------------------------------------------------------------------
 
--spec delete_serial(ExchangeName) -> ok when
-      ExchangeName :: rabbit_exchange:name().
+-spec delete_serial(ExchangeName) -> Ret when
+      ExchangeName :: rabbit_exchange:name(),
+      Ret :: ok | rabbit_khepri:timeout_error().
 %% @doc Deletes an exchange serial record from the database.
 %%
-%% @returns ok
+%% @returns ok if the deletion succeeds or an error tuple otherwise.
 %%
 %% @private
 
@@ -659,7 +660,7 @@ delete_serial_in_mnesia(XName) ->
 
 delete_serial_in_khepri(XName) ->
     Path = khepri_exchange_serial_path(XName),
-    ok = rabbit_khepri:delete(Path).
+    rabbit_khepri:delete(Path).
 
 %% -------------------------------------------------------------------
 %% recover().

@@ -48,7 +48,7 @@ recover(VHost) ->
 
 callback(X = #exchange{decorators = Decorators, name = XName}, Fun, Serial, Args) ->
     case Fun of
-        delete -> rabbit_db_exchange:delete_serial(XName);
+        delete -> ok = rabbit_db_exchange:delete_serial(XName);
         _ -> ok
     end,
     Modules = rabbit_exchange_decorator:select(all, Decorators),
