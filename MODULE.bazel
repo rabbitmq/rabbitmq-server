@@ -46,7 +46,7 @@ bazel_dep(
 
 bazel_dep(
     name = "com_github_rabbitmq_looking_glass",
-    version = "0.2.1",
+    version = "0.2.2",
     dev_dependency = True,
     repo_name = "looking_glass",
 )
