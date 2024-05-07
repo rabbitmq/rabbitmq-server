@@ -419,8 +419,9 @@ with_fun_in_khepri_tx(VHostName, Thunk) ->
 %% delete().
 %% -------------------------------------------------------------------
 
--spec delete(VHostName) -> Existed when
+-spec delete(VHostName) -> Ret when
       VHostName :: vhost:name(),
+      Ret :: Existed | rabbit_khepri:timeout_error(),
       Existed :: boolean().
 %% @doc Deletes a virtual host record from the database.
 %%
@@ -448,7 +449,7 @@ delete_in_khepri(VHostName) ->
     case rabbit_khepri:delete_or_fail(Path) of
         ok -> true;
         {error, {node_not_found, _}} -> false;
-        _ -> false
+        {error, _} = Err -> Err
     end.
 
 %% -------------------------------------------------------------------
