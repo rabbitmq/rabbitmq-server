@@ -2304,12 +2304,16 @@ convert_v3_to_v4(Config) ->
 
     %% convert from v3 to v4
     {#rabbit_fifo{consumers = Consumers}, ok, _} =
-    apply(meta(ConfigV4, 4), {machine_version, 3, 4}, State),
+        apply(meta(ConfigV4, 4), {machine_version, 3, 4}, State),
 
     ?assertEqual(2, maps:size(Consumers)),
     ?assertMatch(#consumer{cfg = #consumer_cfg{credit_mode =
                                                {simple_prefetch, MaxCredits}}},
                  maps:get(Cid2, Consumers)),
+    #consumer{checked_out = Ch1} = maps:get(Cid1, Consumers),
+    maps:foreach(fun (_MsgId, Msg) -> ?assert(is_tuple(Msg)) end, Ch1),
+    #consumer{checked_out = Ch2} = maps:get(Cid2, Consumers),
+    maps:foreach(fun (_MsgId, Msg) -> ?assert(is_tuple(Msg)) end, Ch2),
     ok.
 
 queue_ttl_test(C) ->
