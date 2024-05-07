@@ -61,7 +61,7 @@
       VHostName :: vhost:name(),
       Limits :: vhost:limits(),
       Metadata :: vhost:metadata(),
-      Ret :: {existing | new, VHost},
+      Ret :: {existing | new, VHost} | no_return(),
       VHost :: vhost:vhost().
 %% @doc Writes a virtual host record if it doesn't exist already or returns
 %% the existing one.
