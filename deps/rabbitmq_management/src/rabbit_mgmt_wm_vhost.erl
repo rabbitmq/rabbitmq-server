@@ -92,8 +92,22 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
 
 delete_resource(ReqData, Context = #context{user = #user{username = Username}}) ->
     VHost = id(ReqData),
-    _ = rabbit_vhost:delete(VHost, Username),
-    {true, ReqData, Context}.
+    case rabbit_vhost:delete(VHost, Username) of
+        ok ->
+            {true, ReqData, Context};
+        {error, timeout} ->
+            rabbit_mgmt_util:internal_server_error(
+              timeout,
+              "Timed out waiting for the vhost to be deleted",
+              ReqData, Context);
+        {error, E} ->
+            Reason = iolist_to_binary(
+                       io_lib:format(
+                         "Error occurred while deleting vhost: ~tp",
+                         [E])),
+            rabbit_mgmt_util:internal_server_error(
+              Reason, ReqData, Context)
+    end.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
