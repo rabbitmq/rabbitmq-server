@@ -11,6 +11,8 @@
 %% We only hold Raft index and message header in memory.
 %% Raw message data is always stored on disk.
 -define(MSG(Index, Header), ?TUPLE(Index, Header)).
+-define(C_MSG(At, Msg), {At, Msg}).
+-define(C_MSG(At, Index, Header), {At, ?MSG(Index, Header)}).
 
 -define(IS_HEADER(H),
         (is_integer(H) andalso H >= 0) orelse
@@ -108,6 +110,7 @@
 -define(LOW_LIMIT, 0.8).
 -define(DELIVERY_CHUNK_LIMIT_B, 128_000).
 
+-type milliseconds() :: non_neg_integer().
 -record(consumer_cfg,
         {meta = #{} :: consumer_meta(),
          pid :: pid(),
@@ -125,7 +128,7 @@
         {cfg = #consumer_cfg{},
          status = up :: up | suspected_down | cancelled | fading,
          next_msg_id = 0 :: msg_id(),
-         checked_out = #{} :: #{msg_id() => msg()},
+         checked_out = #{} :: #{msg_id() => {At :: milliseconds(), msg()}},
          %% max number of messages that can be sent
          %% decremented for each delivery
          credit = 0 : non_neg_integer(),
@@ -136,8 +139,6 @@
 -type consumer() :: #consumer{}.
 
 -type consumer_strategy() :: competing | single_active.
-
--type milliseconds() :: non_neg_integer().
 
 -type dead_letter_handler() :: option({at_most_once, applied_mfa()} | at_least_once).
 

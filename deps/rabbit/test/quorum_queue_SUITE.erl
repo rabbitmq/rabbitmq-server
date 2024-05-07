@@ -237,8 +237,9 @@ init_per_group(Group, Config) ->
                 Config2 ->
                     _ = rabbit_ct_broker_helpers:enable_feature_flag(Config2,
                                                                      message_containers),
-                    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config2,
+                    QQV4 = rabbit_ct_broker_helpers:enable_feature_flag(Config2,
                                                                      quorum_queues_v4),
+                    ct:pal("quorum_queue_v4 enable result ~p", [QQV4]),
                     ok = rabbit_ct_broker_helpers:rpc(
                            Config2, 0, application, set_env,
                            [rabbit, channel_tick_interval, 100]),
@@ -3895,7 +3896,7 @@ basic_get(Ch, Q, NoAck, Attempt) ->
 
 check_quorum_queues_v4_compat(Config) ->
     case rabbit_ct_broker_helpers:is_feature_flag_enabled(Config,
-                                                          quorum_queues_4) of
+                                                          quorum_queues_v4) of
         false ->
             throw({skip, "test needs feature flag quorum_queues_v4"});
         true ->

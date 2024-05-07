@@ -185,7 +185,8 @@
 -callback is_stateful() -> boolean().
 
 %% intitialise and return a queue type specific session context
--callback init(amqqueue:amqqueue()) -> {ok, queue_state()} | {error, Reason :: term()}.
+-callback init(amqqueue:amqqueue()) ->
+    {ok, queue_state()} | {error, Reason :: term()}.
 
 -callback close(queue_state()) -> ok.
 %% update the queue type state from amqqrecord

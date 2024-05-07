@@ -72,6 +72,7 @@
          make_return/2,
          make_discard/2,
          make_credit/4,
+         make_defer/2,
          make_purge/0,
          make_purge_nodes/1,
          make_update_config/1,
@@ -112,10 +113,13 @@
                  credit :: non_neg_integer(),
                  delivery_count :: rabbit_queue_type:delivery_count(),
                  drain :: boolean()}).
+-record(defer, {consumer_key :: consumer_key(),
+                msg_ids :: [msg_id()]}).
 -record(purge, {}).
 -record(purge_nodes, {nodes :: [node()]}).
 -record(update_config, {config :: config()}).
 -record(garbage_collection, {}).
+% -record(eval_consumer_timeouts, {consumer_keys :: [consumer_key()]}).
 
 -opaque protocol() ::
     #enqueue{} |
@@ -127,6 +131,7 @@
     #return{} |
     #discard{} |
     #credit{} |
+    #defer{} |
     #purge{} |
     #purge_nodes{} |
     #update_config{} |
@@ -251,7 +256,7 @@ apply(Meta, #discard{consumer_key = ConsumerKey,
                                     case maps:get(Id, Checked, undefined) of
                                         undefined ->
                                             false;
-                                        Msg ->
+                                        ?C_MSG(_At, Msg) ->
                                             {true, Msg}
                                     end
                             end, MsgIds),
@@ -716,8 +721,8 @@ apply(#{index := Idx} = Meta,
     State1 = update_config(Conf, State0#?STATE{dlx = DlxState}),
     {State, Reply, Effects} = checkout(Meta, State0, State1, Effects0),
     update_smallest_raft_index(Idx, Reply, State, Effects);
-apply(_Meta, {machine_version, FromVersion, ToVersion}, V0State) ->
-    State = convert(FromVersion, ToVersion, V0State),
+apply(Meta, {machine_version, FromVersion, ToVersion}, V0State) ->
+    State = convert(Meta, FromVersion, ToVersion, V0State),
     {State, ok, [{aux, {dlx, setup}}]};
 apply(#{index := IncomingRaftIdx} = Meta, {dlx, _} = Cmd,
       #?STATE{cfg = #cfg{dead_letter_handler = DLH},
@@ -731,9 +736,16 @@ apply(_Meta, Cmd, State) ->
     rabbit_log:debug("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
     {State, ok, []}.
 
-convert_v3_to_v4(#rabbit_fifo{} = StateV3) ->
-    %% nothing to convert - yet
-    StateV3.
+convert_v3_to_v4(#{system_time := Ts}, #rabbit_fifo{consumers = Consumers0} = StateV3) ->
+    Consumers = maps:map(
+                  fun (_CKey, #consumer{checked_out = Ch0} = C) ->
+                          Ch = maps:map(
+                                 fun (_MsgId, ?MSG(_, _) = Msg) ->
+                                         ?C_MSG(Ts, Msg)
+                                 end, Ch0),
+                          C#consumer{checked_out = Ch}
+                  end, Consumers0),
+    StateV3#?MODULE{consumers = Consumers}.
 
 purge_node(Meta, Node, State, Effects) ->
     lists:foldl(fun(Pid, {S0, E0}) ->
@@ -937,7 +949,7 @@ get_checked_out(CKey, From, To, #?STATE{consumers = Consumers}) ->
     case find_consumer(CKey, Consumers) of
         {_CKey, #consumer{checked_out = Checked}} ->
             [begin
-                 ?MSG(I, H) = maps:get(K, Checked),
+                 ?C_MSG(_At, I, H) = maps:get(K, Checked),
                  {K, {I, H}}
              end || K <- lists:seq(From, To), maps:is_key(K, Checked)];
         _ ->
@@ -996,7 +1008,7 @@ handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
         {ConsumerKey, #consumer{checked_out = Checked}} ->
             {Log, ToReturn} =
                 maps:fold(
-                  fun (MsgId, ?MSG(Idx, Header), {L0, Acc}) ->
+                  fun (MsgId, ?C_MSG(_, Idx, Header), {L0, Acc}) ->
                           %% it is possible this is not found if the consumer
                           %% crashed and the message got removed
                           case ra_log:fetch(Idx, L0) of
@@ -1034,7 +1046,7 @@ handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds},
         #{ConsumerKey := #consumer{checked_out = Checked}} ->
             {Log, IdMsgs} =
                 maps:fold(
-                  fun (MsgId, ?MSG(Idx, Header), {L0, Acc}) ->
+                  fun (MsgId, ?C_MSG(_, Idx, Header), {L0, Acc}) ->
                           %% it is possible this is not found if the consumer
                           %% crashed and the message got removed
                           case ra_log:fetch(Idx, L0) of
@@ -1706,7 +1718,7 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg, Effects0,
 return(#{index := IncomingRaftIdx} = Meta,
        ConsumerKey, Returned, Effects0, State0) ->
     {State1, Effects1} = maps:fold(
-                           fun(MsgId, Msg, {S0, E0}) ->
+                           fun(MsgId, {_At, Msg}, {S0, E0}) ->
                                    return_one(Meta, MsgId, Msg,
                                               S0, E0, ConsumerKey)
                            end, {State0, Effects0}, Returned),
@@ -1726,7 +1738,7 @@ complete(Meta, ConsumerKey, [MsgId],
                  msg_bytes_checkout = BytesCheckout,
                  messages_total = Tot} = State0) ->
     case maps:take(MsgId, Checked0) of
-        {?MSG(Idx, Hdr), Checked} ->
+        {?C_MSG(_, Idx, Hdr), Checked} ->
             SettledSize = get_header(size, Hdr),
             Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
             Con = Con0#consumer{checked_out = Checked,
@@ -1747,7 +1759,7 @@ complete(Meta, ConsumerKey, MsgIds,
         = lists:foldl(
             fun (MsgId, {S0, Ch0, Idxs}) ->
                     case maps:take(MsgId, Ch0) of
-                        {?MSG(Idx, Hdr), Ch} ->
+                        {?C_MSG(_, Idx, Hdr), Ch} ->
                             S = get_header(size, Hdr) + S0,
                             {S, Ch, rabbit_fifo_index:delete(Idx, Idxs)};
                         error ->
@@ -1887,7 +1899,7 @@ get_header(Key, Header)
   when is_map(Header) andalso is_map_key(size, Header) ->
     maps:get(Key, Header, undefined).
 
-return_one(Meta, MsgId, Msg0,
+return_one(Meta, MsgId, ?MSG(_, _) = Msg0,
            #?STATE{returns = Returns,
                    consumers = Consumers,
                    dlx = DlxState0,
@@ -1918,7 +1930,7 @@ return_one(Meta, MsgId, Msg0,
 return_all(Meta, #?STATE{consumers = Cons} = State0, Effects0, ConsumerKey,
            #consumer{checked_out = Checked} = Con) ->
     State = State0#?STATE{consumers = Cons#{ConsumerKey => Con}},
-    lists:foldl(fun ({MsgId, Msg}, {S, E}) ->
+    lists:foldl(fun ({MsgId, ?C_MSG(_At, Msg)}, {S, E}) ->
                         return_one(Meta, MsgId, Msg, S, E, ConsumerKey)
                 end, {State, Effects0}, lists:sort(maps:to_list(Checked))).
 
@@ -1945,7 +1957,7 @@ checkout(#{index := Index} = Meta,
     end.
 
 checkout0(Meta, {success, ConsumerKey, MsgId,
-                 ?MSG(_RaftIdx, _Header) = Msg, ExpiredMsg, State, Effects},
+                 ?MSG(_, _) = Msg, ExpiredMsg, State, Effects},
           SendAcc0) ->
     DelMsg = {MsgId, Msg},
     SendAcc = case maps:get(ConsumerKey, SendAcc0, undefined) of
@@ -2055,7 +2067,7 @@ take_next_msg(#?STATE{returns = Returns0,
                     %% add index here
                     Indexes = rabbit_fifo_index:append(RaftIdx, Indexes0),
                     {Msg, State#?STATE{messages = Messages,
-                                        ra_indexes = Indexes}}
+                                       ra_indexes = Indexes}}
             end
     end.
 
@@ -2110,7 +2122,7 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
         {{value, ConsumerKey}, SQ1}
           when is_map_key(ConsumerKey, Cons0) ->
             case take_next_msg(InitState) of
-                {ConsumerMsg, State0} ->
+                {Msg, State0} ->
                     %% there are consumers waiting to be serviced
                     %% process consumer checkout
                     case maps:get(ConsumerKey, Cons0) of
@@ -2131,7 +2143,7 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
                                   credit = Credit,
                                   delivery_count = DelCnt0,
                                   cfg = Cfg} = Con0 ->
-                            Checked = maps:put(Next, ConsumerMsg, Checked0),
+                            Checked = maps:put(Next, ?C_MSG(Ts, Msg), Checked0),
                             DelCnt = case credit_api_v2(Cfg) of
                                          true -> add(DelCnt0, 1);
                                          false -> DelCnt0 + 1
@@ -2140,14 +2152,14 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
                                                 next_msg_id = Next + 1,
                                                 credit = Credit - 1,
                                                 delivery_count = DelCnt},
-                            Size = get_header(size, get_msg_header(ConsumerMsg)),
+                            Size = get_header(size, get_msg_header(Msg)),
                             State1 =
                                 State0#?STATE{service_queue = SQ1,
                                               msg_bytes_checkout = BytesCheckout + Size,
                                               msg_bytes_enqueue = BytesEnqueue - Size},
                             State = update_or_remove_con(
                                        Meta, ConsumerKey, Con, State1),
-                            {success, ConsumerKey, Next, ConsumerMsg, ExpiredMsg,
+                            {success, ConsumerKey, Next, Msg, ExpiredMsg,
                              State, Effects1}
                     end;
                 empty ->
@@ -2471,6 +2483,10 @@ make_credit(Key, Credit, DeliveryCount, Drain) ->
             delivery_count = DeliveryCount,
             drain = Drain}.
 
+-spec make_defer(consumer_key(), [msg_id()]) -> protocol().
+make_defer(ConsumerKey, MsgIds) when is_list(MsgIds) ->
+    #defer{consumer_key = ConsumerKey, msg_ids = MsgIds}.
+
 -spec make_purge() -> protocol().
 make_purge() -> #purge{}.
 
@@ -2607,16 +2623,16 @@ notify_decorators_startup(QName) ->
     {mod_call, rabbit_quorum_queue, spawn_notify_decorators,
      [QName, startup, []]}.
 
-convert(To, To, State) ->
+convert(_Meta, To, To, State) ->
     State;
-convert(0, To, State) ->
-    convert(1, To, rabbit_fifo_v1:convert_v0_to_v1(State));
-convert(1, To, State) ->
-    convert(2, To, rabbit_fifo_v3:convert_v1_to_v2(State));
-convert(2, To, State) ->
-    convert(3, To, rabbit_fifo_v3:convert_v2_to_v3(State));
-convert(3, To, State) ->
-    convert(4, To, convert_v3_to_v4(State)).
+convert(Meta, 0, To, State) ->
+    convert(Meta, 1, To, rabbit_fifo_v1:convert_v0_to_v1(State));
+convert(Meta, 1, To, State) ->
+    convert(Meta, 2, To, rabbit_fifo_v3:convert_v1_to_v2(State));
+convert(Meta, 2, To, State) ->
+    convert(Meta, 3, To, rabbit_fifo_v3:convert_v2_to_v3(State));
+convert(Meta, 3, To, State) ->
+    convert(Meta, 4, To, convert_v3_to_v4(Meta, State)).
 
 smallest_raft_index(#?STATE{messages = Messages,
                             ra_indexes = Indexes,
