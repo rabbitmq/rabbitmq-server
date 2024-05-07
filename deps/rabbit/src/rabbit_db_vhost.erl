@@ -456,7 +456,7 @@ delete_in_khepri(VHostName) ->
 %% clear().
 %% -------------------------------------------------------------------
 
--spec clear() -> ok.
+-spec clear() -> ok | rabbit_khepri:timeout_error().
 %% @doc Deletes all vhosts.
 %%
 %% @private
@@ -472,10 +472,7 @@ clear_in_mnesia() ->
 
 clear_in_khepri() ->
     Path = khepri_vhosts_path(),
-    case rabbit_khepri:delete(Path) of
-        ok    -> ok;
-        Error -> throw(Error)
-    end.
+    rabbit_khepri:delete(Path).
 
 %% --------------------------------------------------------------
 %% Paths
