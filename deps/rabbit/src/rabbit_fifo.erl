@@ -38,7 +38,7 @@
          which_module/1,
          %% aux
          init_aux/1,
-         handle_aux/6,
+         handle_aux/5,
          % queries
          query_messages_ready/1,
          query_messages_checked_out/1,
@@ -975,7 +975,7 @@ which_module(4) -> ?STATE.
                last_decorators_state :: term(),
                capacity :: term(),
                gc = #aux_gc{} :: #aux_gc{},
-               tick_pid,
+               tick_pid :: undefined | pid(),
                cache = #{} :: map()}).
 
 init_aux(Name) when is_atom(Name) ->
@@ -989,45 +989,47 @@ init_aux(Name) when is_atom(Name) ->
 
 handle_aux(RaftState, Tag, Cmd, #aux{name = Name,
                                      capacity = Cap,
-                                     gc = Gc}, Log, MacState) ->
+                                     gc = Gc}, RaAux) ->
     %% convert aux state to new version
     Aux = #?AUX{name = Name,
                 capacity = Cap,
                 gc = Gc},
-    handle_aux(RaftState, Tag, Cmd, Aux, Log, MacState);
-handle_aux(leader, _, garbage_collection, Aux, Log, MacState) ->
-    {no_reply, force_eval_gc(Log, MacState, Aux), Log};
-handle_aux(follower, _, garbage_collection, Aux, Log, MacState) ->
-    {no_reply, force_eval_gc(Log, MacState, Aux), Log};
+    handle_aux(RaftState, Tag, Cmd, Aux, RaAux);
 handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
-                                      consumer_key = Key}, Corr, Pid},
-           Aux0, Log0, #?STATE{cfg = #cfg{delivery_limit = undefined},
-                               consumers = Consumers}) ->
+                                      consumer_key = Key} = Ret, Corr, Pid},
+           Aux0, RaAux0) ->
+    case ra_aux:machine_state(RaAux0) of
+        #?STATE{cfg = #cfg{delivery_limit = undefined},
+                consumers = Consumers} ->
+            case find_consumer(Key, Consumers) of
+                {ConsumerKey, #consumer{checked_out = Checked}} ->
+                    {RaAux, ToReturn} =
+                    maps:fold(
+                      fun (MsgId, ?C_MSG(_, Idx, Header), {RA0, Acc}) ->
+                              %% it is possible this is not found if the consumer
+                              %% crashed and the message got removed
+                              case ra_aux:log_fetch(Idx, RA0) of
+                                  {{_Term, _Meta, Cmd}, RA} ->
+                                      Msg = get_msg(Cmd),
+                                      {RA, [{MsgId, Idx, Header, Msg} | Acc]};
+                                  {undefined, RA} ->
+                                      {RA, Acc}
+                              end
+                      end, {RaAux0, []}, maps:with(MsgIds, Checked)),
 
-    case find_consumer(Key, Consumers) of
-        {ConsumerKey, #consumer{checked_out = Checked}} ->
-            {Log, ToReturn} =
-                maps:fold(
-                  fun (MsgId, ?C_MSG(_, Idx, Header), {L0, Acc}) ->
-                          %% it is possible this is not found if the consumer
-                          %% crashed and the message got removed
-                          case ra_log:fetch(Idx, L0) of
-                              {{_, _, {_, _, Cmd, _}}, L} ->
-                                  Msg = get_msg(Cmd),
-                                  {L, [{MsgId, Idx, Header, Msg} | Acc]};
-                              {undefined, L} ->
-                                  {L, Acc}
-                          end
-                  end, {Log0, []}, maps:with(MsgIds, Checked)),
-
-            Appends = make_requeue(ConsumerKey, {notify, Corr, Pid},
-                                   lists:sort(ToReturn), []),
-            {no_reply, Aux0, Log, Appends};
+                    Appends = make_requeue(ConsumerKey, {notify, Corr, Pid},
+                                           lists:sort(ToReturn), []),
+                    {no_reply, Aux0, RaAux, Appends};
+                _ ->
+                    {no_reply, Aux0, RaAux0}
+            end;
         _ ->
-            {no_reply, Aux0, Log0}
+            %% for returns with a delivery limit set we can just return as before
+            {no_reply, Aux0, RaAux0, [{append, Ret, {notify, Corr, Pid}}]}
     end;
-handle_aux(leader, _, {handle_tick, [QName, Overview, Nodes]},
-           #?AUX{tick_pid = Pid} = Aux, Log, _) ->
+handle_aux(leader, _, {handle_tick, [QName, Overview0, Nodes]},
+           #?AUX{tick_pid = Pid} = Aux, RaAux) ->
+    Overview = Overview0#{members_info => ra_aux:members_info(RaAux)},
     NewPid =
         case process_is_alive(Pid) of
             false ->
@@ -1038,35 +1040,34 @@ handle_aux(leader, _, {handle_tick, [QName, Overview, Nodes]},
                 %% Active TICK pid, do nothing
                 Pid
         end,
-    {no_reply, Aux#?AUX{tick_pid = NewPid}, Log};
-handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds},
-           Aux0, Log0, #?STATE{cfg = #cfg{},
-                               consumers = Consumers}) ->
+    %% TODO: check consumer timeouts
+    {no_reply, Aux#?AUX{tick_pid = NewPid}, RaAux};
+handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds}, Aux0, RaAux0) ->
+    #?STATE{cfg = #cfg{},
+            consumers = Consumers} = ra_aux:machine_state(RaAux0),
     case Consumers of
         #{ConsumerKey := #consumer{checked_out = Checked}} ->
-            {Log, IdMsgs} =
+            {RaState, IdMsgs} =
                 maps:fold(
-                  fun (MsgId, ?C_MSG(_, Idx, Header), {L0, Acc}) ->
+                  fun (MsgId, ?C_MSG(_, Idx, Header), {S0, Acc}) ->
                           %% it is possible this is not found if the consumer
                           %% crashed and the message got removed
-                          case ra_log:fetch(Idx, L0) of
-                              {{_, _, {_, _, Cmd, _}}, L} ->
+                          case ra_aux:log_fetch(Idx, S0) of
+                              {{_Term, _Meta, Cmd}, S} ->
                                   Msg = get_msg(Cmd),
-                                  {L, [{MsgId, {Header, Msg}} | Acc]};
-                              {undefined, L} ->
-                                  {L, Acc}
+                                  {S, [{MsgId, {Header, Msg}} | Acc]};
+                              {undefined, S} ->
+                                  {S, Acc}
                           end
-                  end, {Log0, []}, maps:with(MsgIds, Checked)),
-            {reply, {ok,  IdMsgs}, Aux0, Log};
+                  end, {RaAux0, []}, maps:with(MsgIds, Checked)),
+            {reply, {ok,  IdMsgs}, Aux0, RaState};
         _ ->
-            {reply, {error, consumer_not_found}, Aux0, Log0}
+            {reply, {error, consumer_not_found}, Aux0, RaAux0}
     end;
-handle_aux(leader, cast, {#return{} = Ret, Corr, Pid},
-           Aux0, Log, #?STATE{}) ->
-    %% for returns with a delivery limit set we can just return as before
-    {no_reply, Aux0, Log, [{append, Ret, {notify, Corr, Pid}}]};
 handle_aux(leader, cast, eval, #?AUX{last_decorators_state = LastDec} = Aux0,
-           Log, #?STATE{cfg = #cfg{resource = QName}} = MacState) ->
+           RaAux) ->
+    #?STATE{cfg = #cfg{resource = QName}} = MacState =
+        ra_aux:machine_state(RaAux),
     %% this is called after each batch of commands have been applied
     %% set timer for message expire
     %% should really be the last applied index ts but this will have to do
@@ -1074,74 +1075,77 @@ handle_aux(leader, cast, eval, #?AUX{last_decorators_state = LastDec} = Aux0,
     Effects0 = timer_effect(Ts, MacState, []),
     case query_notify_decorators_info(MacState) of
         LastDec ->
-            {no_reply, Aux0, Log, Effects0};
+            {no_reply, Aux0, RaAux, Effects0};
         {MaxActivePriority, IsEmpty} = NewLast ->
             Effects = [notify_decorators_effect(QName, MaxActivePriority, IsEmpty)
                        | Effects0],
-            {no_reply, Aux0#?AUX{last_decorators_state = NewLast}, Log, Effects}
+            {no_reply, Aux0#?AUX{last_decorators_state = NewLast}, RaAux, Effects}
     end;
-handle_aux(_RaftState, cast, eval, Aux0, Log, _MacState) ->
-    {no_reply, Aux0, Log};
-handle_aux(_RaState, cast, Cmd, #?AUX{capacity = Use0} = Aux0,
-           Log, _MacState)
+handle_aux(_RaftState, cast, eval, Aux0, RaAux) ->
+    {no_reply, Aux0, RaAux};
+handle_aux(_RaState, cast, Cmd, #?AUX{capacity = Use0} = Aux0, RaAux)
   when Cmd == active orelse Cmd == inactive ->
-    {no_reply, Aux0#?AUX{capacity = update_use(Use0, Cmd)}, Log};
+    {no_reply, Aux0#?AUX{capacity = update_use(Use0, Cmd)}, RaAux};
 handle_aux(_RaState, cast, tick, #?AUX{name = Name,
                                        capacity = Use0} = State0,
-           Log, MacState) ->
+           RaAux) ->
     true = ets:insert(rabbit_fifo_usage,
                       {Name, capacity(Use0)}),
-    Aux = eval_gc(Log, MacState, State0),
-    {no_reply, Aux, Log};
-handle_aux(_RaState, cast, eol, #?AUX{name = Name} = Aux, Log, _) ->
+    Aux = eval_gc(RaAux, ra_aux:machine_state(RaAux), State0),
+    {no_reply, Aux, RaAux};
+handle_aux(_RaState, cast, eol, #?AUX{name = Name} = Aux, RaAux) ->
     ets:delete(rabbit_fifo_usage, Name),
-    {no_reply, Aux, Log};
+    {no_reply, Aux, RaAux};
 handle_aux(_RaState, {call, _From}, oldest_entry_timestamp,
-           #?AUX{cache = Cache} = Aux0,
-           Log0, #?STATE{} = State) ->
-    {CachedIdx, CachedTs} = maps:get(oldest_entry, Cache, {undefined, undefined}),
-    case smallest_raft_index(State) of
+           #?AUX{cache = Cache} = Aux0, RaAux0) ->
+    {CachedIdx, CachedTs} = maps:get(oldest_entry, Cache,
+                                     {undefined, undefined}),
+    case smallest_raft_index(ra_aux:machine_state(RaAux0)) of
         %% if there are no entries, we return current timestamp
         %% so that any previously obtained entries are considered
         %% older than this
         undefined ->
             Aux1 = Aux0#?AUX{cache = maps:remove(oldest_entry, Cache)},
-            {reply, {ok, erlang:system_time(millisecond)}, Aux1, Log0};
+            {reply, {ok, erlang:system_time(millisecond)}, Aux1, RaAux0};
         CachedIdx ->
             %% cache hit
-            {reply, {ok, CachedTs}, Aux0, Log0};
+            {reply, {ok, CachedTs}, Aux0, RaAux0};
         Idx when is_integer(Idx) ->
-            case ra_log:fetch(Idx, Log0) of
-                {{_, _, {_, #{ts := Timestamp}, _, _}}, Log1} ->
+            case ra_aux:log_fetch(Idx, RaAux0) of
+                {{_Term, #{ts := Timestamp}, _Cmd}, RaAux} ->
                     Aux1 = Aux0#?AUX{cache = Cache#{oldest_entry =>
                                                     {Idx, Timestamp}}},
-                    {reply, {ok, Timestamp}, Aux1, Log1};
-                {undefined, Log1} ->
+                    {reply, {ok, Timestamp}, Aux1, RaAux};
+                {undefined, RaAux} ->
                     %% fetch failed
-                    {reply, {error, failed_to_get_timestamp}, Aux0, Log1}
+                    {reply, {error, failed_to_get_timestamp}, Aux0, RaAux}
             end
     end;
 handle_aux(_RaState, {call, _From}, {peek, Pos}, Aux0,
-           Log0, MacState) ->
+           RaAux0) ->
+    MacState = ra_aux:machine_state(RaAux0),
     case query_peek(Pos, MacState) of
         {ok, ?MSG(Idx, Header)} ->
             %% need to re-hydrate from the log
-            {{_, _, {_, _, Cmd, _}}, Log} = ra_log:fetch(Idx, Log0),
+            {{_, _, Cmd}, RaAux} = ra_aux:log_fetch(Idx, RaAux0),
             Msg = get_msg(Cmd),
-            {reply, {ok, {Header, Msg}}, Aux0, Log};
+            {reply, {ok, {Header, Msg}}, Aux0, RaAux};
         Err ->
-            {reply, Err, Aux0, Log0}
+            {reply, Err, Aux0, RaAux0}
     end;
-handle_aux(RaState, _, {dlx, _} = Cmd, Aux0, Log,
-           #?STATE{dlx = DlxState,
-                   cfg = #cfg{dead_letter_handler = DLH,
-                              resource = QRes}}) ->
+handle_aux(_, _, garbage_collection, Aux, RaAux) ->
+    {no_reply, force_eval_gc(RaAux, Aux), RaAux};
+handle_aux(RaState, _, {dlx, _} = Cmd, Aux0, RaAux) ->
+    #?STATE{dlx = DlxState,
+            cfg = #cfg{dead_letter_handler = DLH,
+                       resource = QRes}} = ra_aux:machine_state(RaAux),
     Aux = rabbit_fifo_dlx:handle_aux(RaState, Cmd, Aux0, QRes, DLH, DlxState),
-    {no_reply, Aux, Log}.
+    {no_reply, Aux, RaAux}.
 
-eval_gc(Log, #?STATE{cfg = #cfg{resource = QR}} = MacState,
+eval_gc(RaAux, MacState,
         #?AUX{gc = #aux_gc{last_raft_idx = LastGcIdx} = Gc} = AuxState) ->
-    {Idx, _} = ra_log:last_index_term(Log),
+    {Idx, _} = ra_aux:log_last_index_term(RaAux),
+    #?STATE{cfg = #cfg{resource = QR}} = ra_aux:machine_state(RaAux),
     {memory, Mem} = erlang:process_info(self(), memory),
     case messages_total(MacState) of
         0 when Idx > LastGcIdx andalso
@@ -1156,9 +1160,11 @@ eval_gc(Log, #?STATE{cfg = #cfg{resource = QR}} = MacState,
             AuxState
     end.
 
-force_eval_gc(Log, #?STATE{cfg = #cfg{resource = QR}},
+force_eval_gc(%Log,
+              RaAux,
               #?AUX{gc = #aux_gc{last_raft_idx = LastGcIdx} = Gc} = AuxState) ->
-    {Idx, _} = ra_log:last_index_term(Log),
+    {Idx, _} = ra_aux:log_last_index_term(RaAux),
+    #?STATE{cfg = #cfg{resource = QR}} = ra_aux:machine_state(RaAux),
     {memory, Mem} = erlang:process_info(self(), memory),
     case Idx > LastGcIdx of
         true ->

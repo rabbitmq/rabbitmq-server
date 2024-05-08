@@ -126,7 +126,7 @@
 -define(RPC_TIMEOUT, 1000).
 -define(START_CLUSTER_TIMEOUT, 5000).
 -define(START_CLUSTER_RPC_TIMEOUT, 60_000). %% needs to be longer than START_CLUSTER_TIMEOUT
--define(TICK_TIMEOUT, 5000). %% the ra server tick time
+-define(TICK_INTERVAL, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
 -define(MEMBER_CHANGE_TIMEOUT, 20_000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
@@ -559,12 +559,12 @@ handle_tick(QName,
                       Stale when length(ExpectedNodes) > 0 ->
                           %% rabbit_nodes:list_members/0 returns [] when there
                           %% is an error so we need to handle that case
-                          rabbit_log:debug("~ts: stale nodes detected. Purging ~w",
+                          rabbit_log:debug("~ts: stale nodes detected in quorum "
+                                           "queue state. Purging ~w",
                                            [rabbit_misc:rs(QName), Stale]),
                           %% pipeline purge command
                           ok = ra:pipeline_command(amqqueue:get_pid(Q),
                                                    rabbit_fifo:make_purge_nodes(Stale)),
-
                           ok;
                       _ ->
                           ok
@@ -1774,7 +1774,7 @@ make_ra_conf(Q, ServerId) ->
 
 make_ra_conf(Q, ServerId, Membership) ->
     TickTimeout = application:get_env(rabbit, quorum_tick_interval,
-                                      ?TICK_TIMEOUT),
+                                      ?TICK_INTERVAL),
     SnapshotInterval = application:get_env(rabbit, quorum_snapshot_interval,
                                            ?SNAPSHOT_INTERVAL),
     make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership).
@@ -1802,7 +1802,7 @@ make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership) ->
 make_mutable_config(Q) ->
     QName = amqqueue:get_name(Q),
     TickTimeout = application:get_env(rabbit, quorum_tick_interval,
-                                      ?TICK_TIMEOUT),
+                                      ?TICK_INTERVAL),
     Formatter = {?MODULE, format_ra_event, [QName]},
     #{tick_timeout => TickTimeout,
       ra_event_formatter => Formatter}.
