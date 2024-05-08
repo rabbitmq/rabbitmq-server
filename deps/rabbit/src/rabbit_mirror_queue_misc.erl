@@ -1010,7 +1010,9 @@ has_ha_policies(Policies) ->
               does_policy_configure_cmq(KeyList)
       end, Policies).
 
-does_policy_configure_cmq(KeyList) ->
+does_policy_configure_cmq(Map) when is_map(Map) ->
+    is_map_key(<<"ha-mode">>, Map);
+does_policy_configure_cmq(KeyList) when is_list(KeyList) ->
     lists:keymember(<<"ha-mode">>, 1, KeyList).
 
 list_policies_with_classic_queue_mirroring_for_cli() ->
