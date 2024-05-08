@@ -1011,7 +1011,7 @@ has_ha_policies(Policies) ->
       end, Policies).
 
 does_policy_configure_cmq(Map) when is_map(Map) ->
-    lists:keymember(<<"ha-mode">>, 1, rabbit_data_coercion:to_proplist(Map));
+    is_map_key(<<"ha-mode">>, Map);
 does_policy_configure_cmq(KeyList) when is_list(KeyList) ->
     lists:keymember(<<"ha-mode">>, 1, KeyList).
 
