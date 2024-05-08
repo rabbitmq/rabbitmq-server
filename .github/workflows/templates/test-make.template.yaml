@@ -10,7 +10,10 @@
 #@ end
 
 #@ def cache_prefix(name):
-#@  return "${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-"+name+"-${{ matrix.metadata_store }}-${{ matrix.otp_version }}"
+#@  prefix = "${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-"
+#@  prefix += name
+#@  prefix += "-${{ matrix.metadata_store }}-${{ matrix.otp_version }}"
+#@  return prefix
 #@ end
 
 #@ def test_plugin(name, needs, suites):
@@ -27,8 +30,6 @@
           - mnesia
           - khepri
     timeout-minutes: 180
-    env:
-      CACHE_PATH: /home/runner/test-result-cache
     steps:
       #@ if name == "rabbit":
       - name: INSTALL DOTNET
@@ -39,7 +40,7 @@
       - name: RESTORE BUILT REPO
         uses: actions/cache@v4
         with:
-          path: ${{ github.workspace }}
+          path: ${{ env.PRIMARY_VERSION_PATH }}
           key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
           fail-on-cache-miss: true
       - name: COMPUTE PREVIOUS RUN ATTEPMT
@@ -70,6 +71,7 @@
         run: |
           mkdir -p ${{ env.CACHE_PATH }}
       - name: DIALYZE
+        working-directory: ${{ env.PRIMARY_VERSION_PATH }}
         run: |
           if [[ -f ${{ env.CACHE_PATH }}/dialyze ]]; then
             echo "dialyze already passed for this key ${{ needs.xref.outputs.hash }}"
@@ -81,6 +83,7 @@
           fi
         continue-on-error: #@ name == "rabbitmq_ct_helpers" or name == "trust_store_http"
       - name: EUNIT
+        working-directory: ${{ env.PRIMARY_VERSION_PATH }}
         run: |
           if [[ -f ${{ env.CACHE_PATH }}/eunit ]]; then
             echo "eunit already passed for this key ${{ needs.xref.outputs.hash }}"
@@ -97,6 +100,11 @@
         if: false
 #@ end
 #@ end
+        working-directory: ${{ env.PRIMARY_VERSION_PATH }}
+#@ if data.values.mixed_version_ref != "none":
+        env:
+          SECONDARY_UMBRELLA: ${{ github.workspace }}/${{ env.MIXED_VERSION_PATH }}
+#@ end
         run: |
           if [[ -f ${{ env.CACHE_PATH }}/ct-(@= suite @) ]]; then
             echo "ct-(@= suite @) already passed for this key ${{ needs.xref.outputs.hash }}"
@@ -107,7 +115,33 @@
             touch ${{ env.CACHE_PATH }}/ct-(@= suite @)
           fi
 #@ end
+      - name: RESTORE BUILT MIXED VERSION REPO
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MIXED_VERSION_PATH }}
+          key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}-mixed
+          fail-on-cache-miss: true
+#@ for suite in suites:
+      - name: CT (@= suite @) mixed
+#@ if name == "rabbitmq_peer_discovery_aws":
+#@ if suite == "integration":
+        if: false
+#@ end
+#@ end
+        working-directory: ${{ env.PRIMARY_VERSION_PATH }}
+        run: |
+          if [[ -f ${{ env.CACHE_PATH }}/ct-(@= suite @)-mixed ]]; then
+            echo "ct-(@= suite @)-mixed already passed for this key ${{ needs.xref.outputs.hash }}"
+          else
+            make -C deps/(@= name @) \
+                ct-(@= suite @) \
+                RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }} \
+                SECONDARY_UMBRELLA=${{ github.workspace }}/${{ env.MIXED_VERSION_PATH }}
+            touch ${{ env.CACHE_PATH }}/ct-(@= suite @)-mixed
+          fi
+#@ end
       - name: SAVE TEST RESULT CACHE
+        if: always()
         uses: actions/cache/save@v4
         with:
           path: /home/runner/test-result-cache/
@@ -117,7 +151,8 @@
         uses: actions/upload-artifact@v4.3.1
         with:
           name: testlogs-(@= name @)-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
-          path: deps/(@= name @)/logs/*
+          path: |
+            ${{ env.PRIMARY_VERSION_PATH }}/deps/(@= name @)/logs/*
 #@ end
 
 #@ def test_cli(needs):
@@ -134,13 +169,11 @@
           - mnesia
           - khepri
     timeout-minutes: 20
-    env:
-      CACHE_PATH: /home/runner/test-result-cache
     steps:
       - name: RESTORE BUILT REPO
         uses: actions/cache@v4
         with:
-          path: ${{ github.workspace }}
+          path: ${{ env.PRIMARY_VERSION_PATH }}
           key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
           fail-on-cache-miss: true
       - name: COMPUTE PREVIOUS RUN ATTEPMT
@@ -172,6 +205,7 @@
           mkdir -p ${{ env.CACHE_PATH }}
       - name: TEST
         id: test
+        working-directory: ${{ env.PRIMARY_VERSION_PATH }}
         run: |
           if [[ -f ${{ env.CACHE_PATH }}/checks ]]; then
             echo "checks already passed for this key ${{ needs.xref.outputs.hash }}"
@@ -182,6 +216,7 @@
             touch ${{ env.CACHE_PATH }}/checks
           fi
       - name: SAVE TEST RESULT CACHE
+        if: always()
         uses: actions/cache/save@v4
         with:
           path: /home/runner/test-result-cache/
@@ -192,7 +227,7 @@
         with:
           name: testlogs-rabbitmq_cli-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
           path: |
-            deps/rabbitmq_cli/logs/*
+            ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_cli/logs/*
 #@ end
 
 ---
@@ -209,6 +244,10 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
+env:
+  PRIMARY_VERSION_PATH: rabbitmq-server
+  MIXED_VERSION_PATH: secondary-umbrella
+  CACHE_PATH: /home/runner/test-result-cache
 jobs:
   xref:
     runs-on: ubuntu-latest
@@ -217,6 +256,8 @@ jobs:
     steps:
       - name: CHECKOUT REPOSITORY
         uses: actions/checkout@v4
+        with:
+          path: ${{ env.PRIMARY_VERSION_PATH }}
       - name: SETUP ERLANG/ELIXIR
         if: steps.check.outputs.passed != 'true'
         uses: erlef/setup-beam@v1
@@ -224,6 +265,7 @@ jobs:
           otp-version: 26.2
           elixir-version: 1.15
       - name: ENSURE WORKFLOWS ARE UP TO DATE
+        working-directory: ${{ env.PRIMARY_VERSION_PATH }}
         run: |
           mkdir local-bin/
           curl -L https://carvel.dev/install.sh | K14SIO_INSTALL_BIN_DIR=local-bin bash
@@ -232,19 +274,41 @@ jobs:
           git diff --exit-code
       - name: COMPUTE REPO HASH
         id: hash
+        working-directory: ${{ env.PRIMARY_VERSION_PATH }}
         run: |
           echo "hash=${{ hashFiles('**', '!WORKSPACE', '!.github/**', '!**.bazel', '!**.bzl', '!**/BUILD.*') }}" | tee -a $GITHUB_OUTPUT
       - name: CACHE BUILT REPO
         uses: actions/cache@v4
         with:
-          path: ${{ github.workspace }}
+          path: ${{ env.PRIMARY_VERSION_PATH }}
           key: ${{ runner.os }}-make-cache-${{ steps.hash.outputs.hash }}
       - name: BUILD
+        working-directory: ${{ env.PRIMARY_VERSION_PATH }}
         run: |
           make
       - name: XREF
+        working-directory: ${{ env.PRIMARY_VERSION_PATH }}
         run: |
           make xref
+          - name: CACHE BUILT REPO
+          uses: actions/cache@v4
+          with:
+            path: ${{ env.PRIMARY_VERSION_PATH }}
+            key: ${{ runner.os }}-make-cache-${{ steps.hash.outputs.hash }}
+      - name: CHECKOUT MIXED VERSION REPOSITORY
+        uses: actions/checkout@v4
+        with:
+          ref: #@ data.values.mixed_version_ref
+          path: ${{ env.MIXED_VERSION_PATH }}
+      - name: CACHE BUILT MIXED VERSION REPO
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MIXED_VERSION_PATH }}
+          key: ${{ runner.os }}-make-cache-${{ steps.hash.outputs.hash }}-mixed
+      - name: BUILD
+        working-directory: ${{ env.MIXED_VERSION_PATH }}
+        run: |
+          make
 #@ for plugin in data.values.internal_deps:
   _: #@ template.replace(test_plugin(plugin, ["xref"], data.values[plugin].suites))
 #@ end

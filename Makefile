@@ -626,6 +626,7 @@ actions-workflows: .github/workflows/test-make.yaml
 		$(foreach f,$(PLUGIN_SUITES_FILES),--data-values-file $f) \
 		--data-value-yaml internal_deps=[$(subst $(space),$(comma),$(foreach s,$(INTERNAL_DEPS),"$s"))] \
 		--data-value-yaml tier1_plugins=[$(subst $(space),$(comma),$(foreach s,$(TIER1_PLUGINS),"$s"))] \
+		--data-value mixed_version_ref=v3.12.1 \
 		| sed 's/^true:/on:/' \
 		| sed 's/pull_request: null/pull_request:/'> $@
 
