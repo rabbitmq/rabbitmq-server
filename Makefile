@@ -616,11 +616,21 @@ PLUGIN_SUITES_FILES := $(addprefix .github/workflows/data/,$(addsuffix .yaml,$(T
 
 YTT ?= ytt
 
-actions-workflows: .github/workflows/test-make.yaml
+actions-workflows: .github/workflows/test-make.yaml .github/workflows/test-make-mixed.yaml
 
-.PHONY: .github/workflows/test-make.yaml
+.PHONY: .github/workflows/test-make.yaml .github/workflows/test-make-mixed.yaml
 
 .github/workflows/test-make.yaml: .github/workflows/templates/test-make.template.yaml $(PLUGIN_SUITES_FILES)
+	$(gen_verbose) $(YTT) \
+		--file $< \
+		$(foreach f,$(PLUGIN_SUITES_FILES),--data-values-file $f) \
+		--data-value-yaml internal_deps=[$(subst $(space),$(comma),$(foreach s,$(INTERNAL_DEPS),"$s"))] \
+		--data-value-yaml tier1_plugins=[$(subst $(space),$(comma),$(foreach s,$(TIER1_PLUGINS),"$s"))] \
+		--data-value mixed_version_ref=none \
+		| sed 's/^true:/on:/' \
+		| sed 's/pull_request: null/pull_request:/'> $@
+
+.github/workflows/test-make-mixed.yaml: .github/workflows/templates/test-make.template.yaml $(PLUGIN_SUITES_FILES)
 	$(gen_verbose) $(YTT) \
 		--file $< \
 		$(foreach f,$(PLUGIN_SUITES_FILES),--data-values-file $f) \

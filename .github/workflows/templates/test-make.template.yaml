@@ -12,6 +12,9 @@
 #@ def cache_prefix(name):
 #@  prefix = "${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-"
 #@  prefix += name
+#@  if data.values.mixed_version_ref:
+#@    prefix += "-mixed-"+data.values.mixed_version_ref
+#@  end
 #@  prefix += "-${{ matrix.metadata_store }}-${{ matrix.otp_version }}"
 #@  return prefix
 #@ end
@@ -43,6 +46,14 @@
           path: ${{ env.PRIMARY_VERSION_PATH }}
           key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
           fail-on-cache-miss: true
+#@ if data.values.mixed_version_ref != "none":
+      - name: RESTORE BUILT MIXED VERSION REPO
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MIXED_VERSION_PATH }}
+          key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}-mixed
+          fail-on-cache-miss: true
+#@ end
       - name: COMPUTE PREVIOUS RUN ATTEPMT
         id: previous-attempt
         run: |
@@ -70,6 +81,7 @@
       - name: PREPARE
         run: |
           mkdir -p ${{ env.CACHE_PATH }}
+#@ if data.values.mixed_version_ref == "none":
       - name: DIALYZE
         working-directory: ${{ env.PRIMARY_VERSION_PATH }}
         run: |
@@ -93,8 +105,9 @@
                 RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
             touch ${{ env.CACHE_PATH }}/eunit
           fi
+#@ end
 #@ for suite in suites:
-      - name: CT (@= suite @)
+      - name: CT (@= suite if data.values.mixed_version_ref == "none" else suite + " MIXED" @)
 #@ if name == "rabbitmq_peer_discovery_aws":
 #@ if suite == "integration":
         if: false
@@ -113,31 +126,6 @@
                 ct-(@= suite @) \
                 RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }}
             touch ${{ env.CACHE_PATH }}/ct-(@= suite @)
-          fi
-#@ end
-      - name: RESTORE BUILT MIXED VERSION REPO
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.MIXED_VERSION_PATH }}
-          key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}-mixed
-          fail-on-cache-miss: true
-#@ for suite in suites:
-      - name: CT (@= suite @) mixed
-#@ if name == "rabbitmq_peer_discovery_aws":
-#@ if suite == "integration":
-        if: false
-#@ end
-#@ end
-        working-directory: ${{ env.PRIMARY_VERSION_PATH }}
-        run: |
-          if [[ -f ${{ env.CACHE_PATH }}/ct-(@= suite @)-mixed ]]; then
-            echo "ct-(@= suite @)-mixed already passed for this key ${{ needs.xref.outputs.hash }}"
-          else
-            make -C deps/(@= name @) \
-                ct-(@= suite @) \
-                RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }} \
-                SECONDARY_UMBRELLA=${{ github.workspace }}/${{ env.MIXED_VERSION_PATH }}
-            touch ${{ env.CACHE_PATH }}/ct-(@= suite @)-mixed
           fi
 #@ end
       - name: SAVE TEST RESULT CACHE
@@ -176,6 +164,14 @@
           path: ${{ env.PRIMARY_VERSION_PATH }}
           key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}
           fail-on-cache-miss: true
+#@ if data.values.mixed_version_ref != "none":
+      - name: RESTORE BUILT MIXED VERSION REPO
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MIXED_VERSION_PATH }}
+          key: ${{ runner.os }}-make-cache-${{ needs.xref.outputs.hash }}-mixed
+          fail-on-cache-miss: true
+#@ end
       - name: COMPUTE PREVIOUS RUN ATTEPMT
         id: previous-attempt
         run: |
@@ -203,9 +199,13 @@
       - name: PREPARE
         run: |
           mkdir -p ${{ env.CACHE_PATH }}
-      - name: TEST
+      - name: TEST(@= "" if data.values.mixed_version_ref == "none" else " MIXED" @)
         id: test
         working-directory: ${{ env.PRIMARY_VERSION_PATH }}
+#@ if data.values.mixed_version_ref != "none":
+        env:
+          SECONDARY_UMBRELLA: ${{ github.workspace }}/${{ env.MIXED_VERSION_PATH }}
+#@ end
         run: |
           if [[ -f ${{ env.CACHE_PATH }}/checks ]]; then
             echo "checks already passed for this key ${{ needs.xref.outputs.hash }}"
@@ -232,7 +232,7 @@
 
 ---
 #@ load("@ytt:template", "template")
-name: Test (make)
+name: #@ "Test (make)" + (" Mixed Versions" if data.values.mixed_version_ref != "none" else "" )
 on:
   push:
     branches:
@@ -286,6 +286,7 @@ jobs:
         working-directory: ${{ env.PRIMARY_VERSION_PATH }}
         run: |
           make
+#@ if data.values.mixed_version_ref == "none":
       - name: XREF
         working-directory: ${{ env.PRIMARY_VERSION_PATH }}
         run: |
@@ -295,6 +296,8 @@ jobs:
           with:
             path: ${{ env.PRIMARY_VERSION_PATH }}
             key: ${{ runner.os }}-make-cache-${{ steps.hash.outputs.hash }}
+#@ end
+#@ if data.values.mixed_version_ref != "none":
       - name: CHECKOUT MIXED VERSION REPOSITORY
         uses: actions/checkout@v4
         with:
@@ -309,6 +312,7 @@ jobs:
         working-directory: ${{ env.MIXED_VERSION_PATH }}
         run: |
           make
+#@ end
 #@ for plugin in data.values.internal_deps:
   _: #@ template.replace(test_plugin(plugin, ["xref"], data.values[plugin].suites))
 #@ end
