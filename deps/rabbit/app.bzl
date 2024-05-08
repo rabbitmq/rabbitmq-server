@@ -2092,6 +2092,15 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
     )
 
     erlang_bytecode(
+        name = "cluster_limit_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/cluster_limit_SUITE.erl"],
+        outs = ["test/cluster_limit_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
+    )
+    erlang_bytecode(
         name = "metadata_store_clustering_SUITE_beam_files",
         testonly = True,
         srcs = ["test/metadata_store_clustering_SUITE.erl"],
