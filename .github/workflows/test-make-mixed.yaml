@@ -55,7 +55,7 @@ jobs:
     - name: CHECKOUT MIXED VERSION REPOSITORY
       uses: actions/checkout@v4
       with:
-        ref: v3.12.1
+        ref: v3.12.x
         path: ${{ env.MIXED_VERSION_PATH }}
     - name: CACHE BUILT MIXED VERSION REPO
       uses: actions/cache@v4
@@ -102,11 +102,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -151,7 +151,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -195,11 +195,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -270,7 +270,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp10_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -314,11 +314,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -363,7 +363,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-amqp_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -407,11 +407,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -456,7 +456,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-oauth2_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -500,11 +500,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -601,7 +601,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -645,11 +645,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -668,7 +668,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_client_helpers-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -712,11 +712,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -748,7 +748,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_ct_helpers-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -792,11 +792,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -828,7 +828,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -872,11 +872,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -895,7 +895,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-trust_store_http-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -952,11 +952,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -2795,7 +2795,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbit-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -2921,11 +2921,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -2957,7 +2957,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp_client-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3001,11 +3001,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -3024,7 +3024,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_amqp1_0-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3068,11 +3068,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -3130,7 +3130,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_cache-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3174,11 +3174,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -3236,7 +3236,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_http-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3280,11 +3280,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -3342,7 +3342,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_ldap-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3386,11 +3386,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -3526,7 +3526,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_backend_oauth2-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3570,11 +3570,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -3593,7 +3593,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_auth_mechanism_ssl-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3637,11 +3637,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -3660,7 +3660,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_aws-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3704,11 +3704,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -3740,7 +3740,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_consistent_hash_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3784,11 +3784,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -3846,7 +3846,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_event_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -3890,11 +3890,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -4004,7 +4004,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4048,11 +4048,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -4084,7 +4084,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_federation_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4128,11 +4128,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -4190,7 +4190,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_jms_topic_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4234,11 +4234,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -4439,7 +4439,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4483,11 +4483,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -4558,7 +4558,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_management_agent-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4602,11 +4602,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -4872,7 +4872,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_mqtt-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -4916,11 +4916,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -4979,7 +4979,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_aws-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5023,11 +5023,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5059,7 +5059,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_common-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5103,11 +5103,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5152,7 +5152,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_consul-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5196,11 +5196,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5258,7 +5258,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_etcd-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5302,11 +5302,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5351,7 +5351,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_peer_discovery_k8s-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5395,11 +5395,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5444,7 +5444,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prelaunch-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5488,11 +5488,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5550,7 +5550,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_prometheus-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5594,11 +5594,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5617,7 +5617,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_random_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5661,11 +5661,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5697,7 +5697,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_recent_history_exchange-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5741,11 +5741,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5790,7 +5790,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_sharding-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -5834,11 +5834,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -5987,7 +5987,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6031,11 +6031,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -6093,7 +6093,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_shovel_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6137,11 +6137,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -6277,7 +6277,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stomp-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6321,11 +6321,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -6435,7 +6435,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6479,11 +6479,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -6515,7 +6515,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_stream_management-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6559,11 +6559,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -6582,7 +6582,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_top-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6626,11 +6626,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -6662,7 +6662,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_tracing-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6706,11 +6706,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -6755,7 +6755,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_trust_store-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6799,11 +6799,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -6848,7 +6848,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_dispatch-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -6892,11 +6892,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -6967,7 +6967,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -7011,11 +7011,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -7034,7 +7034,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_mqtt_examples-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -7078,11 +7078,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -7179,7 +7179,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
@@ -7223,11 +7223,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
-          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -7246,7 +7246,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-mixed-v3.12.1-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_web_stomp_examples-mixed-v3.12.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
