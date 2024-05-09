@@ -67,7 +67,9 @@ end_per_testcase(_Group, _Config) ->
 -define(ASSERT_EFF(EfxPat, Guard, Effects),
         ?assert(lists:any(fun (EfxPat) when Guard -> true;
                               (_) -> false
-                          end, Effects))).
+                          end, Effects),
+                lists:flatten(
+                  io_lib:format("effect not found in ~p", [Effects])))).
 
 -define(ASSERT_NO_EFF(EfxPat, Effects),
         ?assert(not lists:any(fun (EfxPat) -> true;
@@ -88,6 +90,11 @@ end_per_testcase(_Group, _Config) ->
         {assert, fun (S) -> ?assertMatch(Guard, S), Fun end}).
 -define(ASSERT(Guard),
         ?ASSERT(Guard, fun () -> ok end)).
+
+-define(ASSERT_MANY(Guard, Cmds),
+        ?ASSERT_MANY(Guard, Cmds, fun () -> ok end)).
+-define(ASSERT_MANY(Guard, Cmds, Fun),
+        {assert_many, Cmds, fun (S) -> ?assertMatch(Guard, S), Fun end}).
 
 test_init(Name) ->
     init(#{name => Name,
@@ -1246,7 +1253,7 @@ single_active_consumer_all_disconnected_test(Config) ->
      ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{status = up,
                                                          credit = 1}}})
     ],
-    {State1, _} = run_log(Config, State0, Entries),
+    {_State1, _} = run_log(Config, State0, Entries),
     ok.
 
 single_active_consumer_state_enter_leader_include_waiting_consumers_test(Config) ->
@@ -1946,6 +1953,46 @@ single_active_consumer_credited_favour_with_credit_test(Config) ->
     {_S1, _} = run_log(Config, S0, Entries, fun single_active_invariant/1),
     ok.
 
+consumer_timeout_competing_test(Config) ->
+    S0 = init(#{name => ?FUNCTION_NAME,
+                queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)
+               }),
+    Pid1 = test_util:fake_pid(node()),
+    C1Pid = test_util:fake_pid(n1@banana),
+    % % adding some consumers
+    {CK1, C1} = {?LINE, {?LINE_B, C1Pid}},
+    Entries =
+    [
+     %% add a consumer, with plenty of prefetch
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 10}}, #{})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up}},
+                          waiting_consumers = []}),
+
+     %% enqueue a message
+     {?LINE, rabbit_fifo:make_enqueue(Pid1, 1, msg1)},
+     %% the idx is also used as the timestamp, here we add a bit more than
+     %% 5s which should be enough
+     {?LINE + ?CONSUMER_LOCK_MS, rabbit_fifo:make_eval_consumer_timeouts([CK1])},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = timed_out,
+                                                         checked_out = Ch}}
+                         } when map_size(Ch) == 0),
+     %% a late consumer interaction re-activates the consumer
+     ?ASSERT_MANY(#rabbit_fifo{consumers =
+                               #{CK1 := #consumer{status = up,
+                                                  checked_out = Ch}}}
+                    when map_size(Ch) == 1,
+                  [
+                   {?LINE, rabbit_fifo:make_defer(CK1, [0])},
+                   {?LINE, rabbit_fifo:make_settle(CK1, [0])},
+                   {?LINE, rabbit_fifo:make_discard(CK1, [0])},
+                   {?LINE, rabbit_fifo:make_return(CK1, [0])}
+                  ])
+    ],
+
+    {_S1, Effects} = run_log(Config, S0, Entries,
+                             fun (_S) -> true end),
+    ?ASSERT_EFF({consumer_timeout, _Ctag, [_]}, Effects),
+    ok.
 
 
 register_enqueuer_test(Config) ->
@@ -2021,7 +2068,6 @@ reject_publish_purge_test(Config) ->
                             rabbit_fifo:make_enqueue(Pid1, 2, two), State2),
     {State4, ok, Efx} = apply(meta(Config, 4, ?LINE, {notify, 2, Pid1}),
                               rabbit_fifo:make_enqueue(Pid1, 3, three), State3),
-    % ct:pal("Efx ~tp", [Efx]),
     ?ASSERT_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]}, P == Pid1, Efx),
     {_State5, {purge, 3}, Efx1} = apply(meta(Config, 5), rabbit_fifo:make_purge(), State4),
     ?ASSERT_EFF({send_msg, P, {queue_status, go}, [ra_event]}, P == Pid1, Efx1),
@@ -2191,24 +2237,33 @@ run_log(Config, InitState, Entries) ->
     run_log(Config, InitState, Entries, fun (_) -> true end).
 run_log(Config, InitState, Entries, Invariant) ->
     lists:foldl(
-      fun ({assert, Fun}, {Acc0, Efx0}) ->
+      fun
+          ({assert, Fun}, {Acc0, Efx0}) ->
               _ = Fun(Acc0),
               {Acc0, Efx0};
-          ({Idx, E}, {Acc0, Efx0}) ->
-              case apply(meta(Config, Idx, Idx, {notify, Idx, self()}),
-                         E, Acc0) of
-                  {Acc, _, Efx} when is_list(Efx) ->
-                      ?assert(Invariant(Acc)),
-                      {Acc, Efx0 ++ Efx};
-                  {Acc, _, Efx}  ->
-                      ?assert(Invariant(Acc)),
-                      {Acc, Efx0 ++ [Efx]};
-                  {Acc, _}  ->
-                      ?assert(Invariant(Acc)),
-                      {Acc, Efx0}
-              end
+          ({assert_many, Cmds, Fun}, {Acc0, Efx0}) ->
+              [begin
+                   {Acc, _} = run_log_apply(Config, Idx, Cmd, Invariant, Acc0, Efx0),
+                   Fun(Acc)
+               end || {Idx, Cmd} <- Cmds],
+              {Acc0, Efx0};
+          ({Idx, Cmd}, {Acc0, Efx0}) ->
+              run_log_apply(Config, Idx, Cmd, Invariant, Acc0, Efx0)
       end, {InitState, []}, Entries).
 
+run_log_apply(Config, Idx, Cmd, Invariant, Acc0, Efx0) ->
+    case apply(meta(Config, Idx, Idx, {notify, Idx, self()}),
+               Cmd, Acc0) of
+        {Acc, _, Efx} when is_list(Efx) ->
+            ?assert(Invariant(Acc)),
+            {Acc, Efx0 ++ Efx};
+        {Acc, _, Efx}  ->
+            ?assert(Invariant(Acc)),
+            {Acc, Efx0 ++ [Efx]};
+        {Acc, _}  ->
+            ?assert(Invariant(Acc)),
+            {Acc, Efx0}
+    end.
 
 %% AUX Tests
 
@@ -2221,10 +2276,9 @@ aux_test(_) ->
     ok = meck:new(ra_log, []),
     Log = mock_log,
     meck:expect(ra_log, last_index_term, fun (_) -> {0, 0} end),
-    {no_reply, Aux, mock_log} = handle_aux(leader, cast, active, Aux0,
-                                            Log, MacState),
-    {no_reply, _Aux, mock_log} = handle_aux(leader, cast, tick, Aux,
-                                             Log, MacState),
+    RaAux = #{log => Log, machine_state => MacState},
+    {no_reply, Aux, RaAux} = handle_aux(leader, cast, active, Aux0, RaAux),
+    {no_reply, _Aux, RaAux} = handle_aux(leader, cast, tick, Aux, RaAux),
     [X] = ets:lookup(rabbit_fifo_usage, aux_test),
     meck:unload(),
     ?assert(X > 0.0),
@@ -2596,7 +2650,7 @@ init(Conf) -> rabbit_fifo:init(Conf).
 make_register_enqueuer(Pid) -> rabbit_fifo:make_register_enqueuer(Pid).
 apply(Meta, Entry, State) -> rabbit_fifo:apply(Meta, Entry, State).
 init_aux(Conf) -> rabbit_fifo:init_aux(Conf).
-handle_aux(S, T, C, A, L, M) -> rabbit_fifo:handle_aux(S, T, C, A, L, M).
+handle_aux(S, T, C, A, RaAux) -> rabbit_fifo:handle_aux(S, T, C, A, RaAux).
 make_checkout(C, S, M) -> rabbit_fifo:make_checkout(C, S, M).
 
 cid(A) when is_atom(A) ->

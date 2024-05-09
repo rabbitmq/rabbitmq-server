@@ -110,6 +110,8 @@
 -define(LOW_LIMIT, 0.8).
 -define(DELIVERY_CHUNK_LIMIT_B, 128_000).
 
+-define(CONSUMER_LOCK_MS, 5 * 60 * 1000). % 5 min lock
+
 -type milliseconds() :: non_neg_integer().
 -record(consumer_cfg,
         {meta = #{} :: consumer_meta(),
@@ -126,7 +128,18 @@
 
 -record(consumer,
         {cfg = #consumer_cfg{},
-         status = up :: up | suspected_down | cancelled | fading,
+         status = up :: up |
+                        % on a disconnected node
+                        suspected_down |
+                        cancelled |
+                        % deprioritised with pending messages
+                        fading |
+                        %% one or more checked out messages have timed out
+                        %% and been returned but the consumer process is still
+                        %% on a connected node,
+                        %% the `timed_out' state can only be reached directly from
+                        %% the `up' state and can transition into any other state
+                        timed_out,
          next_msg_id = 0 :: msg_id(),
          checked_out = #{} :: #{msg_id() => {At :: milliseconds(), msg()}},
          %% max number of messages that can be sent
@@ -140,7 +153,8 @@
 
 -type consumer_strategy() :: competing | single_active.
 
--type dead_letter_handler() :: option({at_most_once, applied_mfa()} | at_least_once).
+-type dead_letter_handler() :: option({at_most_once, applied_mfa()} |
+                                      at_least_once).
 
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),

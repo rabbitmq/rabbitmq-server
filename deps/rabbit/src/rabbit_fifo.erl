@@ -23,6 +23,8 @@
 -define(CONSUMER_TAG_PID(Tag, Pid),
         #consumer{cfg = #consumer_cfg{tag = Tag,
                                       pid = Pid}}).
+-define(NON_EMPTY_MAP(M), M when map_size(M) > 0).
+-define(EMPTY_MAP, M when map_size(M) == 0).
 
 -export([
          %% ra_machine callbacks
@@ -76,6 +78,7 @@
          make_purge/0,
          make_purge_nodes/1,
          make_update_config/1,
+         make_eval_consumer_timeouts/1,
          make_garbage_collection/0
         ]).
 
@@ -119,7 +122,7 @@
 -record(purge_nodes, {nodes :: [node()]}).
 -record(update_config, {config :: config()}).
 -record(garbage_collection, {}).
-% -record(eval_consumer_timeouts, {consumer_keys :: [consumer_key()]}).
+-record(eval_consumer_timeouts, {consumer_keys :: [consumer_key()]}).
 
 -opaque protocol() ::
     #enqueue{} |
@@ -238,9 +241,31 @@ apply(Meta, #settle{msg_ids = MsgIds,
             %% find_consumer/2 returns the actual consumer key even if
             %% if id was passed instead for example
             complete_and_checkout(Meta, MsgIds, ConsumerKey,
-                                  Con0, [], State);
+                                  reactivate_timed_out(Con0),
+                                  [], State);
         _ ->
-            {State, ok}
+            {State, {error, invalid_consumer_key}}
+    end;
+apply(#{index := Idx,
+        system_time := Ts} = Meta, #defer{msg_ids = MsgIds,
+                                          consumer_key = Key},
+      #?STATE{consumers = Consumers} = State0) ->
+    case find_consumer(Key, Consumers) of
+        {ConsumerKey, #consumer{checked_out = Checked0} = Con0} ->
+            Checked = maps:map(fun (MsgId, ?C_MSG(_At, Msg) = Orig) ->
+                                       case lists:member(MsgId, MsgIds) of
+                                           true ->
+                                               ?C_MSG(Ts, Msg);
+                                           false ->
+                                               Orig
+                                       end
+                               end, Checked0),
+            Con = reactivate_timed_out(Con0#consumer{checked_out = Checked}),
+            State1 = State0#?STATE{consumers = Consumers#{ConsumerKey => Con}},
+            {State, Ret, Effs} = checkout(Meta, State0, State1, []),
+            update_smallest_raft_index(Idx, Ret, State, Effs);
+        _ ->
+            {State0, {error, invalid_consumer_key}}
     end;
 apply(Meta, #discard{consumer_key = ConsumerKey,
                      msg_ids = MsgIds},
@@ -263,19 +288,25 @@ apply(Meta, #discard{consumer_key = ConsumerKey,
             {DlxState, Effects} = rabbit_fifo_dlx:discard(DiscardMsgs, rejected,
                                                           DLH, DlxState0),
             State = State0#?STATE{dlx = DlxState},
-            complete_and_checkout(Meta, MsgIds, ConsumerKey, Con, Effects, State);
+            complete_and_checkout(Meta, MsgIds, ConsumerKey,
+                                  reactivate_timed_out(Con),
+                                  Effects, State);
         _ ->
-            {State0, ok}
+            {State0, {error, invalid_consumer_key}}
     end;
 apply(Meta, #return{consumer_key = ConsumerKey,
                     msg_ids = MsgIds},
-      #?STATE{consumers = Cons0} = State) ->
+      #?STATE{consumers = Cons0} = State0) ->
     case find_consumer(ConsumerKey, Cons0) of
-        {ActualConsumerKey, #consumer{checked_out = Checked0}} ->
+        {ActualConsumerKey, #consumer{checked_out = Checked0} = Con0} ->
+
+            State = State0#?MODULE{consumers =
+                                   Cons0#{ActualConsumerKey =>
+                                          reactivate_timed_out(Con0)}},
             Returned = maps:with(MsgIds, Checked0),
             return(Meta, ActualConsumerKey, Returned, [], State);
         _ ->
-            {State, ok}
+            {State0, {error, invalid_consumer_key}}
     end;
 apply(#{index := Idx} = Meta,
       #requeue{consumer_key = ConsumerKey,
@@ -731,12 +762,51 @@ apply(#{index := IncomingRaftIdx} = Meta, {dlx, _} = Cmd,
     State1 = State0#?STATE{dlx = DlxState},
     {State, ok, Effects} = checkout(Meta, State0, State1, Effects0),
     update_smallest_raft_index(IncomingRaftIdx, State, Effects);
+apply(Meta, #eval_consumer_timeouts{consumer_keys = CKeys}, State) ->
+    eval_consumer_timeouts(Meta, CKeys, State);
 apply(_Meta, Cmd, State) ->
     %% handle unhandled commands gracefully
     rabbit_log:debug("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
     {State, ok, []}.
 
-convert_v3_to_v4(#{system_time := Ts}, #rabbit_fifo{consumers = Consumers0} = StateV3) ->
+eval_consumer_timeouts(#{system_time := Ts} = Meta, CKeys,
+                       #?STATE{cfg = #cfg{consumer_strategy = competing},
+                               consumers = Consumers0} = State0) ->
+    ToCheck = maps:with(CKeys, Consumers0),
+    {State, Effects} =
+    maps:fold(
+      fun (Ckey, #consumer{cfg = #consumer_cfg{},
+                           status = up,
+                           checked_out = Ch} = C0,
+           {#?STATE{consumers = Cons} = S0, E0} = Acc) ->
+              case maps:filter(fun (_MsgId, ?C_MSG(At, _)) ->
+                                       (At + ?CONSUMER_LOCK_MS) < Ts
+                               end, Ch) of
+                  ?EMPTY_MAP ->
+                      Acc;
+                  ?NON_EMPTY_MAP(ToReturn) ->
+                      %% there are timed out messages,
+                      %% update consumer state to `timed_out'
+                      %% TODO: only if current status us `up'
+                      C1 = C0#consumer{status = timed_out},
+                      S1 = S0#?STATE{consumers = Cons#{Ckey => C1}},
+                      {S, E1} = maps:fold(
+                                  fun(MsgId, ?C_MSG(_At, Msg), {S2, E1}) ->
+                                          return_one(Meta, MsgId, Msg,
+                                                     S2, E1, Ckey)
+                                  end, {S1, E0}, ToReturn),
+                      E = [{consumer_timeout, Ckey, maps:keys(ToReturn)} | E1],
+                      C = maps:get(Ckey, S#?STATE.consumers),
+                      {update_or_remove_con(Meta, Ckey, C, S), E}
+              end;
+          (_Ckey, _Con, Acc) ->
+              Acc
+      end, {State0, []}, ToCheck),
+
+    {State, ok, Effects}.
+
+convert_v3_to_v4(#{system_time := Ts},
+                 #rabbit_fifo{consumers = Consumers0} = StateV3) ->
     Consumers = maps:map(
                   fun (_CKey, #consumer{checked_out = Ch0} = C) ->
                           Ch = maps:map(
@@ -965,18 +1035,27 @@ which_module(2) -> rabbit_fifo_v3;
 which_module(3) -> rabbit_fifo_v3;
 which_module(4) -> ?STATE.
 
--define(AUX, aux_v2).
+-define(AUX, aux_v3).
 
 -record(aux_gc, {last_raft_idx = 0 :: ra:index()}).
 -record(aux, {name :: atom(),
               capacity :: term(),
               gc = #aux_gc{} :: #aux_gc{}}).
+-record(aux_v2, {name :: atom(),
+                 last_decorators_state :: term(),
+                 capacity :: term(),
+                 gc = #aux_gc{} :: #aux_gc{},
+                 tick_pid :: undefined | pid(),
+                 cache = #{} :: map()}).
 -record(?AUX, {name :: atom(),
                last_decorators_state :: term(),
                capacity :: term(),
                gc = #aux_gc{} :: #aux_gc{},
                tick_pid :: undefined | pid(),
-               cache = #{} :: map()}).
+               cache = #{} :: map(),
+               last_consumer_timeout_check :: milliseconds(),
+               reserved_1,
+               reserved_2}).
 
 init_aux(Name) when is_atom(Name) ->
     %% TODO: catch specific exception throw if table already exists
@@ -985,15 +1064,36 @@ init_aux(Name) when is_atom(Name) ->
                                       {write_concurrency, true}]),
     Now = erlang:monotonic_time(micro_seconds),
     #?AUX{name = Name,
+          last_consumer_timeout_check = erlang:system_time(millisecond),
           capacity = {inactive, Now, 1, 1.0}}.
 
 handle_aux(RaftState, Tag, Cmd, #aux{name = Name,
                                      capacity = Cap,
-                                     gc = Gc}, RaAux) ->
+                                     gc = Gc
+                                    }, RaAux) ->
     %% convert aux state to new version
     Aux = #?AUX{name = Name,
                 capacity = Cap,
-                gc = Gc},
+                gc = Gc,
+                last_consumer_timeout_check = erlang:system_time(millisecond)
+               },
+    handle_aux(RaftState, Tag, Cmd, Aux, RaAux);
+handle_aux(RaftState, Tag, Cmd, #aux_v2{name = Name,
+                                        last_decorators_state = LDS,
+                                        capacity = Cap,
+                                        gc = Gc,
+                                        tick_pid = TickPid,
+                                        cache = Cache
+                                       }, RaAux) ->
+    %% convert aux state to new version
+    Aux = #?AUX{name = Name,
+                last_decorators_state = LDS,
+                capacity = Cap,
+                gc = Gc,
+                tick_pid = TickPid,
+                cache = Cache,
+                last_consumer_timeout_check = erlang:system_time(millisecond)
+               },
     handle_aux(RaftState, Tag, Cmd, Aux, RaAux);
 handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
                                       consumer_key = Key} = Ret, Corr, Pid},
@@ -1028,7 +1128,8 @@ handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
             {no_reply, Aux0, RaAux0, [{append, Ret, {notify, Corr, Pid}}]}
     end;
 handle_aux(leader, _, {handle_tick, [QName, Overview0, Nodes]},
-           #?AUX{tick_pid = Pid} = Aux, RaAux) ->
+           #?AUX{tick_pid = Pid,
+                 last_consumer_timeout_check = LastCheck} = Aux, RaAux) ->
     Overview = Overview0#{members_info => ra_aux:members_info(RaAux)},
     NewPid =
         case process_is_alive(Pid) of
@@ -1040,8 +1141,17 @@ handle_aux(leader, _, {handle_tick, [QName, Overview0, Nodes]},
                 %% Active TICK pid, do nothing
                 Pid
         end,
-    %% TODO: check consumer timeouts
-    {no_reply, Aux#?AUX{tick_pid = NewPid}, RaAux};
+    %% check consumer timeouts
+    Now = erlang:system_time(millisecond),
+    case Now - LastCheck > 1000 of
+        true ->
+            %% check if there are any consumer checked out message that have
+            %% timed out.
+            {no_reply, Aux#?AUX{tick_pid = NewPid,
+                                last_consumer_timeout_check = Now}, RaAux};
+        false ->
+            {no_reply, Aux#?AUX{tick_pid = NewPid}, RaAux}
+    end;
 handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds}, Aux0, RaAux0) ->
     #?STATE{cfg = #cfg{},
             consumers = Consumers} = ra_aux:machine_state(RaAux0),
@@ -1724,13 +1834,14 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg, Effects0,
 return(#{index := IncomingRaftIdx} = Meta,
        ConsumerKey, Returned, Effects0, State0) ->
     {State1, Effects1} = maps:fold(
-                           fun(MsgId, {_At, Msg}, {S0, E0}) ->
+                           fun(MsgId, ?C_MSG(_At, Msg), {S0, E0}) ->
                                    return_one(Meta, MsgId, Msg,
                                               S0, E0, ConsumerKey)
                            end, {State0, Effects0}, Returned),
     State2 = case State1#?STATE.consumers of
                  #{ConsumerKey := Con} ->
-                     update_or_remove_con(Meta, ConsumerKey, Con, State1);
+                     update_or_remove_con(Meta, ConsumerKey,
+                                          Con, State1);
                  _ ->
                      State1
              end,
@@ -1738,24 +1849,6 @@ return(#{index := IncomingRaftIdx} = Meta,
     update_smallest_raft_index(IncomingRaftIdx, State, Effects).
 
 % used to process messages that are finished
-complete(Meta, ConsumerKey, [MsgId],
-         #consumer{checked_out = Checked0} = Con0,
-         #?STATE{ra_indexes = Indexes0,
-                 msg_bytes_checkout = BytesCheckout,
-                 messages_total = Tot} = State0) ->
-    case maps:take(MsgId, Checked0) of
-        {?C_MSG(_, Idx, Hdr), Checked} ->
-            SettledSize = get_header(size, Hdr),
-            Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
-            Con = Con0#consumer{checked_out = Checked,
-                                credit = increase_credit(Con0, 1)},
-            State1 = update_or_remove_con(Meta, ConsumerKey, Con, State0),
-            State1#?STATE{ra_indexes = Indexes,
-                          msg_bytes_checkout = BytesCheckout - SettledSize,
-                          messages_total = Tot - 1};
-        error ->
-            State0
-    end;
 complete(Meta, ConsumerKey, MsgIds,
          #consumer{checked_out = Checked0} = Con0,
          #?STATE{ra_indexes = Indexes0,
@@ -2507,6 +2600,10 @@ make_purge_nodes(Nodes) ->
 make_update_config(Config) ->
     #update_config{config = Config}.
 
+-spec make_eval_consumer_timeouts([consumer_key()]) -> protocol().
+make_eval_consumer_timeouts(Keys) when is_list(Keys) ->
+    #eval_consumer_timeouts{consumer_keys = Keys}.
+
 add_bytes_drop(Header,
                #?STATE{msg_bytes_enqueue = Enqueue} = State) ->
     Size = get_header(size, Header),
@@ -2791,3 +2888,8 @@ maps_search(Pred, {K, V, I}) ->
     end;
 maps_search(Pred, Map) when is_map(Map) ->
     maps_search(Pred, maps:next(maps:iterator(Map))).
+
+reactivate_timed_out(#consumer{status = timed_out} = C) ->
+    C#consumer{status = up};
+reactivate_timed_out(C) ->
+    C.
