@@ -76,7 +76,7 @@ defmodule PluginsFormatterTest do
               enabled: :implicit,
               running: true,
               version: ~c"3.7.0",
-              running_version: nil
+              running_version: ""
             },
             %{
               name: :mock_rabbitmq_plugins_01,
