@@ -146,7 +146,19 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
     ]
   end
 
+  defp augment_version(%{version: version, running: nil}) do
+    to_string(version)
+  end
+
   defp augment_version(%{version: version, running: false}) do
+    to_string(version)
+  end
+
+  defp augment_version(%{version: version, running_version: nil}) do
+    to_string(version)
+  end
+
+  defp augment_version(%{version: version, running_version: ""}) do
     to_string(version)
   end
 
