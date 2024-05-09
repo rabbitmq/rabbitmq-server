@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+## Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 alias RabbitMQ.CLI.Formatters.FormatterHelpers
 
 defmodule RabbitMQ.CLI.Formatters.Plugins do
@@ -144,10 +144,6 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
       "     Dependencies:\t#{prettified}",
       "     Description: \t#{description}"
     ]
-  end
-
-  defp augment_version(%{version: version, running: nil}) do
-    to_string(version)
   end
 
   defp augment_version(%{version: version, running: false}) do
