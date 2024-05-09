@@ -352,7 +352,7 @@
 ## Set the max permissible number of channels per connection.
 ## 0 means "no limit".
 ##
-# channel_max = 128
+# channel_max = 2047
 
 ## Customising TCP Listener (Socket) Configuration.
 ##
