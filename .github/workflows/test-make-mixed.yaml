@@ -156,7 +156,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-amqp10_client-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-amqp10_client-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/amqp10_client/logs/*
   test-amqp10_common:
@@ -275,7 +275,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-amqp10_common-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-amqp10_common-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/amqp10_common/logs/*
   test-amqp_client:
@@ -368,7 +368,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-amqp_client-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-amqp_client-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/amqp_client/logs/*
   test-oauth2_client:
@@ -461,7 +461,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-oauth2_client-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-oauth2_client-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/oauth2_client/logs/*
   test-rabbit_common:
@@ -606,7 +606,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbit_common-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbit_common-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbit_common/logs/*
   test-rabbitmq_ct_client_helpers:
@@ -673,7 +673,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_ct_client_helpers-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_ct_client_helpers-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_ct_client_helpers/logs/*
   test-rabbitmq_ct_helpers:
@@ -753,7 +753,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_ct_helpers-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_ct_helpers-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_ct_helpers/logs/*
   test-rabbitmq_stream_common:
@@ -833,7 +833,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_stream_common-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_stream_common-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_stream_common/logs/*
   test-trust_store_http:
@@ -900,7 +900,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-trust_store_http-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-trust_store_http-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/trust_store_http/logs/*
   test-rabbit:
@@ -2800,7 +2800,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbit-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbit-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbit/logs/*
   test-rabbitmq_cli:
@@ -2840,11 +2840,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: (@= cache_prefix('rabbitmq_cli') @)-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-mixed-v3.13.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          (@= cache_prefix('rabbitmq_cli') @)-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          (@= cache_prefix('rabbitmq_cli') @)-${{ github.run_number }}-
-          (@= cache_prefix('rabbitmq_cli') @)-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-mixed-v3.13.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-mixed-v3.13.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-mixed-v3.13.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -2858,7 +2858,7 @@ jobs:
     - name: PREPARE
       run: |
         mkdir -p ${{ env.CACHE_PATH }}
-    - name: TEST(@= "" if data.values.mixed_version_ref == "none" else " MIXED" @)
+    - name: TEST MIXED
       id: test
       working-directory: ${{ env.PRIMARY_VERSION_PATH }}
       env:
@@ -2877,12 +2877,12 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: (@= cache_prefix('rabbitmq_cli') @)-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-mixed-v3.13.x-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_cli-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_cli-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_cli/logs/*
   test-rabbitmq_amqp_client:
@@ -2962,7 +2962,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_amqp_client-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_amqp_client-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_amqp_client/logs/*
   test-rabbitmq_amqp1_0:
@@ -3029,7 +3029,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_amqp1_0-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_amqp1_0-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_amqp1_0/logs/*
   test-rabbitmq_auth_backend_cache:
@@ -3135,7 +3135,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_auth_backend_cache-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_auth_backend_cache-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_auth_backend_cache/logs/*
   test-rabbitmq_auth_backend_http:
@@ -3241,7 +3241,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_auth_backend_http-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_auth_backend_http-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_auth_backend_http/logs/*
   test-rabbitmq_auth_backend_ldap:
@@ -3347,7 +3347,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_auth_backend_ldap-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_auth_backend_ldap-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_auth_backend_ldap/logs/*
   test-rabbitmq_auth_backend_oauth2:
@@ -3531,7 +3531,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_auth_backend_oauth2-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_auth_backend_oauth2-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_auth_backend_oauth2/logs/*
   test-rabbitmq_auth_mechanism_ssl:
@@ -3598,7 +3598,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_auth_mechanism_ssl-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_auth_mechanism_ssl-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_auth_mechanism_ssl/logs/*
   test-rabbitmq_aws:
@@ -3665,7 +3665,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_aws-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_aws-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_aws/logs/*
   test-rabbitmq_consistent_hash_exchange:
@@ -3745,7 +3745,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_consistent_hash_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_consistent_hash_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_consistent_hash_exchange/logs/*
   test-rabbitmq_event_exchange:
@@ -3851,7 +3851,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_event_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_event_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_event_exchange/logs/*
   test-rabbitmq_federation:
@@ -4009,7 +4009,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_federation-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_federation-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_federation/logs/*
   test-rabbitmq_federation_management:
@@ -4089,7 +4089,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_federation_management-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_federation_management-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_federation_management/logs/*
   test-rabbitmq_jms_topic_exchange:
@@ -4195,7 +4195,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_jms_topic_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_jms_topic_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_jms_topic_exchange/logs/*
   test-rabbitmq_management:
@@ -4444,7 +4444,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_management-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_management-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_management/logs/*
   test-rabbitmq_management_agent:
@@ -4563,7 +4563,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_management_agent-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_management_agent-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_management_agent/logs/*
   test-rabbitmq_mqtt:
@@ -4877,7 +4877,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_mqtt-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_mqtt-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_mqtt/logs/*
   test-rabbitmq_peer_discovery_aws:
@@ -4984,7 +4984,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_peer_discovery_aws-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_peer_discovery_aws-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_peer_discovery_aws/logs/*
   test-rabbitmq_peer_discovery_common:
@@ -5064,7 +5064,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_peer_discovery_common-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_peer_discovery_common-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_peer_discovery_common/logs/*
   test-rabbitmq_peer_discovery_consul:
@@ -5157,7 +5157,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_peer_discovery_consul-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_peer_discovery_consul-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_peer_discovery_consul/logs/*
   test-rabbitmq_peer_discovery_etcd:
@@ -5263,7 +5263,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_peer_discovery_etcd-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_peer_discovery_etcd-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_peer_discovery_etcd/logs/*
   test-rabbitmq_peer_discovery_k8s:
@@ -5356,7 +5356,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_peer_discovery_k8s-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_peer_discovery_k8s-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_peer_discovery_k8s/logs/*
   test-rabbitmq_prelaunch:
@@ -5449,7 +5449,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_prelaunch-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_prelaunch-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_prelaunch/logs/*
   test-rabbitmq_prometheus:
@@ -5555,7 +5555,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_prometheus-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_prometheus-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_prometheus/logs/*
   test-rabbitmq_random_exchange:
@@ -5622,7 +5622,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_random_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_random_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_random_exchange/logs/*
   test-rabbitmq_recent_history_exchange:
@@ -5702,7 +5702,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_recent_history_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_recent_history_exchange-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_recent_history_exchange/logs/*
   test-rabbitmq_sharding:
@@ -5795,7 +5795,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_sharding-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_sharding-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_sharding/logs/*
   test-rabbitmq_shovel:
@@ -5992,7 +5992,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_shovel-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_shovel-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_shovel/logs/*
   test-rabbitmq_shovel_management:
@@ -6098,7 +6098,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_shovel_management-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_shovel_management-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_shovel_management/logs/*
   test-rabbitmq_stomp:
@@ -6282,7 +6282,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_stomp-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_stomp-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_stomp/logs/*
   test-rabbitmq_stream:
@@ -6440,7 +6440,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_stream-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_stream-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_stream/logs/*
   test-rabbitmq_stream_management:
@@ -6520,7 +6520,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_stream_management-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_stream_management-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_stream_management/logs/*
   test-rabbitmq_top:
@@ -6587,7 +6587,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_top-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_top-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_top/logs/*
   test-rabbitmq_tracing:
@@ -6667,7 +6667,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_tracing-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_tracing-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_tracing/logs/*
   test-rabbitmq_trust_store:
@@ -6760,7 +6760,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_trust_store-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_trust_store-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_trust_store/logs/*
   test-rabbitmq_web_dispatch:
@@ -6853,7 +6853,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_web_dispatch-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_web_dispatch-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_web_dispatch/logs/*
   test-rabbitmq_web_mqtt:
@@ -6972,7 +6972,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_web_mqtt-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_web_mqtt-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_web_mqtt/logs/*
   test-rabbitmq_web_mqtt_examples:
@@ -7039,7 +7039,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_web_mqtt_examples-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_web_mqtt_examples-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_web_mqtt_examples/logs/*
   test-rabbitmq_web_stomp:
@@ -7184,7 +7184,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_web_stomp-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_web_stomp-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_web_stomp/logs/*
   test-rabbitmq_web_stomp_examples:
@@ -7251,7 +7251,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4.3.1
       with:
-        name: testlogs-rabbitmq_web_stomp_examples-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+        name: testlogs-rabbitmq_web_stomp_examples-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-mixed
         path: |
           ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_web_stomp_examples/logs/*
   summary-test-make:

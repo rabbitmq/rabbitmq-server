@@ -138,11 +138,12 @@
         if: always()
         uses: actions/upload-artifact@v4.3.1
         with:
-          name: testlogs-(@= name @)-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+          name: testlogs-(@= name @)-${{ matrix.metadata_store }}-${{ matrix.otp_version }}(@= "-mixed" if data.values.mixed_version_ref != "none" else "" @)
           path: |
             ${{ env.PRIMARY_VERSION_PATH }}/deps/(@= name @)/logs/*
 #@ end
 
+#@yaml/text-templated-strings
 #@ def test_cli(needs):
   test-rabbitmq_cli:
     name: Test rabbitmq_cli
@@ -225,7 +226,7 @@
         if: always()
         uses: actions/upload-artifact@v4.3.1
         with:
-          name: testlogs-rabbitmq_cli-${{ matrix.metadata_store }}-${{ matrix.otp_version }}
+          name: testlogs-rabbitmq_cli-${{ matrix.metadata_store }}-${{ matrix.otp_version }}(@= "-mixed" if data.values.mixed_version_ref != "none" else "" @)
           path: |
             ${{ env.PRIMARY_VERSION_PATH }}/deps/rabbitmq_cli/logs/*
 #@ end

@@ -2683,11 +2683,11 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ env.CACHE_PATH }}
-        key: (@= cache_prefix('rabbitmq_cli') @)-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-mixed-none-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
         restore-keys: |
-          (@= cache_prefix('rabbitmq_cli') @)-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
-          (@= cache_prefix('rabbitmq_cli') @)-${{ github.run_number }}-
-          (@= cache_prefix('rabbitmq_cli') @)-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-mixed-none-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ steps.previous-attempt-outputs.number }}
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-mixed-none-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-
+          ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-mixed-none-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-
     - name: PRINT CACHED RESULTS
       run: |
         set -x
@@ -2701,7 +2701,7 @@ jobs:
     - name: PREPARE
       run: |
         mkdir -p ${{ env.CACHE_PATH }}
-    - name: TEST(@= "" if data.values.mixed_version_ref == "none" else " MIXED" @)
+    - name: TEST
       id: test
       working-directory: ${{ env.PRIMARY_VERSION_PATH }}
       run: |
@@ -2718,7 +2718,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/test-result-cache/
-        key: (@= cache_prefix('rabbitmq_cli') @)-${{ github.run_number }}-${{ github.run_attempt }}
+        key: ${{ runner.os }}-test-result-cache-${{ needs.xref.outputs.hash }}-rabbitmq_cli-mixed-none-${{ matrix.metadata_store }}-${{ matrix.otp_version }}-${{ github.run_number }}-${{ github.run_attempt }}
     - name: UPLOAD TEST ARTIFACTS
       if: always()
       uses: actions/upload-artifact@v4.3.1
