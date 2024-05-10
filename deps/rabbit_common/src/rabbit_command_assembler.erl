@@ -77,6 +77,18 @@ process({method, MethodName, FieldsBin}, {method, Protocol}) ->
         end
     catch exit:#amqp_error{} = Reason -> {error, Reason}
     end;
+process({method, MethodName = 'channel.close', FieldsBin}, State = {content_header, _Method, _ClassId, Protocol}) ->
+    try
+        Method = Protocol:decode_method_fields(MethodName, FieldsBin),
+        {ok, Method, State}
+    catch exit:#amqp_error{} = Reason -> {error, Reason}
+    end;
+process({method, MethodName = 'channel.close', FieldsBin}, State = {content_body, _Method, _RemainingSize, _Content, Protocol}) ->
+    try
+        Method = Protocol:decode_method_fields(MethodName, FieldsBin),
+        {ok, Method, State}
+    catch exit:#amqp_error{} = Reason -> {error, Reason}
+    end;
 process(_Frame, {method, _Protocol}) ->
     unexpected_frame("expected method frame, "
                      "got non method frame instead", [], none);
