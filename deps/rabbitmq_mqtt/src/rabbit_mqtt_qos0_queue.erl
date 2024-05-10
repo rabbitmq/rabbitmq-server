@@ -113,15 +113,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
               Msg :: mc:state(),
               rabbit_queue_type:delivery_options()) ->
     {[], rabbit_queue_type:actions()}.
-deliver(Qs, Msg0, Options) ->
-    Msg = case rabbit_feature_flags:is_enabled(message_containers_store_amqp_v1) of
-              true ->
-                  Msg0;
-              false ->
-                  %% An old node might not understand our new mc_amqp state.
-                  %% The following line takes care of converting mc_amqp to mc_amqpl.
-                  mc:prepare(store, Msg0)
-          end,
+deliver(Qs, Msg, Options) ->
     Evt = {queue_event, ?MODULE,
            {?MODULE, _QPid = none, _QMsgId = none, _Redelivered = false, Msg}},
     {Pids, Actions} =

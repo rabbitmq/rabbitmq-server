@@ -87,13 +87,13 @@ end_per_testcase(Testcase, Config) ->
 
 build_dotnet_test_project(Config) ->
     TestProjectDir = filename:join(
-      [?config(data_dir, Config), "fsharp-tests"]),
+                       [?config(data_dir, Config), "fsharp-tests"]),
     Ret = rabbit_ct_helpers:exec(["dotnet", "restore"],
-      [{cd, TestProjectDir}]),
+                                 [{cd, TestProjectDir}]),
     case Ret of
         {ok, _} ->
-            rabbit_ct_helpers:set_config(Config,
-              {dotnet_test_project_dir, TestProjectDir});
+            rabbit_ct_helpers:set_config(
+              Config, {dotnet_test_project_dir, TestProjectDir});
         _ ->
             {skip, "Failed to fetch .NET Core test project dependencies"}
     end.
@@ -119,6 +119,8 @@ roundtrip(Config) ->
                  {java, "RoundTripTest"}]).
 
 streams(Config) ->
+    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config,
+                                                     message_containers_store_amqp_v1),
     Ch = rabbit_ct_client_helpers:open_channel(Config),
     amqp_channel:call(Ch, #'queue.declare'{queue = <<"stream_q2">>,
                                            durable = true,
