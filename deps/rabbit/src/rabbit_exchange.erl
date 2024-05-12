@@ -142,11 +142,11 @@ check_type(TypeBin) ->
     case rabbit_registry:binary_to_type(rabbit_data_coercion:to_binary(TypeBin)) of
         {error, not_found} ->
             rabbit_misc:protocol_error(
-              command_invalid, "unknown exchange type '~ts'", [TypeBin]);
+              precondition_failed, "unknown exchange type '~ts'", [TypeBin]);
         T ->
             case rabbit_registry:lookup_module(exchange, T) of
                 {error, not_found} -> rabbit_misc:protocol_error(
-                                        command_invalid,
+                                        precondition_failed,
                                         "invalid exchange type '~ts'", [T]);
                 {ok, _Module}      -> T
             end
