@@ -200,6 +200,11 @@ init_per_testcase(T, Config)
             %% * stream is known to fail due to https://github.com/rabbitmq/rabbitmq-server/issues/11173
             Skip
     end;
+init_per_testcase(dead_letter_headers_should_not_be_appended_for_republish = T, Config) ->
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers) of
+        ok -> init_per_testcase0(T, Config);
+        {skip, _} = Skip -> Skip
+    end;
 init_per_testcase(Testcase, Config) ->
     init_per_testcase0(Testcase, Config).
 

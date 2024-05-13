@@ -59,23 +59,28 @@ enable_feature_flag(Config) ->
                                                                 {<<"x-dead-letter-routing-key">>, longstr, Q1}]}),
     P1 = <<"payload 1">>,
     P2 = <<"payload 2">>,
+    P3 = <<"payload 3">>,
     amqp_channel:call(Ch,
                       #'basic.publish'{routing_key = Q1},
                       #amqp_msg{payload = P1}),
+    ?assertNot(rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, message_containers)),
+    ?assertEqual(ok, rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers)),
+    amqp_channel:call(Ch,
+                      #'basic.publish'{routing_key = Q1},
+                      #amqp_msg{payload = P2}),
     ?assertNot(rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, ?FEATURE_FLAG)),
     ?assertEqual(ok, rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FEATURE_FLAG)),
     amqp_channel:call(Ch,
                       #'basic.publish'{routing_key = Q1},
-                      #amqp_msg{payload = P2}),
-
-    %% We now have 2 messages in Q2 with different mc annotations:
-    %% * deaths for v1 in the 1st msg
-    %% * deaths_v2 for v2 in the 2nd msg
+                      #amqp_msg{payload = P3}),
+    %% We now have 3 messages in Q2 with 3 different ways how we store the death history.
 
     reject(Ch, Q2, P1),
     reject(Ch, Q2, P2),
+    reject(Ch, Q2, P3),
     reject(Ch, Q2, P1),
     reject(Ch, Q2, P2),
+    reject(Ch, Q2, P3),
 
     {#'basic.get_ok'{}, #amqp_msg{props = #'P_basic'{headers = H1}}} =
     ?awaitMatch({#'basic.get_ok'{},
@@ -89,17 +94,20 @@ enable_feature_flag(Config) ->
                 amqp_channel:call(Ch, #'basic.get'{queue = Q2}),
                 5000),
 
+    {#'basic.get_ok'{}, #amqp_msg{props = #'P_basic'{headers = H3}}} =
+    ?awaitMatch({#'basic.get_ok'{},
+                 #amqp_msg{payload = P3}},
+                amqp_channel:call(Ch, #'basic.get'{queue = Q2}),
+                5000),
+
     lists:foreach(
       fun(Headers) ->
               ?assertEqual({longstr, <<"expired">>}, rabbit_misc:table_lookup(Headers, <<"x-first-death-reason">>)),
               ?assertEqual({longstr, Q1}, rabbit_misc:table_lookup(Headers, <<"x-first-death-queue">>)),
               ?assertEqual({longstr, <<>>}, rabbit_misc:table_lookup(Headers, <<"x-first-death-exchange">>)),
-              ?assertEqual({longstr, <<"expired">>}, rabbit_misc:table_lookup(Headers, <<"x-last-death-reason">>)),
-              ?assertEqual({longstr, Q1}, rabbit_misc:table_lookup(Headers, <<"x-last-death-queue">>)),
-              ?assertEqual({longstr, <<>>}, rabbit_misc:table_lookup(Headers, <<"x-last-death-exchange">>)),
 
               {array, [{table, Death1},
-                       {table, Death2}]} = rabbit_misc:table_lookup(H1, <<"x-death">>),
+                       {table, Death2}]} = rabbit_misc:table_lookup(Headers, <<"x-death">>),
 
               ?assertEqual({longstr, Q1}, rabbit_misc:table_lookup(Death1, <<"queue">>)),
               ?assertEqual({longstr, <<"expired">>}, rabbit_misc:table_lookup(Death1, <<"reason">>)),
@@ -114,7 +122,14 @@ enable_feature_flag(Config) ->
               ?assertEqual({longstr, <<>>}, rabbit_misc:table_lookup(Death2, <<"exchange">>)),
               ?assertEqual({long, 2}, rabbit_misc:table_lookup(Death2, <<"count">>)),
               ?assertEqual({array, [{longstr, Q2}]}, rabbit_misc:table_lookup(Death2, <<"routing-keys">>))
-      end, [H1, H2]),
+      end, [H1, H2, H3]),
+
+    lists:foreach(
+      fun(Headers) ->
+              ?assertEqual({longstr, <<"expired">>}, rabbit_misc:table_lookup(Headers, <<"x-last-death-reason">>)),
+              ?assertEqual({longstr, Q1}, rabbit_misc:table_lookup(Headers, <<"x-last-death-queue">>)),
+              ?assertEqual({longstr, <<>>}, rabbit_misc:table_lookup(Headers, <<"x-last-death-exchange">>))
+      end, [H2, H3]),
     ok.
 
 reject(Ch, Queue, Payload) ->

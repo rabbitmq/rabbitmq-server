@@ -464,7 +464,7 @@ is_cycle_v2(TargetQueue, Deaths) ->
 %% queue name and there are no newer deaths with the 'rejected' reason then
 %% consider this a cycle."
 %% However, the correct death order cannot be reliably determined in v1.
-%% deaths_v2 fixes this bug.
+%% v2 fixes this bug.
 is_cycle_v1(_Queue, []) ->
     false;
 is_cycle_v1(_Queue, [{_Q, rejected} | _]) ->

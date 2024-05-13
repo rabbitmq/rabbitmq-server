@@ -175,6 +175,7 @@ parse_constructor(16#80) -> ulong;
 parse_constructor(16#81) -> long;
 parse_constructor(16#40) -> null;
 parse_constructor(16#56) -> boolean;
+parse_constructor(16#d1) -> map;
 parse_constructor(16#f0) -> array;
 parse_constructor(0) -> described;
 parse_constructor(X) ->

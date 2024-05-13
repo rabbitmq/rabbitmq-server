@@ -181,6 +181,7 @@ constructor(timestamp) -> <<16#83>>;
 constructor(uuid) -> <<16#98>>;
 constructor(null) -> <<16#40>>;
 constructor(boolean) -> <<16#56>>;
+constructor(map) -> 16#d1;  % use large map type for all array elements
 constructor(array) -> <<16#f0>>; % use large array type for all nested arrays
 constructor(utf8) -> <<16#b1>>;
 constructor({described, Descriptor, Primitive}) ->
@@ -203,6 +204,14 @@ generate(ulong, {ulong, V}) -> <<V:64/unsigned>>;
 generate(long, {long, V}) -> <<V:64/signed>>;
 generate({described, D, P}, {described, D, V}) ->
     generate(P, V);
+generate(map, {map, KvList}) ->
+    Count = length(KvList) * 2,
+    Compound = lists:map(fun({Key, Val}) ->
+                                 [(generate(Key)),
+                                  (generate(Val))]
+                         end, KvList),
+    S = iolist_size(Compound),
+    [<<(S + 4):32, Count:32>>, Compound];
 generate(array, {array, Type, List}) ->
     Count = length(List),
     Body = iolist_to_binary([constructor(Type),
