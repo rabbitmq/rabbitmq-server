@@ -2538,8 +2538,8 @@ end}.
 
 {translation, "rabbit.classic_queue_default_version",
     fun(Conf) ->
-        case cuttlefish:conf_get("classic_queue.default_version", Conf, 1) of
-            1 -> 1;
+        case cuttlefish:conf_get("classic_queue.default_version", Conf, 2) of
+            1 -> cuttlefish:invalid("Classic queues v1 are no longer supported");
             2 -> 2;
             _ -> cuttlefish:unset()
         end

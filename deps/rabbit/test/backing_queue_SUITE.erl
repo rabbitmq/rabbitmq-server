@@ -67,8 +67,7 @@ groups() ->
      {backing_queue_tests, [], [
           msg_store,
           msg_store_file_scan,
-          {backing_queue_v2, [], Common ++ V2Only},
-          {backing_queue_v1, [], Common}
+          {backing_queue_v2, [], Common ++ V2Only}
         ]}
     ].
 
@@ -124,14 +123,6 @@ init_per_group1(backing_queue_tests, Config) ->
                "Backing queue module not supported by this test group: ~tp~n",
                [Module])}
     end;
-init_per_group1(backing_queue_v1, Config) ->
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-      application, set_env, [rabbit, classic_queue_default_version, 1]),
-    Config;
-init_per_group1(backing_queue_v2, Config) ->
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-      application, set_env, [rabbit, classic_queue_default_version, 2]),
-    Config;
 init_per_group1(backing_queue_embed_limit_0, Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
       application, set_env, [rabbit, queue_index_embed_msgs_below, 0]),
@@ -175,12 +166,6 @@ end_per_group(Group, Config) ->
 end_per_group1(backing_queue_tests, Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, teardown_backing_queue_test_group, [Config]);
-end_per_group1(Group, Config)
-when   Group =:= backing_queue_v1
-orelse Group =:= backing_queue_v2 ->
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-      application, unset_env, [rabbit, classic_queue_default_version]),
-    Config;
 end_per_group1(Group, Config)
 when   Group =:= backing_queue_embed_limit_0
 orelse Group =:= backing_queue_embed_limit_1024 ->
@@ -745,10 +730,7 @@ bq_queue_index(Config) ->
       ?MODULE, bq_queue_index1, [Config]).
 
 index_mod() ->
-    case application:get_env(rabbit, classic_queue_default_version) of
-        {ok, 1} -> rabbit_queue_index;
-        {ok, 2} -> rabbit_classic_queue_index_v2
-    end.
+    rabbit_classic_queue_index_v2.
 
 bq_queue_index1(_Config) ->
     init_queue_index(),
@@ -761,10 +743,7 @@ bq_queue_index1(_Config) ->
     SeqIdsC = lists:seq(0, trunc(SegmentSize/2)),
     SeqIdsD = lists:seq(0, SegmentSize*4),
 
-    VerifyReadWithPublishedFun = case IndexMod of
-        rabbit_queue_index -> fun verify_read_with_published_v1/3;
-        rabbit_classic_queue_index_v2 -> fun verify_read_with_published_v2/3
-    end,
+    VerifyReadWithPublishedFun = fun verify_read_with_published_v2/3,
 
     with_empty_test_queue(
       fun (Qi0, QName) ->
@@ -854,8 +833,7 @@ bq_queue_index1(_Config) ->
       end),
 
     %% d) get messages in all states to a segment, then flush, then do
-    %% the same again, don't flush and read. CQ v1: this will hit all
-    %% possibilities in combining the segment with the journal.
+    %% the same again, don't flush and read.
     with_empty_test_queue(
       fun (Qi0, _QName) ->
               {Qi1, [Seven,Five,Four|_]} = queue_index_publish([0,1,2,4,5,7],
@@ -882,8 +860,7 @@ bq_queue_index1(_Config) ->
               Qi10
       end),
 
-    %% e) as for (d), but use terminate instead of read, which (CQ v1) will
-    %% exercise journal_minus_segment, not segment_plus_journal.
+    %% e) as for (d), but use terminate instead of read.
     with_empty_test_queue(
       fun (Qi0, QName) ->
               {Qi1, _SeqIdsMsgIdsE} = queue_index_publish([0,1,2,4,5,7],
@@ -908,15 +885,6 @@ bq_queue_index1(_Config) ->
     {ok, _} = rabbit_variable_queue:start(?VHOST, []),
 
     passed.
-
-verify_read_with_published_v1(_Persistent, [], _) ->
-    ok;
-verify_read_with_published_v1(Persistent,
-                           [{MsgId, SeqId, _Location, _Props, Persistent}|Read],
-                           [{SeqId, MsgId}|Published]) ->
-    verify_read_with_published_v1(Persistent, Read, Published);
-verify_read_with_published_v1(_Persistent, _Read, _Published) ->
-    ko.
 
 %% The v2 index does not store the MsgId unless required.
 %% We therefore do not check it.

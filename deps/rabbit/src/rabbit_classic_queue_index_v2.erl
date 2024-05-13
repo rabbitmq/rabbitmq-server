@@ -1078,7 +1078,7 @@ sync(State0 = #qi{ confirms = Confirms,
     end,
     State#qi{ confirms = sets:new([{version,2}]) }.
 
--spec needs_sync(state()) -> 'false'.
+-spec needs_sync(state()) -> 'false' | 'confirms'.
 
 needs_sync(State = #qi{ confirms = Confirms }) ->
     ?DEBUG("~0p", [State]),

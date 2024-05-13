@@ -319,8 +319,6 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "classic_queue_prop_SUITE",
     size = "large",
-    shard_count = 6,
-    sharding_method = "case",
     deps = [
         "@proper//:erlang_app",
     ],
