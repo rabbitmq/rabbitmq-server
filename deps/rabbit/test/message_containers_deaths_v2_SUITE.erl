@@ -96,7 +96,7 @@ enable_feature_flag(Config) ->
               ?assertEqual({longstr, <<>>}, rabbit_misc:table_lookup(Headers, <<"x-last-death-exchange">>)),
 
               {array, [{table, Death1},
-                       {table, Death2}]} = rabbit_misc:table_lookup(H1, <<"x-death">>),
+                       {table, Death2}]} = rabbit_misc:table_lookup(Headers, <<"x-death">>),
 
               ?assertEqual({longstr, Q1}, rabbit_misc:table_lookup(Death1, <<"queue">>)),
               ?assertEqual({longstr, <<"expired">>}, rabbit_misc:table_lookup(Death1, <<"reason">>)),
