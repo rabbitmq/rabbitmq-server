@@ -2079,8 +2079,8 @@ clear_policy(Config, Node, Name) ->
     clear_policy(Config, Node, Name, <<"acting-user">>).
 
 clear_policy(Config, Node, Name, Username) ->
-    rpc(Config, Node,
-        rabbit_policy, delete, [<<"/">>, Name, Username]).
+    ok = rpc(Config, Node,
+             rabbit_policy, delete, [<<"/">>, Name, Username]).
 
 set_operator_policy(Config, Node, Name, Pattern, ApplyTo, Definition) ->
     ok = rpc(Config, Node,

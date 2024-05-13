@@ -224,8 +224,9 @@ get_all_in_khepri(VHostName, Comp) ->
 %% delete().
 %% -------------------------------------------------------------------
 
--spec delete(Key) -> ok when
-      Key :: atom().
+-spec delete(Key) -> Ret when
+      Key :: atom(),
+      Ret :: ok | rabbit_khepri:timeout_error().
 %% @doc Deletes the global runtime parameter named `Key'.
 %%
 %% @private
@@ -235,10 +236,11 @@ delete(Key) when is_atom(Key) ->
       #{mnesia => fun() -> delete_in_mnesia(Key) end,
         khepri => fun() -> delete_in_khepri(Key) end}).
 
--spec delete(VHostName, Comp, Name) -> ok when
+-spec delete(VHostName, Comp, Name) -> Ret when
       VHostName :: vhost:name() | '_',
       Comp :: binary() | '_',
-      Name :: binary() | atom() | '_'.
+      Name :: binary() | atom() | '_',
+      Ret :: ok | rabbit_khepri:timeout_error().
 %% @doc Deletes the non-global runtime parameter named `Name' for the given
 %% virtual host and component.
 %%
@@ -281,7 +283,7 @@ delete_matching_in_mnesia_tx(VHostName, Comp, Name) ->
 
 delete_in_khepri(Key) ->
     Path = khepri_rp_path(Key),
-    ok = rabbit_khepri:delete(Path).
+    rabbit_khepri:delete(Path).
 
 delete_matching_in_khepri(VHostName, Comp, Name) ->
     Key = {?any(VHostName), ?any(Comp), ?any(Name)},

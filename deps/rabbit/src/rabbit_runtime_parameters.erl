@@ -222,10 +222,19 @@ clear_global(Key, ActingUser) ->
         not_found ->
             {error_string, "Parameter does not exist"};
         _         ->
-            ok = rabbit_db_rtparams:delete(KeyAsAtom),
-            event_notify(parameter_cleared, none, global,
-                         [{name,  KeyAsAtom},
-                          {user_who_performed_action, ActingUser}])
+            case rabbit_db_rtparams:delete(KeyAsAtom) of
+                ok ->
+                    event_notify(parameter_cleared, none, global,
+                                 [{name,  KeyAsAtom},
+                                  {user_who_performed_action, ActingUser}]),
+                    ok;
+                {error, timeout} ->
+                    Msg = rabbit_misc:format(
+                            "Could not delete global runtime parameter '~ts' "
+                            "because the operation timed out",
+                            [Key]),
+                    {error_string, Msg}
+            end
     end.
 
 clear_vhost(VHostName, ActingUser) when is_binary(VHostName) ->
@@ -251,10 +260,24 @@ clear_vhost(VHostName, ActingUser) when is_binary(VHostName) ->
             Err
     end.
 
+-spec clear_component(Component, ActingUser) -> Ret when
+      Component :: binary(),
+      ActingUser :: rabbit_types:username(),
+      Ret :: ok_or_error_string().
+
 clear_component(<<"policy">>, _) ->
     {error_string, "policies may not be cleared using this method"};
 clear_component(Component, _ActingUser) ->
-    ok = rabbit_db_rtparams:delete('_', Component, '_').
+    case rabbit_db_rtparams:delete('_', Component, '_') of
+        ok ->
+            ok;
+        {error, timeout} ->
+            Msg = rabbit_misc:format(
+                    "Could not delete component '~ts' because the operation "
+                    "timed out",
+                    [Component]),
+            {error_string, Msg}
+    end.
 
 -spec clear_any(rabbit_types:vhost(), binary(), binary(), rabbit_types:username())
                      -> ok_thunk_or_error_string().
@@ -263,14 +286,24 @@ clear_any(VHost, Component, Name, ActingUser) ->
     case lookup(VHost, Component, Name) of
         not_found -> {error_string, "Parameter does not exist"};
         _         ->
-            rabbit_db_rtparams:delete(VHost, Component, Name),
-            case lookup_component(Component) of
-                {ok, Mod} -> event_notify(
-                               parameter_cleared, VHost, Component,
-                               [{name, Name},
-                                {user_who_performed_action, ActingUser}]),
-                             Mod:notify_clear(VHost, Component, Name, ActingUser);
-                _         -> ok
+            case rabbit_db_rtparams:delete(VHost, Component, Name) of
+                ok ->
+                    case lookup_component(Component) of
+                        {ok, Mod} ->
+                            event_notify(
+                              parameter_cleared, VHost, Component,
+                              [{name, Name},
+                               {user_who_performed_action, ActingUser}]),
+                            Mod:notify_clear(VHost, Component, Name, ActingUser);
+                        _ ->
+                            ok
+                    end;
+                {error, timeout} ->
+                    Msg = rabbit_misc:format(
+                            "Could not delete parameter '~ts' because the "
+                            "operation timed out",
+                            [Name]),
+                    {error_string, Msg}
             end
     end.
 
