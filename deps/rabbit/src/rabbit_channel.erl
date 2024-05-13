@@ -1056,15 +1056,6 @@ check_msg_size(Content, MaxMessageSize, GCThreshold) ->
         _ -> ok
     end.
 
-check_vhost_queue_limit(#resource{name = QueueName}, VHost) ->
-  case rabbit_vhost_limit:is_over_queue_limit(VHost) of
-    false         -> ok;
-    {true, Limit} -> rabbit_misc:precondition_failed("cannot declare queue '~ts': "
-                               "queue limit in vhost '~ts' (~tp) is reached",
-                               [QueueName, VHost, Limit])
-
-  end.
-
 qbin_to_resource(QueueNameBin, VHostPath) ->
     name_to_resource(queue, QueueNameBin, VHostPath).
 
@@ -2525,7 +2516,6 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
             {ok, QueueName, MessageCount, ConsumerCount};
         {error, not_found} ->
             %% enforce the limit for newly declared queues only
-            check_vhost_queue_limit(QueueName, VHostPath),
             DlxKey = <<"x-dead-letter-exchange">>,
             case rabbit_misc:r_arg(VHostPath, exchange, Args, DlxKey) of
                undefined ->

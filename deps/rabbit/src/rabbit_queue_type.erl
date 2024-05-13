@@ -282,6 +282,7 @@ is_compatible(Type, Durable, Exclusive, AutoDelete) ->
 declare(Q0, Node) ->
     Q = rabbit_queue_decorator:set(rabbit_policy:set(Q0)),
     Mod = amqqueue:get_type(Q),
+    ok = check_vhost_queue_limit(Q),
     Mod:declare(Q, Node).
 
 -spec delete(amqqueue:amqqueue(), boolean(),
@@ -730,3 +731,13 @@ known_queue_type_names() ->
     {QueueTypes, _} = lists:unzip(Registered),
     QTypeBins = lists:map(fun(X) -> atom_to_binary(X) end, QueueTypes),
     ?KNOWN_QUEUE_TYPES ++ QTypeBins.
+
+check_vhost_queue_limit(Q) ->
+    #resource{name = QueueName} = amqqueue:get_name(Q),
+    VHost = amqqueue:get_vhost(Q),
+    case rabbit_vhost_limit:is_over_queue_limit(VHost) of
+        false         -> ok;
+        {true, Limit} -> rabbit_misc:precondition_failed("cannot declare queue '~ts': "
+                                                         "queue limit in vhost '~ts' (~tp) is reached",
+                                                         [QueueName, VHost, Limit])
+    end.
