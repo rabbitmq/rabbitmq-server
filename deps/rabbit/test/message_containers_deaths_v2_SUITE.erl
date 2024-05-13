@@ -67,10 +67,7 @@ enable_feature_flag(Config) ->
     amqp_channel:call(Ch,
                       #'basic.publish'{routing_key = Q1},
                       #amqp_msg{payload = P2}),
-
-    %% We now have 2 messages in Q2 with different mc annotations:
-    %% * deaths for v1 in the 1st msg
-    %% * deaths_v2 for v2 in the 2nd msg
+    %% We now have 2 messages in Q2 with different values for the mc deaths annotation for v1 and v2.
 
     reject(Ch, Q2, P1),
     reject(Ch, Q2, P2),
