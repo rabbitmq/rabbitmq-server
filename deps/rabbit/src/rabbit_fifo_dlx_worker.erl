@@ -46,6 +46,8 @@
           consumed_msg_id :: non_neg_integer(),
           delivery :: mc:state(),
           reason :: rabbit_dead_letter:reason(),
+          %% routing keys (including CC keys) the message was published with to the source quorum queue
+          original_routing_keys :: [rabbit_types:routing_key(),...],
           %% target queues for which publisher confirm has not been received yet
           unsettled = [] :: [rabbit_amqqueue:name()],
           %% target queues for which publisher rejection was received recently
@@ -315,13 +317,18 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
     Now = os:system_time(millisecond),
     #resource{name = SourceQName} = ConsumedQRef,
     #resource{name = DLXName} = DLXRef,
+    OriginalRoutingKeys = mc:routing_keys(ConsumedMsg),
     DLRKeys = case RKey of
                   undefined ->
-                      mc:routing_keys(ConsumedMsg);
+                      OriginalRoutingKeys;
                   _ ->
                       [RKey]
               end,
-    Msg0 = mc:record_death(Reason, SourceQName, ConsumedMsg),
+    Env = case rabbit_feature_flags:is_enabled(?FF_MC_DEATHS_V2) of
+              true -> #{};
+              false -> #{?FF_MC_DEATHS_V2 => false}
+          end,
+    Msg0 = mc:record_death(Reason, SourceQName, ConsumedMsg, Env),
     Msg1 = mc:set_ttl(undefined, Msg0),
     Msg2 = mc:set_annotation(?ANN_ROUTING_KEYS, DLRKeys, Msg1),
     Msg = mc:set_annotation(?ANN_EXCHANGE, DLXName, Msg2),
@@ -331,7 +338,7 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
                 {[], State0};
             _ ->
                 RouteToQs0 = rabbit_exchange:route(DLX, Msg),
-                {RouteToQs1, Cycles} = rabbit_dead_letter:detect_cycles(
+                {Cycles, RouteToQs1} = rabbit_dead_letter:detect_cycles(
                                          Reason, Msg, RouteToQs0),
                 State1 = log_cycles(Cycles, [RKey], State0),
                 RouteToQs2 = rabbit_amqqueue:lookup_many(RouteToQs1),
@@ -347,7 +354,8 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
     Pend0 = #pending{consumed_msg_id = ConsumedMsgId,
                      consumed_at = Now,
                      delivery = Msg,
-                     reason = Reason},
+                     reason = Reason,
+                     original_routing_keys = OriginalRoutingKeys},
     case TargetQs of
         [] ->
             %% We can't deliver this message since there is no target queue we can route to.
@@ -453,15 +461,18 @@ redeliver_messages(#state{pendings = Pendings,
                       end, State, Pendings)
     end.
 
-redeliver(#pending{delivery = Msg} = Pend,
-          DLX, OutSeq, #state{routing_key = undefined} = State) ->
+redeliver(#pending{original_routing_keys = RKeys} = Pend,
+          DLX,
+          OutSeq,
+          #state{routing_key = undefined} = State) ->
     %% No dead-letter-routing-key defined for source quorum queue.
     %% Therefore use all of messages's original routing keys (which can include CC and BCC recipients).
     %% This complies with the behaviour of the rabbit_dead_letter module.
-    %% We stored these original routing keys in the 1st (i.e. most recent) x-death entry.
-    {_, #death{routing_keys = Routes}} = mc:last_death(Msg),
-    redeliver0(Pend, DLX, Routes, OutSeq, State);
-redeliver(Pend, DLX, OutSeq, #state{routing_key = DLRKey} = State) ->
+    redeliver0(Pend, DLX, RKeys, OutSeq, State);
+redeliver(Pend,
+          DLX,
+          OutSeq,
+          #state{routing_key = DLRKey} = State) ->
     redeliver0(Pend, DLX, [DLRKey], OutSeq, State).
 
 redeliver0(#pending{delivery = Msg0,
@@ -501,7 +512,7 @@ redeliver0(#pending{delivery = Msg0,
             %% Note that a quorum queue client does not redeliver on our behalf if it previously
             %% rejected the message. This is why we always redeliver rejected messages here.
             RouteToQs1 = Unsettled -- clients_redeliver(Unsettled0, QTypeState),
-            {RouteToQs, Cycles} = rabbit_dead_letter:detect_cycles(Reason, Msg, RouteToQs1),
+            {Cycles, RouteToQs} = rabbit_dead_letter:detect_cycles(Reason, Msg, RouteToQs1),
             State1 = log_cycles(Cycles, DLRKeys, State0),
             case RouteToQs of
                 [] ->
@@ -599,6 +610,7 @@ format_status(_Opt, [_PDict, #state{
 format_pending(#pending{consumed_msg_id = ConsumedMsgId,
                         delivery = _DoNotLogLargeBinary,
                         reason = Reason,
+                        original_routing_keys = OriginalRoutingKeys,
                         unsettled = Unsettled,
                         rejected = Rejected,
                         settled = Settled,
@@ -607,6 +619,7 @@ format_pending(#pending{consumed_msg_id = ConsumedMsgId,
                         consumed_at = ConsumedAt}) ->
     #{consumed_msg_id => ConsumedMsgId,
       reason => Reason,
+      original_routing_keys => OriginalRoutingKeys,
       unsettled => Unsettled,
       rejected => Rejected,
       settled => Settled,

@@ -19,7 +19,7 @@
 
 all() ->
     [
-     {group, dead_letter_tests}
+     {group, tests}
     ].
 
 groups() ->
@@ -28,6 +28,7 @@ groups() ->
                        dead_letter_nack_requeue,
                        dead_letter_nack_requeue_multiple,
                        dead_letter_reject,
+                       dead_letter_reject_expire_expire,
                        dead_letter_reject_many,
                        dead_letter_reject_requeue,
                        dead_letter_max_length_drop_head,
@@ -62,7 +63,7 @@ groups() ->
                            metric_expired_per_msg_msg_ttl],
     Opts = [shuffle],
     [
-     {dead_letter_tests, Opts,
+     {tests, Opts,
       [
        {classic_queue, Opts, [{at_most_once, Opts, [dead_letter_max_length_reject_publish_dlx | DeadLetterTests]},
                               {disabled, Opts, DisabledMetricTests}]},
@@ -80,7 +81,9 @@ groups() ->
                                dead_letter_missing_exchange
                               ]}
                             ]
-       }]}].
+       },
+       {stream_queue, Opts, [stream]}
+      ]}].
 
 suite() ->
     [
@@ -178,28 +181,37 @@ end_per_group(Group, Config) ->
             Config
     end.
 
+init_per_testcase(T, Config)
+  when T =:= dead_letter_reject_expire_expire orelse
+       T =:= stream ->
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers_deaths_v2) of
+        ok ->
+            init_per_testcase0(T, Config);
+        {skip, _} = Skip ->
+            %% With feature flag message_containers_deaths_v2 disabled, test case:
+            %% * dead_letter_reject_expire_expire is known to fail due to https://github.com/rabbitmq/rabbitmq-server/issues/11159
+            %% * stream is known to fail due to https://github.com/rabbitmq/rabbitmq-server/issues/11173
+            Skip
+    end;
 init_per_testcase(Testcase, Config) ->
-    IsMixed = rabbit_ct_helpers:is_mixed_versions(),
-    case Testcase of
-        dead_letter_headers_should_not_be_appended_for_republish when IsMixed ->
-            {skip, "dead_letter_headers_should_not_be_appended_for_republish isn't mixed versions compatible"};
-        _ ->
-            Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
-            Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~tp", [Group, Testcase])),
-            Q2 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_2", [Group, Testcase])),
-            Q3 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_3", [Group, Testcase])),
-            Policy = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_policy", [Group, Testcase])),
-            DLXExchange = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_dlx_exchange",
-                                                                       [Group, Testcase])),
-            Counters = get_global_counters(Config),
-            Config1 = rabbit_ct_helpers:set_config(Config, [{dlx_exchange, DLXExchange},
-                                                            {queue_name, Q},
-                                                            {queue_name_dlx, Q2},
-                                                            {queue_name_dlx_2, Q3},
-                                                            {policy, Policy},
-                                                            {counters, Counters}]),
-            rabbit_ct_helpers:testcase_started(Config1, Testcase)
-    end.
+    init_per_testcase0(Testcase, Config).
+
+init_per_testcase0(Testcase, Config) ->
+    Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
+    Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~p", [Group, Testcase])),
+    Q2 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_2", [Group, Testcase])),
+    Q3 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_3", [Group, Testcase])),
+    Policy = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_policy", [Group, Testcase])),
+    DLXExchange = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_dlx_exchange",
+                                                               [Group, Testcase])),
+    Counters = get_global_counters(Config),
+    Config1 = rabbit_ct_helpers:set_config(Config, [{dlx_exchange, DLXExchange},
+                                                    {queue_name, Q},
+                                                    {queue_name_dlx, Q2},
+                                                    {queue_name_dlx_2, Q3},
+                                                    {policy, Policy},
+                                                    {counters, Counters}]),
+    rabbit_ct_helpers:testcase_started(Config1, Testcase).
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
@@ -376,6 +388,65 @@ dead_letter_reject(Config) ->
     _ = consume(Ch, QName, [P2, P3]),
     consume_empty(Ch, QName),
     ?assertEqual(1, counted(messages_dead_lettered_rejected_total, Config)).
+
+dead_letter_reject_expire_expire(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    %% In 3.13.0 - 3.13.2 there is a bug in mc:is_death_cycle/2 where the queue names matter:
+    %% https://github.com/rabbitmq/rabbitmq-server/issues/11159
+    %% The following queue names triggered the bug because they affect the order returned by maps:keys/1.
+    Q1 = <<"b">>,
+    Q2 = <<"a2">>,
+    Q3 = <<"a3">>,
+    Args = ?config(queue_args, Config),
+    Durable = ?config(queue_durable, Config),
+
+    %% Test the followig topology message flow:
+    %% Q1 --rejected--> Q2 --expired--> Q3 --expired-->
+    %% Q1 --rejected--> Q2 --expired--> Q3 --expired-->
+    %% Q1
+
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch,
+                              #'queue.declare'{
+                                 queue = Q1,
+                                 arguments = Args ++ [{<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                                      {<<"x-dead-letter-routing-key">>, longstr, Q2}],
+                                 durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch,
+                              #'queue.declare'{
+                                 queue = Q2,
+                                 arguments = Args ++ [{<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                                      {<<"x-dead-letter-routing-key">>, longstr, Q3},
+                                                      {<<"x-message-ttl">>, long, 5}],
+                                 durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch,
+                              #'queue.declare'{
+                                 queue = Q3,
+                                 arguments = Args ++ [{<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                                      {<<"x-dead-letter-routing-key">>, longstr, Q1},
+                                                      {<<"x-message-ttl">>, long, 5}],
+                                 durable = Durable}),
+
+    %% Send a single message.
+    P = <<"msg">>,
+    publish(Ch, Q1, [P]),
+    wait_for_messages(Config, [[Q1, <<"1">>, <<"1">>, <<"0">>]]),
+
+    %% Reject the 1st time.
+    [DTag1] = consume(Ch, Q1, [P]),
+    amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag1,
+                                          requeue      = false}),
+    %% Message should now flow from Q1 -> Q2 -> Q3 -> Q1
+    wait_for_messages(Config, [[Q1, <<"1">>, <<"1">>, <<"0">>]]),
+
+    %% Reject the 2nd time.
+    [DTag2] = consume(Ch, Q1, [P]),
+    amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag2,
+                                          requeue      = false}),
+    %% Message should again flow from Q1 -> Q2 -> Q3 -> Q1
+    wait_for_messages(Config, [[Q1, <<"1">>, <<"1">>, <<"0">>]]).
 
 %% 1) Many messages are rejected. They get dead-lettered in correct order.
 dead_letter_reject_many(Config) ->
@@ -752,7 +823,9 @@ dead_letter_routing_key_cycle_max_length(Config) ->
 
     DeadLetterArgs = [{<<"x-max-length">>, long, 1},
                       {<<"x-dead-letter-exchange">>, longstr, <<>>}],
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName,
+                                                                   arguments = DeadLetterArgs ++ Args,
+                                                                   durable = Durable}),
 
     P1 = <<"msg1">>,
     P2 = <<"msg2">>,
@@ -777,7 +850,9 @@ dead_letter_routing_key_cycle_ttl(Config) ->
 
     DeadLetterArgs = [{<<"x-message-ttl">>, long, 1},
                       {<<"x-dead-letter-exchange">>, longstr, <<>>}],
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName,
+                                                                   arguments = DeadLetterArgs ++ Args,
+                                                                   durable = Durable}),
 
     P1 = <<"msg1">>,
     P2 = <<"msg2">>,
@@ -796,7 +871,9 @@ dead_letter_routing_key_cycle_with_reject(Config) ->
     QName = ?config(queue_name, Config),
 
     DeadLetterArgs = [{<<"x-dead-letter-exchange">>, longstr, <<>>}],
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName,
+                                                                   arguments = DeadLetterArgs ++ Args,
+                                                                   durable = Durable}),
 
     P = <<"msg1">>,
 
@@ -1559,6 +1636,96 @@ metric_expired_per_msg_msg_ttl(Config) ->
                                  props = #'P_basic'{expiration = <<"0">>}})
      || Payload <- Payloads],
     ?awaitMatch(1000, counted(messages_dead_lettered_expired_total, Config), 3000, 300).
+
+%% The final dead letter queue is a stream.
+stream(Config) ->
+    Ch0 = rabbit_ct_client_helpers:open_channel(Config, 0),
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, 1),
+    Q1 = <<"q1">>,
+    Q2 = <<"q2">>,
+    Q3 = <<"q3">>,
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch0,
+                              #'queue.declare'{queue = Q1,
+                                               arguments = [{<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                                            {<<"x-dead-letter-routing-key">>, longstr, Q2}]}),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch0,
+                              #'queue.declare'{queue = Q2,
+                                               arguments = [{<<"x-message-ttl">>, long, 2500},
+                                                            {<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                                            {<<"x-dead-letter-routing-key">>, longstr, Q3}]}),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch1,
+                              #'queue.declare'{queue = Q3,
+                                               arguments = [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                                            {<<"x-initial-cluster-size">>, long, 1}],
+                                               durable = true}),
+
+    Payload = <<"my payload">>,
+    %% Message should travel Q1 -> Q2 -> Q3
+    amqp_channel:call(
+      Ch0,
+      #'basic.publish'{routing_key = Q1},
+      #amqp_msg{payload = Payload,
+                props = #'P_basic'{expiration = <<"0">>,
+                                   headers = [{<<"CC">>, array, [{longstr, <<"other key">>}]}]}
+               }),
+
+    #'basic.qos_ok'{} = amqp_channel:call(Ch1, #'basic.qos'{prefetch_count = 1}),
+    Ctag = <<"my ctag">>,
+    amqp_channel:subscribe(
+      Ch1,
+      #'basic.consume'{queue = Q3,
+                       consumer_tag = Ctag,
+                       arguments = [{<<"x-stream-offset">>, longstr, <<"first">>}]},
+      self()),
+    receive
+        #'basic.consume_ok'{consumer_tag = Ctag} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    Headers = receive {#'basic.deliver'{delivery_tag = DeliveryTag},
+                       #amqp_msg{payload = Payload,
+                                 props = #'P_basic'{headers = Headers0}
+                                }} ->
+                          ok = amqp_channel:cast(Ch1, #'basic.ack'{delivery_tag = DeliveryTag,
+                                                                   multiple = false}),
+                          Headers0
+              after 10_000 -> ct:fail({missing_event, ?LINE})
+              end,
+
+    Reason = <<"expired">>,
+    ?assertEqual({longstr, Reason}, rabbit_misc:table_lookup(Headers, <<"x-first-death-reason">>)),
+    ?assertEqual({longstr, Q1}, rabbit_misc:table_lookup(Headers, <<"x-first-death-queue">>)),
+    ?assertEqual({longstr, <<>>}, rabbit_misc:table_lookup(Headers, <<"x-first-death-exchange">>)),
+    ?assertEqual({longstr, Reason}, rabbit_misc:table_lookup(Headers, <<"x-last-death-reason">>)),
+    ?assertEqual({longstr, Q2}, rabbit_misc:table_lookup(Headers, <<"x-last-death-queue">>)),
+    ?assertEqual({longstr, <<>>}, rabbit_misc:table_lookup(Headers, <<"x-last-death-exchange">>)),
+
+    %% We expect the array to be ordered by death recency.
+    {array, [{table, Death2}, {table, Death1}]} = rabbit_misc:table_lookup(Headers, <<"x-death">>),
+
+    ?assertEqual({longstr, Q1}, rabbit_misc:table_lookup(Death1, <<"queue">>)),
+    ?assertEqual({longstr, Reason}, rabbit_misc:table_lookup(Death1, <<"reason">>)),
+    ?assertEqual({longstr, <<>>}, rabbit_misc:table_lookup(Death1, <<"exchange">>)),
+    ?assertEqual({long, 1}, rabbit_misc:table_lookup(Death1, <<"count">>)),
+    ?assertEqual({array, [{longstr, Q1}, {longstr, <<"other key">>}]},
+                 rabbit_misc:table_lookup(Death1, <<"routing-keys">>)),
+    ?assertEqual({longstr, <<"0">>}, rabbit_misc:table_lookup(Death1, <<"original-expiration">>)),
+    {timestamp, T1} = rabbit_misc:table_lookup(Death1, <<"time">>),
+
+    ?assertEqual({longstr, Q2}, rabbit_misc:table_lookup(Death2, <<"queue">>)),
+    ?assertEqual({longstr, Reason}, rabbit_misc:table_lookup(Death2, <<"reason">>)),
+    ?assertEqual({longstr, <<>>}, rabbit_misc:table_lookup(Death2, <<"exchange">>)),
+    ?assertEqual({long, 1}, rabbit_misc:table_lookup(Death2, <<"count">>)),
+    ?assertEqual({array, [{longstr, Q2}]}, rabbit_misc:table_lookup(Death2, <<"routing-keys">>)),
+    ?assertEqual(undefined, rabbit_misc:table_lookup(Death2, <<"original-expiration">>)),
+    {timestamp, T2} = rabbit_misc:table_lookup(Death2, <<"time">>),
+    ?assert(T1 < T2),
+
+    ok = rabbit_ct_client_helpers:close_channel(Ch0),
+    ok = rabbit_ct_client_helpers:close_channel(Ch1).
 
 %%%%%%%%%%%%%%%%%%%%%%%%
 %% Test helpers

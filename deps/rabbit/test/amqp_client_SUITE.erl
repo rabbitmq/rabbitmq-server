@@ -105,11 +105,13 @@ groups() ->
        attach_to_exclusive_queue,
        classic_priority_queue,
        dead_letter_headers_exchange,
+       dead_letter_reject,
        immutable_bare_message
       ]},
 
      {cluster_size_3, [shuffle],
       [
+       dead_letter_into_stream,
        last_queue_confirms,
        target_queue_deleted,
        target_classic_queue_down,
@@ -184,6 +186,22 @@ init_per_testcase(T = immutable_bare_message, Config) ->
         false ->
             {skip, "RabbitMQ is known to wrongfully modify the bare message with feature "
              "flag message_containers_store_amqp_v1 disabled"}
+    end;
+init_per_testcase(T = dead_letter_into_stream, Config) ->
+    case rpc(Config, rabbit_feature_flags, is_enabled, [message_containers_deaths_v2]) of
+        true ->
+            rabbit_ct_helpers:testcase_started(Config, T);
+        false ->
+            {skip, "This test is known to fail with feature flag message_containers_deaths_v2 disabled "
+             "due to missing feature https://github.com/rabbitmq/rabbitmq-server/issues/11173"}
+    end;
+init_per_testcase(T = dead_letter_reject, Config) ->
+    case rpc(Config, rabbit_feature_flags, is_enabled, [message_containers_deaths_v2]) of
+        true ->
+            rabbit_ct_helpers:testcase_started(Config, T);
+        false ->
+            {skip, "This test is known to fail with feature flag message_containers_deaths_v2 disabled "
+             "due bug https://github.com/rabbitmq/rabbitmq-server/issues/11159"}
     end;
 init_per_testcase(T, Config)
   when T =:= classic_queue_on_new_node orelse
@@ -3497,6 +3515,7 @@ dead_letter_headers_exchange(Config) ->
            #{<<"x-my key">> => 6},
            amqp10_msg:new(<<"tag 4">>, <<"m4">>, false)),
 
+    Now = os:system_time(millisecond),
     [ok = amqp10_client:send_msg(Sender, M) || M <- [M1, M2, M3, M4]],
     ok = wait_for_accepts(4),
     flush(accepted),
@@ -3507,9 +3526,36 @@ dead_letter_headers_exchange(Config) ->
     ?assertEqual(<<"m2">>, amqp10_msg:body_bin(Msg2)),
     ?assertEqual(#{message_id => <<"my ID">>}, amqp10_msg:properties(Msg1)),
     ?assertEqual(0, maps:size(amqp10_msg:properties(Msg2))),
+    case rpc(Config, rabbit_feature_flags, is_enabled, [message_containers_deaths_v2]) of
+        true ->
+            ?assertMatch(
+               #{<<"x-first-death-queue">> := QName1,
+                 <<"x-first-death-exchange">> := <<>>,
+                 <<"x-first-death-reason">> := <<"expired">>,
+                 <<"x-last-death-queue">> := QName1,
+                 <<"x-last-death-exchange">> := <<>>,
+                 <<"x-last-death-reason">> := <<"expired">>,
+                 <<"x-opt-deaths">> := {array,
+                                        map,
+                                        [{map,
+                                          [
+                                           {{symbol, <<"queue">>}, {utf8, QName1}},
+                                           {{symbol, <<"reason">>}, {symbol, <<"expired">>}},
+                                           {{symbol, <<"count">>}, {ulong, 1}},
+                                           {{symbol, <<"first-time">>}, {timestamp, Timestamp}},
+                                           {{symbol, <<"last-time">>}, {timestamp, Timestamp}},
+                                           {{symbol, <<"exchange">>},{utf8, <<>>}},
+                                           {{symbol, <<"routing-keys">>}, {array, utf8, [{utf8, QName1}]}}
+                                          ]}]}
+                } when is_integer(Timestamp) andalso
+                       Timestamp > Now - 5000 andalso
+                       Timestamp < Now + 5000,
+                       amqp10_msg:message_annotations(Msg1));
+        false ->
+            ok
+    end,
 
     %% We expect M3 and M4 to get dropped.
-    %% Since the queue has no messages yet, we shouldn't receive any message.
     receive Unexp -> ct:fail({unexpected, Unexp})
     after 10 -> ok
     end,
@@ -3521,6 +3567,173 @@ dead_letter_headers_exchange(Config) ->
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = end_session_sync(Session),
     ok = amqp10_client:close_connection(Connection).
+
+dead_letter_reject(Config) ->
+    {Connection, Session, LinkPair} = init(Config),
+    QName1 = <<"q1">>,
+    QName2 = <<"q2">>,
+    QName3 = <<"q3">>,
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair,
+                                      QName1,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                                       <<"x-message-ttl">> => {ulong, 20},
+                                                       <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                                                       <<"x-dead-letter-routing-key">> => {utf8, QName2}
+                                                      }}),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair,
+                                      QName2,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                                       <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                                                       <<"x-dead-letter-routing-key">> => {utf8, QName3}
+                                                      }}),
+    {ok, #{type := <<"classic">>}} = rabbitmq_amqp_client:declare_queue(
+                                       LinkPair,
+                                       QName3,
+                                       #{arguments => #{<<"x-queue-type">> => {utf8, <<"classic">>},
+                                                        <<"x-message-ttl">> => {ulong, 20},
+                                                        <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                                                        <<"x-dead-letter-routing-key">> => {utf8, QName1}
+                                                       }}),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, <<"/queue/", QName2/binary>>, unsettled),
+    {ok, Sender} = amqp10_client:attach_sender_link(
+                     Session, <<"sender">>, <<"/queue/", QName1/binary>>, unsettled),
+    wait_for_credit(Sender),
+    Tag = <<"my tag">>,
+    Body = <<"my body">>,
+    M = amqp10_msg:new(Tag, Body),
+    ok = amqp10_client:send_msg(Sender, M),
+    ok = wait_for_settlement(Tag),
+
+    {ok, Msg1} = amqp10_client:get_msg(Receiver),
+    ok = amqp10_client:settle_msg(Receiver, Msg1, rejected),
+    {ok, Msg2} = amqp10_client:get_msg(Receiver),
+    ok = amqp10_client:settle_msg(Receiver, Msg2, rejected),
+    {ok, Msg3} = amqp10_client:get_msg(Receiver),
+    ok = amqp10_client:settle_msg(Receiver, Msg3, accepted),
+    ?assertEqual(Body, amqp10_msg:body_bin(Msg3)),
+    Annotations = amqp10_msg:message_annotations(Msg3),
+    ?assertMatch(
+       #{<<"x-first-death-queue">> := QName1,
+         <<"x-first-death-exchange">> := <<>>,
+         <<"x-first-death-reason">> := <<"expired">>,
+         <<"x-last-death-queue">> := QName1,
+         <<"x-last-death-exchange">> := <<>>,
+         <<"x-last-death-reason">> := <<"expired">>},
+       Annotations),
+    %% The array should be ordered by death recency.
+    {ok, {array, map, [D1, D3, D2]}} = maps:find(<<"x-opt-deaths">>, Annotations),
+    {map, [
+           {{symbol, <<"queue">>}, {utf8, QName1}},
+           {{symbol, <<"reason">>}, {symbol, <<"expired">>}},
+           {{symbol, <<"count">>}, {ulong, 3}},
+           {{symbol, <<"first-time">>}, {timestamp, Ts1}},
+           {{symbol, <<"last-time">>}, {timestamp, Ts2}},
+           {{symbol, <<"exchange">>},{utf8, <<>>}},
+           {{symbol, <<"routing-keys">>}, {array, utf8, [{utf8, QName1}]}}
+          ]} = D1,
+    {map, [
+           {{symbol, <<"queue">>}, {utf8, QName2}},
+           {{symbol, <<"reason">>}, {symbol, <<"rejected">>}},
+           {{symbol, <<"count">>}, {ulong, 2}},
+           {{symbol, <<"first-time">>}, {timestamp, Ts3}},
+           {{symbol, <<"last-time">>}, {timestamp, Ts4}},
+           {{symbol, <<"exchange">>},{utf8, <<>>}},
+           {{symbol, <<"routing-keys">>}, {array, utf8, [{utf8, QName2}]}}
+          ]} = D2,
+    {map, [
+           {{symbol, <<"queue">>}, {utf8, QName3}},
+           {{symbol, <<"reason">>}, {symbol, <<"expired">>}},
+           {{symbol, <<"count">>}, {ulong, 2}},
+           {{symbol, <<"first-time">>}, {timestamp, Ts5}},
+           {{symbol, <<"last-time">>}, {timestamp, Ts6}},
+           {{symbol, <<"exchange">>},{utf8, <<>>}},
+           {{symbol, <<"routing-keys">>}, {array, utf8, [{utf8, QName3}]}}
+          ]} = D3,
+    ?assertEqual([Ts1, Ts3, Ts5, Ts4, Ts6, Ts2],
+                 lists:sort([Ts1, Ts2, Ts3, Ts4, Ts5, Ts6])),
+
+    ok = amqp10_client:detach_link(Receiver),
+    ok = amqp10_client:detach_link(Sender),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName1),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName2),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName3),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+%% Dead letter from a quorum queue into a stream.
+dead_letter_into_stream(Config) ->
+    {Connection0, Session0, LinkPair0} = init(0, Config),
+    {Connection1, Session1, LinkPair1} = init(1, Config),
+    QName0 = <<"q0">>,
+    QName1 = <<"q1">>,
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair0,
+                                      QName0,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                                       <<"x-quorum-initial-group-size">> => {ulong, 1},
+                                                       <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                                                       <<"x-dead-letter-routing-key">> => {utf8, QName1}
+                                                      }}),
+    {ok, #{type := <<"stream">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair1,
+                                      QName1,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"stream">>},
+                                                       <<"x-initial-cluster-size">> => {ulong, 1}
+                                                      }}),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session1, <<"receiver">>, <<"/queue/", QName1/binary>>, settled),
+    {ok, Sender} = amqp10_client:attach_sender_link(
+                     Session0, <<"sender">>, <<"/queue/", QName0/binary>>),
+    wait_for_credit(Sender),
+    Ttl = 10,
+    M = amqp10_msg:set_headers(
+          #{durable => true,
+            ttl => Ttl},
+          amqp10_msg:new(<<"tag">>, <<"msg">>, true)),
+    Now = os:system_time(millisecond),
+    ok = amqp10_client:send_msg(Sender, M),
+
+    {ok, Msg} = amqp10_client:get_msg(Receiver),
+    ?assertEqual(<<"msg">>, amqp10_msg:body_bin(Msg)),
+    ?assertMatch(
+       #{<<"x-first-death-queue">> := QName0,
+         <<"x-first-death-exchange">> := <<>>,
+         <<"x-first-death-reason">> := <<"expired">>,
+         <<"x-last-death-queue">> := QName0,
+         <<"x-last-death-exchange">> := <<>>,
+         <<"x-last-death-reason">> := <<"expired">>,
+         <<"x-opt-deaths">> := {array,
+                                map,
+                                [{map,
+                                  [
+                                   {{symbol, <<"ttl">>}, {uint, Ttl}},
+                                   {{symbol, <<"queue">>}, {utf8, QName0}},
+                                   {{symbol, <<"reason">>}, {symbol, <<"expired">>}},
+                                   {{symbol, <<"count">>}, {ulong, 1}},
+                                   {{symbol, <<"first-time">>}, {timestamp, Timestamp}},
+                                   {{symbol, <<"last-time">>}, {timestamp, Timestamp}},
+                                   {{symbol, <<"exchange">>},{utf8, <<>>}},
+                                   {{symbol, <<"routing-keys">>}, {array, utf8, [{utf8, QName0}]}}
+                                  ]}]}
+        } when is_integer(Timestamp) andalso
+               Timestamp > Now - 5000 andalso
+               Timestamp < Now + 5000,
+               amqp10_msg:message_annotations(Msg)),
+
+    ok = amqp10_client:detach_link(Receiver),
+    ok = amqp10_client:detach_link(Sender),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair0, QName0),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair1, QName1),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair0),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair1),
+    ok = end_session_sync(Session0),
+    ok = end_session_sync(Session1),
+    ok = amqp10_client:close_connection(Connection0),
+    ok = amqp10_client:close_connection(Connection1).
 
 %% This test asserts the following §3.2 requirement:
 %% "The bare message is immutable within the AMQP network. That is, none of the sections can be
@@ -3689,7 +3902,10 @@ footer_checksum(FooterOpt, Config) ->
 %%
 
 init(Config) ->
-    OpnConf = connection_config(Config),
+    init(0, Config).
+
+init(Node, Config) ->
+    OpnConf = connection_config(Node, Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
     {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session, <<"my link pair">>),

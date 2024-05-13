@@ -391,7 +391,13 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_queue_utils_beam",
     ],
-    shard_count = 7,
+    shard_count = 8,
+)
+
+rabbitmq_integration_suite(
+    name = "message_containers_deaths_v2_SUITE",
+    size = "medium",
+    shard_count = 1,
 )
 
 rabbitmq_integration_suite(
