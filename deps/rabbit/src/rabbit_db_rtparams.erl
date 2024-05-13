@@ -12,7 +12,6 @@
 
 -export([set/2, set/4,
          get/1,
-         get_or_set/2,
          get_all/0, get_all/2,
          delete/1, delete/3,
          delete_vhost/1]).
@@ -158,61 +157,6 @@ get_in_khepri(Key) ->
         []       -> undefined;
         [Record] -> Record
     end.
-
-%% -------------------------------------------------------------------
-%% get_or_set().
-%% -------------------------------------------------------------------
-
--spec get_or_set(Key, Default) -> Ret when
-      Key :: atom() | {vhost:name(), binary(), binary()},
-      Default :: any(),
-      Ret :: #runtime_parameters{}.
-%% @doc Returns a runtime parameter or sets its value if it does not exist.
-%%
-%% @private
-
-get_or_set({VHostName, Comp, Name} = Key, Default)
-  when is_binary(VHostName) andalso
-       is_binary(Comp) andalso
-       (is_binary(Name) orelse is_atom(Name)) ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> get_or_set_in_mnesia(Key, Default) end,
-        khepri => fun() -> get_or_set_in_khepri(Key, Default) end});
-get_or_set(Key, Default) ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> get_or_set_in_mnesia(Key, Default) end,
-        khepri => fun() -> get_or_set_in_khepri(Key, Default) end
-       }).
-
-get_or_set_in_mnesia(Key, Default) ->
-    rabbit_mnesia:execute_mnesia_transaction(
-      fun() -> get_or_set_in_mnesia_tx(Key, Default) end).
-
-get_or_set_in_mnesia_tx(Key, Default) ->
-    case mnesia:read(?MNESIA_TABLE, Key, read) of
-        [Record] ->
-            Record;
-        [] ->
-            Record = #runtime_parameters{key   = Key,
-                                         value = Default},
-            mnesia:write(?MNESIA_TABLE, Record, write),
-            Record
-    end.
-
-get_or_set_in_khepri(Key, Default) ->
-    Path = khepri_rp_path(Key),
-    rabbit_khepri:transaction(
-      fun () ->
-              case khepri_tx:get(Path) of
-                  {ok, undefined} ->
-                      Record = #runtime_parameters{key   = Key,
-                                                   value = Default},
-                      ok = khepri_tx:put(Path, Record),
-                      Record;
-                  {ok, R} ->
-                      R
-              end
-      end).
 
 %% -------------------------------------------------------------------
 %% get_all().
