@@ -52,7 +52,7 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
           Val = if is_map(Value) -> maps:to_list(Value);
                     true         -> Value
                 end,
-          rabbit_runtime_parameters:set_global(name(ReqData), Val, Username),
+          ok = rabbit_runtime_parameters:set_global(name(ReqData), Val, Username),
           {true, ReqData, Context}
       end).
 

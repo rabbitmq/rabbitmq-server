@@ -36,7 +36,7 @@
 -spec set(Key, Term) -> Ret when
       Key :: atom(),
       Term :: any(),
-      Ret :: new | {old, Term}.
+      Ret :: {ok, new | {old, Term}} | rabbit_khepri:timeout_error().
 %% @doc Sets the new value of the global runtime parameter named `Key'.
 %%
 %% @returns `new' if the runtime parameter was not set before, or `{old,
@@ -59,9 +59,11 @@ set_in_khepri(Key, Term) ->
                                  value = Term},
     case rabbit_khepri:adv_put(Path, Record) of
         {ok, #{data := Params}} ->
-            {old, Params#runtime_parameters.value};
+            {ok, {old, Params#runtime_parameters.value}};
         {ok, _} ->
-            new
+            {ok, new};
+        {error, _} = Err ->
+            Err
     end.
 
 -spec set(VHostName, Comp, Name, Term) -> Ret when
@@ -69,7 +71,7 @@ set_in_khepri(Key, Term) ->
       Comp :: binary(),
       Name :: binary() | atom(),
       Term :: any(),
-      Ret :: new | {old, Term}.
+      Ret :: {ok, new | {old, Term}} | rabbit_khepri:timeout_error().
 %% @doc Checks the existence of `VHostName' and sets the new value of the
 %% non-global runtime parameter named `Key'.
 %%
@@ -101,7 +103,7 @@ set_in_mnesia_tx(Key, Term) ->
     Record = #runtime_parameters{key   = Key,
                                  value = Term},
     mnesia:write(?MNESIA_TABLE, Record, write),
-    Res.
+    {ok, Res}.
 
 set_in_khepri(VHostName, Key, Term) ->
     rabbit_khepri:transaction(
@@ -114,9 +116,9 @@ set_in_khepri_tx(Key, Term) ->
                                  value = Term},
     case khepri_tx_adv:put(Path, Record) of
         {ok, #{data := Params}} ->
-            {old, Params#runtime_parameters.value};
+            {ok, {old, Params#runtime_parameters.value}};
         {ok, _} ->
-            new
+            {ok, new}
     end.
 
 %% -------------------------------------------------------------------

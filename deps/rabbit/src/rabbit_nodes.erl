@@ -54,9 +54,15 @@
 %% API
 %%----------------------------------------------------------------------------
 
+-spec boot() -> ok | {error, timeout}.
+
 boot() ->
-  _ = seed_internal_cluster_id(),
-  seed_user_provided_cluster_name().
+  case seed_internal_cluster_id() of
+      {ok, _ClusterId} ->
+          seed_user_provided_cluster_name();
+      {error, _} = Err ->
+          Err
+  end.
 
 name_type() ->
     #{nodename_type := NodeType} = rabbit_prelaunch:get_context(),
@@ -121,17 +127,21 @@ persistent_cluster_id() ->
             Val
     end.
 
--spec seed_internal_cluster_id() -> binary().
+-spec seed_internal_cluster_id() -> {ok, binary()} | {error, timeout}.
 seed_internal_cluster_id() ->
     case rabbit_runtime_parameters:lookup_global(?INTERNAL_CLUSTER_ID_PARAM_NAME) of
         not_found ->
             Id = rabbit_guid:binary(rabbit_guid:gen(), "rabbitmq-cluster-id"),
             rabbit_log:info("Initialising internal cluster ID to '~ts'", [Id]),
-            rabbit_runtime_parameters:set_global(?INTERNAL_CLUSTER_ID_PARAM_NAME, Id, ?INTERNAL_USER),
-            Id;
+            case rabbit_runtime_parameters:set_global(?INTERNAL_CLUSTER_ID_PARAM_NAME, Id, ?INTERNAL_USER) of
+                ok ->
+                    {ok, Id};
+                {error, _} = Err ->
+                    Err
+            end;
         Param ->
             #{value := Val, name := ?INTERNAL_CLUSTER_ID_PARAM_NAME} = maps:from_list(Param),
-            Val
+            {ok, Val}
     end.
 
 seed_user_provided_cluster_name() ->
@@ -142,12 +152,17 @@ seed_user_provided_cluster_name() ->
             set_cluster_name(rabbit_data_coercion:to_binary(Name))
     end.
 
--spec set_cluster_name(binary()) -> 'ok'.
+-spec set_cluster_name(Name) -> Ret when
+      Name :: binary(),
+      Ret :: ok | {error, timeout}.
 
 set_cluster_name(Name) ->
     set_cluster_name(Name, ?INTERNAL_USER).
 
--spec set_cluster_name(binary(), rabbit_types:username()) -> 'ok'.
+-spec set_cluster_name(Name, ActingUser) -> Ret when
+      Name :: binary(),
+      ActingUser :: rabbit_types:username(),
+      Ret :: ok | {error, timeout}.
 
 set_cluster_name(Name, Username) ->
     %% Cluster name should be binary

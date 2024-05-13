@@ -741,7 +741,7 @@ add_parameter(VHost, Param, Username) ->
 add_global_parameter(Param, Username) ->
     Key   = maps:get(name,      Param, undefined),
     Term  = maps:get(value,     Param, undefined),
-    case is_map(Term) of
+    Result = case is_map(Term) of
         true ->
             %% coerce maps to proplists for backwards compatibility.
             %% See rabbitmq-management#528.
@@ -749,6 +749,13 @@ add_global_parameter(Param, Username) ->
             rabbit_runtime_parameters:set_global(Key, TermProplist, Username);
         _ ->
             rabbit_runtime_parameters:set_global(Key, Term, Username)
+    end,
+    case Result of
+        ok               -> ok;
+        {error, timeout} ->
+            exit(rabbit_misc:format(
+                   "Could not set global parameter '~ts' because the "
+                   "operation timed out", [Key]))
     end.
 
 add_policy(Param, Username) ->

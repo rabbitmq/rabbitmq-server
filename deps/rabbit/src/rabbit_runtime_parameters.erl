@@ -94,37 +94,49 @@ set(VHost, Component, Name, Term, User) ->
 parse_set_global(Name, String, ActingUser) ->
     Definition = rabbit_data_coercion:to_binary(String),
     case rabbit_json:try_decode(Definition) of
-        {ok, Term} when is_map(Term) -> set_global(Name, maps:to_list(Term), ActingUser);
-        {ok, Term} -> set_global(Name, Term, ActingUser);
+        {ok, Term0} ->
+            Term = case is_map(Term0) of
+                       true  -> maps:to_list(Term0);
+                       false -> Term0
+                   end,
+            case set_global(Name, Term, ActingUser) of
+                ok ->
+                    ok;
+                {error, timeout} ->
+                    Msg = rabbit_misc:format(
+                            "Could not set global parameter '~ts' because the "
+                            "operation timed out", [Name]),
+                    {error_string, Msg}
+            end;
         {error, Reason} ->
             {error_string, rabbit_misc:format("Could not parse JSON document: ~tp", [Reason])}
     end.
 
--spec set_global(atom(), term(), rabbit_types:username()) -> 'ok'.
+-spec set_global(Name, Term, ActingUser) -> Ret when
+      Name :: atom(),
+      Term :: term(),
+      ActingUser :: rabbit_types:username(),
+      Ret :: ok | {error, timeout}.
 
 set_global(Name, Term, ActingUser)  ->
     NameAsAtom = rabbit_data_coercion:to_atom(Name),
     rabbit_log:debug("Setting global parameter '~ts' to ~tp", [NameAsAtom, Term]),
-    _ = rabbit_db_rtparams:set(NameAsAtom, Term),
-    event_notify(parameter_set, none, global, [{name,  NameAsAtom},
-                                               {value, Term},
-                                               {user_who_performed_action, ActingUser}]),
-    ok.
-
-format_error(L) ->
-    {error_string, rabbit_misc:format_many([{"Validation failed~n", []} | L])}.
+    case rabbit_db_rtparams:set(NameAsAtom, Term) of
+        {ok, _}  ->
+            event_notify(parameter_set, none, global,
+                         [{name,  NameAsAtom},
+                          {value, Term},
+                          {user_who_performed_action, ActingUser}]),
+            ok;
+        {error, timeout} = Err ->
+            Err
+    end.
 
 -spec set_any(rabbit_types:vhost(), binary(), binary(), term(),
               rabbit_types:user() | rabbit_types:username() | 'none')
              -> ok_or_error_string().
 
 set_any(VHost, Component, Name, Term, User) ->
-    case set_any0(VHost, Component, Name, Term, User) of
-        ok          -> ok;
-        {errors, L} -> format_error(L)
-    end.
-
-set_any0(VHost, Component, Name, Term, User) ->
     rabbit_log:debug("Asked to set or update runtime parameter '~ts' in vhost '~ts' "
                      "for component '~ts', value: ~tp",
                      [Name, VHost, Component, Term]),
@@ -135,27 +147,36 @@ set_any0(VHost, Component, Name, Term, User) ->
                     case flatten_errors(Mod:validate(VHost, Component, Name, Term, get_user(User)))  of
                         ok ->
                             case rabbit_db_rtparams:set(VHost, Component, Name, Term) of
-                                {old, Term} ->
+                                {ok, {old, Term}} ->
                                     ok;
-                                _           ->
+                                {ok, _NewOrUpdated} ->
                                     ActingUser = get_username(User),
                                     event_notify(
-                                    parameter_set, VHost, Component,
-                                    [{name,  Name},
-                                    {value, Term},
-                                    {user_who_performed_action, ActingUser}]),
-                                    Mod:notify(VHost, Component, Name, Term, ActingUser)
-                            end,
-                            ok;
-                        E ->
-                            E
+                                      parameter_set, VHost, Component,
+                                      [{name,  Name},
+                                       {value, Term},
+                                       {user_who_performed_action, ActingUser}]),
+                                    Mod:notify(VHost, Component, Name, Term, ActingUser),
+                                    ok;
+                                {error, timeout} ->
+                                    Msg = rabbit_misc:format(
+                                            "Could not set runtime parameter "
+                                            "'~ts' because the operation "
+                                            "timed out", [Name]),
+                                    {error_string, Msg}
+                            end;
+                        {errors, Errs} ->
+                            format_validation_errors(Errs)
                     end;
-                E ->
-                    E
+                {errors, Errs} ->
+                    format_validation_errors(Errs)
             end;
-        E ->
-            E
+        {errors, Errs} ->
+            format_validation_errors(Errs)
     end.
+
+format_validation_errors(Errs) ->
+    {error_string, rabbit_misc:format_many([{"Validation failed~n", []} | Errs])}.
 
 -spec is_within_limit(binary()) -> ok | {errors, list()}.
 
