@@ -6,6 +6,7 @@
 %%
 
 -module(rabbit_queue_type).
+-feature(maybe_expr, enable).
 
 -behaviour(rabbit_registry_class).
 
@@ -307,7 +308,7 @@ is_compatible(Type, Durable, Exclusive, AutoDelete) ->
 declare(Q0, Node) ->
     Q = rabbit_queue_decorator:set(rabbit_policy:set(Q0)),
     Mod = amqqueue:get_type(Q),
-    case check_vhost_queue_limit(Q) of
+    case check_queue_limits(Q) of
         ok ->
             Mod:declare(Q, Node);
         Error ->
@@ -770,6 +771,12 @@ known_queue_type_names() ->
     {QueueTypes, _} = lists:unzip(Registered),
     QTypeBins = lists:map(fun(X) -> atom_to_binary(X) end, QueueTypes),
     ?KNOWN_QUEUE_TYPES ++ QTypeBins.
+
+check_queue_limits(Q) ->
+    maybe
+        %% Prepare for more checks
+        ok ?= check_vhost_queue_limit(Q)
+    end.
 
 check_vhost_queue_limit(Q) ->
     #resource{name = QueueName} = amqqueue:get_name(Q),
