@@ -785,7 +785,7 @@ check_vhost_queue_limit(Q) ->
     #resource{name = QueueName} = amqqueue:get_name(Q),
     VHost = amqqueue:get_vhost(Q),
     case rabbit_vhost_limit:is_over_queue_limit(VHost) of
-        false->
+        false ->
             ok;
         {true, Limit} ->
             {protocol_error, precondition_failed,
