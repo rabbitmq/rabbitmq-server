@@ -1717,7 +1717,7 @@ incoming_mgmt_link_transfer(
     %% given that we are going to send a response anyway.
     true = Settled,
     %% In the current implementation, we disallow large incoming management request messages.
-    false = More,
+    false = default(More, false),
     #management_link{name = Name,
                      delivery_count = IncomingDeliveryCount0,
                      credit = IncomingCredit0,
