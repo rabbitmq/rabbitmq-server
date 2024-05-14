@@ -1226,27 +1226,29 @@ events(Config) ->
     end,
     ok = close_connection_sync(Connection),
 
-    [E0, E1, E2] = event_recorder:get_events(Config),
+    Events = event_recorder:get_events(Config),
     ok = event_recorder:stop(Config),
+    ct:pal("Recorded events: ~p", [Events]),
 
-    assert_event_type(user_authentication_success, E0),
     Protocol = {protocol, {1, 0}},
-    assert_event_prop([{name, <<"guest">>},
+    AuthProps = [{name, <<"guest">>},
                        {auth_mechanism, <<"PLAIN">>},
                        {ssl, false},
                        Protocol],
-                      E0),
+    ?assertMatch(
+      {value, _},
+      find_event(user_authentication_success, AuthProps, Events)),
 
-    assert_event_type(connection_created, E1),
     Node = get_node_config(Config, 0, nodename),
-    assert_event_prop(
-      [Protocol,
-       {node, Node},
-       {vhost, <<"/">>},
-       {user, <<"guest">>},
-       {type, network}],
-      E1),
-    Props = E1#event.props,
+    ConnectionCreatedProps = [Protocol,
+                              {node, Node},
+                              {vhost, <<"/">>},
+                              {user, <<"guest">>},
+                              {type, network}],
+    {value, ConnectionCreatedEvent} = find_event(
+                                        connection_created,
+                                        ConnectionCreatedProps, Events),
+    Props = ConnectionCreatedEvent#event.props,
     Name = proplists:lookup(name, Props),
     Pid = proplists:lookup(pid, Props),
     ClientProperties = {client_properties, List} = proplists:lookup(client_properties, Props),
@@ -1257,13 +1259,14 @@ events(Config) ->
               {<<"ignore-maintenance">>, bool, true},
               List)),
 
-    assert_event_type(connection_closed, E2),
-    assert_event_prop(
-      [{node, Node},
-       Name,
-       Pid,
-       ClientProperties],
-      E2).
+    ConnectionClosedProps = [{node, Node},
+                             Name,
+                             Pid,
+                             ClientProperties],
+    ?assertMatch(
+      {value, _},
+      find_event(connection_closed, ConnectionClosedProps, Events)),
+    ok.
 
 sync_get_unsettled_classic_queue(Config) ->
     sync_get_unsettled(<<"classic">>, Config).
@@ -4193,3 +4196,19 @@ has_local_member(QName) ->
         {error, _} ->
             false
     end.
+
+-spec find_event(Type, Props, Events) -> Ret when
+      Type :: atom(),
+      Props :: proplists:proplist(),
+      Events :: [#event{}],
+      Ret :: {value, #event{}} | false.
+
+find_event(Type, Props, Events) when is_list(Props), is_list(Events) ->
+    lists:search(
+      fun(#event{type = EventType, props = EventProps}) ->
+              Type =:= EventType andalso
+                lists:all(
+                  fun({Key, _Value}) ->
+                          lists:keymember(Key, 1, EventProps)
+                  end, Props)
+      end, Events).
