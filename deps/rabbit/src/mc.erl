@@ -348,14 +348,22 @@ record_death(Reason, SourceQueue,
        is_binary(SourceQueue) ->
     Key = {SourceQueue, Reason},
     #{?ANN_EXCHANGE := Exchange,
-      ?ANN_ROUTING_KEYS := RoutingKeys} = Anns0,
+      ?ANN_ROUTING_KEYS := RKeys0} = Anns0,
+    %% The routing keys that we record in the death history and will
+    %% report to the client should include CC, but exclude BCC.
+    RKeys = case Anns0 of
+                #{bcc := BccKeys} ->
+                    RKeys0 -- BccKeys;
+                _ ->
+                    RKeys0
+            end,
     Timestamp = os:system_time(millisecond),
     Ttl = maps:get(ttl, Anns0, undefined),
     DeathAnns = rabbit_misc:maps_put_truthy(
                   ttl, Ttl, #{first_time => Timestamp,
                               last_time => Timestamp}),
     NewDeath = #death{exchange = Exchange,
-                      routing_keys = RoutingKeys,
+                      routing_keys = RKeys,
                       count = 1,
                       anns = DeathAnns},
     Anns = case Anns0 of
