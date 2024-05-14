@@ -51,10 +51,11 @@
 
 %% mc implementation
 init(#content{} = Content0) ->
-    Content = rabbit_binary_parser:ensure_content_decoded(Content0),
+    Content1 = rabbit_binary_parser:ensure_content_decoded(Content0),
     %% project essential properties into annotations
-    Anns = essential_properties(Content),
-    {strip_header(Content, ?DELETED_HEADER), Anns}.
+    Anns = essential_properties(Content1),
+    Content = strip_header(Content1, ?DELETED_HEADER),
+    {Content, Anns}.
 
 convert_from(mc_amqp, Sections, Env) ->
     {H, MAnn, Prop, AProp, BodyRev, Footer} =
@@ -554,7 +555,7 @@ message(#resource{name = ExchangeNameBin},
             Error;
         HeaderRoutes ->
             {ok, mc:init(?MODULE,
-                         rabbit_basic:strip_bcc_header(Content),
+                         Content,
                          Anns#{?ANN_ROUTING_KEYS => [RoutingKey | HeaderRoutes],
                                ?ANN_EXCHANGE => ExchangeNameBin})}
     end.
@@ -795,7 +796,8 @@ message_id(undefined, _HKey, H) ->
 essential_properties(#content{} = C) ->
     #'P_basic'{delivery_mode = Mode,
                priority = Priority,
-               timestamp = TimestampRaw} = Props = C#content.properties,
+               timestamp = TimestampRaw,
+               headers = Headers} = Props = C#content.properties,
     {ok, MsgTTL} = rabbit_basic:parse_expiration(Props),
     Timestamp = case TimestampRaw of
                     undefined ->
@@ -805,6 +807,12 @@ essential_properties(#content{} = C) ->
                         TimestampRaw * 1000
                 end,
     Durable = Mode == 2,
+    BccKeys = case rabbit_basic:header(<<"BCC">>, Headers) of
+                  {<<"BCC">>, array, Routes} ->
+                      [Route || {longstr, Route} <- Routes];
+                  _ ->
+                      undefined
+              end,
     maps_put_truthy(
       ?ANN_PRIORITY, Priority,
       maps_put_truthy(
@@ -813,7 +821,9 @@ essential_properties(#content{} = C) ->
           ?ANN_TIMESTAMP, Timestamp,
           maps_put_falsy(
             ?ANN_DURABLE, Durable,
-            #{})))).
+            maps_put_truthy(
+              bcc, BccKeys,
+              #{}))))).
 
 %% headers that are added as annotations during conversions
 is_internal_header(<<"x-basic-", _/binary>>) ->

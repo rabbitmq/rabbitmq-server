@@ -1379,17 +1379,18 @@ dead_letter_headers_BCC(Config) ->
                                                              routing_key = DLXQName}),
 
     P1 = <<"msg1">>,
-    BCCHeader = {<<"BCC">>, array, [{longstr, DLXQName}]},
-    publish(Ch, QName, [P1], [BCCHeader]),
+    CCHeader = {<<"CC">>, array, [{longstr, <<"cc 1">>}, {longstr, <<"cc 2">>}]},
+    BCCHeader = {<<"BCC">>, array, [{longstr, DLXQName}, {longstr, <<"bcc 2">>}]},
+    publish(Ch, QName, [P1], [CCHeader, BCCHeader]),
     %% Message is published to both queues because of BCC header and DLX queue bound to both
     %% exchanges
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
     {#'basic.get_ok'{delivery_tag = DTag1}, #amqp_msg{payload = P1,
                                                       props = #'P_basic'{headers = Headers1}}} =
-        amqp_channel:call(Ch, #'basic.get'{queue = QName}),
+    amqp_channel:call(Ch, #'basic.get'{queue = QName}),
     {#'basic.get_ok'{}, #amqp_msg{payload = P1,
                                   props = #'P_basic'{headers = Headers2}}} =
-        amqp_channel:call(Ch, #'basic.get'{queue = DLXQName}),
+    amqp_channel:call(Ch, #'basic.get'{queue = DLXQName}),
     %% We check the headers to ensure no dead lettering has happened
     ?assertEqual(undefined, header_lookup(Headers1, <<"x-death">>)),
     ?assertEqual(undefined, header_lookup(Headers2, <<"x-death">>)),
@@ -1401,10 +1402,15 @@ dead_letter_headers_BCC(Config) ->
     wait_for_messages(Config, [[DLXQName, <<"2">>, <<"1">>, <<"1">>]]),
     {#'basic.get_ok'{}, #amqp_msg{payload = P1,
                                   props = #'P_basic'{headers = Headers3}}} =
-        amqp_channel:call(Ch, #'basic.get'{queue = DLXQName}),
+    amqp_channel:call(Ch, #'basic.get'{queue = DLXQName}),
     consume_empty(Ch, QName),
     ?assertEqual(undefined, rabbit_misc:table_lookup(Headers3, <<"BCC">>)),
-    ?assertMatch({array, _}, rabbit_misc:table_lookup(Headers3, <<"x-death">>)).
+    {array, [{table, Death}]} = rabbit_misc:table_lookup(Headers3, <<"x-death">>),
+    {array, RKeys0} = rabbit_misc:table_lookup(Death, <<"routing-keys">>),
+    RKeys = [RKey || {longstr, RKey} <- RKeys0],
+    %% routing-keys in the death history should include CC but exclude BCC keys
+    ?assertEqual(lists:sort([QName, <<"cc 1">>, <<"cc 2">>]),
+                 lists:sort(RKeys)).
 
 %% Three top-level headers are added for the very first dead-lettering event.
 %% They are
@@ -1669,7 +1675,11 @@ stream(Config) ->
       #'basic.publish'{routing_key = Q1},
       #amqp_msg{payload = Payload,
                 props = #'P_basic'{expiration = <<"0">>,
-                                   headers = [{<<"CC">>, array, [{longstr, <<"other key">>}]}]}
+                                   headers = [{<<"CC">>, array, [{longstr, <<"cc 1">>},
+                                                                 {longstr, <<"cc 2">>}]},
+                                              {<<"BCC">>, array, [{longstr, <<"bcc 1">>},
+                                                                  {longstr, <<"bcc 2">>}]}
+                                             ]}
                }),
 
     #'basic.qos_ok'{} = amqp_channel:call(Ch1, #'basic.qos'{prefetch_count = 1}),
@@ -1710,7 +1720,10 @@ stream(Config) ->
     ?assertEqual({longstr, Reason}, rabbit_misc:table_lookup(Death1, <<"reason">>)),
     ?assertEqual({longstr, <<>>}, rabbit_misc:table_lookup(Death1, <<"exchange">>)),
     ?assertEqual({long, 1}, rabbit_misc:table_lookup(Death1, <<"count">>)),
-    ?assertEqual({array, [{longstr, Q1}, {longstr, <<"other key">>}]},
+    %% routing-keys in the death history should include CC but exclude BCC keys
+    ?assertEqual({array, [{longstr, Q1},
+                          {longstr, <<"cc 1">>},
+                          {longstr, <<"cc 2">>}]},
                  rabbit_misc:table_lookup(Death1, <<"routing-keys">>)),
     ?assertEqual({longstr, <<"0">>}, rabbit_misc:table_lookup(Death1, <<"original-expiration">>)),
     {timestamp, T1} = rabbit_misc:table_lookup(Death1, <<"time">>),
