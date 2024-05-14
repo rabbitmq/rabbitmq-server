@@ -12,6 +12,8 @@
 -include_lib("khepri/include/khepri.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+-include("include/khepri.hrl").
+
 -export([create/1,
          update/2,
          get/1,
@@ -489,13 +491,12 @@ set_user_permissions_in_khepri(Username, VHostName, UserPermission) ->
           end)), rw).
 
 set_user_permissions_in_khepri_tx(Username, VHostName, UserPermission) ->
+    %% TODO: Check user presence in a transaction.
     Path = khepri_user_permission_path(
-             #if_all{conditions =
-                         [Username,
-                          #if_node_exists{exists = true}]},
+             Username,
              VHostName),
     Extra = #{keep_while =>
-                  #{rabbit_db_vhost:khepri_vhost_path(VHostName) =>
+                  #{rabbit_db_user:khepri_user_path(Username) =>
                         #if_node_exists{exists = true}}},
     Ret = khepri_tx:put(
             Path, UserPermission, Extra),
@@ -877,14 +878,13 @@ set_topic_permissions_in_khepri(Username, VHostName, TopicPermission) ->
 set_topic_permissions_in_khepri_tx(Username, VHostName, TopicPermission) ->
     #topic_permission{topic_permission_key =
                           #topic_permission_key{exchange = ExchangeName}} = TopicPermission,
+    %% TODO: Check user presence in a transaction.
     Path = khepri_topic_permission_path(
-             #if_all{conditions =
-                         [Username,
-                          #if_node_exists{exists = true}]},
+             Username,
              VHostName,
              ExchangeName),
     Extra = #{keep_while =>
-                  #{rabbit_db_vhost:khepri_vhost_path(VHostName) =>
+                  #{rabbit_db_user:khepri_user_path(Username) =>
                         #if_node_exists{exists = true}}},
     Ret = khepri_tx:put(Path, TopicPermission, Extra),
     case Ret of
@@ -1094,15 +1094,14 @@ clear_in_khepri() ->
 
 khepri_user_path(Username)
   when ?IS_KHEPRI_PATH_CONDITION(Username) ->
-    [?MODULE, users, Username].
+    ?KHEPRI_ROOT_PATH ++ [users, Username].
 
 khepri_user_permission_path(Username, VHostName)
-  when ?IS_KHEPRI_PATH_CONDITION(Username) andalso
-       ?IS_KHEPRI_PATH_CONDITION(VHostName) ->
-    [?MODULE, users, Username, user_permissions, VHostName].
+  when ?IS_KHEPRI_PATH_CONDITION(Username) ->
+    (rabbit_db_vhost:khepri_vhost_path(VHostName) ++
+     [user_permissions, Username]).
 
 khepri_topic_permission_path(Username, VHostName, Exchange)
-  when ?IS_KHEPRI_PATH_CONDITION(Username) andalso
-       ?IS_KHEPRI_PATH_CONDITION(VHostName) andalso
-       ?IS_KHEPRI_PATH_CONDITION(Exchange) ->
-    [?MODULE, users, Username, topic_permissions, VHostName, Exchange].
+  when ?IS_KHEPRI_PATH_CONDITION(Username) ->
+    (rabbit_db_exchange:khepri_exchange_path(VHostName, Exchange) ++
+     [user_permissions, Username]).

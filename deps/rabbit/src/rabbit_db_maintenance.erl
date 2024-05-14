@@ -10,6 +10,8 @@
 -include_lib("khepri/include/khepri.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+-include("include/khepri.hrl").
+
 -export([
          table_definitions/0,
          set/1,
@@ -168,4 +170,4 @@ get_consistent_in_khepri(Node) ->
 %% -------------------------------------------------------------------
 
 khepri_maintenance_path(Node) when ?IS_KHEPRI_PATH_CONDITION(Node) ->
-    [?MODULE, maintenance, Node].
+    ?KHEPRI_ROOT_PATH ++ [node_maintenance, Node].
