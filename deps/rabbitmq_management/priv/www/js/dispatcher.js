@@ -340,8 +340,8 @@ dispatcher_add(function(sammy) {
             oauth.logged_in = false;
             oauth_initiateLogout();
         }else {
-          go_to_home()
-//          location.reload();
+//          go_to_home()
+          location.reload();
         }
     });
 
