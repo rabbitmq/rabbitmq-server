@@ -225,6 +225,9 @@ function oauth_redirectToHome(oauth) {
 function go_to(path) {
   location.href = rabbit_path_prefix() + "/" + path
 }
+function go_to_home() {
+  location.href = rabbit_path_prefix() + "/"
+}
 function go_to_authority() {
   location.href = oauth.authority
 }

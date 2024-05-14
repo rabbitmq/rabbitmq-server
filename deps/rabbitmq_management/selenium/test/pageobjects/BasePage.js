@@ -4,7 +4,7 @@ const MENU_TABS = By.css('div#menu ul#tabs')
 const USER = By.css('li#logout')
 const LOGOUT_FORM = By.css('li#logout form')
 const SELECT_VHOSTS = By.css('select#show-vhost')
-
+const SELECT_REFRESH = By.css('ul#topnav li#interval select#update-every')
 const OVERVIEW_TAB = By.css('div#menu ul#tabs li#overview')
 const CONNECTIONS_TAB = By.css('div#menu ul#tabs li#connections')
 const CHANNELS_TAB = By.css('div#menu ul#tabs li#channels')
@@ -36,7 +36,9 @@ module.exports = class BasePage {
   async getUser () {
     return this.getText(USER)
   }
-
+  async selectRefreshOption(option) {
+    return this.selectOption(SELECT_REFRESH, option)
+  }
   async waitForOverviewTab() {
     return this.waitForDisplayed(OVERVIEW_TAB)
   }

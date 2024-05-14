@@ -341,7 +341,6 @@ dispatcher_add(function(sammy) {
             oauth_initiateLogout();
         }else {
           go_to_home()
-//          location.reload();
         }
     });
 

@@ -22,6 +22,7 @@ describe('When a logged in user', function () {
   it('logs out', async function () {
     await loginPage.login('guest', 'guest')
     await overview.isLoaded()
+    await overview.selectRefreshOption("Do not refresh")
     await overview.logout()
     await loginPage.isLoaded()
   })
