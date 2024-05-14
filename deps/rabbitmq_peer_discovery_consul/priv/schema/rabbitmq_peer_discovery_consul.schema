@@ -140,7 +140,7 @@ fun(Conf) ->
 end}.
 
 
-%% use (Erlang) node name when compuing service address?
+%% use (Erlang) node name when computing service address?
 
 {mapping, "cluster_formation.consul.svc_addr_use_nodename", "rabbit.cluster_formation.peer_discovery_consul.consul_svc_addr_nodename", [
     {datatype, {enum, [true, false]}}
@@ -149,6 +149,21 @@ end}.
 {translation, "rabbit.cluster_formation.peer_discovery_consul.consul_svc_addr_nodename",
 fun(Conf) ->
     case cuttlefish:conf_get("cluster_formation.consul.svc_addr_use_nodename", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% service ID
+
+{mapping, "cluster_formation.consul.svc_id", "rabbit.cluster_formation.peer_discovery_consul.consul_svc_id", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_consul.consul_svc_id",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.consul.svc_id", Conf, undefined) of
         undefined -> cuttlefish:unset();
         Value     -> Value
     end
