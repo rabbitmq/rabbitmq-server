@@ -168,10 +168,21 @@ array(_Config) ->
     ?assertEqual({array, boolean, [true, false]},
                  roundtrip_return({array, boolean, [{boolean, true}, {boolean, false}]})),
 
-    % array of arrays
-    % TODO: does the inner type need to be consistent across the array?
+    %% array of arrays
     roundtrip({array, array, []}),
     roundtrip({array, array, [{array, symbol, [{symbol, <<"ANONYMOUS">>}]}]}),
+
+    %% array of maps
+    roundtrip({array, map, []}),
+    roundtrip({array, map, [{map, [{{symbol, <<"k1">>}, {utf8, <<"v1">>}}]},
+                            {map, []},
+                            {map, [{{described,
+                                     {utf8, <<"URL">>},
+                                     {utf8, <<"http://example.org/hello-world">>}},
+                                    {byte, -1}},
+                                   {{int, 0}, {ulong, 0}}
+                                  ]}
+                           ]}),
 
     Desc = {utf8, <<"URL">>},
     roundtrip({array, {described, Desc, utf8},

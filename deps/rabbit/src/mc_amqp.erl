@@ -180,6 +180,10 @@ protocol_state(Msg0 = #msg{message_annotations = MA0}, Anns) ->
                            maps_upsert(K, mc_util:infer_type(V), L);
                       (<<"timestamp_in_ms">>, V, L) ->
                            maps_upsert(<<"x-opt-rabbitmq-received-time">>, {timestamp, V}, L);
+                      (deaths, Deaths, L)
+                        when is_list(Deaths) ->
+                           Maps = encode_deaths(Deaths),
+                           maps_upsert(<<"x-opt-deaths">>, {array, map, Maps}, L);
                       (_, _, Acc) ->
                            Acc
                    end, MA0, Anns),
@@ -352,34 +356,33 @@ decode([#'v1_0.amqp_value'{} = B | Rem], #msg{} = Msg) ->
     %% an amqp value can only be a singleton
     decode(Rem, Msg#msg{data = B}).
 
-key_find(K, [{{_, K}, {_, V}} | _]) ->
-    V;
-key_find(K, [_ | Rem]) ->
-    key_find(K, Rem);
-key_find(_K, []) ->
-    undefined.
 
-recover_deaths([], Acc) ->
-    Acc;
-recover_deaths([{map, Kvs} | Rem], Acc) ->
-    Queue = key_find(<<"queue">>, Kvs),
-    Reason = binary_to_existing_atom(key_find(<<"reason">>, Kvs)),
-    DA0 = case key_find(<<"original-expiration">>, Kvs) of
-              undefined ->
-                  #{};
-              Exp ->
-                  #{ttl => binary_to_integer(Exp)}
-          end,
-    RKeys = [RK || {_, RK} <- key_find(<<"routing-keys">>, Kvs)],
-    Ts = key_find(<<"time">>, Kvs),
-    DA = DA0#{first_time => Ts,
-              last_time => Ts},
-    recover_deaths(Rem,
-                   Acc#{{Queue, Reason} =>
-                        #death{anns = DA,
-                               exchange = key_find(<<"exchange">>, Kvs),
-                               count = key_find(<<"count">>, Kvs),
-                               routing_keys = RKeys}}).
+encode_deaths(Deaths) ->
+    lists:map(
+      fun({{Queue, Reason},
+           #death{exchange = Exchange,
+                  routing_keys = RoutingKeys,
+                  count = Count,
+                  anns = Anns = #{first_time := FirstTime,
+                                  last_time := LastTime}}}) ->
+              RKeys = [{utf8, Rk} || Rk <- RoutingKeys],
+              Map0 = [
+                      {{symbol, <<"queue">>}, {utf8, Queue}},
+                      {{symbol, <<"reason">>}, {symbol, atom_to_binary(Reason)}},
+                      {{symbol, <<"count">>}, {ulong, Count}},
+                      {{symbol, <<"first-time">>}, {timestamp, FirstTime}},
+                      {{symbol, <<"last-time">>}, {timestamp, LastTime}},
+                      {{symbol, <<"exchange">>}, {utf8, Exchange}},
+                      {{symbol, <<"routing-keys">>}, {array, utf8, RKeys}}
+                     ],
+              Map = case Anns of
+                        #{ttl := Ttl} ->
+                            [{{symbol, <<"ttl">>}, {uint, Ttl}} | Map0];
+                        _ ->
+                            Map0
+                    end,
+              {map, Map}
+      end, Deaths).
 
 essential_properties(#msg{message_annotations = MA} = Msg) ->
     Durable = get_property(durable, Msg),
@@ -387,20 +390,6 @@ essential_properties(#msg{message_annotations = MA} = Msg) ->
     Timestamp = get_property(timestamp, Msg),
     Ttl = get_property(ttl, Msg),
 
-    Deaths = case message_annotation(<<"x-death">>, Msg, undefined) of
-                 {list, DeathMaps}  ->
-                     %% TODO: make more correct?
-                     Def = {utf8, <<>>},
-                     {utf8, FstQ} = message_annotation(<<"x-first-death-queue">>, Msg, Def),
-                     {utf8, FstR} = message_annotation(<<"x-first-death-reason">>, Msg, Def),
-                     {utf8, LastQ} = message_annotation(<<"x-last-death-queue">>, Msg, Def),
-                     {utf8, LastR} = message_annotation(<<"x-last-death-reason">>, Msg, Def),
-                     #deaths{first = {FstQ, binary_to_existing_atom(FstR)},
-                             last = {LastQ, binary_to_existing_atom(LastR)},
-                             records = recover_deaths(DeathMaps, #{})};
-                 _ ->
-                     undefined
-             end,
     Anns = maps_put_falsy(
              ?ANN_DURABLE, Durable,
              maps_put_truthy(
@@ -409,9 +398,7 @@ essential_properties(#msg{message_annotations = MA} = Msg) ->
                  ?ANN_TIMESTAMP, Timestamp,
                  maps_put_truthy(
                    ttl, Ttl,
-                   maps_put_truthy(
-                     deaths, Deaths,
-                     #{}))))),
+                     #{})))),
     case MA of
         [] ->
             Anns;
