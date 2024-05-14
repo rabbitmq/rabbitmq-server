@@ -737,6 +737,9 @@ known_queue_type_names() ->
     QTypeBins = lists:map(fun(X) -> atom_to_binary(X) end, QueueTypes),
     ?KNOWN_QUEUE_TYPES ++ QTypeBins.
 
+-spec check_queue_limits(amqqueue:amqqueue()) ->
+          ok |
+          {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 check_queue_limits(Q) ->
     maybe
         %% Prepare for more checks
