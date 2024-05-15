@@ -2140,7 +2140,7 @@ receive_transfer_flow_order(Config) ->
     gen_statem:cast(Session, {flow_session, #'v1_0.flow'{incoming_window = {uint, 0}}}),
 
     ok = amqp10_client:flow_link_credit(Receiver, 2, never, true),
-    %% Given our incoming window is closed, we shouldn't receive the TRANSFER yet, and threfore
+    %% Given our incoming window is closed, we shouldn't receive the TRANSFER yet, and therefore
     %% must not yet receive the FLOW that comes thereafter with drain=true, credit=0, and advanced delivery-count.
     receive Unexpected -> ct:fail({unexpected, Unexpected})
     after 300 -> ok

@@ -88,6 +88,9 @@
                                     rabbit_types:routing_key(),
                                     rabbit_types:permission_atom()}].
 
+-type transfer_frame_body() :: [Performative :: #'v1_0.transfer'{} |
+                                Payload :: iolist()].
+
 -export_type([permission_cache/0,
               topic_permission_cache/0]).
 
@@ -155,8 +158,9 @@
           queue_name :: rabbit_amqqueue:name()
          }).
 
--record(pending_transfer, {
-          frames :: iolist(),
+-record(pending_delivery, {
+          %% A large message can be split into multiple transfer frames.
+          frames :: [transfer_frame_body(), ...],
           queue_ack_required :: boolean(),
           %% Queue that sent us this message.
           %% When feature flag credit_api_v2 becomes required, this field should be deleted.
@@ -165,8 +169,9 @@
           outgoing_unsettled :: #outgoing_unsettled{}
          }).
 
--record(pending_management_transfer, {
-          frames :: iolist()
+-record(pending_management_delivery, {
+          %% A large message can be split into multiple transfer frames.
+          frames :: [transfer_frame_body(), ...]
          }).
 
 -record(cfg, {
@@ -241,8 +246,8 @@
           %% Even when we are limited by session flow control, we must make sure to first send the TRANSFER to the
           %% client (once the remote_incoming_window got opened) followed by the FLOW with drain=true and credit=0
           %% and advanced delivery count. Otherwise, we would violate the AMQP protocol spec.
-          outgoing_pending = queue:new() :: queue:queue(#pending_transfer{} |
-                                                        #pending_management_transfer{} |
+          outgoing_pending = queue:new() :: queue:queue(#pending_delivery{} |
+                                                        #pending_management_delivery{} |
                                                         #'v1_0.flow'{}),
 
           %% The link or session endpoint assigns each message a unique delivery-id
@@ -1292,7 +1297,7 @@ send_pending(#state{remote_incoming_window = Space,
             Flow = session_flow_fields(Flow0, State0),
             rabbit_amqp_writer:send_command(WriterPid, Ch, Flow),
             send_pending(State0#state{outgoing_pending = Buf});
-        {{value, #pending_transfer{
+        {{value, #pending_delivery{
                     frames = Frames,
                     queue_pid = QPid,
                     outgoing_unsettled = #outgoing_unsettled{queue_name = QName}
@@ -1323,13 +1328,13 @@ send_pending(#state{remote_incoming_window = Space,
                      record_outgoing_unsettled(Pending, State0)};
                 {sent_some, Rest} ->
                     {Space,
-                     queue:in_r(Pending#pending_transfer{frames = Rest}, Buf1),
+                     queue:in_r(Pending#pending_delivery{frames = Rest}, Buf1),
                      State0}
             end,
             State2 = session_flow_control_sent_transfers(NumTransfersSent, State1),
             State = State2#state{outgoing_pending = Buf},
             send_pending(State);
-        {{value, Pending = #pending_management_transfer{frames = Frames}}, Buf1}
+        {{value, Pending = #pending_management_delivery{frames = Frames}}, Buf1}
           when Space > 0 ->
             SendFun = send_fun(WriterPid, Ch),
             {NumTransfersSent, Buf} =
@@ -1337,7 +1342,7 @@ send_pending(#state{remote_incoming_window = Space,
                 {sent_all, SpaceLeft} ->
                     {Space - SpaceLeft, Buf1};
                 {sent_some, Rest} ->
-                    {Space, queue:in_r(Pending#pending_management_transfer{frames = Rest}, Buf1)}
+                    {Space, queue:in_r(Pending#pending_management_delivery{frames = Rest}, Buf1)}
             end,
             State1 = session_flow_control_sent_transfers(NumTransfersSent, State0),
             State = State1#state{outgoing_pending = Buf},
@@ -1359,7 +1364,7 @@ send_fun(WriterPid, Ch) ->
             rabbit_amqp_writer:send_command(WriterPid, Ch, Transfer, Sections)
     end.
 
-record_outgoing_unsettled(#pending_transfer{queue_ack_required = true,
+record_outgoing_unsettled(#pending_delivery{queue_ack_required = true,
                                             delivery_id = DeliveryId,
                                             outgoing_unsettled = Unsettled},
                           #state{outgoing_unsettled_map = Map0} = State) ->
@@ -1367,7 +1372,7 @@ record_outgoing_unsettled(#pending_transfer{queue_ack_required = true,
     %% once we receive the DISPOSITION from the AMQP client.
     Map = Map0#{DeliveryId => Unsettled},
     State#state{outgoing_unsettled_map = Map};
-record_outgoing_unsettled(#pending_transfer{queue_ack_required = false}, State) ->
+record_outgoing_unsettled(#pending_delivery{queue_ack_required = false}, State) ->
     %% => 'snd-settle-mode' at attachment must have been 'settled'.
     %% => 'settled' field in TRANSFER must have been 'true'.
     %% => AMQP client won't ack this message.
@@ -1640,13 +1645,13 @@ handle_deliver(ConsumerTag, AckRequired,
                      msg_id = MsgId,
                      consumer_tag = ConsumerTag,
                      queue_name = QName},
-            PendingTransfer = #pending_transfer{
+            PendingDelivery = #pending_delivery{
                                  frames = Frames,
                                  queue_ack_required = AckRequired,
                                  queue_pid = QPid,
                                  delivery_id = DeliveryId,
                                  outgoing_unsettled = Del},
-            State#state{outgoing_pending = queue:in(PendingTransfer, Pending),
+            State#state{outgoing_pending = queue:in(PendingDelivery, Pending),
                         outgoing_delivery_id = add(DeliveryId, 1),
                         outgoing_links = OutgoingLinks};
         _ ->
@@ -1773,7 +1778,7 @@ incoming_mgmt_link_transfer(
                       Section <- amqp10_framing:decode_bin(iolist_to_binary(Response))]]),
     validate_message_size(Response, OutgoingMaxMessageSize),
     Frames = transfer_frames(Transfer, Response, MaxFrameSize),
-    PendingTransfer = #pending_management_transfer{frames = Frames},
+    PendingDelivery = #pending_management_delivery{frames = Frames},
     IncomingDeliveryCount = add(IncomingDeliveryCount0, 1),
     IncomingCredit1 = IncomingCredit0 - 1,
     {IncomingCredit, Reply} = maybe_grant_mgmt_link_credit(
@@ -1784,7 +1789,7 @@ incoming_mgmt_link_transfer(
                                                  credit = OutgoingCredit - 1},
     State = State0#state{
               outgoing_delivery_id = add(OutgoingDeliveryId, 1),
-              outgoing_pending = queue:in(PendingTransfer, Pending),
+              outgoing_pending = queue:in(PendingDelivery, Pending),
               incoming_management_links = maps:update(IncomingHandleInt, IncomingLink, IncomingLinks),
               outgoing_management_links = maps:update(OutgoingHandleInt, OutgoingLink, OutgoingLinks),
               permission_cache = PermCache,
