@@ -70,7 +70,9 @@
          make_update_config/1,
          make_garbage_collection/0,
          convert_v1_to_v2/1,
-         convert_v2_to_v3/1
+         convert_v2_to_v3/1,
+
+         get_field/2
         ]).
 
 -ifdef(TEST).
@@ -765,6 +767,21 @@ convert_v2_to_v3(#rabbit_fifo{consumers = ConsumersV2} = StateV2) ->
                                    convert_consumer_v2_to_v3(C)
                            end, ConsumersV2),
     StateV2#rabbit_fifo{consumers = ConsumersV3}.
+
+get_field(Field, State) ->
+    Fields = record_info(fields, ?STATE),
+    Index = record_index_of(Field, Fields),
+    element(Index, State).
+
+record_index_of(F, Fields) ->
+    index_of(2, F, Fields).
+
+index_of(_, F, []) ->
+    exit({field_not_found, F});
+index_of(N, F, [F | _]) ->
+   N;
+index_of(N, F, [_ | T]) ->
+    index_of(N+1, F, T).
 
 convert_consumer_v2_to_v3(C = #consumer{cfg = Cfg = #consumer_cfg{credit_mode = simple_prefetch,
                                                                   meta = #{prefetch := Prefetch}}}) ->

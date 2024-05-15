@@ -15,6 +15,7 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit/src/rabbit_fifo.hrl").
 
+-define(PROTOMOD, rabbit_framing_amqp_0_9_1).
 %%%===================================================================
 %%% Common Test callbacks
 %%%===================================================================
@@ -350,7 +351,7 @@ enq_expire_deq_test(C) ->
              queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>),
              msg_ttl => 0},
     S0 = rabbit_fifo:init(Conf),
-    Msg = #basic_message{content = #content{properties = none,
+    Msg = #basic_message{content = #content{properties = #'P_basic'{},
                                             payload_fragments_rev = []}},
     {S1, ok, _} = apply(meta(C, 1, 100, {notify, 1, self()}),
                         rabbit_fifo:make_enqueue(self(), 1, Msg), S0),
@@ -370,18 +371,23 @@ enq_expire_enq_deq_test(Config) ->
                             exchange_name = #resource{name = <<"x">>,
                                                       kind = exchange,
                                                       virtual_host = <<"v">>},
-                            content = #content{properties = #'P_basic'{expiration = <<"0">>},
+                            content = #content{properties = #'P_basic'{
+                                                               expiration = <<"0">>},
                                                payload_fragments_rev = [<<"msg1">>]}}),
     Enq1 = rabbit_fifo:make_enqueue(self(), 1, Msg1),
-    {S1, ok, _} = apply(meta(Config, 1, 100, {notify, 1, self()}), Enq1, S0),
-    Msg2 = #basic_message{content = #content{properties = none,
+    Idx1 = ?LINE,
+    {S1, ok, _} = apply(meta(Config, Idx1, 100, {notify, 1, self()}), Enq1, S0),
+    Msg2 = #basic_message{content = #content{properties = #'P_basic'{},
+                                             % class_id = 60,
+                                             % protocol = ?PROTOMOD,
                                              payload_fragments_rev = [<<"msg2">>]}},
     Enq2 = rabbit_fifo:make_enqueue(self(), 2, Msg2),
-    {S2, ok, _} = apply(meta(Config, 2, 100, {notify, 2, self()}), Enq2, S1),
+    Idx2 = ?LINE,
+    {S2, ok, _} = apply(meta(Config, Idx2, 100, {notify, 2, self()}), Enq2, S1),
     Cid = {?FUNCTION_NAME, self()},
     {_S3, _, Effs} =
-        apply(meta(Config, 3, 101), make_checkout(Cid, {dequeue, unsettled}, #{}), S2),
-    {log, [2], Fun} = get_log_eff(Effs),
+        apply(meta(Config, ?LINE, 101), make_checkout(Cid, {dequeue, unsettled}, #{}), S2),
+    {log, [Idx2], Fun} = get_log_eff(Effs),
     [{reply, _From,
       {wrap_reply, {dequeue, {_MsgId, _HeaderMsg}, ReadyMsgCount}}}] = Fun([Enq2]),
     ?assertEqual(0, ReadyMsgCount).
@@ -573,7 +579,7 @@ cancelled_checkout_out_test(Config) ->
     % cancelled checkout should not return pending messages to queue
     {State2, _, _} = apply(meta(Config, 4),
                            rabbit_fifo:make_checkout(Cid, cancel, #{}), State1),
-    ?assertEqual(1, lqueue:len(State2#rabbit_fifo.messages)),
+    ?assertEqual(1, rabbit_fifo_q:len(State2#rabbit_fifo.messages)),
     ?assertEqual(0, lqueue:len(State2#rabbit_fifo.returns)),
     ?assertEqual(0, priority_queue:len(State2#rabbit_fifo.service_queue)),
 
@@ -645,13 +651,13 @@ down_with_noconnection_returns_unack_test(Config) ->
     Cid = {?FUNCTION_NAME_B, Pid},
     Msg = rabbit_fifo:make_enqueue(self(), 1, second),
     {State0, _} = enq(Config, 1, 1, second, test_init(test)),
-    ?assertEqual(1, lqueue:len(State0#rabbit_fifo.messages)),
+    ?assertEqual(1, rabbit_fifo_q:len(State0#rabbit_fifo.messages)),
     ?assertEqual(0, lqueue:len(State0#rabbit_fifo.returns)),
     {State1, {_, _}} = deq(Config, 2, Cid, unsettled, Msg, State0),
-    ?assertEqual(0, lqueue:len(State1#rabbit_fifo.messages)),
+    ?assertEqual(0, rabbit_fifo_q:len(State1#rabbit_fifo.messages)),
     ?assertEqual(0, lqueue:len(State1#rabbit_fifo.returns)),
     {State2a, _, _} = apply(meta(Config, 3), {down, Pid, noconnection}, State1),
-    ?assertEqual(0, lqueue:len(State2a#rabbit_fifo.messages)),
+    ?assertEqual(0, rabbit_fifo_q:len(State2a#rabbit_fifo.messages)),
     ?assertEqual(1, lqueue:len(State2a#rabbit_fifo.returns)),
     ?assertMatch(#consumer{checked_out = Ch,
                            status = suspected_down}
@@ -782,7 +788,7 @@ duplicate_delivery_test(Config) ->
     {#rabbit_fifo{messages = Messages} = State, _} =
         enq(Config, 2, 1, first, State0),
     ?assertEqual(1, rabbit_fifo:query_messages_total(State)),
-    ?assertEqual(1, lqueue:len(Messages)),
+    ?assertEqual(1, rabbit_fifo_q:len(Messages)),
     ok.
 
 state_enter_monitors_and_notifications_test(Config) ->
@@ -844,7 +850,7 @@ down_noproc_returns_checked_out_in_order_test(Config) ->
                          {FS, _} = enq(Config, Num, Num, Num, FS0),
                          FS
                      end, S0, lists:seq(1, 100)),
-    ?assertEqual(100, lqueue:len(S1#rabbit_fifo.messages)),
+    ?assertEqual(100, rabbit_fifo_q:len(S1#rabbit_fifo.messages)),
     Cid = {<<"cid">>, self()},
     {S2, #{key := CKey}, _} = checkout(Config, ?LINE, Cid, 1000, S1),
     #consumer{checked_out = Checked} = maps:get(CKey, S2#rabbit_fifo.consumers),
@@ -865,7 +871,7 @@ down_noconnection_returns_checked_out_test(Config) ->
                          {FS, _} = enq(Config, Num, Num, Num, FS0),
                          FS
                      end, S0, lists:seq(1, NumMsgs)),
-    ?assertEqual(NumMsgs, lqueue:len(S1#rabbit_fifo.messages)),
+    ?assertEqual(NumMsgs, rabbit_fifo_q:len(S1#rabbit_fifo.messages)),
     Cid = {<<"cid">>, self()},
     {S2, #{key := CKey}, _} = checkout(Config, ?LINE, Cid, 1000, S1),
     #consumer{checked_out = Checked} = maps:get(CKey, S2#rabbit_fifo.consumers),
@@ -2162,15 +2168,19 @@ checkout_reply(Oth) ->
     Oth.
 
 run_log(Config, InitState, Entries) ->
-    run_log(Config, InitState, Entries, fun (_) -> true end).
+    run_log(rabbit_fifo, Config, InitState, Entries, fun (_) -> true end).
+
 run_log(Config, InitState, Entries, Invariant) ->
+    run_log(rabbit_fifo, Config, InitState, Entries, Invariant).
+
+run_log(Module, Config, InitState, Entries, Invariant) ->
     lists:foldl(
       fun ({assert, Fun}, {Acc0, Efx0}) ->
               _ = Fun(Acc0),
               {Acc0, Efx0};
           ({Idx, E}, {Acc0, Efx0}) ->
-              case apply(meta(Config, Idx, Idx, {notify, Idx, self()}),
-                         E, Acc0) of
+              case Module:apply(meta(Config, Idx, Idx, {notify, Idx, self()}),
+                                E, Acc0) of
                   {Acc, _, Efx} when is_list(Efx) ->
                       ?assert(Invariant(Acc)),
                       {Acc, Efx0 ++ Efx};
@@ -2189,16 +2199,15 @@ run_log(Config, InitState, Entries, Invariant) ->
 aux_test(_) ->
     _ = ra_machine_ets:start_link(),
     Aux0 = init_aux(aux_test),
-    MacState = init(#{name => aux_test,
-                      queue_resource =>
-                      rabbit_misc:r(<<"/">>, queue, <<"test">>)}),
+    State0 = #{machine_state =>
+               init(#{name => ?FUNCTION_NAME,
+                                       queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                                       single_active_consumer_on => false}),
+               log => mock_log},
     ok = meck:new(ra_log, []),
-    Log = mock_log,
     meck:expect(ra_log, last_index_term, fun (_) -> {0, 0} end),
-    {no_reply, Aux, mock_log} = handle_aux(leader, cast, active, Aux0,
-                                            Log, MacState),
-    {no_reply, _Aux, mock_log} = handle_aux(leader, cast, tick, Aux,
-                                             Log, MacState),
+    {no_reply, Aux, State} = handle_aux(leader, cast, active, Aux0, State0),
+    {no_reply, _Aux, _} = handle_aux(leader, cast, tick, Aux, State),
     [X] = ets:lookup(rabbit_fifo_usage, aux_test),
     meck:unload(),
     ?assert(X > 0.0),
@@ -2300,7 +2309,8 @@ convert_v3_to_v4(Config) ->
                max_in_memory_length => 0,
                queue_resource => rabbit_misc:r("/", queue, atom_to_binary(Name)),
                release_cursor_interval => 0}),
-    {State, _} = run_log(ConfigV3, Init, Entries),
+    {State, _} = run_log(rabbit_fifo_v3, ConfigV3, Init, Entries,
+                         fun (_) -> true end),
 
     %% convert from v3 to v4
     {#rabbit_fifo{consumers = Consumers}, ok, _} =
@@ -2473,7 +2483,7 @@ expire_message_should_emit_release_cursor_test(Config) ->
              release_cursor_interval => 0,
              msg_ttl => 1},
     S0 = rabbit_fifo:init(Conf),
-    Msg = #basic_message{content = #content{properties = none,
+    Msg = #basic_message{content = #content{properties = #'P_basic'{},
                                             payload_fragments_rev = []}},
     {S1, ok, _} = apply(meta(Config, ?LINE, 100, {notify, 1, self()}),
                         rabbit_fifo:make_enqueue(self(), 1, Msg), S0),
@@ -2570,7 +2580,7 @@ init(Conf) -> rabbit_fifo:init(Conf).
 make_register_enqueuer(Pid) -> rabbit_fifo:make_register_enqueuer(Pid).
 apply(Meta, Entry, State) -> rabbit_fifo:apply(Meta, Entry, State).
 init_aux(Conf) -> rabbit_fifo:init_aux(Conf).
-handle_aux(S, T, C, A, L, M) -> rabbit_fifo:handle_aux(S, T, C, A, L, M).
+handle_aux(S, T, C, A, A2) -> rabbit_fifo:handle_aux(S, T, C, A, A2).
 make_checkout(C, S, M) -> rabbit_fifo:make_checkout(C, S, M).
 
 cid(A) when is_atom(A) ->

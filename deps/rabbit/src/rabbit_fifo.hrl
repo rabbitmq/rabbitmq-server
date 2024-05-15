@@ -181,7 +181,7 @@
 -record(rabbit_fifo,
         {cfg :: #cfg{},
          % unassigned messages
-         messages = lqueue:new() :: lqueue:lqueue(msg()),
+         messages = rabbit_fifo_q:new() :: rabbit_fifo_q:state(),
          messages_total = 0 :: non_neg_integer(),
          % queue of returned msg_in_ids - when checking out it picks from
          returns = lqueue:new() :: lqueue:lqueue(term()),
