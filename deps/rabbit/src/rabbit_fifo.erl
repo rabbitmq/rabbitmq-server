@@ -14,7 +14,6 @@
 -dialyzer(no_improper_lists).
 
 -include("rabbit_fifo.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(STATE, ?MODULE).
 
@@ -299,7 +298,9 @@ apply(#{index := Idx} = Meta,
                                 credit = increase_credit(Con0, 1)},
             State1 = State0#?STATE{ra_indexes = rabbit_fifo_index:delete(OldIdx,
                                                                          Indexes0),
-                                   messages = lqueue:in(?MSG(Idx, Header), Messages),
+                                   messages = rabbit_fifo_q:in(lo,
+                                                               ?MSG(Idx, Header),
+                                                               Messages),
                                    enqueue_count = EnqCount + 1},
             State2 = update_or_remove_con(Meta, ConsumerKey, Con, State1),
             {State, Ret, Effs} = checkout(Meta, State0, State2, []),
@@ -566,7 +567,7 @@ apply(#{index := Index}, #purge{},
                                   end, Indexes0, Returns)
               end,
     State1 = State0#?STATE{ra_indexes = Indexes,
-                           messages = lqueue:new(),
+                           messages = rabbit_fifo_q:new(),
                            messages_total = Total - NumReady,
                            returns = lqueue:new(),
                            msg_bytes_enqueue = 0
@@ -736,7 +737,11 @@ apply(_Meta, Cmd, State) ->
     rabbit_log:debug("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
     {State, ok, []}.
 
-convert_v3_to_v4(#{system_time := Ts}, #rabbit_fifo{consumers = Consumers0} = StateV3) ->
+convert_v3_to_v4(#{system_time := Ts},
+                 StateV3) ->
+    Messages0 = rabbit_fifo_v3:get_field(messages, StateV3),
+    Consumers0 = rabbit_fifo_v3:get_field(consumers, StateV3),
+    Messages = rabbit_fifo_q:from_lqueue(Messages0),
     Consumers = maps:map(
                   fun (_CKey, #consumer{checked_out = Ch0} = C) ->
                           Ch = maps:map(
@@ -745,7 +750,23 @@ convert_v3_to_v4(#{system_time := Ts}, #rabbit_fifo{consumers = Consumers0} = St
                                  end, Ch0),
                           C#consumer{checked_out = Ch}
                   end, Consumers0),
-    StateV3#?MODULE{consumers = Consumers}.
+    #?MODULE{cfg = rabbit_fifo_v3:get_field(cfg, StateV3),
+             messages = Messages,
+             messages_total = rabbit_fifo_v3:get_field(messages_total, StateV3),
+             returns = rabbit_fifo_v3:get_field(returns, StateV3),
+             enqueue_count = rabbit_fifo_v3:get_field(enqueue_count, StateV3),
+             enqueuers = rabbit_fifo_v3:get_field(enqueuers, StateV3),
+             ra_indexes = rabbit_fifo_v3:get_field(ra_indexes, StateV3),
+             release_cursors = rabbit_fifo_v3:get_field(release_cursors, StateV3),
+             consumers = Consumers,
+             % consumers that require further service are queued here
+             service_queue = rabbit_fifo_v3:get_field(service_queue, StateV3),
+             dlx = rabbit_fifo_v3:get_field(dlx, StateV3),
+             msg_bytes_enqueue = rabbit_fifo_v3:get_field(msg_bytes_enqueue, StateV3),
+             msg_bytes_checkout = rabbit_fifo_v3:get_field(msg_bytes_checkout, StateV3),
+             waiting_consumers = rabbit_fifo_v3:get_field(waiting_consumers, StateV3),
+             last_active = rabbit_fifo_v3:get_field(last_active, StateV3),
+             msg_cache = rabbit_fifo_v3:get_field(msg_cache, StateV3)}.
 
 purge_node(Meta, Node, State, Effects) ->
     lists:foldl(fun(Pid, {S0, E0}) ->
@@ -1345,7 +1366,7 @@ is_v4() ->
 
 messages_ready(#?STATE{messages = M,
                        returns = R}) ->
-    lqueue:len(M) + lqueue:len(R).
+    rabbit_fifo_q:len(M) + lqueue:len(R).
 
 messages_total(#?STATE{messages_total = Total,
                        dlx = DlxState}) ->
@@ -1596,19 +1617,6 @@ drop_head(#?STATE{ra_indexes = Indexes0} = State0, Effects) ->
             {State0, Effects}
     end.
 
-maybe_set_msg_ttl(#basic_message{content = #content{properties = none}},
-                  RaCmdTs, Header,
-                  #?STATE{cfg = #cfg{msg_ttl = PerQueueMsgTTL}}) ->
-    update_expiry_header(RaCmdTs, PerQueueMsgTTL, Header);
-maybe_set_msg_ttl(#basic_message{content = #content{properties = Props}},
-                  RaCmdTs, Header,
-                  #?STATE{cfg = #cfg{msg_ttl = PerQueueMsgTTL}}) ->
-    %% rabbit_quorum_queue will leave the properties decoded if and only if
-    %% per message message TTL is set.
-    %% We already check in the channel that expiration must be valid.
-    {ok, PerMsgMsgTTL} = rabbit_basic:parse_expiration(Props),
-    TTL = min(PerMsgMsgTTL, PerQueueMsgTTL),
-    update_expiry_header(RaCmdTs, TTL, Header);
 maybe_set_msg_ttl(Msg, RaCmdTs, Header,
                   #?STATE{cfg = #cfg{msg_ttl = MsgTTL}}) ->
     case mc:is(Msg) of
@@ -1670,10 +1678,11 @@ maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg, Effects,
     Size = message_size(RawMsg),
     Header = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
     Msg = ?MSG(RaftIdx, Header),
+    PTag = priority_tag(RawMsg),
     State = State0#?STATE{msg_bytes_enqueue = Enqueue + Size,
                           enqueue_count = EnqCount + 1,
                           messages_total = Total + 1,
-                          messages = lqueue:in(Msg, Messages)
+                          messages = rabbit_fifo_q:in(PTag, Msg, Messages)
                          },
     {ok, State, Effects};
 maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg, Effects0,
@@ -1701,10 +1710,11 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg, Effects0,
                            false ->
                                undefined
                        end,
+            PTag = priority_tag(RawMsg),
             State = State0#?STATE{msg_bytes_enqueue = Enqueue + Size,
                                   enqueue_count = EnqCount + 1,
                                   messages_total = Total + 1,
-                                  messages = lqueue:in(Msg, Messages),
+                                  messages = rabbit_fifo_q:in(PTag, Msg, Messages),
                                   enqueuers = Enqueuers0#{From => Enq},
                                   msg_cache = MsgCache
                                  },
@@ -1821,10 +1831,10 @@ update_smallest_raft_index(IncomingRaftIdx, Reply,
                            #?STATE{cfg = Cfg,
                                    release_cursors = Cursors0} = State0,
                            Effects) ->
-    Total = messages_total(State0),
+    % Total = messages_total(State0),
     %% TODO: optimise
     case smallest_raft_index(State0) of
-        undefined when Total == 0 ->
+        undefined ->
             % there are no messages on queue anymore and no pending enqueues
             % we can forward release_cursor all the way until
             % the last received command, hooray
@@ -1835,8 +1845,8 @@ update_smallest_raft_index(IncomingRaftIdx, Reply,
                                   release_cursors = lqueue:new(),
                                   enqueue_count = 0},
             {State, Reply, Effects ++ [{release_cursor, IncomingRaftIdx, State}]};
-        undefined ->
-            {State0, Reply, Effects};
+        % undefined ->
+        %     {State0, Reply, Effects};
         Smallest when is_integer(Smallest) ->
             case find_next_cursor(Smallest, Cursors0) of
                 empty ->
@@ -2063,10 +2073,10 @@ take_next_msg(#?STATE{returns = Returns0,
         {{value, NextMsg}, Returns} ->
             {NextMsg, State#?STATE{returns = Returns}};
         {empty, _} ->
-            case lqueue:out(Messages0) of
+            case rabbit_fifo_q:out(Messages0) of
                 {empty, _} ->
                     empty;
-                {{value, ?MSG(RaftIdx, _) = Msg}, Messages} ->
+                {_P, ?MSG(RaftIdx, _) = Msg, Messages} ->
                     %% add index here
                     Indexes = rabbit_fifo_index:append(RaftIdx, Indexes0),
                     {Msg, State#?STATE{messages = Messages,
@@ -2078,7 +2088,7 @@ get_next_msg(#?STATE{returns = Returns0,
                      messages = Messages0}) ->
     case lqueue:get(Returns0, empty) of
         empty ->
-            lqueue:get(Messages0, empty);
+            rabbit_fifo_q:get(Messages0);
         Msg ->
             Msg
     end.
@@ -2173,7 +2183,7 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
             checkout_one(Meta, ExpiredMsg,
                          InitState#?STATE{service_queue = SQ1}, Effects1);
         {empty, _} ->
-            case lqueue:len(Messages0) of
+            case rabbit_fifo_q:len(Messages0) of
                 0 ->
                     {nochange, ExpiredMsg, InitState, Effects1};
                 _ ->
@@ -2407,9 +2417,10 @@ normalize(#?STATE{ra_indexes = _Indexes,
                    release_cursors = Cursors,
                    dlx = DlxState} = State) ->
     State#?STATE{returns = lqueue:from_list(lqueue:to_list(Returns)),
-                  messages = lqueue:from_list(lqueue:to_list(Messages)),
-                  release_cursors = lqueue:from_list(lqueue:to_list(Cursors)),
-                  dlx = rabbit_fifo_dlx:normalize(DlxState)}.
+                 messages = rabbit_fifo_q:normalize(Messages,
+                                                    rabbit_fifo_q:new()),
+                 release_cursors = lqueue:from_list(lqueue:to_list(Cursors)),
+                 dlx = rabbit_fifo_dlx:normalize(DlxState)}.
 
 is_over_limit(#?STATE{cfg = #cfg{max_length = undefined,
                                   max_bytes = undefined}}) ->
@@ -2517,9 +2528,6 @@ add_bytes_return(Header,
     State#?STATE{msg_bytes_checkout = Checkout - Size,
                   msg_bytes_enqueue = Enqueue + Size}.
 
-message_size(#basic_message{content = Content}) ->
-    #content{payload_fragments_rev = PFR} = Content,
-    iolist_size(PFR);
 message_size(B) when is_binary(B) ->
     byte_size(B);
 message_size(Msg) ->
@@ -2641,12 +2649,7 @@ smallest_raft_index(#?STATE{messages = Messages,
                             ra_indexes = Indexes,
                             dlx = DlxState}) ->
     SmallestDlxRaIdx = rabbit_fifo_dlx:smallest_raft_index(DlxState),
-    SmallestMsgsRaIdx = case lqueue:get(Messages, undefined) of
-                            ?MSG(I, _) when is_integer(I) ->
-                                I;
-                            _ ->
-                                undefined
-                        end,
+    SmallestMsgsRaIdx = rabbit_fifo_q:get_lowest_index(Messages),
     SmallestRaIdx = rabbit_fifo_index:smallest(Indexes),
     lists:min([SmallestDlxRaIdx, SmallestMsgsRaIdx, SmallestRaIdx]).
 
@@ -2788,3 +2791,16 @@ maps_search(Pred, {K, V, I}) ->
     end;
 maps_search(Pred, Map) when is_map(Map) ->
     maps_search(Pred, maps:next(maps:iterator(Map))).
+
+priority_tag(Msg) ->
+    case mc:is(Msg) of
+        true ->
+            case mc:priority(Msg) of
+                P when P > 4 ->
+                    hi;
+                _ ->
+                    lo
+            end;
+        false ->
+            lo
+    end.

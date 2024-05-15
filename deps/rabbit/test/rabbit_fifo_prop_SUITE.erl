@@ -1443,7 +1443,7 @@ messages_total_invariant() ->
                      returns = R,
                      dlx = #rabbit_fifo_dlx{discards = D,
                                             consumer = DlxCon}} = S) ->
-            Base = lqueue:len(M) + lqueue:len(R),
+            Base = rabbit_fifo_q:len(M) + lqueue:len(R),
             Tot0 = maps:fold(fun (_, #consumer{checked_out = Ch}, Acc) ->
                                      Acc + map_size(Ch)
                             end, Base, C),
@@ -1797,7 +1797,7 @@ msg_gen() ->
 
 msg(Bin) when is_binary(Bin) ->
     #basic_message{content = #content{payload_fragments_rev = [Bin],
-                                      properties = none}}.
+                                      properties = #'P_basic'{}}}.
 
 checkout_cancel_gen(Pid) ->
     {checkout, Pid, cancel}.

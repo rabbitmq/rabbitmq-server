@@ -173,7 +173,9 @@ all_tests() ->
      cancel_consumer_gh_3729,
      cancel_and_consume_with_same_tag,
      validate_messages_on_queue,
-     amqpl_headers
+     amqpl_headers,
+     priority_queue_fifo,
+     priority_queue_2_1_ratio
     ].
 
 memory_tests() ->
@@ -1110,6 +1112,71 @@ single_active_consumer_priority(Config) ->
                 rpc:call(Server0, ra, local_query, [RaNameQ2, QueryFun])),
     ?assertMatch({ok, {_, {value, {<<"ch1-ctag3">>, _}}}, _},
                 rpc:call(Server0, ra, local_query, [RaNameQ3, QueryFun])),
+    ok.
+
+priority_queue_fifo(Config) ->
+    %% testing: if hi priority messages are published before lo priority
+    %% messages they are always consumed first (fifo)
+    check_quorum_queues_v4_compat(Config),
+    [Server0 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Queue = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Queue, 0, 0},
+                 declare(Ch, Queue,
+                         [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ExpectedHi =
+        [begin
+             MsgP5 = integer_to_binary(P),
+             ok = amqp_channel:cast(Ch, #'basic.publish'{routing_key = Queue},
+                                    #amqp_msg{props = #'P_basic'{priority = P},
+                                              payload = MsgP5}),
+             MsgP5
+             %% high priority is > 4
+         end || P <- lists:seq(5, 10)],
+
+    ExpectedLo =
+        [begin
+             MsgP1 = integer_to_binary(P),
+             ok = amqp_channel:cast(Ch, #'basic.publish'{routing_key = Queue},
+                                    #amqp_msg{props = #'P_basic'{priority = P},
+                                              payload = MsgP1}),
+             MsgP1
+         end || P <- lists:seq(0, 4)],
+
+    validate_queue(Ch, Queue, ExpectedHi ++ ExpectedLo),
+    ok.
+
+priority_queue_2_1_ratio(Config) ->
+    %% testing: if lo priority messages are published before hi priority
+    %% messages are consumed in a 2:1 hi to lo ratio
+    check_quorum_queues_v4_compat(Config),
+    [Server0 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Queue = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Queue, 0, 0},
+                 declare(Ch, Queue,
+                         [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ExpectedLo =
+        [begin
+             MsgP1 = integer_to_binary(P),
+             ok = amqp_channel:cast(Ch, #'basic.publish'{routing_key = Queue},
+                                    #amqp_msg{props = #'P_basic'{priority = P},
+                                              payload = MsgP1}),
+             MsgP1
+         end || P <- lists:seq(0, 4)],
+    ExpectedHi =
+        [begin
+             MsgP5 = integer_to_binary(P),
+             ok = amqp_channel:cast(Ch, #'basic.publish'{routing_key = Queue},
+                                    #amqp_msg{props = #'P_basic'{priority = P},
+                                              payload = MsgP5}),
+             MsgP5
+             %% high priority is > 4
+         end || P <- lists:seq(5, 14)],
+
+    Expected = lists_interleave(ExpectedLo, ExpectedHi),
+
+    validate_queue(Ch, Queue, Expected),
     ok.
 
 reject_after_leader_transfer(Config) ->
@@ -3880,3 +3947,11 @@ check_quorum_queues_v4_compat(Config) ->
         true ->
             ok
     end.
+
+lists_interleave([], _List) ->
+    [];
+lists_interleave([Item | Items], List)
+  when is_list(List) ->
+    {Left, Right} = lists:split(2, List),
+    Left ++ [Item | lists_interleave(Items, Right)].
+
