@@ -66,7 +66,7 @@
 -define(INFO_KEYS, [name, durable, auto_delete, arguments, leader, members, online, state,
                     messages, messages_ready, messages_unacknowledged, committed_offset,
                     policy, operator_policy, effective_policy_definition, type, memory,
-                    consumers]).
+                    consumers, segments]).
 
 -type appender_seq() :: non_neg_integer().
 
@@ -768,6 +768,14 @@ i(committed_offset, Q) ->
             '';
         Data ->
             maps:get(committed_offset, Data, '')
+    end;
+i(segments, Q) ->
+    Key = {osiris_writer, amqqueue:get_name(Q)},
+    case osiris_counters:overview(Key) of
+        undefined ->
+            '';
+        Data ->
+            maps:get(segments, Data, '')
     end;
 i(policy, Q) ->
     case rabbit_policy:name(Q) of
