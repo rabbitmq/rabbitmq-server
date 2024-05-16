@@ -1,0 +1,3 @@
+[build_info]
+apps = "deps/*"
+deps = ""
