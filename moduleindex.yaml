@@ -342,6 +342,7 @@ khepri:
 - khepri_export_erlang
 - khepri_import_export
 - khepri_machine
+- khepri_machine_v0
 - khepri_path
 - khepri_pattern_tree
 - khepri_payload
