@@ -11,7 +11,7 @@
 
 -export_type([
               %% deprecated
-              maybe/1,
+              'maybe'/1,
               option/1,
               info/0, infos/0, info_key/0, info_keys/0,
               message/0, msg_id/0, basic_message/0,
@@ -35,7 +35,7 @@
 
 -type(option(T) :: T | 'none' | 'undefined').
 %% Deprecated, 'maybe' is a keyword in modern Erlang
--type(maybe(T) :: T | 'none').
+-type('maybe'(T) :: T | 'none').
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
 
 -type(vhost() :: binary()).
