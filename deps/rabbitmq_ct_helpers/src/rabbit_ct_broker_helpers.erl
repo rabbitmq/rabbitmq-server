@@ -170,7 +170,9 @@
     test_writer/1,
     user/1,
 
-    configured_metadata_store/1
+    configured_metadata_store/1,
+    do_khepri_state_machines_use_same_version/1,
+    do_khepri_state_machines_use_same_version/2
   ]).
 
 %% Internal functions exported to be used by rpc:call/4.
@@ -989,6 +991,14 @@ enable_khepri_metadata_store(Config, FFs0) ->
                                 Skip
                         end
                 end, Config, FFs).
+
+do_khepri_state_machines_use_same_version(Config) ->
+    Servers = get_node_configs(Config, nodename),
+    do_khepri_state_machines_use_same_version(Config, Servers).
+
+do_khepri_state_machines_use_same_version(Config, Servers) ->
+    MacVers = rpc(Config, Servers, khepri_machine, version, []),
+    length(lists:uniq(MacVers)) =:= 1.
 
 rewrite_node_config_file(Config, Node) ->
     NodeConfig = get_node_config(Config, Node),
