@@ -392,6 +392,7 @@ meck:
 my_plugin:
 - my_plugin
 oauth2_client:
+- jwt_helper
 - oauth2_client
 observer_cli:
 - observer_cli
