@@ -104,7 +104,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/system_SUITE.erl"],
         outs = ["test/system_SUITE.beam"],
-        hdrs = [],
         app_name = "rabbitmq_peer_discovery_consul",
         erlc_opts = "//:test_erlc_opts",
     )

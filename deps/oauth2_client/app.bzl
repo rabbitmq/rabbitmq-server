@@ -8,15 +8,15 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = ["src/oauth2_client.erl",
-                "src/jwt_helper.erl"],
+        srcs = [
+            "src/jwt_helper.erl",
+            "src/oauth2_client.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "oauth2_client",
         dest = "ebin",
         erlc_opts = "//:erlc_opts",
-        deps = [
-            "@jose//:erlang_app"
-        ],
+        deps = ["@jose//:erlang_app"],
     )
 
 def all_test_beam_files(name = "all_test_beam_files"):
@@ -28,15 +28,15 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = ["src/oauth2_client.erl",
-                "src/jwt_helper.erl"],
+        srcs = [
+            "src/jwt_helper.erl",
+            "src/oauth2_client.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "oauth2_client",
         dest = "test",
         erlc_opts = "//:test_erlc_opts",
-        deps = [
-            "@jose//:erlang_app"
-        ],
+        deps = ["@jose//:erlang_app"],
     )
 
 def all_srcs(name = "all_srcs"):
@@ -54,8 +54,10 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = ["src/oauth2_client.erl",
-                "src/jwt_helper.erl"],
+        srcs = [
+            "src/jwt_helper.erl",
+            "src/oauth2_client.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",
