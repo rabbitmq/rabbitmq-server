@@ -5,7 +5,7 @@ on:
 jobs:
   bazel-run-gazelle:
     name: bazel run gazelle
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     strategy:
       max-parallel: 1
       fail-fast: false
@@ -21,6 +21,11 @@ jobs:
       uses: actions/checkout@v4
       with:
         ref: ${{ matrix.target_branch }}
+    - name: Configure Erlang
+      uses: erlef/setup-beam@v1
+      with:
+        otp-version: 26.2
+        elixir-version: 1.15
     - name: BAZEL RUN GAZELLE
       run: |
         bazel run gazelle
