@@ -138,6 +138,15 @@
           multi_transfer_msg :: undefined | #multi_transfer_msg{}
          }).
 
+%% link flow control state
+%% §2.6.7
+-record(flow_control, {
+          delivery_count :: sequence_no(),
+          credit :: non_neg_integer(),
+          available :: non_neg_integer(),
+          drain :: boolean()
+         }).
+
 -record(outgoing_link, {
           %% Although the source address of a link might be an exchange name and binding key
           %% or a topic filter, an outgoing link will always consume from a queue.
@@ -145,10 +154,13 @@
           queue_type :: rabbit_queue_type:queue_type(),
           send_settled :: boolean(),
           max_message_size :: unlimited | pos_integer(),
+          %% When feature flag credit_api_v2 becomes required, the following 2 fields should be deleted.
+          credit_api_version :: v1 | v2,
           %% When credit API v1 is used, our session process holds the delivery-count
-          %% When credit API v2 is used, the queue type implementation holds the delivery-count
-          %% When feature flag credit_api_v2 becomes required, this field should be deleted.
-          delivery_count :: {credit_api_v1, sequence_no()} | credit_api_v2
+          delivery_count :: sequence_no() | credit_api_v2,
+          %% When credit API v2 is used, both our session process and the queue hold link flow control state.
+          client_flow_control :: #flow_control{} | credit_api_v1,
+          queue_flow_control :: #flow_control{} | credit_api_v1
          }).
 
 -record(outgoing_unsettled, {
@@ -1108,6 +1120,10 @@ handle_control(#'v1_0.flow'{handle = Handle} = Flow,
                                 handle_outgoing_mgmt_link_flow_control(OutgoingMgmtLink, Flow, State);
                             _ when is_map_key(HandleInt, IncomingLinks) orelse
                                    is_map_key(HandleInt, IncomingMgmtLinks) ->
+                                %%TODO technically the sender is allowed to advance the delivery-count
+                                %% and consume link-credit that we granted to the sender even if drain=false,
+                                %% in which case we have to update our link flow control state.
+                                %%
                                 %% We're being told about available messages at the sender.
                                 State;
                             _ ->
@@ -1290,6 +1306,7 @@ send_pending(#state{remote_incoming_window = Space,
                     outgoing_pending = Buf0,
                     cfg = #cfg{writer_pid = WriterPid,
                                channel_num = Ch}} = State0) ->
+    %% TODO if credit_flow:blocked() then stop
     case queue:out(Buf0) of
         {empty, _} ->
             State0;
@@ -2277,7 +2294,8 @@ handle_outgoing_mgmt_link_flow_control(
 
 handle_outgoing_link_flow_control(
   #outgoing_link{queue_name_bin = QNameBin,
-                 delivery_count = MaybeDeliveryCountSnd},
+                 credit_api_version = CreditApiVsn
+                } = Link,
   #'v1_0.flow'{handle = ?UINT(HandleInt),
                delivery_count = MaybeDeliveryCountRcv,
                link_credit = ?UINT(LinkCreditRcv),
@@ -2290,8 +2308,10 @@ handle_outgoing_link_flow_control(
     DeliveryCountRcv = delivery_count_rcv(MaybeDeliveryCountRcv),
     Drain = default(Drain0, false),
     Echo = default(Echo0, false),
-    case MaybeDeliveryCountSnd of
-        credit_api_v2 ->
+    case CreditApiVsn of
+        2 ->
+            %% TODO stash?
+            %% only grant a max number of credits to the queue
             {ok, QStates, Actions} = rabbit_queue_type:credit(
                                        QName, Ctag, DeliveryCountRcv, LinkCreditRcv, Drain, Echo, QStates0),
             State1 = State0#state{queue_states = QStates},
@@ -2299,7 +2319,8 @@ handle_outgoing_link_flow_control(
             %% We'll handle the credit_reply queue event async later
             %% thanks to the queue event containing the consumer tag.
             State;
-        {credit_api_v1, DeliveryCountSnd} ->
+        1 ->
+            DeliveryCountSnd = Link#outgoing_link.delivery_count,
             LinkCreditSnd = amqp10_util:link_credit_snd(DeliveryCountRcv, LinkCreditRcv, DeliveryCountSnd),
             {ok, QStates, Actions} = rabbit_queue_type:credit_v1(QName, Ctag, LinkCreditSnd, Drain, QStates0),
             State1 = State0#state{queue_states = QStates},
