@@ -23,7 +23,7 @@
          return/3,
          discard/3,
          credit_v1/4,
-         credit/6,
+         credit/5,
          handle_ra_event/4,
          untracked_enqueue/2,
          purge/1,
@@ -43,10 +43,6 @@
 
 -record(consumer, {last_msg_id :: seq() | -1 | undefined,
                    ack = false :: boolean(),
-                   %% 'echo' field from latest FLOW, see AMQP 1.0 §2.7.4
-                   %% Quorum queue server will always echo back to us,
-                   %% but we only emit a credit_reply if Echo=true
-                   echo :: boolean(),
                    %% Remove this field when feature flag credit_api_v2 becomes required.
                    delivery_count :: {credit_api_v1, rabbit_queue_type:delivery_count()} | credit_api_v2
                   }).
@@ -369,7 +365,6 @@ checkout(ConsumerTag, NumUnsettled, CreditMode, Meta,
                       fun (C) -> C#consumer{ack = Ack} end,
                       #consumer{last_msg_id = LastMsgId,
                                 ack = Ack,
-                                echo = false,
                                 delivery_count = DeliveryCount},
                       CDels0),
             {ok, State0#state{leader = Leader,
@@ -397,12 +392,9 @@ query_single_active_consumer(#state{leader = Leader}) ->
                 state()) ->
     {state(), rabbit_queue_type:actions()}.
 credit_v1(ConsumerTag, Credit, Drain,
-          #state{consumer_deliveries = CDels} = State0) ->
-    ConsumerId = consumer_id(ConsumerTag),
+          State = #state{consumer_deliveries = CDels}) ->
     #consumer{delivery_count = {credit_api_v1, Count}} = maps:get(ConsumerTag, CDels),
-    ServerId = pick_server(State0),
-    Cmd = rabbit_fifo:make_credit(ConsumerId, Credit, Count, Drain),
-    {send_command(ServerId, undefined, Cmd, normal, State0), []}.
+    credit(ConsumerTag, Count, Credit, Drain, State).
 
 %% @doc Provide credit to the queue
 %%
@@ -417,18 +409,12 @@ credit_v1(ConsumerTag, Credit, Drain,
              rabbit_queue_type:delivery_count(),
              rabbit_queue_type:credit(),
              Drain :: boolean(),
-             Echo :: boolean(),
              state()) ->
     {state(), rabbit_queue_type:actions()}.
-credit(ConsumerTag, DeliveryCount, Credit, Drain, Echo,
-       #state{consumer_deliveries = CDels0} = State0) ->
+credit(ConsumerTag, DeliveryCount, Credit, Drain, State) ->
     ConsumerId = consumer_id(ConsumerTag),
-    ServerId = pick_server(State0),
+    ServerId = pick_server(State),
     Cmd = rabbit_fifo:make_credit(ConsumerId, Credit, DeliveryCount, Drain),
-    CDels = maps:update_with(ConsumerTag,
-                             fun(C) -> C#consumer{echo = Echo} end,
-                             CDels0),
-    State = State0#state{consumer_deliveries = CDels},
     {send_command(ServerId, undefined, Cmd, normal, State), []}.
 
 %% @doc Cancels a checkout with the rabbit_fifo queue  for the consumer tag
@@ -594,21 +580,10 @@ handle_ra_event(QName, From, {applied, Seqs},
     end;
 handle_ra_event(QName, From, {machine, {delivery, _ConsumerTag, _} = Del}, State0) ->
     handle_delivery(QName, From, Del, State0);
-handle_ra_event(_QName, _From,
-                {machine, {credit_reply_v1, _CTag, _Credit, _Available, _Drain = false} = Action},
-                State) ->
+handle_ra_event(_QName, _From, {machine, Action}, State)
+  when element(1, Action) =:= credit_reply orelse
+       element(1, Action) =:= credit_reply_v1 ->
     {ok, State, [Action]};
-handle_ra_event(_QName, _From,
-                {machine, {credit_reply, CTag, _DeliveryCount, _Credit, _Available, Drain} = Action},
-                #state{consumer_deliveries = CDels} = State) ->
-    Actions = case CDels of
-                  #{CTag := #consumer{echo = Echo}}
-                    when Echo orelse Drain ->
-                      [Action];
-                  _ ->
-                      []
-              end,
-    {ok, State, Actions};
 handle_ra_event(_QName, _, {machine, {queue_status, Status}},
                 #state{} = State) ->
     %% just set the queue status

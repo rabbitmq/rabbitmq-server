@@ -42,7 +42,7 @@
          deliver/3,
          settle/5,
          credit_v1/5,
-         credit/7,
+         credit/6,
          dequeue/5,
          info/2,
          state_info/1,
@@ -306,8 +306,8 @@ credit_v1(_QName, Ctag, LinkCreditSnd, Drain, #?STATE{pid = QPid} = State) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [Request]}),
     {State, []}.
 
-credit(_QName, Ctag, DeliveryCountRcv, LinkCreditRcv, Drain, Echo, #?STATE{pid = QPid} = State) ->
-    Request = {credit, self(), Ctag, DeliveryCountRcv, LinkCreditRcv, Drain, Echo},
+credit(_QName, Ctag, DeliveryCountRcv, LinkCreditRcv, Drain, #?STATE{pid = QPid} = State) ->
+    Request = {credit, self(), Ctag, DeliveryCountRcv, LinkCreditRcv, Drain},
     delegate:invoke_no_result(QPid, {gen_server2, cast, [Request]}),
     {State, []}.
 

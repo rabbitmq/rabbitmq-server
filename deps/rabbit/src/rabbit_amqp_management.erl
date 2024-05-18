@@ -8,6 +8,9 @@
 -import(rabbit_amqp_session,
         [check_resource_access/4,
          check_read_permitted_on_topic/4]).
+-import(rabbit_misc,
+        [queue_resource/2,
+         exchange_resource/2]).
 
 -type permission_caches() :: {rabbit_amqp_session:permission_cache(),
                               rabbit_amqp_session:topic_permission_cache()}.
@@ -77,7 +80,7 @@ handle_http_req(<<"GET">>,
                 _ConnPid,
                 PermCaches) ->
     QNameBin = uri_string:unquote(QNameBinQuoted),
-    QName = rabbit_misc:r(Vhost, queue, QNameBin),
+    QName = queue_resource(Vhost, QNameBin),
     case rabbit_amqqueue:with(
            QName,
            fun(Q) ->
@@ -118,7 +121,7 @@ handle_http_req(HttpMethod = <<"PUT">>,
         _ -> ok
     end,
     ok = prohibit_cr_lf(QNameBin),
-    QName = rabbit_misc:r(Vhost, queue, QNameBin),
+    QName = queue_resource(Vhost, QNameBin),
     ok = prohibit_reserved_amq(QName),
     PermCache1 = check_resource_access(QName, configure, User, PermCache0),
     rabbit_core_metrics:queue_declared(QName),
@@ -192,7 +195,7 @@ handle_http_req(<<"PUT">>,
                 catch exit:#amqp_error{explanation = Explanation} ->
                           throw(<<"400">>, Explanation, [])
                 end,
-    XName = rabbit_misc:r(Vhost, exchange, XNameBin),
+    XName = exchange_resource(Vhost, XNameBin),
     ok = prohibit_default_exchange(XName),
     PermCache = check_resource_access(XName, configure, User, PermCache0),
     X = case rabbit_exchange:lookup(XName) of
@@ -223,7 +226,7 @@ handle_http_req(<<"DELETE">>,
                 ConnPid,
                 {PermCache0, TopicPermCache}) ->
     QNameBin = uri_string:unquote(QNameBinQuoted),
-    QName = rabbit_misc:r(Vhost, queue, QNameBin),
+    QName = queue_resource(Vhost, QNameBin),
     PermCache = check_resource_access(QName, read, User, PermCache0),
     try rabbit_amqqueue:with_exclusive_access_or_die(
           QName, ConnPid,
@@ -251,7 +254,7 @@ handle_http_req(<<"DELETE">>,
                 ConnPid,
                 {PermCache0, TopicPermCache}) ->
     QNameBin = uri_string:unquote(QNameBinQuoted),
-    QName = rabbit_misc:r(Vhost, queue, QNameBin),
+    QName = queue_resource(Vhost, QNameBin),
     ok = prohibit_cr_lf(QNameBin),
     PermCache = check_resource_access(QName, configure, User, PermCache0),
     try rabbit_amqqueue:delete_with(QName, ConnPid, false, false, Username, true) of
@@ -271,7 +274,7 @@ handle_http_req(<<"DELETE">>,
                 _ConnPid,
                 {PermCache0, TopicPermCache}) ->
     XNameBin = uri_string:unquote(XNameBinQuoted),
-    XName = rabbit_misc:r(Vhost, exchange, XNameBin),
+    XName = exchange_resource(Vhost, XNameBin),
     ok = prohibit_cr_lf(XNameBin),
     ok = prohibit_default_exchange(XName),
     ok = prohibit_reserved_amq(XName),
@@ -296,7 +299,7 @@ handle_http_req(<<"POST">>,
                                 #{destination_exchange := Bin} ->
                                     {exchange, Bin}
                             end,
-    SrcXName = rabbit_misc:r(Vhost, exchange, SrcXNameBin),
+    SrcXName = exchange_resource(Vhost, SrcXNameBin),
     DstName = rabbit_misc:r(Vhost, DstKind, DstNameBin),
     PermCaches = binding_checks(SrcXName, DstName, BindingKey, User, PermCaches0),
     Binding = #binding{source      = SrcXName,
@@ -319,7 +322,7 @@ handle_http_req(<<"DELETE">>,
      DstNameBin,
      BindingKey,
      ArgsHash} = decode_binding_path_segment(BindingSegment),
-    SrcXName = rabbit_misc:r(Vhost, exchange, SrcXNameBin),
+    SrcXName = exchange_resource(Vhost, SrcXNameBin),
     DstName = rabbit_misc:r(Vhost, DstKind, DstNameBin),
     PermCaches = binding_checks(SrcXName, DstName, BindingKey, User, PermCaches0),
     Bindings = rabbit_binding:list_for_source_and_destination(SrcXName, DstName),
@@ -351,7 +354,7 @@ handle_http_req(<<"GET">>,
                                  "missing 'dste' or 'dstq' in query: ~tp",
                                  QueryMap)
                    end,
-    SrcXName = rabbit_misc:r(Vhost, exchange, SrcXNameBin),
+    SrcXName = exchange_resource(Vhost, SrcXNameBin),
     DstName = rabbit_misc:r(Vhost, DstKind, DstNameBin),
     Bindings0 = rabbit_binding:list_for_source_and_destination(SrcXName, DstName),
     Bindings = [B || B = #binding{key = K} <- Bindings0, K =:= Key],

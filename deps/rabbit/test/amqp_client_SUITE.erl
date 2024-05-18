@@ -51,6 +51,9 @@ groups() ->
        roundtrip_with_drain_classic_queue,
        roundtrip_with_drain_quorum_queue,
        roundtrip_with_drain_stream,
+       drain_many_classic_queue,
+       drain_many_quorum_queue,
+       drain_many_stream,
        amqp_stream_amqpl,
        amqp_quorum_queue_amqpl,
        message_headers_conversion,
@@ -85,7 +88,6 @@ groups() ->
        resource_alarm_after_session_begin,
        max_message_size_client_to_server,
        max_message_size_server_to_client,
-       receive_transfer_flow_order,
        global_counters,
        stream_filtering,
        available_messages_classic_queue,
@@ -106,7 +108,20 @@ groups() ->
        classic_priority_queue,
        dead_letter_headers_exchange,
        dead_letter_reject,
-       immutable_bare_message
+       immutable_bare_message,
+       receive_many_made_available_over_time_classic_queue,
+       receive_many_made_available_over_time_quorum_queue,
+       receive_many_made_available_over_time_stream,
+       receive_many_auto_flow_classic_queue,
+       receive_many_auto_flow_quorum_queue,
+       receive_many_auto_flow_stream,
+       incoming_window_closed_transfer_flow_order,
+       incoming_window_closed_stop_link,
+       incoming_window_closed_close_link,
+       incoming_window_closed_rabbitmq_internal_flow_classic_queue,
+       incoming_window_closed_rabbitmq_internal_flow_quorum_queue,
+       tcp_back_pressure_rabbitmq_internal_flow_classic_queue,
+       tcp_back_pressure_rabbitmq_internal_flow_quorum_queue
       ]},
 
      {cluster_size_3, [shuffle],
@@ -170,6 +185,7 @@ end_per_group(_, Config) ->
 init_per_testcase(T, Config)
   when T =:= message_headers_conversion orelse
        T =:= roundtrip_with_drain_quorum_queue orelse
+       T =:= drain_many_quorum_queue orelse
        T =:= timed_get_quorum_queue orelse
        T =:= available_messages_quorum_queue ->
     case rpc(Config, rabbit_feature_flags, is_enabled, [credit_api_v2]) of
@@ -178,6 +194,21 @@ init_per_testcase(T, Config)
         false ->
             {skip, "Receiving with drain from quorum queues in credit API v1 have a known "
              "bug that they reply with send_drained before delivering the message."}
+    end;
+init_per_testcase(T, Config)
+  when T =:= incoming_window_closed_close_link orelse
+       T =:= incoming_window_closed_rabbitmq_internal_flow_classic_queue orelse
+       T =:= incoming_window_closed_rabbitmq_internal_flow_quorum_queue orelse
+       T =:= tcp_back_pressure_rabbitmq_internal_flow_classic_queue orelse
+       T =:= tcp_back_pressure_rabbitmq_internal_flow_quorum_queue ->
+    %% The new RabbitMQ internal flow control
+    %% writer proc <- session proc <- queue proc
+    %% is only available with credit API v2.
+    case rpc(Config, rabbit_feature_flags, is_enabled, [credit_api_v2]) of
+        true ->
+            rabbit_ct_helpers:testcase_started(Config, T);
+        false ->
+            {skip, "Feature flag credit_api_v2 is disabled"}
     end;
 init_per_testcase(T = immutable_bare_message, Config) ->
     case rpc(Config, rabbit_feature_flags, is_enabled, [message_containers_store_amqp_v1]) of
@@ -274,7 +305,7 @@ reliable_send_receive(QType, Outcome, Config) ->
     True = {boolean, true},
     Msg2 = amqp10_msg:set_headers(#{durable => True}, Msg1),
     ok = amqp10_client:send_msg(Sender, Msg2),
-    ok = wait_for_settlement(DTag1),
+    ok = wait_for_accepted(DTag1),
 
     ok = amqp10_client:detach_link(Sender),
     ok = end_session_sync(Session),
@@ -625,7 +656,7 @@ roundtrip_with_drain(Config, QueueType, QName)
     end,
     OutMsg2 = amqp10_msg:new(<<"tag-2">>, <<"my-body2">>, false),
     ok = amqp10_client:send_msg(Sender, OutMsg2),
-    ok = wait_for_settlement(<<"tag-2">>),
+    ok = wait_for_accepted(<<"tag-2">>),
 
     %% no delivery should be made at this point
     receive {amqp10_msg, _, _} -> ct:fail(unexpected_delivery)
@@ -634,6 +665,85 @@ roundtrip_with_drain(Config, QueueType, QName)
 
     flush("final"),
     ok = amqp10_client:detach_link(Sender),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = amqp10_client:close_connection(Connection).
+
+drain_many_classic_queue(Config) ->
+    QName  = atom_to_binary(?FUNCTION_NAME),
+    drain_many(Config, <<"classic">>, QName).
+
+drain_many_quorum_queue(Config) ->
+    QName  = atom_to_binary(?FUNCTION_NAME),
+    drain_many(Config, <<"quorum">>, QName).
+
+drain_many_stream(Config) ->
+    QName  = atom_to_binary(?FUNCTION_NAME),
+    drain_many(Config, <<"stream">>, QName).
+
+drain_many(Config, QueueType, QName)
+  when is_binary(QueueType) ->
+    Address = <<"/queue/", QName/binary>>,
+    {Connection, Session, LinkPair} = init(Config),
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QueueType}}},
+    {ok, #{type := QueueType}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"test-sender">>, Address),
+    wait_for_credit(Sender),
+
+    Num = 5000,
+    ok = send_messages(Sender, Num, false),
+    ok = wait_for_accepts(Num),
+
+    TerminusDurability = none,
+    Filter = consume_from_first(QueueType),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"test-receiver">>, Address, settled,
+                       TerminusDurability, Filter),
+
+    ok = amqp10_client:flow_link_credit(Receiver, Num - 1, never, true),
+    ?assertEqual(Num - 1, count_received_messages(Receiver)),
+    flush("drained 1"),
+
+    ok = amqp10_client:flow_link_credit(Receiver, Num, never, true),
+    receive_messages(Receiver, 1),
+    flush("drained 2"),
+
+    ok = send_messages(Sender, Num, false),
+    ok = wait_for_accepts(Num),
+    receive {amqp10_msg, _, _} = Unexpected1 -> ct:fail({unexpected, Unexpected1})
+    after 10 -> ok
+    end,
+
+    %% Let's send a couple of FLOW frames in sequence.
+    ok = amqp10_client:flow_link_credit(Receiver, 0, never, false),
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    ok = amqp10_client:flow_link_credit(Receiver, Num div 2, never, false),
+    ok = amqp10_client:flow_link_credit(Receiver, Num, never, false),
+    ok = amqp10_client:flow_link_credit(Receiver, Num, never, true),
+    %% Eventually, we should receive all messages.
+    receive_messages(Receiver, Num),
+    flush("drained 3"),
+
+    ok = send_messages(Sender, 1, false),
+    ok = wait_for_accepts(1),
+    %% Our receiver shouldn't have any credit left to consume this message.
+    receive {amqp10_msg, _, _} = Unexpected2 -> ct:fail({unexpected, Unexpected2})
+    after 30 -> ok
+    end,
+
+    %% Grant a huge amount of credits.
+    ok = amqp10_client:flow_link_credit(Receiver, 2_000_000_000, never, true),
+    %% We expect the server to send us the last message and
+    %% to advance the delivery-count promptly.
+    receive {amqp10_msg, _, _} -> ok
+    after 2000 -> ct:fail({missing_delivery, ?LINE})
+    end,
+    receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
+    after 300 -> ct:fail("expected credit_exhausted")
+    end,
+
+    ok = amqp10_client:detach_link(Sender),
+    ok = amqp10_client:detach_link(Receiver),
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = amqp10_client:close_connection(Connection).
@@ -993,7 +1103,7 @@ server_closes_link(QType, Config) ->
     DTag = <<0>>,
     Body = <<"body">>,
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag, Body, false)),
-    ok = wait_for_settlement(DTag),
+    ok = wait_for_accepted(DTag),
 
     receive {amqp10_msg, Receiver, Msg} ->
                 ?assertEqual([Body], amqp10_msg:body(Msg))
@@ -1005,7 +1115,7 @@ server_closes_link(QType, Config) ->
     eventually(?_assertEqual(
                   1,
                   begin
-                      #{outgoing_unsettled_map := UnsettledMap} = gen_server_state(SessionPid),
+                      #{outgoing_unsettled_map := UnsettledMap} = formatted_state(SessionPid),
                       maps:size(UnsettledMap)
                   end)),
 
@@ -1030,7 +1140,7 @@ server_closes_link(QType, Config) ->
     eventually(?_assertEqual(
                   0,
                   begin
-                      #{outgoing_unsettled_map := UnsettledMap} = gen_server_state(SessionPid),
+                      #{outgoing_unsettled_map := UnsettledMap} = formatted_state(SessionPid),
                       maps:size(UnsettledMap)
                   end)),
 
@@ -1058,7 +1168,7 @@ server_closes_link_exchange(Config) ->
 
     DTag1 = <<1>>,
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag1, <<"m1">>, false)),
-    ok = wait_for_settlement(DTag1),
+    ok = wait_for_accepted(DTag1),
 
     %% Server closes the link endpoint due to some AMQP 1.0 external condition:
     %% In this test, the external condition is that an AMQP 0.9.1 client deletes the exchange.
@@ -1109,7 +1219,7 @@ link_target_queue_deleted(QType, Config) ->
     flush(credited),
     DTag1 = <<1>>,
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag1, <<"m1">>, false)),
-    ok = wait_for_settlement(DTag1),
+    ok = wait_for_accepted(DTag1),
 
     %% Mock delivery to the target queue to do nothing.
     rabbit_ct_broker_helpers:setup_meck(Config, [?MODULE]),
@@ -1169,7 +1279,7 @@ target_queues_deleted_accepted(Config) ->
 
     DTag1 = <<1>>,
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag1, <<"m1">>, false)),
-    ok = wait_for_settlement(DTag1),
+    ok = wait_for_accepted(DTag1),
 
     %% Mock to deliver only to q1.
     rabbit_ct_broker_helpers:setup_meck(Config, [?MODULE]),
@@ -1868,7 +1978,7 @@ detach_requeues(Config) ->
     eventually(?_assertEqual(
                   0,
                   begin
-                      #{outgoing_unsettled_map := UnsettledMap} = gen_server_state(SessionPid),
+                      #{outgoing_unsettled_map := UnsettledMap} = formatted_state(SessionPid),
                       maps:size(UnsettledMap)
                   end)),
 
@@ -1925,7 +2035,7 @@ resource_alarm_before_session_begin(Config) ->
     %% Hence, RabbitMQ should open its incoming window allowing our client to send TRANSFERs.
     ?assertEqual(ok,
                  amqp10_client:send_msg(Sender, Msg1)),
-    ok = wait_for_settlement(Tag1),
+    ok = wait_for_accepted(Tag1),
 
     ok = amqp10_client:detach_link(Sender),
     ok = end_session_sync(Session1),
@@ -1987,7 +2097,7 @@ resource_alarm_after_session_begin(Config) ->
     %% Now, we should be able to send again.
     ?assertEqual(ok,
                  amqp10_client:send_msg(Sender, Msg4)),
-    ok = wait_for_settlement(<<"t4">>),
+    ok = wait_for_accepted(<<"t4">>),
 
     ok = amqp10_client:detach_link(Sender),
     ok = amqp10_client:detach_link(Receiver1),
@@ -2043,7 +2153,7 @@ max_message_size_client_to_server(Config) ->
     PayloadSmallEnough = binary:copy(<<0>>, MaxMessageSize - 10),
     ?assertEqual(ok,
                  amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, PayloadSmallEnough, false))),
-    ok = wait_for_settlement(<<"t1">>),
+    ok = wait_for_accepted(<<"t1">>),
 
     PayloadTooLarge = binary:copy(<<0>>, MaxMessageSize + 1),
     ?assertEqual({error, message_size_exceeded},
@@ -2074,7 +2184,7 @@ max_message_size_server_to_client(Config) ->
     %% e.g. message annotations with routing key and exchange name.
     PayloadSmallEnough = binary:copy(<<0>>, MaxMessageSize - 200),
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, PayloadSmallEnough, false)),
-    ok = wait_for_settlement(<<"t1">>),
+    ok = wait_for_accepted(<<"t1">>),
 
     AttachArgs = #{max_message_size => MaxMessageSize,
                    name => <<"test-receiver">>,
@@ -2091,7 +2201,7 @@ max_message_size_server_to_client(Config) ->
     %% The sending link has no maximum message size set.
     %% Hence, sending this large message from client to server should work.
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t2">>, PayloadTooLarge, false)),
-    ok = wait_for_settlement(<<"t2">>),
+    ok = wait_for_accepted(<<"t2">>),
 
     %% However, the receiving link has a maximum message size set.
     %% Hence, when the server attempts to deliver this large message,
@@ -2110,59 +2220,6 @@ max_message_size_server_to_client(Config) ->
     ok = amqp10_client:close_connection(Connection),
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     ok = rabbit_ct_client_helpers:close_channel(Ch).
-
-%% This test ensures that the server sends us TRANSFER and FLOW frames in the correct order
-%% even if the server is temporarily not allowed to send us any TRANSFERs due to our incoming
-%% window being closed.
-receive_transfer_flow_order(Config) ->
-    QName = atom_to_binary(?FUNCTION_NAME),
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName}),
-    ok = rabbit_ct_client_helpers:close_channel(Ch),
-    Address = <<"/amq/queue/", QName/binary>>,
-    OpnConf = connection_config(Config),
-    {ok, Connection} = amqp10_client:open_connection(OpnConf),
-    {ok, Session} = amqp10_client:begin_session_sync(Connection),
-    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
-    ok = wait_for_credit(Sender),
-    DTag = <<"my tag">>,
-    Body = <<"my body">>,
-    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag, Body, false)),
-    ok = wait_for_settlement(DTag),
-    ok = amqp10_client:detach_link(Sender),
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, Address, unsettled),
-    receive {amqp10_event, {link, Receiver, attached}} -> ok
-    after 5000 -> ct:fail(missing_attached)
-    end,
-    flush(receiver_attached),
-
-    %% Close our incoming window.
-    gen_statem:cast(Session, {flow_session, #'v1_0.flow'{incoming_window = {uint, 0}}}),
-
-    ok = amqp10_client:flow_link_credit(Receiver, 2, never, true),
-    %% Given our incoming window is closed, we shouldn't receive the TRANSFER yet, and therefore
-    %% must not yet receive the FLOW that comes thereafter with drain=true, credit=0, and advanced delivery-count.
-    receive Unexpected -> ct:fail({unexpected, Unexpected})
-    after 300 -> ok
-    end,
-
-    %% Open our incoming window
-    gen_statem:cast(Session, {flow_session, #'v1_0.flow'{incoming_window = {uint, 5}}}),
-    %% Important: We should first receive the TRANSFER,
-    %% and only thereafter the FLOW (and hence the credit_exhausted notification).
-    receive First ->
-                {amqp10_msg, Receiver, Msg} = First,
-                ?assertEqual([Body], amqp10_msg:body(Msg))
-    after 5000 -> ct:fail("timeout receiving message")
-    end,
-    receive Second ->
-                ?assertEqual({amqp10_event, {link, Receiver, credit_exhausted}}, Second)
-    after 5000 -> ct:fail("timeout receiving credit_exhausted")
-    end,
-
-    ok = delete_queue(Session, QName),
-    ok = end_session_sync(Session),
-    ok = amqp10_client:close_connection(Connection).
 
 last_queue_confirms(Config) ->
     ClassicQ = <<"my classic queue">>,
@@ -2329,7 +2386,7 @@ target_classic_queue_down(Config) ->
 
     DTag1 = <<"t1">>,
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag1, <<"m1">>, false)),
-    ok = wait_for_settlement(DTag1),
+    ok = wait_for_accepted(DTag1),
 
     {ok, Msg1} = amqp10_client:get_msg(Receiver1),
     ?assertEqual([<<"m1">>], amqp10_msg:body(Msg1)),
@@ -2361,7 +2418,7 @@ target_classic_queue_down(Config) ->
     end,
     DTag3 = <<"t3">>,
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag3, <<"m3">>, false)),
-    ok = wait_for_settlement(DTag3),
+    ok = wait_for_accepted(DTag3),
     {ok, Msg3} = amqp10_client:get_msg(Receiver2),
     ?assertEqual([<<"m3">>], amqp10_msg:body(Msg3)),
 
@@ -2422,7 +2479,7 @@ async_notify(SenderSettleMode, QType, Config) ->
          ok = amqp10_client:send_msg(Sender, amqp10_msg:new(Bin, Bin, false))
      end || N <- lists:seq(1, NumMsgs)],
     %% Wait for last message to be confirmed.
-    ok = wait_for_settlement(integer_to_binary(NumMsgs)),
+    ok = wait_for_accepted(integer_to_binary(NumMsgs)),
     flush(settled),
     ok = detach_link_sync(Sender),
 
@@ -2619,7 +2676,7 @@ queue_and_client_different_nodes(QueueLeaderNode, ClientNode, QueueType, Config)
             Tag = <<"tag">>,
             Body = <<"body">>,
             ok = amqp10_client:send_msg(Sender, amqp10_msg:new(Tag, Body, false)),
-            ok = wait_for_settlement(Tag),
+            ok = wait_for_accepted(Tag),
             ok = amqp10_client:flow_link_credit(Receiver, 999, never, true),
             [Msg] = receive_messages(Receiver, 1),
             ?assertEqual([Body], amqp10_msg:body(Msg)),
@@ -2739,7 +2796,7 @@ global_counters(Config) ->
     {ok, QQReceiver} = amqp10_client:attach_receiver_link(Session, <<"test-receiver-qq">>, QQAddress, unsettled),
     ok = amqp10_client:send_msg(CQSender, amqp10_msg:new(<<0>>, <<"m0">>, true)),
     ok = amqp10_client:send_msg(QQSender, amqp10_msg:new(<<1>>, <<"m1">>, false)),
-    ok = wait_for_settlement(<<1>>),
+    ok = wait_for_accepted(<<1>>),
 
     {ok, Msg0} = amqp10_client:get_msg(CQReceiver),
     ?assertEqual([<<"m0">>], amqp10_msg:body(Msg0)),
@@ -2779,7 +2836,7 @@ global_counters(Config) ->
 
     %% Test re-delivery.
     ok = amqp10_client:send_msg(QQSender, amqp10_msg:new(<<2>>, <<"m2">>, false)),
-    ok = wait_for_settlement(<<2>>),
+    ok = wait_for_accepted(<<2>>),
     {ok, Msg2a} = amqp10_client:get_msg(QQReceiver),
     ?assertEqual([<<"m2">>], amqp10_msg:body(Msg2a)),
     %% Releasing causes the message to be requeued.
@@ -2883,7 +2940,7 @@ stream_filtering(Config) ->
                                             Msg1 = amqp10_msg:set_application_properties(AppProps, Msg0),
                                             Msg2 = amqp10_msg:set_message_annotations(Anns, Msg1),
                                             ok = amqp10_client:send_msg(Sender, Msg2),
-                                            ok = wait_for_settlement(DTag)
+                                            ok = wait_for_accepted(DTag)
                                     end, lists:seq(1, WaveCount))
               end,
 
@@ -3010,12 +3067,12 @@ available_messages(QType, Config) ->
     ok = wait_for_accepts(4),
 
     OutputHandle = element(4, Receiver),
-    Flow = #'v1_0.flow'{
-              %% Grant 1 credit to the sending queue.
-              link_credit = {uint, 1},
-              %% Request sending queue to send us a FLOW including available messages.
-              echo = true},
-    ok = amqp10_client_session:flow(Session, OutputHandle, Flow, never),
+    Flow0 = #'v1_0.flow'{
+               %% Grant 1 credit to the sending queue.
+               link_credit = {uint, 1},
+               %% Request sending queue to send us a FLOW including available messages.
+               echo = true},
+    ok = amqp10_client_session:flow(Session, OutputHandle, Flow0, never),
     receive_messages(Receiver, 1),
     receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
     after 5000 -> ct:fail({missing_event, ?LINE})
@@ -3040,6 +3097,29 @@ available_messages(QType, Config) ->
     after 5000 -> ct:fail({missing_event, ?LINE})
     end,
     ?assertEqual(0, get_available_messages(Receiver)),
+
+    ok = send_messages(Sender, 5000, false),
+    %% We know that Streams only return an approximation for available messages.
+    %% The committed Stream offset is queried by chunk ID.
+    %% So, we wait here a bit such that the 4th message goes into its own new chunk.
+    timer:sleep(50),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"last dtag">>, <<"last msg">>, false)),
+    ok = wait_for_accepts(5001),
+
+    Flow1 = #'v1_0.flow'{
+               link_credit = {uint, 0},
+               echo = false},
+    Flow2 = #'v1_0.flow'{
+               link_credit = {uint, 1},
+               echo = true},
+    %% Send both FLOW frames in sequence.
+    ok = amqp10_client_session:flow(Session, OutputHandle, Flow1, never),
+    ok = amqp10_client_session:flow(Session, OutputHandle, Flow2, never),
+    receive_messages(Receiver, 1),
+    receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ?assertEqual(5000, get_available_messages(Receiver)),
 
     ok = amqp10_client:detach_link(Sender),
     ok = amqp10_client:detach_link(Receiver),
@@ -3073,7 +3153,7 @@ incoming_message_interceptors(Config) ->
     NowMillis = os:system_time(millisecond),
     Tag = <<"tag">>,
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(Tag, <<"body">>)),
-    ok = wait_for_settlement(Tag),
+    ok = wait_for_accepted(Tag),
 
     {ok, Msg1} = amqp10_client:get_msg(StreamReceiver),
     {ok, Msg2} = amqp10_client:get_msg(QQReceiver),
@@ -3608,7 +3688,7 @@ dead_letter_reject(Config) ->
     Body = <<"my body">>,
     M = amqp10_msg:new(Tag, Body),
     ok = amqp10_client:send_msg(Sender, M),
-    ok = wait_for_settlement(Tag),
+    ok = wait_for_accepted(Tag),
 
     {ok, Msg1} = amqp10_client:get_msg(Receiver),
     ok = amqp10_client:settle_msg(Receiver, Msg1, rejected),
@@ -3688,7 +3768,9 @@ dead_letter_into_stream(Config) ->
                                                        <<"x-initial-cluster-size">> => {ulong, 1}
                                                       }}),
     {ok, Receiver} = amqp10_client:attach_receiver_link(
-                       Session1, <<"receiver">>, <<"/queue/", QName1/binary>>, settled),
+                       Session1, <<"receiver">>, <<"/queue/", QName1/binary>>,
+                       settled, configuration,
+                       #{<<"rabbitmq:stream-offset-spec">> => <<"first">>}),
     {ok, Sender} = amqp10_client:attach_sender_link(
                      Session0, <<"sender">>, <<"/queue/", QName0/binary>>),
     wait_for_credit(Sender),
@@ -3808,7 +3890,7 @@ footer_checksum(FooterOpt, Config) ->
                      "false" => false},
                    amqp10_msg:new(<<"t1">>, <<"m1">>)))))),
     ok = amqp10_client:send_msg(Sender, M1),
-    ok = wait_for_settlement(<<"t1">>),
+    ok = wait_for_accepted(<<"t1">>),
 
     {ok, Msg1} = amqp10_client:get_msg(Receiver),
     ?assertEqual(<<"m1">>, amqp10_msg:body_bin(Msg1)),
@@ -3821,7 +3903,7 @@ footer_checksum(FooterOpt, Config) ->
              "false" => false},
            amqp10_msg:new(<<"t2">>, <<"m2">>)),
     ok = amqp10_client:send_msg(Sender, M2),
-    ok = wait_for_settlement(<<"t2">>),
+    ok = wait_for_accepted(<<"t2">>),
 
     {ok, Msg2} = amqp10_client:get_msg(Receiver),
     ?assertEqual(<<"m2">>, amqp10_msg:body_bin(Msg2)),
@@ -3829,7 +3911,7 @@ footer_checksum(FooterOpt, Config) ->
     %% bare message consists of single data section
     M3 = amqp10_msg:new(<<"t3">>, <<"m3">>),
     ok = amqp10_client:send_msg(Sender, M3),
-    ok = wait_for_settlement(<<"t3">>),
+    ok = wait_for_accepted(<<"t3">>),
 
     {ok, Msg3} = amqp10_client:get_msg(Receiver),
     ?assertEqual(<<"m3">>, amqp10_msg:body_bin(Msg3)),
@@ -3838,7 +3920,7 @@ footer_checksum(FooterOpt, Config) ->
     M4 = amqp10_msg:new(<<"t4">>, [#'v1_0.data'{content = <<"m4 a">>},
                                    #'v1_0.data'{content = <<"m4 b">>}]),
     ok = amqp10_client:send_msg(Sender, M4),
-    ok = wait_for_settlement(<<"t4">>),
+    ok = wait_for_accepted(<<"t4">>),
 
     {ok, Msg4} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m4 a">>, <<"m4 b">>], amqp10_msg:body(Msg4)),
@@ -3851,7 +3933,7 @@ footer_checksum(FooterOpt, Config) ->
                          %% Our serialiser uses 1 byte boolean encoding
                          #'v1_0.amqp_sequence'{content = [true, false, undefined]}]),
     ok = amqp10_client:send_msg(Sender, M5),
-    ok = wait_for_settlement(<<"t5">>),
+    ok = wait_for_accepted(<<"t5">>),
 
     {ok, Msg5} = amqp10_client:get_msg(Receiver),
     ?assertEqual([#'v1_0.amqp_sequence'{content = [{ubyte, 255}]},
@@ -3876,7 +3958,7 @@ footer_checksum(FooterOpt, Config) ->
                           {{symbol, <<"x-opt-carrot">>}, {char, $🥕}}
                          ]}]),
     ok = amqp10_client:send_msg(Sender, M6),
-    ok = wait_for_settlement(<<"t6">>),
+    ok = wait_for_accepted(<<"t6">>),
 
     {ok, Msg6} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m6 a">>, <<"m6 b">>], amqp10_msg:body(Msg6)),
@@ -3897,6 +3979,382 @@ footer_checksum(FooterOpt, Config) ->
     ok = amqp10_client:detach_link(Receiver),
     ok = amqp10_client:detach_link(Sender),
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+receive_many_made_available_over_time_classic_queue(Config) ->
+    receive_many_made_available_over_time(<<"classic">>, Config).
+
+receive_many_made_available_over_time_quorum_queue(Config) ->
+    receive_many_made_available_over_time(<<"quorum">>, Config).
+
+receive_many_made_available_over_time_stream(Config) ->
+    receive_many_made_available_over_time(<<"stream">>, Config).
+
+%% This test grants many credits to the queue once while
+%% messages are being made available at the source over time.
+receive_many_made_available_over_time(QType, Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = <<"/queue/", QName/binary>>,
+    {Connection, Session, LinkPair} = init(Config),
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType}}},
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"test-sender">>, Address),
+    wait_for_credit(Sender),
+
+    %% Send first batch of messages.
+    ok = send_messages(Sender, 10, false),
+    ok = wait_for_accepts(10),
+    Filter = consume_from_first(QType),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address,
+                       settled, configuration, Filter),
+    flush(attached),
+    %% Grant many credits to the queue once.
+    ok = amqp10_client:flow_link_credit(Receiver, 5000, never),
+    %% We expect to receive the first batch of messages.
+    receive_messages(Receiver, 10),
+
+    %% Make next batch of messages available.
+    ok = send_messages(Sender, 2990, false),
+    ok = wait_for_accepts(2990),
+    %% We expect to receive this batch of messages.
+    receive_messages(Receiver, 2990),
+
+    %% Make next batch of messages available.
+    ok = send_messages(Sender, 1999, false),
+    ok = wait_for_accepts(1999),
+    %% We expect to receive this batch of messages.
+    receive_messages(Receiver, 1999),
+
+    %% Make next batch of messages available.
+    ok = send_messages(Sender, 2, false),
+    ok = wait_for_accepts(2),
+    %% At this point, we only have 2 messages in the queue, but only 1 credit left.
+    ?assertEqual(1, count_received_messages(Receiver)),
+
+    ok = amqp10_client:detach_link(Sender),
+    ok = amqp10_client:detach_link(Receiver),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = amqp10_client:close_connection(Connection).
+
+receive_many_auto_flow_classic_queue(Config) ->
+    receive_many_auto_flow(<<"classic">>, Config).
+
+receive_many_auto_flow_quorum_queue(Config) ->
+    receive_many_auto_flow(<<"quorum">>, Config).
+
+receive_many_auto_flow_stream(Config) ->
+    receive_many_auto_flow(<<"stream">>, Config).
+
+receive_many_auto_flow(QType, Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = <<"/queue/", QName/binary>>,
+    {Connection, Session, LinkPair} = init(Config),
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType}}},
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"test-sender">>, Address),
+    wait_for_credit(Sender),
+
+    %% Send many messages.
+    Num = 10_000,
+    ok = send_messages(Sender, Num, false),
+    ok = wait_for_accepts(Num),
+
+    Filter = consume_from_first(QType),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address,
+                       settled, configuration, Filter),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 5000 -> ct:fail(missing_attached)
+    end,
+    flush(receiver_attached),
+
+    %% Let's auto top up relatively often, but in large batches.
+    ok = amqp10_client:flow_link_credit(Receiver, 1300, 1200),
+    receive_messages(Receiver, Num),
+
+    ok = amqp10_client:detach_link(Sender),
+    ok = amqp10_client:detach_link(Receiver),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = amqp10_client:close_connection(Connection).
+
+%% This test ensures that the server sends us TRANSFER and FLOW frames in the correct order
+%% even if the server is temporarily not allowed to send us any TRANSFERs due to our session
+%% incoming-window being closed.
+incoming_window_closed_transfer_flow_order(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName}),
+    ok = rabbit_ct_client_helpers:close_channel(Ch),
+    Address = <<"/amq/queue/", QName/binary>>,
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    DTag = <<"my tag">>,
+    Body = <<"my body">>,
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag, Body, false)),
+    ok = wait_for_accepted(DTag),
+    ok = amqp10_client:detach_link(Sender),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, Address, unsettled),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 5000 -> ct:fail(missing_attached)
+    end,
+    flush(receiver_attached),
+
+    ok = close_incoming_window(Session),
+    ok = amqp10_client:flow_link_credit(Receiver, 2, never, true),
+    %% Given our incoming window is closed, we shouldn't receive the TRANSFER yet, and therefore
+    %% must not yet receive the FLOW that comes thereafter with drain=true, credit=0, and advanced delivery-count.
+    receive Unexpected -> ct:fail({unexpected, Unexpected})
+    after 300 -> ok
+    end,
+
+    %% Open our incoming window
+    gen_statem:cast(Session, {flow_session, #'v1_0.flow'{incoming_window = {uint, 5}}}),
+    %% Important: We should first receive the TRANSFER,
+    %% and only thereafter the FLOW (and hence the credit_exhausted notification).
+    receive First ->
+                {amqp10_msg, Receiver, Msg} = First,
+                ?assertEqual([Body], amqp10_msg:body(Msg))
+    after 5000 -> ct:fail("timeout receiving message")
+    end,
+    receive Second ->
+                ?assertEqual({amqp10_event, {link, Receiver, credit_exhausted}}, Second)
+    after 5000 -> ct:fail("timeout receiving credit_exhausted")
+    end,
+
+    ok = delete_queue(Session, QName),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+incoming_window_closed_stop_link(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = <<"/queue/", QName/binary>>,
+
+    OpnConf0 = connection_config(Config),
+    OpnConf = OpnConf0#{transfer_limit_margin => -1},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session, <<"my link pair">>),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>, false)),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t2">>, <<"m2">>, false)),
+    ok = wait_for_accepted(<<"t1">>),
+    ok = wait_for_accepted(<<"t2">>),
+    ok = amqp10_client:detach_link(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, Address, unsettled),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 5000 -> ct:fail(missing_attached)
+    end,
+    flush(receiver_attached),
+
+    ok = close_incoming_window(Session),
+    %% We first grant a credit in drain mode.
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, true),
+    %% Then, we change our mind and stop the link.
+    ok = amqp10_client:stop_receiver_link(Receiver),
+    %% Given our incoming window is closed, we shouldn't receive any TRANSFER.
+    receive {amqp10_msg, _, _} = Unexp1 -> ct:fail({?LINE, unexpected_msg, Unexp1})
+    after 10 -> ok
+    end,
+
+    %% Open our incoming window
+    gen_statem:cast(Session, {flow_session, #'v1_0.flow'{incoming_window = {uint, 5}}}),
+
+    %% Since we decreased link credit dynamically, we may or may not receive the 1st message.
+    receive {amqp10_msg, Receiver, Msg1} ->
+                ?assertEqual([<<"m1">>], amqp10_msg:body(Msg1))
+    after 500 -> ok
+    end,
+    %% We must not receive the 2nd message.
+    receive {amqp10_msg, _, _} = Unexp2 -> ct:fail({?LINE, unexpected_msg, Unexp2})
+    after 5 -> ok
+    end,
+
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+%% Test that we can close a link while our session incoming-window is closed.
+incoming_window_closed_close_link(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = <<"/queue/", QName/binary>>,
+
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    DTag = <<"my tag">>,
+    Body = <<"my body">>,
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag, Body, false)),
+    ok = wait_for_accepted(DTag),
+    ok = amqp10_client:detach_link(Sender),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, Address, unsettled),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 5000 -> ct:fail(missing_attached)
+    end,
+    flush(receiver_attached),
+
+    ok = close_incoming_window(Session),
+    ok = amqp10_client:flow_link_credit(Receiver, 2, never, true),
+    %% Given our incoming window is closed, we shouldn't receive the TRANSFER yet, and therefore
+    %% must not yet receive the FLOW that comes thereafter with drain=true, credit=0, and advanced delivery-count.
+    receive Unexpected1 -> ct:fail({unexpected, Unexpected1})
+    after 300 -> ok
+    end,
+    %% Close the link while our session incoming-window is closed.
+    ok = detach_link_sync(Receiver),
+    %% Open our incoming window.
+    gen_statem:cast(Session, {flow_session, #'v1_0.flow'{incoming_window = {uint, 5}}}),
+    %% Given that both endpoints have now destroyed the link, we do not
+    %% expect to receive any TRANSFER or FLOW frame referencing the destroyed link.
+    receive Unexpected2 -> ct:fail({unexpected, Unexpected2})
+    after 300 -> ok
+    end,
+
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+incoming_window_closed_rabbitmq_internal_flow_classic_queue(Config) ->
+    incoming_window_closed_rabbitmq_internal_flow(<<"classic">>, Config).
+
+incoming_window_closed_rabbitmq_internal_flow_quorum_queue(Config) ->
+    incoming_window_closed_rabbitmq_internal_flow(<<"quorum">>, Config).
+
+incoming_window_closed_rabbitmq_internal_flow(QType, Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = <<"/queue/", QName/binary>>,
+
+    {Connection, Session, LinkPair} = init(Config),
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType}}},
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+
+    %% Send many messages.
+    Num = 5_000,
+    ok = send_messages(Sender, Num, false),
+    ok = wait_for_accepts(Num),
+    ok = detach_link_sync(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, Address, settled),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 5000 -> ct:fail(missing_attached)
+    end,
+    flush(receiver_attached),
+
+    ok = close_incoming_window(Session),
+    %% Grant all link credit at once.
+    ok = amqp10_client:flow_link_credit(Receiver, Num, never),
+    %% Given our incoming window is closed, we shouldn't receive any TRANSFER yet.
+    receive Unexpected -> ct:fail({unexpected, Unexpected})
+    after 200 -> ok
+    end,
+
+    %% Here, we do a bit of white box testing: We assert that RabbitMQ has some form of internal
+    %% flow control by checking that the queue did not send all its messages to the server session
+    %% process. In other words, there should be ready messages in the queue.
+    MsgsReady = ready_messages(QName, Config),
+    ?assert(MsgsReady > 0),
+
+    %% Open our incoming window.
+    gen_statem:cast(Session, {flow_session, #'v1_0.flow'{incoming_window = {uint, Num}}}),
+    receive_messages(Receiver, Num),
+
+    ok = detach_link_sync(Receiver),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+tcp_back_pressure_rabbitmq_internal_flow_classic_queue(Config) ->
+    tcp_back_pressure_rabbitmq_internal_flow(<<"classic">>, Config).
+
+tcp_back_pressure_rabbitmq_internal_flow_quorum_queue(Config) ->
+    tcp_back_pressure_rabbitmq_internal_flow(<<"quorum">>, Config).
+
+%% Test that RabbitMQ can handle clients that do not receive fast enough
+%% causing TCP back-pressure to the server. RabbitMQ's internal flow control
+%% writer proc <- session proc <- queue proc
+%% should be able to protect the server by having the queue not send out all messages at once.
+tcp_back_pressure_rabbitmq_internal_flow(QType, Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = <<"/queue/", QName/binary>>,
+
+    OpnConf0 = connection_config(Config),
+    %% We also want to test the code path where large messages are split into multiple transfer frames.
+    OpnConf = OpnConf0#{max_frame_size => 600},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session, <<"my link pair">>),
+
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType}}},
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+
+    %% Send many messages.
+    %% The messages should be somewhat large to fill up buffers causing TCP back-pressure.
+    BodySuffix = binary:copy(<<"x">>, 1000),
+    Num = 5000,
+    ok = send_messages(Sender, Num, false, BodySuffix),
+    ok = wait_for_accepts(Num),
+    ok = detach_link_sync(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, Address, settled),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 5000 -> ct:fail(missing_attached)
+    end,
+    flush(receiver_attached),
+
+    {_GenStatemState,
+     #{reader := ReaderPid,
+       socket := {tcp, Socket}}} = formatted_state(Session),
+
+    %% Provoke TCP back-pressure from client to server by using very small buffers.
+    ok = inet:setopts(Socket, [{recbuf, 256},
+                               {buffer, 256}]),
+    %% Suspend the receiving client such that it stops reading from its socket
+    %% causing TCP back-pressure to the server being applied.
+    true = erlang:suspend_process(ReaderPid),
+
+    ok = amqp10_client:flow_link_credit(Receiver, Num, never),
+    %% We give the queue time to send messages to the session proc and writer proc.
+    timer:sleep(1000),
+
+    %% Here, we do a bit of white box testing: We assert that RabbitMQ has some form of internal
+    %% flow control by checking that the queue sent some but, more importantly, not all its
+    %% messages to the server session and writer processes. In other words, there should be
+    %% ready messages in the queue.
+    MsgsReady = ready_messages(QName, Config),
+    ?assert(MsgsReady > 0),
+    ?assert(MsgsReady < Num),
+
+    %% Use large buffers. This will considerably speed up receiving all messages (on Linux).
+    ok = inet:setopts(Socket, [{recbuf, 65536},
+                               {buffer, 65536}]),
+    %% When we resume the receiving client, we expect to receive all messages.
+    true = erlang:resume_process(ReaderPid),
+    receive_messages(Receiver, Num),
+
+    ok = detach_link_sync(Receiver),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = end_session_sync(Session),
     ok = amqp10_client:close_connection(Connection).
@@ -4008,7 +4466,7 @@ wait_for_connection_close(Connection) ->
               ct:fail({connection_close_timeout, Connection})
     end.
 
-wait_for_settlement(Tag) ->
+wait_for_accepted(Tag) ->
     wait_for_settlement(Tag, accepted).
 
 wait_for_settlement(Tag, State) ->
@@ -4076,18 +4534,22 @@ count_received_messages0(Receiver, Count) ->
     receive
         {amqp10_msg, Receiver, _Msg} ->
             count_received_messages0(Receiver, Count + 1)
-    after 200 ->
+    after 1000 ->
               Count
     end.
 
-send_messages(_Sender, 0, _Settled) ->
-    ok;
 send_messages(Sender, Left, Settled) ->
+    send_messages(Sender, Left, Settled, <<>>).
+
+send_messages(_, 0, _, _) ->
+    ok;
+send_messages(Sender, Left, Settled, BodySuffix) ->
     Bin = integer_to_binary(Left),
-    Msg = amqp10_msg:new(Bin, Bin, Settled),
+    Body = <<Bin/binary, BodySuffix/binary>>,
+    Msg = amqp10_msg:new(Bin, Body, Settled),
     case amqp10_client:send_msg(Sender, Msg) of
         ok ->
-            send_messages(Sender, Left - 1, Settled);
+            send_messages(Sender, Left - 1, Settled, BodySuffix);
         {error, insufficient_credit} ->
             ok = wait_for_credit(Sender),
             %% The credited event we just processed could have been received some time ago,
@@ -4099,7 +4561,7 @@ send_messages(Sender, Left, Settled) ->
             %%    but do not process the credited event in our mailbox.
             %% So, we must be defensive here and assume that the next amqp10_client:send/2 call might return {error, insufficient_credit}
             %% again causing us then to really wait to receive a credited event (instead of just processing an old credited event).
-            send_messages(Sender, Left, Settled)
+            send_messages(Sender, Left, Settled, BodySuffix)
     end.
 
 assert_link_credit_runs_out(_Sender, 0) ->
@@ -4152,9 +4614,9 @@ consume_from_first(<<"stream">>) ->
 consume_from_first(_) ->
     #{}.
 
-%% Return the formatted state of a gen_server via sys:get_status/1.
+%% Return the formatted state of a gen_server or gen_statem via sys:get_status/1.
 %% (sys:get_state/1 is unformatted)
-gen_server_state(Pid) ->
+formatted_state(Pid) ->
     {status, _, _, L0} = sys:get_status(Pid, 20_000),
     L1 = lists:last(L0),
     {data, L2} = lists:last(L1),
@@ -4179,6 +4641,14 @@ get_available_messages({link_ref, receiver, Session, OutputHandle}) ->
     {ok, Link} = maps:find(OutputHandle, Links),
     {ok, Available} = maps:find(available, Link),
     Available.
+
+ready_messages(QName, Config)
+  when is_binary(QName) ->
+    {ok, Q} = rpc(Config, rabbit_amqqueue, lookup, [QName, <<"/">>]),
+    {ok, MsgsReady, _ConsumerCount} = rpc(Config, rabbit_queue_type, stat, [Q]),
+    ?assert(is_integer(MsgsReady)),
+    ct:pal("Queue ~s has ~b ready messages.", [QName, MsgsReady]),
+    MsgsReady.
 
 ra_name(Q) ->
     binary_to_atom(<<"%2F_", Q/binary>>).
@@ -4212,3 +4682,6 @@ find_event(Type, Props, Events) when is_list(Props), is_list(Events) ->
                           lists:keymember(Key, 1, EventProps)
                   end, Props)
       end, Events).
+
+close_incoming_window(Session) ->
+    gen_statem:cast(Session, {flow_session, #'v1_0.flow'{incoming_window = {uint, 0}}}).

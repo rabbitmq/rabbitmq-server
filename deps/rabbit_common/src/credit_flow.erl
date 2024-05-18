@@ -156,7 +156,7 @@ state_delayed(BlockedAt) ->
         B         -> Now = erlang:monotonic_time(),
                      Diff = erlang:convert_time_unit(Now - B,
                                                      native,
-                                                     micro_seconds),
+                                                     microsecond),
                      case Diff < ?STATE_CHANGE_INTERVAL of
                          true  -> flow;
                          false -> running

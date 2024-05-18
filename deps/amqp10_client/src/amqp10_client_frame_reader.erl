@@ -286,14 +286,18 @@ handle_input(StateName, Data, State) ->
 defer_heartbeat_timer(State =
                       #state{heartbeat_timer_ref = TRef,
                              connection_config = #{idle_time_out := T}})
-  when is_number(T) andalso T > 0 ->
+  when is_integer(T) andalso T > 0 ->
     _ = case TRef of
-            undefined -> ok;
-            _ -> _ = erlang:cancel_timer(TRef)
+            undefined ->
+                ok;
+            _ ->
+                erlang:cancel_timer(TRef, [{async, true},
+                                           {info, false}])
         end,
     NewTRef = erlang:send_after(T * 2, self(), heartbeat),
     State#state{heartbeat_timer_ref = NewTRef};
-defer_heartbeat_timer(State) -> State.
+defer_heartbeat_timer(State) ->
+    State.
 
 route_frame(Channel, FrameType, {Performative, Payload} = Frame, State0) ->
     {DestinationPid, State} = find_destination(Channel, FrameType, Performative,

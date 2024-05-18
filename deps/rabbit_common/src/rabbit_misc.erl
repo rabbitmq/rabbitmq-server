@@ -24,7 +24,8 @@
          precondition_failed/1, precondition_failed/2]).
 -export([type_class/1, assert_args_equivalence/4, assert_field_equivalence/4]).
 -export([table_lookup/2, set_table_value/4, amqp_table/1, to_amqp_table/1]).
--export([r/3, r/2, r_arg/4, rs/1]).
+-export([r/3, r/2, r_arg/4, rs/1,
+         queue_resource/2, exchange_resource/2]).
 -export([enable_cover/0, report_cover/0]).
 -export([enable_cover/1, report_cover/1]).
 -export([start_cover/1]).
@@ -436,6 +437,16 @@ rs(#resource{virtual_host = VHostPath, kind = topic, name = Name}) ->
     format("'~ts' in vhost '~ts'", [Name, VHostPath]);
 rs(#resource{virtual_host = VHostPath, kind = Kind, name = Name}) ->
     format("~ts '~ts' in vhost '~ts'", [Kind, Name, VHostPath]).
+
+-spec queue_resource(rabbit_types:vhost(), resource_name()) ->
+    rabbit_types:r(queue).
+queue_resource(VHostPath, Name) ->
+    r(VHostPath, queue, Name).
+
+-spec exchange_resource(rabbit_types:vhost(), resource_name()) ->
+    rabbit_types:r(exchange).
+exchange_resource(VHostPath, Name) ->
+    r(VHostPath, exchange, Name).
 
 enable_cover() -> enable_cover(["."]).
 

@@ -49,7 +49,9 @@ await_shovel(Config, Node, Name) ->
       ?MODULE, await_shovel1, [Config, Name]).
 
 await_shovel1(_Config, Name) ->
-    await(fun () -> lists:member(Name, shovels_from_status()) end).
+    await(fun() ->
+                  lists:member(Name, shovels_from_status())
+          end, 30_000).
 
 shovels_from_status() ->
     S = rabbit_shovel_status:status(),

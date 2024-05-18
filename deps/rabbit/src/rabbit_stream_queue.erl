@@ -24,7 +24,7 @@
          deliver/3,
          settle/5,
          credit_v1/5,
-         credit/7,
+         credit/6,
          dequeue/5,
          info/2,
          queue_length/1,
@@ -101,6 +101,7 @@
                        }).
 
 -import(rabbit_queue_type_util, [args_policy_lookup/3]).
+-import(rabbit_misc, [queue_resource/2]).
 
 -type client() :: #stream_client{}.
 
@@ -467,7 +468,7 @@ cancel(_Q, ConsumerTag, OkMsg, ActingUser, #stream_client{readers = Readers0,
 credit_v1(_, _, _, _, _) ->
     erlang:error(credit_v1_unsupported).
 
-credit(QName, CTag, DeliveryCountRcv, LinkCreditRcv, Drain, Echo,
+credit(QName, CTag, DeliveryCountRcv, LinkCreditRcv, Drain,
        #stream_client{readers = Readers,
                       name = Name,
                       local_pid = LocalPid} = State0) ->
@@ -479,27 +480,20 @@ credit(QName, CTag, DeliveryCountRcv, LinkCreditRcv, Drain, Echo,
             {Str2 = #stream{delivery_count = DeliveryCount,
                             credit = Credit,
                             ack = Ack}, Msgs} = stream_entries(QName, Name, LocalPid, Str1),
-            DrainedInsufficientMsgs = Drain andalso Credit > 0,
-            Str = case DrainedInsufficientMsgs of
+            Str = case Drain andalso Credit > 0 of
                       true ->
                           Str2#stream{delivery_count = serial_number:add(DeliveryCount, Credit),
                                       credit = 0};
                       false ->
                           Str2
                   end,
-            DeliverActions = deliver_actions(CTag, Ack, Msgs),
             State = State0#stream_client{readers = maps:update(CTag, Str, Readers)},
-            Actions = case Echo orelse DrainedInsufficientMsgs of
-                          true ->
-                              DeliverActions ++ [{credit_reply,
-                                                  CTag,
-                                                  Str#stream.delivery_count,
-                                                  Str#stream.credit,
-                                                  available_messages(Str),
-                                                  Drain}];
-                          false ->
-                              DeliverActions
-                      end,
+            Actions = deliver_actions(CTag, Ack, Msgs) ++ [{credit_reply,
+                                                            CTag,
+                                                            Str#stream.delivery_count,
+                                                            Str#stream.credit,
+                                                            available_messages(Str),
+                                                            Drain}],
             {State, Actions};
         _ ->
             {State0, []}
@@ -973,7 +967,7 @@ set_retention_policy(Name, VHost, Policy) ->
         {error, _} = E ->
             E;
         MaxAge ->
-            QName = rabbit_misc:r(VHost, queue, Name),
+            QName = queue_resource(VHost, Name),
             Fun = fun(Q) ->
                           Conf = amqqueue:get_type_state(Q),
                           amqqueue:set_type_state(Q, Conf#{max_age => MaxAge})
@@ -1004,7 +998,7 @@ restart_stream(VHost, Queue, Options)
 
 
 add_replica(VHost, Name, Node) ->
-    QName = rabbit_misc:r(VHost, queue, Name),
+    QName = queue_resource(VHost, Name),
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} when ?amqqueue_is_classic(Q) ->
             {error, classic_queue_not_supported};
@@ -1022,7 +1016,7 @@ add_replica(VHost, Name, Node) ->
     end.
 
 delete_replica(VHost, Name, Node) ->
-    QName = rabbit_misc:r(VHost, queue, Name),
+    QName = queue_resource(VHost, Name),
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} when ?amqqueue_is_classic(Q) ->
             {error, classic_queue_not_supported};
