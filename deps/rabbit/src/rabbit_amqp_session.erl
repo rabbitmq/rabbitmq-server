@@ -388,6 +388,10 @@ handle_call(Msg, _From, State) ->
 
 handle_info(timeout, State) ->
     noreply(State);
+handle_info({bump_credit, Msg}, State) ->
+    %% We are receiving credit from the writer proc.
+    credit_flow:handle_bump_msg(Msg),
+    noreply(State);
 handle_info({{'DOWN', QName}, _MRef, process, QPid, Reason},
             #state{queue_states = QStates0,
                    stashed_eol = Eol} = State0) ->
@@ -1302,79 +1306,101 @@ handle_control(Frame, _State) ->
                    "Unexpected frame ~tp",
                    [amqp10_framing:pprint(Frame)]).
 
-send_pending(#state{remote_incoming_window = Space,
-                    outgoing_pending = Buf0,
-                    cfg = #cfg{writer_pid = WriterPid,
-                               channel_num = Ch}} = State0) ->
-    %% TODO if credit_flow:blocked() then stop
+send_pending(#state{remote_incoming_window = RemoteIncomingWindow,
+                    outgoing_pending = Buf0
+                   } = State) ->
     case queue:out(Buf0) of
         {empty, _} ->
-            State0;
+            State;
         {{value, #'v1_0.flow'{} = Flow0}, Buf} ->
-            Flow = session_flow_fields(Flow0, State0),
+            #cfg{writer_pid = WriterPid,
+                 channel_num = Ch} = State#state.cfg,
+            Flow = session_flow_fields(Flow0, State),
             rabbit_amqp_writer:send_command(WriterPid, Ch, Flow),
-            send_pending(State0#state{outgoing_pending = Buf});
-        {{value, #pending_delivery{
-                    frames = Frames,
-                    queue_pid = QPid,
-                    outgoing_unsettled = #outgoing_unsettled{queue_name = QName}
-                   } = Pending}, Buf1}
-          when Space > 0 ->
-            SendFun = case QPid of
-                          credit_api_v2 ->
-                              send_fun(WriterPid, Ch);
-                          _ ->
-                              case rabbit_queue_type:module(QName, State0#state.queue_states) of
-                                  {ok, rabbit_classic_queue} ->
-                                      %% Classic queue client and classic queue process that
-                                      %% communicate via credit API v1 use RabbitMQ internal
-                                      %% credit flow control.
-                                      fun(Transfer, Sections) ->
-                                              rabbit_amqp_writer:send_command_and_notify(
-                                                WriterPid, Ch, QPid, self(), Transfer, Sections)
-                                      end;
-                                  {ok, _QType} ->
-                                      send_fun(WriterPid, Ch)
-                              end
-                      end,
-            {NumTransfersSent, Buf, State1} =
-            case send_frames(SendFun, Frames, Space) of
-                {sent_all, SpaceLeft} ->
-                    {Space - SpaceLeft,
-                     Buf1,
-                     record_outgoing_unsettled(Pending, State0)};
-                {sent_some, Rest} ->
-                    {Space,
-                     queue:in_r(Pending#pending_delivery{frames = Rest}, Buf1),
-                     State0}
-            end,
-            State2 = session_flow_control_sent_transfers(NumTransfersSent, State1),
-            State = State2#state{outgoing_pending = Buf},
-            send_pending(State);
-        {{value, Pending = #pending_management_delivery{frames = Frames}}, Buf1}
-          when Space > 0 ->
-            SendFun = send_fun(WriterPid, Ch),
-            {NumTransfersSent, Buf} =
-            case send_frames(SendFun, Frames, Space) of
-                {sent_all, SpaceLeft} ->
-                    {Space - SpaceLeft, Buf1};
-                {sent_some, Rest} ->
-                    {Space, queue:in_r(Pending#pending_management_delivery{frames = Rest}, Buf1)}
-            end,
-            State1 = session_flow_control_sent_transfers(NumTransfersSent, State0),
-            State = State1#state{outgoing_pending = Buf},
-            send_pending(State);
-        _ when Space =:= 0 ->
-            State0
+            send_pending(State#state{outgoing_pending = Buf});
+        {{value, Delivery}, Buf1} ->
+            case RemoteIncomingWindow =:= 0 orelse
+                 credit_flow:blocked() of
+                true ->
+                    State;
+                false ->
+                    {NewRemoteIncomingWindow, Buf, State1} =
+                    send_pending_delivery(Delivery, Buf1, State),
+                    NumTransfersSent = NewRemoteIncomingWindow - RemoteIncomingWindow,
+                    State2 = session_flow_control_sent_transfers(NumTransfersSent, State1),
+                    State = State2#state{outgoing_pending = Buf},
+                    %% Recurse to possibly send FLOW frames.
+                    send_pending(State)
+            end
+    end.
+
+send_pending_delivery(#pending_delivery{
+                         frames = Frames,
+                         queue_pid = QPid,
+                         outgoing_unsettled = #outgoing_unsettled{queue_name = QName}
+                        } = Pending,
+                      Buf,
+                      #state{remote_incoming_window = Space,
+                             queue_states = QStates,
+                             cfg = #cfg{writer_pid = WriterPid,
+                                        channel_num = Ch}
+                            } = State) ->
+    SendFun = case QPid of
+                  credit_api_v2 ->
+                      send_fun(WriterPid, Ch);
+                  _ ->
+                      case rabbit_queue_type:module(QName, QStates) of
+                          {ok, rabbit_classic_queue} ->
+                              %% Classic queue client and classic queue process that
+                              %% communicate via credit API v1 use RabbitMQ internal
+                              %% credit flow control.
+                              fun(Transfer, Sections) ->
+                                      rabbit_amqp_writer:send_command_and_notify(
+                                        WriterPid, QPid, Ch, Transfer, Sections)
+                              end;
+                          {ok, _QType} ->
+                              send_fun(WriterPid, Ch)
+                      end
+              end,
+    case send_frames(SendFun, Frames, Space) of
+        {sent_all, SpaceLeft} ->
+            {SpaceLeft,
+             Buf,
+             record_outgoing_unsettled(Pending, State)};
+        {sent_some, SpaceLeft, Rest} ->
+            {SpaceLeft,
+             queue:in_r(Pending#pending_delivery{frames = Rest}, Buf),
+             State}
+    end;
+send_pending_delivery(#pending_management_delivery{frames = Frames} = Pending,
+                      Buf,
+                      #state{remote_incoming_window = Space,
+                             cfg = #cfg{writer_pid = WriterPid,
+                                        channel_num = Ch}
+                            } = State) ->
+    SendFun = send_fun(WriterPid, Ch),
+    case send_frames(SendFun, Frames, Space) of
+        {sent_all, SpaceLeft} ->
+            {SpaceLeft,
+             Buf,
+             State};
+        {sent_some, SpaceLeft, Rest} ->
+            {SpaceLeft,
+             queue:in_r(Pending#pending_management_delivery{frames = Rest}, Buf),
+             State}
     end.
 
 send_frames(_, [], SpaceLeft) ->
     {sent_all, SpaceLeft};
-send_frames(_, Rest, 0) ->
-    {sent_some, Rest};
-send_frames(SendFun, [[Transfer, Sections] | Rest], SpaceLeft) ->
-    SendFun(Transfer, Sections),
-    send_frames(SendFun, Rest, SpaceLeft - 1).
+send_frames(_, Rest, SpaceLeft = 0) ->
+    {sent_some, SpaceLeft, Rest};
+send_frames(SendFun, [[Transfer, Sections] | Rest] = Frames, SpaceLeft) ->
+    case SendFun(Transfer, Sections) of
+        ok ->
+            send_frames(SendFun, Rest, SpaceLeft - 1);
+        {error, blocked} ->
+            {sent_some, SpaceLeft, Frames}
+    end.
 
 send_fun(WriterPid, Ch) ->
     fun(Transfer, Sections) ->
