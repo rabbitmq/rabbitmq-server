@@ -438,7 +438,7 @@ vhost_cluster_state(VHost) ->
     Nodes).
 
 vhost_down(VHost) ->
-    rabbit_log:warning("Virtual host '~ts' is stopping or failed", [VHost]),
+    rabbit_log:warning("Virtual host '~ts' is stopping", [VHost]),
     ok = rabbit_event:notify(vhost_down,
                              [{name, VHost},
                               {node, node()},
