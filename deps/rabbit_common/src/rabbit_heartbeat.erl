@@ -19,7 +19,7 @@
 
 -export_type([heartbeaters/0]).
 
--type heartbeaters() :: {rabbit_types:maybe(pid()), rabbit_types:maybe(pid())}.
+-type heartbeaters() :: {rabbit_types:'maybe'(pid()), rabbit_types:'maybe'(pid())}.
 
 -type heartbeat_callback() :: fun (() -> any()).
 
