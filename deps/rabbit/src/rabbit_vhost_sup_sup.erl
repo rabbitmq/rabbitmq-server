@@ -22,7 +22,7 @@
          save_vhost_recovery_terms/2,
          lookup_vhost_sup_record/1,
          lookup_vhost_recovery_terms/1]).
--export([delete_on_all_nodes/1, start_on_all_nodes/1]).
+-export([delete_on_all_nodes/1, start_on_all_nodes/1, start_on_all_nodes/2]).
 -export([is_vhost_alive/1]).
 -export([check/0]).
 
@@ -54,16 +54,19 @@ init([]) ->
             [rabbit_vhost_sup_wrapper, rabbit_vhost_sup]}]}}.
 
 start_on_all_nodes(VHost) ->
-    %% Do not try to start a vhost on booting peer nodes
-    AllBooted = [Node || Node <- rabbit_nodes:list_running()],
+    %% By default select only fully booted peers
+    AllBooted = rabbit_nodes:list_running(),
     Nodes     = [node() | AllBooted],
+    start_on_all_nodes(VHost, Nodes).
+
+start_on_all_nodes(VHost, Nodes) ->
     Results   = [{Node, start_vhost(VHost, Node)} || Node <- Nodes],
     Failures  = lists:filter(fun
-                               ({_, {ok, _}}) -> false;
-                               ({_, {error, {already_started, _}}}) -> false;
-                               (_) -> true
-                            end,
-                            Results),
+                                 ({_, {ok, _}}) -> false;
+                                 ({_, {error, {already_started, _}}}) -> false;
+                                 (_) -> true
+                             end,
+        Results),
     case Failures of
         []     -> ok;
         Errors -> {error, {failed_to_start_vhost_on_nodes, Errors}}
