@@ -101,7 +101,8 @@ init({Sock, MaxFrame, ReaderPid}) ->
                    max_frame_size = MaxFrame,
                    reader = ReaderPid,
                    pending = [],
-                   pending_size = 0},
+                   pending_size = 0,
+                   monitored_sessions = #{}},
     process_flag(message_queue_data, off_heap),
     {ok, State}.
 

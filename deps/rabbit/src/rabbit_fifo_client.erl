@@ -24,6 +24,7 @@
          discard/3,
          credit_v1/4,
          credit/6,
+         sent/3,
          handle_ra_event/4,
          untracked_enqueue/2,
          purge/1,
@@ -430,6 +431,13 @@ credit(ConsumerTag, DeliveryCount, Credit, Drain, Echo,
                              CDels0),
     State = State0#state{consumer_deliveries = CDels},
     {send_command(ServerId, undefined, Cmd, normal, State), []}.
+
+sent(ConsumerTag, NumSent, State0) ->
+    ConsumerId = consumer_id(ConsumerTag),
+    ServerId = pick_server(State0),
+    Cmd = rabbit_fifo:make_sent(ConsumerId, NumSent),
+    State = send_command(ServerId, undefined, Cmd, normal, State0),
+    {State, []}.
 
 %% @doc Cancels a checkout with the rabbit_fifo queue  for the consumer tag
 %%

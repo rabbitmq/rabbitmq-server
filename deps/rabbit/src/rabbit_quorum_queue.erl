@@ -25,7 +25,7 @@
          delete_immediately/1]).
 -export([state_info/1, info/2, stat/1, infos/1, infos/2]).
 -export([settle/5, dequeue/5, consume/3, cancel/5]).
--export([credit_v1/5, credit/7]).
+-export([credit_v1/5, credit/7, sent/4]).
 -export([purge/1]).
 -export([stateless_deliver/2, deliver/3]).
 -export([dead_letter_publish/5]).
@@ -806,6 +806,9 @@ credit_v1(_QName, CTag, Credit, Drain, QState) ->
 
 credit(_QName, CTag, DeliveryCount, Credit, Drain, Echo, QState) ->
     rabbit_fifo_client:credit(quorum_ctag(CTag), DeliveryCount, Credit, Drain, Echo, QState).
+
+sent(_QName, CTag, NumSent, QState) ->
+    rabbit_fifo_client:sent(quorum_ctag(CTag), NumSent, QState).
 
 -spec dequeue(rabbit_amqqueue:name(), NoAck :: boolean(), pid(),
               rabbit_types:ctag(), rabbit_fifo_client:state()) ->

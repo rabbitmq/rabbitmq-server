@@ -119,9 +119,16 @@
          checked_out = #{} :: #{msg_id() => msg()},
          %% max number of messages that can be sent
          %% decremented for each delivery
-         credit = 0 : non_neg_integer(),
+         credit = 0 :: non_neg_integer(),
          %% AMQP 1.0 §2.6.7
-         delivery_count :: rabbit_queue_type:delivery_count()
+         delivery_count :: rabbit_queue_type:delivery_count(),
+         %% TODO session should send its initial NOTIFY_SENT_AFTER
+         %% This value is x2 so that we keep the procs busy.
+         %%
+         %% This field is used for RabbitMQ internal flow control betweeen
+         %% AMQP writer proc <--- sesssion proc <--- queue proc
+         %% to ensure we (queue proc) don't overload the session proc.
+         pause_after = 1000 :: non_neg_integer()
         }).
 
 -type consumer() :: #consumer{}.

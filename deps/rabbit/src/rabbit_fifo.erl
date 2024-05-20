@@ -63,6 +63,7 @@
          make_return/2,
          make_discard/2,
          make_credit/4,
+         make_sent/2,
          make_purge/0,
          make_purge_nodes/1,
          make_update_config/1,
@@ -99,6 +100,8 @@
                  credit :: non_neg_integer(),
                  delivery_count :: rabbit_queue_type:delivery_count(),
                  drain :: boolean()}).
+-record(sent, {consumer_id :: consumer_id(),
+               num :: pos_integer()}).
 -record(purge, {}).
 -record(purge_nodes, {nodes :: [node()]}).
 -record(update_config, {config :: config()}).
@@ -113,6 +116,7 @@
     #return{} |
     #discard{} |
     #credit{} |
+    #sent{} |
     #purge{} |
     #purge_nodes{} |
     #update_config{} |
@@ -368,6 +372,31 @@ apply(Meta, #credit{credit = LinkCreditRcv, delivery_count = DeliveryCountRcv,
             end;
         _ ->
             %% credit for unknown consumer - just ignore
+            {State0, ok}
+    end;
+apply(Meta, #sent{consumer_id = ConsumerId, num = NumSent},
+      #?MODULE{consumers = Cons0,
+               service_queue = ServiceQueue0,
+               waiting_consumers = Waiting0} = State0) ->
+    case Cons0 of
+        #{ConsumerId := #consumer{pause_after = PauseAfter} = Con0} ->
+            Con = Con0#consumer{pause_after = PauseAfter + NumSent},
+            ServiceQueue = maybe_queue_consumer(ConsumerId, Con, ServiceQueue0),
+            State1 = State0#?MODULE{service_queue = ServiceQueue,
+                                    consumers = maps:update(ConsumerId, Con, Cons0)},
+            {_State, ok, _Effects} = checkout(Meta, State0, State1, []);
+        _ when Waiting0 /= [] ->
+            case lists:keytake(ConsumerId, 1, Waiting0) of
+                {value, {_, Con0 = #consumer{pause_after = PauseAfter}}, Waiting} ->
+                    Con = Con0#consumer{pause_after = PauseAfter},
+                    State = State0#?MODULE{waiting_consumers =
+                                           [{ConsumerId, Con} | Waiting]},
+                    {State, ok};
+                false ->
+                    {State0, ok}
+            end;
+        _ ->
+            %% ignore unknown consumer
             {State0, ok}
     end;
 apply(_, #checkout{spec = {dequeue, _}},
@@ -2106,7 +2135,10 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
                     %% there are consumers waiting to be serviced
                     %% process consumer checkout
                     case maps:get(ConsumerId, Cons0) of
-                        #consumer{credit = 0} ->
+                        #consumer{credit = Credit,
+                                  pause_after = PauseAfter}
+                          when Credit =:= 0 orelse
+                               PauseAfter =:= 0 ->
                             %% no credit but was still on queue
                             %% can happen when draining
                             %% recurse without consumer on queue
@@ -2121,16 +2153,21 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
                                   next_msg_id = Next,
                                   credit = Credit,
                                   delivery_count = DelCnt0,
+                                  pause_after = PauseAfter0,
                                   cfg = Cfg} = Con0 ->
                             Checked = maps:put(Next, ConsumerMsg, Checked0),
-                            DelCnt = case credit_api_v2(Cfg) of
-                                         true -> add(DelCnt0, 1);
-                                         false -> DelCnt0 + 1
-                                     end,
+                            %% For now, PauseAfter must only be decremented for AMQP 1.0 consumers.
+                            {DelCnt, PauseAfter} = case credit_api_v2(Cfg) of
+                                                       true ->
+                                                           {add(DelCnt0, 1), PauseAfter0 - 1};
+                                                       false ->
+                                                           DelCnt0 + 1
+                                                   end,
                             Con = Con0#consumer{checked_out = Checked,
                                                 next_msg_id = Next + 1,
                                                 credit = Credit - 1,
-                                                delivery_count = DelCnt},
+                                                delivery_count = DelCnt,
+                                                pause_after = PauseAfter},
                             Size = get_header(size, get_msg_header(ConsumerMsg)),
                             State = update_or_remove_sub(
                                        Meta, ConsumerId, Con,
@@ -2227,9 +2264,11 @@ update_or_remove_sub(_Meta, ConsumerId,
                   service_queue = maybe_queue_consumer(ConsumerId, Con, ServiceQueue)}.
 
 maybe_queue_consumer(Key, #consumer{credit = Credit,
+                                    pause_after = PauseAfter,
                                     status = up,
                                     cfg = #consumer_cfg{priority = P}}, ServiceQueue)
-  when Credit > 0 ->
+  when Credit > 0 andalso
+       PauseAfter > 0 ->
     % TODO: queue:member could surely be quite expensive, however the practical
     % number of unique consumers may not be large enough for it to matter
     case priority_queue:member(Key, ServiceQueue) of
@@ -2399,6 +2438,10 @@ make_credit(ConsumerId, Credit, DeliveryCount, Drain) ->
             credit = Credit,
             delivery_count = DeliveryCount,
             drain = Drain}.
+
+make_sent(ConsumerId, NumSent) ->
+    #sent{consumer_id = ConsumerId,
+          num = NumSent}.
 
 -spec make_purge() -> protocol().
 make_purge() -> #purge{}.

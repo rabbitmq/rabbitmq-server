@@ -47,6 +47,7 @@
          settle/5,
          credit_v1/5,
          credit/7,
+         sent/4,
          dequeue/5,
          fold_state/3,
          is_policy_applicable/2,
@@ -224,6 +225,10 @@
 %% credit API v2
 -callback credit(queue_name(), rabbit_types:ctag(), delivery_count(), credit(),
                  Drain :: boolean(), Echo :: boolean(), queue_state()) ->
+    {queue_state(), actions()}.
+
+%% credit API v2
+-callback sent(queue_name(), rabbit_types:ctag(), NumSent :: pos_integer(), queue_state()) ->
     {queue_state(), actions()}.
 
 -callback dequeue(queue_name(), NoAck :: boolean(), LimiterPid :: pid(),
@@ -674,6 +679,14 @@ credit(QName, CTag, DeliveryCount, Credit, Drain, Echo, Ctxs) ->
     #ctx{state = State0,
          module = Mod} = Ctx = get_ctx(QName, Ctxs),
     {State, Actions} = Mod:credit(QName, CTag, DeliveryCount, Credit, Drain, Echo, State0),
+    {ok, set_ctx(QName, Ctx#ctx{state = State}, Ctxs), Actions}.
+
+-spec sent(queue_name(), rabbit_types:ctag(), pos_integer(), state()) ->
+    {ok, state(), actions()}.
+sent(QName, CTag, NumSent, Ctxs) ->
+    #ctx{state = State0,
+         module = Mod} = Ctx = get_ctx(QName, Ctxs),
+    {State, Actions} = Mod:sent(QName, CTag, NumSent, State0),
     {ok, set_ctx(QName, Ctx#ctx{state = State}, Ctxs), Actions}.
 
 -spec dequeue(amqqueue:amqqueue(), boolean(),
