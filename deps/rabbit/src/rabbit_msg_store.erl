@@ -907,7 +907,7 @@ handle_cast({write, CRef, MsgRef, MsgId, Flow},
             %% the normal logic for that in write_message/4 and
             %% maybe_roll_to_new_file/2.
             case index_lookup(MsgId, State) of
-                [#msg_location { file = File }]
+                #msg_location { file = File }
                   when File == State #msstate.current_file ->
                     ok;
                 _ ->
