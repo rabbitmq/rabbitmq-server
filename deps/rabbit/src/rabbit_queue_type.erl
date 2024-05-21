@@ -792,6 +792,7 @@ check_vhost_queue_limit(Q) ->
              "cannot declare queue '~ts': "
              "queue limit in vhost '~ts' (~tp) is reached",
              [QueueName, VHost, Limit]}
+    end.
 
 check_cluster_queue_limit(Q) ->
     #resource{name = QueueName} = amqqueue:get_name(Q),
