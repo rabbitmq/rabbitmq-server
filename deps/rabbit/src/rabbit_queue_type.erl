@@ -6,6 +6,7 @@
 %%
 
 -module(rabbit_queue_type).
+-feature(maybe_expr, enable).
 
 -behaviour(rabbit_registry_class).
 
@@ -282,7 +283,12 @@ is_compatible(Type, Durable, Exclusive, AutoDelete) ->
 declare(Q0, Node) ->
     Q = rabbit_queue_decorator:set(rabbit_policy:set(Q0)),
     Mod = amqqueue:get_type(Q),
-    Mod:declare(Q, Node).
+    case check_queue_limits(Q) of
+        ok ->
+            Mod:declare(Q, Node);
+        Error ->
+            Error
+    end.
 
 -spec delete(amqqueue:amqqueue(), boolean(),
              boolean(), rabbit_types:username()) ->
@@ -730,3 +736,25 @@ known_queue_type_names() ->
     {QueueTypes, _} = lists:unzip(Registered),
     QTypeBins = lists:map(fun(X) -> atom_to_binary(X) end, QueueTypes),
     ?KNOWN_QUEUE_TYPES ++ QTypeBins.
+
+-spec check_queue_limits(amqqueue:amqqueue()) ->
+          ok |
+          {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
+check_queue_limits(Q) ->
+    maybe
+        %% Prepare for more checks
+        ok ?= check_vhost_queue_limit(Q)
+    end.
+
+check_vhost_queue_limit(Q) ->
+    #resource{name = QueueName} = amqqueue:get_name(Q),
+    VHost = amqqueue:get_vhost(Q),
+    case rabbit_vhost_limit:is_over_queue_limit(VHost) of
+        false ->
+            ok;
+        {true, Limit} ->
+            {protocol_error, precondition_failed,
+             "cannot declare queue '~ts': "
+             "queue limit in vhost '~ts' (~tp) is reached",
+             [QueueName, VHost, Limit]}
+    end.
