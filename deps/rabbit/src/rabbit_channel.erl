@@ -2503,6 +2503,8 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                     %% connection has died. Pretend the queue exists though,
                     %% just so nothing fails.
                     {ok, QueueName, 0, 0};
+                {error, queue_limit_exceeded, Reason, ReasonArgs} ->
+                    rabbit_misc:precondition_failed(Reason, ReasonArgs);
                 {protocol_error, ErrorType, Reason, ReasonArgs} ->
                     rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs)
             end;

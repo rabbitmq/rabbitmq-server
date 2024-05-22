@@ -524,15 +524,6 @@ handle_info(Info, State) ->
 create_stream(VirtualHost, Reference, Arguments, Username) ->
     StreamQueueArguments = stream_queue_arguments(Arguments),
     maybe
-        ok ?= case rabbit_vhost_limit:is_over_queue_limit(VirtualHost) of
-                  false ->
-                      ok;
-                  {true, Limit} ->
-                      rabbit_log:warning("Cannot declare stream ~tp because "
-                                         "queue limit ~tp in vhost '~tp' is reached",
-                                         [Reference, Limit, VirtualHost]),
-                      {error, validation_failed}
-              end,
         ok ?= validate_stream_queue_arguments(StreamQueueArguments),
         do_create_stream(VirtualHost, Reference, StreamQueueArguments, Username)
     else
@@ -581,6 +572,12 @@ do_create_stream(VirtualHost, Reference, StreamQueueArguments, Username) ->
                             rabbit_log:warning("Error while creating ~tp stream, ~tp",
                                                [Reference, Err]),
                             {error, internal_error};
+                        {error,
+                         queue_limit_exceeded, Reason, ReasonArg} ->
+                            rabbit_log:warning("Cannot declare stream ~tp because, "
+                                               ++ Reason,
+                                               [Reference] ++ ReasonArg),
+                            {error, validation_failed};
                         {protocol_error,
                          precondition_failed,
                          Msg,
