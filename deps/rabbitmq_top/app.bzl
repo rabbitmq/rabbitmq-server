@@ -23,7 +23,6 @@ def all_beam_files(name = "all_beam_files"):
         dest = "ebin",
         erlc_opts = "//:erlc_opts",
         deps = [
-            "//deps/amqp_client:erlang_app",
             "//deps/rabbit_common:erlang_app",
             "//deps/rabbitmq_management:erlang_app",
             "//deps/rabbitmq_management_agent:erlang_app",
@@ -100,7 +99,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
         app_name = "rabbitmq_top",
         dest = "test",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbit_common:erlang_app", "//deps/rabbitmq_management:erlang_app", "//deps/rabbitmq_management_agent:erlang_app"],
+        deps = ["//deps/rabbit_common:erlang_app", "//deps/rabbitmq_management:erlang_app", "//deps/rabbitmq_management_agent:erlang_app"],
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):

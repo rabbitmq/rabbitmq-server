@@ -7,8 +7,6 @@
 
 -module(internal_user).
 
--include_lib("rabbit_common/include/rabbit.hrl").
-
 -export([
   new/0,
   new/1,

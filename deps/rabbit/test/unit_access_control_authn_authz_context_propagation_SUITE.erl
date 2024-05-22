@@ -7,7 +7,6 @@
 
 -module(unit_access_control_authn_authz_context_propagation_SUITE).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 

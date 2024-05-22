@@ -7,8 +7,6 @@
 
 -module(rabbit_mnesia).
 
--include_lib("kernel/include/logger.hrl").
-
 -include_lib("rabbit_common/include/logging.hrl").
 
 -export([%% Main interface

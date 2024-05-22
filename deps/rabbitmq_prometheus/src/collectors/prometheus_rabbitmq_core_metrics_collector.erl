@@ -18,7 +18,6 @@
 
 -import(prometheus_text_format, [escape_label_value/1]).
 
--include_lib("prometheus/include/prometheus.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(prometheus_collector).

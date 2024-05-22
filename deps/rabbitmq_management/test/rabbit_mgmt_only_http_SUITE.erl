@@ -8,7 +8,6 @@
 -module(rabbit_mgmt_only_http_SUITE).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
--include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 

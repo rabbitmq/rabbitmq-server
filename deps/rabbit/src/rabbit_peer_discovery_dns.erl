@@ -8,8 +8,6 @@
 -module(rabbit_peer_discovery_dns).
 -behaviour(rabbit_peer_discovery_backend).
 
--include_lib("rabbit_common/include/rabbit.hrl").
-
 -export([list_nodes/0, supports_registration/0, register/0, unregister/0,
          post_registration/0, lock/1, unlock/1]).
 %% for tests

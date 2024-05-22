@@ -8,8 +8,6 @@
 -module(rabbit_mgmt_stats).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
--include_lib("rabbitmq_management_agent/include/rabbit_mgmt_metrics.hrl").
-
 -export([format_range/6]).
 
 -define(MICRO_TO_MILLI, 1000).

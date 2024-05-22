@@ -31,8 +31,6 @@
 %% This module has no public functions.
 -module(amqp_direct_consumer).
 
--include("amqp_gen_consumer_spec.hrl").
-
 -behaviour(amqp_gen_consumer).
 
 -export([init/1, handle_consume_ok/3, handle_consume/3, handle_cancel_ok/3,

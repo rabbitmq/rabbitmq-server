@@ -17,7 +17,6 @@
                     {enables, recovery}]}).
 
 -include_lib("rabbit/include/amqqueue.hrl").
--include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
 -behaviour(rabbit_queue_decorator).

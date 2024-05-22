@@ -7,8 +7,6 @@
 
 -module(rabbit_authn_backend).
 
--include("rabbit.hrl").
-
 %% Check a user can log in, given a username and a proplist of
 %% authentication information (e.g. [{password, Password}]). If your
 %% backend is not to be used for authentication, this should always

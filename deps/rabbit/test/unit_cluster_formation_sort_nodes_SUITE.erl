@@ -7,7 +7,6 @@
 
 -module(unit_cluster_formation_sort_nodes_SUITE).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -export([all/0,

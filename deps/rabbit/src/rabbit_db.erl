@@ -7,8 +7,6 @@
 
 -module(rabbit_db).
 
--include_lib("khepri/include/khepri.hrl").
-
 -include_lib("kernel/include/logger.hrl").
 -include_lib("stdlib/include/assert.hrl").
 

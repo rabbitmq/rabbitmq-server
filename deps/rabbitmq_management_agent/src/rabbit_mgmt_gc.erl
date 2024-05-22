@@ -6,8 +6,6 @@
 %%
 -module(rabbit_mgmt_gc).
 
--include_lib("rabbit_common/include/rabbit.hrl").
-
 -record(state, {timer,
                 interval
                }).

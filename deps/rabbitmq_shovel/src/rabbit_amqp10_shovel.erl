@@ -9,7 +9,6 @@
 
 -behaviour(rabbit_shovel_behaviour).
 
--include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
 
 -export([

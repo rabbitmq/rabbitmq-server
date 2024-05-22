@@ -1,6 +1,5 @@
 -module(rabbit_shovel_mgmt_SUITE).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").

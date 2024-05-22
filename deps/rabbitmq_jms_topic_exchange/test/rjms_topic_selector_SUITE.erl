@@ -9,7 +9,6 @@
 
 -compile(export_all).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_jms_topic_exchange.hrl").
 

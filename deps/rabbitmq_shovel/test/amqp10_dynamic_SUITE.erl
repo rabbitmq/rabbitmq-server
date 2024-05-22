@@ -9,8 +9,6 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include_lib("amqp_client/include/amqp_client.hrl").
-
 -compile(export_all).
 
 all() ->

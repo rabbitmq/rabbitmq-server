@@ -7,7 +7,6 @@
 
 -module(channel_interceptor_SUITE).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 

@@ -8,8 +8,6 @@
 %% @private
 -module(amqp_channel_sup_sup).
 
--include("amqp_client.hrl").
-
 -behaviour(supervisor).
 
 -export([start_link/3, start_channel_sup/4]).

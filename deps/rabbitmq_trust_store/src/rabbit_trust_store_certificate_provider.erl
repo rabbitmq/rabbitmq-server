@@ -7,8 +7,6 @@
 
 -module(rabbit_trust_store_certificate_provider).
 
--include_lib("public_key/include/public_key.hrl").
-
 -callback list_certs(Config)
     -> no_change | {ok, [{CertId, Attributes}], ProviderState}
     when Config :: list(),

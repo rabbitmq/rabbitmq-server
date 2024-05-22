@@ -2,7 +2,6 @@
 
 -compile(export_all).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("proper/include/proper.hrl").
 
 -define(ITERATIONS_TO_RUN_UNTIL_CONFIDENT, 10000).

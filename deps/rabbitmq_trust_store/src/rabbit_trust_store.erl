@@ -18,7 +18,6 @@
          code_change/3]).
 
 -include_lib("stdlib/include/ms_transform.hrl").
--include_lib("kernel/include/file.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
 -type certificate() :: #'OTPCertificate'{}.

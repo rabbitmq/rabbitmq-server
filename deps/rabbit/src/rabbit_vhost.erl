@@ -7,7 +7,6 @@
 
 -module(rabbit_vhost).
 
--include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("vhost.hrl").
 

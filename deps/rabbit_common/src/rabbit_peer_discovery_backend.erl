@@ -37,8 +37,6 @@
 
 -module(rabbit_peer_discovery_backend).
 
--include("rabbit.hrl").
-
 -callback init() -> ok | {error, Reason :: string()}.
 
 -callback list_nodes() -> {ok, {Nodes :: [node()] | node(), NodeType :: rabbit_types:node_type()}} |

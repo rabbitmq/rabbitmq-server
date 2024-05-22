@@ -12,8 +12,6 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/logging.hrl").
--include_lib("rabbit/include/mc.hrl").
-
 %% logger callbacks
 -export([log/2, adding_handler/1, removing_handler/1, changing_config/3,
          filter_config/1]).

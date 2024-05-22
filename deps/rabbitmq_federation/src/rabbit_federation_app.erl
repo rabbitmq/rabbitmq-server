@@ -7,8 +7,6 @@
 
 -module(rabbit_federation_app).
 
--include("rabbit_federation.hrl").
-
 -behaviour(application).
 -export([start/2, stop/1]).
 

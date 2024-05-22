@@ -6,6 +6,4 @@
 %%
 
 -module(rabbit_password_hashing).
--include("rabbit.hrl").
-
 -callback hash(rabbit_types:password()) -> rabbit_types:password_hash().

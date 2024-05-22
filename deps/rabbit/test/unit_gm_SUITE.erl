@@ -11,8 +11,6 @@
 
 -include_lib("common_test/include/ct.hrl").
 
--include("gm_specs.hrl").
-
 -compile(export_all).
 
 -define(RECEIVE_OR_THROW(Body, Bool, Error),

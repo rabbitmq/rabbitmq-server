@@ -1,6 +1,5 @@
 -module(rabbit_prelaunch_conf).
 
--include_lib("kernel/include/file.hrl").
 -include_lib("kernel/include/logger.hrl").
 -include_lib("stdlib/include/zip.hrl").
 

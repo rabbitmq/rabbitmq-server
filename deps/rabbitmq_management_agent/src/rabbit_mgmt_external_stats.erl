@@ -15,8 +15,6 @@
 
 -export([list_registry_plugins/1]).
 
--include_lib("rabbit_common/include/rabbit.hrl").
-
 -define(METRICS_KEYS, [fd_used, sockets_used, mem_used, disk_free, proc_used, gc_num,
                        gc_bytes_reclaimed, context_switches]).
 

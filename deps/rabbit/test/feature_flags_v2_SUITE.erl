@@ -11,8 +11,6 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
 
--include_lib("rabbit_common/include/logging.hrl").
-
 -export([suite/0,
          all/0,
          groups/0,

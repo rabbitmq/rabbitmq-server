@@ -28,8 +28,6 @@
          terminate/2,
          code_change/3]).
 
--include("webmachine_logger.hrl").
-
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.

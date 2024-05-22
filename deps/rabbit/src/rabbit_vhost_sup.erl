@@ -7,8 +7,6 @@
 
 -module(rabbit_vhost_sup).
 
--include_lib("rabbit_common/include/rabbit.hrl").
-
 %% Each vhost gets an instance of this supervisor that supervises
 %% message stores and queues (via rabbit_amqqueue_sup_sup).
 -behaviour(supervisor).

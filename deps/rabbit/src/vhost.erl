@@ -7,7 +7,6 @@
 
 -module(vhost).
 
--include_lib("rabbit_common/include/rabbit.hrl").
 -include("vhost.hrl").
 
 -export([

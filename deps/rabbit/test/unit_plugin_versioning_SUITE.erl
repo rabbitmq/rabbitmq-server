@@ -7,7 +7,6 @@
 
 -module(unit_plugin_versioning_SUITE).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -compile(export_all).

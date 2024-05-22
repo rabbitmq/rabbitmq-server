@@ -7,8 +7,6 @@
 
 -module(rabbit_credential_validator_min_password_length).
 
--include_lib("rabbit_common/include/rabbit.hrl").
-
 -behaviour(rabbit_credential_validator).
 
 %% accommodates default (localhost-only) user credentials,

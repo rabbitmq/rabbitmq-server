@@ -8,7 +8,6 @@
 -module(rabbit_queue_location_client_local).
 -behaviour(rabbit_queue_master_locator).
 
--include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
 -export([description/0, queue_master_location/1]).
