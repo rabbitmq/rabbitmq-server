@@ -335,6 +335,14 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+    name = "cluster_limit_SUITE",
+    size = "medium",
+    additional_beam = [
+        ":test_queue_utils_beam",
+    ],
+)
+
+rabbitmq_integration_suite(
     name = "clustering_management_SUITE",
     size = "large",
     additional_beam = [

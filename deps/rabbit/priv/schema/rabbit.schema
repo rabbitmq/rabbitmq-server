@@ -1437,6 +1437,21 @@ fun(Conf) ->
 end}.
 
 
+{mapping, "cluster_queue_limit", "rabbit.cluster_queue_limit",
+  [{datatype, [{atom, infinity}, integer]}]}.
+
+{translation, "rabbit.cluster_queue_limit",
+ fun(Conf) ->
+  case cuttlefish:conf_get("cluster_queue_limit", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      infinity  -> infinity;
+      Val when is_integer(Val) andalso Val > 0 -> Val;
+      _         -> cuttlefish:invalid("should be positive integer or 'infinity'")
+  end
+ end
+}.
+
+
 %% Interval (in milliseconds) at which we send keepalive messages
 %% to other cluster members. Note that this is not the same thing
 %% as net_ticktime; missed keepalive messages will not cause nodes

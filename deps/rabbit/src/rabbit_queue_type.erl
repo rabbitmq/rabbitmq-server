@@ -742,8 +742,8 @@ known_queue_type_names() ->
           {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 check_queue_limits(Q) ->
     maybe
-        %% Prepare for more checks
-        ok ?= check_vhost_queue_limit(Q)
+        ok ?= check_vhost_queue_limit(Q),
+        ok ?= check_cluster_queue_limit(Q)
     end.
 
 check_vhost_queue_limit(Q) ->
@@ -757,4 +757,21 @@ check_vhost_queue_limit(Q) ->
              "cannot declare queue '~ts': "
              "queue limit in vhost '~ts' (~tp) is reached",
              [QueueName, VHost, Limit]}
+    end.
+
+check_cluster_queue_limit(Q) ->
+    #resource{name = QueueName} = amqqueue:get_name(Q),
+    case rabbit_misc:get_env(rabbit, cluster_queue_limit, infinity) of
+        infinity ->
+            ok;
+        Limit ->
+            case rabbit_db_queue:count() >= Limit of
+                true ->
+                    {protocol_error, precondition_failed,
+                     "cannot declare queue '~ts': "
+                     "queue limit in cluster (~tp) is reached",
+                     [QueueName, Limit]};
+                false ->
+                    ok
+            end
     end.
