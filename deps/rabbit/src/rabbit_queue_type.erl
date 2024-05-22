@@ -279,6 +279,7 @@ is_compatible(Type, Durable, Exclusive, AutoDelete) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
     {'absent', amqqueue:amqqueue(), rabbit_amqqueue:absent_reason()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()} |
+    {'error', Type :: atom(), Reason :: string(), Args :: term()} |
     {'error', Err :: term() }.
 declare(Q0, Node) ->
     Q = rabbit_queue_decorator:set(rabbit_policy:set(Q0)),
@@ -739,7 +740,7 @@ known_queue_type_names() ->
 
 -spec check_queue_limits(amqqueue:amqqueue()) ->
           ok |
-          {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
+          {error, queue_limit_exceeded, Reason :: string(), Args :: term()}.
 check_queue_limits(Q) ->
     maybe
         ok ?= check_vhost_queue_limit(Q),
@@ -753,10 +754,9 @@ check_vhost_queue_limit(Q) ->
         false ->
             ok;
         {true, Limit} ->
-            {protocol_error, precondition_failed,
-             "cannot declare queue '~ts': "
-             "queue limit in vhost '~ts' (~tp) is reached",
-             [QueueName, VHost, Limit]}
+            queue_limit_error("cannot declare queue '~ts': "
+                              "queue limit in vhost '~ts' (~tp) is reached",
+                              [QueueName, VHost, Limit])
     end.
 
 check_cluster_queue_limit(Q) ->
@@ -767,11 +767,13 @@ check_cluster_queue_limit(Q) ->
         Limit ->
             case rabbit_db_queue:count() >= Limit of
                 true ->
-                    {protocol_error, precondition_failed,
-                     "cannot declare queue '~ts': "
-                     "queue limit in cluster (~tp) is reached",
-                     [QueueName, Limit]};
+                    queue_limit_error("cannot declare queue '~ts': "
+                                      "queue limit in cluster (~tp) is reached",
+                                      [QueueName, Limit]);
                 false ->
                     ok
             end
     end.
+
+queue_limit_error(Reason, ReasonArgs) ->
+    {error, queue_limit_exceeded, Reason, ReasonArgs}.
