@@ -1354,32 +1354,27 @@ create_queue(QNamePart, QOwner, QArgs, QType,
                           Err0 -> Err0
                       end
               end,
-        case rabbit_vhost_limit:is_over_queue_limit(VHost) of
-            false ->
-                rabbit_core_metrics:queue_declared(QName),
-                Q0 = amqqueue:new(QName,
-                                  none,
-                                  _Durable = true,
-                                  _AutoDelete = false,
-                                  QOwner,
-                                  QArgs,
-                                  VHost,
-                                  #{user => Username},
-                                  QType),
-                case rabbit_queue_type:declare(Q0, node()) of
-                    {new, Q} when ?is_amqqueue(Q) ->
-                        rabbit_core_metrics:queue_created(QName),
-                        {ok, Q};
-                    Other ->
-                        ?LOG_ERROR("Failed to declare ~s: ~p",
-                                   [rabbit_misc:rs(QName), Other]),
-                        {error, queue_declare}
-                end;
-            {true, Limit} ->
-                ?LOG_ERROR("cannot declare ~s because "
-                           "queue limit ~p in vhost '~s' is reached",
-                           [rabbit_misc:rs(QName), Limit, VHost]),
-                {error, queue_limit_exceeded}
+        rabbit_core_metrics:queue_declared(QName),
+        Q0 = amqqueue:new(QName,
+                          none,
+                          _Durable = true,
+                          _AutoDelete = false,
+                          QOwner,
+                          QArgs,
+                          VHost,
+                          #{user => Username},
+                          QType),
+        case rabbit_queue_type:declare(Q0, node()) of
+            {new, Q} when ?is_amqqueue(Q) ->
+                rabbit_core_metrics:queue_created(QName),
+                {ok, Q};
+            {error, queue_limit_exceeded, Reason, ReasonArgs} ->
+                ?LOG_ERROR(Reason, ReasonArgs),
+                {error, queue_limit_exceeded};
+            Other ->
+                ?LOG_ERROR("Failed to declare ~s: ~p",
+                           [rabbit_misc:rs(QName), Other]),
+                {error, queue_declare}
         end
     else
         {error, access_refused} = Err ->
