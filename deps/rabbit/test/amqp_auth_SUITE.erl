@@ -727,7 +727,7 @@ v1_vhost_queue_limit(Config) ->
                        Session1, <<"test-sender-1">>, TargetAddress),
     ExpectedErr = amqp_error(
                     ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
-                    <<"cannot declare queue 'q1' in vhost 'test vhost': vhost queue limit (0) is reached">>),
+                    <<"cannot declare queue 'q1': queue limit in vhost 'test vhost' (0) is reached">>),
     receive {amqp10_event, {session, Session1, {ended, ExpectedErr}}} -> ok
     after 5000 -> flush(missing_ended),
                   ct:fail("did not receive expected error")
@@ -831,8 +831,7 @@ declare_queue_vhost_queue_limit(Config) ->
     ?assertMatch(#{subject := <<"403">>}, amqp10_msg:properties(Resp)),
     ?assertEqual(
        #'v1_0.amqp_value'{
-          content = {utf8, <<"refused to declare queue '", QName/binary, "' in vhost 'test vhost' ",
-                             "because vhost queue limit 0 is reached">>}},
+          content = {utf8, <<"cannot declare queue '", QName/binary, "': queue limit in vhost 'test vhost' (0) is reached">>}},
        amqp10_msg:body(Resp)),
 
     ok = cleanup_pair(Init),

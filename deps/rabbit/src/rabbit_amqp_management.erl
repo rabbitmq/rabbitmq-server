@@ -142,7 +142,6 @@ handle_http_req(HttpMethod = <<"PUT">>,
         {ok, Result} ->
             Result;
         {error, not_found} ->
-            ok = check_vhost_queue_limit(QName),
             PermCache2 = check_dead_letter_exchange(QName, QArgs, User, PermCache1),
             case rabbit_amqqueue:declare(
                    QName, Durable, AutoDelete, QArgs, Owner, Username) of
@@ -160,6 +159,10 @@ handle_http_req(HttpMethod = <<"PUT">>,
                     %% Must have been created in the meantime. Loop around again.
                     handle_http_req(HttpMethod, PathSegments, Query, ReqPayload,
                                     Vhost, User, ConnPid, {PermCache2, TopicPermCache});
+                {error, queue_limit_exceeded, Reason, ReasonArgs} ->
+                    throw(<<"403">>,
+                          Reason,
+                          ReasonArgs);
                 {protocol_error, _ErrorType, Reason, ReasonArgs} ->
                     throw(<<"400">>, Reason, ReasonArgs)
             end;
@@ -675,17 +678,6 @@ prohibit_reserved_amq(Res = #resource{name = <<"amq.", _/binary>>}) ->
           [rabbit_misc:rs(Res)]);
 prohibit_reserved_amq(#resource{}) ->
     ok.
-
-check_vhost_queue_limit(QName = #resource{virtual_host = Vhost}) ->
-    case rabbit_vhost_limit:is_over_queue_limit(Vhost) of
-        false ->
-            ok;
-        {true, Limit} ->
-            throw(<<"403">>,
-                  "refused to declare ~ts because vhost queue limit ~b is reached",
-                  [rabbit_misc:rs(QName), Limit])
-    end.
-
 
 check_dead_letter_exchange(QName = #resource{virtual_host = Vhost}, QArgs, User, PermCache0) ->
     case rabbit_misc:r_arg(Vhost, exchange, QArgs, ?DEAD_LETTER_EXCHANGE_KEY) of

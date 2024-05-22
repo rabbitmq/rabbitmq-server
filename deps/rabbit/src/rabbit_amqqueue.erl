@@ -201,6 +201,7 @@ find_recoverable_queues() ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
     {'new', amqqueue:amqqueue(), rabbit_fifo_client:state()} |
     {'absent', amqqueue:amqqueue(), absent_reason()} |
+    {'error', Type :: atom(), Reason :: string(), Args :: term()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
     declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser, node()).
@@ -219,6 +220,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
               node() | {'ignore_location', node()}) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
     {'absent', amqqueue:amqqueue(), absent_reason()} |
+    {'error', Type :: atom(), Reason :: string(), Args :: term()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
         Owner, ActingUser, Node) ->

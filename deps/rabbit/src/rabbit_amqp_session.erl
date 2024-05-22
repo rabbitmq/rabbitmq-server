@@ -71,7 +71,7 @@
 -export([init/1,
          terminate/2,
          handle_call/3,
-         handle_cast/2, 
+         handle_cast/2,
          handle_info/2,
          format_status/1]).
 
@@ -2612,7 +2612,6 @@ declare_queue(QNameBin,
               PermCache0) ->
     QName = rabbit_misc:r(Vhost, queue, QNameBin),
     PermCache = check_resource_access(QName, configure, User, PermCache0),
-    check_vhost_queue_limit(Vhost, QName),
     rabbit_core_metrics:queue_declared(QName),
     Q0 = amqqueue:new(QName,
                       _Pid = none,
@@ -2628,6 +2627,11 @@ declare_queue(QNameBin,
             rabbit_core_metrics:queue_created(QName);
         {existing, _Q} ->
             ok;
+        {error, queue_limit_exceeded, Reason, ReasonArgs} ->
+            protocol_error(
+              ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
+              Reason,
+              ReasonArgs);
         Other ->
             protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                            "Failed to declare ~s: ~p",
@@ -2866,17 +2870,6 @@ check_topic_authorisation(#exchange{type = topic,
     end;
 check_topic_authorisation(_, _, _, _, Cache) ->
     Cache.
-
-check_vhost_queue_limit(Vhost, QName) ->
-    case rabbit_vhost_limit:is_over_queue_limit(Vhost) of
-        false ->
-            ok;
-        {true, Limit} ->
-            protocol_error(
-              ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
-              "cannot declare ~ts: vhost queue limit (~p) is reached",
-              [rabbit_misc:rs(QName), Limit])
-    end.
 
 check_user_id(Mc, User) ->
     case rabbit_access_control:check_user_id(Mc, User) of
