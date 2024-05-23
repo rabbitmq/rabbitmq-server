@@ -12,7 +12,6 @@
 -export([variances/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
--include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
 
 %%--------------------------------------------------------------------

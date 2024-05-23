@@ -7,7 +7,6 @@
 
 -module(unit_queue_consumers_SUITE).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).

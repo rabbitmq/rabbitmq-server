@@ -8,7 +8,6 @@
 -module(peer_discovery_classic_config_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
--include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 

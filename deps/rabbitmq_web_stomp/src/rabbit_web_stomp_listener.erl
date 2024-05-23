@@ -17,8 +17,6 @@
 %% for testing purposes
 -export([get_binding_address/1, get_tcp_port/1, get_tcp_conf/2]).
 
--include_lib("rabbitmq_stomp/include/rabbit_stomp.hrl").
-
 -import(rabbit_misc, [pget/2]).
 
 -define(TCP_PROTOCOL, 'http/web-stomp').

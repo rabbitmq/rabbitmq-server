@@ -2,8 +2,6 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--include("rabbitmq_aws.hrl").
-
 parse_test_() ->
   [
     {"string decoding", fun() ->

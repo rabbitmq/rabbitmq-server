@@ -51,8 +51,6 @@
 -define(STORE_FD_RESERVATIONS, 2).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("kernel/include/file.hrl").
-
 %% Set to true to get an awful lot of debug logs.
 -if(false).
 -define(DEBUG(X,Y), logger:debug("~0p: " ++ X, [?FUNCTION_NAME|Y])).

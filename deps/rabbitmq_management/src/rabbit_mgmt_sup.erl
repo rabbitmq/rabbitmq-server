@@ -13,7 +13,6 @@
 -export([start_link/0]).
 -export([setup_wm_logging/0]).
 
--include_lib("rabbitmq_management_agent/include/rabbit_mgmt_metrics.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
 

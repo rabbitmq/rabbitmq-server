@@ -10,7 +10,6 @@
 -export([parse/2,
          ensure_defaults/2]).
 
--include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
 
 resolve_module(amqp091) -> rabbit_amqp091_shovel;

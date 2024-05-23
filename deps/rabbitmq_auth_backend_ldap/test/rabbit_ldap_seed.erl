@@ -7,7 +7,6 @@
 
 -module(rabbit_ldap_seed).
 
--include_lib("eldap/include/eldap.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
 -export([seed/1,delete/1]).

@@ -7,8 +7,6 @@
 
 -module(term_to_binary_compat).
 
--include_lib("rabbit_common/include/rabbit.hrl").
-
 -export([term_to_binary_1/1]).
 
 term_to_binary_1(Term) ->

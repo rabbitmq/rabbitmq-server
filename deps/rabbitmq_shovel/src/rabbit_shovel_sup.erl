@@ -12,8 +12,6 @@
 
 -import(rabbit_shovel_config, []).
 
--include("rabbit_shovel.hrl").
-
 start_link() ->
     case parse_configuration(application:get_env(shovels)) of
         {ok, Configurations} ->

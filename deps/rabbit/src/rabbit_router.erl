@@ -7,8 +7,6 @@
 
 -module(rabbit_router).
 -include_lib("stdlib/include/qlc.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
-
 -export([match_bindings/2, match_routing_key/2]).
 
 %%----------------------------------------------------------------------------

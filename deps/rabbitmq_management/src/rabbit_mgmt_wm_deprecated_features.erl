@@ -14,8 +14,6 @@
 -export([deprecated_features/1]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
-
 -ifdef(TEST).
 -export([feature_is_used/1,
          feature_is_unused/1]).

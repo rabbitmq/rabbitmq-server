@@ -9,8 +9,6 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include_lib("common_test/include/ct.hrl").
-
 -compile(export_all).
 
 -define(VHOST, <<"/">>).

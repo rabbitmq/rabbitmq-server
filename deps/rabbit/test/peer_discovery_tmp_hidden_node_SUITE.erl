@@ -8,7 +8,6 @@
 
 -module(peer_discovery_tmp_hidden_node_SUITE).
 
--include_lib("kernel/include/logger.hrl").
 -include_lib("kernel/include/inet.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").

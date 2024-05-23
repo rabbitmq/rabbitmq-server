@@ -119,8 +119,6 @@
 
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
-
 -define(QUEUE, lqueue).
 -define(TIMEOUT_TEST_MSG, <<"timeout_test_msg!">>).
 

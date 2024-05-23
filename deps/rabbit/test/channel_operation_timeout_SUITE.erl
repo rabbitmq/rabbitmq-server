@@ -7,7 +7,6 @@
 
 -module(channel_operation_timeout_SUITE).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("amqqueue.hrl").
 

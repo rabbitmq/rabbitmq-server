@@ -128,7 +128,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/add_uaa_key_command_SUITE.beam"],
         app_name = "rabbitmq_auth_backend_oauth2",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
     )
     erlang_bytecode(
         name = "config_schema_SUITE_beam_files",
@@ -240,5 +239,4 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/add_signing_key_command_SUITE.beam"],
         app_name = "rabbitmq_auth_backend_oauth2",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
     )

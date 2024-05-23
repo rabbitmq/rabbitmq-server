@@ -8,8 +8,6 @@
 -module(rabbit_federation_db).
 
 -include("rabbit_federation.hrl").
--include_lib("amqp_client/include/amqp_client.hrl").
-
 -define(DICT, orddict).
 
 -export([get_active_suffix/3, set_active_suffix/3, prune_scratch/2]).

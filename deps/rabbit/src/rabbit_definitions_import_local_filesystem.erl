@@ -15,8 +15,6 @@
 %%  * rabbit_definitions_import_http
 %%  * rabbit_definitions_hashing
 -module(rabbit_definitions_import_local_filesystem).
--include_lib("rabbit_common/include/rabbit.hrl").
-
 -export([
     is_enabled/0,
     %% definition source options

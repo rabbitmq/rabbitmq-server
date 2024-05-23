@@ -7,7 +7,6 @@
 
 -module(rabbit_federation_status_SUITE).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -include("rabbit_federation.hrl").

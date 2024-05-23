@@ -11,7 +11,6 @@
 -export([start_link/2, init/1]).
 -export([id_to_khepri_path/1]).
 
--include("rabbit_shovel.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 start_link(ShovelName, ShovelConfig) ->

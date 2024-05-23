@@ -7,7 +7,6 @@
 
 -module(prometheus_rabbitmq_federation_collector_SUITE).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("prometheus/include/prometheus_model.hrl").

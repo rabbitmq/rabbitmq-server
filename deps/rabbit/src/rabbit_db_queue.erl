@@ -7,7 +7,6 @@
 
 -module(rabbit_db_queue).
 
--include_lib("kernel/include/logger.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
 -include_lib("khepri/include/khepri.hrl").

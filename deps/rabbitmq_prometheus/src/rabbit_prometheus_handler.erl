@@ -10,7 +10,6 @@
 -export([generate_response/2, content_types_provided/2, is_authorized/2]).
 -export([setup/0]).
 
--include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_web_dispatch/include/rabbitmq_web_dispatch_records.hrl").
 
 -define(SCRAPE_DURATION, telemetry_scrape_duration_seconds).

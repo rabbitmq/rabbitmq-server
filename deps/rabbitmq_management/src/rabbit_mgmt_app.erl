@@ -14,7 +14,6 @@
 -export([get_listeners_config/0]).
 -endif.
 
--include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -define(TCP_CONTEXT, rabbitmq_management_tcp).

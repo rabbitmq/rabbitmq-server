@@ -7,8 +7,6 @@
 
 -module(rabbit_authz_backend).
 
--include("rabbit.hrl").
-
 %% Check that a user can log in, when this backend is being used for
 %% authorisation only. Authentication has already taken place
 %% successfully, but we need to check that the user exists in this

@@ -12,7 +12,6 @@
 -export([authSettings/0,resolve_oauth_provider_url/1,resolve_oauth_provider_url/3]). %% for testing only
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("oauth2_client/include/oauth2_client.hrl").
 
 %%--------------------------------------------------------------------

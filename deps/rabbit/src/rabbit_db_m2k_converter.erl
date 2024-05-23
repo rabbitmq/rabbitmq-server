@@ -9,7 +9,6 @@
 
 -behaviour(mnesia_to_khepri_converter).
 
--include_lib("kernel/include/logger.hrl").
 -include_lib("khepri/include/khepri.hrl").
 -include_lib("khepri_mnesia_migration/src/kmm_logging.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").

@@ -3,7 +3,6 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).

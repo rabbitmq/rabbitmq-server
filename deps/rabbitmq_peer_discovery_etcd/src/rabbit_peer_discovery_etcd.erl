@@ -10,7 +10,6 @@
 -module(rabbit_peer_discovery_etcd).
 -behaviour(rabbit_peer_discovery_backend).
 
--include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_peer_discovery_common/include/rabbit_peer_discovery.hrl").
 -include("rabbit_peer_discovery_etcd.hrl").
 

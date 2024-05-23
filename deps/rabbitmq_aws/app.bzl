@@ -124,7 +124,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbitmq_aws_json_tests.erl"],
         outs = ["test/rabbitmq_aws_json_tests.beam"],
-        hdrs = ["include/rabbitmq_aws.hrl"],
         app_name = "rabbitmq_aws",
         erlc_opts = "//:test_erlc_opts",
     )
@@ -168,7 +167,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbitmq_aws_xml_tests.erl"],
         outs = ["test/rabbitmq_aws_xml_tests.beam"],
-        hdrs = ["include/rabbitmq_aws.hrl"],
         app_name = "rabbitmq_aws",
         erlc_opts = "//:test_erlc_opts",
     )

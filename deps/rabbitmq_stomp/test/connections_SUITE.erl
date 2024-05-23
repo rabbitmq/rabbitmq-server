@@ -10,7 +10,6 @@
 
 -import(rabbit_misc, [pget/2]).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
 -define(DESTINATION, "/queue/bulk-test").

@@ -11,7 +11,6 @@
          await_online_synchronised_mirrors/1,
          list_with_minimum_quorum_for_cli/0]).
 
--include_lib("rabbit_common/include/rabbit.hrl").
 %%
 %% API
 %%

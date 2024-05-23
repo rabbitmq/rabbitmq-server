@@ -11,8 +11,6 @@
 -export([variances/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
-
 init(Req, _State) ->
   {cowboy_rest, rabbit_mgmt_headers:set_common_permission_headers(Req, ?MODULE), #context{}}.
 

@@ -7,8 +7,6 @@
 
 -module(rabbit_trust_store_http_provider).
 
--include_lib("public_key/include/public_key.hrl").
-
 -behaviour(rabbit_trust_store_certificate_provider).
 
 -define(PROFILE, ?MODULE).

@@ -9,7 +9,6 @@
 
 -behaviour(supervisor2).
 
--include_lib("common_test/include/ct.hrl").
 -include("rabbit.hrl").
 
 -compile(export_all).

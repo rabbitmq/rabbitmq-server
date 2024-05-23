@@ -170,7 +170,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/amqp10_dynamic_SUITE.beam"],
         app_name = "rabbitmq_shovel",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app"],
     )
     erlang_bytecode(
         name = "amqp10_shovel_SUITE_beam_files",

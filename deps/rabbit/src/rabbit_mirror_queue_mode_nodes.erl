@@ -7,8 +7,6 @@
 
 -module(rabbit_mirror_queue_mode_nodes).
 
--include_lib("rabbit_common/include/rabbit.hrl").
-
 -behaviour(rabbit_mirror_queue_mode).
 
 -export([description/0, suggested_queue_nodes/5, validate_policy/1]).

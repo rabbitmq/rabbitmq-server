@@ -12,7 +12,6 @@
 
 -compile(export_all).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -import(sjx_evaluator, [evaluate/2]).

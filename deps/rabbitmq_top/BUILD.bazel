@@ -46,7 +46,6 @@ rabbitmq_app(
     license_files = [":license_files"],
     priv = [":priv"],
     deps = [
-        "//deps/amqp_client:erlang_app",
         "//deps/rabbit:erlang_app",  # keep
         "//deps/rabbit_common:erlang_app",
         "//deps/rabbitmq_management:erlang_app",

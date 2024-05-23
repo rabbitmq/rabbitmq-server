@@ -322,6 +322,10 @@ jose:
 - jose_xchacha20_poly1305
 - jose_xchacha20_poly1305_crypto
 - jose_xchacha20_poly1305_unsupported
+katana_code:
+- ktn_code
+- ktn_dodger
+- ktn_io_string
 khepri:
 - khepri
 - khepri_adv
@@ -1275,6 +1279,15 @@ ranch:
 - ranch_sup
 - ranch_tcp
 - ranch_transport
+rebar3_format:
+- default_formatter
+- erlfmt_formatter
+- otp_formatter
+- rebar3_ast_formatter
+- rebar3_format
+- rebar3_format_prv
+- rebar3_formatter
+- sr_formatter
 recon:
 - recon
 - recon_alloc

@@ -16,8 +16,6 @@
 -import(rabbit_misc, [pget/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
-
 -define(BASIC_COLUMNS, ["hashing_algorithm",
 			"rabbit_password_hashing_sha256",
 			"limits",

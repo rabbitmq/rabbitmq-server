@@ -14,8 +14,6 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp.hrl").
 -include("rabbit_stomp_frame.hrl").
--include("rabbit_stomp_headers.hrl").
-
 all() ->
     [{group, list_to_atom("version_" ++ V)} || V <- ?SUPPORTED_VERSIONS].
 
