@@ -267,6 +267,24 @@
                     {mfa,         {logger, debug, ["'networking' boot step skipped and moved to end of startup", [], #{domain => ?RMQLOG_DOMAIN_GLOBAL}]}},
                     {requires,    notify_cluster}]}).
 
+<<<<<<< HEAD
+=======
+%% This mechanism is necessary in environments where a cluster is formed in parallel,
+%% which is the case with many container orchestration tools.
+%% In such scenarios, a virtual host can be declared before the cluster is formed and all
+%% cluster members are known, e.g. via definition import.
+-rabbit_boot_step({virtual_host_reconciliation,
+    [{description, "makes sure all virtual host have running processes on all nodes"},
+        {mfa,         {rabbit_vhosts, boot, []}},
+        {requires,    notify_cluster}]}).
+
+-rabbit_boot_step({pg_local,
+                   [{description, "local-only pg scope"},
+                    {mfa,         {rabbit, pg_local, []}},
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
+
+>>>>>>> 37778fd934 (Periodically reconcile virtual host processes)
 %%---------------------------------------------------------------------------
 
 -include_lib("rabbit_common/include/rabbit_framing.hrl").

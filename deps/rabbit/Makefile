@@ -121,12 +121,13 @@ define PROJECT_ENV
 	    %% interval at which connection/channel tracking executes post operations
 	    {tracking_execution_timeout, 15000},
 	    {stream_messages_soft_limit, 256},
-      {track_auth_attempt_source, false},
-			{credentials_obfuscation_fallback_secret, <<"nocookie">>},
-      {dead_letter_worker_consumer_prefetch, 32},
-      {dead_letter_worker_publisher_confirm_timeout, 180000},
-			%% EOL date for the current release series, if known/announced
-			{release_series_eol_date, none}
+      	{track_auth_attempt_source, false},
+		{credentials_obfuscation_fallback_secret, <<"nocookie">>},
+      	{dead_letter_worker_consumer_prefetch, 32},
+      	{dead_letter_worker_publisher_confirm_timeout, 180000},
+		%% EOL date for the current release series, if known/announced
+		{release_series_eol_date, none},
+		{vhost_process_reconciliation_run_interval, 30}
 	  ]
 endef
 
