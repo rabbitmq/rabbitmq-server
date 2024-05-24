@@ -14,7 +14,7 @@ endif
 # dialyzer
 # --------------------------------------------------------------------
 
-DIALYZER_OPTS ?= -Werror_handling
+DIALYZER_OPTS ?= -Werror_handling -Wunmatched_returns -Wunknown
 
 dialyze: ERL_LIBS = $(APPS_DIR):$(DEPS_DIR):$(DEPS_DIR)/rabbitmq_cli/_build/dev/lib:$(dir $(shell elixir --eval ":io.format '~s~n', [:code.lib_dir :elixir ]"))
 
