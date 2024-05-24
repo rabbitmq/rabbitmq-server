@@ -49,7 +49,7 @@ describe('management user with vhosts permissions', function () {
     await overview.waitForQueuesTab()
     assert.ok(!await overview.isPopupWarningDisplayed())
   })
-  it('can access limited options in admin tab', async function () {
+  it('can access limited options in admin tab', async function () {    
     await overview.clickOnAdminTab()
     await overview.waitForAdminTab()
     assert.ok(!await overview.isPopupWarningDisplayed())

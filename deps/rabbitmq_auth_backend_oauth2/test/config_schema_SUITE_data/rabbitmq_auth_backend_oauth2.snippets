@@ -129,6 +129,8 @@
         auth_oauth2.oauth_providers.uaa.issuer = https://uaa
         auth_oauth2.oauth_providers.keycloak.token_endpoint = https://keycloak/token
         auth_oauth2.oauth_providers.keycloak.jwks_uri = https://keycloak/keys
+        auth_oauth2.oauth_providers.keycloak.authorization_endpoint = https://keycloak/authorize
+        auth_oauth2.oauth_providers.keycloak.end_session_endpoint = https://keycloak/logout
         auth_oauth2.oauth_providers.keycloak.https.cacertfile = /mnt/certs/ca_certificate.pem
         auth_oauth2.oauth_providers.keycloak.https.verify = verify_none",
         [
@@ -149,8 +151,10 @@
                     {verify, verify_none},
                     {cacertfile, "/mnt/certs/ca_certificate.pem"}
                   ]},
+                  {end_session_endpoint, <<"https://keycloak/logout">>},
+                  {authorization_endpoint, <<"https://keycloak/authorize">>},
                   {token_endpoint, <<"https://keycloak/token">>},
-                  {jwks_uri, <<"https://keycloak/keys">>}
+                  {jwks_uri, <<"https://keycloak/keys">>}                  
                 ]
 
               }
