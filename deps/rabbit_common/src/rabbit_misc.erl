@@ -1141,8 +1141,8 @@ rabbitmq_and_erlang_versions() ->
 which_applications() ->
     try
         application:which_applications(10000)
-    catch
-        exit:{timeout, _} -> []
+    catch _:_:_Stacktrace ->
+        []
     end.
 
 sequence_error([T])                      -> T;
