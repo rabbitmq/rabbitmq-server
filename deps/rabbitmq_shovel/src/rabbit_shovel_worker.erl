@@ -62,6 +62,9 @@ handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
 handle_cast(init, State = #state{config = Config0}) ->
+    rabbit_log_shovel:debug("Shovel ~ts is reporting its status", [human_readable_name(State#state.name)]),
+    rabbit_shovel_status:report(State#state.name, State#state.type, starting),
+    rabbit_log_shovel:info("Shovel ~ts will now try to connect...", [human_readable_name(State#state.name)]),
     try rabbit_shovel_behaviour:connect_source(Config0) of
       Config ->
         rabbit_log_shovel:debug("Shovel ~ts connected to source", [human_readable_name(maps:get(name, Config))]),

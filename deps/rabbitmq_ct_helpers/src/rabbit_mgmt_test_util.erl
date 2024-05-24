@@ -175,6 +175,9 @@ http_delete(Config, Path, User, Pass, CodeExp) ->
     assert_code(CodeExp, CodeAct, "DELETE", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 
+http_get_fails(Config, Path) ->
+    {error, {failed_connect, _}} = req(Config, get, Path, []).
+
 format_for_upload(none) ->
     <<"">>;
 format_for_upload(List) ->

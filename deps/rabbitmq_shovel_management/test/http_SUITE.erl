@@ -11,60 +11,99 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 
+-import(rabbit_mgmt_test_util, [http_get/3, http_get/5, http_put/4, http_post/4, http_delete/3, http_delete/4, http_get_fails/2]).
+-import(rabbit_ct_helpers, [await_condition/2]).
+
 -compile(export_all).
 
 all() ->
     [
+<<<<<<< HEAD
       {group, non_parallel_tests}
+=======
+     {group, dynamic_shovels},
+     {group, static_shovels},
+     {group, plugin_management}
+>>>>>>> cae964dba1 (ctl delete_shovel: use a more effective way)
     ].
 
 groups() ->
     [
+<<<<<<< HEAD
      {non_parallel_tests, [], [
                                amqp10_shovels,
                                shovels,
                                dynamic_plugin_enable_disable
                               ]}
+=======
+     {dynamic_shovels, [], [
+                  start_and_list_a_dynamic_amqp10_shovel,
+                  create_and_delete_a_dynamic_shovel_that_successfully_connects,
+                  create_and_delete_a_dynamic_shovel_that_fails_to_connect
+                 ]},
+
+    {static_shovels, [], [
+                    start_static_shovels
+                 ]},
+
+    {plugin_management, [], [
+                    dynamic_plugin_enable_disable
+                  ]}
+>>>>>>> cae964dba1 (ctl delete_shovel: use a more effective way)
     ].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
-init_per_suite(Config) ->
+init_per_group(static_shovels, Config) ->
+    rabbit_ct_helpers:log_environment(),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, ?MODULE}
+    ]),
+    rabbit_ct_helpers:run_setup_steps(Config1, [
+        fun configure_shovels/1,
+        fun start_inets/1
+    ] ++ rabbit_ct_broker_helpers:setup_steps() ++
+         rabbit_ct_client_helpers:setup_steps());
+init_per_group(_Group, Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1, [
-        fun configure_shovels/1,
         fun start_inets/1
       ] ++
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
-end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config,
-      rabbit_ct_client_helpers:teardown_steps() ++
-      rabbit_ct_broker_helpers:teardown_steps()).
-
-init_per_group(_, Config) ->
-    Config.
-
-end_per_group(_, Config) ->
-    Config.
-
-init_per_testcase(Testcase, Config) ->
-    rabbit_ct_helpers:testcase_started(Config, Testcase).
-
-end_per_testcase(amqp10_shovels = Testcase, Config) ->
-    http_delete(Config,  "/parameters/shovel/%2f/my-dynamic-amqp10", ?NO_CONTENT),
-    rabbit_ct_helpers:testcase_finished(Config, Testcase);
-end_per_testcase(shovels = Testcase, Config) ->
+end_per_group(start_static_shovels, Config) ->
     http_delete(Config, "/vhosts/v", ?NO_CONTENT),
     http_delete(Config, "/users/admin", ?NO_CONTENT),
     http_delete(Config, "/users/mon", ?NO_CONTENT),
-    rabbit_ct_helpers:testcase_finished(Config, Testcase);
+
+    remove_all_dynamic_shovels(Config, <<"/">>),
+
+    rabbit_ct_helpers:run_teardown_steps(Config,
+        rabbit_ct_client_helpers:teardown_steps() ++
+        rabbit_ct_broker_helpers:teardown_steps());
+end_per_group(_, Config) ->
+    remove_all_dynamic_shovels(Config, <<"/">>),
+    rabbit_ct_helpers:run_teardown_steps(Config,
+        rabbit_ct_client_helpers:teardown_steps() ++
+        rabbit_ct_broker_helpers:teardown_steps()).
+
+
+init_per_testcase(create_and_delete_a_dynamic_shovel_that_fails_to_connect = Testcase, Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "not mixed versions compatible"};
+        _ ->
+            rabbit_ct_helpers:testcase_started(Config, Testcase)
+    end;
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
+
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -89,17 +128,22 @@ configure_shovels(Config) ->
         ]}).
 
 start_inets(Config) ->
-    ok = application:start(inets),
+    _ = application:start(inets),
     Config.
 
 %% -------------------------------------------------------------------
-%% Testcases.
+%% Testcases
 %% -------------------------------------------------------------------
 
-amqp10_shovels(Config) ->
+start_and_list_a_dynamic_amqp10_shovel(Config) ->
     Port = integer_to_binary(
              rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)),
-    http_put(Config, "/parameters/shovel/%2f/my-dynamic-amqp10",
+
+    remove_all_dynamic_shovels(Config, <<"/">>),
+    ID = {<<"/">>, <<"dynamic-amqp10-1">>},
+    await_shovel_removed(Config, ID),
+
+    http_put(Config, "/parameters/shovel/%2f/dynamic-amqp10-1",
                   #{value => #{'src-protocol' => <<"amqp10">>,
                                'src-uri' => <<"amqp://localhost:", Port/binary>>,
                                'src-address'  => <<"test">>,
@@ -109,29 +153,10 @@ amqp10_shovels(Config) ->
                                'dest-properties' => #{},
                                'dest-application-properties' => #{},
                                'dest-message-annotations' => #{}}}, ?CREATED),
-    % sleep to give the shovel time to emit a full report
-    % that includes the protocols used.
-    wait_until(fun () ->
-		       case lists:sort(fun(#{name := AName}, #{name := BName}) ->
-					       AName < BName
-				       end,
-				       http_get(Config, "/shovels", "guest", "guest", ?OK))
-		       of
-			   [#{name := <<"my-dynamic-amqp10">>,
-			      src_protocol := <<"amqp10">>,
-			      dest_protocol := <<"amqp10">>,
-			      type := <<"dynamic">>},
-			    #{name := <<"my-static">>,
-			      src_protocol := <<"amqp091">>,
-			      dest_protocol := <<"amqp091">>,
-			      type := <<"static">>}] ->
-			       true;
-			   _ ->
-			       false
-		       end
-	       end, 20),
-    ok.
 
+    await_shovel_startup(Config, ID),
+
+    ok.
 
 -define(StaticPattern, #{name := <<"my-static">>,
                          type := <<"static">>}).
@@ -144,7 +169,7 @@ amqp10_shovels(Config) ->
                            vhost := <<"v">>,
                            type  := <<"dynamic">>}).
 
-shovels(Config) ->
+start_static_shovels(Config) ->
     http_put(Config, "/users/admin",
 	     #{password => <<"admin">>, tags => <<"administrator">>}, ?CREATED),
     http_put(Config, "/users/mon",
@@ -209,9 +234,56 @@ shovels(Config) ->
 		 http_get(Config, "/shovels/v",   "mon",   "mon", ?OK)),
     ok.
 
-%% It's a bit arbitrary to be testing this here, but we want to be
-%% able to test that mgmt extensions can be started and stopped
-%% *somewhere*, and here is as good a place as any.
+create_and_delete_a_dynamic_shovel_that_successfully_connects(Config) ->
+    Port = integer_to_binary(
+        rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)),
+
+    remove_all_dynamic_shovels(Config, <<"/">>),
+    Name = <<"dynamic-amqp10-to-delete-1">>,
+    ID = {<<"/">>, Name},
+    await_shovel_removed(Config, ID),
+
+    http_put(Config, "/parameters/shovel/%2f/dynamic-amqp10-to-delete-1",
+        #{value => #{'src-protocol' => <<"amqp10">>,
+            'src-uri' => <<"amqp://localhost:", Port/binary>>,
+            'src-address'  => <<"test">>,
+            'dest-protocol' => <<"amqp10">>,
+            'dest-uri' => <<"amqp://localhost:", Port/binary>>,
+            'dest-address' => <<"test2">>,
+            'dest-properties' => #{},
+            'dest-application-properties' => #{},
+            'dest-message-annotations' => #{}}}, ?CREATED),
+
+    await_shovel_startup(Config, ID),
+    timer:sleep(3_000),
+    delete_shovel(Config, Name),
+    await_shovel_removed(Config, ID).
+
+create_and_delete_a_dynamic_shovel_that_fails_to_connect(Config) ->
+    Port = integer_to_binary(
+        rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)),
+
+    remove_all_dynamic_shovels(Config, <<"/">>),
+    Name = <<"dynamic-amqp10-to-delete-2">>,
+    ID = {<<"/">>, Name},
+    await_shovel_removed(Config, ID),
+
+    http_put(Config, "/parameters/shovel/%2f/dynamic-amqp10-to-delete-2",
+        #{value => #{'src-protocol' => <<"amqp10">>,
+            'src-uri' => <<"amqp://non-existing-hostname.lolz.wut:", Port/binary>>,
+            'src-address'  => <<"test">>,
+            'dest-protocol' => <<"amqp10">>,
+            'dest-uri' => <<"amqp://non-existing-hostname.lolz.wut:", Port/binary>>,
+            'dest-address' => <<"test2">>,
+            'dest-properties' => #{},
+            'dest-application-properties' => #{},
+            'dest-message-annotations' => #{}}}, ?CREATED),
+
+    await_shovel_startup(Config, ID),
+    timer:sleep(3_000),
+    delete_shovel(Config, Name),
+    await_shovel_removed(Config, ID).
+
 dynamic_plugin_enable_disable(Config) ->
     http_get(Config, "/shovels", ?OK),
     rabbit_ct_broker_helpers:disable_plugin(Config, 0,
@@ -220,8 +292,8 @@ dynamic_plugin_enable_disable(Config) ->
     http_get(Config, "/overview", ?OK),
     rabbit_ct_broker_helpers:disable_plugin(Config, 0,
       "rabbitmq_management"),
-    http_fail(Config, "/shovels"),
-    http_fail(Config, "/overview"),
+    http_get_fails(Config, "/shovels"),
+    http_get_fails(Config, "/overview"),
     rabbit_ct_broker_helpers:enable_plugin(Config, 0,
       "rabbitmq_management"),
     http_get(Config, "/shovels", ?NOT_FOUND),
@@ -232,97 +304,9 @@ dynamic_plugin_enable_disable(Config) ->
     http_get(Config, "/overview", ?OK),
     passed.
 
-%%---------------------------------------------------------------------------
-%% TODO this is mostly copypasta from the mgmt tests
-
-http_get(Config, Path) ->
-    http_get(Config, Path, ?OK).
-
-http_get(Config, Path, CodeExp) ->
-    http_get(Config, Path, "guest", "guest", CodeExp).
-
-http_get(Config, Path, User, Pass, CodeExp) ->
-    {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
-        req(Config, get, Path, [auth_header(User, Pass)]),
-    assert_code(CodeExp, CodeAct, "GET", Path, ResBody),
-    decode(CodeExp, Headers, ResBody).
-
-http_fail(Config, Path) ->
-    {error, {failed_connect, _}} = req(Config, get, Path, []).
-
-http_put(Config, Path, List, CodeExp) ->
-    http_put_raw(Config, Path, format_for_upload(List), CodeExp).
-
-http_put(Config, Path, List, User, Pass, CodeExp) ->
-    http_put_raw(Config, Path, format_for_upload(List), User, Pass, CodeExp).
-
-http_post(Config, Path, List, CodeExp) ->
-    http_post_raw(Config, Path, format_for_upload(List), CodeExp).
-
-http_post(Config, Path, List, User, Pass, CodeExp) ->
-    http_post_raw(Config, Path, format_for_upload(List), User, Pass, CodeExp).
-
-format_for_upload(none) ->
-    <<"">>;
-format_for_upload(Map) ->
-    iolist_to_binary(rabbit_json:encode(convert_keys(Map))).
-
-convert_keys(Map) ->
-    maps:fold(fun
-        (K, V, Acc) when is_map(V) ->
-            Acc#{atom_to_binary(K, latin1) => convert_keys(V)};
-        (K, V, Acc) ->
-            Acc#{atom_to_binary(K, latin1) => V}
-    end, #{}, Map).
-
-http_put_raw(Config, Path, Body, CodeExp) ->
-    http_upload_raw(Config, put, Path, Body, "guest", "guest", CodeExp).
-
-http_put_raw(Config, Path, Body, User, Pass, CodeExp) ->
-    http_upload_raw(Config, put, Path, Body, User, Pass, CodeExp).
-
-http_post_raw(Config, Path, Body, CodeExp) ->
-    http_upload_raw(Config, post, Path, Body, "guest", "guest", CodeExp).
-
-http_post_raw(Config, Path, Body, User, Pass, CodeExp) ->
-    http_upload_raw(Config, post, Path, Body, User, Pass, CodeExp).
-
-http_upload_raw(Config, Type, Path, Body, User, Pass, CodeExp) ->
-    {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
-        req(Config, Type, Path, [auth_header(User, Pass)], Body),
-    assert_code(CodeExp, CodeAct, Type, Path, ResBody),
-    decode(CodeExp, Headers, ResBody).
-
-http_delete(Config, Path, CodeExp) ->
-    http_delete(Config, Path, "guest", "guest", CodeExp).
-
-http_delete(Config, Path, User, Pass, CodeExp) ->
-    {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
-        req(Config, delete, Path, [auth_header(User, Pass)]),
-    assert_code(CodeExp, CodeAct, "DELETE", Path, ResBody),
-    decode(CodeExp, Headers, ResBody).
-
-assert_code(CodeExp, CodeAct, _Type, _Path, _Body) ->
-    ?assertEqual(CodeExp, CodeAct).
-
-req_uri(Config, Path) ->
-    rabbit_misc:format("~ts/api~ts", [
-        rabbit_ct_broker_helpers:node_uri(Config, 0, management),
-        Path
-      ]).
-
-req(Config, Type, Path, Headers) ->
-    httpc:request(Type,
-      {req_uri(Config, Path), Headers},
-      ?HTTPC_OPTS, []).
-
-req(Config, Type, Path, Headers, Body) ->
-    httpc:request(Type,
-      {req_uri(Config, Path), Headers, "application/json", Body},
-      ?HTTPC_OPTS, []).
-
-decode(?OK, _Headers,  ResBody) -> cleanup(rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)));
-decode(_,    Headers, _ResBody) -> Headers.
+%%
+%% Implementation
+%%
 
 cleanup(L) when is_list(L) ->
     [cleanup(I) || I <- L];
@@ -345,13 +329,37 @@ assert_item(ExpI, ActI) ->
     ExpI = maps:with(maps:keys(ExpI), ActI),
     ok.
 
-wait_until(_Fun, 0) ->
-    ?assert(wait_failed);
-wait_until(Fun, N) ->
-    case Fun() of
-	true ->
-	    ok;
-	false ->
-	    timer:sleep(500),
-	    wait_until(Fun, N - 1)
+delete_shovel(Config, Name) ->
+    Path = io_lib:format("/shovels/vhost/%2F/~s", [Name]),
+    http_delete(Config, Path, ?NO_CONTENT).
+
+remove_all_dynamic_shovels(Config, VHost) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+        rabbit_runtime_parameters, clear_vhost, [VHost, <<"CT tests">>]).
+
+await_shovel_startup(Config, Name) ->
+    await_shovel_startup(Config, Name, 10_000).
+
+await_shovel_startup(Config, Name, Timeout) ->
+    await_condition(
+        fun() ->
+            does_shovel_exist(Config, Name)
+        end, Timeout).
+
+await_shovel_removed(Config, Name) ->
+    await_shovel_removed(Config, Name, 10_000).
+
+await_shovel_removed(Config, Name, Timeout) ->
+    await_condition(
+        fun() ->
+            not does_shovel_exist(Config, Name)
+        end, Timeout).
+
+lookup_shovel_status(Config, Name) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status, lookup, [Name]).
+
+does_shovel_exist(Config, Name) ->
+    case lookup_shovel_status(Config, Name) of
+        not_found -> false;
+        _Found    -> true
     end.

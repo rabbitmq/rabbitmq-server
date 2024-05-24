@@ -1,5 +1,5 @@
 %%% @doc Unit tests of rabbit_shovel_mgmt_util
--module(rabbit_shovel_mgmt_util_SUITE).
+-module(unit_SUITE).
 
 -compile([export_all, nowarn_export_all]).
 
