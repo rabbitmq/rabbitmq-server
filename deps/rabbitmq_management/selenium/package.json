@@ -4,7 +4,6 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "mocha --recursive --trace-warnings --timeout 45000",
     "fakeportal": "node fakeportal/app.js",
     "fakeproxy": "node fakeportal/proxy.js",
     "amqp10_roundtriptest": "eval $(cat $ENV_FILE ) &&./run-amqp10-roundtriptest",

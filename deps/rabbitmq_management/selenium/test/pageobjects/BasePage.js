@@ -17,11 +17,14 @@ module.exports = class BasePage {
   driver
   timeout
   polling
+  interactionDelay
 
   constructor (webdriver) {
     this.driver = webdriver
     this.timeout = parseInt(process.env.SELENIUM_TIMEOUT) || 1000 // max time waiting to locate an element. Should be less that test timeout
     this.polling = parseInt(process.env.SELENIUM_POLLING) || 500 // how frequent selenium searches for an element
+    this.interactionDelay = parseInt(process.env.SELENIUM_INTERACTION_DELAY) || 0 // slow down interactions (when rabbit is behind a http proxy)
+    console.log("Interaction Delay : " + this.interactionDelay)
   }
 
 
@@ -54,10 +57,10 @@ module.exports = class BasePage {
     return this.waitForDisplayed(CONNECTIONS_TAB)
   }
 
-  async clickOnAdminTab () {
+  async clickOnAdminTab () {    
     return this.click(ADMIN_TAB)
   }
-  async waitForAdminTab() {
+  async waitForAdminTab() {    
     return this.waitForDisplayed(ADMIN_TAB)
   }
 
@@ -71,7 +74,7 @@ module.exports = class BasePage {
   async clickOnExchangesTab () {
     return this.click(EXCHANGES_TAB)
   }
-  async waitForExchangesTab() {
+  async waitForExchangesTab() {    
     return this.waitForDisplayed(EXCHANGES_TAB)
   }
 
@@ -79,10 +82,11 @@ module.exports = class BasePage {
     return this.click(QUEUES_AND_STREAMS_TAB)
   }
   async waitForQueuesTab() {
+    await this.driver.sleep(250)
     return this.waitForDisplayed(QUEUES_AND_STREAMS_TAB)
   }
 
-  async clickOnStreamTab () {
+  async clickOnStreamTab () {    
     return this.click(STREAM_CONNECTIONS_TAB)
   }
   async waitForStreamConnectionsTab() {
@@ -153,8 +157,8 @@ module.exports = class BasePage {
   async isDisplayed(locator) {
       try {
         element = await driver.findElement(locator)
-        console.log("element:"+element)
-        return this.driver.wait(until.elementIsVisible(element), this.timeout / 2,
+        
+        return this.driver.wait(until.elementIsVisible(element), this.timeout,
           'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
           this.polling / 2)
       }catch(error) {
@@ -186,7 +190,13 @@ module.exports = class BasePage {
 
 
   async waitForDisplayed (locator) {
-    return this.waitForVisible(await this.waitForLocated(locator))
+    if (this.interactionDelay && this.interactionDelay > 0) await this.driver.sleep(this.interactionDelay)    
+    try {
+      return this.waitForVisible(await this.waitForLocated(locator))
+    }catch(error) {
+      console.error("Failed to waitForDisplayed for locator " + locator)
+      throw error
+    } 
   }
 
   async getText (locator) {
@@ -200,6 +210,8 @@ module.exports = class BasePage {
   }
 
   async click (locator) {
+    if (this.interactionDelay) await this.driver.sleep(this.interactionDelay)
+
     const element = await this.waitForDisplayed(locator)
     try {
       return element.click()
