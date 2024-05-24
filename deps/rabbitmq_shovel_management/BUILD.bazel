@@ -99,16 +99,7 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_suite(
-    name = "rabbit_shovel_mgmt_SUITE",
-    deps = [
-        "//deps/rabbit_common:erlang_app",
-        "//deps/rabbitmq_management_agent:erlang_app",
-        "@meck//:erlang_app",
-    ],
-)
-
-rabbitmq_suite(
-    name = "rabbit_shovel_mgmt_util_SUITE",
+    name = "unit_SUITE",
     deps = [
         "//deps/rabbit_common:erlang_app",
         "//deps/rabbitmq_shovel:erlang_app",

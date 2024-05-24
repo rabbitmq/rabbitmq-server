@@ -112,7 +112,9 @@ fmt_status({'running', Proplist}, Map) ->
 fmt_status('starting' = St, Map) ->
     Map#{state => St,
          source => <<>>,
+         source_protocol => <<>>,
          destination => <<>>,
+         destination_protocol => <<>>,
          termination_reason => <<>>};
 fmt_status({'terminated' = St, Reason}, Map) ->
     Map#{state => St,
