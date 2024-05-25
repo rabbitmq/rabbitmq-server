@@ -18,24 +18,13 @@
 
 all() ->
     [
-<<<<<<< HEAD
-      {group, non_parallel_tests}
-=======
      {group, dynamic_shovels},
      {group, static_shovels},
      {group, plugin_management}
->>>>>>> cae964dba1 (ctl delete_shovel: use a more effective way)
     ].
 
 groups() ->
     [
-<<<<<<< HEAD
-     {non_parallel_tests, [], [
-                               amqp10_shovels,
-                               shovels,
-                               dynamic_plugin_enable_disable
-                              ]}
-=======
      {dynamic_shovels, [], [
                   start_and_list_a_dynamic_amqp10_shovel,
                   create_and_delete_a_dynamic_shovel_that_successfully_connects,
@@ -49,7 +38,6 @@ groups() ->
     {plugin_management, [], [
                     dynamic_plugin_enable_disable
                   ]}
->>>>>>> cae964dba1 (ctl delete_shovel: use a more effective way)
     ].
 
 %% -------------------------------------------------------------------
