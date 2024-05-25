@@ -27,7 +27,8 @@
          members,
          memory,
          readers,
-         consumers
+         consumers,
+         segments
         ]).
 
 -record(state, {timeout :: non_neg_integer()}).
