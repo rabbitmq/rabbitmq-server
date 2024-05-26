@@ -290,7 +290,7 @@ Publish => Key Version PublisherId PublishedMessages
 ```
 
 1. Use version 1 if there is no filter value.
-2. Use version 2 if there is a filter value. 
+2. Use version 2 if there is a filter value.
 
 === PublishConfirm
 
@@ -398,7 +398,7 @@ Deliver => Key Version SubscriptionId OsirisChunk
   DataLength => uint32
   TrailerLength => uint32
   BloomSize => uint8 // size of bloom filter data
-  Reserved => unit24 // unused 3 bytes
+  Reserved => uint24 // unused 3 bytes
   BloomFilterData => [uint8] // bloom filter data, the size of the array is defined by BloomSize
   Messages => [Message] // a continous collection of messages, the size of the array is defined by NumEntries
   Message => EntryTypeAndSize
@@ -425,7 +425,7 @@ Deliver => Key Version SubscriptionId CommittedOffset OsirisChunk
   DataLength => uint32
   TrailerLength => uint32
   BloomSize => uint8 // size of bloom filter data
-  Reserved => unit24 // unused 3 bytes
+  Reserved => uint24 // unused 3 bytes
   BloomFilterData => [uint8] // bloom filter data, the size of the array is defined by BloomSize
   Messages => [Message] // a continous collection of messages, the size of the array is defined by NumEntries
   Message => EntryTypeAndSize
