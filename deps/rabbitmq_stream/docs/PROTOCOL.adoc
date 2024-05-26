@@ -399,8 +399,8 @@ Deliver => Key Version SubscriptionId OsirisChunk
   TrailerLength => uint32
   BloomSize => uint8 // size of bloom filter data
   Reserved => unit24 // unused 3 bytes
-  BloomFilterData => [uint8] // bloom filter data (no int32 for the size of this array, the size is defined by BloomSize
-  Messages => [Message] // no int32 for the size for this array; the size is defined by NumEntries field above
+  BloomFilterData => [uint8] // bloom filter data, the size of the array is defined by BloomSize
+  Messages => [Message] // a continous collection of messages, the size of the array is defined by NumEntries
   Message => EntryTypeAndSize
   Data => bytes
 ```
@@ -426,8 +426,8 @@ Deliver => Key Version SubscriptionId CommittedOffset OsirisChunk
   TrailerLength => uint32
   BloomSize => uint8 // size of bloom filter data
   Reserved => unit24 // unused 3 bytes
-  BloomFilterData => [uint8] // bloom filter data (no int32 for the size of this array, the size is defined by BloomSize
-  Messages => [Message] // no int32 for the size for this array; the size is defined by NumEntries field above
+  BloomFilterData => [uint8] // bloom filter data, the size of the array is defined by BloomSize
+  Messages => [Message] // a continous collection of messages, the size of the array is defined by NumEntries
   Message => EntryTypeAndSize
   Data => bytes
 ```
