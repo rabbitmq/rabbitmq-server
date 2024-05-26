@@ -289,6 +289,9 @@ Publish => Key Version PublisherId PublishedMessages
   Message => bytes
 ```
 
+1. Use version 1 if there is no filter value.
+2. Use version 2 if there is a filter value. 
+
 === PublishConfirm
 
 ```
@@ -394,7 +397,9 @@ Deliver => Key Version SubscriptionId OsirisChunk
   ChunkCrc => int32
   DataLength => uint32
   TrailerLength => uint32
-  Reserved => unit32 // unused 4 bytes
+  BloomSize => uint8 // size of bloom filter data
+  Reserved => unit24 // unused 3 bytes
+  BloomFilterData => [uint8] // bloom filter data (no int32 for the size of this array, the size is defined by BloomSize
   Messages => [Message] // no int32 for the size for this array; the size is defined by NumEntries field above
   Message => EntryTypeAndSize
   Data => bytes
@@ -419,14 +424,16 @@ Deliver => Key Version SubscriptionId CommittedOffset OsirisChunk
   ChunkCrc => int32
   DataLength => uint32
   TrailerLength => uint32
-  Reserved => unit32 // unused 4 bytes
+  BloomSize => uint8 // size of bloom filter data
+  Reserved => unit24 // unused 3 bytes
+  BloomFilterData => [uint8] // bloom filter data (no int32 for the size of this array, the size is defined by BloomSize
   Messages => [Message] // no int32 for the size for this array; the size is defined by NumEntries field above
   Message => EntryTypeAndSize
   Data => bytes
 ```
 
 
-NB: See the https://github.com/rabbitmq/osiris/blob/f32df7563a036b1687c0208a3cb5f9e8f5cee937/src/osiris_log.erl#L101[Osiris project]
+NB: See the https://github.com/rabbitmq/osiris/blob/12a430b11be2c2be3f26ce4f2d7268954c7ec02b/src/osiris_log.erl#L126-L195[Osiris project]
 for details on the structure of messages.
 
 === Credit
