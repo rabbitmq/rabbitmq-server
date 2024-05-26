@@ -394,8 +394,10 @@ Deliver => Key Version SubscriptionId OsirisChunk
   ChunkCrc => int32
   DataLength => uint32
   TrailerLength => uint32
-  Reserved => unit32 // unused 4 bytes
-  Messages => [Message] // no int32 for the size for this array; the size is defined by NumEntries field above
+  BloomSize => uint8 // size of bloom filter data
+  Reserved => unit24 // unused 3 bytes
+  BloomFilterData => [uint8] // bloom filter data, the size of the array is defined by BloomSize
+  Messages => [Message] // a continous collection of messages, the size of the array is defined by NumEntries
   Message => EntryTypeAndSize
   Data => bytes
 ```
@@ -419,8 +421,10 @@ Deliver => Key Version SubscriptionId CommittedOffset OsirisChunk
   ChunkCrc => int32
   DataLength => uint32
   TrailerLength => uint32
-  Reserved => unit32 // unused 4 bytes
-  Messages => [Message] // no int32 for the size for this array; the size is defined by NumEntries field above
+  BloomSize => uint8 // size of bloom filter data
+  Reserved => unit24 // unused 3 bytes
+  BloomFilterData => [uint8] // bloom filter data, the size of the array is defined by BloomSize
+  Messages => [Message] // a continous collection of messages, the size of the array is defined by NumEntries
   Message => EntryTypeAndSize
   Data => bytes
 ```
@@ -837,4 +841,4 @@ answers whether it accepts the access or not.
 == Resources
 
 - https://docs.google.com/presentation/d/1Hlv4qaWm2PRU04dVPmShP9wU7TEQEttXdsbV8P54Uvw/edit#slide=id.gdbeadf9676_0_37[RabbitMQ Streams client] : a general guide line to write a streams client
-- https://docs.google.com/presentation/d/1BFwf01LcicZ-SyxE1CycZv2gUQMPFGdtFkVuXhgkoTE/edit#slide=id.p1[RabbitMQ Streams Internals]: how the streams work internally 
+- https://docs.google.com/presentation/d/1BFwf01LcicZ-SyxE1CycZv2gUQMPFGdtFkVuXhgkoTE/edit#slide=id.p1[RabbitMQ Streams Internals]: how the streams work internally
