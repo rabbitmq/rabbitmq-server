@@ -839,7 +839,11 @@ handle_channel_exit(Reason = #amqp_error{name = ErrorName, explanation = Expl},
     handle_shutdown({connection_closing, ReportedReason}, State);
 handle_channel_exit(Reason, State) ->
     %% Unexpected death of a channel infrastructure process
-    {stop, {infrastructure_died, Reason}, State}.
+    Reason1 = case Reason of
+                  {shutdown, R} -> R;
+                  _             -> Reason
+              end,
+    {stop, {infrastructure_died, Reason1}, State}.
 
 handle_shutdown({_, 200, _}, State) ->
     {stop, normal, State};
@@ -872,11 +876,8 @@ do(Method, Content, Flow, #state{driver = direct, writer = W}) ->
 
 
 flush_writer(#state{driver = network, writer = Writer}) ->
-    try
-        rabbit_writer:flush(Writer)
-    catch
-        exit:noproc -> ok
-    end;
+    _ = catch rabbit_writer:flush(Writer),
+    ok;
 flush_writer(#state{driver = direct}) ->
     ok.
 amqp_msg(none) ->
