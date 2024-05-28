@@ -31,6 +31,7 @@ all_tests() ->
      amqpl_table_x_header_array_of_tbls,
      amqpl_death_v1_records,
      amqpl_death_v2_records,
+     amqpl_parse_x_death,
      is_death_cycle,
      amqpl_amqp_bin_amqpl,
      amqpl_cc_amqp_bin_amqpl,
@@ -239,6 +240,59 @@ amqpl_death_records(Env) ->
     ?assertMatch({_, longstr, <<"q1">>}, header(<<"queue">>, T2b)),
     ok.
 
+%% Test case for https://github.com/rabbitmq/rabbitmq-server/issues/10709
+%% with feature flag message_containers_deaths_v2 enabled.
+amqpl_parse_x_death(_Config) ->
+    Q = <<"my queue">>,
+    DLQ = <<"my dead letter queue">>,
+
+    Content0 = #content{class_id = 60,
+                        properties = #'P_basic'{headers = [],
+                                                expiration = <<"9999">>},
+                        payload_fragments_rev = [<<"data">>]},
+    Msg0 = mc:prepare(store, mc:init(mc_amqpl, Content0, annotations())),
+    Msg1 = mc:record_death(rejected, Q, Msg0, #{}),
+
+    %% Roundtrip simulates message being sent to and received from AMQP 0.9.1 client.
+    Content1 = mc:protocol_state(Msg1),
+    Msg2 = mc:init(mc_amqpl, Content1, annotations()),
+
+    ?assertEqual([Q], mc:death_queue_names(Msg2)),
+    ?assertEqual(false, mc:is_death_cycle(Q, Msg2)),
+
+
+    #content{properties = #'P_basic'{headers = H1}} = mc:protocol_state(Msg2),
+    ?assertMatch({_, longstr, Q}, header(<<"x-first-death-queue">>, H1)),
+    ?assertMatch({_, longstr, Q}, header(<<"x-last-death-queue">>, H1)),
+    ?assertMatch({_, longstr, <<"exch">>}, header(<<"x-first-death-exchange">>, H1)),
+    ?assertMatch({_, longstr, <<"exch">>}, header(<<"x-last-death-exchange">>, H1)),
+    ?assertMatch({_, longstr, <<"rejected">>}, header(<<"x-first-death-reason">>, H1)),
+    ?assertMatch({_, longstr, <<"rejected">>}, header(<<"x-last-death-reason">>, H1)),
+    {_, array, [{table, T1}]} = header(<<"x-death">>, H1),
+    ?assertMatch({_, long, 1}, header(<<"count">>, T1)),
+    ?assertMatch({_, longstr, <<"rejected">>}, header(<<"reason">>, T1)),
+    ?assertMatch({_, longstr, Q}, header(<<"queue">>, T1)),
+    ?assertMatch({_, longstr, <<"exch">>}, header(<<"exchange">>, T1)),
+    ?assertMatch({_, timestamp, _}, header(<<"time">>, T1)),
+    ?assertMatch({_, array, [{longstr, <<"apple">>}]}, header(<<"routing-keys">>, T1)),
+    ?assertMatch({_, longstr, <<"9999">>}, header(<<"original-expiration">>, T1)),
+
+    Msg3 = mc:record_death(expired, DLQ, Msg2, #{}),
+
+    #content{properties = #'P_basic'{headers = H2}} = mc:protocol_state(Msg3),
+    {_, array, [{table, T2a}, {table, T2b}]} = header(<<"x-death">>, H2),
+    ?assertMatch({_, longstr, DLQ}, header(<<"queue">>, T2a)),
+    ?assertMatch({_, longstr, Q}, header(<<"queue">>, T2b)),
+
+    Msg4 = mc:record_death(rejected, Q, Msg3, #{}),
+
+    %% Roundtrip simulates message being sent to and received from AMQP 0.9.1 client.
+    Content2 = mc:protocol_state(Msg4),
+    Msg5 = mc:init(mc_amqpl, Content2, annotations()),
+
+    %% We expect the list to be ordered by death recency.
+    ?assertEqual([Q, DLQ], mc:death_queue_names(Msg5)).
+
 is_death_cycle(_Config) ->
     Content = #content{class_id = 60,
                        properties = #'P_basic'{headers = []},
@@ -430,6 +484,10 @@ amqpl_amqp_bin_amqpl(_Config) ->
     ok.
 
 amqpl_cc_amqp_bin_amqpl(_Config) ->
+    Mod = rabbit_feature_flags,
+    meck:new(Mod, [no_link]),
+    meck:expect(Mod, is_enabled, fun (message_containers_deaths_v2) -> true end),
+
     Headers = [{<<"CC">>, array, [{longstr, <<"q1">>},
                                   {longstr, <<"q2">>}]}],
     Props = #'P_basic'{headers = Headers},
@@ -724,15 +782,10 @@ amqp_amqpl_amqp_bodies(_Config) ->
 
     [begin
          EncodedPayload = amqp10_encode_bin(Payload),
-
-         Ex = #resource{virtual_host = <<"/">>,
-                        kind = exchange,
-                        name = <<"ex">>},
-         {ok, LegacyMsg} = mc_amqpl:message(Ex, <<"rkey">>,
-                                            #content{payload_fragments_rev =
-                                                     lists:reverse(EncodedPayload),
-                                                     properties = Props},
-                                            #{}, true),
+         LegacyMsg = mc:init(mc_amqpl,
+                             #content{properties = Props,
+                                      payload_fragments_rev = lists:reverse(EncodedPayload)},
+                             annotations()),
 
          AmqpMsg = mc:convert(mc_amqp, LegacyMsg),
          %% drop any non body sections

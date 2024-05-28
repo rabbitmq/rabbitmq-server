@@ -156,7 +156,7 @@ channel_consumers_limit(Config) ->
     ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
     Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VHost),
     {ok, Ch} = open_channel(Conn1),
-    Q = <<"Q">>, Tag = <<"Tag">>,
+    Q = <<"Q">>,
 
     {ok, _} = consume(Ch, Q, <<"Tag1">>),
     {ok, _} = consume(Ch, Q, <<"Tag2">>),

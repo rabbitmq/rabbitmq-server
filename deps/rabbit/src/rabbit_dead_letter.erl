@@ -31,11 +31,7 @@ publish(Msg0, Reason, #exchange{name = XName} = DLX, RK,
                   _ ->
                       [RK]
               end,
-    Env = case rabbit_feature_flags:is_enabled(?FF_MC_DEATHS_V2) of
-              true -> #{};
-              false -> #{?FF_MC_DEATHS_V2 => false}
-          end,
-    Msg1 = mc:record_death(Reason, SourceQName, Msg0, Env),
+    Msg1 = mc:record_death(Reason, SourceQName, Msg0, ?MC_ENV),
     {Ttl, Msg2} = mc:take_annotation(dead_letter_ttl, Msg1),
     Msg3 = mc:set_ttl(Ttl, Msg2),
     Msg4 = mc:set_annotation(?ANN_ROUTING_KEYS, DLRKeys, Msg3),

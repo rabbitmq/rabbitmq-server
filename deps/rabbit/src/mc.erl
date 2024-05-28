@@ -93,7 +93,7 @@
 %% protocol specific init function
 %% returns a map of additional annotations to merge into the
 %% protocol generic annotations map, e.g. ttl, priority and durable
--callback init(term()) ->
+-callback init(term(), environment()) ->
     {proto_state(), annotations()}.
 
 %% the size of the payload and other meta data respectively
@@ -147,7 +147,7 @@ init(Proto, Data, Anns0, Env)
   when is_atom(Proto)
        andalso is_map(Anns0)
        andalso is_map(Env) ->
-    {ProtoData, ProtoAnns} = Proto:init(Data),
+    {ProtoData, ProtoAnns} = Proto:init(Data, Env),
     Anns = case maps:size(Env) == 0 of
                true ->
                    Anns0;
@@ -389,9 +389,9 @@ record_death(Reason, SourceQueue,
                                             [{Key, NewDeath} | Deaths0]
                                     end
                             end,
-                   Anns0#{<<"x-last-death-reason">> := atom_to_binary(Reason),
-                          <<"x-last-death-queue">> := SourceQueue,
-                          <<"x-last-death-exchange">> := Exchange,
+                   Anns0#{<<"x-last-death-reason">> => atom_to_binary(Reason),
+                          <<"x-last-death-queue">> => SourceQueue,
+                          <<"x-last-death-exchange">> => Exchange,
                           deaths := Deaths};
                _ ->
                    Deaths = case Env of

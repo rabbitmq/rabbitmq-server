@@ -2,6 +2,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include_lib("rabbit/include/mc.hrl").
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -65,8 +66,9 @@ append_to_acc(_Config) ->
                                                priority = 2},
                        payload_fragments_rev = [[<<"1234567890">>]]  %% 10 bytes
                       },
-    ExName = rabbit_misc:r(<<>>, exchange, <<>>),
-    {ok, Msg} = mc_amqpl:message(ExName, <<>>, Content, #{id => 1}, true),
+    Msg = mc:init(mc_amqpl, Content, #{id => 1,
+                                       ?ANN_EXCHANGE => <<>>,
+                                       ?ANN_ROUTING_KEYS => [<<>>]}),
     BQDepth = 10,
     SyncThroughput_0 = 0,
     FoldAcc1 = {[], 0, {0, erlang:monotonic_time(), SyncThroughput_0}, {0, BQDepth}, erlang:monotonic_time()},
