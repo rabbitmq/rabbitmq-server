@@ -355,7 +355,7 @@ internal_send_command_async(MethodRecord,
                                             protocol  = Protocol,
                                             pending   = Pending}) ->
     Frame = assemble_frame(Channel, MethodRecord, Protocol),
-    maybe_flush(State#wstate{pending = [Frame | Pending]}).
+    internal_flush(State#wstate{pending = [Frame | Pending]}).
 
 internal_send_command_async(MethodRecord, Content,
                             State = #wstate{channel      = Channel,
@@ -366,7 +366,7 @@ internal_send_command_async(MethodRecord, Content,
     Frames = assemble_frames(Channel, MethodRecord, Content, FrameMax,
                              Protocol),
     _ = maybe_gc_large_msg(Content, GCThreshold),
-    maybe_flush(State#wstate{pending = [Frames | Pending]}).
+    internal_flush(State#wstate{pending = [Frames | Pending]}).
 
 %% When the amount of protocol method data buffered exceeds
 %% this threshold, a socket flush is performed.
@@ -375,13 +375,13 @@ internal_send_command_async(MethodRecord, Content,
 %% minimum size of a AMQP 0-9-1 basic.deliver method frame (24) plus basic
 %% content header (22). The idea is that we want to flush just before
 %% exceeding the MSS.
--define(FLUSH_THRESHOLD, 3650).
-
-maybe_flush(State = #wstate{pending = Pending}) ->
-    case iolist_size(Pending) >= ?FLUSH_THRESHOLD of
-        true  -> internal_flush(State);
-        false -> State
-    end.
+% -define(FLUSH_THRESHOLD, 3650).
+%
+% maybe_flush(State = #wstate{pending = Pending}) ->
+%     case iolist_size(Pending) >= ?FLUSH_THRESHOLD of
+%         true  -> internal_flush(State);
+%         false -> State
+%     end.
 
 internal_flush(State = #wstate{pending = []}) ->
     State;
