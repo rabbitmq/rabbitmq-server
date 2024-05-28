@@ -14,7 +14,7 @@ endif
 PROJECT_VERSION := $(RABBITMQ_VERSION)
 
 ifeq ($(PROJECT_VERSION),)
-PROJECT_VERSION := $(shell \
+PROJECT_VERSION = $(shell \
 if test -f git-revisions.txt; then \
 	head -n1 git-revisions.txt | \
 	awk '{print $$$(words $(PROJECT_DESCRIPTION) version);}'; \
