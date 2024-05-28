@@ -375,7 +375,7 @@ internal_send_command_async(MethodRecord, Content,
 %% minimum size of a AMQP 0-9-1 basic.deliver method frame (24) plus basic
 %% content header (22). The idea is that we want to flush just before
 %% exceeding the MSS.
--define(FLUSH_THRESHOLD, 1414).
+-define(FLUSH_THRESHOLD, 3650).
 
 maybe_flush(State = #wstate{pending = Pending}) ->
     case iolist_size(Pending) >= ?FLUSH_THRESHOLD of
