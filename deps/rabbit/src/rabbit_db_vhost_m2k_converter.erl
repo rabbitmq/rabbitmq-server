@@ -12,7 +12,7 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("khepri_mnesia_migration/src/kmm_logging.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("vhost.hrl").
+-include_lib("rabbit/include/vhost.hrl").
 
 -export([init_copy_to_khepri/3,
          copy_to_khepri/3,

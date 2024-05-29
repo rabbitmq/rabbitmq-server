@@ -7,7 +7,7 @@
 
 -module(rabbit_global_counters).
 
--include("rabbit_global_counters.hrl").
+-include_lib("rabbit/include/rabbit_global_counters.hrl").
 
 -export([
          boot_step/0,

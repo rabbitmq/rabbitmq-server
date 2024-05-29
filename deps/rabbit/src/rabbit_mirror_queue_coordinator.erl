@@ -19,7 +19,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
--include("gm_specs.hrl").
+-include_lib("rabbit/include/gm_specs.hrl").
 
 -record(state, { q,
                  gm,

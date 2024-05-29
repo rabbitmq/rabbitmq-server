@@ -11,7 +11,7 @@
 -include_lib("rabbit_common/include/logging.hrl").
 -include_lib("khepri/include/khepri.hrl").
 
--include("vhost.hrl").
+-include_lib("rabbit/include/vhost.hrl").
 
 -export([create_or_get/3,
          merge_metadata/2,

@@ -13,7 +13,7 @@
 -include_lib("khepri/include/khepri.hrl").
 -include_lib("khepri_mnesia_migration/src/kmm_logging.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("internal_user.hrl").
+-include_lib("rabbit/include/internal_user.hrl").
 
 -export([init_copy_to_khepri/3,
          copy_to_khepri/3,

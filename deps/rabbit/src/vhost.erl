@@ -7,7 +7,7 @@
 
 -module(vhost).
 
--include("vhost.hrl").
+-include_lib("rabbit/include/vhost.hrl").
 
 -export([
   new/2,

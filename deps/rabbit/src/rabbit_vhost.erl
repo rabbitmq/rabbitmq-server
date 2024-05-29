@@ -8,7 +8,7 @@
 -module(rabbit_vhost).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("vhost.hrl").
+-include_lib("rabbit/include/vhost.hrl").
 
 -export([recover/0, recover/1, read_config/1]).
 -export([add/2, add/3, add/4, delete/2, exists/1, assert/1,
