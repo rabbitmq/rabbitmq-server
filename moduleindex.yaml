@@ -217,7 +217,6 @@ inet_tcp_proxy_dist:
 jose:
 - jose
 - jose_app
-- jose_base
 - jose_base64
 - jose_base64url
 - jose_block_encryptor
@@ -227,10 +226,14 @@ jose:
 - jose_chacha20_poly1305_unsupported
 - jose_crypto_compat
 - jose_curve25519
+- jose_curve25519_crypto
+- jose_curve25519_fallback
 - jose_curve25519_libdecaf
 - jose_curve25519_libsodium
 - jose_curve25519_unsupported
 - jose_curve448
+- jose_curve448_crypto
+- jose_curve448_fallback
 - jose_curve448_libdecaf
 - jose_curve448_unsupported
 - jose_json
@@ -275,6 +278,7 @@ jose:
 - jose_jwe_alg_dir
 - jose_jwe_alg_ecdh_1pu
 - jose_jwe_alg_ecdh_es
+- jose_jwe_alg_ecdh_ss
 - jose_jwe_alg_pbes2
 - jose_jwe_alg_rsa
 - jose_jwe_alg_xc20p_kw
@@ -321,6 +325,7 @@ jose:
 - jose_sup
 - jose_xchacha20_poly1305
 - jose_xchacha20_poly1305_crypto
+- jose_xchacha20_poly1305_libsodium
 - jose_xchacha20_poly1305_unsupported
 katana_code:
 - ktn_code
