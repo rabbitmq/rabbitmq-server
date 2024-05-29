@@ -7,7 +7,7 @@
 
 -module(amqp_uri).
 
--include("amqp_client.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -export([parse/1, parse/2, remove_credentials/1]).
 

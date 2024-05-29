@@ -30,7 +30,7 @@
 %% terminated.<br/>
 -module(amqp_selective_consumer).
 
--include("amqp_gen_consumer_spec.hrl").
+-include_lib("amqp_client/include/amqp_gen_consumer_spec.hrl").
 
 -behaviour(amqp_gen_consumer).
 

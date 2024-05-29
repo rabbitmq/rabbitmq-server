@@ -8,7 +8,7 @@
 %% @private
 -module(amqp_connection_sup).
 
--include("amqp_client.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -behaviour(supervisor).
 

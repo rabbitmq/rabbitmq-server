@@ -11,8 +11,8 @@
 -export([ensure_endpoint/4, ensure_endpoint/5, ensure_binding/3]).
 -export([dest_temp_queue/1]).
 
--include("amqp_client.hrl").
--include("rabbit_routing_prefixes.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("amqp_client/include/rabbit_routing_prefixes.hrl").
 
 %%----------------------------------------------------------------------------
 

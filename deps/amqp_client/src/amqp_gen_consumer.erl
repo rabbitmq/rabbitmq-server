@@ -18,7 +18,7 @@
 %% result in deadlock.
 -module(amqp_gen_consumer).
 
--include("amqp_client.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -behaviour(gen_server2).
 

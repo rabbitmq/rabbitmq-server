@@ -153,13 +153,13 @@ def all_srcs(name = "all_srcs"):
         name = "public_hdrs",
         srcs = [
             "include/amqp_client.hrl",
-            "include/amqp_client_internal.hrl",
             "include/amqp_gen_consumer_spec.hrl",
             "include/rabbit_routing_prefixes.hrl",
         ],
     )
     filegroup(
         name = "private_hdrs",
+        srcs = ["src/amqp_client_internal.hrl"],
     )
     filegroup(
         name = "license_files",
@@ -175,7 +175,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/system_SUITE.erl"],
         outs = ["test/system_SUITE.beam"],
-        hdrs = ["include/amqp_client.hrl", "include/amqp_client_internal.hrl"],
+        hdrs = ["include/amqp_client.hrl", "src/amqp_client_internal.hrl"],
         app_name = "amqp_client",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app"],

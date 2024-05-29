@@ -8,7 +8,7 @@
 %% @private
 -module(amqp_auth_mechanisms).
 
--include("amqp_client.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -export([plain/3, amqplain/3, external/3, crdemo/3]).
 
