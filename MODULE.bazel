@@ -67,63 +67,6 @@ erlang_config = use_extension(
     "erlang_config",
 )
 
-erlang_config.internal_erlang_from_github_release(
-    name = "24",
-    extra_make_opts = ["-j 4"],
-    sha256 = "8444ff9abe23aea268adbb95463561fc222c965052d35d7c950b17be01c3ad82",
-    version = "24.3.4.6",
-)
-
-erlang_config.internal_erlang_from_github_release(
-    name = "25_0",
-    extra_make_opts = ["-j 4"],
-    sha256 = "8fc707f92a124b2aeb0f65dcf9ac8e27b2a305e7bcc4cc1b2fdf770eec0165bf",
-    version = "25.0.4",
-)
-
-erlang_config.internal_erlang_from_github_release(
-    name = "25_1",
-    extra_make_opts = ["-j 4"],
-    sha256 = "1cd2fbe225a412009cda9b1fd9f3fff0293e75e3020daa48abf68721471e91eb",
-    version = "25.1.2.1",
-)
-
-erlang_config.internal_erlang_from_github_release(
-    name = "25_2",
-    extra_make_opts = ["-j 4"],
-    sha256 = "f4d9f11d67ba478a053d72e635a44722a975603fe1284063fdf38276366bc61c",
-    version = "25.2.3",
-)
-
-erlang_config.internal_erlang_from_github_release(
-    name = "25_3",
-    extra_make_opts = ["-j 4"],
-    sha256 = "fd690c843100c3268ac7d8ada02af8310e8520bf32581eb72f28c26ae61b46ad",
-    version = "25.3.2.12",
-)
-
-erlang_config.internal_erlang_from_github_release(
-    name = "26_1",
-    extra_make_opts = ["-j 4"],
-    sha256 = "f1074cf3a54f1f87e66027d5abebab2fa76a0243453fa58bc5f30d0ce0313921",
-    version = "26.1.2",
-)
-
-erlang_config.internal_erlang_from_github_release(
-    name = "26_2",
-    extra_make_opts = ["-j 4"],
-    sha256 = "de155c4ad9baab2b9e6c96dbd03bf955575a04dd6feee9c08758beb28484c9f6",
-    version = "26.2.5",
-)
-
-erlang_config.internal_erlang_from_http_archive(
-    name = "git_master",
-    extra_make_opts = ["-j 4"],
-    strip_prefix = "otp-master",
-    url = "https://github.com/erlang/otp/archive/refs/heads/master.tar.gz",
-    version = "27",
-)
-
 use_repo(
     erlang_config,
     "erlang_config",
@@ -134,50 +77,13 @@ elixir_config = use_extension(
     "elixir_config",
 )
 
-elixir_config.internal_elixir_from_github_release(
-    name = "1_13",
-    sha256 = "95daf2dd3052e6ca7d4d849457eaaba09de52d65ca38d6933c65bc1cdf6b8579",
-    version = "1.13.4",
-)
-
-elixir_config.internal_elixir_from_github_release(
-    name = "1_14",
-    sha256 = "2ea249566c67e57f8365ecdcd0efd9b6c375f57609b3ac2de326488ac37c8ebd",
-    version = "1.14.5",
-)
-
-elixir_config.internal_elixir_from_github_release(
-    name = "1_15",
-    sha256 = "09e697ab13fc60f27adaba9b71f8793105acd4320a89b16be0ceb4a13426d779",
-    version = "1.15.8",
-)
-
 use_repo(
     elixir_config,
     "elixir_config",
 )
 
 register_toolchains(
-    "@erlang_config//24:toolchain_major",
-    "@erlang_config//24:toolchain_major_minor",
-    "@erlang_config//25_0:toolchain_major",
-    "@erlang_config//25_0:toolchain_major_minor",
-    "@erlang_config//25_1:toolchain_major",
-    "@erlang_config//25_1:toolchain_major_minor",
-    "@erlang_config//25_2:toolchain_major",
-    "@erlang_config//25_2:toolchain_major_minor",
-    "@erlang_config//25_3:toolchain_major",
-    "@erlang_config//25_3:toolchain_major_minor",
-    "@erlang_config//26_1:toolchain_major",
-    "@erlang_config//26_1:toolchain_major_minor",
-    "@erlang_config//26_2:toolchain_major",
-    "@erlang_config//26_2:toolchain_major_minor",
-    "@erlang_config//git_master:toolchain_major",
-    "@erlang_config//git_master:toolchain_major_minor",
     "@elixir_config//external:toolchain",
-    "@elixir_config//1_13:toolchain",
-    "@elixir_config//1_14:toolchain",
-    "@elixir_config//1_15:toolchain",
 )
 
 erlang_package = use_extension(
@@ -514,21 +420,6 @@ use_repo(
     "proper",
     "temp",
     "x509",
-)
-
-rbe = use_extension(
-    "//bazel/bzlmod:extensions.bzl",
-    "rbe",
-)
-
-rbe.git_repository(
-    branch = "linux-rbe",
-    remote = "https://github.com/rabbitmq/rbe-erlang-platform.git",
-)
-
-use_repo(
-    rbe,
-    "rbe",
 )
 
 secondary_umbrella = use_extension(
