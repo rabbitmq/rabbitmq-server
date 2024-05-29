@@ -10,7 +10,7 @@
 -export([generate/1, build_frame/2, build_frame/3,
          build_heartbeat_frame/0]).
 
--include("amqp10_framing.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -type signed_byte() :: -128 .. 127.
 

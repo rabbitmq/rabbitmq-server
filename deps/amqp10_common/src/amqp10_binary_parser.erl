@@ -13,7 +13,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -module(amqp10_binary_parser).
 
--include("amqp10_framing.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -export([parse/1,
          parse_many/2]).

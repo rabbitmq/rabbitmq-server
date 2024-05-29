@@ -21,7 +21,7 @@
 %% debug
 -export([fill_from_list/2, fill_from_map/2]).
 
--include("amqp10_framing.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -type amqp10_frame() :: #'v1_0.header'{} |
 #'v1_0.delivery_annotations'{} |

@@ -6,7 +6,7 @@
 
 %% https://www.ietf.org/rfc/rfc1982.txt
 -module(serial_number).
--include("amqp10_types.hrl").
+-include_lib("amqp10_common/include/amqp10_types.hrl").
 
 -export([add/2,
          compare/2,
