@@ -1,6 +1,6 @@
 -module(rabbit_amqp_management).
 
--include("rabbit_amqp.hrl").
+-include_lib("rabbit/include/rabbit_amqp.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([handle_request/5]).

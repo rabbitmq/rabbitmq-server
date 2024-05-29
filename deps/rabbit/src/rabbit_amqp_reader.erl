@@ -8,7 +8,7 @@
 -module(rabbit_amqp_reader).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("rabbit_amqp.hrl").
+-include_lib("rabbit/include/rabbit_amqp.hrl").
 
 -export([init/2,
          info/2,

@@ -6,7 +6,7 @@
 %%
 
 -module(rabbit_amqp_util).
--include("rabbit_amqp.hrl").
+-include_lib("rabbit/include/rabbit_amqp.hrl").
 
 -export([protocol_error/3]).
 

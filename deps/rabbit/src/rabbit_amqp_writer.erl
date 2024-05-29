@@ -8,7 +8,7 @@
 -module(rabbit_amqp_writer).
 -behaviour(gen_server).
 
--include("rabbit_amqp.hrl").
+-include_lib("rabbit/include/rabbit_amqp.hrl").
 
 %% client API
 -export([start_link/3,
