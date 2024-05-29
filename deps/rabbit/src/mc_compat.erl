@@ -2,7 +2,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
--include("mc.hrl").
+-include_lib("rabbit/include/mc.hrl").
 
 -export([
          %init/3,

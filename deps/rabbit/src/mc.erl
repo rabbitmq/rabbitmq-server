@@ -39,7 +39,7 @@
          death_queue_names/1
         ]).
 
--include("mc.hrl").
+-include_lib("rabbit/include/mc.hrl").
 
 -type str() :: atom() | string() | binary().
 -type internal_ann_key() :: atom().

@@ -6,7 +6,7 @@
 %%
 
 -module(rabbit_dead_letter).
--include("mc.hrl").
+-include_lib("rabbit/include/mc.hrl").
 
 -export([publish/5,
          detect_cycles/3]).

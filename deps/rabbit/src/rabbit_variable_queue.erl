@@ -28,7 +28,7 @@
 %% exported for testing only
 -export([start_msg_store/3, stop_msg_store/1, init/5]).
 
--include("mc.hrl").
+-include_lib("rabbit/include/mc.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
 -define(QUEUE_MIGRATION_BATCH_SIZE, 100).

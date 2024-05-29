@@ -23,7 +23,7 @@
 
 -module(rabbit_fifo_dlx_worker).
 
--include("mc.hrl").
+-include_lib("rabbit/include/mc.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 % -include_lib("rabbit_common/include/rabbit_framing.hrl").
 

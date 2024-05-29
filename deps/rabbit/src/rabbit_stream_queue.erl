@@ -6,7 +6,7 @@
 %%
 
 -module(rabbit_stream_queue).
--include("mc.hrl").
+-include_lib("rabbit/include/mc.hrl").
 
 -behaviour(rabbit_queue_type).
 

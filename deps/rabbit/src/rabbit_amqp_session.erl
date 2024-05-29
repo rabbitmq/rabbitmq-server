@@ -14,7 +14,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("amqp10_common/include/amqp10_types.hrl").
 -include("rabbit_amqp.hrl").
--include("mc.hrl").
+-include_lib("rabbit/include/mc.hrl").
 
 -rabbit_deprecated_feature(
    {amqp_address_v1,

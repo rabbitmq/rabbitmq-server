@@ -9,7 +9,7 @@
 %% now be configured to add such headers. This enables non-AMQP 0.9.1 protocols (that
 %% do not use rabbit_channel) to also add AMQP 0.9.1 headers to incoming messages.
 -module(rabbit_message_interceptor).
--include("mc.hrl").
+-include_lib("rabbit/include/mc.hrl").
 
 -export([intercept/1]).
 

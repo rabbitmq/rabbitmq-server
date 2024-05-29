@@ -2,7 +2,7 @@
 -behaviour(mc).
 
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
--include("mc.hrl").
+-include_lib("rabbit/include/mc.hrl").
 
 -export([
          init/1,

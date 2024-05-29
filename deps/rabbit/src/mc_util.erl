@@ -1,6 +1,6 @@
 -module(mc_util).
 
--include("mc.hrl").
+-include_lib("rabbit/include/mc.hrl").
 
 -export([is_valid_shortstr/1,
          is_utf8_no_null/1,

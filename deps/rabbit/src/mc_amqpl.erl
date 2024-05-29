@@ -4,7 +4,7 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("mc.hrl").
+-include_lib("rabbit/include/mc.hrl").
 
 %% mc
 -export([
