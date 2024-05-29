@@ -20,7 +20,7 @@
 
 -behaviour(gen_server2).
 
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 %%----------------------------------------------------------------------------
 

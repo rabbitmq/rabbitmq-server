@@ -9,7 +9,7 @@
 -behaviour(rabbit_queue_master_locator).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 -export([description/0, queue_master_location/1]).
 

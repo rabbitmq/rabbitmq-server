@@ -10,7 +10,7 @@
 
 -behaviour(rabbit_registry_class).
 
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("amqp10_common/include/amqp10_types.hrl").
 

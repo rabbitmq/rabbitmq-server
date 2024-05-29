@@ -7,7 +7,7 @@
 
 -module(rabbit_queue_location).
 
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 -export([queue_leader_locators/0,
          select_leader_and_followers/2]).

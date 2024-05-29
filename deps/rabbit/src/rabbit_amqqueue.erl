@@ -83,7 +83,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 -define(INTEGER_ARG_TYPES, [byte, short, signedint, long,
                             unsignedbyte, unsignedshort, unsignedint]).

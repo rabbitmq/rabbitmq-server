@@ -268,7 +268,7 @@
 -define(IN_MEMORY, memory).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 %%----------------------------------------------------------------------------
 

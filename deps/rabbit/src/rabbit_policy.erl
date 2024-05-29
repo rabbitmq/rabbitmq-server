@@ -28,7 +28,7 @@
 -behaviour(rabbit_runtime_parameter).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 -import(rabbit_misc, [pget/2, pget/3]).
 

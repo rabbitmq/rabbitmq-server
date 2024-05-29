@@ -7,7 +7,7 @@
 
 -module(rabbit_binding).
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 -export([recover/0, recover/2, exists/1, add/2, add/3, remove/2, remove/3]).
 -export([list/1, list_for_source/1, list_for_destination/1,

@@ -87,7 +87,7 @@
 -endif.
 
 -include("rabbit_stream_coordinator.hrl").
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 -define(REPLICA_FRESHNESS_LIMIT_MS, 10 * 1000). %% 10s
 

@@ -40,7 +40,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_misc.hrl").
 
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 -behaviour(gen_server2).
 

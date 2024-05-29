@@ -7,7 +7,7 @@
 
 -module(rabbit_amqqueue_process).
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 -behaviour(gen_server2).
 

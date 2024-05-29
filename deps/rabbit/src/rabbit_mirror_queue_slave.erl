@@ -28,7 +28,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 -include("gm_specs.hrl").
 
 %%----------------------------------------------------------------------------

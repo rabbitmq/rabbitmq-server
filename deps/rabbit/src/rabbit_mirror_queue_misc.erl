@@ -11,7 +11,7 @@
 
 -include_lib("stdlib/include/assert.hrl").
 
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 -export([remove_from_queue/3, on_vhost_up/1, add_mirrors/3,
          report_deaths/4, store_updated_slaves/1,

@@ -7,7 +7,7 @@
 
 -module(rabbit_queue_master_location_misc).
 
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 -export([lookup_master/2,
          lookup_queue/2,

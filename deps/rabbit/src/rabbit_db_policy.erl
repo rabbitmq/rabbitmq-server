@@ -8,7 +8,7 @@
 -module(rabbit_db_policy).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 -export([update/3]).
 

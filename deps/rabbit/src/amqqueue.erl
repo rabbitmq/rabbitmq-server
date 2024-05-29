@@ -8,7 +8,7 @@
 -module(amqqueue). %% Could become amqqueue_v2 in the future.
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 -export([new/8,
          new/9,

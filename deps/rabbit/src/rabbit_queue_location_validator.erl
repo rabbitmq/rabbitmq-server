@@ -8,7 +8,7 @@
 -module(rabbit_queue_location_validator).
 -behaviour(rabbit_policy_validator).
 
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 -export([validate_policy/1, validate_strategy/1]).
 

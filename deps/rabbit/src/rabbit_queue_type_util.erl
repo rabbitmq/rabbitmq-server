@@ -16,7 +16,7 @@
          erpc_call/5]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 args_policy_lookup(Name, Resolve, Q) when ?is_amqqueue(Q) ->
     Args = amqqueue:get_arguments(Q),

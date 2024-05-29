@@ -9,7 +9,7 @@
 
 -export([clear_read_cache/0]).
 
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 clear_read_cache() ->
     case application:get_env(rabbit, fhc_read_buffering) of

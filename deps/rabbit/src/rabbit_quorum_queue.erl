@@ -88,7 +88,7 @@
 
 -include_lib("stdlib/include/qlc.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 -type msg_id() :: non_neg_integer().
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(),

@@ -1,7 +1,7 @@
 -module(rabbit_classic_queue).
 -behaviour(rabbit_queue_type).
 
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %% TODO possible to use sets / maps instead of lists?

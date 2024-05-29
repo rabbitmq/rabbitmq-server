@@ -61,7 +61,7 @@
 -export([check_max_segment_size_bytes/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("amqqueue.hrl").
+-include_lib("rabbit/include/amqqueue.hrl").
 
 -define(INFO_KEYS, [name, durable, auto_delete, arguments, leader, members, online, state,
                     messages, messages_ready, messages_unacknowledged, committed_offset,
