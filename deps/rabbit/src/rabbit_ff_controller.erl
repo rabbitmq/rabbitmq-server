@@ -31,7 +31,7 @@
 
 -include_lib("rabbit_common/include/logging.hrl").
 
--include("src/rabbit_feature_flags.hrl").
+-include("rabbit_feature_flags.hrl").
 
 -export([is_supported/1, is_supported/2,
          enable/1,

@@ -82,7 +82,7 @@
 
 -include_lib("rabbit_common/include/logging.hrl").
 
--include("src/rabbit_feature_flags.hrl").
+-include("rabbit_feature_flags.hrl").
 
 -export([list/0,
          list/1,

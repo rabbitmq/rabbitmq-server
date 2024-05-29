@@ -110,7 +110,7 @@
 
 -include_lib("rabbit_common/include/logging.hrl").
 
--include("src/rabbit_feature_flags.hrl").
+-include("rabbit_feature_flags.hrl").
 
 -export([is_permitted/1,
          get_phase/1,
