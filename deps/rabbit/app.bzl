@@ -9,6 +9,7 @@ def all_beam_files(name = "all_beam_files"):
     erlang_bytecode(
         name = "behaviours",
         srcs = [
+            "src/gm.erl",
             "src/mc.erl",
             "src/rabbit_backing_queue.erl",
             "src/rabbit_credential_validator.erl",
@@ -266,6 +267,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
         name = "test_behaviours",
         testonly = True,
         srcs = [
+            "src/gm.erl",
             "src/mc.erl",
             "src/rabbit_backing_queue.erl",
             "src/rabbit_credential_validator.erl",
@@ -561,6 +563,7 @@ def all_srcs(name = "all_srcs"):
             "src/background_gc.erl",
             "src/code_server_cache.erl",
             "src/gatherer.erl",
+            "src/gm.erl",
             "src/internal_user.erl",
             "src/lqueue.erl",
             "src/mc.erl",
