@@ -57,9 +57,19 @@ jobs:
       run: |
         sudo apt-get update && \
         sudo apt-get install -y dotnet-sdk-6.0
+
+        mkdir warmup \
+          && cd warmup \
+          && dotnet new console \
+          && cd .. \
+          && rm -rf warmup \
+          && rm -rf /tmp/NuGetScratch
     - name: RUN TESTS
       run: |
+        mkdir -p /tmp/activemq
+
         bazelisk test //deps/${{ inputs.plugin }}/... \
+          --test_env ACTIVEMQ_HOME=/tmp/activemq \
           --test_env RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }} \
           --test_tag_filters=-aws,-docker,-mixed-version-cluster \
           --build_tests_only \
