@@ -5,6 +5,9 @@ on:
       plugin:
         required: true
         type: string
+      test_size_filters:
+        default: small,medium,large,enormous
+        type: string
     secrets:
       REMOTE_CACHE_BUCKET_NAME:
         required: true
@@ -100,6 +103,7 @@ jobs:
         bazelisk test //deps/${{ inputs.plugin }}/... \
           --test_env RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }} \
           --test_tag_filters=-docker,-mixed-version-cluster \
+          --test_size_filters=${{ inputs.test_size_filters }} \
           --build_tests_only \
           --verbose_failures
     - name: UPLOAD TEST LOGS

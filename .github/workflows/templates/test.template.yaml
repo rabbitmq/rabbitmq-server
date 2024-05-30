@@ -66,11 +66,28 @@ jobs:
     secrets: inherit
 #@ end
 
-  test-rabbit:
+  test-rabbit-small:
     needs: #@ job_names(data.values.internal_deps)
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbit
+      test_size_filters: small
+    secrets: inherit
+
+  test-rabbit-medium:
+    needs: #@ job_names(data.values.internal_deps)
+    uses: ./.github/workflows/test-plugin.yaml
+    with:
+      plugin: rabbit
+      test_size_filters: medium
+    secrets: inherit
+
+  test-rabbit-large:
+    needs: #@ job_names(data.values.internal_deps)
+    uses: ./.github/workflows/test-plugin.yaml
+    with:
+      plugin: rabbit
+      test_size_filters: large,enormous
     secrets: inherit
 
 #@ for plugin in data.values.tier1_plugins:
@@ -83,7 +100,7 @@ jobs:
 #@ end
 
   summary-test:
-    needs: #@ job_names(data.values.internal_deps + ["rabbit"] + data.values.tier1_plugins)
+    needs: #@ job_names(data.values.internal_deps + data.values.tier1_plugins) + ["test-rabbit-small", "test-rabbit-medium", "test-rabbit-large"]
     runs-on: ubuntu-latest
     steps:
     - name: SUMMARY
