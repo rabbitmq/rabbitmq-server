@@ -59,6 +59,7 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "private_hdrs",
+        srcs = ["src/logging.hrl"],
     )
     filegroup(
         name = "srcs",
@@ -71,7 +72,6 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "public_hdrs",
-        srcs = ["include/logging.hrl"],
     )
     filegroup(
         name = "license_files",
