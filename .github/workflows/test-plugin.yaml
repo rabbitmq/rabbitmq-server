@@ -52,6 +52,11 @@ jobs:
         bazelisk info release
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
+    - name: INSTALL DOTNET
+      if: ${{ 'rabbit' == inputs.plugin }}
+      run: |
+        sudo apt-get update && \
+        sudo apt-get install -y dotnet-sdk-6.0
     - name: RUN TESTS
       run: |
         bazelisk test //deps/${{ inputs.plugin }}/... \
