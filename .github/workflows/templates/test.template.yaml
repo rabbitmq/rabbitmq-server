@@ -74,7 +74,7 @@ jobs:
     secrets: inherit
 #@ end
 
-#@ rabbit_shard_count = 4
+#@ rabbit_shard_count = 10
 #@ for shard_index in range(0, rabbit_shard_count):
   test-rabbit-(@= str(shard_index) @):
     needs: #@ job_names(data.values.internal_deps)
@@ -88,7 +88,7 @@ jobs:
 
 #@ for plugin in data.values.tier1_plugins:
   test-(@= plugin @):
-    needs: #@ job_names(data.values.internal_deps)
+    needs: #@ sharded_job_names("rabbit", rabbit_shard_count)
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: #@ plugin
