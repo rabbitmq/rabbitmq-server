@@ -10,9 +10,8 @@
      {user_path,"http://some-server/auth/user"},
      {vhost_path,"http://some-server/auth/vhost"},
      {resource_path,"http://some-server/auth/resource"}]}],
-  [rabbitmq_auth_backend_http]}
-
-, {default_http_method,
+  [rabbitmq_auth_backend_http]},
+ {default_http_method,
   "auth_backends.1        = http
    auth_http.user_path     = http://some-server/auth/user
    auth_http.vhost_path    = http://some-server/auth/vhost
@@ -22,9 +21,8 @@
     [{user_path,"http://some-server/auth/user"},
      {vhost_path,"http://some-server/auth/vhost"},
      {resource_path,"http://some-server/auth/resource"}]}],
-  [rabbitmq_auth_backend_http]}
-
-, {timeouts,
+  [rabbitmq_auth_backend_http]},
+ {timeouts,
   "auth_backends.1        = http
    auth_http.user_path     = http://some-server/auth/user
    auth_http.vhost_path    = http://some-server/auth/vhost
@@ -33,98 +31,88 @@
    auth_http.connection_timeout = 30000",
   [{rabbit,[{auth_backends,[rabbit_auth_backend_http]}]},
    {rabbitmq_auth_backend_http,
-    [
-     {connection_timeout,30000},
+    [{connection_timeout,30000},
      {request_timeout,30000},
      {user_path,"http://some-server/auth/user"},
      {vhost_path,"http://some-server/auth/vhost"},
      {resource_path,"http://some-server/auth/resource"}]}],
-  [rabbitmq_auth_backend_http]}
-
- , {ssl_options,
-   "
-    auth_http.ssl_options.cacertfile           = test/config_schema_SUITE_data/certs/cacert.pem
+  [rabbitmq_auth_backend_http]},
+ {ssl_options,
+  "auth_http.ssl_options.cacertfile           = test/config_schema_SUITE_data/certs/cacert.pem
     auth_http.ssl_options.certfile             = test/config_schema_SUITE_data/certs/cert.pem
     auth_http.ssl_options.keyfile              = test/config_schema_SUITE_data/certs/key.pem
     auth_http.ssl_options.verify               = verify_peer
     auth_http.ssl_options.fail_if_no_peer_cert = true",
-   [{rabbitmq_auth_backend_http, [
-         {ssl_options,
-               [{cacertfile, "test/config_schema_SUITE_data/certs/cacert.pem"},
-               {certfile,   "test/config_schema_SUITE_data/certs/cert.pem"},
-               {keyfile,    "test/config_schema_SUITE_data/certs/key.pem"},
-               {verify,               verify_peer},
-               {fail_if_no_peer_cert, true}]}
-      ]}],
-   [rabbitmq_auth_backend_http]},
-
+  [{rabbitmq_auth_backend_http, [
+                                 {ssl_options,
+                                  [{cacertfile, "test/config_schema_SUITE_data/certs/cacert.pem"},
+                                   {certfile,   "test/config_schema_SUITE_data/certs/cert.pem"},
+                                   {keyfile,    "test/config_schema_SUITE_data/certs/key.pem"},
+                                   {verify,               verify_peer},
+                                   {fail_if_no_peer_cert, true}]}
+                                ]}],
+  [rabbitmq_auth_backend_http]},
  {ssl_options_verify_peer,
-  "
-   auth_http.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+  "auth_http.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
    auth_http.ssl_options.certfile = test/config_schema_SUITE_data/certs/cert.pem
    auth_http.ssl_options.keyfile = test/config_schema_SUITE_data/certs/key.pem
    auth_http.ssl_options.verify = verify_peer
    auth_http.ssl_options.fail_if_no_peer_cert = false",
   [{rabbitmq_auth_backend_http,
-       [
-        {ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-             {verify,verify_peer},
-             {fail_if_no_peer_cert,false}]}]}],
+    [
+     {ssl_options,
+      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+       {verify,verify_peer},
+       {fail_if_no_peer_cert,false}]}]}],
   []},
  {ssl_options_password,
-  "
-   auth_http.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+  "auth_http.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
    auth_http.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
    auth_http.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
    auth_http.ssl_options.password   = t0p$3kRe7",
   [{rabbitmq_auth_backend_http,
-       [
-        {ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-             {password,"t0p$3kRe7"}]}]}],
+    [
+     {ssl_options,
+      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+       {password,"t0p$3kRe7"}]}]}],
   []},
  {ssl_options_tls_versions,
-  "
-   auth_http.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+  "auth_http.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
    auth_http.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
    auth_http.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
    auth_http.ssl_options.versions.tls1_2 = tlsv1.2
    auth_http.ssl_options.versions.tls1_1 = tlsv1.1",
   [],
   [{rabbitmq_auth_backend_http,
-       [{ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-             {versions,['tlsv1.2','tlsv1.1']}]}
-        ]}],
+    [{ssl_options,
+      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+       {versions,['tlsv1.2','tlsv1.1']}]}
+    ]}],
   []},
  {ssl_options_depth,
-  "
-   auth_http.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+  "auth_http.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
    auth_http.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
    auth_http.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
    auth_http.ssl_options.depth      = 2
    auth_http.ssl_options.verify     = verify_peer
    auth_http.ssl_options.fail_if_no_peer_cert = false",
   [{rabbitmq_auth_backend_http,
-       [
-        {ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-             {depth,2},
-             {verify,verify_peer},
-             {fail_if_no_peer_cert,false}]}]}],
+    [{ssl_options,
+      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+       {depth,2},
+       {verify,verify_peer},
+       {fail_if_no_peer_cert,false}]}]}],
   []},
  {ssl_options_honor_cipher_order,
-  "
-   auth_http.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+  "auth_http.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
    auth_http.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
    auth_http.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
    auth_http.ssl_options.depth      = 2
@@ -132,19 +120,17 @@
    auth_http.ssl_options.fail_if_no_peer_cert = false
    auth_http.ssl_options.honor_cipher_order   = true",
   [{rabbitmq_auth_backend_http,
-       [
-        {ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-             {depth,2},
-             {verify,verify_peer},
-             {fail_if_no_peer_cert, false},
-             {honor_cipher_order, true}]}]}],
+    [{ssl_options,
+      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+       {depth,2},
+       {verify,verify_peer},
+       {fail_if_no_peer_cert, false},
+       {honor_cipher_order, true}]}]}],
   []},
  {ssl_options_honor_ecc_order,
-  "
-   auth_http.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+  "auth_http.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
    auth_http.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
    auth_http.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
    auth_http.ssl_options.depth      = 2
@@ -152,15 +138,68 @@
    auth_http.ssl_options.fail_if_no_peer_cert = false
    auth_http.ssl_options.honor_ecc_order      = true",
   [{rabbitmq_auth_backend_http,
-       [
-        {ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-             {depth,2},
-             {verify,verify_peer},
-             {fail_if_no_peer_cert, false},
-             {honor_ecc_order, true}]}]}],
+    [{ssl_options,
+      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+       {depth,2},
+       {verify,verify_peer},
+       {fail_if_no_peer_cert, false},
+       {honor_ecc_order, true}]}
+    ]}],
+  []},
+ {ssl_options_sni_disabled,
+  "auth_http.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   auth_http.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   auth_http.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   auth_http.ssl_options.versions.tls1_2 = tlsv1.2
+   auth_http.ssl_options.versions.tls1_1 = tlsv1.1
+   auth_http.ssl_options.sni = none",
+  [],
+  [{rabbitmq_auth_backend_http,
+    [{ssl_options,
+      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+       {versions,['tlsv1.2','tlsv1.1']}]
+     }]
+   }],
+  []},
+ {ssl_options_sni_hostname,
+  "auth_http.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   auth_http.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   auth_http.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   auth_http.ssl_options.versions.tls1_2 = tlsv1.2
+   auth_http.ssl_options.versions.tls1_1 = tlsv1.1
+   auth_http.ssl_options.sni = hostname.dev",
+  [],
+  [{rabbitmq_auth_backend_http,
+    [{ssl_options,
+      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+       {versions,['tlsv1.2','tlsv1.1']},
+       {server_name_indication, "hostname.dev"}
+      ]}
+    ]}],
+  []},
+ {ssl_options_hostname_verification_wildcard,
+  "auth_http.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   auth_http.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   auth_http.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   auth_http.ssl_options.versions.tls1_2 = tlsv1.2
+   auth_http.ssl_options.versions.tls1_1 = tlsv1.1
+   auth_http.ssl_options.hostname_verification = wildcard",
+  [],
+  [{rabbitmq_auth_backend_http,
+    [
+     {ssl_hostname_verification, wildcard},
+     {ssl_options,
+      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+       {versions,['tlsv1.2','tlsv1.1']}
+      ]}
+    ]}],
   []}
-
 ].
