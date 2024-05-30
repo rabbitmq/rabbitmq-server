@@ -54,7 +54,7 @@
                 page_size = undefined,
                 proc_file = undefined}).
 
--include("rabbit_memory.hrl").
+-include_lib("rabbit_common/include/rabbit_memory.hrl").
 
 %%----------------------------------------------------------------------------
 

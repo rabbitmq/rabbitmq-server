@@ -6,7 +6,7 @@
 %%
 
 -module(rabbit_auth_backend_dummy).
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).

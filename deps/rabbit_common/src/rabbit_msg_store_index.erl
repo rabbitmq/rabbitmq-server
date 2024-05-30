@@ -7,7 +7,7 @@
 
 -module(rabbit_msg_store_index).
 
--include("rabbit_msg_store.hrl").
+-include_lib("rabbit_common/include/rabbit_msg_store.hrl").
 
 %% Behaviour module to provide pluggable message store index.
 %% The index is used to locate message on disk and for reference-counting.

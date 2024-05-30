@@ -7,7 +7,7 @@
 %%  Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 -module(rabbit_framing_amqp_0_8).
--include("rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -export([version/0]).
 -export([lookup_method_name/1]).

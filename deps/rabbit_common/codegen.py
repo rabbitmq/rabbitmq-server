@@ -310,7 +310,7 @@ def genErl(spec):
     if module == "rabbit_framing_amqp_8_0":
         module = "rabbit_framing_amqp_0_8"
     print("-module(%s)." % module)
-    print("""-include("rabbit_framing.hrl").
+    print("""-include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -export([version/0]).
 -export([lookup_method_name/1]).

@@ -7,7 +7,7 @@
 
 -module(rabbit_core_metrics).
 
--include("rabbit_core_metrics.hrl").
+-include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
 
 -export([create_table/1]).
 -export([init/0]).

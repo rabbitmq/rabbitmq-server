@@ -6,8 +6,8 @@
 %%
 
 -module(rabbit_binary_generator).
--include("rabbit_framing.hrl").
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([build_simple_method_frame/3,
          build_simple_content_frames/4,

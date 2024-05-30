@@ -13,7 +13,7 @@
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 %%----------------------------------------------------------------------------
 

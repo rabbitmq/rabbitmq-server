@@ -7,7 +7,7 @@
 
 -module(rabbit_event).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([start_link/0]).
 -export([init_stats_timer/2, init_disabled_stats_timer/2,

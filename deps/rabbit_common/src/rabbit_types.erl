@@ -7,7 +7,7 @@
 
 -module(rabbit_types).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export_type([
               %% deprecated

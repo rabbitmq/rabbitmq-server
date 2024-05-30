@@ -7,7 +7,7 @@
 
 -module(rabbit_binary_parser).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([parse_table/1]).
 -export([ensure_content_decoded/1, clear_decoded_content/1]).

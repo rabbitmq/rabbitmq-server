@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--include("resource.hrl").
+-include_lib("rabbit_common/include/resource.hrl").
 
 %% Passed around most places
 -record(user, {username :: rabbit_types:option(rabbit_types:username()),

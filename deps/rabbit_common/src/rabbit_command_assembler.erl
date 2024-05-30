@@ -6,8 +6,8 @@
 %%
 
 -module(rabbit_command_assembler).
--include("rabbit_framing.hrl").
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([analyze_frame/3, init/1, process/2]).
 

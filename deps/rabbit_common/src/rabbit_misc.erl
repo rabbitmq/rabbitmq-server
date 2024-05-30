@@ -9,8 +9,8 @@
 
 -ignore_xref([{maps, get, 2}]).
 
--include("rabbit.hrl").
--include("rabbit_misc.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_misc.hrl").
 
 -include_lib("kernel/include/file.hrl").
 

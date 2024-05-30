@@ -10,7 +10,7 @@
 -include_lib("kernel/include/file.hrl").
 -include_lib("kernel/include/logger.hrl").
 
--include("logging.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
 
 -export([get_context/0,
          get_context/1,

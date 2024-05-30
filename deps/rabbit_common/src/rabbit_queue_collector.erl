@@ -19,7 +19,7 @@
 
 -record(state, {monitors, delete_from}).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 %%----------------------------------------------------------------------------
 
