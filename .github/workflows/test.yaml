@@ -27,7 +27,6 @@ concurrency:
   cancel-in-progress: true
 jobs:
   check-workflow:
-    name: Check Workflow
     runs-on: ubuntu-latest
     steps:
     - name: CHECKOUT REPOSITORY
