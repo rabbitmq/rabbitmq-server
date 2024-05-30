@@ -10,7 +10,7 @@
 -compile({no_auto_import,[get/1]}).
 -compile({no_auto_import,[put/2]}).
 
--include("rabbit_auth_backend_cache.hrl").
+-include_lib("rabbitmq_auth_backend_cache/include/rabbit_auth_backend_cache.hrl").
 
 -behaviour(rabbit_auth_cache).
 
