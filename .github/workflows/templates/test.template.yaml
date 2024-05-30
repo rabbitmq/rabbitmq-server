@@ -9,6 +9,14 @@
 #@   return names
 #@ end
 
+#@ def sharded_job_names(plugin, shard_count):
+#@   names = []
+#@   for shard_index in range(0, shard_count):
+#@     names.append("test-"+plugin+"-"+str(shard_index))
+#@   end
+#@   return names
+#@ end
+
 ---
 name: Test
 on:
@@ -66,29 +74,17 @@ jobs:
     secrets: inherit
 #@ end
 
-  test-rabbit-small:
+#@ rabbit_shard_count = 4
+#@ for shard_index in range(0, rabbit_shard_count):
+  test-rabbit-(@= str(shard_index) @):
     needs: #@ job_names(data.values.internal_deps)
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbit
-      test_size_filters: small
+      shard_index: #@ shard_index
+      shard_count: #@ rabbit_shard_count
     secrets: inherit
-
-  test-rabbit-medium:
-    needs: #@ job_names(data.values.internal_deps)
-    uses: ./.github/workflows/test-plugin.yaml
-    with:
-      plugin: rabbit
-      test_size_filters: medium
-    secrets: inherit
-
-  test-rabbit-large:
-    needs: #@ job_names(data.values.internal_deps)
-    uses: ./.github/workflows/test-plugin.yaml
-    with:
-      plugin: rabbit
-      test_size_filters: large,enormous
-    secrets: inherit
+#@ end
 
 #@ for plugin in data.values.tier1_plugins:
   test-(@= plugin @):
@@ -100,7 +96,7 @@ jobs:
 #@ end
 
   summary-test:
-    needs: #@ job_names(data.values.internal_deps + data.values.tier1_plugins) + ["test-rabbit-small", "test-rabbit-medium", "test-rabbit-large"]
+    needs: #@ job_names(data.values.internal_deps + data.values.tier1_plugins) + sharded_job_names("rabbit", rabbit_shard_count)
     runs-on: ubuntu-latest
     steps:
     - name: SUMMARY

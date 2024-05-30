@@ -98,7 +98,7 @@ jobs:
     with:
       plugin: trust_store_http
     secrets: inherit
-  test-rabbit-small:
+  test-rabbit-0:
     needs:
     - test-amqp10_client
     - test-amqp10_common
@@ -112,9 +112,10 @@ jobs:
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbit
-      test_size_filters: small
+      shard_index: 0
+      shard_count: 4
     secrets: inherit
-  test-rabbit-medium:
+  test-rabbit-1:
     needs:
     - test-amqp10_client
     - test-amqp10_common
@@ -128,9 +129,10 @@ jobs:
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbit
-      test_size_filters: medium
+      shard_index: 1
+      shard_count: 4
     secrets: inherit
-  test-rabbit-large:
+  test-rabbit-2:
     needs:
     - test-amqp10_client
     - test-amqp10_common
@@ -144,7 +146,25 @@ jobs:
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbit
-      test_size_filters: large,enormous
+      shard_index: 2
+      shard_count: 4
+    secrets: inherit
+  test-rabbit-3:
+    needs:
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
+    uses: ./.github/workflows/test-plugin.yaml
+    with:
+      plugin: rabbit
+      shard_index: 3
+      shard_count: 4
     secrets: inherit
   test-rabbitmq_amqp_client:
     needs:
@@ -781,9 +801,10 @@ jobs:
     - test-rabbitmq_web_mqtt_examples
     - test-rabbitmq_web_stomp
     - test-rabbitmq_web_stomp_examples
-    - test-rabbit-small
-    - test-rabbit-medium
-    - test-rabbit-large
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
     runs-on: ubuntu-latest
     steps:
     - name: SUMMARY

@@ -5,9 +5,12 @@ on:
       plugin:
         required: true
         type: string
-      test_size_filters:
-        default: small,medium,large,enormous
-        type: string
+      shard_index:
+        default: 0
+        type: number
+      shart_count:
+        default: 1
+        type: number
     secrets:
       REMOTE_CACHE_BUCKET_NAME:
         required: true
@@ -91,6 +94,14 @@ jobs:
         cat << EOF >> user.bazelrc
           build --strategy=TestRunner=local
         EOF
+    - name: COMPUTE TESTS IN SHARD
+      id: shard
+      run: |
+        bazelisk cquery 'tests(//deps/${{ inputs.plugin }}/...)' --output=label \
+          | awk '{print $1;}' > tests.log
+        split -da 3 -l $((`wc -l < tests.log`/${{ inputs.shart_count }})) tests.log shard
+        printf -v padded_index "%03d" ${{ inputs.shard_index }}
+        echo "file=shard$padded_index" | tee -a $GITHUB_OUTPUT
     - name: RUN TESTS
       if: inputs.plugin != 'rabbitmq_peer_discovery_aws'
       run: |
@@ -100,10 +111,9 @@ jobs:
         ## rabbit_ct_helpers or other code may log portions of the
         ## env vars and leak them
 
-        bazelisk test //deps/${{ inputs.plugin }}/... \
+        bazelisk test "$(< ${{ steps.shard.outputs.file }})" \
           --test_env RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }} \
           --test_tag_filters=-docker,-mixed-version-cluster \
-          --test_size_filters=${{ inputs.test_size_filters }} \
           --build_tests_only \
           --verbose_failures
     - name: UPLOAD TEST LOGS
