@@ -1,0 +1,61 @@
+name: Test Plugin
+on:
+  workflow_call:
+    inputs:
+      plugin:
+        required: true
+        type: string
+    secrets:
+      REMOTE_CACHE_BUCKET_NAME:
+        required: true
+      REMOTE_CACHE_CREDENTIALS_JSON:
+        required: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        erlang_version:
+        - 26
+        metadata_store:
+          - mnesia
+          - khepri
+        include:
+        - erlang_version: 26
+          elixir_version: 1.15
+    timeout-minutes: 120
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v4
+    - name: CONFIGURE OTP & ELIXIR
+      uses: erlef/setup-beam@v1.17
+      with:
+        otp-version: ${{ matrix.erlang_version }}
+        elixir-version: ${{ matrix.elixir_version }}
+    - name: AUTHENTICATE TO GOOGLE CLOUD
+      uses: google-github-actions/auth@v2.1.2
+      with:
+        credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
+    - name: CONFIGURE BAZEL
+      run: |
+        if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME }}" ]; then
+        cat << EOF >> user.bazelrc
+          build --remote_cache=https://storage.googleapis.com/${{ secrets.REMOTE_CACHE_BUCKET_NAME }}
+          build --google_default_credentials
+        EOF
+        fi
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --color=yes
+        EOF
+
+        bazelisk info release
+    #! - name: Setup tmate session
+    #!   uses: mxschmitt/action-tmate@v3
+    - name: RUN TESTS
+      run: |
+        bazelisk test //deps/${{ inputs.plugin }}/... \
+          --test_env RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }} \
+          --test_tag_filters=-aws,-docker,-mixed-version-cluster \
+          --build_tests_only \
+          --verbose_failures

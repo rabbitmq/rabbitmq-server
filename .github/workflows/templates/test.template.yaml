@@ -1,0 +1,93 @@
+#@ load("@ytt:data", "data")
+#@yaml/text-templated-strings
+
+#@ def job_names(plugins):
+#@   names = []
+#@   for p in plugins:
+#@     names.append("test-"+p)
+#@   end
+#@   return names
+#@ end
+
+---
+name: Test
+on:
+  push:
+    branches:
+      - main
+      - v3.13.x
+      - v3.12.x
+      - v3.11.x
+      - bump-otp-for-oci
+      - bump-rbe-*
+      - bump-rules_erlang
+    paths:
+      - 'deps/**'
+      - 'scripts/**'
+      - Makefile
+      - plugins.mk
+      - rabbitmq-components.mk
+      - .bazelrc
+      - .bazelversion
+      - BUILD.*
+      - '*.bzl'
+      - '*.bazel'
+      - .github/workflows/test.yaml
+  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  check-workflow:
+    name: Check Workflow
+    runs-on: ubuntu-latest
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v4
+    - name: SETUP ERLANG/ELIXIR
+      uses: erlef/setup-beam@v1
+      with:
+        otp-version: 26
+        elixir-version: 1.15
+    - name: ENSURE WORKFLOWS ARE UP TO DATE
+      working-directory: ${{ env.PRIMARY_VERSION_PATH }}
+      run: |
+        mkdir local-bin/
+        curl -L https://carvel.dev/install.sh | K14SIO_INSTALL_BIN_DIR=local-bin bash
+        make actions-workflows YTT=$PWD/local-bin/ytt
+        git diff --exit-code
+
+#@ for plugin in data.values.internal_deps:
+  test-(@= plugin @):
+    needs: check-workflow
+    uses: ./.github/workflows/test-plugin.yaml
+    with:
+      plugin: #@ plugin
+    secrets: inherit
+#@ end
+
+  test-rabbit:
+    needs: #@ ["check-workflow"] + job_names(data.values.internal_deps)
+    uses: ./.github/workflows/test-plugin.yaml
+    with:
+      plugin: rabbit
+    secrets: inherit
+
+#@ for plugin in data.values.tier1_plugins:
+  test-(@= plugin @):
+    needs: #@ ["check-workflow"] + job_names(data.values.internal_deps + ["rabbit"])
+    uses: ./.github/workflows/test-plugin.yaml
+    with:
+      plugin: #@ plugin
+    secrets: inherit
+#@ end
+
+  summary-test:
+    needs: #@ job_names(data.values.internal_deps + ["rabbit"] + data.values.tier1_plugins)
+    runs-on: ubuntu-latest
+    steps:
+    - name: SUMMARY
+      run: |
+        cat << 'EOF' | jq -e 'map(.result == "success") | all(.)'
+        ${{ toJson(needs) }}
+        EOF
