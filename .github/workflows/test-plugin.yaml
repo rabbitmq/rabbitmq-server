@@ -53,14 +53,14 @@ jobs:
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
     - name: deps/amqp10_client SETUP
-      if: ${{ 'amqp10_client' == inputs.plugin }}
+      if: inputs.plugin == 'amqp10_client'
       run: |
         # reduce sandboxing so that activemq works
         cat << EOF >> user.bazelrc
           build --strategy=TestRunner=local
         EOF
     - name: deps/rabbit SETUP
-      if: ${{ 'rabbit' == inputs.plugin }}
+      if: inputs.plugin == 'rabbit'
       run: |
         sudo apt-get update && \
         sudo apt-get install -y dotnet-sdk-6.0
@@ -72,6 +72,7 @@ jobs:
           && rm -rf warmup \
           && rm -rf /tmp/NuGetScratch
     - name: RUN TESTS
+      if: inputs.plugin != 'rabbitmq_peer_discovery_aws'
       run: |
         ## WARNING:
         ## secrets must not be set in --test_env or --action_env,
@@ -81,7 +82,7 @@ jobs:
 
         bazelisk test //deps/${{ inputs.plugin }}/... \
           --test_env RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }} \
-          --test_tag_filters=-aws,-docker,-mixed-version-cluster \
+          --test_tag_filters=-docker,-mixed-version-cluster \
           --build_tests_only \
           --verbose_failures
     - name: UPLOAD TEST LOGS
