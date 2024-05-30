@@ -75,7 +75,7 @@ jobs:
 
 #@ for plugin in data.values.tier1_plugins:
   test-(@= plugin @):
-    needs: #@ job_names(["rabbit"])
+    needs: #@ job_names(data.values.internal_deps)
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: #@ plugin

@@ -115,273 +115,585 @@ jobs:
     secrets: inherit
   test-rabbitmq_amqp_client:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_amqp_client
     secrets: inherit
   test-rabbitmq_amqp1_0:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_amqp1_0
     secrets: inherit
   test-rabbitmq_auth_backend_cache:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_auth_backend_cache
     secrets: inherit
   test-rabbitmq_auth_backend_http:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_auth_backend_http
     secrets: inherit
   test-rabbitmq_auth_backend_ldap:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_auth_backend_ldap
     secrets: inherit
   test-rabbitmq_auth_backend_oauth2:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_auth_backend_oauth2
     secrets: inherit
   test-rabbitmq_auth_mechanism_ssl:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_auth_mechanism_ssl
     secrets: inherit
   test-rabbitmq_aws:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_aws
     secrets: inherit
   test-rabbitmq_consistent_hash_exchange:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_consistent_hash_exchange
     secrets: inherit
   test-rabbitmq_event_exchange:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_event_exchange
     secrets: inherit
   test-rabbitmq_federation:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_federation
     secrets: inherit
   test-rabbitmq_federation_management:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_federation_management
     secrets: inherit
   test-rabbitmq_jms_topic_exchange:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_jms_topic_exchange
     secrets: inherit
   test-rabbitmq_management:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_management
     secrets: inherit
   test-rabbitmq_management_agent:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_management_agent
     secrets: inherit
   test-rabbitmq_mqtt:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_mqtt
     secrets: inherit
   test-rabbitmq_peer_discovery_aws:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_peer_discovery_aws
     secrets: inherit
   test-rabbitmq_peer_discovery_common:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_peer_discovery_common
     secrets: inherit
   test-rabbitmq_peer_discovery_consul:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_peer_discovery_consul
     secrets: inherit
   test-rabbitmq_peer_discovery_etcd:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_peer_discovery_etcd
     secrets: inherit
   test-rabbitmq_peer_discovery_k8s:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_peer_discovery_k8s
     secrets: inherit
   test-rabbitmq_prelaunch:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_prelaunch
     secrets: inherit
   test-rabbitmq_prometheus:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_prometheus
     secrets: inherit
   test-rabbitmq_random_exchange:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_random_exchange
     secrets: inherit
   test-rabbitmq_recent_history_exchange:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_recent_history_exchange
     secrets: inherit
   test-rabbitmq_sharding:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_sharding
     secrets: inherit
   test-rabbitmq_shovel:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_shovel
     secrets: inherit
   test-rabbitmq_shovel_management:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_shovel_management
     secrets: inherit
   test-rabbitmq_stomp:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_stomp
     secrets: inherit
   test-rabbitmq_stream:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_stream
     secrets: inherit
   test-rabbitmq_stream_management:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_stream_management
     secrets: inherit
   test-rabbitmq_top:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_top
     secrets: inherit
   test-rabbitmq_tracing:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_tracing
     secrets: inherit
   test-rabbitmq_trust_store:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_trust_store
     secrets: inherit
   test-rabbitmq_web_dispatch:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_web_dispatch
     secrets: inherit
   test-rabbitmq_web_mqtt:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_web_mqtt
     secrets: inherit
   test-rabbitmq_web_mqtt_examples:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_web_mqtt_examples
     secrets: inherit
   test-rabbitmq_web_stomp:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_web_stomp
     secrets: inherit
   test-rabbitmq_web_stomp_examples:
     needs:
-    - test-rabbit
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_web_stomp_examples
