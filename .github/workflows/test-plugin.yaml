@@ -71,6 +71,13 @@ jobs:
           && cd .. \
           && rm -rf warmup \
           && rm -rf /tmp/NuGetScratch
+    - name: deps/rabbitmq_auth_backend_ldap SETUP
+      if: inputs.plugin == 'rabbitmq_auth_backend_ldap'
+      run: |
+        sudo apt-get update && \
+        sudo apt-get install -y \
+          ldap-utils \
+          slapd
     - name: RUN TESTS
       if: inputs.plugin != 'rabbitmq_peer_discovery_aws'
       run: |
