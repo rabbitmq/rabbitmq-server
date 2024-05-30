@@ -113,6 +113,10 @@ jobs:
         ## rabbit_ct_helpers or other code may log portions of the
         ## env vars and leak them
 
+        echo "Tests in shard:"
+        echo $(< ${{ steps.shard.outputs.file }})
+        echo ""
+
         bazelisk test $(< ${{ steps.shard.outputs.file }}) \
           --test_env RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }} \
           --test_tag_filters=-docker,-mixed-version-cluster \
