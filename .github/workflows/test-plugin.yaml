@@ -8,7 +8,7 @@ on:
       shard_index:
         default: 0
         type: number
-      shart_count:
+      shard_count:
         default: 1
         type: number
     secrets:
@@ -99,7 +99,7 @@ jobs:
       run: |
         bazelisk cquery 'tests(//deps/${{ inputs.plugin }}/...)' --output=label \
           | awk '{print $1;}' > tests.log
-        split -da 3 -l $((`wc -l < tests.log`/${{ inputs.shart_count }})) tests.log shard
+        split -da 3 -l $((`wc -l < tests.log`/${{ inputs.shard_count }})) tests.log shard
         printf -v padded_index "%03d" ${{ inputs.shard_index }}
         echo "file=shard$padded_index" | tee -a $GITHUB_OUTPUT
     - name: RUN TESTS
