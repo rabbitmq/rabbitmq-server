@@ -98,7 +98,7 @@ jobs:
       id: shard
       run: |
         bazelisk cquery \
-          'tests(//deps/${{ inputs.plugin }}/...) except attr("tags", "manual", //deps/...)' \
+          'tests(//deps/${{ inputs.plugin }}/...) except attr("tags", "manual|mixed-version-cluster", //deps/...)' \
           --output=label \
             | awk '{print $1;}' > tests.log
         split -da 3 -l $((`wc -l < tests.log`/${{ inputs.shard_count }})) tests.log shard
@@ -119,7 +119,6 @@ jobs:
 
         bazelisk test $(< ${{ steps.shard.outputs.file }}) \
           --test_env RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }} \
-          --test_tag_filters=-docker,-mixed-version-cluster \
           --build_tests_only \
           --verbose_failures
     - name: UPLOAD TEST LOGS
