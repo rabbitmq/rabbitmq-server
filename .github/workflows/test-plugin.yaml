@@ -64,3 +64,10 @@ jobs:
           --test_tag_filters=-aws,-docker,-mixed-version-cluster \
           --build_tests_only \
           --verbose_failures
+    - name: UPLOAD TEST LOGS
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: bazel-testlogs-${{ inputs.plugin }}-${{ matrix.erlang_version }}-${{ matrix.metadata_store }}
+        path: |
+          bazel-testlogs/deps/${{ inputs.plugin }}/*
