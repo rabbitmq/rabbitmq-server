@@ -67,7 +67,7 @@ jobs:
 #@ end
 
   test-rabbit:
-    needs: #@ ["check-workflow"] + job_names(data.values.internal_deps)
+    needs: #@ job_names(data.values.internal_deps)
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbit
@@ -75,7 +75,7 @@ jobs:
 
 #@ for plugin in data.values.tier1_plugins:
   test-(@= plugin @):
-    needs: #@ ["check-workflow"] + job_names(data.values.internal_deps + ["rabbit"])
+    needs: rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: #@ plugin
