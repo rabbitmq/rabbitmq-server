@@ -114,235 +114,274 @@ jobs:
       plugin: rabbit
     secrets: inherit
   test-rabbitmq_amqp_client:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_amqp_client
     secrets: inherit
   test-rabbitmq_amqp1_0:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_amqp1_0
     secrets: inherit
   test-rabbitmq_auth_backend_cache:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_auth_backend_cache
     secrets: inherit
   test-rabbitmq_auth_backend_http:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_auth_backend_http
     secrets: inherit
   test-rabbitmq_auth_backend_ldap:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_auth_backend_ldap
     secrets: inherit
   test-rabbitmq_auth_backend_oauth2:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_auth_backend_oauth2
     secrets: inherit
   test-rabbitmq_auth_mechanism_ssl:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_auth_mechanism_ssl
     secrets: inherit
   test-rabbitmq_aws:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_aws
     secrets: inherit
   test-rabbitmq_consistent_hash_exchange:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_consistent_hash_exchange
     secrets: inherit
   test-rabbitmq_event_exchange:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_event_exchange
     secrets: inherit
   test-rabbitmq_federation:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_federation
     secrets: inherit
   test-rabbitmq_federation_management:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_federation_management
     secrets: inherit
   test-rabbitmq_jms_topic_exchange:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_jms_topic_exchange
     secrets: inherit
   test-rabbitmq_management:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_management
     secrets: inherit
   test-rabbitmq_management_agent:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_management_agent
     secrets: inherit
   test-rabbitmq_mqtt:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_mqtt
     secrets: inherit
   test-rabbitmq_peer_discovery_aws:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_peer_discovery_aws
     secrets: inherit
   test-rabbitmq_peer_discovery_common:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_peer_discovery_common
     secrets: inherit
   test-rabbitmq_peer_discovery_consul:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_peer_discovery_consul
     secrets: inherit
   test-rabbitmq_peer_discovery_etcd:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_peer_discovery_etcd
     secrets: inherit
   test-rabbitmq_peer_discovery_k8s:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_peer_discovery_k8s
     secrets: inherit
   test-rabbitmq_prelaunch:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_prelaunch
     secrets: inherit
   test-rabbitmq_prometheus:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_prometheus
     secrets: inherit
   test-rabbitmq_random_exchange:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_random_exchange
     secrets: inherit
   test-rabbitmq_recent_history_exchange:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_recent_history_exchange
     secrets: inherit
   test-rabbitmq_sharding:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_sharding
     secrets: inherit
   test-rabbitmq_shovel:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_shovel
     secrets: inherit
   test-rabbitmq_shovel_management:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_shovel_management
     secrets: inherit
   test-rabbitmq_stomp:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_stomp
     secrets: inherit
   test-rabbitmq_stream:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_stream
     secrets: inherit
   test-rabbitmq_stream_management:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_stream_management
     secrets: inherit
   test-rabbitmq_top:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_top
     secrets: inherit
   test-rabbitmq_tracing:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_tracing
     secrets: inherit
   test-rabbitmq_trust_store:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_trust_store
     secrets: inherit
   test-rabbitmq_web_dispatch:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_web_dispatch
     secrets: inherit
   test-rabbitmq_web_mqtt:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_web_mqtt
     secrets: inherit
   test-rabbitmq_web_mqtt_examples:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_web_mqtt_examples
     secrets: inherit
   test-rabbitmq_web_stomp:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_web_stomp
     secrets: inherit
   test-rabbitmq_web_stomp_examples:
-    needs: rabbit
+    needs:
+    - test-rabbit
     uses: ./.github/workflows/test-plugin.yaml
     with:
       plugin: rabbitmq_web_stomp_examples
