@@ -46,7 +46,7 @@ jobs:
         EOF
         fi
         cat << EOF >> user.bazelrc
-          build:buildbuddy --color=yes
+          build --color=yes
         EOF
 
         bazelisk info release
