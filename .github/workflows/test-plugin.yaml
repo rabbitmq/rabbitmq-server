@@ -77,6 +77,10 @@ jobs:
           && cd .. \
           && rm -rf warmup \
           && rm -rf /tmp/NuGetScratch
+
+        cat << EOF >> user.bazelrc
+          build --strategy=TestRunner=local
+        EOF
     - name: deps/rabbitmq_auth_backend_ldap SETUP
       if: inputs.plugin == 'rabbitmq_auth_backend_ldap'
       run: |
