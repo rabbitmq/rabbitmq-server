@@ -78,6 +78,7 @@ jobs:
       if: inputs.plugin == 'rabbit'
       run: |
         sudo apt-get update && \
+        sudo apt-get purge -y dotnet-sdk-8.0
         sudo apt-get install -y dotnet-sdk-6.0
 
         mkdir warmup \
