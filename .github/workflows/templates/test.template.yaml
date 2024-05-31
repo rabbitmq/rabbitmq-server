@@ -48,6 +48,8 @@ concurrency:
 jobs:
   check-workflow:
     runs-on: ubuntu-latest
+    outputs:
+      repo_cache_key: steps.repo-cache-key.outputs.value
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
@@ -63,12 +65,27 @@ jobs:
         curl -L https://carvel.dev/install.sh | K14SIO_INSTALL_BIN_DIR=local-bin bash
         make actions-workflows YTT=$PWD/local-bin/ytt
         git diff --exit-code
+    - name: COMPUTE REPO CACHE KEY
+      id: repo-cache-key
+      run: |
+        echo "value=${{ hashFiles('MODULE.bazel') }}" | tee -a $GITHUB_OUTPUT
+    - name: REPO CACHE
+      uses: actions/cache@v4
+      with:
+        key: ${{ steps.repo-cache-key.outputs.value }}
+        path: /home/runner/repo-cache/
+    - name: PRIME CACHE
+      run: |
+        bazelisk cquery \
+          'tests(//...) except attr("tags", "manual|mixed-version-cluster", //deps/...)' \
+          --output=label
 
 #@ for plugin in data.values.internal_deps:
   test-(@= plugin @):
     needs: check-workflow
     uses: ./.github/workflows/test-plugin.yaml
     with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
       plugin: #@ plugin
     secrets: inherit
 #@ end
@@ -76,9 +93,10 @@ jobs:
 #@ rabbit_shard_count = 10
 #@ for shard_index in range(0, rabbit_shard_count):
   test-rabbit-(@= str(shard_index) @):
-    needs: #@ job_names(data.values.internal_deps)
+    needs: #@ ["check-workflow"] + job_names(data.values.internal_deps)
     uses: ./.github/workflows/test-plugin.yaml
     with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
       plugin: rabbit
       shard_index: #@ shard_index
       shard_count: #@ rabbit_shard_count
@@ -87,9 +105,10 @@ jobs:
 
 #@ for plugin in data.values.tier1_plugins:
   test-(@= plugin @):
-    needs: #@ sharded_job_names("rabbit", rabbit_shard_count)
+    needs: #@ ["check-workflow"] + sharded_job_names("rabbit", rabbit_shard_count)
     uses: ./.github/workflows/test-plugin.yaml
     with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
       plugin: #@ plugin
     secrets: inherit
 #@ end

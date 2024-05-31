@@ -2,6 +2,9 @@ name: Test Plugin
 on:
   workflow_call:
     inputs:
+      repo_cache_key:
+        required: true
+        type: string
       plugin:
         required: true
         type: string
@@ -32,6 +35,11 @@ jobs:
           elixir_version: 1.15
     timeout-minutes: 120
     steps:
+    - name: LOAD REPO CACHE
+      uses: actions/cache/restore@v4
+      with:
+        key: ${{ inputs.repo_cache_key }}
+        path: /home/runner/repo-cache/
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
     - name: CONFIGURE OTP & ELIXIR
@@ -52,6 +60,7 @@ jobs:
         EOF
         fi
         cat << EOF >> user.bazelrc
+          build --repository_cache=/home/runner/repo-cache/
           build --color=yes
         EOF
 
