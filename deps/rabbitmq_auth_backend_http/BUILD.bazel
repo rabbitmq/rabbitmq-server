@@ -57,7 +57,12 @@ rabbitmq_app(
     app_module = APP_MODULE,
     app_name = APP_NAME,
     beam_files = [":beam_files"],
-    extra_apps = ["inets"],
+    extra_apps = [
+        "crypto",
+        "inets",
+        "ssl",
+        "public_key",
+    ],
     license_files = [":license_files"],
     priv = [":priv"],
     deps = [
