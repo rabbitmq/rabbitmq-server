@@ -18,7 +18,7 @@ define PROJECT_APP_EXTRA_KEYS
 	{broker_version_requirements, []}
 endef
 
-LOCAL_DEPS = inets
+LOCAL_DEPS = ssl inets crypto public_key
 DEPS = rabbit_common rabbit amqp_client
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers cowboy
 

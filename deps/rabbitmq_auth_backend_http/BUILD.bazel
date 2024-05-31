@@ -44,7 +44,7 @@ all_srcs(name = "all_srcs")
 test_suite_beam_files(name = "test_suite_beam_files")
 
 # gazelle:erlang_app_extra_app inets
-
+# gazelle:erlang_app_extra_app public_key
 # gazelle:erlang_app_dep rabbit
 
 rabbitmq_app(
