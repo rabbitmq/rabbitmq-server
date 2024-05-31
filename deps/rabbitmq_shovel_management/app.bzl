@@ -99,19 +99,10 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         deps = ["//deps/rabbit_common:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )
     erlang_bytecode(
-        name = "rabbit_shovel_mgmt_SUITE_beam_files",
+        name = "unit_SUITE_beam_files",
         testonly = True,
-        srcs = ["test/rabbit_shovel_mgmt_SUITE.erl"],
-        outs = ["test/rabbit_shovel_mgmt_SUITE.beam"],
-        app_name = "rabbitmq_shovel_management",
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app", "//deps/rabbitmq_management_agent:erlang_app"],
-    )
-    erlang_bytecode(
-        name = "rabbit_shovel_mgmt_util_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/rabbit_shovel_mgmt_util_SUITE.erl"],
-        outs = ["test/rabbit_shovel_mgmt_util_SUITE.beam"],
+        srcs = ["test/unit_SUITE.erl"],
+        outs = ["test/unit_SUITE.beam"],
         app_name = "rabbitmq_shovel_management",
         erlc_opts = "//:test_erlc_opts",
     )
