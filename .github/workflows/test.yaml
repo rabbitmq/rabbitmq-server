@@ -29,7 +29,7 @@ jobs:
   check-workflow:
     runs-on: ubuntu-latest
     outputs:
-      repo_cache_key: steps.repo-cache-key.outputs.value
+      repo_cache_key: ${{ steps.repo-cache-key.outputs.value }}
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
@@ -48,7 +48,11 @@ jobs:
     - name: COMPUTE REPO CACHE KEY
       id: repo-cache-key
       run: |
-        echo "value=${{ hashFiles('MODULE.bazel') }}" | tee -a $GITHUB_OUTPUT
+        echo "value=bazel-repo-cache-${{ hashFiles('MODULE.bazel') }}" | tee -a $GITHUB_OUTPUT
+    - name: AUTHENTICATE TO GOOGLE CLOUD
+      uses: google-github-actions/auth@v2.1.2
+      with:
+        credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
     - name: REPO CACHE
       uses: actions/cache@v4
       with:
@@ -56,6 +60,17 @@ jobs:
         path: /home/runner/repo-cache/
     - name: PRIME CACHE
       run: |
+        if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME }}" ]; then
+        cat << EOF >> user.bazelrc
+          build --remote_cache=https://storage.googleapis.com/${{ secrets.REMOTE_CACHE_BUCKET_NAME }}
+          build --google_default_credentials
+        EOF
+        fi
+        cat << EOF >> user.bazelrc
+          build --repository_cache=/home/runner/repo-cache/
+          build --color=yes
+        EOF
+
         bazelisk cquery \
           'tests(//...) except attr("tags", "manual|mixed-version-cluster", //deps/...)' \
           --output=label
