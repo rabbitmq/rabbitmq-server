@@ -1252,7 +1252,7 @@ segment_entry_count() ->
     %% A value lower than the max write_buffer size results in nothing needing
     %% to be written to disk as long as the consumer consumes as fast as the
     %% producer produces.
-    persistent_term:get({rabbit, classic_queue_index_v2_segment_entry_count}, 4096).
+    persistent_term:get(classic_queue_index_v2_segment_entry_count, 4096).
 
 %% Note that store files will also be removed if there are any in this directory.
 %% Currently the v2 per-queue store expects this function to remove its own files.

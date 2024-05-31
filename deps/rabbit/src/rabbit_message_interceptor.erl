@@ -18,7 +18,7 @@
 
 -spec intercept(mc:state()) -> mc:state().
 intercept(Msg) ->
-    Interceptors = persistent_term:get({rabbit, incoming_message_interceptors}, []),
+    Interceptors = persistent_term:get(incoming_message_interceptors, []),
     lists:foldl(fun({InterceptorName, Overwrite}, M) ->
                         intercept(M, InterceptorName, Overwrite)
                 end, Msg, Interceptors).

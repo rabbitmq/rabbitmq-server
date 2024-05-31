@@ -37,19 +37,7 @@
 %% synchronization has not been documented, since this doesn't affect
 %% client publishes.
 
--define(DEFAULT_INITIAL_CREDIT, 200).
--define(DEFAULT_MORE_CREDIT_AFTER, 100).
-
--define(DEFAULT_CREDIT,
-        case get(credit_flow_default_credit) of
-            undefined ->
-                Val = rabbit_misc:get_env(rabbit, credit_flow_default_credit,
-                                           {?DEFAULT_INITIAL_CREDIT,
-                                            ?DEFAULT_MORE_CREDIT_AFTER}),
-                put(credit_flow_default_credit, Val),
-                Val;
-            Val       -> Val
-        end).
+-define(DEFAULT_CREDIT, persistent_term:get(credit_flow_default_credit)).
 
 -export([send/1, send/2, ack/1, ack/2, handle_bump_msg/1, blocked/0, state/0, state_delayed/1]).
 -export([peer_down/1]).

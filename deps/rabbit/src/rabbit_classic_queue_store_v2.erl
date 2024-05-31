@@ -561,13 +561,13 @@ delete_segments(Segments, State0 = #qs{ write_buffer = WriteBuffer0,
 
 segment_entry_count() ->
     %% We use the same value as the index.
-    persistent_term:get({rabbit, classic_queue_index_v2_segment_entry_count}, 4096).
+    persistent_term:get(classic_queue_index_v2_segment_entry_count, 4096).
 
 max_cache_size() ->
-    persistent_term:get({rabbit, classic_queue_store_v2_max_cache_size}, 512000).
+    persistent_term:get(classic_queue_store_v2_max_cache_size, 512000).
 
 check_crc32() ->
-    persistent_term:get({rabbit, classic_queue_store_v2_check_crc32}, true).
+    persistent_term:get(classic_queue_store_v2_check_crc32, true).
 
 %% Same implementation as rabbit_classic_queue_index_v2:segment_file/2,
 %% but with a different state record.

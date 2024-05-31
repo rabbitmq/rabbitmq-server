@@ -745,7 +745,7 @@ do_wait_updated_amqqueue(Name, Pid) ->
     end.
 
 cmd_set_v2_check_crc32(Value) ->
-    application:set_env(rabbit, classic_queue_store_v2_check_crc32, Value).
+    persistent_term:put(classic_queue_store_v2_check_crc32, Value).
 
 cmd_set_version(Version) ->
     ?DEBUG("~0p ~0p", [Version]),
