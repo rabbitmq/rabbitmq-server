@@ -417,6 +417,42 @@ stop-brokers stop-cluster:
 	wait
 
 # --------------------------------------------------------------------
+# Code reloading.
+#
+# For `make run-broker` either do:
+# * make RELOAD=1
+# * make all reload-broker        (can't do this alongside -j flag)
+# * make && make reload-broker    (fine with -j flag)
+#
+# Or if recompiling a specific application:
+# * make -C deps/rabbit RELOAD=1
+#
+# For `make start-cluster` use the `reload-cluster` target.
+# Same constraints apply as with `reload-broker`:
+# * make all reload-cluster
+# * make && make reload-cluster
+# --------------------------------------------------------------------
+
+reload-broker:
+	$(exec_verbose) ERL_LIBS="$(DIST_ERL_LIBS)" \
+		$(RABBITMQCTL) -n $(RABBITMQ_NODENAME) \
+		eval "io:format(\"~p~n\", [c:lm()])."
+
+ifeq ($(MAKELEVEL),0)
+ifdef RELOAD
+all:: reload-broker
+endif
+endif
+
+reload-cluster:
+	@for n in $$(seq $(NODES) -1 1); do \
+		nodename="rabbit-$$n@$(HOSTNAME)"; \
+		$(MAKE) reload-broker \
+			RABBITMQ_NODENAME="$$nodename" & \
+	done; \
+	wait
+
+# --------------------------------------------------------------------
 # Used by testsuites.
 # --------------------------------------------------------------------
 
