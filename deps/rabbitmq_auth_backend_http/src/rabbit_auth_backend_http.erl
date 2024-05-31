@@ -205,15 +205,15 @@ do_http_req(Path0, Query) ->
 ssl_options() ->
     case application:get_env(rabbitmq_auth_backend_http, ssl_options) of
         {ok, Opts0} when is_list(Opts0) ->
-            Opts1 = rabbit_networking:fix_ssl_options(Opts0),
+            Opts1 = [{ssl, rabbit_networking:fix_ssl_options(Opts0)}],            
             case application:get_env(rabbitmq_auth_backend_http, ssl_hostname_verification) of
-                wildcard ->
+                {ok, wildcard} ->
                     rabbit_log:debug("Enabling wildcard-aware hostname verification for HTTP client connections"),
                     %% Needed for HTTPS connections that connect to servers that use wildcard certificates.
                     %% See https://erlang.org/doc/man/public_key.html#pkix_verify_hostname_match_fun-1.
                     [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]} | Opts1];
                 _ ->
-                    Opts0
+                    Opts1
             end;
         _ -> []
     end.
