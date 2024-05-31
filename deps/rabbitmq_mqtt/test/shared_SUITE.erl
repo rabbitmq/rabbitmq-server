@@ -516,7 +516,18 @@ publish_to_all_non_deprecated_queue_types(Config, QoS) ->
 flow_classic_mirrored_queue(Config) ->
     QueueName = <<"flow">>,
     ok = rabbit_ct_broker_helpers:set_ha_policy(Config, 0, QueueName, <<"all">>),
-    flow(Config, {rabbit, credit_flow_default_credit, {2, 1}}, <<"classic">>),
+    %% New nodes lookup via persistent_term:get/1.
+    %% Old nodes lookup via application:get_env/2.
+    %% Therefore, we set both persistent_term and application.
+    Key = credit_flow_default_credit,
+    Val = {2, 1},
+    DefaultVal = rabbit_ct_broker_helpers:rpc(Config, persistent_term, get, [Key]),
+    Result = rpc_all(Config, persistent_term, put, [Key, Val]),
+    ?assert(lists:all(fun(R) -> R =:= ok end, Result)),
+
+    flow(Config, {rabbit, Key, Val}, <<"classic">>),
+
+    ?assertEqual(Result, rpc_all(Config, persistent_term, put, [Key, DefaultVal])),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, QueueName).
 
 flow_quorum_queue(Config) ->
@@ -558,8 +569,8 @@ flow(Config, {App, Par, Val}, QueueType)
     ok = emqtt:disconnect(C),
     ?awaitMatch([],
                 all_connection_pids(Config), 10_000, 1000),
-    Result = rpc_all(Config, application, set_env, [App, Par, DefaultVal]),
-    ok.
+    ?assertEqual(Result,
+                 rpc_all(Config, application, set_env, [App, Par, DefaultVal])).
 
 events(Config) ->
     ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config, event_recorder),
@@ -1790,7 +1801,7 @@ default_queue_type(Config) ->
     ok = rabbit_ct_broker_helpers:delete_vhost(Config, Vhost).
 
 incoming_message_interceptors(Config) ->
-    Key = {rabbit, ?FUNCTION_NAME},
+    Key = ?FUNCTION_NAME,
     ok = rpc(Config, persistent_term, put, [Key, [{set_header_timestamp, false}]]),
     Ch = rabbit_ct_client_helpers:open_channel(Config),
     Payload = ClientId = Topic = atom_to_binary(?FUNCTION_NAME),

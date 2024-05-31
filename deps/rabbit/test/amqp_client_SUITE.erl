@@ -3049,7 +3049,7 @@ available_messages(QType, Config) ->
     ok = rabbit_ct_client_helpers:close_channel(Ch).
 
 incoming_message_interceptors(Config) ->
-    Key = {rabbit, ?FUNCTION_NAME},
+    Key = ?FUNCTION_NAME,
     ok = rpc(Config, persistent_term, put, [Key, [{set_header_routing_node, false},
                                                   {set_header_timestamp, false}]]),
     Stream = <<"my stream">>,

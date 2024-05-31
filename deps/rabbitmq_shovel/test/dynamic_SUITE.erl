@@ -790,12 +790,9 @@ shovels_from_parameters() ->
     [rabbit_misc:pget(name, Shovel) || Shovel <- L].
 
 set_default_credit(Config, Value) ->
-    {ok, OrigValue} =
-        rabbit_ct_broker_helpers:rpc(
-          Config, 0, application, get_env, [rabbit, credit_flow_default_credit]),
-    ok =
-        rabbit_ct_broker_helpers:rpc(
-          Config, 0, application, set_env, [rabbit, credit_flow_default_credit, Value]),
+    Key = credit_flow_default_credit,
+    OrigValue = rabbit_ct_broker_helpers:rpc(Config, persistent_term, get, [Key]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, persistent_term, put, [Key, Value]),
     OrigValue.
 
 set_vm_memory_high_watermark(Config, Limit) ->

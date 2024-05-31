@@ -1710,7 +1710,8 @@ persist_static_configuration() ->
       [classic_queue_index_v2_segment_entry_count,
        classic_queue_store_v2_max_cache_size,
        classic_queue_store_v2_check_crc32,
-       incoming_message_interceptors
+       incoming_message_interceptors,
+       credit_flow_default_credit
       ]),
 
     %% Disallow 0 as it means unlimited:
@@ -1726,12 +1727,11 @@ persist_static_configuration() ->
     ok = persistent_term:put(max_message_size, MaxMsgSize).
 
 persist_static_configuration(Params) ->
-    App = ?MODULE,
     lists:foreach(
       fun(Param) ->
-              case application:get_env(App, Param) of
+              case application:get_env(?MODULE, Param) of
                   {ok, Value} ->
-                      ok = persistent_term:put({App, Param}, Value);
+                      ok = persistent_term:put(Param, Value);
                   undefined ->
                       ok
               end
