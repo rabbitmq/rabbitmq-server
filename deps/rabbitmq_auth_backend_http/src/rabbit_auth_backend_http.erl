@@ -163,7 +163,6 @@ http_req(Path, Query, Retry) ->
         Other -> Other
     end.
 
-
 do_http_req(Path0, Query) ->
     URI = uri_parser:parse(Path0, [{port, 80}]),
     {host, Host} = lists:keyfind(host, 1, URI),
@@ -190,19 +189,8 @@ do_http_req(Path0, Query) ->
             _ -> RequestTimeout
         end,
     rabbit_log:debug("auth_backend_http: request timeout: ~tp, connection timeout: ~tp", [RequestTimeout, ConnectionTimeout]),
-    HttpOpts = case application:get_env(rabbitmq_auth_backend_http, ssl_options) of
-        {ok, Opts} when is_list(Opts) ->
-            [
-                {ssl, Opts},
-                {timeout, RequestTimeout},
-                {connect_timeout, ConnectionTimeout}];
-        _                             ->
-            [
-                {timeout, RequestTimeout},
-                {connect_timeout, ConnectionTimeout}
-            ]
-    end,
-
+    HttpOpts = [{timeout, RequestTimeout},
+                {connect_timeout, ConnectionTimeout}] ++ ssl_options(),
     case httpc:request(Method, Request, HttpOpts, []) of
         {ok, {{_HTTP, Code, _}, _Headers, Body}} ->
             rabbit_log:debug("auth_backend_http: response code is ~tp, body: ~tp", [Code, Body]),
@@ -212,6 +200,22 @@ do_http_req(Path0, Query) ->
             end;
         {error, _} = E ->
             E
+    end.
+
+ssl_options() ->
+    case application:get_env(rabbitmq_auth_backend_http, ssl_options) of
+        {ok, Opts0} when is_list(Opts0) ->
+            Opts1 = [{ssl, rabbit_networking:fix_ssl_options(Opts0)}],            
+            case application:get_env(rabbitmq_auth_backend_http, ssl_hostname_verification) of
+                {ok, wildcard} ->
+                    rabbit_log:debug("Enabling wildcard-aware hostname verification for HTTP client connections"),
+                    %% Needed for HTTPS connections that connect to servers that use wildcard certificates.
+                    %% See https://erlang.org/doc/man/public_key.html#pkix_verify_hostname_match_fun-1.
+                    [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]} | Opts1];
+                _ ->
+                    Opts1
+            end;
+        _ -> []
     end.
 
 p(PathName) ->
