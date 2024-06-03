@@ -96,6 +96,9 @@ jobs:
         cat << EOF >> user.bazelrc
           build --strategy=TestRunner=local
         EOF
+    - name: Setup tmate session
+      if: inputs.plugin == 'rabbitmq_auth_backend_ldap'
+      uses: mxschmitt/action-tmate@v3
     - name: deps/rabbitmq_peer_discovery_consul SETUP
       if: inputs.plugin == 'rabbitmq_peer_discovery_consul'
       run: |
