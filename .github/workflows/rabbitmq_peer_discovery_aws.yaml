@@ -13,10 +13,6 @@ jobs:
   peer-discovery-aws-integration-test:
     name: Integration Test
     runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        otp_version_id:
-          - 26_2
     timeout-minutes: 45
     steps:
     - name: CHECK IF IMAGE WILL PUSH
@@ -43,30 +39,50 @@ jobs:
         tags: ${{ steps.metadata.outputs.tags }}
         timeout-seconds: 3600
         polling-seconds: 60
+    - name: COMPUTE REPO CACHE KEY
+      if: steps.authorized.outputs.authorized == 'true'
+      id: repo-cache-key
+      run: |
+        echo "value=bazel-repo-cache-${{ hashFiles('MODULE.bazel') }}" | tee -a $GITHUB_OUTPUT
+    - name: LOAD REPO CACHE
+      if: steps.authorized.outputs.authorized == 'true'
+      uses: actions/cache/restore@v4
+      with:
+        key: ${{ steps.repo-cache-key.outputs.value }}
+        path: /home/runner/repo-cache/
+    - name: CONFIGURE OTP & ELIXIR
+      if: steps.authorized.outputs.authorized == 'true'
+      uses: erlef/setup-beam@v1.17
+      with:
+        otp-version: 26
+        elixir-version: 1.15
+    - name: AUTHENTICATE TO GOOGLE CLOUD
+      if: steps.authorized.outputs.authorized == 'true'
+      uses: google-github-actions/auth@v2.1.2
+      with:
+        credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
     - name: CONFIGURE BAZEL
       if: steps.authorized.outputs.authorized == 'true'
       run: |
-        if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
+        if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME }}" ]; then
         cat << EOF >> user.bazelrc
-          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
+          build --remote_cache=https://storage.googleapis.com/${{ secrets.REMOTE_CACHE_BUCKET_NAME }}
+          build --google_default_credentials
         EOF
         fi
         cat << EOF >> user.bazelrc
-          build:buildbuddy --build_metadata=ROLE=CI
-          build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
-          build:buildbuddy --color=yes
+          build --repository_cache=/home/runner/repo-cache/
+          build --color=yes
         EOF
+
+        bazelisk info release
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
     - name: RUN INTEGRATION TESTS
       if: steps.authorized.outputs.authorized == 'true'
       run: |
-        sudo sysctl -w net.ipv4.tcp_keepalive_time=60
-        sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
-
         branch_or_tag="${GITHUB_REF##*/}"
         bazelisk test //deps/rabbitmq_peer_discovery_aws:integration_SUITE \
-          --config=rbe-${{ matrix.otp_version_id }} \
           --test_tag_filters=aws \
           --build_tests_only \
           --test_env AWS_ACCESS_KEY_ID=${{ secrets.CONCOURSE_AWS_ACCESS_KEY_ID }} \

@@ -145,7 +145,6 @@ jobs:
         otp-version: 26
         elixir-version: 1.15
     - name: ENSURE WORKFLOWS ARE UP TO DATE
-      working-directory: ${{ env.PRIMARY_VERSION_PATH }}
       run: |
         mkdir local-bin/
         curl -L https://carvel.dev/install.sh | K14SIO_INSTALL_BIN_DIR=local-bin bash
