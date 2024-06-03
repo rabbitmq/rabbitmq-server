@@ -612,14 +612,21 @@ TIER1_PLUGINS := \
 
 YTT ?= ytt
 
-actions-workflows: .github/workflows/test.yaml
+actions-workflows: .github/workflows/test.yaml .github/workflows/test-mixed-versions.yaml
 
-.PHONY: .github/workflows/test.yaml
+.PHONY: .github/workflows/test.yaml .github/workflows/test-mixed-versions.yaml
 
 .github/workflows/test.yaml: .github/workflows/templates/test.template.yaml
 	$(gen_verbose) $(YTT) \
 		--file $< \
-		$(foreach f,$(PLUGIN_SUITES_FILES),--data-values-file $f) \
+		--data-value-yaml internal_deps=[$(subst $(space),$(comma),$(foreach s,$(INTERNAL_DEPS),"$s"))] \
+		--data-value-yaml tier1_plugins=[$(subst $(space),$(comma),$(foreach s,$(TIER1_PLUGINS),"$s"))] \
+		| sed 's/^true:/on:/' \
+		| sed 's/pull_request: null/pull_request:/'> $@
+
+.github/workflows/test-mixed-versions.yaml: .github/workflows/templates/test-mixed-versions.template.yaml
+	$(gen_verbose) $(YTT) \
+		--file $< \
 		--data-value-yaml internal_deps=[$(subst $(space),$(comma),$(foreach s,$(INTERNAL_DEPS),"$s"))] \
 		--data-value-yaml tier1_plugins=[$(subst $(space),$(comma),$(foreach s,$(TIER1_PLUGINS),"$s"))] \
 		| sed 's/^true:/on:/' \

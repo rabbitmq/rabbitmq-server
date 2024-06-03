@@ -1,0 +1,201 @@
+#@ load("@ytt:data", "data")
+#@yaml/text-templated-strings
+
+#@ def job_names(plugins):
+#@   names = []
+#@   for p in plugins:
+#@     names.append("test-"+p)
+#@   end
+#@   return names
+#@ end
+
+#@ def sharded_job_names(plugin, shard_count):
+#@   names = []
+#@   for shard_index in range(0, shard_count):
+#@     names.append("test-"+plugin+"-"+str(shard_index))
+#@   end
+#@   return names
+#@ end
+
+---
+name: Test Mixed Version Clusters
+on:
+  push:
+    branches:
+      - main
+      - v3.12.x
+      - v3.11.x
+      - v3.10.x
+      - v3.9.x
+      - v3.8.x
+      - bump-otp-*
+      - bump-elixir-*
+      - bump-rbe-*
+      - bump-rules_erlang
+    paths:
+      - 'deps/**'
+      - 'scripts/**'
+      - Makefile
+      - plugins.mk
+      - rabbitmq-components.mk
+      - .bazelrc
+      - .bazelversion
+      - BUILD.*
+      - '*.bzl'
+      - '*.bazel'
+      - .github/workflows/test-mixed-versions.yaml
+  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  ensure-mixed-version-archive:
+    name: Prepare Artifacts
+    runs-on: ubuntu-22.04
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v4
+      with:
+        path: primary-umbrella
+    #! - name: Setup tmate session
+    #!   uses: mxschmitt/action-tmate@v3
+    - name: CHECK FOR ARCHIVE ON S3
+      id: check
+      working-directory: primary-umbrella
+      run: |
+        set -u
+
+        ARCHIVE_URL="$(grep -Eo 'https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com.*.tar.xz' bazel/bzlmod/secondary_umbrella.bzl)"
+        echo "ARCHIVE_URL: ${ARCHIVE_URL}"
+
+        curl -LO "${ARCHIVE_URL}"
+
+        if xzcat --test package-generic-unix-for-mixed-version-testing-v*.tar.xz; then
+          exists=true
+        else
+          exists=false
+        fi
+        echo "exists=${exists}" | tee $GITHUB_ENV
+
+        OTP_VERSION_ID=${ARCHIVE_URL#*secondary-umbrellas/rbe-}
+        OTP_VERSION_ID=${OTP_VERSION_ID%*/package-generic-unix-for-mixed-version-testing-v*.tar.xz}
+        echo "otp_version_id=${OTP_VERSION_ID}" | tee -a $GITHUB_OUTPUT
+
+        VERSION=${ARCHIVE_URL#*package-generic-unix-for-mixed-version-testing-v}
+        VERSION=${VERSION%*.tar.xz}
+        echo "version=${VERSION}" | tee -a $GITHUB_OUTPUT
+    - name: CHECKOUT REPOSITORY (MIXED VERSION)
+      if: env.exists != 'true'
+      uses: actions/checkout@v4
+      with:
+        ref: v${{ steps.check.outputs.version }}
+        path: secondary-umbrella
+    - name: BUILD SECONDARY UMBRELLA ARCHIVE
+      if: env.exists != 'true'
+      working-directory: secondary-umbrella
+      run: |
+        if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
+        EOF
+        fi
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --build_metadata=ROLE=CI
+          build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
+          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-secondary-umbrella
+          build:buildbuddy --color=yes
+
+          build:buildbuddy --remote_download_toplevel
+        EOF
+
+        sed -i"_orig" -E "/APP_VERSION/ s/3\.[0-9]+\.[0-9]+/${{ steps.check.outputs.version }}/" rabbitmq.bzl
+        bazelisk build :package-generic-unix \
+          --config=rbe-${{ steps.check.outputs.otp_version_id }} \
+          --test_build \
+          --verbose_failures
+
+        OUTPUT_DIR=${{ github.workspace }}/output
+        mkdir -p ${OUTPUT_DIR}/rbe-${{ steps.check.outputs.otp_version_id }}
+        cp \
+          bazel-bin/package-generic-unix.tar.xz \
+          ${OUTPUT_DIR}/rbe-${{ steps.check.outputs.otp_version_id }}/package-generic-unix-for-mixed-version-testing-v${{ steps.check.outputs.version }}.tar.xz
+    - name: UPLOAD THE ARCHIVE TO S3
+      if: env.exists != 'true'
+      uses: jakejarvis/s3-sync-action@v0.5.1
+      with:
+        args: --acl public-read --follow-symlinks
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY}}
+        AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+        AWS_REGION: ${{ secrets.AWS_REGION }}
+        SOURCE_DIR: output
+        DEST_DIR: secondary-umbrellas
+
+  check-workflow:
+    needs: ensure-mixed-version-archive
+    runs-on: ubuntu-latest
+    outputs:
+      repo_cache_key: ${{ steps.repo-cache-key.outputs.value }}
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v4
+    - name: SETUP ERLANG/ELIXIR
+      uses: erlef/setup-beam@v1
+      with:
+        otp-version: 26
+        elixir-version: 1.15
+    - name: ENSURE WORKFLOWS ARE UP TO DATE
+      working-directory: ${{ env.PRIMARY_VERSION_PATH }}
+      run: |
+        mkdir local-bin/
+        curl -L https://carvel.dev/install.sh | K14SIO_INSTALL_BIN_DIR=local-bin bash
+        make actions-workflows YTT=$PWD/local-bin/ytt
+        git diff --exit-code
+    - name: COMPUTE REPO CACHE KEY
+      id: repo-cache-key
+      run: |
+        echo "value=bazel-repo-cache-${{ hashFiles('MODULE.bazel') }}" | tee -a $GITHUB_OUTPUT
+
+#@ for plugin in data.values.internal_deps:
+  test-(@= plugin @):
+    needs: check-workflow
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: #@ plugin
+    secrets: inherit
+#@ end
+
+#@ rabbit_shard_count = 10
+#@ for shard_index in range(0, rabbit_shard_count):
+  test-rabbit-(@= str(shard_index) @):
+    needs: #@ ["check-workflow"] + job_names(data.values.internal_deps)
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbit
+      shard_index: #@ shard_index
+      shard_count: #@ rabbit_shard_count
+    secrets: inherit
+#@ end
+
+#@ for plugin in data.values.tier1_plugins:
+  test-(@= plugin @):
+    needs: #@ ["check-workflow"] + sharded_job_names("rabbit", rabbit_shard_count)
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: #@ plugin
+    secrets: inherit
+#@ end
+
+  summary-test:
+    needs: #@ job_names(data.values.internal_deps + data.values.tier1_plugins) + sharded_job_names("rabbit", rabbit_shard_count)
+    runs-on: ubuntu-latest
+    steps:
+    - name: SUMMARY
+      run: |
+        cat << 'EOF' | jq -e 'map(.result == "success") | all(.)'
+        ${{ toJson(needs) }}
+        EOF
