@@ -23,7 +23,7 @@ connect {
 
 # Addresses and ports
 client_addr = "0.0.0.0"
-bind_addr   = "0.0.0.0"
+bind_addr = "{{ GetInterfaceIP \"eth0\" }}"
 
 addresses {
   grpc = "0.0.0.0"
