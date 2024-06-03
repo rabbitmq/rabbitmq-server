@@ -121,15 +121,15 @@ jobs:
     - name: RUN TESTS
       if: inputs.plugin != 'rabbitmq_peer_discovery_aws'
       run: |
+        echo "Tests in shard:"
+        cat ${{ steps.shard.outputs.file }}
+        echo ""
+
         ## WARNING:
         ## secrets must not be set in --test_env or --action_env,
         ## or otherwise logs must not be saved as artifacts.
         ## rabbit_ct_helpers or other code may log portions of the
         ## env vars and leak them
-
-        echo "Tests in shard:"
-        echo $(< ${{ steps.shard.outputs.file }})
-        echo ""
 
         bazelisk test $(< ${{ steps.shard.outputs.file }}) \
           --test_env RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }} \
