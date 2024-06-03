@@ -67,6 +67,10 @@ jobs:
         bazelisk info release
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
+    - uses: actions/setup-dotnet@v4
+      if: inputs.plugin == 'rabbit'
+      with:
+        dotnet-version: '3.1.x'
     - name: deps/amqp10_client SETUP
       if: inputs.plugin == 'amqp10_client'
       run: |
@@ -77,17 +81,7 @@ jobs:
     - name: deps/rabbit SETUP
       if: inputs.plugin == 'rabbit'
       run: |
-        sudo apt-get update && \
-        sudo apt-get purge -y dotnet-sdk-8.0
-        sudo apt-get install -y dotnet-sdk-6.0
-
-        mkdir warmup \
-          && cd warmup \
-          && dotnet new console \
-          && cd .. \
-          && rm -rf warmup \
-          && rm -rf /tmp/NuGetScratch
-
+        # reduce sandboxing so that maven works
         cat << EOF >> user.bazelrc
           build --strategy=TestRunner=local
         EOF
