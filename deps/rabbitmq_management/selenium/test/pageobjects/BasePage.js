@@ -57,10 +57,10 @@ module.exports = class BasePage {
     return this.waitForDisplayed(CONNECTIONS_TAB)
   }
 
-  async clickOnAdminTab () {    
+  async clickOnAdminTab () {
     return this.click(ADMIN_TAB)
   }
-  async waitForAdminTab() {    
+  async waitForAdminTab() {
     return this.waitForDisplayed(ADMIN_TAB)
   }
 
@@ -74,7 +74,7 @@ module.exports = class BasePage {
   async clickOnExchangesTab () {
     return this.click(EXCHANGES_TAB)
   }
-  async waitForExchangesTab() {    
+  async waitForExchangesTab() {
     return this.waitForDisplayed(EXCHANGES_TAB)
   }
 
