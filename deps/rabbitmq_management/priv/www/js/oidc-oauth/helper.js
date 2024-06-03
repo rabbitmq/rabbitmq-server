@@ -103,6 +103,11 @@ function oauth_initialize_user_manager(resource_server) {
           audience: resource_server.id, // required by oauth0
         },
     };
+    if (resource_server.end_session_endpoint != "") {
+      oidcSettings.metadataSeed = {
+        end_session_endpoint: resource_server.end_session_endpoint
+      }
+    }
     if (resource_server.oauth_client_secret != "") {
       oidcSettings.client_secret = resource_server.oauth_client_secret;
     }
