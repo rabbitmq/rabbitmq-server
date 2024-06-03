@@ -22,7 +22,7 @@ define PROJECT_APP_EXTRA_KEYS
 endef
 
 DEPS = rabbit_common rabbit amqp_client cowboy cowlib rabbitmq_web_dispatch rabbitmq_management_agent oauth2_client
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers proper
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers proper amqp10_client
 LOCAL_DEPS += ranch ssl crypto public_key
 
 # FIXME: Add Ranch as a BUILD_DEPS to be sure the correct version is picked.

@@ -100,6 +100,7 @@
             {issuer, build_issuer("http") },
             {authorization_endpoint, <<"http://localhost:8000/authorize">>},
             {token_endpoint, build_token_endpoint_uri("http")},
+            {end_session_endpoint, <<"http://localhost:8000/logout">>},
             {jwks_uri, build_jwks_uri("http")}
         ]}
   ]
@@ -117,6 +118,7 @@
             {issuer, build_issuer("https") },
             {authorization_endpoint, <<"https://localhost:8000/authorize">>},
             {token_endpoint, build_token_endpoint_uri("https")},
+            {end_session_endpoint, <<"http://localhost:8000/logout">>},
             {jwks_uri, build_jwks_uri("https")}
         ]}
     ]
@@ -166,8 +168,7 @@ groups() ->
         denies_access_token,
         auth_server_error,
         non_json_payload,
-        grants_refresh_token,
-        grants_access_token_using_oauth_provider_id
+        grants_refresh_token        
     ]},
     {verify_get_oauth_provider, [], [
         get_oauth_provider,
@@ -262,6 +263,8 @@ configure_all_oauth_provider_settings(Config) ->
     application:set_env(rabbitmq_auth_backend_oauth2, issuer, OAuthProvider#oauth_provider.issuer),
     application:set_env(rabbitmq_auth_backend_oauth2, oauth_providers, OAuthProviders),
     application:set_env(rabbitmq_auth_backend_oauth2, token_endpoint, OAuthProvider#oauth_provider.token_endpoint),
+    application:set_env(rabbitmq_auth_backend_oauth2, end_sessione_endpoint, OAuthProvider#oauth_provider.end_session_endpoint),
+    application:set_env(rabbitmq_auth_backend_oauth2, authorization_endpoint, OAuthProvider#oauth_provider.authorization_endpoint),
     KeyConfig = [ { jwks_url, OAuthProvider#oauth_provider.jwks_uri } ] ++
         case OAuthProvider#oauth_provider.ssl_options of
             undefined -> 
@@ -313,6 +316,8 @@ end_per_testcase(_, Config) ->
     application:unset_env(rabbitmq_auth_backend_oauth2, oauth_providers),
     application:unset_env(rabbitmq_auth_backend_oauth2, issuer),
     application:unset_env(rabbitmq_auth_backend_oauth2, token_endpoint),
+    application:unset_env(rabbitmq_auth_backend_oauth2, authorization_endpoint),
+    application:unset_env(rabbitmq_auth_backend_oauth2, end_session_endpoint),
     application:unset_env(rabbitmq_auth_backend_oauth2, key_config),
     case ?config(group, Config) of
         http_up ->
@@ -337,15 +342,6 @@ grants_access_token_dynamically_resolving_oauth_provider(Config) ->
     {ok, #successful_access_token_response{access_token = AccessToken, token_type = TokenType} } =
         oauth2_client:get_access_token(?config(oauth_provider_id, Config), build_access_token_request(Parameters)),
 
-    ?assertEqual(proplists:get_value(token_type, JsonPayload), TokenType),
-    ?assertEqual(proplists:get_value(access_token, JsonPayload), AccessToken).
-
-grants_access_token_using_oauth_provider_id(Config) ->
-    #{request := #{parameters := Parameters},
-        response := [ {code, 200}, {content_type, _CT}, {payload, JsonPayload}] } = lookup_expectation(token_endpoint, Config),
-
-    {ok, #successful_access_token_response{access_token = AccessToken, token_type = TokenType} } =
-        oauth2_client:get_access_token(?config(oauth_provider_id, Config), build_access_token_request(Parameters)),
     ?assertEqual(proplists:get_value(token_type, JsonPayload), TokenType),
     ?assertEqual(proplists:get_value(access_token, JsonPayload), AccessToken).
 
@@ -417,11 +413,19 @@ get_oauth_provider_given_oauth_provider_id(Config) ->
         = lookup_expectation(get_openid_configuration, Config),
 
     ct:log("get_oauth_provider ~p", [?config(oauth_provider_id, Config)]),
-    {ok, #oauth_provider{issuer = Issuer, token_endpoint = TokenEndPoint, jwks_uri = Jwks_uri}} =
-        oauth2_client:get_oauth_provider(?config(oauth_provider_id, Config), [issuer, token_endpoint, jwks_uri]),
+    {ok, #oauth_provider{
+            issuer = Issuer, 
+            token_endpoint = TokenEndPoint, 
+            authorization_endpoint = AuthorizationEndpoint,
+            end_session_endpoint = EndSessionEndpoint,
+            jwks_uri = Jwks_uri}} =
+        oauth2_client:get_oauth_provider(?config(oauth_provider_id, Config), 
+            [issuer, token_endpoint, jwks_uri, authorization_endpoint, end_session_endpoint]),
 
     ?assertEqual(proplists:get_value(issuer, JsonPayload), Issuer),
     ?assertEqual(proplists:get_value(token_endpoint, JsonPayload), TokenEndPoint),
+    ?assertEqual(proplists:get_value(authorization_endpoint, JsonPayload), AuthorizationEndpoint),
+    ?assertEqual(proplists:get_value(end_session_endpoint, JsonPayload), EndSessionEndpoint),
     ?assertEqual(proplists:get_value(jwks_uri, JsonPayload), Jwks_uri).
 
 

@@ -41,6 +41,7 @@
 -define(RESPONSE_ISSUER, <<"issuer">>).
 -define(RESPONSE_TOKEN_ENDPOINT, <<"token_endpoint">>).
 -define(RESPONSE_AUTHORIZATION_ENDPOINT, <<"authorization_endpoint">>).
+-define(RESPONSE_END_SESSION_ENDPOINT, <<"end_session_endpoint">>).
 -define(RESPONSE_JWKS_URI, <<"jwks_uri">>).
 -define(RESPONSE_TLS_OPTIONS, <<"ssl_options">>).
 
@@ -51,6 +52,7 @@
   issuer :: option(uri_string:uri_string()),
   token_endpoint :: option(uri_string:uri_string()),
   authorization_endpoint :: option(uri_string:uri_string()),
+  end_session_endpoint :: option(uri_string:uri_string()),
   jwks_uri :: option(uri_string:uri_string()),
   ssl_options :: option(list())
   }).

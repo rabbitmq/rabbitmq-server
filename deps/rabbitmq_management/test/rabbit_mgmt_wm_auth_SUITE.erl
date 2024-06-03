@@ -19,6 +19,8 @@ all() ->
      {group, verify_client_id_and_secret},
      {group, verify_mgt_oauth_provider_url_with_single_resource},
      {group, verify_mgt_oauth_provider_url_with_single_resource_and_another_resource},
+     {group, verify_end_session_endpoint_with_single_resource},
+     {group, verify_end_session_endpoint_with_single_resource_and_another_resource},
      {group, verify_oauth_initiated_logon_type_for_sp_initiated},
      {group, verify_oauth_initiated_logon_type_for_idp_initiated},
      {group, verify_oauth_disable_basic_auth},
@@ -90,6 +92,70 @@ groups() ->
                   {with_mgt_oauth_provider_url_url0, [], [
                     should_return_mgt_oauth_provider_url_url0
                   ]}
+                ]}
+              ]}
+            ]}
+          ]}
+        ]}
+      ]},
+      {verify_end_session_endpoint_with_single_resource, [], [
+        {with_resource_server_id_rabbit, [], [
+          {with_root_issuer_url1, [], [
+            {with_oauth_enabled, [], [
+              {with_mgt_oauth_client_id_z, [], [ 
+                should_not_return_end_session_endpoint,
+                {with_root_end_session_endpoint_0, [], [
+                  should_return_end_session_endpoint_0
+                ]}
+              ]}
+            ]}
+          ]},
+          {with_oauth_providers_idp1_idp2, [], [
+            {with_default_oauth_provider_idp1, [], [
+              {with_oauth_enabled, [], [                
+                {with_mgt_oauth_client_id_z, [], [
+                  should_not_return_end_session_endpoint,
+                  {with_end_session_endpoint_for_idp1_1, [], [
+                    should_return_end_session_endpoint_1
+                  ]},
+                  {with_root_end_session_endpoint_0, [], [
+                    should_not_return_end_session_endpoint,
+                    {with_end_session_endpoint_for_idp1_1, [], [
+                      should_return_end_session_endpoint_1
+                    ]}
+                  ]}
+                ]}
+              ]}
+            ]}
+          ]}
+        ]}
+      ]},
+      {verify_end_session_endpoint_with_single_resource_and_another_resource, [], [
+        {with_resource_server_id_rabbit, [], [
+          {with_resource_server_a, [], [
+            {with_root_issuer_url1, [], [
+              {with_oauth_enabled, [], [
+                should_return_disabled_auth_settings,
+                {with_mgt_oauth_client_id_z, [], [
+                  should_not_return_end_session_endpoint,
+                  should_return_oauth_resource_server_a_without_end_session_endpoint,
+                  {with_root_end_session_endpoint_0, [], [
+                    should_return_end_session_endpoint_0,
+                    should_return_oauth_resource_server_a_with_end_session_endpoint_0                  
+                  ]},
+                  {with_oauth_providers_idp1_idp2, [], [
+                    {with_default_oauth_provider_idp1, [], [
+                      {with_end_session_endpoint_for_idp1_1, [], [
+                        should_return_end_session_endpoint_1,
+                        should_return_oauth_resource_server_a_with_end_session_endpoint_1,
+                        {with_oauth_provider_idp2_for_resource_server_a, [], [
+                          {with_end_session_endpoint_for_idp2_2, [], [
+                            should_return_oauth_resource_server_a_with_end_session_endpoint_2
+                          ]}                          
+                        ]}
+                      ]}
+                    ]}
+                  ]} 
                 ]}
               ]}
             ]}
@@ -237,6 +303,9 @@ init_per_suite(Config) ->
     {idp3_url, <<"https://idp3">>},
     {url0, <<"https://url0">>},
     {url1, <<"https://url1">>},
+    {logout_url_0, <<"https://logout_0">>},
+    {logout_url_1, <<"https://logout_1">>},
+    {logout_url_2, <<"https://logout_2">>},
     {a, <<"a">>},
     {b, <<"b">>},
     {q, <<"q">>},
@@ -329,6 +398,23 @@ init_per_group(with_default_oauth_provider_idp1, Config) ->
 init_per_group(with_default_oauth_provider_idp3, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, default_oauth_provider, ?config(idp3, Config)),
   Config;
+init_per_group(with_root_end_session_endpoint_0, Config) ->
+  application:set_env(rabbitmq_auth_backend_oauth2, end_session_endpoint, ?config(logout_url_0, Config)),
+  Config;
+init_per_group(with_end_session_endpoint_for_idp1_1, Config) ->
+  set_attribute_in_entry_for_env_variable(rabbitmq_auth_backend_oauth2, oauth_providers,
+    ?config(idp1, Config), end_session_endpoint, ?config(logout_url_1, Config)),
+  Config;
+init_per_group(with_end_session_endpoint_for_idp2_2, Config) ->
+  set_attribute_in_entry_for_env_variable(rabbitmq_auth_backend_oauth2, oauth_providers,
+    ?config(idp2, Config), end_session_endpoint, ?config(logout_url_2, Config)),
+  Config;
+
+init_per_group(with_oauth_provider_idp2_for_resource_server_a, Config) ->
+  set_attribute_in_entry_for_env_variable(rabbitmq_auth_backend_oauth2, resource_servers,
+    ?config(a, Config), oauth_provider_id, ?config(idp2, Config)),
+  Config;
+
 init_per_group(_, Config) ->
   Config.
 
@@ -409,6 +495,22 @@ end_per_group(with_default_oauth_provider_idp1, Config) ->
 end_per_group(with_default_oauth_provider_idp3, Config) ->
   application:unset_env(rabbitmq_auth_backend_oauth2, default_oauth_provider),
   Config;
+end_per_group(with_root_end_session_endpoint_0, Config) ->
+  application:unset_env(rabbitmq_auth_backend_oauth2, end_session_endpoint),
+  Config;
+end_per_group(with_end_session_endpoint_for_idp1_1, Config) ->
+  remove_attribute_from_entry_from_env_variable(rabbitmq_auth_backend_oauth2, oauth_providers,
+    ?config(idp1, Config), end_session_endpoint),
+  Config;
+end_per_group(with_end_session_endpoint_for_idp2_2, Config) ->
+  remove_attribute_from_entry_from_env_variable(rabbitmq_auth_backend_oauth2, oauth_providers,
+    ?config(idp2, Config), end_session_endpoint),
+  Config;
+end_per_group(with_oauth_provider_idp2_for_resource_server_a, Config) ->
+  remove_attribute_from_entry_from_env_variable(rabbitmq_auth_backend_oauth2, resource_servers,
+    ?config(a, Config), oauth_provider_id),
+  Config;
+
 end_per_group(_, Config) ->
   Config.
 
@@ -534,7 +636,33 @@ should_return_oauth_client_id_z(Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
   ?assertEqual(?config(z, Config), proplists:get_value(oauth_client_id, Actual)).
 
+should_not_return_end_session_endpoint(Config) ->
+  assert_attribute_not_defined_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
+    Config, rabbit, end_session_endpoint).
 
+should_return_end_session_endpoint_0(Config) ->
+  assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
+    Config, rabbit, end_session_endpoint, ?config(logout_url_0, Config)).
+
+should_return_end_session_endpoint_1(Config) ->
+  assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
+    Config, rabbit, end_session_endpoint, ?config(logout_url_1, Config)).
+
+should_return_oauth_resource_server_a_without_end_session_endpoint(Config) ->
+  assert_attribute_not_defined_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
+    Config, a, end_session_endpoint).
+
+should_return_oauth_resource_server_a_with_end_session_endpoint_0(Config) ->
+  assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
+    Config, a, end_session_endpoint, ?config(logout_url_0, Config)).
+
+should_return_oauth_resource_server_a_with_end_session_endpoint_1(Config) ->
+  assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
+    Config, a, end_session_endpoint, ?config(logout_url_1, Config)).
+
+should_return_oauth_resource_server_a_with_end_session_endpoint_2(Config) ->
+  assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
+    Config, a, end_session_endpoint, ?config(logout_url_2, Config)).
 
 %% -------------------------------------------------------------------
 %% Utility/helper functions
@@ -584,7 +712,9 @@ assert_not_defined_oauth_resource_server(Actual, Config, ConfigKey) ->
 
 set_attribute_in_entry_for_env_variable(Application, EnvVar, Key, Attribute, Value) ->
   Map = application:get_env(Application, EnvVar, #{}),
+  ct:log("set_attribute_in_entry_for_env_variable before ~p", [Map]),
   Map1 = maps:put(Key, [ { Attribute, Value} | maps:get(Key, Map, []) ], Map),
+  ct:log("set_attribute_in_entry_for_env_variable after ~p", [Map1]),
   application:set_env(Application, EnvVar, Map1).
 
 log(AuthSettings) ->

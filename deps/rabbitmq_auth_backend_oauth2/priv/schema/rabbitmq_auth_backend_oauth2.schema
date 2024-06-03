@@ -164,6 +164,16 @@
  [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
 
 {mapping,
+ "auth_oauth2.end_session_endpoint",
+ "rabbitmq_auth_backend_oauth2.end_session_endpoint",
+ [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
+
+{mapping,
+ "auth_oauth2.authorization_endpoint",
+ "rabbitmq_auth_backend_oauth2.authorization_endpoint",
+ [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
+
+{mapping,
  "auth_oauth2.https.peer_verification",
  "rabbitmq_auth_backend_oauth2.key_config.peer_verification",
  [{datatype, {enum, [verify_peer, verify_none]}}]}.
@@ -239,6 +249,16 @@
  "rabbitmq_auth_backend_oauth2.oauth_providers",
  [{datatype, string}, {validators, ["uri", "https_uri"]}]
 }.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.end_session_endpoint",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.authorization_endpoint",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
 
 {mapping,
  "auth_oauth2.oauth_providers.$name.https.verify",
