@@ -12,13 +12,7 @@
         ]).
 
 -include("oauth2_client.hrl").
-<<<<<<< HEAD
--include_lib("public_key/include/public_key.hrl").
-
--spec get_access_token(oauth_provider_id() | oauth_provider(), access_token_request()) ->
-=======
 -spec get_access_token(oauth_provider(), access_token_request()) ->
->>>>>>> 72ab1944bf (Make end_session_endpoint configurable)
     {ok, successful_access_token_response()} | {error, unsuccessful_access_token_response() | any()}.
 get_access_token(OAuthProvider, Request) ->
     rabbit_log:debug("get_access_token using OAuthProvider:~p and client_id:~p",
