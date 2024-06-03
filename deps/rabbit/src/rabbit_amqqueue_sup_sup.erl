@@ -32,7 +32,7 @@ start_link() ->
 start_queue_process(Node, Q) ->
     #resource{virtual_host = VHost} = amqqueue:get_name(Q),
     {ok, Sup} = find_for_vhost(VHost, Node),
-    {ok, _SupPid, QPid} = supervisor:start_child(Sup, [Q]),
+    {ok, _SupPid, QPid} = supervisor:start_child(Sup, [Q, declare]),
     QPid.
 
 init([]) ->

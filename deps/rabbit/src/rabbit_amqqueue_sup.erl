@@ -9,7 +9,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/1]).
+-export([start_link/2]).
 
 -export([init/1]).
 
@@ -17,10 +17,10 @@
 
 %%----------------------------------------------------------------------------
 
--spec start_link(amqqueue:amqqueue()) ->
+-spec start_link(amqqueue:amqqueue(), any()) ->
           {'ok', pid(), pid()}.
 
-start_link(Q) ->
+start_link(Q, _StartMode) ->
     Marker = spawn_link(fun() -> receive stop -> ok end end),
     StartMFA = {rabbit_amqqueue_process, start_link, [Q, Marker]},
     ChildSpec = #{id => rabbit_amqqueue,
