@@ -109,11 +109,16 @@ jobs:
           'attr("tags", "mixed-version-cluster", tests(//deps/${{ inputs.plugin }}/...)) except attr("tags", "manual", //deps/${{ inputs.plugin }}/...)' \
           --output=label \
             | awk '{print $1;}' > tests.log
-        split -da 3 -l $((`wc -l < tests.log`/${{ inputs.shard_count }})) tests.log shard
-        printf -v padded_index "%03d" ${{ inputs.shard_index }}
-        echo "file=shard$padded_index" | tee -a $GITHUB_OUTPUT
+        if [[ $(wc -l < tests.log) != "0" ]]; then
+          split -da 3 -l $((`wc -l < tests.log`/${{ inputs.shard_count }})) tests.log shard
+          printf -v padded_index "%03d" ${{ inputs.shard_index }}
+          echo "file=shard$padded_index" | tee -a $GITHUB_OUTPUT
+        else
+          echo "No tests in this shard"
+          echo "file=" | tee -a $GITHUB_OUTPUT
+        fi
     - name: RUN TESTS
-      if: inputs.plugin != 'rabbitmq_peer_discovery_aws'
+      if: steps.shard.outputs.file != '' && inputs.plugin != 'rabbitmq_peer_discovery_aws'
       run: |
         echo "Tests in shard:"
         cat ${{ steps.shard.outputs.file }}

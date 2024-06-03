@@ -50,7 +50,6 @@ concurrency:
   cancel-in-progress: true
 jobs:
   ensure-mixed-version-archive:
-    name: Prepare Artifacts
     runs-on: ubuntu-22.04
     steps:
     - name: CHECKOUT REPOSITORY
