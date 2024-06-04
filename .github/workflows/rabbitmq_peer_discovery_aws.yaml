@@ -89,4 +89,5 @@ jobs:
           --test_env AWS_SECRET_ACCESS_KEY=${{ secrets.CONCOURSE_AWS_SECRET_ACCESS_KEY }} \
           --test_env RABBITMQ_IMAGE="pivotalrabbitmq/rabbitmq:sha-${{ github.sha }}" \
           --test_env AWS_ECS_CLUSTER_NAME="rabbitmq-peer-discovery-aws-actions-${branch_or_tag//[._]/-}" \
+          --test_output=streamed \
           --verbose_failures
