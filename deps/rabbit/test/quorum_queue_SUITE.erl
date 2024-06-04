@@ -139,6 +139,7 @@ all_tests() ->
      sync_queue,
      cancel_sync_queue,
      idempotent_recover,
+     server_system_recover,
      vhost_with_quorum_queue_is_deleted,
      vhost_with_default_queue_type_declares_quorum_queue,
      delete_immediately_by_resource,
@@ -717,6 +718,28 @@ idempotent_recover(Config) ->
                                       #{cluster_state := ServerStatuses} = maps:from_list(I),
                                       maps:get(Server, maps:from_list(ServerStatuses)) =:= running
                               end, Is)
+                end, ?DEFAULT_AWAIT),
+    ok.
+
+server_system_recover(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    LQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', LQ, 0, 0},
+                 declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    RaName = ra_name(LQ),
+    _ = ra:members({RaName, Server}),
+    EtsPid = ct_rpc:call(Server, erlang, whereis, [ra_log_ets]),
+    ?assert(is_pid(EtsPid)),
+
+    true = ct_rpc:call(Server, erlang, exit, [EtsPid, kill]),
+
+    %% validate quorum queue is still functional
+    ?awaitMatch({ok, _, _},
+                begin
+                    ra:members({RaName, Server})
                 end, ?DEFAULT_AWAIT),
     ok.
 
