@@ -99,6 +99,12 @@ jobs:
         cat << EOF >> user.bazelrc
           build --strategy=TestRunner=local
         EOF
+    - name: deps/rabbitmq_mqtt SETUP
+      if: inputs.plugin == 'rabbitmq_mqtt'
+      run: |
+        cat << EOF >> user.bazelrc
+          build --strategy=TestRunner=local
+        EOF
     - name: deps/rabbitmq_peer_discovery_consul SETUP
       if: inputs.plugin == 'rabbitmq_peer_discovery_consul'
       run: |
