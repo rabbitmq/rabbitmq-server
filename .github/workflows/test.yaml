@@ -53,11 +53,13 @@ jobs:
       with:
         credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
     - name: REPO CACHE
+      id: cache
       uses: actions/cache@v4
       with:
         key: ${{ steps.repo-cache-key.outputs.value }}
         path: /home/runner/repo-cache/
     - name: PRIME CACHE
+      if: steps.cache.outputs.cache-hit != 'true'
       run: |
         if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME }}" ]; then
         cat << EOF >> user.bazelrc
