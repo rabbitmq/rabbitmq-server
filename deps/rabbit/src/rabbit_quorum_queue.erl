@@ -551,6 +551,12 @@ handle_tick(QName,
                            | info(Q, Keys)],
                   rabbit_core_metrics:queue_stats(QName, Infos),
                   ok = repair_leader_record(Q, Self),
+                  case repair_amqqueue_nodes(Q) of
+                      ok ->
+                          ok;
+                      repaired ->
+                          rabbit_log:debug("Repaired quorum queue ~ts amqqueue record", [rabbit_misc:rs(QName)])
+                  end,
                   ExpectedNodes = rabbit_nodes:list_members(),
                   case Nodes -- ExpectedNodes of
                       [] ->
@@ -603,8 +609,8 @@ repair_amqqueue_nodes(QName = #resource{}) ->
     repair_amqqueue_nodes(Q0);
 repair_amqqueue_nodes(Q0) ->
     QName = amqqueue:get_name(Q0),
-    Leader = amqqueue:get_pid(Q0),
-    {ok, Members, _} = ra:members(Leader),
+    {Name, _} = amqqueue:get_pid(Q0),
+    Members = ra_leaderboard:lookup_members(Name),
     RaNodes = [N || {_, N} <- Members],
     #{nodes := Nodes} = amqqueue:get_type_state(Q0),
     case lists:sort(RaNodes) =:= lists:sort(Nodes) of
