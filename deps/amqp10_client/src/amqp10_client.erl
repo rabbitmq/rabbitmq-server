@@ -110,7 +110,8 @@ open_connection(ConnectionConfig0) ->
     },
     Sasl = maps:get(sasl, ConnectionConfig1),
     ConnectionConfig2 = ConnectionConfig1#{sasl => amqp10_client_connection:encrypt_sasl(Sasl)},
-    amqp10_client_connection:open(ConnectionConfig2).
+    ConnectionConfig = merge_default_tls_options(ConnectionConfig2),
+    amqp10_client_connection:open(ConnectionConfig).
 
 %% @doc Opens a connection using a connection_config map
 %% This is asynchronous and will notify completion to the caller using
@@ -505,6 +506,19 @@ try_to_existing_atom(L) when is_list(L) ->
 
 ensure_started() ->
     _ = application:ensure_all_started(credentials_obfuscation).
+
+
+-spec merge_default_tls_options(connection_config()) -> connection_config().
+merge_default_tls_options(#{tls_opts := {secure_port, TlsOpts0}} = Config) ->
+    GlobalTlsOpts = application:get_env(amqp10_client, ssl_options, []),
+    TlsOpts =
+        orddict:to_list(
+          orddict:merge(fun (_, _A, B) -> B end,
+                        orddict:from_list(GlobalTlsOpts),
+                        orddict:from_list(TlsOpts0))),
+    Config#{tls_opts => {secure_port, TlsOpts}};
+merge_default_tls_options(Config) ->
+    Config.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
