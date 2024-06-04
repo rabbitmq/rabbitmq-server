@@ -105,6 +105,24 @@ jobs:
         cat << EOF >> user.bazelrc
           build --strategy=TestRunner=local
         EOF
+    - name: deps/rabbitmq_stream SETUP
+      if: inputs.plugin == 'rabbitmq_stream'
+      run: |
+        cat << EOF >> user.bazelrc
+          build --strategy=TestRunner=local
+        EOF
+    - name: deps/rabbitmq_stream_management SETUP
+      if: inputs.plugin == 'rabbitmq_stream_management'
+      run: |
+        cat << EOF >> user.bazelrc
+          build --strategy=TestRunner=local
+        EOF
+    - name: deps/rabbitmq_tracing SETUP
+      if: inputs.plugin == 'rabbitmq_tracing'
+      run: |
+        cat << EOF >> user.bazelrc
+          build --strategy=TestRunner=local
+        EOF
     - name: COMPUTE TESTS IN SHARD
       id: shard
       run: |
