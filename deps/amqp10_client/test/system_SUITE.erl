@@ -34,6 +34,7 @@ groups() ->
      {activemq, [], shared()},
      {rabbitmq_strict, [], [
                             basic_roundtrip_tls,
+                            roundtrip_tls_global_config,
                             open_connection_plain_sasl,
                             open_connection_plain_sasl_failure,
                             open_connection_plain_sasl_parse_uri
@@ -268,6 +269,26 @@ basic_roundtrip_tls(Config) ->
                 container_id => <<"open_connection_tls_container">>,
                 sasl => ?config(sasl, Config)},
     roundtrip(OpnConf).
+
+%% ssl option validation fails if verify_peer is enabled without cacerts.
+%% Test that cacertfile option takes effect taken from the application env.
+roundtrip_tls_global_config(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp_tls),
+    CACertFile = ?config(rmq_certsdir, Config) ++ "/testca/cacert.pem",
+    CertFile = ?config(rmq_certsdir, Config) ++ "/client/cert.pem",
+    KeyFile = ?config(rmq_certsdir, Config) ++ "/client/key.pem",
+    ok = application:set_env(amqp10_client, ssl_options, [{cacertfile, CACertFile},
+                                                          {certfile, CertFile},
+                                                          {keyfile, KeyFile}]),
+    OpnConf = #{address => Hostname,
+                port => Port,
+                tls_opts => {secure_port, [{verify, verify_peer}]},
+                notify => self(),
+                container_id => <<"open_connection_tls_container">>,
+                sasl => ?config(sasl, Config)},
+    roundtrip(OpnConf),
+    application:unset_env(amqp10_client, ssl_options).
 
 service_bus_config(Config, ContainerId) ->
     Hostname = ?config(sb_endpoint, Config),
