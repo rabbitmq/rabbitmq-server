@@ -56,6 +56,14 @@ jobs:
       with:
         otp-version: 26
         elixir-version: 1.15
+    - name: SETUP ecs-cli
+      if: steps.authorized.outputs.authorized == 'true'
+      env:
+        ECS_CLI_VERSION: 1.21.0
+      run: |
+        curl -Lo /usr/local/bin/ecs-cli https://amazon-ecs-cli.s3.amazonaws.com/ecs-cli-linux-amd64-v${ECS_CLI_VERSION} && \
+        chmod +x /usr/local/bin/ecs-cli && \
+        ecs-cli --version
     - name: AUTHENTICATE TO GOOGLE CLOUD
       if: steps.authorized.outputs.authorized == 'true'
       uses: google-github-actions/auth@v2.1.2
