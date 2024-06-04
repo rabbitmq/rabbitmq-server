@@ -20,7 +20,7 @@ memory() ->
     {Sums, _Other} = sum_processes(
                        lists:append(All), distinguishers(), [memory]),
 
-    [Qs, QsSlave, Qqs, DlxWorkers, Ssqs, Srqs, SCoor, ConnsReader, ConnsWriter, ConnsChannel,
+    [Qs, Qqs, DlxWorkers, Ssqs, Srqs, SCoor, ConnsReader, ConnsWriter, ConnsChannel,
      ConnsOther, MsgIndexProc, MgmtDbProc, Plugins] =
         [aggregate(Names, Sums, memory, fun (X) -> X end)
          || Names <- distinguished_interesting_sups()],
@@ -63,7 +63,7 @@ memory() ->
 
     OtherProc = Processes
         - ConnsReader - ConnsWriter - ConnsChannel - ConnsOther
-        - Qs - QsSlave - Qqs - DlxWorkers - Ssqs - Srqs - SCoor - MsgIndexProc - Plugins
+        - Qs - Qqs - DlxWorkers - Ssqs - Srqs - SCoor - MsgIndexProc - Plugins
         - MgmtDbProc - MetricsProc - MetadataStoreProc,
     [
      %% Connections
@@ -74,7 +74,6 @@ memory() ->
 
      %% Queues
      {queue_procs,          Qs},
-     {queue_slave_procs,    QsSlave},
      {quorum_queue_procs,   Qqs},
      {quorum_queue_dlx_procs, DlxWorkers},
      {stream_queue_procs,   Ssqs},
@@ -128,7 +127,7 @@ binary() ->
                                       sets:add_element({Ptr, Sz}, Acc0)
                               end, Acc, Info)
           end, distinguishers(), [{binary, sets:new()}]),
-    [Other, Qs, QsSlave, Qqs, DlxWorkers, Ssqs, Srqs, Scoor, ConnsReader, ConnsWriter,
+    [Other, Qs, Qqs, DlxWorkers, Ssqs, Srqs, Scoor, ConnsReader, ConnsWriter,
      ConnsChannel, ConnsOther, MsgIndexProc, MgmtDbProc, Plugins] =
         [aggregate(Names, [{other, Rest} | Sums], binary, fun sum_binary/1)
          || Names <- [[other] | distinguished_interesting_sups()]],
@@ -146,7 +145,6 @@ binary() ->
      {connection_channels, ConnsChannel},
      {connection_other,    ConnsOther},
      {queue_procs,         Qs},
-     {queue_slave_procs,   QsSlave},
      {quorum_queue_procs,  Qqs},
      {quorum_queue_dlx_procs, DlxWorkers},
      {stream_queue_procs,  Ssqs},
@@ -254,13 +252,11 @@ ranch_server_sups() ->
 
 with(Sups, With) -> [{Sup, With} || Sup <- Sups].
 
-distinguishers() -> with(queue_sups(), fun queue_type/1) ++
-                    with(conn_sups(), fun conn_type/1).
+distinguishers() -> with(conn_sups(), fun conn_type/1).
 
 distinguished_interesting_sups() ->
     [
-     with(queue_sups(), master),
-     with(queue_sups(), slave),
+     queue_sups(),
      quorum_sups(),
      dlx_sups(),
      stream_server_sups(),
@@ -307,12 +303,6 @@ extract(Name, Sums, Key, Fun) ->
 
 sum_binary(Set) ->
     sets:fold(fun({_Pt, Sz}, Acc) -> Acc + Sz end, 0, Set).
-
-queue_type(PDict) ->
-    case keyfind(process_name, PDict) of
-        {value, {rabbit_mirror_queue_slave, _}} -> slave;
-        _                                       -> master
-    end.
 
 conn_type(PDict) ->
     case keyfind(process_name, PDict) of

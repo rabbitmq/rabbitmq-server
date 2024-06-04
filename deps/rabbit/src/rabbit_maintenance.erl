@@ -34,7 +34,6 @@
     primary_replica_transfer_candidate_nodes/0,
     random_primary_replica_transfer_candidate_node/2,
     transfer_leadership_of_quorum_queues/1,
-    transfer_leadership_of_classic_mirrored_queues/1,
     table_definitions/0
 ]).
 
@@ -225,44 +224,6 @@ transfer_leadership_of_metadata_store(TransferCandidates) ->
             rabbit_log:warning("Skipping leadership transfer of metadata store: ~p", [Error])
     end.
 
--spec transfer_leadership_of_classic_mirrored_queues([node()]) -> ok.
-%% This function is no longer used by maintenance mode. We retain it in case
-%% classic mirrored queue leadership transfer would be reconsidered.
-%%
-%% With a lot of CMQs in a cluster, the transfer procedure can take prohibitively long
-%% for a pre-upgrade task.
-transfer_leadership_of_classic_mirrored_queues([]) ->
-    rabbit_log:warning("Skipping leadership transfer of classic mirrored queues: no candidate "
-                       "(online, not under maintenance) nodes to transfer to!");
-transfer_leadership_of_classic_mirrored_queues(TransferCandidates) ->
-    Queues = rabbit_amqqueue:list_local_mirrored_classic_queues(),
-    ReadableCandidates = readable_candidate_list(TransferCandidates),
-    rabbit_log:info("Will transfer leadership of ~b classic mirrored queues hosted on this node to these peer nodes: ~ts",
-                    [length(Queues), ReadableCandidates]),
-    [begin
-         Name = amqqueue:get_name(Q),
-         ExistingReplicaNodes = [node(Pid) || Pid <- amqqueue:get_sync_slave_pids(Q)],
-         rabbit_log:debug("Local ~ts has replicas on nodes ~ts",
-                          [rabbit_misc:rs(Name), readable_candidate_list(ExistingReplicaNodes)]),
-         case random_primary_replica_transfer_candidate_node(TransferCandidates, ExistingReplicaNodes) of
-             {ok, Pick} ->
-                 rabbit_log:debug("Will transfer leadership of local ~ts. Planned target node: ~ts",
-                          [rabbit_misc:rs(Name), Pick]),
-                 case rabbit_mirror_queue_misc:migrate_leadership_to_existing_replica(Q, Pick) of
-                     {migrated, NewPrimary} ->
-                         rabbit_log:debug("Successfully transferred leadership of queue ~ts to node ~ts",
-                                          [rabbit_misc:rs(Name), NewPrimary]);
-                     Other ->
-                         rabbit_log:warning("Could not transfer leadership of queue ~ts: ~tp",
-                                            [rabbit_misc:rs(Name), Other])
-                 end;
-             undefined ->
-                 rabbit_log:warning("Could not transfer leadership of queue ~ts: no suitable candidates?",
-                                    [Name])
-         end
-     end || Q <- Queues],
-    rabbit_log:info("Leadership transfer for local classic mirrored queues is complete").
-
 -spec transfer_leadership_of_stream_coordinator([node()]) -> ok.
 transfer_leadership_of_stream_coordinator([]) ->
     rabbit_log:warning("Skipping leadership transfer of stream coordinator: no candidate "
@@ -365,6 +326,3 @@ ok_or_first_error(ok, Acc) ->
     Acc;
 ok_or_first_error({error, _} = Err, _Acc) ->
     Err.
-
-readable_candidate_list(Nodes) ->
-    string:join(lists:map(fun rabbit_data_coercion:to_list/1, Nodes), ", ").

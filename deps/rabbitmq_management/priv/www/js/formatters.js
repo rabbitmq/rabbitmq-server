@@ -205,36 +205,6 @@ function args_to_features(obj) {
     return res;
 }
 
-function fmt_mirrors(queue) {
-    var synced = queue.synchronised_slave_nodes || [];
-    var unsynced = queue.slave_nodes || [];
-    unsynced = jQuery.grep(unsynced,
-                           function (node, i) {
-                               return jQuery.inArray(node, synced) == -1;
-                           });
-    var res = '';
-    if (synced.length > 0) {
-        res += ' <abbr title="Synchronised mirrors: ' + synced + '">+' +
-            synced.length + '</abbr>';
-    }
-    if (synced.length == 0 && unsynced.length > 0) {
-        res += ' <abbr title="There are no synchronised mirrors">+0</abbr>';
-    }
-    if (unsynced.length > 0) {
-        res += ' <abbr class="warning" title="Unsynchronised mirrors: ' +
-            unsynced + '">+' + unsynced.length + '</abbr>';
-    }
-    return res;
-}
-
-function fmt_sync_state(queue) {
-    var res = '<p><b>Syncing: ';
-    res += (queue.messages == 0) ? 100 : Math.round(100 * queue.sync_messages /
-                                                    queue.messages);
-    res += '%</b></p>';
-    return res;
-}
-
 function fmt_members(queue) {
     var res = '';
     var isMajority = (queue.online.length >= (Math.floor(queue.members.length / 2) + 1));

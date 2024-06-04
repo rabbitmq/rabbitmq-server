@@ -9,9 +9,8 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2, delete_crashed/1,
          purge/1, purge_acks/1,
-         publish/6, publish_delivered/5,
-         batch_publish/4, batch_publish_delivered/4,
-         discard/4, drain_confirmed/1,
+         publish/5, publish_delivered/4,
+         discard/3, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
          ackfold/4, fold/3, len/1, is_empty/1, depth/1,
          set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
@@ -531,34 +530,21 @@ purge(State = #vqstate { len = Len }) ->
 
 purge_acks(State) -> a(purge_pending_ack(false, State)).
 
-publish(Msg, MsgProps, IsDelivered, ChPid, Flow, State) ->
+publish(Msg, MsgProps, IsDelivered, ChPid, State) ->
     State1 =
-        publish1(Msg, MsgProps, IsDelivered, ChPid, Flow,
+        publish1(Msg, MsgProps, IsDelivered, ChPid,
                  fun maybe_write_to_disk/4,
                  State),
     a(maybe_update_rates(State1)).
 
-batch_publish(Publishes, ChPid, Flow, State) ->
-    {ChPid, Flow, State1} =
-        lists:foldl(fun batch_publish1/2, {ChPid, Flow, State}, Publishes),
-    State2 = ui(State1),
-    a(maybe_update_rates(State2)).
-
-publish_delivered(Msg, MsgProps, ChPid, Flow, State) ->
+publish_delivered(Msg, MsgProps, ChPid, State) ->
     {SeqId, State1} =
-        publish_delivered1(Msg, MsgProps, ChPid, Flow,
+        publish_delivered1(Msg, MsgProps, ChPid,
                            fun maybe_write_to_disk/4,
                            State),
     {SeqId, a(maybe_update_rates(State1))}.
 
-batch_publish_delivered(Publishes, ChPid, Flow, State) ->
-    {ChPid, Flow, SeqIds, State1} =
-        lists:foldl(fun batch_publish_delivered1/2,
-                    {ChPid, Flow, [], State}, Publishes),
-    State2 = ui(State1),
-    {lists:reverse(SeqIds), a(maybe_update_rates(State2))}.
-
-discard(_MsgId, _ChPid, _Flow, State) -> State.
+discard(_MsgId, _ChPid, State) -> State.
 
 drain_confirmed(State = #vqstate { confirmed = C }) ->
     case sets:is_empty(C) of
@@ -1695,7 +1681,7 @@ process_delivers_and_acks_fun(_) ->
 
 publish1(Msg,
          MsgProps = #message_properties { needs_confirming = NeedsConfirming },
-         IsDelivered, _ChPid, _Flow, PersistFun,
+         IsDelivered, _ChPid, PersistFun,
          State = #vqstate { q3 = Q3, delta = Delta = #delta { count = DeltaCount },
                             len                 = Len,
                             qi_embed_msgs_below = IndexMaxSize,
@@ -1740,14 +1726,10 @@ maybe_next_deliver_seq_id(SeqId, NextDeliverSeqId, true) ->
 maybe_next_deliver_seq_id(_, NextDeliverSeqId, false) ->
     NextDeliverSeqId.
 
-batch_publish1({Msg, MsgProps, IsDelivered}, {ChPid, Flow, State}) ->
-    {ChPid, Flow, publish1(Msg, MsgProps, IsDelivered, ChPid, Flow,
-                           fun maybe_prepare_write_to_disk/4, State)}.
-
 publish_delivered1(Msg,
                    MsgProps = #message_properties {
                                  needs_confirming = NeedsConfirming },
-                   _ChPid, _Flow, PersistFun,
+                   _ChPid, PersistFun,
                    State = #vqstate { qi_embed_msgs_below = IndexMaxSize,
                                       next_seq_id         = SeqId,
                                       next_deliver_seq_id = NextDeliverSeqId,
@@ -1782,13 +1764,6 @@ maybe_needs_confirming(true, queue_store, MsgId, UC, UCS) ->
 %% Otherwise we keep tracking as it used to be.
 maybe_needs_confirming(true, _, MsgId, UC, UCS) ->
     {sets:add_element(MsgId, UC), UCS}.
-
-batch_publish_delivered1({Msg, MsgProps}, {ChPid, Flow, SeqIds, State}) ->
-    {SeqId, State1} =
-        publish_delivered1(Msg, MsgProps, ChPid, Flow,
-                           fun maybe_prepare_write_to_disk/4,
-                           State),
-    {ChPid, Flow, [SeqId | SeqIds], State1}.
 
 maybe_write_msg_to_disk(Force, MsgStatus = #msg_status {
                                  seq_id = SeqId,

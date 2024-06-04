@@ -14,9 +14,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   @info_keys ~w(name durable auto_delete
-            arguments pid recoverable_slaves
-            recoverable_mirrors type)a
-  @info_key_aliases [recoverable_mirrors: :recoverable_slaves]
+            arguments pid)a
 
   def info_keys(), do: @info_keys
 
@@ -41,7 +39,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
   end
 
   def validate(args, _opts) do
-    case InfoKeys.validate_info_keys(args, @info_keys, @info_key_aliases) do
+    case InfoKeys.validate_info_keys(args, @info_keys) do
       {:ok, _} -> :ok
       err -> err
     end
@@ -56,7 +54,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
         queue_timeout: qtimeout,
         local: local_opt
       }) do
-    info_keys = InfoKeys.prepare_info_keys(args, @info_key_aliases)
+    info_keys = InfoKeys.prepare_info_keys(args)
     broker_keys = InfoKeys.broker_keys(info_keys)
     queue_timeout = qtimeout * 1000
 

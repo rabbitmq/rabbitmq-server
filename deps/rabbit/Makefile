@@ -67,9 +67,8 @@ define PROJECT_ENV
 	                         ]},
 	    {halt_on_upgrade_failure, true},
 	    {ssl_apps, [asn1, crypto, public_key, ssl]},
-	    %% see rabbitmq-server#114
-	    {mirroring_flow_control, true},
-	    {mirroring_sync_batch_size, 4096},
+	    %% classic queue storage implementation version
+	    {classic_queue_default_version, 2},
 	    %% see rabbitmq-server#227 and related tickets.
 	    %% msg_store_credit_disc_bound only takes effect when
 	    %% messages are persisted to the message store. If messages

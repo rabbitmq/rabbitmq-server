@@ -5,8 +5,6 @@
 ## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.RemoveClassicQueueMirroringFromPoliciesCommand do
-  alias RabbitMQ.CLI.Core.DocGuide
-
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   use RabbitMQ.CLI.Core.MergesNoDefaults
@@ -28,9 +26,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RemoveClassicQueueMirroringFromPoliciesComma
   def usage, do: "remove_classic_queue_mirroring_from_policies"
 
   def usage_doc_guides() do
-    [
-      DocGuide.mirroring()
-    ]
+    []
   end
 
   def help_section(), do: :operations

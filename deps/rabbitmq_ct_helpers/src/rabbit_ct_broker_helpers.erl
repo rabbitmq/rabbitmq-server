@@ -95,11 +95,6 @@
     clear_policy/4,
     set_operator_policy/6,
     clear_operator_policy/3,
-    set_ha_policy/4, set_ha_policy/5,
-    set_ha_policy_all/1,
-    set_ha_policy_all/2,
-    set_ha_policy_two_pos/1,
-    set_ha_policy_two_pos_batch_sync/1,
 
     set_parameter/5,
     set_parameter/6,
@@ -2092,50 +2087,6 @@ set_operator_policy(Config, Node, Name, Pattern, ApplyTo, Definition) ->
 clear_operator_policy(Config, Node, Name) ->
     rpc(Config, Node,
         rabbit_policy, delete_op, [<<"/">>, Name, <<"acting-user">>]).
-
-set_ha_policy(Config, Node, Pattern, Policy) ->
-    set_ha_policy(Config, Node, Pattern, Policy, []).
-
-set_ha_policy(Config, Node, Pattern, Policy, Extra) ->
-    set_policy(Config, Node, Pattern, Pattern, <<"queues">>,
-      ha_policy(Policy) ++ Extra).
-
-ha_policy(<<"all">>)      -> [{<<"ha-mode">>,   <<"all">>}];
-ha_policy({Mode, Params}) -> [{<<"ha-mode">>,   Mode},
-                              {<<"ha-params">>, Params}].
-
-set_ha_policy_all(Config) ->
-    set_ha_policy(Config, 0, <<".*">>, <<"all">>),
-    Config.
-
-set_ha_policy_all(Config, Extra) ->
-    set_ha_policy(Config, 0, <<".*">>, <<"all">>, Extra),
-    Config.
-
-set_ha_policy_two_pos(Config) ->
-    Members =
-    [atom_to_binary(N)
-     || N <- get_node_configs(Config, nodename)],
-    TwoNodes = [M || M <- lists:sublist(Members, 2)],
-    set_ha_policy(Config, 0, <<"^ha.two.">>, {<<"nodes">>, TwoNodes},
-                  [{<<"ha-promote-on-shutdown">>, <<"always">>}]),
-    set_ha_policy(Config, 0, <<"^ha.auto.">>, {<<"nodes">>, TwoNodes},
-                  [{<<"ha-sync-mode">>,           <<"automatic">>},
-                   {<<"ha-promote-on-shutdown">>, <<"always">>}]),
-    Config.
-
-set_ha_policy_two_pos_batch_sync(Config) ->
-    Members =
-    [atom_to_binary(N)
-     || N <- get_node_configs(Config, nodename)],
-    TwoNodes = [M || M <- lists:sublist(Members, 2)],
-    set_ha_policy(Config, 0, <<"^ha.two.">>, {<<"nodes">>, TwoNodes},
-                  [{<<"ha-promote-on-shutdown">>, <<"always">>}]),
-    set_ha_policy(Config, 0, <<"^ha.auto.">>, {<<"nodes">>, TwoNodes},
-                  [{<<"ha-sync-mode">>,           <<"automatic">>},
-                   {<<"ha-sync-batch-size">>,     200},
-                   {<<"ha-promote-on-shutdown">>, <<"always">>}]),
-    Config.
 
 %% -------------------------------------------------------------------
 %% Parameter helpers.

@@ -35,9 +35,7 @@
     variable_queue_purge,
     variable_queue_requeue,
     variable_queue_requeue_ram_beta,
-    variable_queue_fold,
-    variable_queue_batch_publish,
-    variable_queue_batch_publish_delivered
+    variable_queue_fold
   ]).
 
 -define(BACKING_QUEUE_TESTCASES, [
@@ -1551,36 +1549,6 @@ test_variable_queue_fold(Cut, Msgs, PendingMsgs, VQ0) ->
     Expected = lists:reverse(Acc), %% assertion
     VQ1.
 
-variable_queue_batch_publish(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_batch_publish1, [Config]).
-
-variable_queue_batch_publish1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_batch_publish2/2,
-      ?config(variable_queue_type, Config)).
-
-variable_queue_batch_publish2(VQ, _Config) ->
-    Count = 10,
-    VQ1 = variable_queue_batch_publish(true, Count, VQ),
-    Count = rabbit_variable_queue:len(VQ1),
-    VQ1.
-
-variable_queue_batch_publish_delivered(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_batch_publish_delivered1, [Config]).
-
-variable_queue_batch_publish_delivered1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_batch_publish_delivered2/2,
-      ?config(variable_queue_type, Config)).
-
-variable_queue_batch_publish_delivered2(VQ, _Config) ->
-    Count = 10,
-    VQ1 = variable_queue_batch_publish_delivered(true, Count, VQ),
-    Count = rabbit_variable_queue:depth(VQ1),
-    VQ1.
-
 %% same as test_variable_queue_requeue_ram_beta but randomly changing
 %% the queue mode after every step.
 variable_queue_mode_change(Config) ->
@@ -1830,43 +1798,8 @@ variable_queue_publish(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
                 rabbit_variable_queue:publish(
                   Msg,
                   PropFun(N, #message_properties{size = 10}),
-                  false, self(), noflow, VQN)
+                  false, self(), VQN)
         end, VQ, lists:seq(Start, Start + Count - 1))).
-
-variable_queue_batch_publish(IsPersistent, Count, VQ) ->
-    variable_queue_batch_publish(IsPersistent, Count, fun (_N, P) -> P end, VQ).
-
-variable_queue_batch_publish(IsPersistent, Count, PropFun, VQ) ->
-    variable_queue_batch_publish(IsPersistent, 1, Count, PropFun,
-                                 fun (_N) -> <<>> end, VQ).
-
-variable_queue_batch_publish(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
-    variable_queue_batch_publish0(IsPersistent, Start, Count, PropFun,
-                                  PayloadFun, fun make_publish/4,
-                                  fun rabbit_variable_queue:batch_publish/4,
-                                  VQ).
-
-variable_queue_batch_publish_delivered(IsPersistent, Count, VQ) ->
-    variable_queue_batch_publish_delivered(IsPersistent, Count, fun (_N, P) -> P end, VQ).
-
-variable_queue_batch_publish_delivered(IsPersistent, Count, PropFun, VQ) ->
-    variable_queue_batch_publish_delivered(IsPersistent, 1, Count, PropFun,
-                                           fun (_N) -> <<>> end, VQ).
-
-variable_queue_batch_publish_delivered(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
-    variable_queue_batch_publish0(IsPersistent, Start, Count, PropFun,
-                                  PayloadFun, fun make_publish_delivered/4,
-                                  fun rabbit_variable_queue:batch_publish_delivered/4,
-                                  VQ).
-
-variable_queue_batch_publish0(IsPersistent, Start, Count, PropFun, PayloadFun,
-                              MakePubFun, PubFun, VQ) ->
-    Publishes =
-        [MakePubFun(IsPersistent, PayloadFun, PropFun, N)
-         || N <- lists:seq(Start, Start + Count - 1)],
-    Res = PubFun(Publishes, self(), noflow, VQ),
-    VQ1 = pub_res(Res),
-    variable_queue_wait_for_shuffling_end(VQ1).
 
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
     lists:foldl(fun (N, {VQN, AckTagsAcc}) ->

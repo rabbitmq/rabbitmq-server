@@ -22,8 +22,7 @@
 
 all() ->
     [
-     {group, non_parallel_tests},
-     {group, non_parallel_tests_mirroring}
+     {group, non_parallel_tests}
     ].
 
 groups() ->
@@ -55,12 +54,7 @@ groups() ->
                                qq_replicas_delete,
                                qq_replicas_grow,
                                qq_replicas_shrink
-                              ]},
-     {non_parallel_tests_mirroring, [
-                                     multi_node_case1_test,
-                                     ha_queue_hosted_on_other_node,
-                                     ha_queue_with_multiple_consumers
-                                    ]}
+                              ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -97,21 +91,12 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
                                          rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_group(non_parallel_tests_mirroring, Config) ->
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        mnesia ->
-            Config;
-        {khepri, _} ->
-            {skip, "Classic queue mirroring not supported by Khepri"}
-    end;
 init_per_group(_, Config) ->
     Config.
 
 end_per_group(_, Config) ->
     Config.
 
-init_per_testcase(multi_node_case1_test = Testcase, Config) ->
-    rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, clear_all_table_data, []),
     rabbit_ct_broker_helpers:rpc(Config, 1, ?MODULE, clear_all_table_data, []),
@@ -120,9 +105,6 @@ init_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, {conn, Conn}),
     rabbit_ct_helpers:testcase_started(Config1, Testcase).
 
-end_per_testcase(multi_node_case1_test = Testcase, Config) ->
-    rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"clustering_SUITE:end_per_testcase">>),
-    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_client_helpers:close_connection(?config(conn, Config)),
     rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"clustering_SUITE:end_per_testcase">>),
@@ -136,107 +118,6 @@ list_cluster_nodes_test(Config) ->
     %% see rmq_nodes_count in init_per_suite
     ?assertEqual(2, length(http_get(Config, "/nodes"))),
     passed.
-
-multi_node_case1_test(Config) ->
-    Nodename1 = rabbit_data_coercion:to_binary(get_node_config(Config, 0, nodename)),
-    Nodename2 = rabbit_data_coercion:to_binary(get_node_config(Config, 1, nodename)),
-    Policy = [{pattern,    <<".*">>},
-              {definition, [{'ha-mode', <<"all">>}]}],
-    http_put(Config, "/policies/%2F/HA", Policy, [?CREATED, ?NO_CONTENT]),
-    http_delete(Config, "/queues/%2F/multi-node-test-queue", [?NO_CONTENT, ?NOT_FOUND]),
-
-    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
-    {ok, Chan} = amqp_connection:open_channel(Conn),
-    _ = queue_declare(Chan, <<"multi-node-test-queue">>),
-    Q = wait_for_mirrored_queue(Config, "/queues/%2F/multi-node-test-queue"),
-
-    ?assert(lists:member(maps:get(node, Q), [Nodename1, Nodename2])),
-    [Mirror] = maps:get(slave_nodes, Q),
-    [Mirror] = maps:get(synchronised_slave_nodes, Q),
-    ?assert(lists:member(Mirror, [Nodename1, Nodename2])),
-
-    %% restart node2 so that queue master migrates
-    restart_node(Config, 1),
-
-    Q2 = wait_for_mirrored_queue(Config, "/queues/%2F/multi-node-test-queue"),
-    http_delete(Config, "/queues/%2F/multi-node-test-queue", ?NO_CONTENT),
-    http_delete(Config, "/policies/%2F/HA", ?NO_CONTENT),
-
-    ?assert(lists:member(maps:get(node, Q2), [Nodename1, Nodename2])),
-
-    rabbit_ct_client_helpers:close_connection(Conn),
-
-    passed.
-
-ha_queue_hosted_on_other_node(Config) ->
-    Policy = [{pattern,    <<".*">>},
-              {definition, [{'ha-mode', <<"all">>}]}],
-    http_put(Config, "/policies/%2F/HA", Policy, [?CREATED, ?NO_CONTENT]),
-
-    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
-    {ok, Chan} = amqp_connection:open_channel(Conn),
-    _ = queue_declare_durable(Chan, <<"ha-queue">>),
-    _ = wait_for_mirrored_queue(Config, "/queues/%2F/ha-queue"),
-
-    {ok, Chan2} = amqp_connection:open_channel(?config(conn, Config)),
-    consume(Chan, <<"ha-queue">>),
-
-    timer:sleep(5100),
-    force_stats(),
-    Res = http_get(Config, "/queues/%2F/ha-queue"),
-
-    % assert some basic data is there
-    [Cons] = maps:get(consumer_details, Res),
-    #{} = maps:get(channel_details, Cons), % channel details proplist must not be empty
-    0 = maps:get(prefetch_count, Cons), % check one of the augmented properties
-    <<"ha-queue">> = maps:get(name, Res),
-
-    amqp_channel:close(Chan),
-    amqp_channel:close(Chan2),
-    rabbit_ct_client_helpers:close_connection(Conn),
-
-    http_delete(Config, "/queues/%2F/ha-queue", ?NO_CONTENT),
-    http_delete(Config, "/policies/%2F/HA", ?NO_CONTENT),
-
-    ok.
-
-ha_queue_with_multiple_consumers(Config) ->
-    Policy = [{pattern,    <<".*">>},
-              {definition, [{'ha-mode', <<"all">>}]}],
-    http_put(Config, "/policies/%2F/HA", Policy, [?CREATED, ?NO_CONTENT]),
-
-    {ok, Chan} = amqp_connection:open_channel(?config(conn, Config)),
-    _ = queue_declare_durable(Chan, <<"ha-queue3">>),
-    _ = wait_for_mirrored_queue(Config, "/queues/%2F/ha-queue3"),
-
-    consume(Chan, <<"ha-queue3">>),
-    force_stats(),
-
-    {ok, Chan2} = amqp_connection:open_channel(?config(conn, Config)),
-    consume(Chan2, <<"ha-queue3">>),
-
-    timer:sleep(5100),
-    force_stats(),
-
-    Res = http_get(Config, "/queues/%2F/ha-queue3"),
-
-    % assert some basic data is there
-    [C1, C2] = maps:get(consumer_details, Res),
-    % channel details proplist must not be empty
-    #{} = maps:get(channel_details, C1),
-    #{} = maps:get(channel_details, C2),
-    % check one of the augmented properties
-    0 = maps:get(prefetch_count, C1),
-    0 = maps:get(prefetch_count, C2),
-    <<"ha-queue3">> = maps:get(name, Res),
-
-    amqp_channel:close(Chan),
-    amqp_channel:close(Chan2),
-
-    http_delete(Config, "/queues/%2F/ha-queue3", ?NO_CONTENT),
-    http_delete(Config, "/policies/%2F/HA", ?NO_CONTENT),
-
-    ok.
 
 qq_replicas_add(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
@@ -902,9 +783,6 @@ queue_bind(Chan, Ex, Q, Key) ->
                             exchange = Ex,
                             routing_key = Key},
     #'queue.bind_ok'{} = amqp_channel:call(Chan, Binding).
-
-wait_for_mirrored_queue(Config, Path) ->
-    wait_for_queue(Config, Path, [slave_nodes, synchronised_slave_nodes]).
 
 wait_for_queue(Config, Path) ->
     wait_for_queue(Config, Path, []).

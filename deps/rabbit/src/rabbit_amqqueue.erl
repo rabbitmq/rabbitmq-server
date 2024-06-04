@@ -36,16 +36,12 @@
 -export([notify_down_all/2, notify_down_all/3, activate_limit_all/2]).
 -export([on_node_up/1, on_node_down/1]).
 -export([update/2, store_queue/1, update_decorators/2, policy_changed/2]).
--export([update_mirroring/1, sync_mirrors/1, cancel_sync_mirrors/1]).
 -export([emit_unresponsive/6, emit_unresponsive_local/5, is_unresponsive/2]).
--export([has_synchronised_mirrors_online/1, is_match/2, is_in_virtual_host/2]).
+-export([is_match/2, is_in_virtual_host/2]).
 -export([is_replicated/1, is_exclusive/1, is_not_exclusive/1, is_dead_exclusive/1]).
 -export([list_local_quorum_queues/0, list_local_quorum_queue_names/0,
          list_local_stream_queues/0, list_stream_queues_on/1,
-         list_local_mirrored_classic_queues/0, list_local_mirrored_classic_names/0,
          list_local_leaders/0, list_local_followers/0, get_quorum_nodes/1,
-         list_local_mirrored_classic_without_synchronised_mirrors/0,
-         list_local_mirrored_classic_without_synchronised_mirrors_for_cli/0,
          list_local_quorum_queues_with_name_matching/1,
          list_local_quorum_queues_with_name_matching/2]).
 -export([is_local_to_node/2, is_local_to_node_set/2]).
@@ -311,7 +307,6 @@ update_decorators(Name, Decorators) ->
 policy_changed(Q1, Q2) ->
     Decorators1 = amqqueue:get_decorators(Q1),
     Decorators2 = amqqueue:get_decorators(Q2),
-    rabbit_mirror_queue_misc:update_mirrors(Q1, Q2),
     D1 = rabbit_queue_decorator:select(Decorators1),
     D2 = rabbit_queue_decorator:select(Decorators2),
     [ok = M:policy_changed(Q1, Q2) || M <- lists:usort(D1 ++ D2)],
@@ -395,7 +390,7 @@ get_rebalance_lock(Pid) when is_pid(Pid) ->
             false
     end.
 
--spec rebalance('all' | 'quorum' | 'classic', binary(), binary()) ->
+-spec rebalance('all' | 'quorum', binary(), binary()) ->
                        {ok, [{node(), pos_integer()}]} | {error, term()}.
 rebalance(Type, VhostSpec, QueueSpec) ->
     %% We have not yet acquired the rebalance_queues global lock.
@@ -428,7 +423,7 @@ maybe_rebalance(false, _Type, _VhostSpec, _QueueSpec) ->
 
 %% Stream queues don't yet support rebalance
 filter_per_type(all, Q)  ->
-    ?amqqueue_is_quorum(Q) or ?amqqueue_is_classic(Q) or ?amqqueue_is_stream(Q);
+    ?amqqueue_is_quorum(Q) or ?amqqueue_is_stream(Q);
 filter_per_type(quorum, Q) ->
     ?amqqueue_is_quorum(Q);
 filter_per_type(stream, Q) ->
@@ -439,9 +434,7 @@ filter_per_type(classic, Q) ->
 rebalance_module(Q) when ?amqqueue_is_quorum(Q) ->
     rabbit_quorum_queue;
 rebalance_module(Q) when ?amqqueue_is_stream(Q) ->
-    rabbit_stream_queue;
-rebalance_module(Q) when ?amqqueue_is_classic(Q) ->
-    rabbit_mirror_queue_misc.
+    rabbit_stream_queue.
 
 get_resource_name(#resource{name = Name}) ->
     Name.
@@ -552,23 +545,15 @@ with(#resource{} = Name, F, E, RetriesLeft) ->
             %% Something bad happened to that queue, we are bailing out
             %% on processing current request.
             E({absent, Q, timeout});
-        {ok, Q} when ?amqqueue_state_is(Q, stopped) andalso RetriesLeft =:= 0 ->
-            %% The queue was stopped and not migrated
+        {ok, Q} when ?amqqueue_state_is(Q, stopped) ->
+            %% The queue was stopped
             E({absent, Q, stopped});
         %% The queue process has crashed with unknown error
         {ok, Q} when ?amqqueue_state_is(Q, crashed) ->
             E({absent, Q, crashed});
-        %% The queue process has been stopped by a supervisor.
-        %% In that case a synchronised mirror can take over
-        %% so we should retry.
-        {ok, Q} when ?amqqueue_state_is(Q, stopped) ->
-            %% The queue process was stopped by the supervisor
-            rabbit_misc:with_exit_handler(
-              fun () -> retry_wait(Q, F, E, RetriesLeft) end,
-              fun () -> F(Q) end);
         %% The queue is supposed to be active.
-        %% The leader node can go away or queue can be killed
-        %% so we retry, waiting for a mirror to take over.
+        %% The node can go away or queue can be killed so we retry.
+        %% TODO review this: why to retry when mirroring is gone?
         {ok, Q} when ?amqqueue_state_is(Q, live) ->
             %% We check is_process_alive(QPid) in case we receive a
             %% nodedown (for example) in F() that has nothing to do
@@ -592,27 +577,19 @@ with(#resource{} = Name, F, E, RetriesLeft) ->
 retry_wait(Q, F, E, RetriesLeft) ->
     Name = amqqueue:get_name(Q),
     QPid = amqqueue:get_pid(Q),
-    QState = amqqueue:get_state(Q),
-    case {QState, is_replicated(Q)} of
-        %% We don't want to repeat an operation if
-        %% there are no mirrors to migrate to
-        {stopped, false} ->
-            E({absent, Q, stopped});
-        _ ->
-            case rabbit_process:is_process_alive(QPid) of
-                true ->
-                    % rabbitmq-server#1682
-                    % The old check would have crashed here,
-                    % instead, log it and run the exit fun. absent & alive is weird,
-                    % but better than crashing with badmatch,true
-                    rabbit_log:debug("Unexpected alive queue process ~tp", [QPid]),
-                    E({absent, Q, alive});
-                false ->
-                    ok % Expected result
-            end,
-            timer:sleep(30),
-            with(Name, F, E, RetriesLeft - 1)
-    end.
+    case rabbit_process:is_process_alive(QPid) of
+        true ->
+            %% rabbitmq-server#1682
+            %% The old check would have crashed here,
+            %% instead, log it and run the exit fun. absent & alive is weird,
+            %% but better than crashing with badmatch,true
+            rabbit_log:debug("Unexpected alive queue process ~tp", [QPid]),
+            E({absent, Q, alive});
+        false ->
+            ok % Expected result
+    end,
+    timer:sleep(30),
+    with(Name, F, E, RetriesLeft - 1).
 
 -spec with(name(), qfun(A)) ->
           A | rabbit_types:error(not_found_or_absent()).
@@ -1248,48 +1225,6 @@ list_local_followers() ->
          rabbit_quorum_queue:is_recoverable(Q)
          ].
 
--spec list_local_mirrored_classic_queues() -> [amqqueue:amqqueue()].
-list_local_mirrored_classic_queues() ->
-    [ Q || Q <- list(),
-        amqqueue:get_state(Q) =/= crashed,
-        amqqueue:is_classic(Q),
-        is_local_to_node(amqqueue:get_pid(Q), node()),
-        is_replicated(Q)].
-
--spec list_local_mirrored_classic_names() -> [name()].
-list_local_mirrored_classic_names() ->
-    [ amqqueue:get_name(Q) || Q <- list(),
-           amqqueue:get_state(Q) =/= crashed,
-           amqqueue:is_classic(Q),
-           is_local_to_node(amqqueue:get_pid(Q), node()),
-           is_replicated(Q)].
-
--spec list_local_mirrored_classic_without_synchronised_mirrors() ->
-    [amqqueue:amqqueue()].
-list_local_mirrored_classic_without_synchronised_mirrors() ->
-    [ Q || Q <- list(),
-         amqqueue:get_state(Q) =/= crashed,
-         amqqueue:is_classic(Q),
-         %% filter out exclusive queues as they won't actually be mirrored
-         is_not_exclusive(Q),
-         is_local_to_node(amqqueue:get_pid(Q), node()),
-         is_replicated(Q),
-         not has_synchronised_mirrors_online(Q)].
-
--spec list_local_mirrored_classic_without_synchronised_mirrors_for_cli() ->
-    [#{binary => any()}].
-list_local_mirrored_classic_without_synchronised_mirrors_for_cli() ->
-    ClassicQs = list_local_mirrored_classic_without_synchronised_mirrors(),
-    [begin
-         #resource{name = Name} = amqqueue:get_name(Q),
-         #{
-             <<"readable_name">> => rabbit_data_coercion:to_binary(rabbit_misc:rs(amqqueue:get_name(Q))),
-             <<"name">>          => Name,
-             <<"virtual_host">>  => amqqueue:get_vhost(Q),
-             <<"type">>          => <<"classic">>
-         }
-     end || Q <- ClassicQs].
-
 -spec list_local_quorum_queues_with_name_matching(binary()) -> [amqqueue:amqqueue()].
 list_local_quorum_queues_with_name_matching(Pattern) ->
     [ Q || Q <- list_by_type(quorum),
@@ -1819,64 +1754,24 @@ internal_delete(Queue, ActingUser, Reason) ->
 %% Does it make any sense once mnesia is not used/removed?
 forget_all_durable(Node) ->
     UpdateFun = fun(Q) ->
-                        forget_node_for_queue(Node, Q)
+                        forget_node_for_queue(Q)
                 end,
     FilterFun = fun(Q) ->
                         is_local_to_node(amqqueue:get_pid(Q), Node)
                 end,
     rabbit_db_queue:foreach_durable(UpdateFun, FilterFun).
 
-%% Try to promote a mirror while down - it should recover as a
-%% leader. We try to take the oldest mirror here for best chance of
-%% recovery.
-forget_node_for_queue(_DeadNode, Q)
+forget_node_for_queue(Q)
   when ?amqqueue_is_quorum(Q) ->
     ok;
-forget_node_for_queue(_DeadNode, Q)
+forget_node_for_queue(Q)
   when ?amqqueue_is_stream(Q) ->
     ok;
-forget_node_for_queue(DeadNode, Q) ->
-    RS = amqqueue:get_recoverable_slaves(Q),
-    forget_node_for_queue(DeadNode, RS, Q).
-
-forget_node_for_queue(_DeadNode, [], Q) ->
-    %% No mirrors to recover from, queue is gone.
+forget_node_for_queue(Q) ->
     %% Don't process_deletions since that just calls callbacks and we
     %% are not really up.
     Name = amqqueue:get_name(Q),
-    rabbit_db_queue:internal_delete(Name, true, normal);
-
-%% Should not happen, but let's be conservative.
-forget_node_for_queue(DeadNode, [DeadNode | T], Q) ->
-    forget_node_for_queue(DeadNode, T, Q);
-
-forget_node_for_queue(DeadNode, [H|T], Q) when ?is_amqqueue(Q) ->
-    Type = amqqueue:get_type(Q),
-    case {node_permits_offline_promotion(H), Type} of
-        {false, _} -> forget_node_for_queue(DeadNode, T, Q);
-        {true, rabbit_classic_queue} ->
-            Q1 = amqqueue:set_pid(Q, rabbit_misc:node_to_fake_pid(H)),
-            %% rabbit_db_queue:set_many/1 just stores a durable queue record,
-            %% that is the only one required here.
-            %% rabbit_db_queue:set/1 writes both durable and transient, thus
-            %% can't be used for this operation.
-            ok = rabbit_db_queue:set_many([Q1]);
-        {true, rabbit_quorum_queue} ->
-            ok
-    end.
-
-node_permits_offline_promotion(Node) ->
-    case node() of
-        Node -> not rabbit:is_running(); %% [1]
-        _    -> NotRunning = rabbit_nodes:list_not_running(),
-                lists:member(Node, NotRunning) %% [2]
-    end.
-%% [1] In this case if we are a real running node (i.e. rabbitmqctl
-%% has RPCed into us) then we cannot allow promotion. If on the other
-%% hand we *are* rabbitmqctl impersonating the node for offline
-%% node-forgetting then we can.
-%%
-%% [2] This is simpler; as long as it's down that's OK
+    rabbit_db_queue:internal_delete(Name, true, normal).
 
 -spec run_backing_queue
         (pid(), atom(), (fun ((atom(), A) -> {[rabbit_types:msg_id()], A}))) ->
@@ -1895,33 +1790,10 @@ set_ram_duration_target(QPid, Duration) ->
 set_maximum_since_use(QPid, Age) ->
     gen_server2:cast(QPid, {set_maximum_since_use, Age}).
 
--spec update_mirroring(pid()) -> 'ok'.
-
-update_mirroring(QPid) ->
-    ok = delegate:invoke_no_result(QPid, {gen_server2, cast, [update_mirroring]}).
-
--spec sync_mirrors(amqqueue:amqqueue() | pid()) ->
-          'ok' | rabbit_types:error('not_mirrored').
-
-sync_mirrors(Q) when ?is_amqqueue(Q) ->
-    QPid = amqqueue:get_pid(Q),
-    delegate:invoke(QPid, {gen_server2, call, [sync_mirrors, infinity]});
-sync_mirrors(QPid) ->
-    delegate:invoke(QPid, {gen_server2, call, [sync_mirrors, infinity]}).
-
--spec cancel_sync_mirrors(amqqueue:amqqueue() | pid()) ->
-          'ok' | {'ok', 'not_syncing'}.
-
-cancel_sync_mirrors(Q) when ?is_amqqueue(Q) ->
-    QPid = amqqueue:get_pid(Q),
-    delegate:invoke(QPid, {gen_server2, call, [cancel_sync_mirrors, infinity]});
-cancel_sync_mirrors(QPid) ->
-    delegate:invoke(QPid, {gen_server2, call, [cancel_sync_mirrors, infinity]}).
-
 -spec is_replicated(amqqueue:amqqueue()) -> boolean().
 
 is_replicated(Q) when ?amqqueue_is_classic(Q) ->
-    rabbit_mirror_queue_misc:is_mirrored(Q);
+    false;
 is_replicated(_Q) ->
     %% streams and quorum queues are all replicated
     true.
@@ -1940,50 +1812,10 @@ is_dead_exclusive(Q) when ?amqqueue_exclusive_owner_is_pid(Q) ->
     Pid = amqqueue:get_pid(Q),
     not rabbit_process:is_process_alive(Pid).
 
--spec has_synchronised_mirrors_online(amqqueue:amqqueue()) -> boolean().
-has_synchronised_mirrors_online(Q) ->
-    %% a queue with all mirrors down would have no mirror pids.
-    %% We treat these as in sync intentionally to avoid false positives.
-    MirrorPids = amqqueue:get_sync_slave_pids(Q),
-    MirrorPids =/= [] andalso lists:any(fun rabbit_misc:is_process_alive/1, MirrorPids).
-
 -spec on_node_up(node()) -> 'ok'.
 
-on_node_up(Node) ->
-    rabbit_db_queue:foreach_transient(maybe_clear_recoverable_node(Node)).
-
-maybe_clear_recoverable_node(Node) ->
-    fun(Q) ->
-            SPids = amqqueue:get_sync_slave_pids(Q),
-            RSs = amqqueue:get_recoverable_slaves(Q),
-            case lists:member(Node, RSs) of
-                true  ->
-                    %% There is a race with
-                    %% rabbit_mirror_queue_slave:record_synchronised/1 called
-                    %% by the incoming mirror node and this function, called
-                    %% by the leader node. If this function is executed after
-                    %% record_synchronised/1, the node is erroneously removed
-                    %% from the recoverable mirror list.
-                    %%
-                    %% We check if the mirror node's queue PID is alive. If it is
-                    %% the case, then this function is executed after. In this
-                    %% situation, we don't touch the queue record, it is already
-                    %% correct.
-                    DoClearNode =
-                        case [SP || SP <- SPids, node(SP) =:= Node] of
-                            [SPid] -> not rabbit_misc:is_process_alive(SPid);
-                            _      -> true
-                        end,
-                    if
-                        DoClearNode -> RSs1 = RSs -- [Node],
-                                       store_queue(
-                                         amqqueue:set_recoverable_slaves(Q, RSs1));
-                        true        -> ok
-                    end;
-                false ->
-                    ok
-            end
-    end.
+on_node_up(_Node) ->
+    ok.
 
 -spec on_node_down(node()) -> 'ok'.
 

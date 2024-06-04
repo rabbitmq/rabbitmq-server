@@ -125,8 +125,6 @@ init_per_testcase(Testcase, Config) ->
         {single_dlx_worker, true, _} ->
             {skip, "single_dlx_worker is not mixed version compatible because process "
              "rabbit_fifo_dlx_sup does not exist in 3.9"};
-        {many_target_queues, _, true} ->
-            {skip, "Classic queue mirroring not supported by Khepri"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             T = rabbit_data_coercion:to_binary(Testcase),
@@ -811,32 +809,25 @@ target_quorum_queue_delete_create(Config) ->
 %% 2. Target queue can be classic queue, quorum queue, or stream queue.
 %%
 %% Lesson learnt by writing this test:
-%% If there are multiple target queues, messages will not be sent / routed to target non-mirrored durable classic queues
+%% If there are multiple target queues, messages will not be sent / routed to target durable classic queues
 %% when their host node is temporarily down because these queues get temporarily deleted from the rabbit_queue RAM table
 %% (but will still be present in the rabbit_durable_queue DISC table). See:
 %% https://github.com/rabbitmq/rabbitmq-server/blob/cf76b479300b767b8ea450293d096cbf729ed734/deps/rabbit/src/rabbit_amqqueue.erl#L1955-L1964
 many_target_queues(Config) ->
     [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
-    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
     SourceQ = ?config(source_queue, Config),
     RaName = ra_name(SourceQ),
     TargetQ1 = ?config(target_queue_1, Config),
     TargetQ2 = ?config(target_queue_2, Config),
     TargetQ3 = ?config(target_queue_3, Config),
-    TargetQ4 = ?config(target_queue_4, Config),
-    TargetQ5 = ?config(target_queue_5, Config),
-    TargetQ6 = ?config(target_queue_6, Config),
     DLX = ?config(dead_letter_exchange, Config),
     DLRKey = <<"k1">>,
     %% Create topology:
     %% * source quorum queue with 1 replica on node 1
-    %% * target non-mirrored classic queue on node 1
+    %% * target classic queue on node 1
     %% * target quorum queue with 3 replicas
     %% * target stream queue with 3 replicas
-    %% * target mirrored classic queue with 3 replicas (leader on node 1)
-    %% * target mirrored classic queue with 1 replica (leader on node 2)
-    %% * target mirrored classic queue with 3 replica (leader on node 2)
     declare_queue(Ch, SourceQ, [{<<"x-dead-letter-exchange">>, longstr, DLX},
                                 {<<"x-dead-letter-routing-key">>, longstr, DLRKey},
                                 {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
@@ -855,22 +846,6 @@ many_target_queues(Config) ->
                                  {<<"x-initial-cluster-size">>, long, 3}
                                 ]),
     bind_queue(Ch, TargetQ3, DLX, DLRKey),
-    ok = rabbit_ct_broker_helpers:set_policy(Config, Server1, <<"mirror-q4">>, TargetQ4, <<"queues">>,
-                                             [{<<"ha-mode">>, <<"all">>},
-                                              {<<"queue-master-locator">>, <<"client-local">>}]),
-    declare_queue(Ch, TargetQ4, []),
-    bind_queue(Ch, TargetQ4, DLX, DLRKey),
-    ok = rabbit_ct_broker_helpers:set_policy(Config, Server1, <<"mirror-q5">>, TargetQ5, <<"queues">>,
-                                             [{<<"ha-mode">>, <<"exactly">>},
-                                              {<<"ha-params">>, 1},
-                                              {<<"queue-master-locator">>, <<"client-local">>}]),
-    declare_queue(Ch2, TargetQ5, []),
-    bind_queue(Ch2, TargetQ5, DLX, DLRKey),
-    ok = rabbit_ct_broker_helpers:set_policy(Config, Server1, <<"mirror-q6">>, TargetQ6, <<"queues">>,
-                                             [{<<"ha-mode">>, <<"all">>},
-                                              {<<"queue-master-locator">>, <<"client-local">>}]),
-    declare_queue(Ch2, TargetQ6, []),
-    bind_queue(Ch2, TargetQ6, DLX, DLRKey),
     Msg1 = <<"m1">>,
     ok = amqp_channel:cast(Ch,
                            #'basic.publish'{routing_key = SourceQ},
@@ -904,15 +879,6 @@ many_target_queues(Config) ->
     after 2000 ->
               exit(deliver_timeout)
     end,
-    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg1}},
-                amqp_channel:call(Ch, #'basic.get'{queue = TargetQ4}),
-                ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
-    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg1}},
-                amqp_channel:call(Ch2, #'basic.get'{queue = TargetQ5}),
-                ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
-    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg1}},
-                amqp_channel:call(Ch2, #'basic.get'{queue = TargetQ6}),
-                ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
     ?awaitMatch([{0, 0}],
                 dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1),
                 ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
@@ -949,16 +915,6 @@ many_target_queues(Config) ->
     after 0 ->
               exit(deliver_timeout)
     end,
-    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
-                amqp_channel:call(Ch, #'basic.get'{queue = TargetQ4}),
-                ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
-    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
-                amqp_channel:call(Ch, #'basic.get'{queue = TargetQ5}),
-                ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
-    %%TODO why is the 1st message (m1) a duplicate?
-    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
-                amqp_channel:call(Ch, #'basic.get'{queue = TargetQ6}),
-                ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
     ?assertEqual(2, counted(messages_dead_lettered_expired_total, Config)),
     ?assertEqual(2, counted(messages_dead_lettered_confirmed_total, Config)).
 

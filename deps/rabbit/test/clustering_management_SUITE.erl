@@ -557,19 +557,19 @@ reset_removes_things(Config) ->
     test_removes_things(Config, fun (R, _H) -> ok = reset(Config, R) end).
 
 test_removes_things(Config, LoseRabbit) ->
-    Unmirrored = <<"unmirrored-queue">>,
+    Classic = <<"classic-queue">>,
     [Rabbit, Hare | _] = cluster_members(Config),
     RCh = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
-    declare(RCh, Unmirrored),
+    declare(RCh, Classic),
     ok = stop_app(Config, Rabbit),
 
     HCh = rabbit_ct_client_helpers:open_channel(Config, Hare),
     {'EXIT',{{shutdown,{server_initiated_close,404,_}}, _}} =
-        (catch declare(HCh, Unmirrored)),
+        (catch declare(HCh, Classic)),
 
     ok = LoseRabbit(Rabbit, Hare),
     HCh2 = rabbit_ct_client_helpers:open_channel(Config, Hare),
-    declare(HCh2, Unmirrored),
+    declare(HCh2, Classic),
     ok.
 
 forget_node_in_khepri(Config) ->
@@ -752,21 +752,21 @@ reset_last_disc_node(Config) ->
 forget_offline_removes_things(Config) ->
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
       nodename),
-    Unmirrored = <<"unmirrored-queue">>,
+    Classic = <<"classic-queue">>,
     X = <<"X">>,
     RCh = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
-    declare(RCh, Unmirrored),
+    declare(RCh, Classic),
 
     amqp_channel:call(RCh, #'exchange.declare'{durable     = true,
                                                exchange    = X,
                                                auto_delete = true}),
-    amqp_channel:call(RCh, #'queue.bind'{queue    = Unmirrored,
+    amqp_channel:call(RCh, #'queue.bind'{queue    = Classic,
                                          exchange = X}),
     ok = rabbit_ct_broker_helpers:stop_broker(Config, Rabbit),
 
     HCh = rabbit_ct_client_helpers:open_channel(Config, Hare),
     {'EXIT',{{shutdown,{server_initiated_close,404,_}}, _}} =
-        (catch declare(HCh, Unmirrored)),
+        (catch declare(HCh, Classic)),
 
     ok = rabbit_ct_broker_helpers:stop_node(Config, Hare),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Rabbit),
@@ -774,56 +774,13 @@ forget_offline_removes_things(Config) ->
     ok = rabbit_ct_broker_helpers:start_node(Config, Hare),
 
     HCh2 = rabbit_ct_client_helpers:open_channel(Config, Hare),
-    declare(HCh2, Unmirrored),
+    declare(HCh2, Classic),
     {'EXIT',{{shutdown,{server_initiated_close,404,_}}, _}} =
         (catch amqp_channel:call(HCh2,#'exchange.declare'{durable     = true,
                                                           exchange    = X,
                                                           auto_delete = true,
                                                           passive     = true})),
     ok.
-
-set_ha_policy(Config, QName, Master, Slaves) ->
-    Nodes = [list_to_binary(atom_to_list(N)) || N <- [Master | Slaves]],
-    HaPolicy = {<<"nodes">>, Nodes},
-    rabbit_ct_broker_helpers:set_ha_policy(Config, Master, QName, HaPolicy),
-    await_followers(QName, Master, Slaves).
-
-await_followers(QName, Master, Slaves) ->
-    await_followers_0(QName, Master, Slaves, 10).
-
-await_followers_0(QName, Master, Slaves0, Tries) ->
-    {ok, Queue} = await_followers_lookup_queue(QName, Master),
-    SPids = amqqueue:get_slave_pids(Queue),
-    ActMaster = amqqueue:qnode(Queue),
-    ActSlaves = lists:usort([node(P) || P <- SPids]),
-    Slaves1 = lists:usort(Slaves0),
-    await_followers_1(QName, ActMaster, ActSlaves, Master, Slaves1, Tries).
-
-await_followers_1(QName, _ActMaster, _ActSlaves, _Master, _Slaves, 0) ->
-    error({timeout_waiting_for_followers, QName});
-await_followers_1(QName, ActMaster, ActSlaves, Master, Slaves, Tries) ->
-    case {Master, Slaves} of
-        {ActMaster, ActSlaves} ->
-            ok;
-        _                      ->
-            timer:sleep(250),
-            await_followers_0(QName, Master, Slaves, Tries - 1)
-    end.
-
-await_followers_lookup_queue(QName, Master) ->
-    await_followers_lookup_queue(QName, Master, 10).
-
-await_followers_lookup_queue(QName, _Master, 0) ->
-    error({timeout_looking_up_queue, QName});
-await_followers_lookup_queue(QName, Master, Tries) ->
-    RpcArgs = [rabbit_misc:r(<<"/">>, queue, QName)],
-    case rpc:call(Master, rabbit_amqqueue, lookup, RpcArgs) of
-        {error, not_found} ->
-            timer:sleep(250),
-            await_followers_lookup_queue(QName, Master, Tries - 1);
-        {ok, Q} ->
-            {ok, Q}
-    end.
 
 force_boot(Config) ->
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,

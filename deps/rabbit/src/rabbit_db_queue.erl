@@ -317,10 +317,7 @@ list_for_count(VHostName) ->
 
 list_for_count_in_mnesia(VHostName) ->
     %% this is certainly suboptimal but there is no way to count
-    %% things using a secondary index in Mnesia. Our counter-table-per-node
-    %% won't work here because with master migration of mirrored queues
-    %% the "ownership" of queues by nodes becomes a non-trivial problem
-    %% that requires a proper consensus algorithm.
+    %% things using a secondary index in Mnesia.
     list_with_possible_retry_in_mnesia(
       fun() ->
               length(mnesia:dirty_index_read(?MNESIA_TABLE,
@@ -601,8 +598,7 @@ update_decorators_in_khepri(QName, Decorators) ->
     Path = khepri_queue_path(QName),
     Ret1 = rabbit_khepri:adv_get(Path),
     case Ret1 of
-        {ok, #{data := Q0, payload_version := Vsn}} ->
-            Q1 = amqqueue:reset_mirroring_and_decorators(Q0),
+        {ok, #{data := Q1, payload_version := Vsn}} ->
             Q2 = amqqueue:set_decorators(Q1, Decorators),
             UpdatePath = khepri_path:combine_with_conditions(
                            Path, [#if_payload_version{version = Vsn}]),
@@ -842,7 +838,7 @@ create_or_get(Q) ->
        }).
 
 create_or_get_in_mnesia(Q) ->
-    DurableQ = amqqueue:reset_mirroring_and_decorators(Q),
+    DurableQ = amqqueue:reset_decorators(Q),
     QueueName = amqqueue:get_name(Q),
     rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
@@ -879,7 +875,7 @@ create_or_get_in_khepri(Q) ->
 -spec set(Queue) -> ok when
       Queue :: amqqueue:amqqueue().
 %% @doc Writes a queue record. If the queue is durable, it writes both instances:
-%% durable and transient. For the durable one, it resets mirrors and decorators.
+%% durable and transient. For the durable one, it resets decorators.
 %% The transient one is left as it is.
 %%
 %% @private
@@ -891,7 +887,7 @@ set(Q) ->
        }).
 
 set_in_mnesia(Q) ->
-    DurableQ = amqqueue:reset_mirroring_and_decorators(Q),
+    DurableQ = amqqueue:reset_decorators(Q),
     rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
               set_in_mnesia_tx(DurableQ, Q)
@@ -1220,7 +1216,6 @@ get_durable_in_mnesia_tx(Name) ->
         [Q] -> {ok, Q}
     end.
 
-%% TODO this should be internal, it's here because of mirrored queues
 get_in_khepri_tx(Name) ->
     case khepri_tx:get(khepri_queue_path(Name)) of
         {ok, X} -> [X];

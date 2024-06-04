@@ -67,8 +67,6 @@ groups() ->
       [
        {classic_queue, Opts, [{at_most_once, Opts, [dead_letter_max_length_reject_publish_dlx | DeadLetterTests]},
                               {disabled, Opts, DisabledMetricTests}]},
-       {mirrored_queue, Opts, [{at_most_once, Opts, [dead_letter_max_length_reject_publish_dlx | DeadLetterTests]},
-                               {disabled, Opts, DisabledMetricTests}]},
        {quorum_queue, Opts, [{at_most_once, Opts, DeadLetterTests},
                              {disabled, Opts, DisabledMetricTests},
                              {at_least_once, Opts, DeadLetterTests --
@@ -108,19 +106,6 @@ init_per_group(classic_queue, Config) ->
       Config,
       [{queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
        {queue_durable, false}]);
-init_per_group(mirrored_queue, Config) ->
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        mnesia ->
-            rabbit_ct_broker_helpers:set_ha_policy(Config, 0, <<"^max_length.*queue">>,
-                                                   <<"all">>, [{<<"ha-sync-mode">>, <<"automatic">>}]),
-            Config1 = rabbit_ct_helpers:set_config(
-                        Config, [{is_mirrored, true},
-                                 {queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
-                                 {queue_durable, false}]),
-            rabbit_ct_helpers:run_steps(Config1, []);
-        _ ->
-            {skip, "Classic mirroring not supported by Khepri"}
-    end;
 init_per_group(quorum_queue, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
@@ -1786,13 +1771,6 @@ consume(Ch, QName, Payloads) ->
 
 consume_empty(Ch, QName) ->
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = QName}).
-
-sync_mirrors(QName, Config) ->
-    case ?config(is_mirrored, Config) of
-        true ->
-            rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, [<<"sync_queue">>, QName]);
-        _ -> ok
-    end.
 
 get_global_counters(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, rabbit_global_counters, overview, []).

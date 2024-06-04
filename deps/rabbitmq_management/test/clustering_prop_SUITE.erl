@@ -218,23 +218,6 @@ queue_bind(Chan, Ex, Q, Key) ->
                             routing_key = Key},
     #'queue.bind_ok'{} = amqp_channel:call(Chan, Binding).
 
-wait_for(Config, Path) ->
-    wait_for(Config, Path, [slave_nodes, synchronised_slave_nodes]).
-
-wait_for(Config, Path, Keys) ->
-    wait_for(Config, Path, Keys, 1000).
-
-wait_for(_Config, Path, Keys, 0) ->
-    exit({timeout, {Path, Keys}});
-
-wait_for(Config, Path, Keys, Count) ->
-    Res = http_get(Config, Path),
-    case present(Keys, Res) of
-        false -> timer:sleep(10),
-                 wait_for(Config, Path, Keys, Count - 1);
-        true  -> Res
-    end.
-
 present(Keys, Res) ->
     lists:all(fun (Key) ->
                       X = pget(Key, Res),

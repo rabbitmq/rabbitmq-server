@@ -396,7 +396,7 @@ import_invalid_file_case(Config, CaseName) ->
 
 import_invalid_file_case_in_khepri(Config, CaseName) ->
     CasePath = filename:join(?config(data_dir, Config), CaseName ++ ".json"),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_invalid_import_case_in_khepri, [CasePath]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, run_invalid_import_case, [CasePath]),
     ok.
 
 import_invalid_file_case_if_unchanged(Config, CaseName) ->
@@ -478,28 +478,6 @@ run_invalid_import_case_if_unchanged(Path) ->
             ct:pal("Expected import case ~tp to fail~n", [Path]),
             ct:fail({expected_failure, Path});
         {error, _E} -> ok
-    end.
-
-run_invalid_import_case_in_khepri(Path) ->
-   case rabbit_khepri:is_enabled() of
-       true ->
-           run_invalid_import_case_in_khepri0(Path);
-       false ->
-           run_import_case(Path)
-   end.
-
-run_invalid_import_case_in_khepri0(Path) ->
-    {ok, Body} = file:read_file(Path),
-    ct:pal("Successfully loaded a definition file at ~tp~n", [Path]),
-    case rabbit_definitions:import_raw(Body) of
-        ok ->
-            ct:pal("Expected import case ~tp to fail~n", [Path]),
-            ct:fail({expected_failure, Path});
-        {error, E} ->
-            case re:run(E, ".*mirrored queues are deprecated.*", [{capture, none}]) of
-                match -> ok;
-                _ -> ct:fail({expected_failure, Path, E})
-            end
     end.
 
 queue_lookup(Config, VHost, Name) ->

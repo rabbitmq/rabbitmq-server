@@ -89,19 +89,4 @@ get_location_mod_by_config(Queue) when ?is_amqqueue(Queue) ->
     end.
 
 all_nodes(Queue) when ?is_amqqueue(Queue) ->
-    handle_is_mirrored_ha_nodes(rabbit_mirror_queue_misc:is_mirrored_ha_nodes(Queue), Queue).
-
-handle_is_mirrored_ha_nodes(false, _Queue) ->
-    % Note: ha-mode is NOT 'nodes' - it is either exactly or all, which means
-    % that any node in the cluster is eligible to be the new queue master node
-    rabbit_nodes:list_serving();
-handle_is_mirrored_ha_nodes(true, Queue) ->
-    % Note: ha-mode is 'nodes', which explicitly specifies allowed nodes.
-    % We must use suggested_queue_nodes to get that list of nodes as the
-    % starting point for finding the queue master location
-    handle_suggested_queue_nodes(rabbit_mirror_queue_misc:suggested_queue_nodes(Queue)).
-
-handle_suggested_queue_nodes({_MNode, []}) ->
-    rabbit_nodes:list_serving();
-handle_suggested_queue_nodes({MNode, SNodes}) ->
-    [MNode | SNodes].
+    rabbit_nodes:list_serving().

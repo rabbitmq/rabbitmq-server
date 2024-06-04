@@ -41,7 +41,6 @@ groups() ->
         vhost_failure_forces_connection_closure,
         vhost_failure_forces_connection_closure_on_failure_node,
         node_starts_with_dead_vhosts,
-        node_starts_with_dead_vhosts_with_mirrors,
         vhost_creation_idempotency,
         vhost_deletion
     ],
@@ -101,17 +100,6 @@ end_per_group(_Group, Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(node_starts_with_dead_vhosts_with_mirrors = Testcase, Config) ->
-    case lists:any(fun(B) -> B end,
-                   rabbit_ct_broker_helpers:rpc_all(
-                     Config, rabbit_feature_flags, is_enabled,
-                     [khepri_db])) of
-        true ->
-            {skip, "Classic queue mirroring not supported by Khepri"};
-        false ->
-            rabbit_ct_helpers:testcase_started(Config, Testcase),
-            Config
-    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config.
@@ -261,71 +249,6 @@ node_starts_with_dead_vhosts(Config) ->
        rabbit_ct_broker_helpers:rpc(Config, 1,
                                     rabbit_vhost_sup_sup, is_vhost_alive, [VHost2]),
        ?AWAIT_TIMEOUT).
-
-node_starts_with_dead_vhosts_with_mirrors(Config) ->
-    VHost1 = <<"vhost1">>,
-    VHost2 = <<"vhost2">>,
-
-    set_up_vhost(Config, VHost1),
-    set_up_vhost(Config, VHost2),
-
-    true = rabbit_ct_broker_helpers:rpc(Config, 1,
-                rabbit_vhost_sup_sup, is_vhost_alive, [VHost1]),
-    true = rabbit_ct_broker_helpers:rpc(Config, 1,
-                rabbit_vhost_sup_sup, is_vhost_alive, [VHost2]),
-    [] = rabbit_ct_broker_helpers:rpc(Config, 1,
-                rabbit_vhost_sup_sup, check, []),
-
-    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VHost1),
-    {ok, Chan} = amqp_connection:open_channel(Conn),
-
-    QName = <<"node_starts_with_dead_vhosts_with_mirrors-q-0">>,
-    amqp_channel:call(Chan, #'queue.declare'{queue = QName, durable = true}),
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-             rabbit_policy, set,
-             [VHost1, <<"mirror">>, <<".*">>, [{<<"ha-mode">>, <<"all">>}],
-              0, <<"queues">>, <<"acting-user">>]),
-
-    %% Wait for the queue to start a mirror
-    ?awaitMatch([_],
-                begin
-                    {ok, Q0} = rabbit_ct_broker_helpers:rpc(
-                                Config, 0,
-                                 rabbit_amqqueue, lookup,
-                                 [rabbit_misc:r(VHost1, queue, QName)], infinity),
-                    amqqueue:get_sync_slave_pids(Q0)
-                end,
-                ?AWAIT_TIMEOUT),
-
-    rabbit_ct_client_helpers:publish(Chan, QName, 10),
-
-    {ok, Q} = rabbit_ct_broker_helpers:rpc(
-                Config, 0,
-                rabbit_amqqueue, lookup,
-                [rabbit_misc:r(VHost1, queue, QName)], infinity),
-
-    Node1 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
-
-    [Pid] = amqqueue:get_sync_slave_pids(Q),
-
-    Node1 = node(Pid),
-
-    DataStore1 = rabbit_ct_broker_helpers:rpc(
-        Config, 1, rabbit_vhost, msg_store_dir_path, [VHost1]),
-
-    rabbit_ct_broker_helpers:stop_node(Config, 1),
-
-    file:write_file(filename:join(DataStore1, "recovery.dets"), <<"garbage">>),
-
-    %% The node should start without a vhost
-    ok = rabbit_ct_broker_helpers:start_node(Config, 1),
-
-    ?awaitMatch(true,
-                rabbit_ct_broker_helpers:rpc(Config, 1, rabbit, is_running, []),
-                ?AWAIT_TIMEOUT),
-
-    ?assertEqual(true, rabbit_ct_broker_helpers:rpc(Config, 1,
-                        rabbit_vhost_sup_sup, is_vhost_alive, [VHost2])).
 
 vhost_creation_idempotency(Config) ->
     VHost = <<"idempotency-test">>,

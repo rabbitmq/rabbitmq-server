@@ -19,6 +19,7 @@
 
 -export([init_with_backing_queue_state/7]).
 
+-export([start_link/2]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
          prioritise_cast/3, prioritise_info/3, format_message_queue/2]).
@@ -35,8 +36,7 @@
             %% This is used to determine when to delete auto-delete queues.
             has_had_consumers,
             %% backing queue module.
-            %% for mirrored queues, this will be rabbit_mirror_queue_master.
-            %% for non-priority and non-mirrored queues, rabbit_variable_queue.
+            %% for non-priority queues, this will be rabbit_variable_queue.
             %% see rabbit_backing_queue.
             backing_queue,
             %% backing queue state.
@@ -81,11 +81,7 @@
             %% e.g. message expiration messages from previously set up timers
             %% that may or may not be still valid
             args_policy_version,
-            %% used to discard outdated/superseded policy updates,
-            %% e.g. when policies are applied concurrently. See
-            %% https://github.com/rabbitmq/rabbitmq-server/issues/803 for one
-            %% example.
-            mirroring_policy_version = 0,
+            mirroring_policy_version = 0, %% reserved
             %% running | flow | idle
             status,
             %% boolean()
@@ -111,9 +107,6 @@
          consumer_utilisation,
          consumer_capacity,
          memory,
-         slave_pids,
-         synchronised_slave_pids,
-         recoverable_slaves,
          state,
          garbage_collection
         ]).
@@ -139,6 +132,26 @@ info_keys()       -> ?INFO_KEYS       ++ rabbit_backing_queue:info_keys().
 statistics_keys() -> ?STATISTICS_KEYS ++ rabbit_backing_queue:info_keys().
 
 %%----------------------------------------------------------------------------
+
+-spec start_link(amqqueue:amqqueue(), pid())
+                      -> rabbit_types:ok_pid_or_error().
+
+start_link(Q, Marker) ->
+    gen_server2:start_link(?MODULE, {Q, Marker}, []).
+
+init({Q, Marker}) ->
+    case is_process_alive(Marker) of
+        true  ->
+            %% start
+            init(Q);
+        false ->
+            %% restart
+            QueueName = amqqueue:get_name(Q),
+            {ok, Q1} = rabbit_amqqueue:lookup(QueueName),
+            rabbit_log:error("Restarting crashed ~ts.", [rabbit_misc:rs(QueueName)]),
+            gen_server2:cast(self(), init),
+            init(Q1)
+    end;
 
 init(Q) ->
     process_flag(trap_exit, true),
@@ -177,7 +190,7 @@ init_it(Recover, From, State = #q{q = Q0}) ->
                  #q{backing_queue       = undefined,
                     backing_queue_state = undefined,
                     q                   = Q} = State,
-                 BQ = backing_queue_module(Q),
+                 BQ = backing_queue_module(),
                  {_, Terms} = recovery_status(Recover),
                  BQS = bq_init(BQ, Q, Terms),
                  %% Rely on terminate to delete the queue.
@@ -202,7 +215,7 @@ init_it2(Recover, From, State = #q{q                   = Q,
                     ok = rabbit_memory_monitor:register(
                            self(), {rabbit_amqqueue,
                                     set_ram_duration_target, [self()]}),
-                    BQ = backing_queue_module(Q1),
+                    BQ = backing_queue_module(),
                     BQS = bq_init(BQ, Q, TermsOrNew),
                     send_reply(From, {new, Q}),
                     recovery_barrier(Barrier),
@@ -235,8 +248,7 @@ matches(new, Q1, Q2) ->
     amqqueue:is_auto_delete(Q1)      =:= amqqueue:is_auto_delete(Q2)      andalso
     amqqueue:get_exclusive_owner(Q1) =:= amqqueue:get_exclusive_owner(Q2) andalso
     amqqueue:get_arguments(Q1)       =:= amqqueue:get_arguments(Q2)       andalso
-    amqqueue:get_pid(Q1)             =:= amqqueue:get_pid(Q2)             andalso
-    amqqueue:get_slave_pids(Q1)      =:= amqqueue:get_slave_pids(Q2);
+    amqqueue:get_pid(Q1)             =:= amqqueue:get_pid(Q2);
 %% FIXME: Should v1 vs. v2 of the same record match?
 matches(_,  Q,   Q) -> true;
 matches(_, _Q, _Q1) -> false.
@@ -505,12 +517,9 @@ next_state(State = #q{q = Q,
         timed -> {ensure_sync_timer(State1), 0             }
     end.
 
-backing_queue_module(Q) ->
-    case rabbit_mirror_queue_misc:is_mirrored(Q) of
-        false -> {ok, BQM} = application:get_env(backing_queue_module),
-                 BQM;
-        true  -> rabbit_mirror_queue_master
-    end.
+backing_queue_module() ->
+    {ok, BQM} = application:get_env(backing_queue_module),
+    BQM.
 
 ensure_sync_timer(State) ->
     rabbit_misc:ensure_timer(State, #q.sync_timer_ref,
@@ -620,28 +629,15 @@ send_or_record_confirm(#delivery{confirm    = true,
             {immediately, State}
     end.
 
-%% This feature was used by `rabbit_amqqueue_process` and
-%% `rabbit_mirror_queue_slave` up-to and including RabbitMQ 3.7.x. It is
-%% unused in 3.8.x and thus deprecated. We keep it to support in-place
-%% upgrades to 3.8.x (i.e. mixed-version clusters), but it is a no-op
-%% starting with that version.
-send_mandatory(#delivery{mandatory  = false}) ->
-    ok;
-send_mandatory(#delivery{mandatory  = true,
-                         sender     = SenderPid,
-                         msg_seq_no = MsgSeqNo}) ->
-    gen_server2:cast(SenderPid, {mandatory_received, MsgSeqNo}).
-
 discard(#delivery{confirm = Confirm,
                   sender  = SenderPid,
-                  flow    = Flow,
                   message = Msg}, BQ, BQS, MTC, QName) ->
     MsgId = mc:get_annotation(id, Msg),
     MTC1 = case Confirm of
                true  -> confirm_messages([MsgId], MTC, QName);
                false -> MTC
            end,
-    BQS1 = BQ:discard(MsgId, SenderPid, Flow, BQS),
+    BQS1 = BQ:discard(MsgId, SenderPid, BQS),
     {BQS1, MTC1}.
 
 run_message_queue(State) -> run_message_queue(false, State).
@@ -665,7 +661,6 @@ run_message_queue(ActiveConsumersChanged, State) ->
     end.
 
 attempt_delivery(Delivery = #delivery{sender  = SenderPid,
-                                      flow    = Flow,
                                       message = Message},
                  Props, Delivered, State = #q{q                   = Q,
                                               backing_queue       = BQ,
@@ -674,7 +669,7 @@ attempt_delivery(Delivery = #delivery{sender  = SenderPid,
     case rabbit_queue_consumers:deliver(
            fun (true)  -> {AckTag, BQS1} =
                               BQ:publish_delivered(
-                                Message, Props, SenderPid, Flow, BQS),
+                                Message, Props, SenderPid, BQS),
                           {{Message, Delivered, AckTag}, {BQS1, MTC}};
                (false) -> {{Message, Delivered, undefined},
                            discard(Delivery, BQ, BQS, MTC, amqqueue:get_name(Q))}
@@ -698,11 +693,10 @@ maybe_deliver_or_enqueue(Delivery = #delivery{message = Message},
                                     backing_queue_state = BQS,
                                     dlx                 = DLX,
                                     dlx_routing_key     = RK}) ->
-    send_mandatory(Delivery), %% must do this before confirms
     case {will_overflow(Delivery, State), Overflow} of
         {true, 'reject-publish'} ->
             %% Drop publish and nack to publisher
-            send_reject_publish(Delivery, Delivered, State);
+            send_reject_publish(Delivery, State);
         {true, 'reject-publish-dlx'} ->
             %% Publish to DLX
             _ = with_dlx(
@@ -717,7 +711,7 @@ maybe_deliver_or_enqueue(Delivery = #delivery{message = Message},
                                                                       disabled, 1)
               end),
             %% Drop publish and nack to publisher
-            send_reject_publish(Delivery, Delivered, State);
+            send_reject_publish(Delivery, State);
         _ ->
             {IsDuplicate, BQS1} = BQ:is_duplicate(Message, BQS),
             State1 = State#q{backing_queue_state = BQS1},
@@ -726,7 +720,7 @@ maybe_deliver_or_enqueue(Delivery = #delivery{message = Message},
                 {true, drop} -> State1;
                 %% Drop publish and nack to publisher
                 {true, reject} ->
-                    send_reject_publish(Delivery, Delivered, State1);
+                    send_reject_publish(Delivery, State1);
                 %% Enqueue and maybe drop head later
                 false ->
                     deliver_or_enqueue(Delivery, Delivered, State1)
@@ -734,8 +728,7 @@ maybe_deliver_or_enqueue(Delivery = #delivery{message = Message},
     end.
 
 deliver_or_enqueue(Delivery = #delivery{message = Message,
-                                        sender  = SenderPid,
-                                        flow    = Flow},
+                                        sender  = SenderPid},
                    Delivered,
                    State = #q{q = Q, backing_queue = BQ}) ->
     {Confirm, State1} = send_or_record_confirm(Delivery, State),
@@ -753,7 +746,7 @@ deliver_or_enqueue(Delivery = #delivery{message = Message,
             State2#q{backing_queue_state = BQS1, msg_id_to_channel = MTC1};
         {undelivered, State2 = #q{backing_queue_state = BQS}} ->
 
-            BQS1 = BQ:publish(Message, Props, Delivered, SenderPid, Flow, BQS),
+            BQS1 = BQ:publish(Message, Props, Delivered, SenderPid, BQS),
             {Dropped, State3 = #q{backing_queue_state = BQS2}} =
                 maybe_drop_head(State2#q{backing_queue_state = BQS1}),
             QLen = BQ:len(BQS2),
@@ -802,10 +795,8 @@ maybe_drop_head(AlreadyDropped, State = #q{backing_queue       = BQ,
 
 send_reject_publish(#delivery{confirm = true,
                               sender = SenderPid,
-                              flow = Flow,
                               msg_seq_no = MsgSeqNo,
                               message = Msg},
-                      _Delivered,
                       State = #q{ q = Q,
                                   backing_queue = BQ,
                                   backing_queue_state = BQS,
@@ -815,10 +806,9 @@ send_reject_publish(#delivery{confirm = true,
                                              amqqueue:get_name(Q), MsgSeqNo),
 
     MTC1 = maps:remove(MsgId, MTC),
-    BQS1 = BQ:discard(MsgId, SenderPid, Flow, BQS),
+    BQS1 = BQ:discard(MsgId, SenderPid, BQS),
     State#q{ backing_queue_state = BQS1, msg_id_to_channel = MTC1 };
-send_reject_publish(#delivery{confirm = false},
-                      _Delivered, State) ->
+send_reject_publish(#delivery{confirm = false}, State) ->
     State.
 
 will_overflow(_, #q{max_length = undefined,
@@ -1136,40 +1126,6 @@ i(consumer_capacity, #q{consumers = Consumers}) ->
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
     M;
-i(slave_pids, #q{q = Q0}) ->
-    Name = amqqueue:get_name(Q0),
-    case rabbit_amqqueue:lookup(Name) of
-        {ok, Q} ->
-            case rabbit_mirror_queue_misc:is_mirrored(Q) of
-                false -> '';
-                true  -> amqqueue:get_slave_pids(Q)
-            end;
-        {error, not_found} ->
-            ''
-    end;
-i(synchronised_slave_pids, #q{q = Q0}) ->
-    Name = amqqueue:get_name(Q0),
-    case rabbit_amqqueue:lookup(Name) of
-        {ok, Q} ->
-            case rabbit_mirror_queue_misc:is_mirrored(Q) of
-                false -> '';
-                true  -> amqqueue:get_sync_slave_pids(Q)
-            end;
-        {error, not_found} ->
-            ''
-    end;
-i(recoverable_slaves, #q{q = Q0}) ->
-    Name = amqqueue:get_name(Q0),
-    Durable = amqqueue:is_durable(Q0),
-    case rabbit_amqqueue:lookup(Name) of
-        {ok, Q} ->
-            case Durable andalso rabbit_mirror_queue_misc:is_mirrored(Q) of
-                false -> '';
-                true  -> amqqueue:get_recoverable_slaves(Q)
-            end;
-        {error, not_found} ->
-            ''
-    end;
 i(state, #q{status = running}) -> credit_flow:state();
 i(state, #q{status = State})   -> State;
 i(garbage_collection, _State) ->
@@ -1275,17 +1231,7 @@ prioritise_info(Msg, _Len, #q{q = Q}) ->
     end.
 
 handle_call({init, Recover}, From, State) ->
-    try
-	init_it(Recover, From, State)
-    catch
-	{coordinator_not_started, Reason} ->
-	    %% The GM can shutdown before the coordinator has started up
-	    %% (lost membership or missing group), thus the start_link of
-	    %% the coordinator returns {error, shutdown} as rabbit_amqqueue_process
-	    %% is trapping exists. The master captures this return value and
-	    %% throws the current exception.
-	    {stop, Reason, State}
-    end;
+    init_it(Recover, From, State);
 
 handle_call(info, _From, State) ->
     reply({ok, infos(info_keys(), State)}, State);
@@ -1457,36 +1403,7 @@ handle_call(purge, _From, State = #q{backing_queue       = BQ,
 
 handle_call({requeue, AckTags, ChPid}, From, State) ->
     gen_server2:reply(From, ok),
-    noreply(requeue(AckTags, ChPid, State));
-
-handle_call(sync_mirrors, _From,
-            State = #q{backing_queue       = rabbit_mirror_queue_master,
-                       backing_queue_state = BQS}) ->
-    S = fun(BQSN) -> State#q{backing_queue_state = BQSN} end,
-    HandleInfo = fun (Status) ->
-                         receive {'$gen_call', From, {info, Items}} ->
-                                 Infos = infos(Items, State#q{status = Status}),
-                                 gen_server2:reply(From, {ok, Infos})
-                         after 0 ->
-                                 ok
-                         end
-                 end,
-    EmitStats = fun (Status) ->
-                        rabbit_event:if_enabled(
-                          State, #q.stats_timer,
-                          fun() -> emit_stats(State#q{status = Status}) end)
-                end,
-    case rabbit_mirror_queue_master:sync_mirrors(HandleInfo, EmitStats, BQS) of
-        {ok, BQS1}           -> reply(ok, S(BQS1));
-        {stop, Reason, BQS1} -> {stop, Reason, S(BQS1)}
-    end;
-
-handle_call(sync_mirrors, _From, State) ->
-    reply({error, not_mirrored}, State);
-
-%% By definition if we get this message here we do not have to do anything.
-handle_call(cancel_sync_mirrors, _From, State) ->
-    reply({ok, not_syncing}, State).
+    noreply(requeue(AckTags, ChPid, State)).
 
 new_single_active_consumer_after_basic_cancel(ChPid, ConsumerTag, CurrentSingleActiveConsumer,
             _SingleActiveConsumerIsOn = true, Consumers) ->
@@ -1525,17 +1442,7 @@ maybe_notify_consumer_updated(#q{single_active_consumer_on = true} = State, _Pre
     end.
 
 handle_cast(init, State) ->
-    try
-	init_it({no_barrier, non_clean_shutdown}, none, State)
-    catch
-	{coordinator_not_started, Reason} ->
-	    %% The GM can shutdown before the coordinator has started up
-	    %% (lost membership or missing group), thus the start_link of
-	    %% the coordinator returns {error, shutdown} as rabbit_amqqueue_process
-	    %% is trapping exists. The master captures this return value and
-	    %% throws the current exception.
-	    {stop, Reason, State}
-    end;
+    init_it({no_barrier, non_clean_shutdown}, none, State);
 
 handle_cast({run_backing_queue, Mod, Fun},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
@@ -1544,25 +1451,18 @@ handle_cast({run_backing_queue, Mod, Fun},
 handle_cast({deliver,
              Delivery = #delivery{sender = Sender,
                                   flow   = Flow},
-             SlaveWhenPublished},
+             Delivered},
             State = #q{senders = Senders}) ->
     Senders1 = case Flow of
     %% In both credit_flow:ack/1 we are acking messages to the channel
     %% process that sent us the message delivery. See handle_ch_down
     %% for more info.
                    flow   -> credit_flow:ack(Sender),
-                             case SlaveWhenPublished of
-                                 true  -> credit_flow:ack(Sender); %% [0]
-                                 false -> ok
-                             end,
                              pmon:monitor(Sender, Senders);
                    noflow -> Senders
                end,
     State1 = State#q{senders = Senders1},
-    noreply(maybe_deliver_or_enqueue(Delivery, SlaveWhenPublished, State1));
-%% [0] The second ack is since the channel thought we were a mirror at
-%% the time it published this message, so it used two credits (see
-%% rabbit_queue_type:deliver/2).
+    noreply(maybe_deliver_or_enqueue(Delivery, Delivered, State1));
 
 handle_cast({ack, AckTags, ChPid}, State) ->
     noreply(ack(AckTags, ChPid, State));
@@ -1613,16 +1513,6 @@ handle_cast({set_ram_duration_target, Duration},
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State);
-
-handle_cast(update_mirroring, State = #q{q = Q,
-                                         mirroring_policy_version = Version}) ->
-    case needs_update_mirroring(Q, Version) of
-        false ->
-            noreply(State);
-        {Policy, NewVersion} ->
-            State1 = State#q{mirroring_policy_version = NewVersion},
-            noreply(update_mirroring(Policy, State1))
-    end;
 
 handle_cast({credit, SessionPid, CTag, Credit, Drain},
             #q{q = Q,
@@ -1700,7 +1590,7 @@ handle_cast(notify_decorators, State) ->
 handle_cast(policy_changed, State = #q{q = Q0}) ->
     Name = amqqueue:get_name(Q0),
     %% We depend on the #q.q field being up to date at least WRT
-    %% policy (but not mirror pids) in various places, so when it
+    %% policy in various places, so when it
     %% changes we go and read it from the database again.
     %%
     %% This also has the side effect of waking us up so we emit a
@@ -1712,7 +1602,7 @@ handle_cast({policy_changed, Q0}, State) ->
     Name = amqqueue:get_name(Q0),
     PolicyVersion0 = amqqueue:get_policy_version(Q0),
     %% We depend on the #q.q field being up to date at least WRT
-    %% policy (but not mirror pids) in various places, so when it
+    %% policy in various places, so when it
     %% changes we go and read it from the database again.
     %%
     %% This also has the side effect of waking us up so we emit a
@@ -1723,21 +1613,8 @@ handle_cast({policy_changed, Q0}, State) ->
         true ->
             noreply(process_args_policy(State#q{q = Q}));
         false ->
-            %% Update just the policy, as pids and mirrors could have been
-            %% updated simultaneously. A testcase on the `confirm_rejects_SUITE`
-            %% fails consistently if the internal state is updated directly to `Q0`.
-            Q1 = amqqueue:set_policy(Q, amqqueue:get_policy(Q0)),
-            Q2 = amqqueue:set_operator_policy(Q1, amqqueue:get_operator_policy(Q0)),
-            Q3 = amqqueue:set_policy_version(Q2, PolicyVersion0),
-            noreply(process_args_policy(State#q{q = Q3}))
-    end;
-
-handle_cast({sync_start, _, _}, State = #q{q = Q}) ->
-    Name = amqqueue:get_name(Q),
-    %% Only a mirror should receive this, it means we are a duplicated master
-    rabbit_mirror_queue_misc:log_warning(
-      Name, "Stopping after receiving sync_start from another master", []),
-    stop(State).
+            noreply(process_args_policy(State#q{q = Q0}))
+    end.
 
 handle_info({maybe_expire, Vsn}, State = #q{q = Q, expires = Expiry, args_policy_version = Vsn}) ->
     case is_unused(State) of
@@ -1840,16 +1717,7 @@ format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 %% TODO: this can be removed after 3.13
 format(Q) when ?is_amqqueue(Q) ->
-    case rabbit_mirror_queue_misc:is_mirrored(Q) of
-        false ->
-            [{node, node(amqqueue:get_pid(Q))}];
-        true ->
-            Slaves = amqqueue:get_slave_pids(Q),
-            SSlaves = amqqueue:get_sync_slave_pids(Q),
-            [{slave_nodes, [node(S) || S <- Slaves]},
-             {synchronised_slave_nodes, [node(S) || S <- SSlaves]},
-             {node, node(amqqueue:get_pid(Q))}]
-    end.
+    [{node, node(amqqueue:get_pid(Q))}].
 
 -spec is_policy_applicable(amqqueue:amqqueue(), any()) -> boolean().
 is_policy_applicable(_Q, _Policy) ->
@@ -1870,58 +1738,6 @@ log_auto_delete(Reason, #q{ q = Q }) ->
     rabbit_log_queue:debug("Deleting auto-delete queue '~ts' in vhost '~ts' " ++
                            Reason,
                            [QName, VHost]).
-
-needs_update_mirroring(Q, Version) ->
-    {ok, UpQ} = rabbit_amqqueue:lookup(amqqueue:get_name(Q)),
-    DBVersion = amqqueue:get_policy_version(UpQ),
-    case DBVersion > Version of
-        true -> {rabbit_policy:get(<<"ha-mode">>, UpQ), DBVersion};
-        false -> false
-    end.
-
-
-update_mirroring(Policy, State = #q{backing_queue = BQ}) ->
-    case update_to(Policy, BQ) of
-        start_mirroring ->
-            start_mirroring(State);
-        stop_mirroring ->
-            stop_mirroring(State);
-        ignore ->
-            State;
-        update_ha_mode ->
-            update_ha_mode(State)
-    end.
-
-update_to(undefined, rabbit_mirror_queue_master) ->
-    stop_mirroring;
-update_to(_, rabbit_mirror_queue_master) ->
-    update_ha_mode;
-update_to(undefined, BQ) when BQ =/= rabbit_mirror_queue_master ->
-    ignore;
-update_to(_, BQ) when BQ =/= rabbit_mirror_queue_master ->
-    start_mirroring.
-
-start_mirroring(State = #q{backing_queue       = BQ,
-                           backing_queue_state = BQS}) ->
-    %% lookup again to get policy for init_with_existing_bq
-    {ok, Q} = rabbit_amqqueue:lookup(qname(State)),
-    true = BQ =/= rabbit_mirror_queue_master, %% assertion
-    BQ1 = rabbit_mirror_queue_master,
-    BQS1 = BQ1:init_with_existing_bq(Q, BQ, BQS),
-    State#q{backing_queue       = BQ1,
-            backing_queue_state = BQS1}.
-
-stop_mirroring(State = #q{backing_queue       = BQ,
-                          backing_queue_state = BQS}) ->
-    BQ = rabbit_mirror_queue_master, %% assertion
-    {BQ1, BQS1} = BQ:stop_mirroring(BQS),
-    State#q{backing_queue       = BQ1,
-            backing_queue_state = BQS1}.
-
-update_ha_mode(State) ->
-    {ok, Q} = rabbit_amqqueue:lookup(qname(State)),
-    ok = rabbit_mirror_queue_misc:update_mirrors(Q),
-    State.
 
 confirm_to_sender(Pid, QName, MsgSeqNos) ->
     rabbit_classic_queue:confirm_to_sender(Pid, QName, MsgSeqNos).

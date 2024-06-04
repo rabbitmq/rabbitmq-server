@@ -42,7 +42,6 @@ groups() ->
 
     AllTestsParallel = [
        {classic_queue, [parallel], AllTests},
-       {mirrored_queue, [parallel], AllTests},
        {quorum_queue, [parallel], AllTests}
       ],
     [
@@ -79,20 +78,6 @@ init_per_group(quorum_queue, Config) ->
       [{policy_type, <<"quorum_queues">>},
        {queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
        {queue_durable, true}]);
-init_per_group(mirrored_queue, Config) ->
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        {khepri, _} ->
-            {skip, <<"Classic queue mirroring not supported by Khepri">>};
-        mnesia ->
-            rabbit_ct_broker_helpers:set_ha_policy(Config, 0, <<"^max_length.*queue">>,
-                                                   <<"all">>, [{<<"ha-sync-mode">>, <<"automatic">>}]),
-            Config1 = rabbit_ct_helpers:set_config(
-                        Config, [{policy_type, <<"classic_queues">>},
-                                 {is_mirrored, true},
-                                 {queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
-                                 {queue_durable, true}]),
-            rabbit_ct_helpers:run_steps(Config1, [])
-    end;
 init_per_group(Group, Config0) ->
     case lists:member({group, Group}, all()) of
         true ->

@@ -13,8 +13,7 @@
 
 all() ->
     [
-      {group, core_validators},
-      {group, classic_queue_mirroring_validators}
+      {group, core_validators}
     ].
 
 groups() ->
@@ -32,11 +31,6 @@ groups() ->
           delivery_limit,
           classic_queue_lazy_mode,
           length_limit_overflow_mode
-        ]},
-
-        {classic_queue_mirroring_validators, [parallel], [
-          classic_queue_ha_mode,
-          classic_queue_ha_params
         ]}
     ].
 
@@ -51,26 +45,9 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(Group = classic_queue_mirroring_validators, Config) ->
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        mnesia ->
-            Config1 = rabbit_ct_helpers:set_config(
-                        Config, [
-                                 {rmq_nodename_suffix, Group},
-                                 {rmq_nodes_count, 1}
-                                ]),
-            rabbit_ct_helpers:run_steps(
-              Config1,
-              rabbit_ct_broker_helpers:setup_steps());
-        {khepri, _} ->
-            {skip, "Classic queue mirroring not supported by Khepri"}
-    end;
 init_per_group(_, Config) ->
     Config.
 
-end_per_group(classic_queue_mirroring_validators, Config) ->
-    rabbit_ct_helpers:run_steps(Config,
-      rabbit_ct_broker_helpers:teardown_steps());
 end_per_group(_, Config) ->
     Config.
 
@@ -131,60 +108,6 @@ length_limit_overflow_mode(_Config) ->
         [<<"drop-head">>, <<"reject-publish">>, <<"reject-publish-dlx">>],
         %% invalid values
         [<<"unknown">>, <<"publish">>, <<"overflow">>, <<"mode">>]).
-
-
-%% -------------------------------------------------------------------
-%% CMQ Validators
-%% -------------------------------------------------------------------
-
-classic_queue_ha_mode(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, classic_queue_ha_mode1, [Config]).
-
-classic_queue_ha_mode1(_Config) ->
-    ?assertEqual(ok, rabbit_mirror_queue_misc:validate_policy([
-        {<<"ha-mode">>, <<"exactly">>},
-        {<<"ha-params">>, 2}
-    ])),
-
-    ?assertEqual(ok, rabbit_mirror_queue_misc:validate_policy([
-        {<<"ha-mode">>, <<"nodes">>},
-        {<<"ha-params">>, [<<"rabbit@host1">>, <<"rabbit@host2">>]}
-    ])),
-
-    ?assertEqual(ok, rabbit_mirror_queue_misc:validate_policy([
-        {<<"ha-mode">>, <<"all">>}
-    ])),
-
-    ?assertMatch({error, _, _}, rabbit_mirror_queue_misc:validate_policy([
-        {<<"ha-mode">>, <<"lolwut">>},
-        {<<"ha-params">>, 2}
-    ])).
-
-classic_queue_ha_params(Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, classic_queue_ha_mode1, [Config]).
-
-classic_queue_ha_params1(_Config) ->
-    ?assertMatch({error, _, _}, rabbit_mirror_queue_misc:validate_policy([
-        {<<"ha-mode">>, <<"exactly">>},
-        {<<"ha-params">>, <<"2">>}
-    ])),
-
-    ?assertEqual(ok, rabbit_mirror_queue_misc:validate_policy([
-        {<<"ha-mode">>, <<"nodes">>},
-        {<<"ha-params">>, <<"lolwut">>}
-    ])),
-
-    ?assertEqual(ok, rabbit_mirror_queue_misc:validate_policy([
-        {<<"ha-mode">>, <<"all">>},
-        {<<"ha-params">>, <<"lolwut">>}
-    ])),
-
-    ?assertMatch({error, _, _}, rabbit_mirror_queue_misc:validate_policy([
-        {<<"ha-mode">>, <<"lolwut">>},
-        {<<"ha-params">>, 2}
-    ])).
 
 %%
 %% Implementation

@@ -10,9 +10,8 @@
 
 -export([init/3, terminate/2, delete_and_terminate/2, delete_crashed/1,
          purge/1, purge_acks/1,
-         publish/6, publish_delivered/5,
-         batch_publish/4, batch_publish_delivered/4,
-         discard/4, drain_confirmed/1,
+         publish/5, publish_delivered/4,
+         discard/3, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
          ackfold/4, fold/3, len/1, is_empty/1, depth/1,
          set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
@@ -224,19 +223,13 @@ purge(State) ->
 purge_acks(State) ->
     rabbit_variable_queue:purge_acks(State).
 
-publish(Msg, MsgProps, IsDelivered, ChPid, Flow, State) ->
-    rabbit_variable_queue:publish(Msg, MsgProps, IsDelivered, ChPid, Flow, State).
+publish(Msg, MsgProps, IsDelivered, ChPid, State) ->
+    rabbit_variable_queue:publish(Msg, MsgProps, IsDelivered, ChPid, State).
 
-batch_publish(Publishes, ChPid, Flow, State) ->
-    rabbit_variable_queue:batch_publish(Publishes, ChPid, Flow, State).
+publish_delivered(Msg, MsgProps, ChPid, State) ->
+    rabbit_variable_queue:publish_delivered(Msg, MsgProps, ChPid, State).
 
-publish_delivered(Msg, MsgProps, ChPid, Flow, State) ->
-    rabbit_variable_queue:publish_delivered(Msg, MsgProps, ChPid, Flow, State).
-
-batch_publish_delivered(Publishes, ChPid, Flow, State) ->
-    rabbit_variable_queue:batch_publish_delivered(Publishes, ChPid, Flow, State).
-
-discard(_MsgId, _ChPid, _Flow, State) -> State.
+discard(_MsgId, _ChPid, State) -> State.
 
 drain_confirmed(State) ->
     rabbit_variable_queue:drain_confirmed(State).
