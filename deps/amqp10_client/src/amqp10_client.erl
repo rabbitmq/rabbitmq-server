@@ -110,12 +110,8 @@ open_connection(ConnectionConfig0) ->
     },
     Sasl = maps:get(sasl, ConnectionConfig1),
     ConnectionConfig2 = ConnectionConfig1#{sasl => amqp10_client_connection:encrypt_sasl(Sasl)},
-<<<<<<< HEAD
-    amqp10_client_connection:open(ConnectionConfig2).
-=======
     ConnectionConfig = merge_default_tls_options(ConnectionConfig2),
     amqp10_client_connection:open(ConnectionConfig).
->>>>>>> 2779bf7375 (amqp10_client: allow configuring global TLS options)
 
 %% @doc Opens a connection using a connection_config map
 %% This is asynchronous and will notify completion to the caller using
