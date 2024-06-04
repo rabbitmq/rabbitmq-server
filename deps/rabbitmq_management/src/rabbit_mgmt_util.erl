@@ -18,7 +18,8 @@
          is_authorized_vhost_visible_for_monitoring/2,
          is_authorized_global_parameters/2]).
 -export([user/1]).
--export([bad_request/3, service_unavailable/3, bad_request_exception/4, internal_server_error/4,
+-export([bad_request/3, service_unavailable/3, bad_request_exception/4,
+         internal_server_error/3, internal_server_error/4,
          id/2, parse_bool/1, parse_int/1, redirect_to_home/3]).
 -export([with_decode/4, not_found/3]).
 -export([with_channel/4, with_channel/5]).
@@ -673,6 +674,9 @@ not_found(Reason, ReqData, Context) ->
 
 method_not_allowed(Reason, ReqData, Context) ->
     halt_response(405, method_not_allowed, Reason, ReqData, Context).
+
+internal_server_error(Reason, ReqData, Context) ->
+    internal_server_error(internal_server_error, Reason, ReqData, Context).
 
 internal_server_error(Error, Reason, ReqData, Context) ->
     rabbit_log:error("~ts~n~ts", [Error, Reason]),

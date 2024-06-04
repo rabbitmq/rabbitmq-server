@@ -72,14 +72,18 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
               case rabbit_vhost:put_vhost(Name, Description, Tags, DefaultQT, Trace, Username) of
                   ok ->
                       {true, ReqData, Context};
-                  {error, timeout} = E ->
+                  {error, timeout} ->
                       rabbit_mgmt_util:internal_server_error(
-                        "Timed out while waiting for the vhost to initialise", E,
+                        timeout,
+                        "Timed out waiting for the vhost to initialise",
                         ReqData0, Context);
                   {error, E} ->
+                      Reason = iolist_to_binary(
+                                 io_lib:format(
+                                   "Error occurred while adding vhost: ~tp",
+                                   [E])),
                       rabbit_mgmt_util:internal_server_error(
-                        "Error occured while adding vhost", E,
-                        ReqData0, Context);
+                        Reason, ReqData0, Context);
                   {'EXIT', {vhost_limit_exceeded,
                       Explanation}} ->
                       rabbit_mgmt_util:bad_request(list_to_binary(Explanation), ReqData, Context)
