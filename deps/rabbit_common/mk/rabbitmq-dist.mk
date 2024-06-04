@@ -214,9 +214,11 @@ do-dist:: $(DIST_EZS)
 CLI_SCRIPTS_LOCK = $(CLI_SCRIPTS_DIR).lock
 CLI_ESCRIPTS_LOCK = $(CLI_ESCRIPTS_DIR).lock
 
+ifeq ($(MAKELEVEL),0)
 ifneq ($(filter-out rabbit_common amqp10_common rabbitmq_stream_common,$(PROJECT)),)
 app:: install-cli
 test-build:: install-cli
+endif
 endif
 
 install-cli: install-cli-scripts install-cli-escripts
