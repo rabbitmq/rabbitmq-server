@@ -20,7 +20,8 @@
     reconcile/0,
     reconcile_once/0,
     start_processes_for_all/0,
-    start_on_all_nodes/2
+    start_on_all_nodes/2,
+    on_node_up/1
 ]).
 
 %% Same as rabbit_vhost:exists/1.
@@ -57,6 +58,14 @@ reconcile_once() ->
     _ = increment_run_counter(),
     N = get_run_counter(),
     rabbit_log:debug("Done with virtual host processes reconciliation (run ~tp)", [N]),
+    ok.
+
+-spec on_node_up(Node :: node()) -> 'ok'.
+on_node_up(_Node) ->
+    DelayInSeconds = 10,
+    Delay = DelayInSeconds * 1000,
+    rabbit_log:debug("Will reschedule virtual host process reconciliation after ~b seconds", [DelayInSeconds]),
+    _ = timer:apply_after(Delay, ?MODULE, reconcile_once, []),
     ok.
 
 %% Starts a virtual host process on every specified nodes.

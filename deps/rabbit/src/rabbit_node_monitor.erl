@@ -897,6 +897,7 @@ handle_live_rabbit(Node) ->
         true  -> ok;
         false -> on_node_up_using_mnesia(Node)
     end,
+    ok = rabbit_vhosts:on_node_up(Node),
     ok = rabbit_quorum_queue_periodic_membership_reconciliation:on_node_up(Node).
 
 on_node_up_using_mnesia(Node) ->
