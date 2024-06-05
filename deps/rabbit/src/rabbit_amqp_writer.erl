@@ -173,21 +173,20 @@ assemble_frame(Channel, Performative) ->
     assemble_frame(Channel, Performative, amqp10_framing).
 
 assemble_frame(Channel, Performative, amqp10_framing) ->
-    ?DEBUG("~s Channel ~tp <-~n~tp~n",
-           [?MODULE, Channel, amqp10_framing:pprint(Performative)]),
+    ?TRACE("channel ~b <-~n ~tp",
+           [Channel, amqp10_framing:pprint(Performative)]),
     PerfBin = amqp10_framing:encode_bin(Performative),
     amqp10_binary_generator:build_frame(Channel, PerfBin);
 assemble_frame(Channel, Performative, rabbit_amqp_sasl) ->
-    ?DEBUG("~s Channel ~tp <-~n~tp~n",
-           [?MODULE, Channel, amqp10_framing:pprint(Performative)]),
+    ?TRACE("channel ~b <-~n ~tp",
+           [Channel, amqp10_framing:pprint(Performative)]),
     PerfBin = amqp10_framing:encode_bin(Performative),
     amqp10_binary_generator:build_frame(Channel, ?AMQP_SASL_FRAME_TYPE, PerfBin).
 
 %%TODO respect MaxFrame
 assemble_frame(Channel, Performative, Payload, _MaxFrame) ->
-    ?DEBUG("~s Channel ~tp <-~n~tp~n followed by ~tp bytes of payload~n",
-           [?MODULE, Channel, amqp10_framing:pprint(Performative),
-            iolist_size(Payload)]),
+    ?TRACE("channel ~b <-~n ~tp~n followed by ~tb bytes of payload",
+           [Channel, amqp10_framing:pprint(Performative), iolist_size(Payload)]),
     PerfIoData = amqp10_framing:encode_bin(Performative),
     amqp10_binary_generator:build_frame(Channel, [PerfIoData, Payload]).
 
