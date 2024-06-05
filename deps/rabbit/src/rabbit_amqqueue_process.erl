@@ -1523,8 +1523,8 @@ handle_cast({credit, SessionPid, CTag, Credit, Drain},
     %% Behave like non-native AMQP 1.0: Send send_credit_reply before deliveries.
     rabbit_classic_queue:send_credit_reply_credit_api_v1(
       SessionPid, amqqueue:get_name(Q), BQ:len(BQS0)),
-    handle_cast({credit, SessionPid, CTag, credit_api_v1, Credit, Drain, false}, State);
-handle_cast({credit, SessionPid, CTag, DeliveryCountRcv, Credit, Drain, Echo},
+    handle_cast({credit, SessionPid, CTag, credit_api_v1, Credit, Drain}, State);
+handle_cast({credit, SessionPid, CTag, DeliveryCountRcv, Credit, Drain},
             #q{consumers = Consumers0,
                q = Q} = State0) ->
     QName = amqqueue:get_name(Q),
@@ -1556,8 +1556,7 @@ handle_cast({credit, SessionPid, CTag, DeliveryCountRcv, Credit, Drain, Echo},
             rabbit_classic_queue:send_credit_reply(
               SessionPid, QName, CTag, AdvancedDeliveryCount, 0, Avail, Drain);
         {PostDeliveryCountSnd, PostCred}
-          when is_integer(PostDeliveryCountSnd) andalso
-               Echo ->
+          when is_integer(PostDeliveryCountSnd) ->
             %% credit API v2
             Avail = BQ:len(PostBQS),
             rabbit_classic_queue:send_credit_reply(

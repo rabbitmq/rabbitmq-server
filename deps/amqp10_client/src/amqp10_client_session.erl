@@ -902,9 +902,10 @@ handle_link_flow(#'v1_0.flow'{delivery_count = MaybeTheirDC,
 handle_link_flow(#'v1_0.flow'{delivery_count = TheirDC,
                               link_credit = {uint, TheirCredit},
                               available = Available,
-                              drain = Drain},
+                              drain = Drain0},
                  Link0 = #link{role = receiver}) ->
-    Link = case Drain andalso TheirCredit =< 0 of
+    Drain = default(Drain0, false),
+    Link = case Drain andalso TheirCredit =:= 0 of
                true ->
                    notify_credit_exhausted(Link0),
                    Link0#link{delivery_count = unpack(TheirDC),
@@ -1211,6 +1212,9 @@ boolean_to_role(?AMQP_ROLE_SENDER) ->
     sender;
 boolean_to_role(?AMQP_ROLE_RECEIVER) ->
     receiver.
+
+default(undefined, Default) -> Default;
+default(Thing, _Default) -> Thing.
 
 format_status(Status = #{data := Data0}) ->
     #state{channel = Channel,

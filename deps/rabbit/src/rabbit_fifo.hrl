@@ -119,7 +119,7 @@
          checked_out = #{} :: #{msg_id() => msg()},
          %% max number of messages that can be sent
          %% decremented for each delivery
-         credit = 0 : non_neg_integer(),
+         credit = 0 :: non_neg_integer(),
          %% AMQP 1.0 §2.6.7
          delivery_count :: rabbit_queue_type:delivery_count()
         }).
