@@ -224,45 +224,22 @@ endif
 install-cli: install-cli-scripts install-cli-escripts
 	@:
 
-ifeq ($(PROJECT),rabbit)
-install-cli-scripts:
-	$(gen_verbose) \
-	if command -v flock >/dev/null; then \
-		flock $(CLI_SCRIPTS_LOCK) \
-			sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && cp -a scripts/* $(CLI_SCRIPTS_DIR)/'; \
-	elif command -v lockf >/dev/null; then \
-		lockf $(CLI_SCRIPTS_LOCK) \
-			sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && cp -a scripts/* $(CLI_SCRIPTS_DIR)/'; \
-	else \
-		mkdir -p "$(CLI_SCRIPTS_DIR)" && cp -a scripts/* $(CLI_SCRIPTS_DIR)/; \
-	fi
-else
-
 install-cli-scripts:
 	$(gen_verbose) \
 	set -e; \
-	if test -d "$(DEPS_DIR)/rabbit/scripts"; then \
-		rabbit_scripts_dir='$(DEPS_DIR)/rabbit/scripts'; \
-	elif test -d "$(DEPS_DIR)/../scripts"; then \
-		rabbit_scripts_dir='$(DEPS_DIR)/../scripts'; \
-	else \
-		echo 'rabbit/scripts directory not found' 1>&2; \
-		exit 1; \
-	fi; \
-	test -d "$$rabbit_scripts_dir"; \
+	test -d "$(DEPS_DIR)/rabbit/scripts"; \
 	if command -v flock >/dev/null; then \
 		flock $(CLI_SCRIPTS_LOCK) \
 		sh -e -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-			cp -a "'$$rabbit_scripts_dir'"/* $(CLI_SCRIPTS_DIR)/'; \
+			cp -a $(DEPS_DIR)/rabbit/scripts/* $(CLI_SCRIPTS_DIR)/'; \
 	elif command -v lockf >/dev/null; then \
 		lockf $(CLI_SCRIPTS_LOCK) \
 		sh -e -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-			cp -a "'$$rabbit_scripts_dir'"/* $(CLI_SCRIPTS_DIR)/'; \
+			cp -a $(DEPS_DIR)/rabbit/scripts/* $(CLI_SCRIPTS_DIR)/'; \
 	else \
 		mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-			cp -a "'$$rabbit_scripts_dir'"/* $(CLI_SCRIPTS_DIR)/; \
+			cp -a $(DEPS_DIR)/rabbit/scripts/* $(CLI_SCRIPTS_DIR)/; \
 	fi
-endif
 
 install-cli-escripts:
 	$(gen_verbose) \
