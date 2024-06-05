@@ -13,6 +13,7 @@
 -include_lib("rabbit_common/include/logging.hrl").
 
 -include("src/rabbit_feature_flags.hrl").
+-include("src/rabbit_ff_registry.hrl").
 
 -export([initialize_registry/0,
          initialize_registry/1,
@@ -22,14 +23,11 @@
          reset_registry/0]).
 
 -ifdef(TEST).
--export([registry_loading_lock/0,
-         purge_old_registry/1]).
+-export([registry_loading_lock/0]).
 -endif.
 
 -define(FF_STATE_CHANGE_LOCK, {feature_flags_state_change, self()}).
 -define(FF_REGISTRY_LOADING_LOCK, {feature_flags_registry_loading, self()}).
-
--type registry_vsn() :: term().
 
 -spec acquire_state_change_lock() -> ok.
 
@@ -171,19 +169,23 @@ initialize_registry(NewSupportedFeatureFlags,
                     NewFeatureStates,
                     WrittenToDisk) ->
     try
-        Ret = maybe_initialize_registry(NewSupportedFeatureFlags,
-                                        NewFeatureStates,
-                                        WrittenToDisk),
-        case Ret of
-            ok      -> ok;
-            restart -> initialize_registry(NewSupportedFeatureFlags,
-                                           NewFeatureStates,
-                                           WrittenToDisk);
-            Error1  -> Error1
-        end
+        true = global:set_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
+        ?LOG_DEBUG(
+           "Feature flags: acquired lock before initializing registry (~tp)",
+           [self()],
+           #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+        ok = maybe_initialize_registry(NewSupportedFeatureFlags,
+                                       NewFeatureStates,
+                                       WrittenToDisk)
     catch
         throw:{error, _} = Error2 ->
             Error2
+    after
+        ?LOG_DEBUG(
+           "Feature flags: releasing lock after initializing registry (~tp)",
+           [self()],
+           #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+        true = global:del_lock(?FF_REGISTRY_LOADING_LOCK, [node()])
     end.
 
 -spec maybe_initialize_registry(FeatureFlags,
@@ -192,17 +194,11 @@ initialize_registry(NewSupportedFeatureFlags,
       FeatureFlags :: rabbit_feature_flags:feature_flags(),
       FeatureStates :: rabbit_feature_flags:feature_states(),
       WrittenToDisk :: boolean(),
-      Ret :: ok | restart | {error, any()} | no_return().
+      Ret :: ok | no_return().
 
 maybe_initialize_registry(NewSupportedFeatureFlags,
                           NewFeatureStates,
                           WrittenToDisk) ->
-    %% We save the version of the current registry before computing
-    %% the new one. This is used when we do the actual reload: if the
-    %% current registry was reloaded in the meantime, we need to restart
-    %% the computation to make sure we don't loose data.
-    RegistryVsn = registry_vsn(),
-
     %% We take the feature flags already registered.
     RegistryInitialized = rabbit_ff_registry:is_registry_initialized(),
     KnownFeatureFlags1 = case RegistryInitialized of
@@ -328,12 +324,11 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
     %% known by this node or not, and decide if a missing feature flag is
     %% unknown or unsupported.
     Inventory = #{applications => ScannedApps,
-                  feature_flags => KnownFeatureFlags2,
-                  states => FeatureStates},
+                  feature_flags => AllFeatureFlags,
+                  states => FeatureStates,
+                  written_to_disk => WrittenToDisk},
 
-    Proceed = does_registry_need_refresh(AllFeatureFlags,
-                                         FeatureStates,
-                                         WrittenToDisk),
+    Proceed = does_registry_need_refresh(Inventory),
 
     case Proceed of
         true ->
@@ -342,11 +337,7 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
               [self()],
               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             T0 = erlang:monotonic_time(),
-            Ret = do_initialize_registry(RegistryVsn,
-                                         AllFeatureFlags,
-                                         FeatureStates,
-                                         Inventory,
-                                         WrittenToDisk),
+            Ret = do_initialize_registry(Inventory),
             T1 = erlang:monotonic_time(),
             ?LOG_DEBUG(
               "Feature flags: time to regen registry: ~tp us",
@@ -360,27 +351,20 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
             ok
     end.
 
--spec does_registry_need_refresh(FeatureFlags,
-                                 FeatureStates,
-                                 WrittenToDisk) -> Ret when
-      FeatureFlags :: rabbit_feature_flags:feature_flags(),
-      FeatureStates :: rabbit_feature_flags:feature_states(),
-      WrittenToDisk :: boolean(),
+-spec does_registry_need_refresh(Inventory) -> Ret when
+      Inventory :: rabbit_feature_flags:inventory(),
       Ret :: boolean().
 
-does_registry_need_refresh(AllFeatureFlags,
-                           FeatureStates,
-                           WrittenToDisk) ->
-    case rabbit_ff_registry:is_registry_initialized() of
-        true ->
+does_registry_need_refresh(#{feature_flags := AllFeatureFlags,
+                             states := FeatureStates,
+                             written_to_disk := WrittenToDisk}) ->
+    case rabbit_ff_registry:inventory() of
+        #{feature_flags := CurrentAllFeatureFlags,
+          states := CurrentFeatureStates,
+          written_to_disk := CurrentWrittenToDisk} ->
             %% Before proceeding with the actual
             %% (re)initialization, let's see if there are any
             %% changes.
-            CurrentAllFeatureFlags = rabbit_ff_registry_wrapper:list(all),
-            CurrentFeatureStates = rabbit_ff_registry_wrapper:states(),
-            CurrentWrittenToDisk =
-            rabbit_ff_registry:is_registry_written_to_disk(),
-
             if
                 AllFeatureFlags =/= CurrentAllFeatureFlags ->
                     ?LOG_DEBUG(
@@ -406,7 +390,7 @@ does_registry_need_refresh(AllFeatureFlags,
                       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
                     false
             end;
-        false ->
+        init_required ->
             ?LOG_DEBUG(
               "Feature flags: registry refresh needed: "
               "yes, first-time initialization",
@@ -447,24 +431,15 @@ enable_deprecated_features_required_by_enabled_feature_flags(
               FeatureFlags, FeatureStates1)
     end.
 
--spec do_initialize_registry(Vsn,
-                             FeatureFlags,
-                             FeatureStates,
-                             Inventory,
-                             WrittenToDisk) -> Ret when
-      Vsn :: registry_vsn(),
-      FeatureFlags :: rabbit_feature_flags:feature_flags(),
-      FeatureStates :: rabbit_feature_flags:feature_states(),
+-spec do_initialize_registry(Inventory) -> Ret when
       Inventory :: rabbit_feature_flags:inventory(),
-      WrittenToDisk :: boolean(),
-      Ret :: ok | restart | {error, any()} | no_return().
+      Ret :: ok.
 %% @private
 
-do_initialize_registry(RegistryVsn,
-                       AllFeatureFlags,
-                       FeatureStates,
-                       #{applications := ScannedApps} = Inventory,
-                       WrittenToDisk) ->
+do_initialize_registry(#{feature_flags := AllFeatureFlags,
+                         states := FeatureStates,
+                         applications := ScannedApps,
+                         written_to_disk := WrittenToDisk} = Inventory) ->
     %% We log the state of those feature flags.
     ?LOG_DEBUG(
       lists:flatten(
@@ -501,337 +476,11 @@ do_initialize_registry(RegistryVsn,
       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}
      ),
 
-    %% We request the registry to be regenerated and reloaded with the
-    %% new state.
-    regen_registry_mod(RegistryVsn,
-                       AllFeatureFlags,
-                       FeatureStates,
-                       Inventory,
-                       WrittenToDisk).
-
--spec regen_registry_mod(
-        RegistryVsn, AllFeatureFlags, FeatureStates, Inventory,
-        WrittenToDisk) -> Ret when
-      RegistryVsn :: registry_vsn(),
-      AllFeatureFlags :: rabbit_feature_flags:feature_flags(),
-      FeatureStates :: rabbit_feature_flags:feature_states(),
-      Inventory :: rabbit_feature_flags:inventory(),
-      WrittenToDisk :: boolean(),
-      Ret :: ok | restart | {error, any()} | no_return().
-%% @private
-
-regen_registry_mod(RegistryVsn,
-                   AllFeatureFlags,
-                   FeatureStates,
-                   Inventory,
-                   WrittenToDisk) ->
-    %% Here, we recreate the source code of the `rabbit_ff_registry`
-    %% module from scratch.
-    %%
-    %% IMPORTANT: We want both modules to have the exact same public
-    %% API in order to simplify the life of developers and their tools
-    %% (Dialyzer, completion, and so on).
-
-    %% -module(rabbit_ff_registry).
-    ModuleAttr = erl_syntax:attribute(
-                   erl_syntax:atom(module),
-                   [erl_syntax:atom(rabbit_ff_registry)]),
-    ModuleForm = erl_syntax:revert(ModuleAttr),
-    %% -export([...]).
-    ExportAttr = erl_syntax:attribute(
-                   erl_syntax:atom(export),
-                   [erl_syntax:list(
-                      [erl_syntax:arity_qualifier(
-                         erl_syntax:atom(F),
-                         erl_syntax:integer(A))
-                       || {F, A} <- [{get, 1},
-                                     {list, 1},
-                                     {states, 0},
-                                     {is_supported, 1},
-                                     {is_enabled, 1},
-                                     {is_registry_initialized, 0},
-                                     {is_registry_written_to_disk, 0},
-                                     {inventory, 0}]]
-                     )
-                   ]
-                  ),
-    ExportForm = erl_syntax:revert(ExportAttr),
-    %% get(_) -> ...
-    GetClauses = [erl_syntax:clause(
-                    [erl_syntax:atom(FeatureName)],
-                    [],
-                    [erl_syntax:abstract(maps:get(FeatureName,
-                                                  AllFeatureFlags))])
-                     || FeatureName <- maps:keys(AllFeatureFlags)
-                    ],
-    GetUnknownClause = erl_syntax:clause(
-                         [erl_syntax:variable("_")],
-                         [],
-                         [erl_syntax:atom(undefined)]),
-    GetFun = erl_syntax:function(
-               erl_syntax:atom(get),
-               GetClauses ++ [GetUnknownClause]),
-    GetFunForm = erl_syntax:revert(GetFun),
-    %% list(_) -> ...
-    ListAllBody = erl_syntax:abstract(AllFeatureFlags),
-    ListAllClause = erl_syntax:clause([erl_syntax:atom(all)],
-                                      [],
-                                      [ListAllBody]),
-    EnabledFeatureFlags = maps:filter(
-                            fun(FeatureName, _) ->
-                                    maps:is_key(FeatureName,
-                                                FeatureStates)
-                                    andalso
-                                    maps:get(FeatureName, FeatureStates)
-                                    =:=
-                                    true
-                            end, AllFeatureFlags),
-    ListEnabledBody = erl_syntax:abstract(EnabledFeatureFlags),
-    ListEnabledClause = erl_syntax:clause(
-                          [erl_syntax:atom(enabled)],
-                          [],
-                          [ListEnabledBody]),
-    DisabledFeatureFlags = maps:filter(
-                            fun(FeatureName, _) ->
-                                    not maps:is_key(FeatureName,
-                                                    FeatureStates)
-                                    orelse
-                                    maps:get(FeatureName, FeatureStates)
-                                    =:=
-                                    false
-                            end, AllFeatureFlags),
-    ListDisabledBody = erl_syntax:abstract(DisabledFeatureFlags),
-    ListDisabledClause = erl_syntax:clause(
-                          [erl_syntax:atom(disabled)],
-                          [],
-                          [ListDisabledBody]),
-    StateChangingFeatureFlags = maps:filter(
-                                  fun(FeatureName, _) ->
-                                          maps:is_key(FeatureName,
-                                                      FeatureStates)
-                                          andalso
-                                          maps:get(FeatureName, FeatureStates)
-                                          =:=
-                                          state_changing
-                                  end, AllFeatureFlags),
-    ListStateChangingBody = erl_syntax:abstract(StateChangingFeatureFlags),
-    ListStateChangingClause = erl_syntax:clause(
-                                [erl_syntax:atom(state_changing)],
-                                [],
-                                [ListStateChangingBody]),
-    ListFun = erl_syntax:function(
-                erl_syntax:atom(list),
-                [ListAllClause,
-                 ListEnabledClause,
-                 ListDisabledClause,
-                 ListStateChangingClause]),
-    ListFunForm = erl_syntax:revert(ListFun),
-    %% states() -> ...
-    StatesBody = erl_syntax:abstract(FeatureStates),
-    StatesClause = erl_syntax:clause([], [], [StatesBody]),
-    StatesFun = erl_syntax:function(
-                  erl_syntax:atom(states),
-                  [StatesClause]),
-    StatesFunForm = erl_syntax:revert(StatesFun),
-    %% is_supported(_) -> ...
-    IsSupportedClauses = [erl_syntax:clause(
-                            [erl_syntax:atom(FeatureName)],
-                            [],
-                            [erl_syntax:atom(true)])
-                          || FeatureName <- maps:keys(AllFeatureFlags)
-                         ],
-    NotSupportedClause = erl_syntax:clause(
-                           [erl_syntax:variable("_")],
-                           [],
-                           [erl_syntax:atom(false)]),
-    IsSupportedFun = erl_syntax:function(
-                       erl_syntax:atom(is_supported),
-                       IsSupportedClauses ++ [NotSupportedClause]),
-    IsSupportedFunForm = erl_syntax:revert(IsSupportedFun),
-    %% is_enabled(_) -> ...
-    IsEnabledClauses = [erl_syntax:clause(
-                          [erl_syntax:atom(FeatureName)],
-                          [],
-                          [case maps:is_key(FeatureName, FeatureStates) of
-                               true ->
-                                   erl_syntax:atom(
-                                     maps:get(FeatureName, FeatureStates));
-                               false ->
-                                   erl_syntax:atom(false)
-                           end])
-                        || FeatureName <- maps:keys(AllFeatureFlags)
-                       ],
-    NotEnabledClause = erl_syntax:clause(
-                         [erl_syntax:variable("_")],
-                         [],
-                         [erl_syntax:atom(false)]),
-    IsEnabledFun = erl_syntax:function(
-                     erl_syntax:atom(is_enabled),
-                     IsEnabledClauses ++ [NotEnabledClause]),
-    IsEnabledFunForm = erl_syntax:revert(IsEnabledFun),
-    %% is_registry_initialized() -> ...
-    IsInitializedClauses = [erl_syntax:clause(
-                              [],
-                              [],
-                              [erl_syntax:atom(true)])
-                           ],
-    IsInitializedFun = erl_syntax:function(
-                         erl_syntax:atom(is_registry_initialized),
-                         IsInitializedClauses),
-    IsInitializedFunForm = erl_syntax:revert(IsInitializedFun),
-    %% is_registry_written_to_disk() -> ...
-    IsWrittenToDiskClauses = [erl_syntax:clause(
-                                [],
-                                [],
-                                [erl_syntax:atom(WrittenToDisk)])
-                             ],
-    IsWrittenToDiskFun = erl_syntax:function(
-                           erl_syntax:atom(is_registry_written_to_disk),
-                           IsWrittenToDiskClauses),
-    IsWrittenToDiskFunForm = erl_syntax:revert(IsWrittenToDiskFun),
-    %% inventory() -> ...
-    InventoryBody = erl_syntax:abstract(Inventory),
-    InventoryClause = erl_syntax:clause([], [], [InventoryBody]),
-    InventoryFun = erl_syntax:function(
-                     erl_syntax:atom(inventory),
-                     [InventoryClause]),
-    InventoryFunForm = erl_syntax:revert(InventoryFun),
-    %% Compilation!
-    Forms = [ModuleForm,
-             ExportForm,
-             GetFunForm,
-             ListFunForm,
-             StatesFunForm,
-             IsSupportedFunForm,
-             IsEnabledFunForm,
-             IsInitializedFunForm,
-             IsWrittenToDiskFunForm,
-             InventoryFunForm],
-    maybe_log_registry_source_code(Forms),
-    CompileOpts = [return_errors,
-                   return_warnings],
-    case compile:forms(Forms, CompileOpts) of
-        {ok, Mod, Bin, _} ->
-            load_registry_mod(RegistryVsn, Mod, Bin);
-        {error, Errors, Warnings} ->
-            ?LOG_ERROR(
-              "Feature flags: registry compilation failure:~n"
-              "Errors: ~tp~n"
-              "Warnings: ~tp",
-              [Errors, Warnings],
-              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            {error, {compilation_failure, Errors, Warnings}};
-        error ->
-            ?LOG_ERROR(
-              "Feature flags: registry compilation failure",
-              [],
-              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            {error, {compilation_failure, [], []}}
-    end.
-
-maybe_log_registry_source_code(Forms) ->
-    case rabbit_prelaunch:get_context() of
-        #{log_feature_flags_registry := true} ->
-            ?LOG_DEBUG(
-              "== FEATURE FLAGS REGISTRY ==~n"
-              "~ts~n"
-              "== END ==~n",
-              [erl_prettypr:format(erl_syntax:form_list(Forms))],
-              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            ok;
-        _ ->
-            ok
-    end.
+    persistent_term:put(?PT_INVENTORY_KEY, Inventory).
 
 -ifdef(TEST).
 registry_loading_lock() -> ?FF_REGISTRY_LOADING_LOCK.
 -endif.
-
--spec load_registry_mod(Vsn, Mod, Bin) -> Ret when
-      Vsn :: registry_vsn(),
-      Mod :: module(),
-      Bin :: binary(),
-      Ret :: ok | restart | no_return().
-%% @private
-
-load_registry_mod(RegistryVsn, Mod, Bin) ->
-    ?LOG_DEBUG(
-      "Feature flags: registry module ready, loading it (~tp)...",
-      [self()],
-      #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-    FakeFilename = "Compiled and loaded by " ?MODULE_STRING,
-    %% Time to load the new registry, replacing the old one. We use a
-    %% lock here to synchronize concurrent reloads.
-    global:set_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
-    ?LOG_DEBUG(
-      "Feature flags: acquired lock before reloading registry module (~tp)",
-     [self()],
-     #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-    %% We want to make sure that the old registry (not the one being
-    %% currently in use) is purged by the code server. It means no
-    %% process lingers on that old code.
-    %%
-    %% We use code:soft_purge() for that (meaning no process is killed)
-    %% and we wait in an infinite loop for that to succeed.
-    ok = purge_old_registry(Mod),
-    %% Now we can replace the currently loaded registry by the new one.
-    %% The code server takes care of marking the current registry as old
-    %% and load the new module in an atomic operation.
-    %%
-    %% Therefore there is no chance of a window where there is no
-    %% registry module available, causing the one on disk to be
-    %% reloaded.
-    Ret = case registry_vsn() of
-              RegistryVsn -> code:load_binary(Mod, FakeFilename, Bin);
-              OtherVsn    -> {error, {restart, RegistryVsn, OtherVsn}}
-          end,
-    ?LOG_DEBUG(
-      "Feature flags: releasing lock after reloading registry module (~tp)",
-     [self()],
-     #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-    global:del_lock(?FF_REGISTRY_LOADING_LOCK, [node()]),
-    case Ret of
-        {module, _} ->
-            ?LOG_DEBUG(
-              "Feature flags: registry module loaded (vsn: ~tp -> ~tp)",
-              [RegistryVsn, registry_vsn()],
-              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            ok;
-        {error, {restart, Expected, Current}} ->
-            ?LOG_DEBUG(
-              "Feature flags: another registry module was loaded in the "
-              "meantime (expected old vsn: ~tp, current vsn: ~tp); "
-              "restarting the regen",
-              [Expected, Current],
-              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            restart;
-        {error, Reason} ->
-            ?LOG_ERROR(
-              "Feature flags: failed to load registry module: ~tp",
-              [Reason],
-              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            throw({feature_flag_registry_reload_failure, Reason})
-    end.
-
--spec registry_vsn() -> Vsn when
-      Vsn :: registry_vsn().
-%% @private
-
-registry_vsn() ->
-    Attrs = rabbit_ff_registry:module_info(attributes),
-    proplists:get_value(vsn, Attrs, undefined).
-
-purge_old_registry(Mod) ->
-    case code:is_loaded(Mod) of
-        {file, _} -> do_purge_old_registry(Mod);
-        false     -> ok
-    end.
-
-do_purge_old_registry(Mod) ->
-    case code:soft_purge(Mod) of
-        true  -> ok;
-        false -> do_purge_old_registry(Mod)
-    end.
 
 -spec reset_registry() -> ok.
 
@@ -840,11 +489,6 @@ reset_registry() ->
        "Feature flags: resetting loaded registry",
        [],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-    _ = code:purge(rabbit_ff_registry),
-    _ = code:delete(rabbit_ff_registry),
-    %% After purging the module, we explicitly reload the stub version from the
-    %% disk. We need to do this because if the Erlang VM is running in embedded
-    %% mode, it will refuse to auto-load the module.
-    _ = code:load_file(rabbit_ff_registry),
+    persistent_term:erase(?PT_INVENTORY_KEY),
     ?assertNot(rabbit_ff_registry:is_registry_initialized()),
     ok.
