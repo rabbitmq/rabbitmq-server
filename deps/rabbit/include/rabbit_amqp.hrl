@@ -1,24 +1,14 @@
-%%-define(debug, true).
-
--ifdef(debug).
--define(DEBUG0(F), ?SAFE(rabbit_log:debug(F, []))).
--define(DEBUG(F, A), ?SAFE(rabbit_log:debug(F, A))).
+%% To enable AMQP trace logging, uncomment below line:
+%-define(TRACE_AMQP, true).
+-ifdef(TRACE_AMQP).
+-warning("AMQP tracing is enabled").
+-define(TRACE(Format, Args),
+        rabbit_log:debug(
+          "~s:~s/~b ~b~n" ++ Format ++ "~n",
+          [?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE] ++ Args)).
 -else.
--define(DEBUG0(F), ok).
--define(DEBUG(F, A), ok).
+-define(TRACE(_Format, _Args), ok).
 -endif.
-
--define(pprint(F), rabbit_log:debug("~p~n",
-                                    [amqp10_framing:pprint(F)])).
-
--define(SAFE(F),
-        ((fun() ->
-                  try F
-                  catch __T:__E:__ST ->
-                            rabbit_log:debug("~p:~p thrown debugging~n~p~n",
-                                             [__T, __E, __ST])
-                  end
-          end)())).
 
 %% General consts
 

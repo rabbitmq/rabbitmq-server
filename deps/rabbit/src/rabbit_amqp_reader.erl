@@ -369,8 +369,12 @@ parse_frame_body(Body, _Channel) ->
     Performative = amqp10_framing:decode(DescribedPerformative),
     if BytesParsed < BytesBody ->
            Payload = binary_part(Body, BytesParsed, BytesBody - BytesParsed),
+           ?TRACE("channel ~b ->~n ~tp~n followed by ~tb bytes of payload",
+                  [_Channel, amqp10_framing:pprint(Performative), iolist_size(Payload)]),
            {Performative, Payload};
        BytesParsed =:= BytesBody ->
+           ?TRACE("channel ~b ->~n ~tp",
+                  [_Channel, amqp10_framing:pprint(Performative)]),
            Performative
     end.
 

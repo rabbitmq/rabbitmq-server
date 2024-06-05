@@ -22,8 +22,6 @@
     {iolist(), permission_caches()}.
 handle_request(Request, Vhost, User, ConnectionPid, PermCaches0) ->
     ReqSections = amqp10_framing:decode_bin(Request),
-    ?DEBUG("~s Inbound request:~n  ~tp",
-           [?MODULE, [amqp10_framing:pprint(Section) || Section <- ReqSections]]),
 
     {#'v1_0.properties'{
         message_id = MessageId,
@@ -65,6 +63,9 @@ handle_request(Request, Vhost, User, ConnectionPid, PermCaches0) ->
                                 ]},
     RespDataSect = #'v1_0.amqp_value'{content = RespBody},
     RespSections = [RespProps, RespAppProps, RespDataSect],
+    ?TRACE("HTTP over AMQP request:~n ~tp~nHTTP over AMQP response:~n ~tp",
+           [[amqp10_framing:pprint(Sect) || Sect <- ReqSections],
+            [amqp10_framing:pprint(Sect) || Sect <- RespSections]]),
     IoList = [amqp10_framing:encode_bin(Sect) || Sect <- RespSections],
     {IoList, PermCaches}.
 

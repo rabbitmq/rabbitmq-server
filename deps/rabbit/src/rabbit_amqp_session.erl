@@ -1773,9 +1773,6 @@ incoming_mgmt_link_transfer(
                   delivery_tag = {binary, <<>>},
                   message_format = ?UINT(?MESSAGE_FORMAT),
                   settled = true},
-    ?DEBUG("~s Outbound payload:~n  ~tp~n",
-           [?MODULE, [amqp10_framing:pprint(Section) ||
-                      Section <- amqp10_framing:decode_bin(iolist_to_binary(Response))]]),
     validate_message_size(Response, OutgoingMaxMessageSize),
     Frames = transfer_frames(Transfer, Response, MaxFrameSize),
     PendingDelivery = #pending_management_delivery{frames = Frames},
