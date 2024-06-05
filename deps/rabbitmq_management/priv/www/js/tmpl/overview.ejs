@@ -99,6 +99,9 @@
   <% if (show_column('overview', 'uptime')) { %>
     <th>Uptime</th>
   <% } %>
+  <% if (show_column('overview', 'cores')) { %>
+    <th>Cores</th>
+  <% } %>
   <% if (show_column('overview', 'info')) { %>
     <th>Info</th>
   <% } %>
@@ -188,17 +191,15 @@
   <% if (show_column('overview', 'uptime')) { %>
      <td><span><%= fmt_uptime(node.uptime) %></span></td>
   <% } %>
+  <% if (show_column('overview', 'cores')) { %>
+     <td><span><%= fmt_string(node.processors) %></span></td>
+  <% } %>
   <% if (show_column('overview', 'info')) { %>
      <td>
        <% if (node.being_drained) { %>
          <abbr class="status-yellow" title="Node was put under maintenance">maintenance mode</abbr>
        <% } %>
          <abbr title="Message rates"><%= fmt_string(node.rates_mode) %></abbr>
-       <% if (node.type == 'disc') { %>
-         <abbr title="Broker definitions are held on disc.">disc</abbr>
-       <% } else { %>
-         <abbr title="Broker definitions are held in RAM. Messages will still be written to disc if necessary.">RAM</abbr>
-       <% } %>
        <%= fmt_plugins_small(node) %>
         <abbr title="Memory calculation strategy"><%= fmt_string(node.mem_calculation_strategy) %></abbr>
      </td>
