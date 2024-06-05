@@ -23,22 +23,16 @@
       <th>Uptime</th>
       <td><%= fmt_uptime(node.uptime) %></td>
     </tr>
+    <tr>
+      <th>Cores</th>
+      <td><%= fmt_string(node.processors) %></td>
+    </tr>
 <% if (rabbit_versions_interesting) { %>
     <tr>
       <th>RabbitMQ Version</th>
       <td><%= fmt_rabbit_version(node.applications) %></td>
     </tr>
 <% } %>
-    <tr>
-      <th>Type</th>
-      <td>
-       <% if (node.type == 'disc') { %>
-         <abbr title="Broker definitions are held on disc.">Disc</abbr>
-       <% } else { %>
-         <abbr title="Broker definitions are held in RAM. Messages will still be written to disc if necessary.">RAM</abbr>
-       <% } %>
-      </td>
-    </tr>
     <tr>
       <th>
         <a href="https://www.rabbitmq.com/configure.html" target="_blank">Config file</a>
