@@ -994,7 +994,7 @@ connections_test_amqp(Config) ->
     after 5000 -> ct:fail(closed_timeout)
     end,
     eventually(?_assertNot(is_process_alive(C1))),
-    ?assertEqual([], http_get(Config, "/connections")),
+    eventually(?_assertEqual([], http_get(Config, "/connections")), 10, 5),
 
     {ok, C2} = amqp10_client:open_connection(OpnConf),
     receive {amqp10_event, {connection, C2, opened}} -> ok
@@ -1011,7 +1011,8 @@ connections_test_amqp(Config) ->
                 <<"Connection forced: \"Closed via management plugin\"">>}}}} -> ok
     after 5000 -> ct:fail(closed_timeout)
     end,
-    ?assertEqual([], http_get(Config, "/connections")),
+    eventually(?_assertNot(is_process_alive(C2))),
+    eventually(?_assertEqual([], http_get(Config, "/connections")), 10, 5),
     ?assertEqual(0, length(rpc(Config, rabbit_amqp1_0, list_local, []))).
 
 flush(Prefix) ->
