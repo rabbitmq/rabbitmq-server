@@ -18,6 +18,7 @@
     exists/1,
     boot/0,
     reconcile/0,
+    reconcile_once/0,
     start_processes_for_all/0,
     start_on_all_nodes/2
 ]).
@@ -38,15 +39,24 @@ boot() ->
     _ = maybe_start_timer(reconcile),
     ok.
 
-%% Performs a round of virtual host process reconciliation. See start_processes_for_all/1.
+%% Performs a round of virtual host process reconciliation and sets up a timer to
+%% re-run this operation again unless it has been run 10 or more times since cluster boot.
+%% See start_processes_for_all/1.
 -spec reconcile() -> 'ok'.
 reconcile() ->
+    _ = reconcile_once(),
+    _ = maybe_start_timer(?FUNCTION_NAME),
+    ok.
+
+%% Performs a round of virtual host process reconciliation but does not schedule any future runs.
+%% See start_processes_for_all/1.
+-spec reconcile_once() -> 'ok'.
+reconcile_once() ->
     rabbit_log:debug("Will reconcile virtual host processes on all cluster members..."),
     _ = start_processes_for_all(),
     _ = increment_run_counter(),
     N = get_run_counter(),
     rabbit_log:debug("Done with virtual host processes reconciliation (run ~tp)", [N]),
-    _ = maybe_start_timer(?FUNCTION_NAME),
     ok.
 
 %% Starts a virtual host process on every specified nodes.
