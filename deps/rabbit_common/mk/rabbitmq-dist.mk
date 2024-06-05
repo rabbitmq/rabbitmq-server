@@ -229,24 +229,12 @@ install-cli-scripts:
 	$(gen_verbose) \
 	if command -v flock >/dev/null; then \
 		flock $(CLI_SCRIPTS_LOCK) \
-		sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-		for file in scripts/*; do \
-			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
-			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
-		done'; \
+			sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && cp -a scripts/* $(CLI_SCRIPTS_DIR)/'; \
 	elif command -v lockf >/dev/null; then \
 		lockf $(CLI_SCRIPTS_LOCK) \
-		sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-		for file in scripts/*; do \
-			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
-			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
-		done'; \
+			sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && cp -a scripts/* $(CLI_SCRIPTS_DIR)/'; \
 	else \
-		mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-		for file in scripts/*; do \
-			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
-			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
-		done; \
+		mkdir -p "$(CLI_SCRIPTS_DIR)" && cp -a scripts/* $(CLI_SCRIPTS_DIR)/; \
 	fi
 else
 
@@ -265,26 +253,14 @@ install-cli-scripts:
 	if command -v flock >/dev/null; then \
 		flock $(CLI_SCRIPTS_LOCK) \
 		sh -e -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-		for file in "'$$rabbit_scripts_dir'"/*; do \
-			test -f "$$file"; \
-			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
-			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
-		done'; \
+			cp -a "'$$rabbit_scripts_dir'"/* $(CLI_SCRIPTS_DIR)/'; \
 	elif command -v lockf >/dev/null; then \
 		lockf $(CLI_SCRIPTS_LOCK) \
 		sh -e -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-		for file in "'$$rabbit_scripts_dir'"/*; do \
-			test -f "$$file"; \
-			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
-			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
-		done'; \
+			cp -a "'$$rabbit_scripts_dir'"/* $(CLI_SCRIPTS_DIR)/'; \
 	else \
 		mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-		for file in "$$rabbit_scripts_dir"/*; do \
-			test -f "$$file"; \
-			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
-			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
-		done; \
+			cp -a "'$$rabbit_scripts_dir'"/* $(CLI_SCRIPTS_DIR)/; \
 	fi
 endif
 
