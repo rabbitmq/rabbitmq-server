@@ -141,6 +141,7 @@ var ALL_COLUMNS =
                      ['memory',             'Memory',             true],
                      ['disk_space',         'Disk space',         true]],
       'General': [['uptime',    'Uptime',       true],
+                  ['cores',     'Cores',        true],
                   ['info',      'Info',         true],
                   ['reset_stats',     'Reset stats',        true]]}};
 
