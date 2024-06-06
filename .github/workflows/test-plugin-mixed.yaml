@@ -85,6 +85,12 @@ jobs:
         cat << EOF >> user.bazelrc
           build --strategy=TestRunner=local
         EOF
+    - name: deps/rabbitmq_amqp1_0 SETUP
+      if: inputs.plugin == 'rabbitmq_amqp1_0'
+      run: |
+        cat << EOF >> user.bazelrc
+          build --strategy=TestRunner=local
+        EOF
     - name: deps/rabbitmq_auth_backend_ldap SETUP
       if: inputs.plugin == 'rabbitmq_auth_backend_ldap'
       run: |
