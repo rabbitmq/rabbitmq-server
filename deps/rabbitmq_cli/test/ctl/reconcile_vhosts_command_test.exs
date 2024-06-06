@@ -48,7 +48,8 @@ defmodule ReconcileVhostsCommandTest do
   end
 
   test "banner", context do
-    assert @command.banner([], context[:opts]) =~ ~r/Will try to initiate virtual host reconciliation/
+    assert @command.banner([], context[:opts]) =~
+             ~r/Will try to initiate virtual host reconciliation/
   end
 
   test "run: initiates an async operation and returns ok", context do

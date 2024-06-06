@@ -48,7 +48,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ReconcileVhostsCommand do
 
   def help_section(), do: :virtual_hosts
 
-  def description(), do: "Makes sure all virtual hosts were initialized on all reachable cluster nodes"
+  def description(),
+    do: "Makes sure all virtual hosts were initialized on all reachable cluster nodes"
 
   def banner(_, _) do
     "Will try to initiate virtual host reconciliation on all reachable cluster nodes..."
