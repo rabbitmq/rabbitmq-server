@@ -167,7 +167,7 @@
              %% rejected but are yet to be sent to the client
              rejected,
              %% used by "one shot RPC" (amq.
-             reply_consumer,
+             reply_consumer :: none | {rabbit_types:ctag(), binary(), binary()},
              %% flow | noflow, see rabbitmq-server#114
              delivery_flow,
              interceptor_state,
