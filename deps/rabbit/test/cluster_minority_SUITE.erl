@@ -36,7 +36,8 @@ groups() ->
                               update_user,
                               delete_user,
                               set_policy,
-                              delete_policy
+                              delete_policy,
+                              export_definitions
                              ]},
      {cluster_operation_add, [], [add_node]},
      {cluster_operation_remove, [], [remove_node]},
@@ -260,6 +261,11 @@ enable_feature_flag(Config) ->
     [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     ?assertMatch({error, missing_clustered_nodes}, rabbit_ct_broker_helpers:rpc(Config, A, rabbit_feature_flags, enable, [khepri_db])).
 
+export_definitions(Config) ->
+    Definitions = rabbit_ct_broker_helpers:rpc(
+                    Config, 0,
+                    rabbit_definitions, all_definitions, []),
+    ?assert(is_map(Definitions)).
 
 %% -------------------------------------------------------------------
 %% Internal helpers.
