@@ -95,64 +95,14 @@ elixir_config = module_extension(
     },
 )
 
-def _rbe(ctx):
-    root_rbe_repo_props = []
-    rbe_repo_props = []
-    for mod in ctx.modules:
-        for repo in mod.tags.git_repository:
-            props = {"remote": repo.remote}
-            if repo.commit != "":
-                props["commit"] = repo.commit
-            if repo.tag != "":
-                props["tag"] = repo.tag
-            if repo.branch != "":
-                props["branch"] = repo.branch
-            if mod.is_root:
-                if not props in root_rbe_repo_props:
-                    root_rbe_repo_props.append(props)
-            elif not props in rbe_repo_props:
-                rbe_repo_props.append(props)
-
-    if len(root_rbe_repo_props) > 1:
-        fail("Multiple definitions for @rbe exist in root module: {}".format(rbe_repo_props))
-
-    if len(root_rbe_repo_props) > 0:
-        git_repository(
-            name = "rbe",
-            **root_rbe_repo_props[0]
-        )
-    else:
-        if len(rbe_repo_props) > 1:
-            fail("Multiple definitions for @rbe exist: {}".format(rbe_repo_props))
-
-        if len(rbe_repo_props) > 0:
-            git_repository(
-                name = "rbe",
-                **rbe_repo_props[0]
-            )
-
-git_repository_tag = tag_class(attrs = {
-    "remote": attr.string(),
-    "branch": attr.string(),
-    "tag": attr.string(),
-    "commit": attr.string(),
-})
-
-rbe = module_extension(
-    implementation = _rbe,
-    tag_classes = {
-        "git_repository": git_repository_tag,
-    },
-)
-
-def _secondary_umbrella(ctx):
+def _secondary_umbrella(_ctx):
     fetch_secondary_umbrella()
 
 secondary_umbrella = module_extension(
     implementation = _secondary_umbrella,
 )
 
-def _hex(ctx):
+def _hex(_ctx):
     http_archive(
         name = "hex",
         sha256 = "0e3e3290d0fcbdc6bb0526b73ca174d68dcff4d53ee86015c49ad0493e39ee65",
