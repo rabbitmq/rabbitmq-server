@@ -409,6 +409,7 @@ jobs:
       shard_count: 10
     secrets: inherit
 <<<<<<< HEAD
+<<<<<<< HEAD
   test-rabbitmq_cli:
     needs: check-workflow
     uses: ./.github/workflows/test-plugin.yaml
@@ -436,6 +437,8 @@ jobs:
       repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
       plugin: rabbitmq_amqp_client
     secrets: inherit
+=======
+>>>>>>> 28ee2ddee6 (remove rabbitmq_amqp_client tests from this branch)
   test-rabbitmq_amqp1_0:
     needs:
     - check-workflow
@@ -1131,7 +1134,6 @@ jobs:
     - test-rabbitmq_ct_helpers
     - test-rabbitmq_stream_common
     - test-trust_store_http
-    - test-rabbitmq_amqp_client
     - test-rabbitmq_amqp1_0
     - test-rabbitmq_auth_backend_cache
     - test-rabbitmq_auth_backend_http

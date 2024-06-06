@@ -572,7 +572,6 @@ INTERNAL_DEPS := \
 	   trust_store_http
 
 TIER1_PLUGINS := \
-	   rabbitmq_amqp_client \
 	   rabbitmq_amqp1_0 \
 	   rabbitmq_auth_backend_cache \
 	   rabbitmq_auth_backend_http \
