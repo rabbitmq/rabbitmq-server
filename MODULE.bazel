@@ -67,66 +67,6 @@ erlang_config = use_extension(
     "erlang_config",
 )
 
-<<<<<<< HEAD
-erlang_config.internal_erlang_from_github_release(
-    name = "24",
-    sha256 = "8444ff9abe23aea268adbb95463561fc222c965052d35d7c950b17be01c3ad82",
-    version = "24.3.4.6",
-    extra_make_opts = ["-j 4"],
-)
-
-erlang_config.internal_erlang_from_github_release(
-    name = "25_0",
-    sha256 = "8fc707f92a124b2aeb0f65dcf9ac8e27b2a305e7bcc4cc1b2fdf770eec0165bf",
-    version = "25.0.4",
-    extra_make_opts = ["-j 4"],
-)
-
-erlang_config.internal_erlang_from_github_release(
-    name = "25_1",
-    sha256 = "1cd2fbe225a412009cda9b1fd9f3fff0293e75e3020daa48abf68721471e91eb",
-    version = "25.1.2.1",
-    extra_make_opts = ["-j 4"],
-)
-
-erlang_config.internal_erlang_from_github_release(
-    name = "25_2",
-    sha256 = "f4d9f11d67ba478a053d72e635a44722a975603fe1284063fdf38276366bc61c",
-    version = "25.2.3",
-    extra_make_opts = ["-j 4"],
-)
-
-erlang_config.internal_erlang_from_github_release(
-    name = "25_3",
-    sha256 = "0a7338415c8eb6ae25664bfd1a10631c293838ef072665223a524831b823a8b7",
-    version = "25.3.2.10",
-    extra_make_opts = ["-j 4"],
-)
-
-erlang_config.internal_erlang_from_github_release(
-    name = "26_1",
-    sha256 = "f1074cf3a54f1f87e66027d5abebab2fa76a0243453fa58bc5f30d0ce0313921",
-    version = "26.1.2",
-    extra_make_opts = ["-j 4"],
-)
-
-erlang_config.internal_erlang_from_github_release(
-    name = "26_2",
-    extra_make_opts = ["-j 4"],
-    sha256 = "de155c4ad9baab2b9e6c96dbd03bf955575a04dd6feee9c08758beb28484c9f6",
-    version = "26.2.5",
-)
-
-erlang_config.internal_erlang_from_http_archive(
-    name = "git_master",
-    strip_prefix = "otp-master",
-    url = "https://github.com/erlang/otp/archive/refs/heads/master.tar.gz",
-    version = "27",
-    extra_make_opts = ["-j 4"],
-)
-
-=======
->>>>>>> a6874e39cc (Turn off BuildBuddy integration (#11343))
 use_repo(
     erlang_config,
     "erlang_config",
