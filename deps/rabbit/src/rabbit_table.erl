@@ -358,6 +358,8 @@ definitions() ->
     end.
 
 mandatory_definitions() ->
+    %% This is exactly where I got the error, in the call to `gm:table_definitions`
+    exit(banana),
     pre_khepri_definitions()
         ++ gm:table_definitions()
         ++ mirrored_supervisor:table_definitions()

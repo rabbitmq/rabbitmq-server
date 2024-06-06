@@ -699,7 +699,6 @@ sync_cluster_task() ->
       Reason :: term().
 
 sync_cluster_task(Nodes) ->
-    exit(banana),
     %% We assume that a feature flag can only be enabled, not disabled.
     %% Therefore this synchronization searches for feature flags enabled on
     %% some nodes but not all, and make sure they are enabled everywhere.
