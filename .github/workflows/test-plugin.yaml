@@ -48,7 +48,7 @@ jobs:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: ${{ matrix.elixir_version }}
     - name: AUTHENTICATE TO GOOGLE CLOUD
-      uses: google-github-actions/auth@v2.1.2
+      uses: google-github-actions/auth@v2.1.3
       with:
         credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
     - name: CONFIGURE BAZEL
