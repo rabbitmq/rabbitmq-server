@@ -101,7 +101,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
         product_version_section ++
         [
           "RabbitMQ version: #{m[:rabbitmq_version]}",
-          "RabbitMQ release series support status: #{m[:release_series_support_status]}",
+          "RabbitMQ release series support status: see https://www.rabbitmq.com/release-information",
           "Node name: #{node_name}",
           "Erlang configuration: #{m[:erlang_version]}",
           "Crypto library: #{m[:crypto_lib_version]}",

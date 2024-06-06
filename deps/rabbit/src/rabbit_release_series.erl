@@ -10,30 +10,16 @@
 -define(EOL_DATE_KEY, release_series_eol_date).
 
 -export([
-  eol_date/0,
   is_currently_supported/0,
   readable_support_status/0
 ]).
 
--spec eol_date() -> rabbit_types:maybe(calendar:date()).
-eol_date() ->
-  case application:get_env(rabbit, ?EOL_DATE_KEY) of
-    undefined                  -> none;
-    {ok, none}                -> none;
-    {ok, {_Y, _M, _D} = Date} -> Date;
-      _                       -> none
-  end.
-
+%% Retained for backwards compatibility with older CLI tools.
 -spec is_currently_supported() -> boolean().
 is_currently_supported() ->
-  case eol_date() of
-    none -> true;
-    Date -> not rabbit_date_time:is_in_the_past(Date)
-  end.
+  true.
 
+%% Retained for backwards compatibility with older CLI tools.
 -spec readable_support_status() -> binary().
 readable_support_status() ->
-    case is_currently_supported() of
-      false -> <<"out of support">>;
-      _     -> <<"supported">>
-  end.
+  <<"supported">>.
