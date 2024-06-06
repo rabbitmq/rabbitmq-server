@@ -154,7 +154,968 @@ jobs:
           --verbose_failures
   summary-mixed-versions:
     needs:
+<<<<<<< HEAD
     - test-mixed-versions
+=======
+    - check-workflow
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbit
+      shard_index: 0
+      shard_count: 10
+    secrets: inherit
+  test-rabbit-1:
+    needs:
+    - check-workflow
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbit
+      shard_index: 1
+      shard_count: 10
+    secrets: inherit
+  test-rabbit-2:
+    needs:
+    - check-workflow
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbit
+      shard_index: 2
+      shard_count: 10
+    secrets: inherit
+  test-rabbit-3:
+    needs:
+    - check-workflow
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbit
+      shard_index: 3
+      shard_count: 10
+    secrets: inherit
+  test-rabbit-4:
+    needs:
+    - check-workflow
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbit
+      shard_index: 4
+      shard_count: 10
+    secrets: inherit
+  test-rabbit-5:
+    needs:
+    - check-workflow
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbit
+      shard_index: 5
+      shard_count: 10
+    secrets: inherit
+  test-rabbit-6:
+    needs:
+    - check-workflow
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbit
+      shard_index: 6
+      shard_count: 10
+    secrets: inherit
+  test-rabbit-7:
+    needs:
+    - check-workflow
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbit
+      shard_index: 7
+      shard_count: 10
+    secrets: inherit
+  test-rabbit-8:
+    needs:
+    - check-workflow
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbit
+      shard_index: 8
+      shard_count: 10
+    secrets: inherit
+  test-rabbit-9:
+    needs:
+    - check-workflow
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbit
+      shard_index: 9
+      shard_count: 10
+    secrets: inherit
+  test-rabbitmq_cli:
+    needs: check-workflow
+    uses: ./.github/workflows/test-plugin.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_cli
+    secrets: inherit
+  test-rabbitmq_amqp_client:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_amqp_client
+    secrets: inherit
+  test-rabbitmq_amqp1_0:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_amqp1_0
+    secrets: inherit
+  test-rabbitmq_auth_backend_cache:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_auth_backend_cache
+    secrets: inherit
+  test-rabbitmq_auth_backend_http:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_auth_backend_http
+    secrets: inherit
+  test-rabbitmq_auth_backend_ldap:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_auth_backend_ldap
+    secrets: inherit
+  test-rabbitmq_auth_backend_oauth2:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_auth_backend_oauth2
+    secrets: inherit
+  test-rabbitmq_auth_mechanism_ssl:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_auth_mechanism_ssl
+    secrets: inherit
+  test-rabbitmq_aws:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_aws
+    secrets: inherit
+  test-rabbitmq_consistent_hash_exchange:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_consistent_hash_exchange
+    secrets: inherit
+  test-rabbitmq_event_exchange:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_event_exchange
+    secrets: inherit
+  test-rabbitmq_federation:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_federation
+    secrets: inherit
+  test-rabbitmq_federation_management:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_federation_management
+    secrets: inherit
+  test-rabbitmq_jms_topic_exchange:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_jms_topic_exchange
+    secrets: inherit
+  test-rabbitmq_management:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_management
+    secrets: inherit
+  test-rabbitmq_management_agent:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_management_agent
+    secrets: inherit
+  test-rabbitmq_mqtt:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_mqtt
+    secrets: inherit
+  test-rabbitmq_peer_discovery_aws:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_peer_discovery_aws
+    secrets: inherit
+  test-rabbitmq_peer_discovery_common:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_peer_discovery_common
+    secrets: inherit
+  test-rabbitmq_peer_discovery_consul:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_peer_discovery_consul
+    secrets: inherit
+  test-rabbitmq_peer_discovery_etcd:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_peer_discovery_etcd
+    secrets: inherit
+  test-rabbitmq_peer_discovery_k8s:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_peer_discovery_k8s
+    secrets: inherit
+  test-rabbitmq_prelaunch:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_prelaunch
+    secrets: inherit
+  test-rabbitmq_prometheus:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_prometheus
+    secrets: inherit
+  test-rabbitmq_random_exchange:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_random_exchange
+    secrets: inherit
+  test-rabbitmq_recent_history_exchange:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_recent_history_exchange
+    secrets: inherit
+  test-rabbitmq_sharding:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_sharding
+    secrets: inherit
+  test-rabbitmq_shovel:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_shovel
+    secrets: inherit
+  test-rabbitmq_shovel_management:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_shovel_management
+    secrets: inherit
+  test-rabbitmq_stomp:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_stomp
+    secrets: inherit
+  test-rabbitmq_stream:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_stream
+    secrets: inherit
+  test-rabbitmq_stream_management:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_stream_management
+    secrets: inherit
+  test-rabbitmq_top:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_top
+    secrets: inherit
+  test-rabbitmq_tracing:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_tracing
+    secrets: inherit
+  test-rabbitmq_trust_store:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_trust_store
+    secrets: inherit
+  test-rabbitmq_web_dispatch:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_web_dispatch
+    secrets: inherit
+  test-rabbitmq_web_mqtt:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_web_mqtt
+    secrets: inherit
+  test-rabbitmq_web_mqtt_examples:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_web_mqtt_examples
+    secrets: inherit
+  test-rabbitmq_web_stomp:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_web_stomp
+    secrets: inherit
+  test-rabbitmq_web_stomp_examples:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_web_stomp_examples
+    secrets: inherit
+  summary-test:
+    needs:
+    - test-amqp10_client
+    - test-amqp10_common
+    - test-amqp_client
+    - test-oauth2_client
+    - test-rabbit_common
+    - test-rabbitmq_ct_client_helpers
+    - test-rabbitmq_ct_helpers
+    - test-rabbitmq_stream_common
+    - test-trust_store_http
+    - test-rabbitmq_amqp_client
+    - test-rabbitmq_amqp1_0
+    - test-rabbitmq_auth_backend_cache
+    - test-rabbitmq_auth_backend_http
+    - test-rabbitmq_auth_backend_ldap
+    - test-rabbitmq_auth_backend_oauth2
+    - test-rabbitmq_auth_mechanism_ssl
+    - test-rabbitmq_aws
+    - test-rabbitmq_consistent_hash_exchange
+    - test-rabbitmq_event_exchange
+    - test-rabbitmq_federation
+    - test-rabbitmq_federation_management
+    - test-rabbitmq_jms_topic_exchange
+    - test-rabbitmq_management
+    - test-rabbitmq_management_agent
+    - test-rabbitmq_mqtt
+    - test-rabbitmq_peer_discovery_aws
+    - test-rabbitmq_peer_discovery_common
+    - test-rabbitmq_peer_discovery_consul
+    - test-rabbitmq_peer_discovery_etcd
+    - test-rabbitmq_peer_discovery_k8s
+    - test-rabbitmq_prelaunch
+    - test-rabbitmq_prometheus
+    - test-rabbitmq_random_exchange
+    - test-rabbitmq_recent_history_exchange
+    - test-rabbitmq_sharding
+    - test-rabbitmq_shovel
+    - test-rabbitmq_shovel_management
+    - test-rabbitmq_stomp
+    - test-rabbitmq_stream
+    - test-rabbitmq_stream_management
+    - test-rabbitmq_top
+    - test-rabbitmq_tracing
+    - test-rabbitmq_trust_store
+    - test-rabbitmq_web_dispatch
+    - test-rabbitmq_web_mqtt
+    - test-rabbitmq_web_mqtt_examples
+    - test-rabbitmq_web_stomp
+    - test-rabbitmq_web_stomp_examples
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    - test-rabbitmq_cli
+>>>>>>> bdd18ed800 (Add back rabbitmq_cli tests to CI)
     runs-on: ubuntu-latest
     steps:
     - name: SUMMARY
