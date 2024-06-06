@@ -117,7 +117,7 @@
                       delivery_tag,
                       %% consumer tag
                       tag,
-                      delivered_at,
+                      delivered_at :: integer(),
                       %% queue name
                       queue,
                       %% message ID used by queue and message store implementations
@@ -1923,10 +1923,10 @@ record_sent(Type, QueueType, Tag, AckRequired,
         false ->
             ok
     end,
-    DeliveredAt = os:system_time(millisecond),
     rabbit_trace:tap_out(Msg, ConnName, ChannelNum, Username, TraceState),
     UAMQ1 = case AckRequired of
                 true ->
+                    DeliveredAt = erlang:monotonic_time(millisecond),
                     ?QUEUE:in(#pending_ack{delivery_tag = DeliveryTag,
                                            tag = Tag,
                                            delivered_at = DeliveredAt,
@@ -2709,7 +2709,7 @@ evaluate_consumer_timeout(State = #ch{unacked_message_q = UAMQ}) ->
 
 evaluate_consumer_timeout1(PA = #pending_ack{delivered_at = Time},
                            State) ->
-    Now = os:system_time(millisecond),
+    Now = erlang:monotonic_time(millisecond),
     case get_consumer_timeout(PA, State) of
         Timeout when is_integer(Timeout)
                      andalso Time < Now - Timeout ->
