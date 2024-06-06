@@ -146,7 +146,9 @@ _APP_ENV = """[
         %% EOL date for the current release series, if known/announced
 		{release_series_eol_date, none},
 
-		{vhost_process_reconciliation_run_interval, 30}
+		{vhost_process_reconciliation_run_interval, 30},
+        %% for testing
+        {vhost_process_reconciliation_enabled, true}
 	  ]
 """
 
