@@ -67,7 +67,11 @@ create_n_node_cluster(Config0, NumNodes) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config0, [{rmq_nodes_count, NumNodes},
                           {rmq_nodes_clustered, true}]),
-    rabbit_ct_helpers:run_steps(Config1,
+    Config2 = rabbit_ct_helpers:merge_app_env(
+        Config1, {rabbit, [
+            {vhost_process_reconciliation_enabled, false}
+        ]}),
+    rabbit_ct_helpers:run_steps(Config2,
                                 rabbit_ct_broker_helpers:setup_steps() ++
                                 rabbit_ct_client_helpers:setup_steps()).
 
@@ -100,9 +104,12 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(list_queues_stopped, Config0) ->
-    %% Start node 3 to crash it's queues
+    %% Start node 3 to kill a few virtual hosts on it
     rabbit_ct_broker_helpers:start_node(Config0, 2),
-    %% Make vhost "down" on nodes 2 and 3
+    %% Disable virtual host reconciliation
+    rabbit_ct_broker_helpers:rpc(Config0, 1, rabbit_vhosts, disable_reconciliation, []),
+    rabbit_ct_broker_helpers:rpc(Config0, 2, rabbit_vhosts, disable_reconciliation, []),
+    %% Terminate default virtual host's processes on nodes 2 and 3
     ok = rabbit_ct_broker_helpers:force_vhost_failure(Config0, 1, <<"/">>),
     ok = rabbit_ct_broker_helpers:force_vhost_failure(Config0, 2, <<"/">>),
 
@@ -118,6 +125,7 @@ end_per_testcase(Testcase, Config0) ->
 %%----------------------------------------------------------------------------
 %% Test cases
 %%----------------------------------------------------------------------------
+
 list_queues_local(Config) ->
     Node1Queues = lists:nth(1, ?config(per_node_queues, Config)),
     Node2Queues = lists:nth(2, ?config(per_node_queues, Config)),
@@ -147,9 +155,9 @@ list_queues_stopped(Config) ->
 
     Expected =
         lists:sort([ {Q, <<"running">>} || Q <- Node1Queues ] ++
-                       %% Node is running. Vhost is down
+                       %% Node is running but virtual host is down with reconciliation disabled
                        [ {Q, <<"stopped">>} || Q <- Node2Queues ] ++
-                       %% Node is not running. Vhost is down
+                       %% Node is not running
                        [ {Q, <<"down">>} || Q <- Node3Queues ]),
 
     ?awaitMatch(

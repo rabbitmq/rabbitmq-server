@@ -19,6 +19,9 @@
     boot/0,
     reconcile/0,
     reconcile_once/0,
+    is_reconciliation_enabled/0,
+    disable_reconciliation/0,
+    enable_reconciliation/0,
     start_processes_for_all/0,
     start_on_all_nodes/2,
     on_node_up/1
@@ -37,7 +40,10 @@ list_names() -> rabbit_db_vhost:list().
 boot() ->
     _ = start_processes_for_all(),
     _ = increment_run_counter(),
-    _ = maybe_start_timer(reconcile),
+    _ = case is_reconciliation_enabled() of
+        false -> ok;
+        true -> maybe_start_timer(reconcile)
+    end,
     ok.
 
 %% Performs a round of virtual host process reconciliation and sets up a timer to
@@ -45,9 +51,13 @@ boot() ->
 %% See start_processes_for_all/1.
 -spec reconcile() -> 'ok'.
 reconcile() ->
-    _ = reconcile_once(),
-    _ = maybe_start_timer(?FUNCTION_NAME),
-    ok.
+    case is_reconciliation_enabled() of
+        false -> ok;
+        true  ->
+            _ = reconcile_once(),
+            _ = maybe_start_timer(?FUNCTION_NAME),
+            ok
+    end.
 
 %% Performs a round of virtual host process reconciliation but does not schedule any future runs.
 %% See start_processes_for_all/1.
@@ -62,11 +72,33 @@ reconcile_once() ->
 
 -spec on_node_up(Node :: node()) -> 'ok'.
 on_node_up(_Node) ->
-    DelayInSeconds = 10,
-    Delay = DelayInSeconds * 1000,
-    rabbit_log:debug("Will reschedule virtual host process reconciliation after ~b seconds", [DelayInSeconds]),
-    _ = timer:apply_after(Delay, ?MODULE, reconcile_once, []),
-    ok.
+    case is_reconciliation_enabled() of
+        false -> ok;
+        true  ->
+            DelayInSeconds = 10,
+            Delay = DelayInSeconds * 1000,
+            rabbit_log:debug("Will reschedule virtual host process reconciliation after ~b seconds", [DelayInSeconds]),
+            timer:apply_after(Delay, ?MODULE, reconcile_once, []),
+            ok
+    end.
+
+-spec is_reconciliation_enabled() -> boolean().
+is_reconciliation_enabled() ->
+    application:get_env(rabbit, vhost_process_reconciliation_enabled, true).
+
+-spec enable_reconciliation() -> 'ok'.
+enable_reconciliation() ->
+    %% reset the auto-stop counter
+    persistent_term:put(?PERSISTENT_TERM_COUNTER_KEY, 0),
+    application:set_env(rabbit, vhost_process_reconciliation_enabled, true).
+
+-spec disable_reconciliation() -> 'ok'.
+disable_reconciliation() ->
+    application:set_env(rabbit, vhost_process_reconciliation_enabled, false).
+
+-spec reconciliation_interval() -> non_neg_integer().
+reconciliation_interval() ->
+    application:get_env(rabbit, vhost_process_reconciliation_run_interval, 30).
 
 %% Starts a virtual host process on every specified nodes.
 %% Only exists to allow for "virtual host process repair"
@@ -117,14 +149,18 @@ increment_run_counter() ->
 -spec maybe_start_timer(atom()) -> ok | {ok, timer:tref()} | {error, any()}.
 maybe_start_timer(FunName) ->
     N = get_run_counter(),
-    DelayInSeconds = application:get_env(rabbit, vhost_process_reconciliation_run_interval, 30),
+    DelayInSeconds = reconciliation_interval(),
     case N >= 10 of
         true ->
             %% Stop after ten runs
             rabbit_log:debug("Will stop virtual host process reconciliation after ~tp runs", [N]),
             ok;
         false ->
-            Delay = DelayInSeconds * 1000,
-            rabbit_log:debug("Will reschedule virtual host process reconciliation after ~b seconds", [DelayInSeconds]),
-            timer:apply_after(Delay, ?MODULE, FunName, [])
+            case is_reconciliation_enabled() of
+                false -> ok;
+                true  ->
+                    Delay = DelayInSeconds * 1000,
+                    rabbit_log:debug("Will reschedule virtual host process reconciliation after ~b seconds", [DelayInSeconds]),
+                    timer:apply_after(Delay, ?MODULE, FunName, [])
+            end
     end.
