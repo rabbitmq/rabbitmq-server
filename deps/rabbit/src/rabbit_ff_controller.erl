@@ -273,8 +273,20 @@ waiting_for_end_of_controller_task(
 
 updating_feature_flag_states(
   internal, Task, #?MODULE{from = From} = Data) ->
-    Reply = proceed_with_task(Task),
-
+    Reply = try
+                %% If this just exits with an error, the process
+                %% gets blocked on terminate while executing
+                %% wait_for_in_flight_operations. There is no
+                %% trace or log whatsoever of which has been the issue
+                proceed_with_task(Task)
+            catch
+                _:Reason:Stacktrace ->
+                    ?LOG_ERROR(
+                       "Feature flags: task ~p failed with reason ~0p "
+                       "and stacktrace ~0p", [Task, Reason, Stacktrace],
+                       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+                    {error, Reason}
+            end,
     ?LOG_DEBUG(
        "Feature flags: unregistering controller globally",
        [],
