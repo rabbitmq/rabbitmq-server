@@ -45,7 +45,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/11, start_link/12, do/2, do/3, do_flow/3, flush/1, shutdown/1]).
--export([send_command/2, deliver_reply/2]).
+-export([send_command/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1,
          emit_info_all/4, info_local/1]).
 -export([refresh_config_local/0, ready_for_close/1]).
@@ -158,7 +158,7 @@
              %% rejected but are yet to be sent to the client
              rejected,
              %% used by "one shot RPC" (amq.
-             reply_consumer,
+             reply_consumer :: none | {rabbit_types:ctag(), binary(), binary()},
              delivery_flow, %% Deprecated since removal of CMQ in 4.0
              interceptor_state,
              queue_states,
@@ -1210,8 +1210,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
             Message = rabbit_message_interceptor:intercept(Message0),
             check_user_id_header(Message, User),
             QNames = rabbit_exchange:route(Exchange, Message, #{return_binding_keys => true}),
-            [rabbit_channel:deliver_reply(RK, Message) ||
-             {virtual_reply_queue, RK} <- QNames],
+            [deliver_reply(RK, Message) || {virtual_reply_queue, RK} <- QNames],
             Queues = rabbit_amqqueue:lookup_many(QNames),
             rabbit_trace:tap_in(Message, QNames, ConnName, ChannelNum,
                                 Username, TraceState),
