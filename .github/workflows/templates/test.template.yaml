@@ -1,0 +1,148 @@
+#@ load("@ytt:data", "data")
+#@yaml/text-templated-strings
+
+#@ def job_names(plugins):
+#@   names = []
+#@   for p in plugins:
+#@     names.append("test-"+p)
+#@   end
+#@   return names
+#@ end
+
+#@ def sharded_job_names(plugin, shard_count):
+#@   names = []
+#@   for shard_index in range(0, shard_count):
+#@     names.append("test-"+plugin+"-"+str(shard_index))
+#@   end
+#@   return names
+#@ end
+
+---
+name: Test
+on:
+  push:
+    branches:
+      - main
+      - v3.13.x
+      - v3.12.x
+      - v3.11.x
+      - bump-otp-for-oci
+      - bump-rbe-*
+      - bump-rules_erlang
+    paths:
+      - 'deps/**'
+      - 'scripts/**'
+      - Makefile
+      - plugins.mk
+      - rabbitmq-components.mk
+      - .bazelrc
+      - .bazelversion
+      - BUILD.*
+      - '*.bzl'
+      - '*.bazel'
+      - .github/workflows/test.yaml
+  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  check-workflow:
+    runs-on: ubuntu-latest
+    outputs:
+      repo_cache_key: ${{ steps.repo-cache-key.outputs.value }}
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v4
+    - name: SETUP ERLANG/ELIXIR
+      uses: erlef/setup-beam@v1
+      with:
+        otp-version: 26
+        elixir-version: 1.15
+    - name: ENSURE WORKFLOWS ARE UP TO DATE
+      run: |
+        mkdir local-bin/
+        curl -L https://carvel.dev/install.sh | K14SIO_INSTALL_BIN_DIR=local-bin bash
+        make actions-workflows YTT=$PWD/local-bin/ytt
+        git diff --exit-code
+    - name: COMPUTE REPO CACHE KEY
+      id: repo-cache-key
+      run: |
+        echo "value=bazel-repo-cache-${{ hashFiles('MODULE.bazel') }}" | tee -a $GITHUB_OUTPUT
+    - name: AUTHENTICATE TO GOOGLE CLOUD
+      uses: google-github-actions/auth@v2.1.2
+      with:
+        credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
+    - name: REPO CACHE
+      id: cache
+      uses: actions/cache@v4
+      with:
+        key: ${{ steps.repo-cache-key.outputs.value }}
+        path: /home/runner/repo-cache/
+    - name: PRIME CACHE
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: |
+        if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME }}" ]; then
+        cat << EOF >> user.bazelrc
+          build --remote_cache=https://storage.googleapis.com/${{ secrets.REMOTE_CACHE_BUCKET_NAME }}
+          build --google_default_credentials
+        EOF
+        fi
+        cat << EOF >> user.bazelrc
+          build --repository_cache=/home/runner/repo-cache/
+          build --color=yes
+        EOF
+
+        bazelisk cquery \
+          'tests(//...) except attr("tags", "manual|mixed-version-cluster", //deps/...)' \
+          --output=label
+
+#@ for plugin in data.values.internal_deps:
+  test-(@= plugin @):
+    needs: check-workflow
+    uses: ./.github/workflows/test-plugin.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: #@ plugin
+    secrets: inherit
+#@ end
+
+#@ rabbit_shard_count = 10
+#@ for shard_index in range(0, rabbit_shard_count):
+  test-rabbit-(@= str(shard_index) @):
+    needs: #@ ["check-workflow"] + job_names(data.values.internal_deps)
+    uses: ./.github/workflows/test-plugin.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbit
+      shard_index: #@ shard_index
+      shard_count: #@ rabbit_shard_count
+    secrets: inherit
+#@ end
+
+  test-rabbitmq_cli:
+    needs: check-workflow
+    uses: ./.github/workflows/test-plugin.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_cli
+    secrets: inherit
+
+#@ for plugin in data.values.tier1_plugins:
+  test-(@= plugin @):
+    needs: #@ ["check-workflow"] + sharded_job_names("rabbit", rabbit_shard_count)
+    uses: ./.github/workflows/test-plugin.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: #@ plugin
+    secrets: inherit
+#@ end
+
+  summary-test:
+    needs: #@ job_names(data.values.internal_deps + data.values.tier1_plugins) + sharded_job_names("rabbit", rabbit_shard_count) + ["test-rabbitmq_cli"]
+    runs-on: ubuntu-latest
+    steps:
+    - name: SUMMARY
+      run: |
+        cat << 'EOF' | jq -e 'map(.result == "success") | all(.)'
+        ${{ toJson(needs) }}
+        EOF
