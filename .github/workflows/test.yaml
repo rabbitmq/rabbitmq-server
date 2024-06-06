@@ -328,24 +328,6 @@ jobs:
       shard_index: 9
       shard_count: 10
     secrets: inherit
-  test-rabbitmq_amqp_client:
-    needs:
-    - check-workflow
-    - test-rabbit-0
-    - test-rabbit-1
-    - test-rabbit-2
-    - test-rabbit-3
-    - test-rabbit-4
-    - test-rabbit-5
-    - test-rabbit-6
-    - test-rabbit-7
-    - test-rabbit-8
-    - test-rabbit-9
-    uses: ./.github/workflows/test-plugin.yaml
-    with:
-      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
-      plugin: rabbitmq_amqp_client
-    secrets: inherit
   test-rabbitmq_amqp1_0:
     needs:
     - check-workflow
@@ -1041,7 +1023,6 @@ jobs:
     - test-rabbitmq_ct_helpers
     - test-rabbitmq_stream_common
     - test-trust_store_http
-    - test-rabbitmq_amqp_client
     - test-rabbitmq_amqp1_0
     - test-rabbitmq_auth_backend_cache
     - test-rabbitmq_auth_backend_http
