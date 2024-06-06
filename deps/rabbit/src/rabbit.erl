@@ -1255,20 +1255,6 @@ print_banner() ->
               LogLocations ++
               CfgLocations).
 
-<<<<<<< HEAD
-maybe_warn_about_release_series_eol() ->
-    case rabbit_release_series:is_currently_supported() of
-        false ->
-            %% we intentionally log this as an error for increased visibiity
-            ?LOG_ERROR("This release series has reached end of life "
-                       "and is no longer supported. "
-                       "Please visit https://rabbitmq.com/versions.html "
-                       "to learn more and upgrade");
-        _ -> ok
-    end.
-
-=======
->>>>>>> 53c67ce45b (rabbitmq-diagnostics status: drop date-based support status field)
 emu_flavor() ->
     %% emu_flavor was introduced in Erlang 24 so we need to catch the error on Erlang 23
     case catch(erlang:system_info(emu_flavor)) of

@@ -22,11 +22,4 @@ is_currently_supported() ->
 %% Retained for backwards compatibility with older CLI tools.
 -spec readable_support_status() -> binary().
 readable_support_status() ->
-<<<<<<< HEAD
-    case is_currently_supported() of
-      false -> <<"out of support">>;
-      _     -> <<"supported">>
-  end.
-=======
-  <<"supported">>.
->>>>>>> 53c67ce45b (rabbitmq-diagnostics status: drop date-based support status field)
+  <<"out of support">>.
