@@ -92,7 +92,9 @@
                   seq :: option(msg_seqno()),
                   msg :: raw_msg()}).
 -record(?ENQ_V2, {seq :: option(msg_seqno()),
-                  msg :: raw_msg()}).
+                  msg :: raw_msg(),
+                  size :: {MetadataSize :: non_neg_integer(),
+                           PayloadSize :: non_neg_integer()}}).
 -record(requeue, {consumer_key :: consumer_key(),
                   msg_id :: msg_id(),
                   index :: ra:index(),
@@ -208,10 +210,10 @@ update_config(Conf, State) ->
     {state(), ra_machine:reply()}.
 apply(Meta, #enqueue{pid = From, seq = Seq,
                      msg = RawMsg}, State00) ->
-    apply_enqueue(Meta, From, Seq, RawMsg, State00);
+    apply_enqueue(Meta, From, Seq, RawMsg, message_size(RawMsg), State00);
 apply(#{reply_mode := {notify, _Corr, EnqPid}} = Meta,
-      #?ENQ_V2{seq = Seq, msg = RawMsg}, State00) ->
-    apply_enqueue(Meta, EnqPid, Seq, RawMsg, State00);
+      #?ENQ_V2{seq = Seq, msg = RawMsg, size = Size}, State00) ->
+    apply_enqueue(Meta, EnqPid, Seq, RawMsg, Size, State00);
 apply(_Meta, #register_enqueuer{pid = Pid},
       #?STATE{enqueuers = Enqueuers0,
               cfg = #cfg{overflow_strategy = Overflow}} = State0) ->
@@ -1589,8 +1591,9 @@ maybe_return_all(#{system_time := Ts} = Meta, ConsumerKey,
     end.
 
 apply_enqueue(#{index := RaftIdx,
-                system_time := Ts} = Meta, From, Seq, RawMsg, State0) ->
-    case maybe_enqueue(RaftIdx, Ts, From, Seq, RawMsg, [], State0) of
+                system_time := Ts} = Meta, From,
+              Seq, RawMsg, Size, State0) ->
+    case maybe_enqueue(RaftIdx, Ts, From, Seq, RawMsg, Size, [], State0) of
         {ok, State1, Effects1} ->
             {State, ok, Effects} = checkout(Meta, State0, State1, Effects1),
             {maybe_store_release_cursor(RaftIdx, State), ok, Effects};
@@ -1669,13 +1672,14 @@ maybe_store_release_cursor(RaftIdx,
 maybe_store_release_cursor(_RaftIdx, State) ->
     State.
 
-maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg, Effects,
-              #?STATE{msg_bytes_enqueue = Enqueue,
-                      enqueue_count = EnqCount,
-                      messages = Messages,
-                      messages_total = Total} = State0) ->
+maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg,
+              {_MetaSize, BodySize},
+              Effects, #?STATE{msg_bytes_enqueue = Enqueue,
+                               enqueue_count = EnqCount,
+                               messages = Messages,
+                               messages_total = Total} = State0) ->
     % direct enqueue without tracking
-    Size = message_size(RawMsg),
+    Size = BodySize,
     Header = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
     Msg = ?MSG(RaftIdx, Header),
     PTag = priority_tag(RawMsg),
@@ -1685,23 +1689,24 @@ maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg, Effects,
                           messages = rabbit_fifo_q:in(PTag, Msg, Messages)
                          },
     {ok, State, Effects};
-maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg, Effects0,
-              #?STATE{msg_bytes_enqueue = Enqueue,
-                      enqueue_count = EnqCount,
-                      enqueuers = Enqueuers0,
-                      messages = Messages,
-                      messages_total = Total} = State0) ->
+maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
+              {_MetaSize, BodySize} = Size,
+              Effects0, #?STATE{msg_bytes_enqueue = Enqueue,
+                                enqueue_count = EnqCount,
+                                enqueuers = Enqueuers0,
+                                messages = Messages,
+                                messages_total = Total} = State0) ->
 
     case maps:get(From, Enqueuers0, undefined) of
         undefined ->
             State1 = State0#?STATE{enqueuers = Enqueuers0#{From => #enqueuer{}}},
             {Res, State, Effects} = maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo,
-                                                  RawMsg, Effects0, State1),
+                                                  RawMsg, Size, Effects0,
+                                                  State1),
             {Res, State, [{monitor, process, From} | Effects]};
         #enqueuer{next_seqno = MsgSeqNo} = Enq0 ->
             % it is the next expected seqno
-            Size = message_size(RawMsg),
-            Header = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
+            Header = maybe_set_msg_ttl(RawMsg, Ts, BodySize, State0),
             Msg = ?MSG(RaftIdx, Header),
             Enq = Enq0#enqueuer{next_seqno = MsgSeqNo + 1},
             MsgCache = case can_immediately_deliver(State0) of
@@ -1711,7 +1716,7 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg, Effects0,
                                undefined
                        end,
             PTag = priority_tag(RawMsg),
-            State = State0#?STATE{msg_bytes_enqueue = Enqueue + Size,
+            State = State0#?STATE{msg_bytes_enqueue = Enqueue + BodySize,
                                   enqueue_count = EnqCount + 1,
                                   messages_total = Total + 1,
                                   messages = rabbit_fifo_q:in(PTag, Msg, Messages),
@@ -2455,7 +2460,9 @@ make_enqueue(Pid, Seq, Msg) ->
         true when is_pid(Pid) andalso
                   is_integer(Seq) ->
             %% more compact format
-            #?ENQ_V2{seq = Seq, msg = Msg};
+            #?ENQ_V2{seq = Seq,
+                     msg = Msg,
+                     size = mc:size(Msg)};
         _ ->
             #enqueue{pid = Pid, seq = Seq, msg = Msg}
     end.
@@ -2533,11 +2540,11 @@ message_size(B) when is_binary(B) ->
 message_size(Msg) ->
     case mc:is(Msg) of
         true ->
-            {_, PayloadSize} = mc:size(Msg),
-            PayloadSize;
+            mc:size(Msg);
         false ->
             %% probably only hit this for testing so ok to use erts_debug
-            erts_debug:size(Msg)
+            {0, erts_debug:size(Msg)}
+
     end.
 
 
