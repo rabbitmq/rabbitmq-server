@@ -119,6 +119,14 @@ jobs:
     secrets: inherit
 #@ end
 
+  test-rabbitmq_cli:
+    needs: check-workflow
+    uses: ./.github/workflows/test-plugin.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_cli
+    secrets: inherit
+
 #@ for plugin in data.values.tier1_plugins:
   test-(@= plugin @):
     needs: #@ ["check-workflow"] + sharded_job_names("rabbit", rabbit_shard_count)
@@ -130,7 +138,7 @@ jobs:
 #@ end
 
   summary-test:
-    needs: #@ job_names(data.values.internal_deps + data.values.tier1_plugins) + sharded_job_names("rabbit", rabbit_shard_count)
+    needs: #@ job_names(data.values.internal_deps + data.values.tier1_plugins) + sharded_job_names("rabbit", rabbit_shard_count) + ["test-rabbitmq_cli"]
     runs-on: ubuntu-latest
     steps:
     - name: SUMMARY
