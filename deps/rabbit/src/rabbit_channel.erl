@@ -306,10 +306,14 @@ send_command(Pid, Msg) ->
 
 
 -spec deliver_reply(binary(), mc:state()) -> 'ok'.
-deliver_reply(RoutingKey, BasicMsg = #basic_message{}) ->
-    %% 3.12 nodes expect a #delivery{}
-    deliver_reply(RoutingKey, #delivery{message = BasicMsg});
-deliver_reply(<<"amq.rabbitmq.reply-to.", EncodedBin/binary>>, Message) ->
+deliver_reply(<<"amq.rabbitmq.reply-to.", EncodedBin/binary>>, Message0) ->
+    Message = case rabbit_feature_flags:is_enabled(message_containers) of
+                  true ->
+                      Message0;
+                  false ->
+                      %% 3.12 nodes expect a #delivery{}
+                      #delivery{message = Message0}
+              end,
     case rabbit_direct_reply_to:decode_reply_to_v2(EncodedBin,
                                                    rabbit_nodes:all_running_with_hashes()) of
         {ok, Pid, Key} ->
@@ -333,8 +337,7 @@ deliver_reply_v1(EncodedBin, Message) ->
 %% We want to ensure people can't use this mechanism to send a message
 %% to an arbitrary process and kill it!
 
--spec deliver_reply_local(pid(), binary(), mc:state()) -> 'ok'.
-
+-spec deliver_reply_local(pid(), binary(), mc:state() | rabbit_types:delivery()) -> ok.
 deliver_reply_local(Pid, Key, #delivery{message = BasicMsg}) ->
     %% Backward compat clause when feature flag message_containers is disabled.
     %% 3.12 nodes send us a #delivery{}.
