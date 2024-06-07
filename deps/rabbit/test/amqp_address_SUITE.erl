@@ -391,16 +391,19 @@ target_per_message_unset_to_address(Config) ->
     ok = wait_for_credit(Sender),
 
     %% Send message with 'to' unset.
-    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<0>>, <<0>>)),
-    receive
-        {amqp10_event,
-         {session, Session,
-          {ended,
-           #'v1_0.error'{
-              condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
-              description = {utf8, <<"anonymous terminus requires 'to' address to be set">>}}}}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    DTag = <<1>>,
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag, <<0>>)),
+    ok = wait_for_settled(released, DTag),
+    receive {amqp10_event,
+             {link, Sender,
+              {detached,
+               #'v1_0.error'{
+                  condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+                  description = {utf8, <<"anonymous terminus requires 'to' address to be set">>}}}}} -> ok
+    after 5000 -> ct:fail("server did not close our outgoing link")
     end,
+
+    ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
 
 bad_v2_addresses() ->
@@ -436,17 +439,20 @@ target_per_message_bad_to_address0(Address, Config) ->
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, null),
     ok = wait_for_credit(Sender),
 
-    Msg = amqp10_msg:set_properties(#{to => Address}, amqp10_msg:new(<<0>>, <<0>>)),
+    DTag = <<255>>,
+    Msg = amqp10_msg:set_properties(#{to => Address}, amqp10_msg:new(DTag, <<0>>)),
     ok = amqp10_client:send_msg(Sender, Msg),
-    receive
-        {amqp10_event,
-         {session, Session,
-          {ended,
-           #'v1_0.error'{
-              condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
-              description = {utf8, <<"bad 'to' address", _Rest/binary>>}}}}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE, Address})
+    ok = wait_for_settled(released, DTag),
+    receive {amqp10_event,
+             {link, Sender,
+              {detached,
+               #'v1_0.error'{
+                  condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+                  description = {utf8, <<"bad 'to' address", _Rest/binary>>}}}}} -> ok
+    after 5000 -> ct:fail("server did not close our outgoing link")
     end,
+
+    ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
 
 target_per_message_exchange_absent(Config) ->
