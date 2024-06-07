@@ -144,7 +144,11 @@ _APP_ENV = """[
         {dead_letter_worker_publisher_confirm_timeout, 180000},
 
         %% EOL date for the current release series, if known/announced
-		{release_series_eol_date, none}
+		{release_series_eol_date, none},
+
+		{vhost_process_reconciliation_run_interval, 30},
+        %% for testing
+        {vhost_process_reconciliation_enabled, true}
 	  ]
 """
 
@@ -1256,6 +1260,10 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_clustering_utils_beam",
     ],
+)
+
+rabbitmq_integration_suite(
+    name = "amqpl_direct_reply_to_SUITE",
 )
 
 assert_suites()

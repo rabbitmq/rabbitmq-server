@@ -45,7 +45,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/11, start_link/12, do/2, do/3, do_flow/3, flush/1, shutdown/1]).
--export([send_command/2, deliver_reply/2]).
+-export([send_command/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1,
          emit_info_all/4, info_local/1]).
 -export([refresh_config_local/0, ready_for_close/1]).
@@ -126,7 +126,7 @@
                       delivery_tag,
                       %% consumer tag
                       tag,
-                      delivered_at,
+                      delivered_at :: integer(),
                       %% queue name
                       queue,
                       %% message ID used by queue and message store implementations
@@ -167,7 +167,7 @@
              %% rejected but are yet to be sent to the client
              rejected,
              %% used by "one shot RPC" (amq.
-             reply_consumer,
+             reply_consumer :: none | {rabbit_types:ctag(), binary(), binary()},
              %% flow | noflow, see rabbitmq-server#114
              delivery_flow,
              interceptor_state,
@@ -306,7 +306,14 @@ send_command(Pid, Msg) ->
 
 
 -spec deliver_reply(binary(), mc:state()) -> 'ok'.
-deliver_reply(<<"amq.rabbitmq.reply-to.", EncodedBin/binary>>, Message) ->
+deliver_reply(<<"amq.rabbitmq.reply-to.", EncodedBin/binary>>, Message0) ->
+    Message = case rabbit_feature_flags:is_enabled(message_containers) of
+                  true ->
+                      Message0;
+                  false ->
+                      %% 3.12 nodes expect a #delivery{}
+                      #delivery{message = Message0}
+              end,
     case rabbit_direct_reply_to:decode_reply_to_v2(EncodedBin,
                                                    rabbit_nodes:all_running_with_hashes()) of
         {ok, Pid, Key} ->
@@ -330,8 +337,11 @@ deliver_reply_v1(EncodedBin, Message) ->
 %% We want to ensure people can't use this mechanism to send a message
 %% to an arbitrary process and kill it!
 
--spec deliver_reply_local(pid(), binary(), mc:state()) -> 'ok'.
-
+-spec deliver_reply_local(pid(), binary(), mc:state() | rabbit_types:delivery()) -> ok.
+deliver_reply_local(Pid, Key, #delivery{message = BasicMsg}) ->
+    %% Backward compat clause when feature flag message_containers is disabled.
+    %% 3.12 nodes send us a #delivery{}.
+    deliver_reply_local(Pid, Key, BasicMsg);
 deliver_reply_local(Pid, Key, Message) ->
     case pg_local:in_group(rabbit_channels, Pid) of
         true  -> gen_server2:cast(Pid, {deliver_reply, Key, Message});
@@ -1269,8 +1279,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         {ok, Message0} ->
             Message = rabbit_message_interceptor:intercept(Message0),
             QNames = rabbit_exchange:route(Exchange, Message, #{return_binding_keys => true}),
-            [rabbit_channel:deliver_reply(RK, Message) ||
-             {virtual_reply_queue, RK} <- QNames],
+            [deliver_reply(RK, Message) || {virtual_reply_queue, RK} <- QNames],
             Queues = rabbit_amqqueue:lookup_many(QNames),
             rabbit_trace:tap_in(Message, QNames, ConnName, ChannelNum,
                                 Username, TraceState),
@@ -1985,10 +1994,10 @@ record_sent(Type, QueueType, Tag, AckRequired,
         false ->
             ok
     end,
-    DeliveredAt = os:system_time(millisecond),
     rabbit_trace:tap_out(Msg, ConnName, ChannelNum, Username, TraceState),
     UAMQ1 = case AckRequired of
                 true ->
+                    DeliveredAt = erlang:monotonic_time(millisecond),
                     ?QUEUE:in(#pending_ack{delivery_tag = DeliveryTag,
                                            tag = Tag,
                                            delivered_at = DeliveredAt,
@@ -2778,7 +2787,7 @@ evaluate_consumer_timeout(State = #ch{unacked_message_q = UAMQ}) ->
 
 evaluate_consumer_timeout1(PA = #pending_ack{delivered_at = Time},
                            State) ->
-    Now = os:system_time(millisecond),
+    Now = erlang:monotonic_time(millisecond),
     case get_consumer_timeout(PA, State) of
         Timeout when is_integer(Timeout)
                      andalso Time < Now - Timeout ->

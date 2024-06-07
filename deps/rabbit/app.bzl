@@ -237,6 +237,7 @@ def all_beam_files(name = "all_beam_files"):
             "src/rabbit_vhost_sup.erl",
             "src/rabbit_vhost_sup_sup.erl",
             "src/rabbit_vhost_sup_wrapper.erl",
+            "src/rabbit_vhosts.erl",
             "src/rabbit_vm.erl",
             "src/supervised_lifecycle.erl",
             "src/tcp_listener.erl",
@@ -499,6 +500,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/rabbit_vhost_sup.erl",
             "src/rabbit_vhost_sup_sup.erl",
             "src/rabbit_vhost_sup_wrapper.erl",
+            "src/rabbit_vhosts.erl",
             "src/rabbit_vm.erl",
             "src/supervised_lifecycle.erl",
             "src/tcp_listener.erl",
@@ -783,6 +785,7 @@ def all_srcs(name = "all_srcs"):
             "src/rabbit_vhost_sup.erl",
             "src/rabbit_vhost_sup_sup.erl",
             "src/rabbit_vhost_sup_wrapper.erl",
+            "src/rabbit_vhosts.erl",
             "src/rabbit_vm.erl",
             "src/supervised_lifecycle.erl",
             "src/tcp_listener.erl",
@@ -2171,4 +2174,13 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "amqpl_direct_reply_to_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/amqpl_direct_reply_to_SUITE.erl"],
+        outs = ["test/amqpl_direct_reply_to_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/amqp_client:erlang_app"],
     )

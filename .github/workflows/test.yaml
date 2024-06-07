@@ -49,7 +49,7 @@ jobs:
       run: |
         echo "value=bazel-repo-cache-${{ hashFiles('MODULE.bazel') }}" | tee -a $GITHUB_OUTPUT
     - name: AUTHENTICATE TO GOOGLE CLOUD
-      uses: google-github-actions/auth@v2.1.2
+      uses: google-github-actions/auth@v2.1.3
       with:
         credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
     - name: REPO CACHE
@@ -327,6 +327,13 @@ jobs:
       plugin: rabbit
       shard_index: 9
       shard_count: 10
+    secrets: inherit
+  test-rabbitmq_cli:
+    needs: check-workflow
+    uses: ./.github/workflows/test-plugin.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_cli
     secrets: inherit
   test-rabbitmq_amqp1_0:
     needs:
@@ -1071,6 +1078,7 @@ jobs:
     - test-rabbit-7
     - test-rabbit-8
     - test-rabbit-9
+    - test-rabbitmq_cli
     runs-on: ubuntu-latest
     steps:
     - name: SUMMARY
