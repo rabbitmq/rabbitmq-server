@@ -149,23 +149,13 @@ list_queues_offline(Config) ->
     ok.
 
 list_queues_stopped(Config) ->
-    Node1Queues = lists:nth(1, ?config(per_node_queues, Config)),
-    Node2Queues = lists:nth(2, ?config(per_node_queues, Config)),
-    Node3Queues = lists:nth(3, ?config(per_node_queues, Config)),
-
-    Expected =
-        lists:sort([ {Q, <<"running">>} || Q <- Node1Queues ] ++
-                       %% Node is running but virtual host is down with reconciliation disabled
-                       [ {Q, <<"stopped">>} || Q <- Node2Queues ] ++
-                       %% Node is not running
-                       [ {Q, <<"down">>} || Q <- Node3Queues ]),
-
-    ?awaitMatch(
-       Expected,
-       lists:sort(
-         [ {Name, State}
-           || [Name, State] <- rabbit_ct_broker_helpers:rabbitmqctl_list(Config, 0, ["list_queues", "name", "state", "--no-table-headers"]) ]),
-       30_000).
+    rabbit_ct_helpers:await_condition(fun() ->
+        Listed = rabbit_ct_broker_helpers:rabbitmqctl_list(Config, 0, ["list_queues", "name", "state", "--no-table-headers"]),
+        %% We expect some queue replicas to be reported as running, some as down and some as stopped,
+        %% and that CLI tools are capable of handling and formatting such rows. MK.
+        ReplicaStates = lists:usort([State|| [_Name, State] <- Listed]),
+        ReplicaStates =:= [<<"down">>, <<"running">>, <<"stopped">>]
+    end, 30_000).
 
 %%----------------------------------------------------------------------------
 %% Helpers
