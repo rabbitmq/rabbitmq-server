@@ -374,14 +374,16 @@ match_user_permissions_in_khepri('_' = _Username, VHostName) ->
           VHostName,
           fun() ->
                   match_user_permissions_in_khepri_tx(?KHEPRI_WILDCARD_STAR, VHostName)
-          end));
+          end),
+        ro);
 match_user_permissions_in_khepri(Username, '_' = _VHostName) ->
     rabbit_khepri:transaction(
         with_fun_in_khepri_tx(
           Username,
           fun() ->
                   match_user_permissions_in_khepri_tx(Username, ?KHEPRI_WILDCARD_STAR)
-          end));
+          end),
+        ro);
 match_user_permissions_in_khepri(Username, VHostName) ->
     rabbit_khepri:transaction(
         with_fun_in_khepri_tx(
@@ -390,7 +392,8 @@ match_user_permissions_in_khepri(Username, VHostName) ->
             VHostName,
             fun() ->
                     match_user_permissions_in_khepri_tx(Username, VHostName)
-            end))).
+            end)),
+        ro).
 
 match_user_permissions_in_khepri_tx(Username, VHostName) ->
     Path = khepri_user_permission_path(Username, VHostName),
@@ -739,7 +742,7 @@ match_topic_permissions_in_khepri('_' = _Username, '_' = _VHostName, ExchangeNam
       fun() ->
               match_topic_permissions_in_khepri_tx(
                 ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR, any(ExchangeName))
-      end);
+      end, ro);
 match_topic_permissions_in_khepri('_' = _Username, VHostName, ExchangeName) ->
     rabbit_khepri:transaction(
         rabbit_db_vhost:with_fun_in_khepri_tx(
@@ -747,7 +750,8 @@ match_topic_permissions_in_khepri('_' = _Username, VHostName, ExchangeName) ->
           fun() ->
                   match_topic_permissions_in_khepri_tx(
                     ?KHEPRI_WILDCARD_STAR, VHostName, any(ExchangeName))
-          end));
+          end),
+        ro);
 match_topic_permissions_in_khepri(
   Username, '_' = _VHostName, ExchangeName) ->
     rabbit_khepri:transaction(
@@ -756,7 +760,8 @@ match_topic_permissions_in_khepri(
           fun() ->
                   match_topic_permissions_in_khepri_tx(
                     Username, ?KHEPRI_WILDCARD_STAR, any(ExchangeName))
-          end));
+          end),
+        ro);
 match_topic_permissions_in_khepri(
   Username, VHostName, ExchangeName) ->
     rabbit_khepri:transaction(
@@ -767,7 +772,8 @@ match_topic_permissions_in_khepri(
             fun() ->
                     match_topic_permissions_in_khepri_tx(
                       Username, VHostName, any(ExchangeName))
-            end))).
+            end)),
+        ro).
 
 match_topic_permissions_in_khepri_tx(Username, VHostName, ExchangeName) ->
     Path = khepri_topic_permission_path(Username, VHostName, ExchangeName),
