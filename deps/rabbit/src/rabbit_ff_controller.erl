@@ -306,6 +306,14 @@ terminate(_Reason, _State, _Data) ->
     ok.
 
 wait_for_in_flight_operations() ->
+    case global:whereis_name(?GLOBAL_NAME) of
+        Pid when Pid == self() ->
+            ok;
+        _ ->
+            wait_for_in_flight_operations0()
+    end.
+
+wait_for_in_flight_operations0() ->
     case register_globally() of
         yes ->
             %% We don't unregister so the controller holds the lock until it
