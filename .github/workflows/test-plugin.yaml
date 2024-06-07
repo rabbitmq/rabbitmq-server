@@ -117,6 +117,12 @@ jobs:
         cat << EOF >> user.bazelrc
           build --strategy=TestRunner=local
         EOF
+    - name: deps/rabbitmq_peer_discovery_etcd SETUP
+      if: inputs.plugin == 'rabbitmq_peer_discovery_etcd'
+      run: |
+        sudo apt-get update && \
+        sudo apt-get install -y \
+          daemonize
     - name: deps/rabbitmq_stream SETUP
       if: inputs.plugin == 'rabbitmq_stream'
       run: |
