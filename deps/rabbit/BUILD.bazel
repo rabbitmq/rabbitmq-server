@@ -1166,7 +1166,7 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     name = "cluster_minority_SUITE",
-    size = "large",
+    size = "medium",
     additional_beam = [
         ":test_clustering_utils_beam",
     ],

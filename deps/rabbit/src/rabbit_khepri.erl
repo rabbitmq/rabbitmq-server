@@ -974,7 +974,16 @@ transaction(Fun, ReadWrite) ->
     transaction(Fun, ReadWrite, #{}).
 
 transaction(Fun, ReadWrite, Options0) ->
-    Options = maps:merge(?DEFAULT_COMMAND_OPTIONS, Options0),
+    %% If the transaction is read-only, use the same default options we use
+    %% for most queries.
+    DefaultQueryOptions = case ReadWrite of
+                              ro ->
+                                  #{favor => low_latency};
+                              _ ->
+                                  #{}
+                          end,
+    Options1 = maps:merge(DefaultQueryOptions, Options0),
+    Options = maps:merge(?DEFAULT_COMMAND_OPTIONS, Options1),
     case khepri:transaction(?STORE_ID, Fun, ReadWrite, Options) of
         ok -> ok;
         {ok, Result} -> Result;

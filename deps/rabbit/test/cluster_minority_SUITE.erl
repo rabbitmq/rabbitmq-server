@@ -10,7 +10,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 all() ->
     [
@@ -36,7 +36,8 @@ groups() ->
                               update_user,
                               delete_user,
                               set_policy,
-                              delete_policy
+                              delete_policy,
+                              export_definitions
                              ]},
      {cluster_operation_add, [], [add_node]},
      {cluster_operation_remove, [], [remove_node]},
@@ -88,6 +89,14 @@ init_per_group(Group, Config0) when Group == client_operations;
             #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = <<"test-queue">>,
                                                                            arguments = [{<<"x-queue-type">>, longstr, <<"classic">>}]}),
 
+            %% Lower the default Khepri command timeout. By default this is set
+            %% to 30s in `rabbit_khepri:setup/1' which makes the cases in this
+            %% group run unnecessarily slow.
+            [ok = rabbit_ct_broker_helpers:rpc(
+                    Config1, N,
+                    application, set_env,
+                    [khepri, default_timeout, 100]) || N <- lists:seq(0, 4)],
+
             %% Create partition
             partition_5_node_cluster(Config1),
             Config1
@@ -104,8 +113,8 @@ init_per_group(Group, Config0) ->
 
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
-                                rabbit_ct_broker_helpers:teardown_steps() ++
-                                    rabbit_ct_client_helpers:teardown_steps()).
+                                rabbit_ct_client_helpers:teardown_steps() ++
+                                    rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -252,6 +261,11 @@ enable_feature_flag(Config) ->
     [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     ?assertMatch({error, missing_clustered_nodes}, rabbit_ct_broker_helpers:rpc(Config, A, rabbit_feature_flags, enable, [khepri_db])).
 
+export_definitions(Config) ->
+    Definitions = rabbit_ct_broker_helpers:rpc(
+                    Config, 0,
+                    rabbit_definitions, all_definitions, []),
+    ?assert(is_map(Definitions)).
 
 %% -------------------------------------------------------------------
 %% Internal helpers.
