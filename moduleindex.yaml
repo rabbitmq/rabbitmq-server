@@ -754,6 +754,7 @@ rabbit:
 - rabbit_vhost_sup
 - rabbit_vhost_sup_sup
 - rabbit_vhost_sup_wrapper
+- rabbit_vhosts
 - rabbit_vm
 - supervised_lifecycle
 - tcp_listener
