@@ -119,6 +119,7 @@ info_keys() ->
      description,
      tags,
      default_queue_type,
+     limits,
      metadata,
      tracing,
      cluster_state].
