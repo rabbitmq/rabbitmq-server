@@ -29,6 +29,7 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
 
 DISABLE_DISTCLEAN = 1
 
+ifeq ($(filter-out xref,$(MAKECMDGOALS)),)
 XREF_SCOPE = app deps
 
 # We add all the applications that are in non-standard paths
@@ -47,6 +48,7 @@ XREF_IGNORE = [ \
 
 # Include Elixir libraries in the Xref checks.
 xref: ERL_LIBS := $(ERL_LIBS):$(CURDIR)/apps:$(CURDIR)/deps:$(dir $(shell elixir --eval ":io.format '~s~n', [:code.lib_dir :elixir ]"))
+endif
 
 ifneq ($(wildcard deps/.hex/cache.erl),)
 deps:: restore-hex-cache-ets-file
