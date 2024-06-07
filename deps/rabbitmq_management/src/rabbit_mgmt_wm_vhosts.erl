@@ -64,4 +64,4 @@ augmented(ReqData, #context{user = User}) ->
     end.
 
 basic() ->
-    rabbit_vhost:info_all([name]).
+    rabbit_vhost:info_all().
