@@ -78,7 +78,7 @@ on_node_up(_Node) ->
             DelayInSeconds = 10,
             Delay = DelayInSeconds * 1000,
             rabbit_log:debug("Will reschedule virtual host process reconciliation after ~b seconds", [DelayInSeconds]),
-            timer:apply_after(Delay, ?MODULE, reconcile_once, []),
+            _ = timer:apply_after(Delay, ?MODULE, reconcile_once, []),
             ok
     end.
 
