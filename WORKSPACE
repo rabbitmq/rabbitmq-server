@@ -34,55 +34,6 @@ load("@rules_erlang//gazelle:deps.bzl", "gazelle_deps")
 
 gazelle_deps()
 
-http_file(
-    name = "otp_src_24",
-    downloaded_file_path = "OTP-24.3.4.6.tar.gz",
-    sha256 = "dc3d2c54eeb093e0dc9a0fe493bc69d6dfac0affbe77c9e3c935aa86c0f63cd5",
-    urls = ["https://github.com/erlang/otp/archive/OTP-24.3.4.6.tar.gz"],
-)
-
-http_file(
-    name = "otp_src_25_0",
-    downloaded_file_path = "OTP-25.0.4.tar.gz",
-    sha256 = "05878cb51a64b33c86836b12a21903075c300409b609ad5e941ddb0feb8c2120",
-    urls = ["https://github.com/erlang/otp/archive/OTP-25.0.4.tar.gz"],
-)
-
-http_file(
-    name = "otp_src_25_1",
-    downloaded_file_path = "OTP-25.1.2.1.tar.gz",
-    sha256 = "79f8e31bb9ff7d43a920f207ef104d1106b2332fdbadf11241d714eacb6d8d1a",
-    urls = ["https://github.com/erlang/otp/archive/OTP-25.1.2.1.tar.gz"],
-)
-
-http_file(
-    name = "otp_src_25_2",
-    downloaded_file_path = "OTP-25.2.3.tar.gz",
-    sha256 = "637bc5cf68dd229fd3c3fe889a6f84dd32c4a827488550a0a98123b00c2d78b5",
-    urls = ["https://github.com/erlang/otp/archive/OTP-25.2.3.tar.gz"],
-)
-
-http_file(
-    name = "otp_src_25_3",
-    downloaded_file_path = "OTP-25.3.2.10.tar.gz",
-    sha256 = "be76f05bd38c60df056ed35f01085f088474a1942ce1778c2217e5658d435b35",
-    urls = ["https://github.com/erlang/otp/archive/OTP-25.3.2.10.tar.gz"],
-)
-
-http_file(
-    name = "otp_src_26_1",
-    downloaded_file_path = "OTP-26.1.2.tar.gz",
-    sha256 = "56042d53b30863d4e720ebf463d777f0502f8c986957fc3a9e63dae870bbafe0",
-    urls = ["https://github.com/erlang/otp/archive/OTP-26.1.2.tar.gz"],
-)
-
-http_file(
-    name = "otp_src_26_2",
-    downloaded_file_path = "OTP-26.2.5.tar.gz",
-    sha256 = "d34b409cb5968ae47dd5a0c4f85b925d5601898d90788bbb08d514964a3a141d",
-    urls = ["https://github.com/erlang/otp/archive/OTP-26.2.5.tar.gz"],
-)
-
 new_git_repository(
     name = "bats",
     build_file = "@//:BUILD.bats",
@@ -97,9 +48,3 @@ activemq_archive()
 load("//bazel/bzlmod:secondary_umbrella.bzl", "secondary_umbrella")
 
 secondary_umbrella()
-
-git_repository(
-    name = "rbe",
-    branch = "linux-rbe",
-    remote = "https://github.com/rabbitmq/rbe-erlang-platform.git",
-)

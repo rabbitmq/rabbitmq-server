@@ -2,43 +2,40 @@ name: Test Mixed Version Clusters
 on:
   push:
     branches:
-      - main
-      - v3.12.x
-      - v3.11.x
-      - v3.10.x
-      - v3.9.x
-      - v3.8.x
-      - bump-otp-*
-      - bump-elixir-*
-      - bump-rbe-*
-      - bump-rules_erlang
+    - main
+    - v3.12.x
+    - v3.11.x
+    - v3.10.x
+    - v3.9.x
+    - v3.8.x
+    - bump-otp-*
+    - bump-elixir-*
+    - bump-rbe-*
+    - bump-rules_erlang
     paths:
-      - 'deps/**'
-      - 'scripts/**'
-      - Makefile
-      - plugins.mk
-      - rabbitmq-components.mk
-      - .bazelrc
-      - .bazelversion
-      - BUILD.*
-      - '*.bzl'
-      - '*.bazel'
-      - .github/workflows/test-mixed-versions.yaml
+    - deps/**
+    - scripts/**
+    - Makefile
+    - plugins.mk
+    - rabbitmq-components.mk
+    - .bazelrc
+    - .bazelversion
+    - BUILD.*
+    - '*.bzl'
+    - '*.bazel'
+    - .github/workflows/test-mixed-versions.yaml
   pull_request:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
   ensure-mixed-version-archive:
-    name: Prepare Artifacts
     runs-on: ubuntu-22.04
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
       with:
         path: primary-umbrella
-    #! - name: Setup tmate session
-    #!   uses: mxschmitt/action-tmate@v3
     - name: CHECK FOR ARCHIVE ON S3
       id: check
       working-directory: primary-umbrella
@@ -111,52 +108,94 @@ jobs:
         AWS_REGION: ${{ secrets.AWS_REGION }}
         SOURCE_DIR: output
         DEST_DIR: secondary-umbrellas
-
-  test-mixed-versions:
-    name: Test (Mixed Version Cluster)
-    runs-on: ubuntu-22.04
+  check-workflow:
     needs: ensure-mixed-version-archive
-    strategy:
-      fail-fast: false
-      matrix:
-        otp_version_id:
-        - "26_1"
-        metadata_store:
-          - mnesia
-          - khepri
-    timeout-minutes: 120
+    runs-on: ubuntu-latest
+    outputs:
+      repo_cache_key: ${{ steps.repo-cache-key.outputs.value }}
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
-    - name: CONFIGURE BAZEL
+    - name: SETUP ERLANG/ELIXIR
+      uses: erlef/setup-beam@v1
+      with:
+        otp-version: 26
+        elixir-version: 1.15
+    - name: ENSURE WORKFLOWS ARE UP TO DATE
       run: |
-        if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
-        cat << EOF >> user.bazelrc
-          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
-        EOF
-        fi
-        cat << EOF >> user.bazelrc
-          build:buildbuddy --build_metadata=ROLE=CI
-          build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
-          build:buildbuddy --color=yes
-        EOF
-    #! - name: Setup tmate session
-    #!   uses: mxschmitt/action-tmate@v3
-    - name: RUN TESTS
+        mkdir local-bin/
+        curl -L https://carvel.dev/install.sh | K14SIO_INSTALL_BIN_DIR=local-bin bash
+        make actions-workflows YTT=$PWD/local-bin/ytt
+        git diff --exit-code
+    - name: COMPUTE REPO CACHE KEY
+      id: repo-cache-key
       run: |
-        sudo sysctl -w net.ipv4.tcp_keepalive_time=60
-        sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
-        bazelisk test //... \
-          --config=rbe-${{ matrix.otp_version_id }} \
-          --test_env RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }} \
-          --test_tag_filters=mixed-version-cluster,-aws,-docker \
-          --build_tests_only \
-          --verbose_failures
-  summary-mixed-versions:
+        echo "value=bazel-repo-cache-${{ hashFiles('MODULE.bazel') }}" | tee -a $GITHUB_OUTPUT
+  test-amqp10_client:
+    needs: check-workflow
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: amqp10_client
+    secrets: inherit
+  test-amqp10_common:
+    needs: check-workflow
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: amqp10_common
+    secrets: inherit
+  test-amqp_client:
+    needs: check-workflow
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: amqp_client
+    secrets: inherit
+  test-oauth2_client:
+    needs: check-workflow
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: oauth2_client
+    secrets: inherit
+  test-rabbit_common:
+    needs: check-workflow
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbit_common
+    secrets: inherit
+  test-rabbitmq_ct_client_helpers:
+    needs: check-workflow
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_ct_client_helpers
+    secrets: inherit
+  test-rabbitmq_ct_helpers:
+    needs: check-workflow
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_ct_helpers
+    secrets: inherit
+  test-rabbitmq_stream_common:
+    needs: check-workflow
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_stream_common
+    secrets: inherit
+  test-trust_store_http:
+    needs: check-workflow
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: trust_store_http
+    secrets: inherit
+  test-rabbit-0:
     needs:
-<<<<<<< HEAD
-    - test-mixed-versions
-=======
     - check-workflow
     - test-amqp10_client
     - test-amqp10_common
@@ -351,24 +390,6 @@ jobs:
     with:
       repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
       plugin: rabbitmq_cli
-    secrets: inherit
-  test-rabbitmq_amqp_client:
-    needs:
-    - check-workflow
-    - test-rabbit-0
-    - test-rabbit-1
-    - test-rabbit-2
-    - test-rabbit-3
-    - test-rabbit-4
-    - test-rabbit-5
-    - test-rabbit-6
-    - test-rabbit-7
-    - test-rabbit-8
-    - test-rabbit-9
-    uses: ./.github/workflows/test-plugin-mixed.yaml
-    with:
-      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
-      plugin: rabbitmq_amqp_client
     secrets: inherit
   test-rabbitmq_amqp1_0:
     needs:
@@ -1065,7 +1086,6 @@ jobs:
     - test-rabbitmq_ct_helpers
     - test-rabbitmq_stream_common
     - test-trust_store_http
-    - test-rabbitmq_amqp_client
     - test-rabbitmq_amqp1_0
     - test-rabbitmq_auth_backend_cache
     - test-rabbitmq_auth_backend_http
@@ -1115,9 +1135,10 @@ jobs:
     - test-rabbit-8
     - test-rabbit-9
     - test-rabbitmq_cli
->>>>>>> bdd18ed800 (Add back rabbitmq_cli tests to CI)
     runs-on: ubuntu-latest
     steps:
     - name: SUMMARY
       run: |
-        echo "SUCCESS"
+        cat << 'EOF' | jq -e 'map(.result == "success") | all(.)'
+        ${{ toJson(needs) }}
+        EOF
