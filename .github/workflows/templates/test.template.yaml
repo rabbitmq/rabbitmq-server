@@ -119,7 +119,6 @@ jobs:
     secrets: inherit
 #@ end
 
-<<<<<<< HEAD
   test-rabbitmq_cli:
     needs: check-workflow
     uses: ./.github/workflows/test-plugin.yaml
@@ -128,8 +127,6 @@ jobs:
       plugin: rabbitmq_cli
     secrets: inherit
 
-=======
->>>>>>> 2c62185317 (Turn off BuildBuddy integration (#11343))
 #@ for plugin in data.values.tier1_plugins:
   test-(@= plugin @):
     needs: #@ ["check-workflow"] + sharded_job_names("rabbit", rabbit_shard_count)
@@ -141,11 +138,7 @@ jobs:
 #@ end
 
   summary-test:
-<<<<<<< HEAD
     needs: #@ job_names(data.values.internal_deps + data.values.tier1_plugins) + sharded_job_names("rabbit", rabbit_shard_count) + ["test-rabbitmq_cli"]
-=======
-    needs: #@ job_names(data.values.internal_deps + data.values.tier1_plugins) + sharded_job_names("rabbit", rabbit_shard_count)
->>>>>>> 2c62185317 (Turn off BuildBuddy integration (#11343))
     runs-on: ubuntu-latest
     steps:
     - name: SUMMARY

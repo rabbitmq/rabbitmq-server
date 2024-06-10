@@ -5,13 +5,6 @@ jobs:
   peer-discovery-aws-integration-test:
     name: Integration Test
     runs-on: ubuntu-22.04
-<<<<<<< HEAD
-    strategy:
-      matrix:
-        otp_version_id:
-          - 26
-=======
->>>>>>> 2c62185317 (Turn off BuildBuddy integration (#11343))
     timeout-minutes: 45
     steps:
     - name: CHECKOUT REPOSITORY
@@ -19,12 +12,6 @@ jobs:
     - name: WAIT FOR OCI IMAGE WORKFLOW
       uses: lewagon/wait-on-check-action@v1.2.0
       with:
-<<<<<<< HEAD
-        ref: ${{ github.ref }}
-        check-name: build-publish-dev-bazel
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
-        wait-interval: 30 # seconds
-=======
         images: pivotalrabbitmq/rabbitmq
         tags: |
           type=sha,format=long
@@ -64,17 +51,8 @@ jobs:
       uses: google-github-actions/auth@v2.1.2
       with:
         credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
->>>>>>> 2c62185317 (Turn off BuildBuddy integration (#11343))
     - name: CONFIGURE BAZEL
       run: |
-<<<<<<< HEAD
-        cat << EOF >> user.bazelrc
-          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
-
-          build:buildbuddy --build_metadata=ROLE=CI
-          build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
-          build:buildbuddy --color=yes
-=======
         if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME }}" ]; then
         cat << EOF >> user.bazelrc
           build --remote_cache=https://storage.googleapis.com/${{ secrets.REMOTE_CACHE_BUCKET_NAME }}
@@ -84,7 +62,6 @@ jobs:
         cat << EOF >> user.bazelrc
           build --repository_cache=/home/runner/repo-cache/
           build --color=yes
->>>>>>> 2c62185317 (Turn off BuildBuddy integration (#11343))
         EOF
 
         bazelisk info release

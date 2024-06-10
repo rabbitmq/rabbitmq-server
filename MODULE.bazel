@@ -90,23 +90,6 @@ use_repo(
 )
 
 register_toolchains(
-<<<<<<< HEAD
-    "@erlang_config//24:toolchain_major",
-    "@erlang_config//24:toolchain_major_minor",
-    "@erlang_config//25_0:toolchain_major",
-    "@erlang_config//25_0:toolchain_major_minor",
-    "@erlang_config//25_1:toolchain_major",
-    "@erlang_config//25_1:toolchain_major_minor",
-    "@erlang_config//25_2:toolchain_major",
-    "@erlang_config//25_2:toolchain_major_minor",
-    "@erlang_config//25_3:toolchain_major",
-    "@erlang_config//25_3:toolchain_major_minor",
-    "@erlang_config//26_1:toolchain_major",
-    "@erlang_config//26_1:toolchain_major_minor",
-    "@erlang_config//git_master:toolchain_major",
-    "@erlang_config//git_master:toolchain_major_minor",
-=======
->>>>>>> 2c62185317 (Turn off BuildBuddy integration (#11343))
     "@elixir_config//external:toolchain",
 )
 

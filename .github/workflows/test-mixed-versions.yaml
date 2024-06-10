@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         path: primary-umbrella
     - name: CHECK FOR ARCHIVE ON S3
@@ -63,7 +63,7 @@ jobs:
         echo "version=${VERSION}" | tee -a $GITHUB_OUTPUT
     - name: CHECKOUT REPOSITORY (MIXED VERSION)
       if: env.exists != 'true'
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         ref: v${{ steps.check.outputs.version }}
         path: secondary-umbrella
@@ -110,18 +110,9 @@ jobs:
         DEST_DIR: secondary-umbrellas
   check-workflow:
     needs: ensure-mixed-version-archive
-<<<<<<< HEAD
-    strategy:
-      fail-fast: false
-      matrix:
-        otp_version_id:
-        - "25_0"
-    timeout-minutes: 120
-=======
     runs-on: ubuntu-latest
     outputs:
       repo_cache_key: ${{ steps.repo-cache-key.outputs.value }}
->>>>>>> 2c62185317 (Turn off BuildBuddy integration (#11343))
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
@@ -139,20 +130,6 @@ jobs:
     - name: COMPUTE REPO CACHE KEY
       id: repo-cache-key
       run: |
-<<<<<<< HEAD
-        sudo sysctl -w net.ipv4.tcp_keepalive_time=60
-        sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
-        bazelisk test //... \
-          --config=rbe-${{ matrix.otp_version_id }} \
-          --test_tag_filters=mixed-version-cluster,-aws,-docker \
-          --build_tests_only \
-          --verbose_failures
-  summary-mixed-versions:
-    needs:
-<<<<<<< HEAD
-    - test-mixed-versions
-=======
-=======
         echo "value=bazel-repo-cache-${{ hashFiles('MODULE.bazel') }}" | tee -a $GITHUB_OUTPUT
   test-amqp10_client:
     needs: check-workflow
@@ -219,7 +196,6 @@ jobs:
     secrets: inherit
   test-rabbit-0:
     needs:
->>>>>>> 2c62185317 (Turn off BuildBuddy integration (#11343))
     - check-workflow
     - test-amqp10_client
     - test-amqp10_common
@@ -408,8 +384,6 @@ jobs:
       shard_index: 9
       shard_count: 10
     secrets: inherit
-<<<<<<< HEAD
-<<<<<<< HEAD
   test-rabbitmq_cli:
     needs: check-workflow
     uses: ./.github/workflows/test-plugin.yaml
@@ -417,28 +391,6 @@ jobs:
       repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
       plugin: rabbitmq_cli
     secrets: inherit
-=======
->>>>>>> 2c62185317 (Turn off BuildBuddy integration (#11343))
-  test-rabbitmq_amqp_client:
-    needs:
-    - check-workflow
-    - test-rabbit-0
-    - test-rabbit-1
-    - test-rabbit-2
-    - test-rabbit-3
-    - test-rabbit-4
-    - test-rabbit-5
-    - test-rabbit-6
-    - test-rabbit-7
-    - test-rabbit-8
-    - test-rabbit-9
-    uses: ./.github/workflows/test-plugin-mixed.yaml
-    with:
-      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
-      plugin: rabbitmq_amqp_client
-    secrets: inherit
-=======
->>>>>>> 28ee2ddee6 (remove rabbitmq_amqp_client tests from this branch)
   test-rabbitmq_amqp1_0:
     needs:
     - check-workflow
@@ -1182,11 +1134,7 @@ jobs:
     - test-rabbit-7
     - test-rabbit-8
     - test-rabbit-9
-<<<<<<< HEAD
     - test-rabbitmq_cli
->>>>>>> bdd18ed800 (Add back rabbitmq_cli tests to CI)
-=======
->>>>>>> 2c62185317 (Turn off BuildBuddy integration (#11343))
     runs-on: ubuntu-latest
     steps:
     - name: SUMMARY
