@@ -214,77 +214,32 @@ do-dist:: $(DIST_EZS)
 CLI_SCRIPTS_LOCK = $(CLI_SCRIPTS_DIR).lock
 CLI_ESCRIPTS_LOCK = $(CLI_ESCRIPTS_DIR).lock
 
+ifeq ($(MAKELEVEL),0)
 ifneq ($(filter-out rabbit_common amqp10_common rabbitmq_stream_common,$(PROJECT)),)
 app:: install-cli
 test-build:: install-cli
+endif
 endif
 
 install-cli: install-cli-scripts install-cli-escripts
 	@:
 
-ifeq ($(PROJECT),rabbit)
-install-cli-scripts:
-	$(gen_verbose) \
-	if command -v flock >/dev/null; then \
-		flock $(CLI_SCRIPTS_LOCK) \
-		sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-		for file in scripts/*; do \
-			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
-			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
-		done'; \
-	elif command -v lockf >/dev/null; then \
-		lockf $(CLI_SCRIPTS_LOCK) \
-		sh -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-		for file in scripts/*; do \
-			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
-			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
-		done'; \
-	else \
-		mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-		for file in scripts/*; do \
-			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
-			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
-		done; \
-	fi
-else
-
 install-cli-scripts:
 	$(gen_verbose) \
 	set -e; \
-	if test -d "$(DEPS_DIR)/rabbit/scripts"; then \
-		rabbit_scripts_dir='$(DEPS_DIR)/rabbit/scripts'; \
-	elif test -d "$(DEPS_DIR)/../scripts"; then \
-		rabbit_scripts_dir='$(DEPS_DIR)/../scripts'; \
-	else \
-		echo 'rabbit/scripts directory not found' 1>&2; \
-		exit 1; \
-	fi; \
-	test -d "$$rabbit_scripts_dir"; \
+	test -d "$(DEPS_DIR)/rabbit/scripts"; \
 	if command -v flock >/dev/null; then \
 		flock $(CLI_SCRIPTS_LOCK) \
 		sh -e -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-		for file in "'$$rabbit_scripts_dir'"/*; do \
-			test -f "$$file"; \
-			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
-			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
-		done'; \
+			cp -a $(DEPS_DIR)/rabbit/scripts/* $(CLI_SCRIPTS_DIR)/'; \
 	elif command -v lockf >/dev/null; then \
 		lockf $(CLI_SCRIPTS_LOCK) \
 		sh -e -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-		for file in "'$$rabbit_scripts_dir'"/*; do \
-			test -f "$$file"; \
-			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
-			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
-		done'; \
+			cp -a $(DEPS_DIR)/rabbit/scripts/* $(CLI_SCRIPTS_DIR)/'; \
 	else \
 		mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-		for file in "$$rabbit_scripts_dir"/*; do \
-			test -f "$$file"; \
-			cmp -s "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")" || \
-			cp -a "$$file" "$(CLI_SCRIPTS_DIR)/$$(basename "$$file")"; \
-		done; \
+			cp -a $(DEPS_DIR)/rabbit/scripts/* $(CLI_SCRIPTS_DIR)/; \
 	fi
-endif
 
 install-cli-escripts:
 	$(gen_verbose) \

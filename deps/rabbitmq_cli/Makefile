@@ -78,7 +78,8 @@ app:: $(ESCRIPTS)
 	@:
 
 rabbitmqctl_srcs := mix.exs \
-		    $(shell find config lib -name "*.ex" -o -name "*.exs")
+	$(call core_find,config/,*.exs) \
+	$(call core_find,lib/,*.ex)
 
 # Elixir dependencies are fetched and compiled as part of the alias
 # `mix make_all`. We do not fetch and build them in `make deps` because

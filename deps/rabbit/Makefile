@@ -247,13 +247,6 @@ ifdef TRACE_SUPERVISOR2
 RMQ_ERLC_OPTS += -DTRACE_SUPERVISOR2=true
 endif
 
-ifndef USE_PROPER_QC
-# PropEr needs to be installed for property checking
-# http://proper.softlab.ntua.gr/
-USE_PROPER_QC := $(shell $(ERL) -eval 'io:format({module, proper} =:= code:ensure_loaded(proper)), halt().')
-RMQ_ERLC_OPTS += $(if $(filter true,$(USE_PROPER_QC)),-Duse_proper_qc)
-endif
-
 # --------------------------------------------------------------------
 # Documentation.
 # --------------------------------------------------------------------

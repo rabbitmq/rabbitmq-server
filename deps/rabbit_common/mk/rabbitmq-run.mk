@@ -96,16 +96,22 @@ RABBITMQ_ENABLED_PLUGINS_FILE ?= $(call node_enabled_plugins_file,$(RABBITMQ_NOD
 RABBITMQ_LOG ?= debug,+color
 export RABBITMQ_LOG
 
-# erlang.mk adds dependencies' ebin directory to ERL_LIBS. This is
-# a sane default, but we prefer to rely on the .ez archives in the
-# `plugins` directory so the plugin code is executed. The `plugins`
-# directory is added to ERL_LIBS by rabbitmq-env.
-DIST_ERL_LIBS = $(patsubst :%,%,$(patsubst %:,%,$(subst :$(APPS_DIR):,:,$(subst :$(DEPS_DIR):,:,:$(ERL_LIBS):))))
+FAST_RUN_BROKER ?= 1
+
+ifeq ($(FAST_RUN_BROKER),1)
+DIST_TARGET = $(if $(NOBUILD),,all)
+PLUGINS_FROM_DEPS_DIR = 1
+endif
 
 ifdef PLUGINS_FROM_DEPS_DIR
-RMQ_PLUGINS_DIR=$(DEPS_DIR)
+RMQ_PLUGINS_DIR = $(DEPS_DIR)
+DIST_ERL_LIBS = $(ERL_LIBS)
 else
-RMQ_PLUGINS_DIR=$(CURDIR)/$(DIST_DIR)
+RMQ_PLUGINS_DIR = $(CURDIR)/$(DIST_DIR)
+# We do not want to add apps/ or deps/ to ERL_LIBS
+# when running the release from dist. The `plugins`
+# directory is added to ERL_LIBS by rabbitmq-env.
+DIST_ERL_LIBS = $(patsubst :%,%,$(patsubst %:,%,$(subst :$(APPS_DIR):,:,$(subst :$(DEPS_DIR):,:,:$(ERL_LIBS):))))
 endif
 
 node_plugins_dir = $(if $(RABBITMQ_PLUGINS_DIR),$(RABBITMQ_PLUGINS_DIR),$(if $(EXTRA_PLUGINS_DIR),$(EXTRA_PLUGINS_DIR):$(RMQ_PLUGINS_DIR),$(RMQ_PLUGINS_DIR)))
@@ -407,6 +413,42 @@ stop-brokers stop-cluster:
 		nodename="rabbit-$$n@$(HOSTNAME)"; \
 		$(MAKE) stop-node \
 		  RABBITMQ_NODENAME="$$nodename" & \
+	done; \
+	wait
+
+# --------------------------------------------------------------------
+# Code reloading.
+#
+# For `make run-broker` either do:
+# * make RELOAD=1
+# * make all reload-broker        (can't do this alongside -j flag)
+# * make && make reload-broker    (fine with -j flag)
+#
+# Or if recompiling a specific application:
+# * make -C deps/rabbit RELOAD=1
+#
+# For `make start-cluster` use the `reload-cluster` target.
+# Same constraints apply as with `reload-broker`:
+# * make all reload-cluster
+# * make && make reload-cluster
+# --------------------------------------------------------------------
+
+reload-broker:
+	$(exec_verbose) ERL_LIBS="$(DIST_ERL_LIBS)" \
+		$(RABBITMQCTL) -n $(RABBITMQ_NODENAME) \
+		eval "io:format(\"~p~n\", [c:lm()])."
+
+ifeq ($(MAKELEVEL),0)
+ifdef RELOAD
+all:: reload-broker
+endif
+endif
+
+reload-cluster:
+	@for n in $$(seq $(NODES) -1 1); do \
+		nodename="rabbit-$$n@$(HOSTNAME)"; \
+		$(MAKE) reload-broker \
+			RABBITMQ_NODENAME="$$nodename" & \
 	done; \
 	wait
 

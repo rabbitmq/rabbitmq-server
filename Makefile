@@ -5,7 +5,7 @@ PROJECT_DESCRIPTION = RabbitMQ Server
 # other components. If PROJECT_VERSION is unset, then an empty variable
 # is propagated and the default version will fallback to the default
 # value from rabbitmq-components.mk.
-export RABBITMQ_VERSION = $(PROJECT_VERSION)
+export RABBITMQ_VERSION := $(PROJECT_VERSION)
 
 # Release artifacts are put in $(PACKAGES_DIR).
 PACKAGES_DIR ?= $(abspath PACKAGES)
@@ -29,6 +29,7 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
 
 DISABLE_DISTCLEAN = 1
 
+ifeq ($(filter-out xref,$(MAKECMDGOALS)),)
 XREF_SCOPE = app deps
 
 # We add all the applications that are in non-standard paths
@@ -47,12 +48,19 @@ XREF_IGNORE = [ \
 
 # Include Elixir libraries in the Xref checks.
 xref: ERL_LIBS := $(ERL_LIBS):$(CURDIR)/apps:$(CURDIR)/deps:$(dir $(shell elixir --eval ":io.format '~s~n', [:code.lib_dir :elixir ]"))
+endif
 
 ifneq ($(wildcard deps/.hex/cache.erl),)
 deps:: restore-hex-cache-ets-file
 endif
 
 include rabbitmq-components.mk
+
+# Set PROJECT_VERSION, calculated in rabbitmq-components.mk,
+# in stone now, because in this Makefile we will be using it
+# multiple times (including for release file names and whatnot).
+PROJECT_VERSION := $(PROJECT_VERSION)
+
 include erlang.mk
 include mk/github-actions.mk
 include mk/bazel.mk
