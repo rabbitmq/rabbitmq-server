@@ -74,59 +74,6 @@ erlang_config = use_extension(
     "erlang_config",
 )
 
-<<<<<<< HEAD
-erlang_config.internal_erlang_from_github_release(
-    name = "24",
-    sha256 = "8444ff9abe23aea268adbb95463561fc222c965052d35d7c950b17be01c3ad82",
-    version = "24.3.4.6",
-    extra_make_opts = ["-j 4"],
-)
-
-erlang_config.internal_erlang_from_github_release(
-    name = "25_0",
-    sha256 = "8fc707f92a124b2aeb0f65dcf9ac8e27b2a305e7bcc4cc1b2fdf770eec0165bf",
-    version = "25.0.4",
-    extra_make_opts = ["-j 4"],
-)
-
-erlang_config.internal_erlang_from_github_release(
-    name = "25_1",
-    sha256 = "1cd2fbe225a412009cda9b1fd9f3fff0293e75e3020daa48abf68721471e91eb",
-    version = "25.1.2.1",
-    extra_make_opts = ["-j 4"],
-)
-
-erlang_config.internal_erlang_from_github_release(
-    name = "25_2",
-    sha256 = "f4d9f11d67ba478a053d72e635a44722a975603fe1284063fdf38276366bc61c",
-    version = "25.2.3",
-    extra_make_opts = ["-j 4"],
-)
-
-erlang_config.internal_erlang_from_github_release(
-    name = "25_3",
-    sha256 = "0a7338415c8eb6ae25664bfd1a10631c293838ef072665223a524831b823a8b7",
-    version = "25.3.2.10",
-    extra_make_opts = ["-j 4"],
-)
-
-erlang_config.internal_erlang_from_github_release(
-    name = "26",
-    sha256 = "47853ea9230643a0a31004433f07a71c1b92d6e0094534f629e3b75dbc62f193",
-    version = "26.0.2",
-    extra_make_opts = ["-j 4"],
-)
-
-erlang_config.internal_erlang_from_http_archive(
-    name = "git_master",
-    strip_prefix = "otp-master",
-    url = "https://github.com/erlang/otp/archive/refs/heads/master.tar.gz",
-    version = "27",
-    extra_make_opts = ["-j 4"],
-)
-
-=======
->>>>>>> c78563a335 (Turn off BuildBuddy integration (backport #11343) (backport #11390) (#11416))
 use_repo(
     erlang_config,
     "erlang_config",
@@ -143,23 +90,6 @@ use_repo(
 )
 
 register_toolchains(
-<<<<<<< HEAD
-    "@erlang_config//24:toolchain_major",
-    "@erlang_config//24:toolchain_major_minor",
-    "@erlang_config//25_0:toolchain_major",
-    "@erlang_config//25_0:toolchain_major_minor",
-    "@erlang_config//25_1:toolchain_major",
-    "@erlang_config//25_1:toolchain_major_minor",
-    "@erlang_config//25_2:toolchain_major",
-    "@erlang_config//25_2:toolchain_major_minor",
-    "@erlang_config//25_3:toolchain_major",
-    "@erlang_config//25_3:toolchain_major_minor",
-    "@erlang_config//26:toolchain_major",
-    "@erlang_config//26:toolchain_major_minor",
-    "@erlang_config//git_master:toolchain_major",
-    "@erlang_config//git_master:toolchain_major_minor",
-=======
->>>>>>> c78563a335 (Turn off BuildBuddy integration (backport #11343) (backport #11390) (#11416))
     "@elixir_config//external:toolchain",
 )
 

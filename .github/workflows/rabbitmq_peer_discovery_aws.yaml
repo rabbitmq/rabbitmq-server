@@ -4,15 +4,7 @@ on:
 jobs:
   peer-discovery-aws-integration-test:
     name: Integration Test
-<<<<<<< HEAD
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        otp_version_id:
-          - 25_3
-=======
     runs-on: ubuntu-22.04
->>>>>>> c78563a335 (Turn off BuildBuddy integration (backport #11343) (backport #11390) (#11416))
     timeout-minutes: 45
     steps:
     - name: CHECKOUT REPOSITORY
@@ -44,8 +36,8 @@ jobs:
       if: steps.authorized.outputs.authorized == 'true'
       uses: erlef/setup-beam@v1.17
       with:
-        otp-version: 26
-        elixir-version: 1.15
+        otp-version: 25.3
+        elixir-version: 1.14
     - name: SETUP ecs-cli
       if: steps.authorized.outputs.authorized == 'true'
       env:

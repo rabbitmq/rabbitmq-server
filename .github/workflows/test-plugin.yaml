@@ -26,13 +26,13 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - 26
+        - 25.3
         metadata_store:
           - mnesia
           - khepri
         include:
-        - erlang_version: 26
-          elixir_version: 1.15
+        - erlang_version: 25.3
+          elixir_version: 1.14
     timeout-minutes: 120
     steps:
     - name: LOAD REPO CACHE

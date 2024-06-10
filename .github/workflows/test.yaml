@@ -2,16 +2,6 @@ name: Test
 on:
   push:
     branches:
-<<<<<<< HEAD
-      - main
-      - v3.11.x
-      - v3.10.x
-      - v3.9.x
-      - v3.8.x
-      - bump-otp-for-oci
-      - bump-rbe-*
-      - bump-rules_erlang
-=======
     - main
     - v3.13.x
     - v3.12.x
@@ -19,7 +9,6 @@ on:
     - bump-otp-for-oci
     - bump-rbe-*
     - bump-rules_erlang
->>>>>>> c78563a335 (Turn off BuildBuddy integration (backport #11343) (backport #11390) (#11416))
     paths:
     - deps/**
     - scripts/**
@@ -37,31 +26,18 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
-<<<<<<< HEAD
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        otp_version_id:
-        - 25_0
-        - 25_3
-    timeout-minutes: 120
-=======
   check-workflow:
     runs-on: ubuntu-latest
     outputs:
       repo_cache_key: ${{ steps.repo-cache-key.outputs.value }}
->>>>>>> c78563a335 (Turn off BuildBuddy integration (backport #11343) (backport #11390) (#11416))
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
-        otp-version: 26
-        elixir-version: 1.15
+        otp-version: 25.3
+        elixir-version: 1.14
     - name: ENSURE WORKFLOWS ARE UP TO DATE
       run: |
         mkdir local-bin/

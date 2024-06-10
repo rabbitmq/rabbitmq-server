@@ -2,17 +2,6 @@ name: Test Mixed Version Clusters
 on:
   push:
     branches:
-<<<<<<< HEAD
-      - main
-      - v3.11.x
-      - v3.10.x
-      - v3.9.x
-      - v3.8.x
-      - bump-otp-*
-      - bump-elixir-*
-      - bump-rbe-*
-      - bump-rules_erlang
-=======
     - main
     - v3.12.x
     - v3.11.x
@@ -23,7 +12,6 @@ on:
     - bump-elixir-*
     - bump-rbe-*
     - bump-rules_erlang
->>>>>>> c78563a335 (Turn off BuildBuddy integration (backport #11343) (backport #11390) (#11416))
     paths:
     - deps/**
     - scripts/**
@@ -42,12 +30,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   ensure-mixed-version-archive:
-<<<<<<< HEAD
-    name: Prepare Artifacts
-    runs-on: ubuntu-latest
-=======
     runs-on: ubuntu-22.04
->>>>>>> c78563a335 (Turn off BuildBuddy integration (backport #11343) (backport #11390) (#11416))
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
@@ -125,25 +108,11 @@ jobs:
         AWS_REGION: ${{ secrets.AWS_REGION }}
         SOURCE_DIR: output
         DEST_DIR: secondary-umbrellas
-<<<<<<< HEAD
-
-  test-mixed-versions:
-    name: Test (Mixed Version Cluster)
-    runs-on: ubuntu-latest
-    needs: ensure-mixed-version-archive
-    strategy:
-      fail-fast: false
-      matrix:
-        otp_version_id:
-        - "25_3"
-    timeout-minutes: 120
-=======
   check-workflow:
     needs: ensure-mixed-version-archive
     runs-on: ubuntu-latest
     outputs:
       repo_cache_key: ${{ steps.repo-cache-key.outputs.value }}
->>>>>>> c78563a335 (Turn off BuildBuddy integration (backport #11343) (backport #11390) (#11416))
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
