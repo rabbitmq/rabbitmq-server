@@ -119,8 +119,8 @@ jobs:
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:
-        otp-version: 26
-        elixir-version: 1.15
+        otp-version: 25
+        elixir-version: 1.14
     - name: ENSURE WORKFLOWS ARE UP TO DATE
       run: |
         mkdir local-bin/

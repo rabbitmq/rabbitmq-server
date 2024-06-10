@@ -26,12 +26,12 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - 26
+        - 25.0
         metadata_store:
           - mnesia
           - khepri
         include:
-        - erlang_version: 26
+        - erlang_version: 25.0
           elixir_version: 1.15
     timeout-minutes: 120
     steps:
