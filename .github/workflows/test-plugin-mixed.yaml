@@ -27,9 +27,6 @@ jobs:
       matrix:
         erlang_version:
         - 25.0
-        metadata_store:
-          - mnesia
-          - khepri
         include:
         - erlang_version: 25.0
           elixir_version: 1.14
@@ -170,7 +167,6 @@ jobs:
         ## env vars and leak them
 
         bazelisk test $(< ${{ steps.shard.outputs.file }}) \
-          --test_env RABBITMQ_METADATA_STORE=${{ matrix.metadata_store }} \
           --build_tests_only \
           --verbose_failures
     - name: UPLOAD TEST LOGS
