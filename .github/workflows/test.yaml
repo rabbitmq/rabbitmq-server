@@ -96,13 +96,6 @@ jobs:
       repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
       plugin: amqp_client
     secrets: inherit
-  test-oauth2_client:
-    needs: check-workflow
-    uses: ./.github/workflows/test-plugin.yaml
-    with:
-      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
-      plugin: oauth2_client
-    secrets: inherit
   test-rabbit_common:
     needs: check-workflow
     uses: ./.github/workflows/test-plugin.yaml
@@ -144,7 +137,6 @@ jobs:
     - test-amqp10_client
     - test-amqp10_common
     - test-amqp_client
-    - test-oauth2_client
     - test-rabbit_common
     - test-rabbitmq_ct_client_helpers
     - test-rabbitmq_ct_helpers
@@ -163,7 +155,6 @@ jobs:
     - test-amqp10_client
     - test-amqp10_common
     - test-amqp_client
-    - test-oauth2_client
     - test-rabbit_common
     - test-rabbitmq_ct_client_helpers
     - test-rabbitmq_ct_helpers
@@ -182,7 +173,6 @@ jobs:
     - test-amqp10_client
     - test-amqp10_common
     - test-amqp_client
-    - test-oauth2_client
     - test-rabbit_common
     - test-rabbitmq_ct_client_helpers
     - test-rabbitmq_ct_helpers
@@ -201,7 +191,6 @@ jobs:
     - test-amqp10_client
     - test-amqp10_common
     - test-amqp_client
-    - test-oauth2_client
     - test-rabbit_common
     - test-rabbitmq_ct_client_helpers
     - test-rabbitmq_ct_helpers
@@ -220,7 +209,6 @@ jobs:
     - test-amqp10_client
     - test-amqp10_common
     - test-amqp_client
-    - test-oauth2_client
     - test-rabbit_common
     - test-rabbitmq_ct_client_helpers
     - test-rabbitmq_ct_helpers
@@ -239,7 +227,6 @@ jobs:
     - test-amqp10_client
     - test-amqp10_common
     - test-amqp_client
-    - test-oauth2_client
     - test-rabbit_common
     - test-rabbitmq_ct_client_helpers
     - test-rabbitmq_ct_helpers
@@ -258,7 +245,6 @@ jobs:
     - test-amqp10_client
     - test-amqp10_common
     - test-amqp_client
-    - test-oauth2_client
     - test-rabbit_common
     - test-rabbitmq_ct_client_helpers
     - test-rabbitmq_ct_helpers
@@ -277,7 +263,6 @@ jobs:
     - test-amqp10_client
     - test-amqp10_common
     - test-amqp_client
-    - test-oauth2_client
     - test-rabbit_common
     - test-rabbitmq_ct_client_helpers
     - test-rabbitmq_ct_helpers
@@ -296,7 +281,6 @@ jobs:
     - test-amqp10_client
     - test-amqp10_common
     - test-amqp_client
-    - test-oauth2_client
     - test-rabbit_common
     - test-rabbitmq_ct_client_helpers
     - test-rabbitmq_ct_helpers
@@ -315,7 +299,6 @@ jobs:
     - test-amqp10_client
     - test-amqp10_common
     - test-amqp_client
-    - test-oauth2_client
     - test-rabbit_common
     - test-rabbitmq_ct_client_helpers
     - test-rabbitmq_ct_helpers
@@ -695,24 +678,6 @@ jobs:
       repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
       plugin: rabbitmq_peer_discovery_k8s
     secrets: inherit
-  test-rabbitmq_prelaunch:
-    needs:
-    - check-workflow
-    - test-rabbit-0
-    - test-rabbit-1
-    - test-rabbit-2
-    - test-rabbit-3
-    - test-rabbit-4
-    - test-rabbit-5
-    - test-rabbit-6
-    - test-rabbit-7
-    - test-rabbit-8
-    - test-rabbit-9
-    uses: ./.github/workflows/test-plugin.yaml
-    with:
-      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
-      plugin: rabbitmq_prelaunch
-    secrets: inherit
   test-rabbitmq_prometheus:
     needs:
     - check-workflow
@@ -1024,7 +989,6 @@ jobs:
     - test-amqp10_client
     - test-amqp10_common
     - test-amqp_client
-    - test-oauth2_client
     - test-rabbit_common
     - test-rabbitmq_ct_client_helpers
     - test-rabbitmq_ct_helpers
@@ -1050,7 +1014,6 @@ jobs:
     - test-rabbitmq_peer_discovery_consul
     - test-rabbitmq_peer_discovery_etcd
     - test-rabbitmq_peer_discovery_k8s
-    - test-rabbitmq_prelaunch
     - test-rabbitmq_prometheus
     - test-rabbitmq_random_exchange
     - test-rabbitmq_recent_history_exchange

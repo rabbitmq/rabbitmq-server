@@ -564,7 +564,6 @@ INTERNAL_DEPS := \
 	   amqp10_client \
 	   amqp10_common \
 	   amqp_client \
-	   oauth2_client \
 	   rabbit_common \
 	   rabbitmq_ct_client_helpers \
 	   rabbitmq_ct_helpers \
@@ -592,7 +591,6 @@ TIER1_PLUGINS := \
 	   rabbitmq_peer_discovery_consul \
 	   rabbitmq_peer_discovery_etcd \
 	   rabbitmq_peer_discovery_k8s \
-	   rabbitmq_prelaunch \
 	   rabbitmq_prometheus \
 	   rabbitmq_random_exchange \
 	   rabbitmq_recent_history_exchange \
