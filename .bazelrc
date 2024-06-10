@@ -13,67 +13,6 @@ build --flag_alias=test_build=//:enable_test_build
 
 build --combined_report=lcov
 
-build:buildbuddy --bes_results_url=https://app.buildbuddy.io/invocation/
-build:buildbuddy --bes_backend=grpcs://remote.buildbuddy.io
-build:buildbuddy --remote_cache=grpcs://remote.buildbuddy.io
-build:buildbuddy --remote_timeout=1200
-build:buildbuddy --grpc_keepalive_time=360s
-build:buildbuddy --grpc_keepalive_timeout=360s
-build:buildbuddy --remote_download_minimal
-build:buildbuddy --build_metadata=REPO_URL=https://github.com/rabbitmq/rabbitmq-server.git
-build:buildbuddy --experimental_remote_cache_compression
-build:buildbuddy --experimental_remote_cache_async
-build:buildbuddy --noslim_profile
-build:buildbuddy --experimental_profile_include_target_label
-build:buildbuddy --experimental_profile_include_primary_output
-build:buildbuddy --remote_build_event_upload=minimal
-build:buildbuddy --nolegacy_important_outputs
-
-# buildbuddy implies remote cache, so ct_logdir is restored to its default for reproducibility
-build:buildbuddy --@rules_erlang//:ct_logdir=
-
-build:rbe --config=buildbuddy
-
-build:rbe --remote_executor=grpcs://remote.buildbuddy.io
-
-build:rbe --strategy=TestRunner=remote,worker,sandboxed,local
-build:rbe --jobs=50
-
-build:rbe --crosstool_top=@rbe//cc:toolchain
-build:rbe --extra_toolchains=@rbe//config:cc-toolchain
-
-build:rbe --host_platform=//bazel/platforms:erlang_internal_platform
-
-build:rbe --host_cpu=k8
-build:rbe --cpu=k8
-
-build:rbe-24 --config=rbe
-build:rbe-24 --platforms=//bazel/platforms:erlang_linux_24_platform
-
-build:rbe-25 --config=rbe
-build:rbe-25 --platforms=//bazel/platforms:erlang_linux_25_3_platform
-
-build:rbe-25_0 --config=rbe
-build:rbe-25_0 --platforms=//bazel/platforms:erlang_linux_25_0_platform
-
-build:rbe-25_1 --config=rbe
-build:rbe-25_1 --platforms=//bazel/platforms:erlang_linux_25_1_platform
-
-build:rbe-25_2 --config=rbe
-build:rbe-25_2 --platforms=//bazel/platforms:erlang_linux_25_2_platform
-
-build:rbe-25_3 --config=rbe
-build:rbe-25_3 --platforms=//bazel/platforms:erlang_linux_25_3_platform
-
-build:rbe-26 --config=rbe
-build:rbe-26 --platforms=//bazel/platforms:erlang_linux_26_1_platform
-
-build:rbe-26_1 --config=rbe
-build:rbe-26_1 --platforms=//bazel/platforms:erlang_linux_26_1_platform
-
-# no-op config so that --config=local does not error
-build:local --color=auto
-
 # Try importing a user specific .bazelrc
 # You can create your own by copying and editing the template-user.bazelrc template:
 # cp template-user.bazelrc user.bazelrc
