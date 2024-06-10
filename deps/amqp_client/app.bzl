@@ -118,7 +118,6 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
-        srcs = ["priv/schema/amqp_client.schema"],
     )
 
     filegroup(
@@ -190,12 +189,4 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         app_name = "amqp_client",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app"],
-    )
-    erlang_bytecode(
-        name = "config_schema_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/config_schema_SUITE.erl"],
-        outs = ["test/config_schema_SUITE.beam"],
-        app_name = "amqp_client",
-        erlc_opts = "//:test_erlc_opts",
     )
