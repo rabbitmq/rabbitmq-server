@@ -561,3 +561,74 @@ install-windows-docs: install-windows-erlapp
 		*) mv "$$file" "$$file.txt" ;; \
 		esac; \
 	done
+
+INTERNAL_DEPS := \
+	   amqp10_client \
+	   amqp10_common \
+	   amqp_client \
+	   rabbit_common \
+	   rabbitmq_ct_client_helpers \
+	   rabbitmq_ct_helpers \
+	   rabbitmq_stream_common \
+	   trust_store_http
+
+TIER1_PLUGINS := \
+	   rabbitmq_amqp1_0 \
+	   rabbitmq_auth_backend_cache \
+	   rabbitmq_auth_backend_http \
+	   rabbitmq_auth_backend_ldap \
+	   rabbitmq_auth_backend_oauth2 \
+	   rabbitmq_auth_mechanism_ssl \
+	   rabbitmq_aws \
+	   rabbitmq_consistent_hash_exchange \
+	   rabbitmq_event_exchange \
+	   rabbitmq_federation \
+	   rabbitmq_federation_management \
+	   rabbitmq_jms_topic_exchange \
+	   rabbitmq_management \
+	   rabbitmq_management_agent \
+	   rabbitmq_mqtt \
+	   rabbitmq_peer_discovery_aws \
+	   rabbitmq_peer_discovery_common \
+	   rabbitmq_peer_discovery_consul \
+	   rabbitmq_peer_discovery_etcd \
+	   rabbitmq_peer_discovery_k8s \
+	   rabbitmq_prometheus \
+	   rabbitmq_random_exchange \
+	   rabbitmq_recent_history_exchange \
+	   rabbitmq_sharding \
+	   rabbitmq_shovel \
+	   rabbitmq_shovel_management \
+	   rabbitmq_stomp \
+	   rabbitmq_stream \
+	   rabbitmq_stream_management \
+	   rabbitmq_top \
+	   rabbitmq_tracing \
+	   rabbitmq_trust_store \
+	   rabbitmq_web_dispatch \
+	   rabbitmq_web_mqtt \
+	   rabbitmq_web_mqtt_examples \
+	   rabbitmq_web_stomp \
+	   rabbitmq_web_stomp_examples
+
+YTT ?= ytt
+
+actions-workflows: .github/workflows/test.yaml .github/workflows/test-mixed-versions.yaml
+
+.PHONY: .github/workflows/test.yaml .github/workflows/test-mixed-versions.yaml
+
+.github/workflows/test.yaml: .github/workflows/templates/test.template.yaml
+	$(gen_verbose) $(YTT) \
+		--file $< \
+		--data-value-yaml internal_deps=[$(subst $(space),$(comma),$(foreach s,$(INTERNAL_DEPS),"$s"))] \
+		--data-value-yaml tier1_plugins=[$(subst $(space),$(comma),$(foreach s,$(TIER1_PLUGINS),"$s"))] \
+		| sed 's/^true:/on:/' \
+		| sed 's/pull_request: null/pull_request:/'> $@
+
+.github/workflows/test-mixed-versions.yaml: .github/workflows/templates/test-mixed-versions.template.yaml
+	$(gen_verbose) $(YTT) \
+		--file $< \
+		--data-value-yaml internal_deps=[$(subst $(space),$(comma),$(foreach s,$(INTERNAL_DEPS),"$s"))] \
+		--data-value-yaml tier1_plugins=[$(subst $(space),$(comma),$(foreach s,$(TIER1_PLUGINS),"$s"))] \
+		| sed 's/^true:/on:/' \
+		| sed 's/pull_request: null/pull_request:/'> $@

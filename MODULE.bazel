@@ -74,6 +74,7 @@ erlang_config = use_extension(
     "erlang_config",
 )
 
+<<<<<<< HEAD
 erlang_config.internal_erlang_from_github_release(
     name = "24",
     sha256 = "8444ff9abe23aea268adbb95463561fc222c965052d35d7c950b17be01c3ad82",
@@ -124,6 +125,8 @@ erlang_config.internal_erlang_from_http_archive(
     extra_make_opts = ["-j 4"],
 )
 
+=======
+>>>>>>> c78563a335 (Turn off BuildBuddy integration (backport #11343) (backport #11390) (#11416))
 use_repo(
     erlang_config,
     "erlang_config",
@@ -134,30 +137,13 @@ elixir_config = use_extension(
     "elixir_config",
 )
 
-elixir_config.internal_elixir_from_github_release(
-    name = "1_13",
-    sha256 = "95daf2dd3052e6ca7d4d849457eaaba09de52d65ca38d6933c65bc1cdf6b8579",
-    version = "1.13.4",
-)
-
-elixir_config.internal_elixir_from_github_release(
-    name = "1_14",
-    sha256 = "2ea249566c67e57f8365ecdcd0efd9b6c375f57609b3ac2de326488ac37c8ebd",
-    version = "1.14.5",
-)
-
-elixir_config.internal_elixir_from_github_release(
-    name = "1_15",
-    sha256 = "09e697ab13fc60f27adaba9b71f8793105acd4320a89b16be0ceb4a13426d779",
-    version = "1.15.8",
-)
-
 use_repo(
     elixir_config,
     "elixir_config",
 )
 
 register_toolchains(
+<<<<<<< HEAD
     "@erlang_config//24:toolchain_major",
     "@erlang_config//24:toolchain_major_minor",
     "@erlang_config//25_0:toolchain_major",
@@ -172,10 +158,9 @@ register_toolchains(
     "@erlang_config//26:toolchain_major_minor",
     "@erlang_config//git_master:toolchain_major",
     "@erlang_config//git_master:toolchain_major_minor",
+=======
+>>>>>>> c78563a335 (Turn off BuildBuddy integration (backport #11343) (backport #11390) (#11416))
     "@elixir_config//external:toolchain",
-    "@elixir_config//1_13:toolchain",
-    "@elixir_config//1_14:toolchain",
-    "@elixir_config//1_15:toolchain",
 )
 
 erlang_package = use_extension(
@@ -468,21 +453,6 @@ use_repo(
     "proper",
     "temp",
     "x509",
-)
-
-rbe = use_extension(
-    "//bazel/bzlmod:extensions.bzl",
-    "rbe",
-)
-
-rbe.git_repository(
-    branch = "linux-rbe",
-    remote = "https://github.com/rabbitmq/rbe-erlang-platform.git",
-)
-
-use_repo(
-    rbe,
-    "rbe",
 )
 
 secondary_umbrella = use_extension(

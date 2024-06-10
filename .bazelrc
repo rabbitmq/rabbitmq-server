@@ -13,6 +13,7 @@ build --flag_alias=test_build=//:enable_test_build
 
 build --combined_report=lcov
 
+<<<<<<< HEAD
 build:buildbuddy --bes_results_url=https://app.buildbuddy.io/invocation/
 build:buildbuddy --bes_backend=grpcs://remote.buildbuddy.io
 build:buildbuddy --remote_cache=grpcs://remote.buildbuddy.io
@@ -71,6 +72,8 @@ build:rbe-26 --platforms=//bazel/platforms:erlang_linux_26_platform
 # no-op config so that --config=local does not error
 build:local --color=auto
 
+=======
+>>>>>>> c78563a335 (Turn off BuildBuddy integration (backport #11343) (backport #11390) (#11416))
 # Try importing a user specific .bazelrc
 # You can create your own by copying and editing the template-user.bazelrc template:
 # cp template-user.bazelrc user.bazelrc

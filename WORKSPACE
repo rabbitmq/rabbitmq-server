@@ -34,6 +34,7 @@ load("@rules_erlang//gazelle:deps.bzl", "gazelle_deps")
 
 gazelle_deps()
 
+<<<<<<< HEAD
 http_file(
     name = "otp_src_24",
     downloaded_file_path = "OTP-24.3.4.6.tar.gz",
@@ -76,6 +77,8 @@ http_file(
     urls = ["https://github.com/erlang/otp/archive/OTP-26.0.2.tar.gz"],
 )
 
+=======
+>>>>>>> c78563a335 (Turn off BuildBuddy integration (backport #11343) (backport #11390) (#11416))
 new_git_repository(
     name = "bats",
     build_file = "@//:BUILD.bats",
@@ -90,9 +93,3 @@ activemq_archive()
 load("//bazel/bzlmod:secondary_umbrella.bzl", "secondary_umbrella")
 
 secondary_umbrella()
-
-git_repository(
-    name = "rbe",
-    branch = "linux-rbe",
-    remote = "https://github.com/rabbitmq/rbe-erlang-platform.git",
-)
