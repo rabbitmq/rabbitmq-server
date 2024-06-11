@@ -89,7 +89,6 @@ plt(
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
     ],
-    target_compatible_with = ["@platforms//os:macos"],
 )
 
 dialyze(
@@ -100,6 +99,7 @@ dialyze(
     ),
     libs = [":elixir"],
     plt = ":deps_plt",
+    tags = ["manual"],
 )
 
 rabbitmqctl_test(

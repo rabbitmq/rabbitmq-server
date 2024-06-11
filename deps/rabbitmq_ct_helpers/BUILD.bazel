@@ -87,7 +87,6 @@ plt(
         "//deps/rabbitmq_management_agent:erlang_app",  # keep
         "@proper//:erlang_app",  # keep
     ],
-    target_compatible_with = ["@platforms//os:macos"],
 )
 
 dialyze(
@@ -96,6 +95,7 @@ dialyze(
     plt = ":deps_plt",
     target = ":erlang_app",
     warnings_as_errors = False,
+    tags = ["manual"],
 )
 
 eunit(
