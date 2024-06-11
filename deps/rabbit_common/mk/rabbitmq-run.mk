@@ -25,13 +25,15 @@ ifeq ($(PLATFORM),msys2)
 RABBITMQ_PLUGINS ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-plugins.bat
 RABBITMQ_SERVER ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-server.bat
 RABBITMQCTL ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmqctl.bat
+RABBITMQ_UPGRADE ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-upgrade.bat
 else
 RABBITMQ_PLUGINS ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-plugins
 RABBITMQ_SERVER ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-server
 RABBITMQCTL ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmqctl
+RABBITMQ_UPGRADE ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-upgrade
 endif
 
-export RABBITMQ_SCRIPTS_DIR RABBITMQCTL RABBITMQ_PLUGINS RABBITMQ_SERVER
+export RABBITMQ_SCRIPTS_DIR RABBITMQCTL RABBITMQ_PLUGINS RABBITMQ_SERVER RABBITMQ_UPGRADE
 
 # We export MAKE to be sure scripts and tests use the proper command.
 export MAKE
@@ -413,6 +415,35 @@ stop-brokers stop-cluster:
 		nodename="rabbit-$$n@$(HOSTNAME)"; \
 		$(MAKE) stop-node \
 		  RABBITMQ_NODENAME="$$nodename" & \
+	done; \
+	wait
+
+NODES ?= 3
+
+# Rolling restart similar to what the Kubernetes Operator does
+restart-cluster:
+	@for n in $$(seq $(NODES) -1 1); do \
+		nodename="rabbit-$$n@$(HOSTNAME)"; \
+		$(RABBITMQ_UPGRADE) -n "$$nodename" await_online_quorum_plus_one -t 604800 && \
+			$(RABBITMQ_UPGRADE) -n "$$nodename" drain; \
+		$(MAKE) stop-node \
+		  RABBITMQ_NODENAME="$$nodename"; \
+		$(MAKE) start-background-broker \
+		  NOBUILD=1 \
+		  RABBITMQ_NODENAME="$$nodename" \
+		  RABBITMQ_NODE_PORT="$$((5672 + $$n - 1))" \
+		  RABBITMQ_SERVER_START_ARGS=" \
+		  -rabbit loopback_users [] \
+		  -rabbitmq_management listener [{port,$$((15672 + $$n - 1))}] \
+		  -rabbitmq_mqtt tcp_listeners [$$((1883 + $$n - 1))] \
+		  -rabbitmq_web_mqtt tcp_config [{port,$$((1893 + $$n - 1))}] \
+		  -rabbitmq_web_mqtt_examples listener [{port,$$((1903 + $$n - 1))}] \
+		  -rabbitmq_stomp tcp_listeners [$$((61613 + $$n - 1))] \
+		  -rabbitmq_web_stomp tcp_config [{port,$$((61623 + $$n - 1))}] \
+		  -rabbitmq_web_stomp_examples listener [{port,$$((61633 + $$n - 1))}] \
+		  -rabbitmq_prometheus tcp_config [{port,$$((15692 + $$n - 1))}] \
+		  -rabbitmq_stream tcp_listeners [$$((5552 + $$n - 1))] \
+		  " & \
 	done; \
 	wait
 
