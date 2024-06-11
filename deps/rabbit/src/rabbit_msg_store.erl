@@ -24,7 +24,11 @@
 
 %%----------------------------------------------------------------------------
 
--include_lib("rabbit_common/include/rabbit_msg_store.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+
+-type(msg() :: any()).
+
+-record(msg_location, {msg_id, ref_count, file, offset, total_size}).
 
 %% We flush to disk at an interval to make sure we don't keep
 %% the data in memory too long. Confirms are sent after the
