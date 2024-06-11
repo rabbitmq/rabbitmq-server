@@ -164,9 +164,9 @@ jobs:
         bazelisk test $(< ${{ steps.shard.outputs.file }}) \
           --build_tests_only \
           --verbose_failures
-    - name: Setup tmate session
-      if: always() && inputs.plugin == 'rabbitmq_ct_helpers'
-      uses: mxschmitt/action-tmate@v3
+    # - name: Setup tmate session
+    #   if: always() && inputs.plugin == 'rabbitmq_ct_helpers'
+    #   uses: mxschmitt/action-tmate@v3
     - name: UPLOAD TEST LOGS
       if: always()
       uses: actions/upload-artifact@v4

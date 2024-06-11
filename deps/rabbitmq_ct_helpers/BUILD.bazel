@@ -87,6 +87,7 @@ plt(
         "//deps/rabbitmq_management_agent:erlang_app",  # keep
         "@proper//:erlang_app",  # keep
     ],
+    exec_compatible_with = ["@platforms//os:macos"],
 )
 
 dialyze(

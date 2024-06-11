@@ -89,6 +89,7 @@ plt(
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
     ],
+    exec_compatible_with = ["@platforms//os:macos"],
 )
 
 dialyze(
