@@ -283,7 +283,6 @@ def all_srcs(name = "all_srcs"):
             "include/rabbit_framing.hrl",
             "include/rabbit_memory.hrl",
             "include/rabbit_misc.hrl",
-            "include/rabbit_msg_store.hrl",
             "include/resource.hrl",
         ],
     )
