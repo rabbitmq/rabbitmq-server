@@ -47,6 +47,9 @@ jobs:
       with:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: ${{ matrix.elixir_version }}
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://cdn.jsdelivr.net/hex
     - name: AUTHENTICATE TO GOOGLE CLOUD
       uses: google-github-actions/auth@v2.1.3
       with:

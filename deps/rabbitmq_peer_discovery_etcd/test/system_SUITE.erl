@@ -265,7 +265,12 @@ registration_with_locking_test(Config) ->
     ?assertEqual(ok, rabbitmq_peer_discovery_etcd_v3_client:unlock(Pid, LockOwnerKey)),
 
     Condition2 = fun() ->
-                    [node()] =:= rabbitmq_peer_discovery_etcd_v3_client:list_nodes(Pid)
+                    case rabbitmq_peer_discovery_etcd_v3_client:list_nodes(Pid) of
+                        [{_, N}] when N =:= node() ->
+                            true;
+                        _ ->
+                            false
+                    end
                  end,
     try
         rabbit_ct_helpers:await_condition(Condition2, 45000)
