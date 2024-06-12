@@ -2661,9 +2661,117 @@ fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("amqp1_0.default_vhost", Conf))
 end}.
 
+%% ----------------------------------------------------------------------------
+%%  AMQP client 1.0 TLS options
+%% ----------------------------------------------------------------------------
+
+{mapping, "amqp10_client.ssl_options", "amqp10_client.ssl_options", [
+    {datatype, {enum, [none]}}
+]}.
+
+{translation, "amqp10_client.ssl_options",
+fun(Conf) ->
+    case cuttlefish:conf_get("amqp10_client.ssl_options", Conf, undefined) of
+        none -> [];
+        _    -> cuttlefish:invalid("Invalid amqp10_client.ssl_options")
+    end
+end}.
+
+{mapping, "amqp10_client.ssl_options.verify", "amqp10_client.ssl_options.verify", [
+    {datatype, {enum, [verify_peer, verify_none]}}]}.
+
+{mapping, "amqp10_client.ssl_options.cacertfile", "amqp10_client.ssl_options.cacertfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "amqp10_client.ssl_options.certfile", "amqp10_client.ssl_options.certfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "amqp10_client.ssl_options.cacerts.$name", "amqp10_client.ssl_options.cacerts",
+    [{datatype, string}]}.
+
+{translation, "amqp10_client.ssl_options.cacerts",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("amqp10_client.ssl_options.cacerts", Conf),
+    [ list_to_binary(V) || {_, V} <- Settings ]
+end}.
+
+{mapping, "amqp10_client.ssl_options.cert", "amqp10_client.ssl_options.cert",
+    [{datatype, string}]}.
+
+{translation, "amqp10_client.ssl_options.cert",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("amqp10_client.ssl_options.cert", Conf))
+end}.
+
+{mapping, "amqp10_client.ssl_options.crl_check", "amqp10_client.ssl_options.crl_check",
+    [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
+
+{mapping, "amqp10_client.ssl_options.depth", "amqp10_client.ssl_options.depth",
+    [{datatype, integer}, {validators, ["byte"]}]}.
+
+{mapping, "amqp10_client.ssl_options.key.RSAPrivateKey", "amqp10_client.ssl_options.key",
+    [{datatype, string}]}.
+
+{mapping, "amqp10_client.ssl_options.key.DSAPrivateKey", "amqp10_client.ssl_options.key",
+    [{datatype, string}]}.
+
+{mapping, "amqp10_client.ssl_options.key.PrivateKeyInfo", "amqp10_client.ssl_options.key",
+    [{datatype, string}]}.
+
+{translation, "amqp10_client.ssl_options.key",
+fun(Conf) ->
+    case cuttlefish_variable:filter_by_prefix("amqp10_client.ssl_options.key", Conf) of
+        [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
+        _ -> undefined
+    end
+end}.
+
+{mapping, "amqp10_client.ssl_options.keyfile", "amqp10_client.ssl_options.keyfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "amqp10_client.ssl_options.log_alert", "amqp10_client.ssl_options.log_alert",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "amqp10_client.ssl_options.password", "amqp10_client.ssl_options.password",
+    [{datatype, string}]}.
+
+{mapping, "amqp10_client.ssl_options.psk_identity", "amqp10_client.ssl_options.psk_identity",
+    [{datatype, string}]}.
+
+{mapping, "amqp10_client.ssl_options.reuse_sessions", "amqp10_client.ssl_options.reuse_sessions",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "amqp10_client.ssl_options.secure_renegotiate", "amqp10_client.ssl_options.secure_renegotiate",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "amqp10_client.ssl_options.versions.$version", "amqp10_client.ssl_options.versions",
+    [{datatype, atom}]}.
+
+{translation, "amqp10_client.ssl_options.versions",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("amqp10_client.ssl_options.versions", Conf),
+    [ V || {_, V} <- Settings ]
+end}.
+
+{mapping, "amqp10_client.ssl_options.sni", "amqp10_client.ssl_options.server_name_indication",
+    [{datatype, [{enum, [none]}, string]}]}.
+
+{translation, "amqp10_client.ssl_options.server_name_indication",
+fun(Conf) ->
+    case cuttlefish:conf_get("amqp10_client.ssl_options.sni", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        none      -> cuttlefish:unset();
+        Hostname  -> Hostname
+    end
+end}.
+
+
+% ===============================
+% AMQP 0.9.1
+% ===============================
 
 %% ----------------------------------------------------------------------------
-%%  amqp_client TLS options
+%%  AMQP client 0.9.1 TLS options
 %% ----------------------------------------------------------------------------
 
 {mapping, "amqp_client.ssl_options", "amqp_client.ssl_options", [
