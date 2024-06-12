@@ -428,6 +428,16 @@ start_it(StartType) ->
                 ok
             catch
                 error:{badmatch, Error}:_ ->
+                    %% `rabbitmq_prelaunch' was started before `rabbit' above.
+                    %% If the latter fails to start, we must stop the former as
+                    %% well.
+                    %%
+                    %% This is important if the environment changes between
+                    %% that error and the next attempt to start `rabbit': the
+                    %% environment is only read during the start of
+                    %% `rabbitmq_prelaunch' (and the cached context is cleaned
+                    %% on stop).
+                    _ = application:stop(rabbitmq_prelaunch),
                     stop_boot_marker(Marker),
                     case StartType of
                         temporary -> throw(Error);
