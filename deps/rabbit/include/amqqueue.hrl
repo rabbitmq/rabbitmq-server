@@ -41,6 +41,9 @@
 -define(amqqueue_is_stream(Q),
         ?amqqueue_type_is(Q, rabbit_stream_queue)).
 
+-define(amqqueue_is_mqtt_qos0(Q),
+    ?amqqueue_type_is(Q, rabbit_mqtt_qos0_queue)).
+
 -define(amqqueue_type_is(Q, Type),
         (?is_amqqueue_v2(Q) andalso
          ?amqqueue_v2_field_type(Q) =:= Type)).
