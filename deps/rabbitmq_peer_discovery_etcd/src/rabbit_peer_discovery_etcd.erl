@@ -59,9 +59,13 @@ list_nodes() ->
                    {ok, {[], disc}}
            end,
     Fun2 = fun(_Proplist) ->
-                   %% error logging will be done by the client
-                   Nodes = rabbitmq_peer_discovery_etcd_v3_client:list_nodes(),
-                   {ok, {Nodes, disc}}
+                   %% nodes are returned sorted with the create_revision as
+                   %% the first element in the tuple.
+                   %% The node with the lowest create_revision is thus selected
+                   %% based on the assumption that the create_revision remains
+                   %% consistent throughout the lifetime of the etcd key.
+                   [{_, Node} | _] = rabbitmq_peer_discovery_etcd_v3_client:list_nodes(),
+                   {ok, {Node, disc}}
            end,
     rabbit_peer_discovery_util:maybe_backend_configured(?BACKEND_CONFIG_KEY, Fun0, Fun1, Fun2).
 

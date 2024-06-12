@@ -230,16 +230,13 @@ connected({call, From}, list_keys, Data = #statem_data{connection_name = Conn}) 
     rabbit_log:debug("etcd peer discovery: will use prefix ~ts to query for node keys", [Prefix]),
     {ok, #{kvs := Result}} = eetcd_kv:get(C2),
     rabbit_log:debug("etcd peer discovery returned keys: ~tp", [Result]),
-    Values = [maps:get(value, M) || M <- Result],
-    rabbit_log:debug("etcd peer discovery: listing node keys returned ~b results", [length(Values)]),
-    ParsedNodes = lists:map(fun extract_node/1, Values),
-    {Successes, Failures} = lists:partition(fun filter_node/1, ParsedNodes),
-    JoinedString = lists:join(",", [rabbit_data_coercion:to_list(Node) || Node <- lists:usort(Successes)]),
-    rabbit_log:error("etcd peer discovery: successfully extracted nodes: ~ts", [JoinedString]),
-    lists:foreach(fun(Val) ->
-        rabbit_log:error("etcd peer discovery: failed to extract node name from etcd value ~tp", [Val])
-    end, Failures),
-    gen_statem:reply(From, lists:usort(Successes)),
+    Values = [{maps:get(create_revision, M), maps:get(value, M)} || M <- Result],
+    rabbit_log:debug("etcd peer discovery: listing node keys returned ~b results",
+                     [length(Values)]),
+    ParsedNodes = lists:filtermap(fun extract_node/1, Values),
+    rabbit_log:info("etcd peer discovery: successfully extracted nodes: ~0tp",
+                    [ParsedNodes]),
+    gen_statem:reply(From, lists:usort(ParsedNodes)),
     keep_state_and_data.
 
 
@@ -298,15 +295,18 @@ registration_value(#statem_data{node_key_lease_id = LeaseID, node_key_ttl_in_sec
         <<"ttl">>      => TTL
     })).
 
--spec extract_node(binary()) -> atom() | {error, any()}.
-
-extract_node(Payload) ->
+extract_node({CreatedRev, Payload}) ->
     case rabbit_json:try_decode(Payload) of
-        {error, Error} -> {error, Error};
+        {error, _Error} ->
+            rabbit_log:error("etcd peer discovery: failed to extract node name from etcd value ~tp",
+                             [Payload]),
+            false;
         {ok, Map} ->
             case maps:get(<<"node">>, Map, undefined) of
-                undefined -> undefined;
-                Node      -> rabbit_data_coercion:to_atom(Node)
+                undefined ->
+                    false;
+                Node ->
+                    {true, {CreatedRev, rabbit_data_coercion:to_atom(Node)}}
             end
     end.
 
