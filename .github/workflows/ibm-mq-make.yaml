@@ -4,9 +4,12 @@ on:
   push:
     branches:
       - 'main'
-      - ibm-mq-docker-workflow
     paths:
       - '.github/workflows/ibm-mq-make.yaml'
+  pull_request:
+    paths:
+      - '.github/workflows/ibm-mq-make.yaml'
+  
 env:
   REGISTRY_IMAGE: pivotalrabbitmq/ibm-mqadvanced-server-dev
   IBM_MQ_REPOSITORY: ibm-messaging/mq-container
