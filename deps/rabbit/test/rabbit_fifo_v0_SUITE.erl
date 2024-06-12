@@ -541,29 +541,6 @@ duplicate_delivery_test(_) ->
     ?assertEqual(1, maps:size(Messages)),
     ok.
 
-state_enter_file_handle_leader_reservation_test(_) ->
-    S0 = init(#{name => the_name,
-                queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>),
-                become_leader_handler => {m, f, [a]}}),
-
-    Resource = {resource, <<"/">>, queue, <<"test">>},
-    Effects = rabbit_fifo_v0:state_enter(leader, S0),
-    ?assertEqual([
-        {mod_call, m, f, [a, the_name]},
-        {mod_call, rabbit_quorum_queue, file_handle_leader_reservation, [Resource]}
-      ], Effects),
-    ok.
-
-state_enter_file_handle_other_reservation_test(_) ->
-    S0 = init(#{name => the_name,
-                queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>)}),
-    Effects = rabbit_fifo_v0:state_enter(other, S0),
-    ?assertEqual([
-        {mod_call, rabbit_quorum_queue, file_handle_other_reservation, []}
-      ],
-      Effects),
-    ok.
-
 state_enter_monitors_and_notifications_test(_) ->
     Oth = spawn(fun () -> ok end),
     {State0, _} = enq(1, 1, first, test_init(test)),
@@ -998,8 +975,7 @@ single_active_consumer_state_enter_leader_include_waiting_consumers_test(_) ->
 
     Effects = rabbit_fifo_v0:state_enter(leader, State1),
     %% 2 effects for each consumer process (channel process), 1 effect for the node,
-    %% 1 effect for file handle reservation
-    ?assertEqual(2 * 3 + 1 + 1, length(Effects)).
+    ?assertEqual(2 * 3 + 1, length(Effects)).
 
 single_active_consumer_state_enter_eol_include_waiting_consumers_test(_) ->
     Resource = rabbit_misc:r("/", queue, atom_to_binary(?FUNCTION_NAME, utf8)),
@@ -1029,8 +1005,7 @@ single_active_consumer_state_enter_eol_include_waiting_consumers_test(_) ->
 
     Effects = rabbit_fifo_v0:state_enter(eol, State1),
     %% 1 effect for each consumer process (channel process),
-    %% 1 effect for file handle reservation
-    ?assertEqual(4, length(Effects)).
+    ?assertEqual(3, length(Effects)).
 
 query_consumers_test(_) ->
     State0 = init(#{name => ?FUNCTION_NAME,

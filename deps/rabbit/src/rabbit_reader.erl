@@ -374,11 +374,7 @@ start_connection(Parent, HelperSups, RanchRef, Deb, Sock) ->
     after
         %% We don't call gen_tcp:close/1 here since it waits for
         %% pending output to be sent, which results in unnecessary
-        %% delays. We could just terminate - the reader is the
-        %% controlling process and hence its termination will close
-        %% the socket. However, to keep the file_handle_cache
-        %% accounting as accurate as possible we ought to close the
-        %% socket w/o delay before termination.
+        %% delays.
         rabbit_net:fast_close(RealSocket),
         rabbit_networking:unregister_connection(self()),
         rabbit_core_metrics:connection_closed(self()),

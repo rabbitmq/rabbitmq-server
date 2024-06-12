@@ -7,7 +7,6 @@
 
 -module(rabbit_amqqueue).
 
--export([warn_file_limit/0]).
 -export([recover/1, stop/1, start/1, declare/6, declare/7,
          delete_immediately/1, delete_exclusive/2, delete/4, purge/1,
          forget_all_durable/1]).
@@ -119,21 +118,6 @@
          active, activity_status, arguments]).
 -define(KILL_QUEUE_DELAY_INTERVAL, 100).
 
-warn_file_limit() ->
-    DurableQueues = find_recoverable_queues(),
-    L = length(DurableQueues),
-
-    %% if there are not enough file handles, the server might hang
-    %% when trying to recover queues, warn the user:
-    case file_handle_cache:get_limit() < L of
-        true ->
-            rabbit_log:warning(
-              "Recovering ~tp queues, available file handles: ~tp. Please increase max open file handles limit to at least ~tp!",
-              [L, file_handle_cache:get_limit(), L]);
-        false ->
-            ok
-    end.
-
 -spec recover(rabbit_types:vhost()) ->
     {Recovered :: [amqqueue:amqqueue()],
      Failed :: [amqqueue:amqqueue()]}.
@@ -181,11 +165,6 @@ find_local_durable_queues(VHostName) ->
     rabbit_db_queue:filter_all_durable(fun(Q) ->
                                                amqqueue:get_vhost(Q) =:= VHostName andalso
                                                    rabbit_queue_type:is_recoverable(Q)
-                                       end).
-
-find_recoverable_queues() ->
-    rabbit_db_queue:filter_all_durable(fun(Q) ->
-                                               rabbit_queue_type:is_recoverable(Q)
                                        end).
 
 -spec declare(name(),

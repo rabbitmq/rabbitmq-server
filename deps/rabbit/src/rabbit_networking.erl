@@ -576,7 +576,7 @@ handshake(Ref, ProxyProtocolEnabled) ->
                         {'EXIT', normal} ->
                             {error, handshake_failed};
                         {ok, Sock} ->
-                            setup_socket(Sock),
+                            ok = tune_buffer_size(Sock),
                             {ok, {rabbit_proxy_socket, Sock, ProxyInfo}}
                     end
             end;
@@ -585,14 +585,10 @@ handshake(Ref, ProxyProtocolEnabled) ->
                 {'EXIT', normal} ->
                     {error, handshake_failed};
                 {ok, Sock} ->
-                    setup_socket(Sock),
+                    ok = tune_buffer_size(Sock),
                     {ok, Sock}
             end
     end.
-
-setup_socket(Sock) ->
-    ok = tune_buffer_size(Sock),
-    ok = file_handle_cache:obtain().
 
 tune_buffer_size(Sock) ->
     case tune_buffer_size1(Sock) of

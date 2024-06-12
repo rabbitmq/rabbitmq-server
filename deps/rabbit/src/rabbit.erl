@@ -744,9 +744,6 @@ status() ->
                                         get_disk_free_limit, []}},
             {disk_free,                {rabbit_disk_monitor,
                                         get_disk_free, []}}]),
-    S3 = rabbit_misc:with_exit_handler(
-           fun () -> [] end,
-           fun () -> [{file_descriptors, file_handle_cache:info()}] end),
     S4 = [{processes,        [{limit, erlang:system_info(process_limit)},
                               {used, erlang:system_info(process_count)}]},
           {run_queue,        erlang:statistics(run_queue)},
@@ -781,7 +778,7 @@ status() ->
                (_) -> false
            end,
            maps:to_list(product_info())),
-    S1 ++ S2 ++ S3 ++ S4 ++ S5 ++ S6 ++ S7 ++ S8.
+    S1 ++ S2 ++ S4 ++ S5 ++ S6 ++ S7 ++ S8.
 
 alarms() ->
     Alarms = rabbit_misc:with_exit_handler(rabbit_misc:const([]),
@@ -1656,7 +1653,7 @@ config_files() ->
 start_fhc() ->
     ok = rabbit_sup:start_restartable_child(
       file_handle_cache,
-      [fun rabbit_alarm:set_alarm/1, fun rabbit_alarm:clear_alarm/1]),
+      [fun(_) -> ok end, fun(_) -> ok end]),
     ensure_working_fhc().
 
 ensure_working_fhc() ->

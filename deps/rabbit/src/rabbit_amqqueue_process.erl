@@ -210,8 +210,6 @@ init_it2(Recover, From, State = #q{q                   = Q,
                (Res == created orelse Res == existing) ->
             case matches(Recover, Q, Q1) of
                 true ->
-                    ok = file_handle_cache:register_callback(
-                           rabbit_amqqueue, set_maximum_since_use, [self()]),
                     BQ = backing_queue_module(),
                     BQS = bq_init(BQ, Q, TermsOrNew),
                     send_reply(From, {new, Q}),
@@ -1189,7 +1187,6 @@ prioritise_cast(Msg, _Len, State) ->
     case Msg of
         delete_immediately                   -> 8;
         {delete_exclusive, _Pid}             -> 8;
-        {set_maximum_since_use, _Age}        -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
         {ack, _AckTags, _ChPid}              -> 4; %% [1]
         {resume, _ChPid}                     -> 3;
@@ -1498,10 +1495,6 @@ handle_cast({activate_limit, ChPid}, State) ->
 handle_cast({deactivate_limit, ChPid}, State) ->
     noreply(possibly_unblock(rabbit_queue_consumers:deactivate_limit_fun(),
                              ChPid, State));
-
-handle_cast({set_maximum_since_use, Age}, State) ->
-    ok = file_handle_cache:set_maximum_since_use(Age),
-    noreply(State);
 
 handle_cast({credit, SessionPid, CTag, Credit, Drain},
             #q{q = Q,

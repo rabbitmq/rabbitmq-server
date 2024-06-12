@@ -27,7 +27,6 @@ groups() ->
           file_handle_cache, %% Change FHC limit.
           file_handle_cache_reserve,
           file_handle_cache_reserve_release,
-          file_handle_cache_reserve_above_limit,
           file_handle_cache_reserve_monitor,
           file_handle_cache_reserve_open_file_above_limit
         ]}
@@ -187,27 +186,6 @@ file_handle_cache_reserve_release1(_Config) ->
     ?assertEqual([{files_reserved, 3}], file_handle_cache:info([files_reserved])),
     ok = file_handle_cache:release_reservation(),
     ?assertEqual([{files_reserved, 0}], file_handle_cache:info([files_reserved])),
-    passed.
-
-file_handle_cache_reserve_above_limit(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, file_handle_cache_reserve_above_limit1, [Config]).
-
-file_handle_cache_reserve_above_limit1(_Config) ->
-    Limit = file_handle_cache:get_limit(),
-    ok = file_handle_cache:set_limit(5),
-    %% Reserves are always accepted, even if above the limit
-    %% These are for special processes such as quorum queues
-    ok = file_handle_cache:obtain(5),
-    ?assertEqual([{file_descriptor_limit, []}],  rabbit_alarm:get_alarms()),
-
-    ok = file_handle_cache:set_reservation(7),
-
-    Props = file_handle_cache:info([files_reserved, sockets_used]),
-    ?assertEqual(7, proplists:get_value(files_reserved, Props)),
-    ?assertEqual(5, proplists:get_value(sockets_used, Props)),
-
-    ok = file_handle_cache:set_limit(Limit),
     passed.
 
 file_handle_cache_reserve_open_file_above_limit(Config) ->

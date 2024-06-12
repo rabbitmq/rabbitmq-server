@@ -41,15 +41,6 @@
 -define(HEADER_SIZE, 64). %% bytes
 -define(ENTRY_SIZE,  32). %% bytes
 
-%% The file_handle_cache module tracks reservations at
-%% the level of the process. This means we cannot
-%% handle them independently in the store and index.
-%% Because the index may reserve more FDs than the
-%% store the index becomes responsible for this and
-%% will always reserve at least 2 FDs, and release
-%% everything when terminating.
--define(STORE_FD_RESERVATIONS, 2).
-
 -include_lib("rabbit_common/include/rabbit.hrl").
 %% Set to true to get an awful lot of debug logs.
 -if(false).
@@ -538,7 +529,6 @@ terminate(VHost, Terms, State0 = #qi { dir = Dir,
         ok = file:sync(Fd),
         ok = file:close(Fd)
     end, OpenFds),
-    file_handle_cache:release_reservation(),
     %% Write recovery terms for faster recovery.
     _ = rabbit_recovery_terms:store(VHost,
                                 filename:basename(rabbit_file:binary_to_filename(Dir)),
@@ -555,7 +545,6 @@ delete_and_terminate(State = #qi { dir = Dir,
     _ = maps:map(fun(_, Fd) ->
         ok = file:close(Fd)
     end, OpenFds),
-    file_handle_cache:release_reservation(),
     %% Erase the data on disk.
     ok = erase_index_dir(rabbit_file:binary_to_filename(Dir)),
     State#qi{ segments = #{},
@@ -626,18 +615,9 @@ new_segment_file(Segment, SegmentEntryCount, State = #qi{ segments = Segments })
 %% using too many FDs when the consumer lags a lot. We
 %% limit at 4 because we try to keep up to 2 for reading
 %% and 2 for writing.
-reduce_fd_usage(SegmentToOpen, State = #qi{ fds = OpenFds })
+reduce_fd_usage(_SegmentToOpen, State = #qi{ fds = OpenFds })
         when map_size(OpenFds) < 4 ->
-    %% The only case where we need to update reservations is
-    %% when we are opening a segment that wasn't already open,
-    %% and we are not closing another segment at the same time.
-    case OpenFds of
-        #{SegmentToOpen := _} ->
-            State;
-        _ ->
-            file_handle_cache:set_reservation(?STORE_FD_RESERVATIONS + map_size(OpenFds) + 1),
-            State
-    end;
+    State;
 reduce_fd_usage(SegmentToOpen, State = #qi{ fds = OpenFds0 }) ->
     case OpenFds0 of
         #{SegmentToOpen := _} ->
@@ -868,7 +848,6 @@ delete_segment(Segment, State0 = #qi{ fds = OpenFds0 }) ->
     State = case maps:take(Segment, OpenFds0) of
         {Fd, OpenFds} ->
             ok = file:close(Fd),
-            file_handle_cache:set_reservation(?STORE_FD_RESERVATIONS + map_size(OpenFds)),
             State0#qi{ fds = OpenFds };
         error ->
             State0

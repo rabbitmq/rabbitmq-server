@@ -80,8 +80,6 @@ groups() ->
                                             reject_after_leader_transfer,
                                             shrink_all,
                                             rebalance,
-                                            file_handle_reservations,
-                                            file_handle_reservations_above_limit,
                                             node_removal_is_not_quorum_critical,
                                             leader_locator_client_local,
                                             leader_locator_balanced,
@@ -2052,61 +2050,6 @@ node_removal_is_not_quorum_critical(Config) ->
     Qs = rpc:call(Server, rabbit_quorum_queue, list_with_minimum_quorum, []),
     ?assertEqual([], Qs).
 
-
-file_handle_reservations(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "file_handle_reservations tests isn't mixed version compatible"};
-        false ->
-            file_handle_reservations0(Config)
-    end.
-
-file_handle_reservations0(Config) ->
-    Servers = [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
-    QQ = ?config(queue_name, Config),
-    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    RaName = ra_name(QQ),
-    {ok, _, {_, Leader}} = ra:members({RaName, Server1}),
-    [Follower1, Follower2] = Servers -- [Leader],
-    ?assertEqual([{files_reserved, 5}],
-                 rpc:call(Leader, file_handle_cache, info, [[files_reserved]])),
-    ?assertEqual([{files_reserved, 2}],
-                 rpc:call(Follower1, file_handle_cache, info, [[files_reserved]])),
-    ?assertEqual([{files_reserved, 2}],
-                 rpc:call(Follower2, file_handle_cache, info, [[files_reserved]])),
-    force_leader_change(Servers, QQ),
-    {ok, _, {_, Leader0}} = ra:members({RaName, Server1}),
-    [Follower01, Follower02] = Servers -- [Leader0],
-    ?assertEqual([{files_reserved, 5}],
-                 rpc:call(Leader0, file_handle_cache, info, [[files_reserved]])),
-    ?assertEqual([{files_reserved, 2}],
-                 rpc:call(Follower01, file_handle_cache, info, [[files_reserved]])),
-    ?assertEqual([{files_reserved, 2}],
-                 rpc:call(Follower02, file_handle_cache, info, [[files_reserved]])).
-
-file_handle_reservations_above_limit(Config) ->
-    [S1, S2, S3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-
-    Ch = rabbit_ct_client_helpers:open_channel(Config, S1),
-    QQ = ?config(queue_name, Config),
-    QQ2 = ?config(alt_queue_name, Config),
-
-    Limit = rpc:call(S1, file_handle_cache, get_limit, []),
-
-    ok = rpc:call(S1, file_handle_cache, set_limit, [3]),
-    ok = rpc:call(S2, file_handle_cache, set_limit, [3]),
-    ok = rpc:call(S3, file_handle_cache, set_limit, [3]),
-
-    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    ?assertEqual({'queue.declare_ok', QQ2, 0, 0},
-                 declare(Ch, QQ2, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-
-    ok = rpc:call(S1, file_handle_cache, set_limit, [Limit]),
-    ok = rpc:call(S2, file_handle_cache, set_limit, [Limit]),
-    ok = rpc:call(S3, file_handle_cache, set_limit, [Limit]).
 
 cleanup_data_dir(Config) ->
     %% With Khepri this test needs to run in a 3-node cluster, otherwise the queue can't
