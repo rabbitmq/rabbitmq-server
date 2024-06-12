@@ -1346,6 +1346,16 @@ is_unresponsive(Q, Timeout) when ?amqqueue_is_stream(Q) ->
     catch
         exit:{timeout, _} ->
             true
+    end;
+is_unresponsive(Q, Timeout) when ?amqqueue_is_mqtt_qos0(Q) ->
+    QPid = amqqueue:get_pid(Q),
+    try
+        delegate:invoke(QPid, {gen_server2, call, [{info, [name]}, Timeout]}),
+        false
+    catch
+        %% TODO catch any exit??
+        exit:{timeout, _} ->
+            true
     end.
 
 format(Q) ->
