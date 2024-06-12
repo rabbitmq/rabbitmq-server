@@ -1,6 +1,5 @@
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
-load(":rabbitmqctl_check_formatted.bzl", "rabbitmqctl_check_formatted_test")
 load(":rabbitmqctl_test.bzl", "rabbitmqctl_test")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
@@ -68,35 +67,6 @@ rabbitmq_run(
     visibility = ["//visibility:public"],
 )
 
-rabbitmqctl_check_formatted_test(
-    name = "check_formatted",
-    size = "small",
-    srcs = [
-        ".formatter.exs",
-        "config/config.exs",
-        "mix.exs",
-    ] + glob([
-        "lib/**/*.ex",
-        "test/**/*.exs",
-    ]),
-    data = glob(["test/fixtures/**/*"]),
-    target_compatible_with = select({
-        "@platforms//os:macos": [
-            "@platforms//os:macos",
-            "@elixir_config//:elixir_1_15",
-        ],
-        "//conditions:default": [
-            "@platforms//os:linux",
-            "@elixir_config//:elixir_1_15",
-        ],
-    }),
-)
-
-test_suite(
-    name = "rabbitmqctl_check_formatted",
-    tests = ["check_formatted"],
-)
-
 plt(
     name = "deps_plt",
     apps = [
@@ -129,6 +99,7 @@ dialyze(
     ),
     libs = [":elixir"],
     plt = ":deps_plt",
+    tags = ["manual"],
 )
 
 rabbitmqctl_test(

@@ -4,11 +4,7 @@ on:
 jobs:
   peer-discovery-aws-integration-test:
     name: Integration Test
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        otp_version_id:
-          - 25_3
+    runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
     - name: CHECKOUT REPOSITORY
@@ -16,33 +12,70 @@ jobs:
     - name: WAIT FOR OCI IMAGE WORKFLOW
       uses: lewagon/wait-on-check-action@v1.3.4
       with:
-        ref: ${{ github.ref }}
-        check-name: build-publish-dev-bazel
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
-        wait-interval: 30 # seconds
+        images: pivotalrabbitmq/rabbitmq
+        tags: |
+          type=sha,format=long
+    - uses: int128/wait-for-docker-image-action@v1
+      if: steps.authorized.outputs.authorized == 'true'
+      with:
+        tags: ${{ steps.metadata.outputs.tags }}
+        timeout-seconds: 3600
+        polling-seconds: 60
+    - name: COMPUTE REPO CACHE KEY
+      if: steps.authorized.outputs.authorized == 'true'
+      id: repo-cache-key
+      run: |
+        echo "value=bazel-repo-cache-${{ hashFiles('MODULE.bazel') }}" | tee -a $GITHUB_OUTPUT
+    - name: LOAD REPO CACHE
+      if: steps.authorized.outputs.authorized == 'true'
+      uses: actions/cache/restore@v4
+      with:
+        key: ${{ steps.repo-cache-key.outputs.value }}
+        path: /home/runner/repo-cache/
+    - name: CONFIGURE OTP & ELIXIR
+      if: steps.authorized.outputs.authorized == 'true'
+      uses: erlef/setup-beam@v1.17
+      with:
+        otp-version: 25.3
+        elixir-version: 1.14
+    - name: SETUP ecs-cli
+      if: steps.authorized.outputs.authorized == 'true'
+      env:
+        ECS_CLI_VERSION: 1.21.0
+      run: |
+        curl -Lo /usr/local/bin/ecs-cli https://amazon-ecs-cli.s3.amazonaws.com/ecs-cli-linux-amd64-v${ECS_CLI_VERSION} && \
+        chmod +x /usr/local/bin/ecs-cli && \
+        ecs-cli --version
+    - name: AUTHENTICATE TO GOOGLE CLOUD
+      if: steps.authorized.outputs.authorized == 'true'
+      uses: google-github-actions/auth@v2.1.2
+      with:
+        credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
     - name: CONFIGURE BAZEL
       run: |
+        if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME }}" ]; then
         cat << EOF >> user.bazelrc
-          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
-
-          build:buildbuddy --build_metadata=ROLE=CI
-          build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
-          build:buildbuddy --color=yes
+          build --remote_cache=https://storage.googleapis.com/${{ secrets.REMOTE_CACHE_BUCKET_NAME }}
+          build --google_default_credentials
         EOF
+        fi
+        cat << EOF >> user.bazelrc
+          build --repository_cache=/home/runner/repo-cache/
+          build --color=yes
+        EOF
+
+        bazelisk info release
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
     - name: RUN INTEGRATION TESTS
       run: |
-        sudo sysctl -w net.ipv4.tcp_keepalive_time=60
-        sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
-
         branch_or_tag="${GITHUB_REF##*/}"
         bazelisk test //deps/rabbitmq_peer_discovery_aws:integration_SUITE \
-          --config=rbe-${{ matrix.otp_version_id }} \
           --test_tag_filters=aws \
           --build_tests_only \
           --test_env AWS_ACCESS_KEY_ID=${{ secrets.CONCOURSE_AWS_ACCESS_KEY_ID }} \
           --test_env AWS_SECRET_ACCESS_KEY=${{ secrets.CONCOURSE_AWS_SECRET_ACCESS_KEY }} \
           --test_env RABBITMQ_IMAGE="pivotalrabbitmq/rabbitmq:${{ github.sha }}" \
           --test_env AWS_ECS_CLUSTER_NAME="rabbitmq-peer-discovery-aws-actions-${branch_or_tag//[._]/-}" \
+          --test_output=streamed \
           --verbose_failures

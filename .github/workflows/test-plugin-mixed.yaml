@@ -1,0 +1,178 @@
+name: Test Plugin Mixed Version Clusters
+on:
+  workflow_call:
+    inputs:
+      repo_cache_key:
+        required: true
+        type: string
+      plugin:
+        required: true
+        type: string
+      shard_index:
+        default: 0
+        type: number
+      shard_count:
+        default: 1
+        type: number
+    secrets:
+      REMOTE_CACHE_BUCKET_NAME:
+        required: true
+      REMOTE_CACHE_CREDENTIALS_JSON:
+        required: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        erlang_version:
+        - 25.0
+        include:
+        - erlang_version: 25.0
+          elixir_version: 1.14
+    timeout-minutes: 120
+    steps:
+    - name: LOAD REPO CACHE
+      uses: actions/cache/restore@v4
+      with:
+        key: ${{ inputs.repo_cache_key }}
+        path: /home/runner/repo-cache/
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v4
+    - name: CONFIGURE OTP & ELIXIR
+      uses: erlef/setup-beam@v1.17
+      with:
+        otp-version: ${{ matrix.erlang_version }}
+        elixir-version: ${{ matrix.elixir_version }}
+    - name: AUTHENTICATE TO GOOGLE CLOUD
+      uses: google-github-actions/auth@v2.1.2
+      with:
+        credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
+    - name: CONFIGURE BAZEL
+      run: |
+        if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME }}" ]; then
+        cat << EOF >> user.bazelrc
+          build --remote_cache=https://storage.googleapis.com/${{ secrets.REMOTE_CACHE_BUCKET_NAME }}
+          build --google_default_credentials
+        EOF
+        fi
+        cat << EOF >> user.bazelrc
+          build --repository_cache=/home/runner/repo-cache/
+          build --color=yes
+        EOF
+
+        bazelisk info release
+    #! - name: Setup tmate session
+    #!   uses: mxschmitt/action-tmate@v3
+    - uses: actions/setup-dotnet@v4
+      if: inputs.plugin == 'rabbit'
+      with:
+        dotnet-version: '3.1.x'
+    - name: deps/amqp10_client SETUP
+      if: inputs.plugin == 'amqp10_client'
+      run: |
+        # reduce sandboxing so that activemq works
+        cat << EOF >> user.bazelrc
+          build --strategy=TestRunner=local
+        EOF
+    - name: deps/rabbit SETUP
+      if: inputs.plugin == 'rabbit'
+      run: |
+        # reduce sandboxing so that maven works
+        cat << EOF >> user.bazelrc
+          build --strategy=TestRunner=local
+        EOF
+    - name: deps/rabbitmq_amqp1_0 SETUP
+      if: inputs.plugin == 'rabbitmq_amqp1_0'
+      run: |
+        cat << EOF >> user.bazelrc
+          build --strategy=TestRunner=local
+        EOF
+    - name: deps/rabbitmq_auth_backend_ldap SETUP
+      if: inputs.plugin == 'rabbitmq_auth_backend_ldap'
+      run: |
+        sudo apt-get update && \
+        sudo apt-get install -y \
+          apparmor-utils \
+          ldap-utils \
+          slapd
+
+        sudo aa-complain `which slapd`
+
+        cat << EOF >> user.bazelrc
+          build --strategy=TestRunner=local
+        EOF
+    - name: deps/rabbitmq_mqtt SETUP
+      if: inputs.plugin == 'rabbitmq_mqtt'
+      run: |
+        cat << EOF >> user.bazelrc
+          build --strategy=TestRunner=local
+        EOF
+    - name: deps/rabbitmq_peer_discovery_consul SETUP
+      if: inputs.plugin == 'rabbitmq_peer_discovery_consul'
+      run: |
+        cat << EOF >> user.bazelrc
+          build --strategy=TestRunner=local
+        EOF
+    - name: deps/rabbitmq_peer_discovery_etcd SETUP
+      if: inputs.plugin == 'rabbitmq_peer_discovery_etcd'
+      run: |
+        sudo apt-get update && \
+        sudo apt-get install -y \
+          daemonize
+    - name: deps/rabbitmq_stream SETUP
+      if: inputs.plugin == 'rabbitmq_stream'
+      run: |
+        cat << EOF >> user.bazelrc
+          build --strategy=TestRunner=local
+        EOF
+    - name: deps/rabbitmq_stream_management SETUP
+      if: inputs.plugin == 'rabbitmq_stream_management'
+      run: |
+        cat << EOF >> user.bazelrc
+          build --strategy=TestRunner=local
+        EOF
+    - name: deps/rabbitmq_tracing SETUP
+      if: inputs.plugin == 'rabbitmq_tracing'
+      run: |
+        cat << EOF >> user.bazelrc
+          build --strategy=TestRunner=local
+        EOF
+    - name: COMPUTE TESTS IN SHARD
+      id: shard
+      run: |
+        bazelisk cquery \
+          'attr("tags", "mixed-version-cluster", tests(//deps/${{ inputs.plugin }}/...)) except attr("tags", "manual", //deps/${{ inputs.plugin }}/...)' \
+          --output=label \
+            | awk '{print $1;}' > tests.log
+        if [[ $(wc -l < tests.log) != "0" ]]; then
+          split -da 3 -l $((`wc -l < tests.log`/${{ inputs.shard_count }})) tests.log shard
+          printf -v padded_index "%03d" ${{ inputs.shard_index }}
+          echo "file=shard$padded_index" | tee -a $GITHUB_OUTPUT
+        else
+          echo "No tests in this shard"
+          echo "file=" | tee -a $GITHUB_OUTPUT
+        fi
+    - name: RUN TESTS
+      if: steps.shard.outputs.file != '' && inputs.plugin != 'rabbitmq_peer_discovery_aws'
+      run: |
+        echo "Tests in shard:"
+        cat ${{ steps.shard.outputs.file }}
+        echo ""
+
+        ## WARNING:
+        ## secrets must not be set in --test_env or --action_env,
+        ## or otherwise logs must not be saved as artifacts.
+        ## rabbit_ct_helpers or other code may log portions of the
+        ## env vars and leak them
+
+        bazelisk test $(< ${{ steps.shard.outputs.file }}) \
+          --build_tests_only \
+          --verbose_failures
+    - name: UPLOAD TEST LOGS
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: bazel-testlogs-${{ inputs.plugin }}-${{ inputs.shard_index }}-${{ matrix.erlang_version }}-${{ matrix.metadata_store }}-mixed
+        path: |
+          bazel-testlogs/deps/${{ inputs.plugin }}/*
