@@ -144,6 +144,9 @@ jobs:
       with:
         otp-version: 26
         elixir-version: 1.15
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://cdn.jsdelivr.net/hex
     - name: ENSURE WORKFLOWS ARE UP TO DATE
       run: |
         mkdir local-bin/
