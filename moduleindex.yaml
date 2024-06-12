@@ -647,6 +647,7 @@ rabbit:
 - rabbit_exchange_type_fanout
 - rabbit_exchange_type_headers
 - rabbit_exchange_type_invalid
+- rabbit_exchange_type_local_random
 - rabbit_exchange_type_topic
 - rabbit_feature_flags
 - rabbit_ff_controller

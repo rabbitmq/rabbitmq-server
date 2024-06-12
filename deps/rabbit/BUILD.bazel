@@ -1063,6 +1063,14 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+    name = "rabbit_local_random_exchange_SUITE",
+    size = "small",
+    additional_beam = [
+        ":test_queue_utils_beam",
+    ],
+)
+
+rabbitmq_integration_suite(
     name = "rabbit_direct_reply_to_prop_SUITE",
     size = "medium",
     deps = [
