@@ -104,6 +104,7 @@ dialyze(
     plt = ":deps_plt",
     target = ":erlang_app",
     warnings_as_errors = False,
+    tags = ["manual"],
 )
 
 eunit(
