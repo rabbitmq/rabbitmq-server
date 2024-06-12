@@ -1,5 +1,6 @@
 -module(unit_quorum_queue_SUITE).
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 all() ->

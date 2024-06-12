@@ -55,10 +55,14 @@ registration_value_test(_Config) ->
 extract_nodes_case1_test(_Config) ->
     Input    = registration_value_of(8488283859587364900, 61),
     Expected = node(),
+    CreatedRev = ?LINE,
+    ?assertEqual({true, {CreatedRev, Expected}},
+                 rabbitmq_peer_discovery_etcd_v3_client:extract_node(
+                   {CreatedRev, Input})),
 
-    ?assertEqual(Expected, rabbitmq_peer_discovery_etcd_v3_client:extract_node(Input)),
-
-    ?assertEqual(undefined, rabbitmq_peer_discovery_etcd_v3_client:extract_node(<<"{}">>)).
+    ?assertEqual(false,
+                 rabbitmq_peer_discovery_etcd_v3_client:extract_node(
+                   {CreatedRev, <<"{}">>})).
 
 filter_nodes_test(_Config) ->
     Input    = [node(), undefined, undefined, {error, reason1}, {error, {another, reason}}],
