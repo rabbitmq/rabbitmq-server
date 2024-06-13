@@ -1878,6 +1878,22 @@ defs_default_queue_type_vhost(Config, QueueType) ->
 
     %% Create a test vhost
     http_put(Config, "/vhosts/test-vhost", #{default_queue_type => QueueType}, {group, '2xx'}),
+
+    Args = #{name => <<"test-vhost">>,
+             metadata => #{description => <<>>,
+                           default_queue_type => QueueType,
+                           tags => []},
+             limits => []},
+
+    %% Get the definitions
+    Definitions = http_get(Config, "/definitions", ?OK),
+
+    %% Check if vhost definition is correct
+    true = lists:any(fun(I) -> test_item(Args, I) end, maps:get(vhosts, Definitions)),
+
+    %% Post the definitions back
+    http_post(Config, "/definitions", Definitions, {group, '2xx'}),
+
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put(Config, "/permissions/test-vhost/guest", PermArgs, {group, '2xx'}),
 
