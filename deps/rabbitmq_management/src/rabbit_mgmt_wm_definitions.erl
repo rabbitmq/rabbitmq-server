@@ -48,40 +48,18 @@ to_json(ReqData, Context) ->
     end.
 
 all_definitions(ReqData, Context) ->
-    Xs = [X || X <- rabbit_mgmt_wm_exchanges:basic(ReqData),
-               export_exchange(X)],
-    Qs = [Q || Q <- rabbit_mgmt_wm_queues:basic(ReqData),
-               export_queue(Q)],
-    QNames = [{pget(name, Q), pget(vhost, Q)} || Q <- Qs],
-    Bs = [B || B <- rabbit_mgmt_wm_bindings:basic(ReqData),
-               export_binding(B, QNames)],
-    Vsn = rabbit:base_product_version(),
-    ProductName = rabbit:product_name(),
-    ProductVersion = rabbit:product_version(),
     rabbit_mgmt_util:reply(
-      [{rabbit_version, rabbit_data_coercion:to_binary(Vsn)},
-       {rabbitmq_version, rabbit_data_coercion:to_binary(Vsn)},
-       {product_name, rabbit_data_coercion:to_binary(ProductName)},
-       {product_version, rabbit_data_coercion:to_binary(ProductVersion)}] ++
-      filter(
-        [{users,             rabbit_mgmt_wm_users:users(all)},
-         {vhosts,            rabbit_mgmt_wm_vhosts:basic()},
-         {permissions,       rabbit_mgmt_wm_permissions:permissions()},
-         {topic_permissions, rabbit_mgmt_wm_topic_permissions:topic_permissions()},
-         {parameters,        rabbit_mgmt_wm_parameters:basic(ReqData)},
-         {global_parameters, rabbit_mgmt_wm_global_parameters:basic()},
-         {policies,          rabbit_mgmt_wm_policies:basic(ReqData)},
-         {queues,            Qs},
-         {exchanges,         Xs},
-         {bindings,          Bs}]),
-      case rabbit_mgmt_util:qs_val(<<"download">>, ReqData) of
-          undefined -> ReqData;
-          Filename  -> rabbit_mgmt_util:set_resp_header(
-                         <<"Content-Disposition">>,
-                         "attachment; filename=" ++
-                             binary_to_list(Filename), ReqData)
-      end,
-      Context).
+        rabbit_definitions:all_definitions(),
+        case rabbit_mgmt_util:qs_val(<<"download">>, ReqData) of
+            undefined ->
+                ReqData;
+            Filename ->
+                rabbit_mgmt_util:set_resp_header(<<"Content-Disposition">>,
+                                                 "attachment; filename="
+                                                 ++ binary_to_list(Filename),
+                                                 ReqData)
+        end,
+        Context).
 
 accept_json(ReqData0, Context) ->
     case rabbit_mgmt_util:read_complete_body(ReqData0) of
@@ -254,7 +232,7 @@ export_name(_Name)                -> true.
 
 rw_state() ->
     [{users,              [name, password_hash, hashing_algorithm, tags, limits]},
-     {vhosts,             [name, limits, metadata]},
+     {vhosts,             [name]},
      {permissions,        [user, vhost, configure, write, read]},
      {topic_permissions,  [user, vhost, exchange, write, read]},
      {parameters,         [vhost, component, name, value]},

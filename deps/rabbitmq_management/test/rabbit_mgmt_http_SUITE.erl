@@ -1786,7 +1786,7 @@ definitions_test(Config) ->
            #{vhost     => vhost,
              component => <<"test">>,
              name      => <<"good">>,
-             value     => <<"ignore">>}),
+             value     => #{a => <<"b">>}}),
     defs(Config, global_parameters, "/global-parameters/good", put,
          #{name  =>    <<"good">>,
            value =>    #{a => <<"b">>}}),
