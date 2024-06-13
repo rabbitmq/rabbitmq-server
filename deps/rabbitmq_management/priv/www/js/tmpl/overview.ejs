@@ -84,9 +84,6 @@
   <% if (show_column('overview', 'file_descriptors')) { %>
     <th>File descriptors <span class="help" id="file-descriptors"></span></th>
   <% } %>
-  <% if (show_column('overview', 'socket_descriptors')) { %>
-    <th>Socket descriptors <span class="help" id="socket-descriptors"></span></th>
-  <% } %>
   <% if (show_column('overview', 'erlang_processes')) { %>
     <th>Erlang processes</th>
   <% } %>
@@ -151,11 +148,6 @@
         <p class="c">handle.exe missing <span class="help" id="handle-exe"></span><sub><%= node.fd_total %> available</sub></p>
 
     <% } %>
-     </td>
-  <% } %>
-  <% if (show_column('overview', 'socket_descriptors')) { %>
-     <td>
-        <%= node_stat_count_bar('sockets_used', 'sockets_total', node, FD_THRESHOLDS) %>
      </td>
   <% } %>
   <% if (show_column('overview', 'erlang_processes')) { %>
