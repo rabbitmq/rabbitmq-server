@@ -221,133 +221,40 @@ start_test_nodes(Testcase, NodeNumber, NodeCount, PeerOptions, Peers)
   when NodeNumber =< NodeCount ->
     PeerName0 = rabbit_misc:format("~s-~b", [Testcase, NodeNumber]),
     PeerOptions1 = PeerOptions#{name => PeerName0},
-    ct:pal("Starting peer with options: ~p", [PeerOptions1]),
-    case catch peer:start(PeerOptions1) of
+    PeerOptions2 = case PeerOptions1 of
+                       #{host := _} ->
+                           PeerOptions1;
+                       #{longnames := true} ->
+                           %% To simulate Erlang long node names, we use a
+                           %% hard-coded IP address that is likely to exist.
+                           %%
+                           %% We can't rely on the host proper network
+                           %% configuration because it appears that several
+                           %% hosts are half-configured (at least some random
+                           %% GitHub workers and Broadcom-managed OSX laptops
+                           %% in the team).
+                           PeerOptions1#{host => "127.0.0.1"};
+                       _ ->
+                           PeerOptions1
+                   end,
+    ct:pal("Starting peer with options: ~p", [PeerOptions2]),
+    case catch peer:start(PeerOptions2) of
         {ok, PeerPid, PeerName} ->
             ct:pal("Configuring peer '~ts'", [PeerName]),
-            setup_test_node(PeerPid, PeerOptions1),
+            setup_test_node(PeerPid, PeerOptions2),
             Peers1 = Peers#{PeerName => PeerPid},
             start_test_nodes(
               Testcase, NodeNumber + 1, NodeCount, PeerOptions, Peers1);
-        Error1 when not is_map_key(host, PeerOptions1) ->
-            ct:pal("Failed to started peer node:~n"
-                   "Options: ~p~n"
-                   "Error: ~p", [PeerOptions1, Error1]),
-            %% At least when running from a Buildbuddy CI worker, the network
-            %% configuration is incomplete and the host lacks an FQDN. This
-            %% breaks the start of an Erlang node with long names.
-            %%
-            %% To work around that, we mess with the network configuration (the
-            %% Erlang node runs as root) and try to determine a hostname we can
-            %% use. We then try again to start the node.
-            case determine_hostname(PeerOptions1) of
-                {ok, Host} ->
-                    PeerOptions2 = PeerOptions1#{host => Host},
-                    start_test_nodes(
-                      Testcase, NodeNumber, NodeCount, PeerOptions2, Peers);
-                {error, _}  = Error2 ->
-                    ct:pal("Failed to determine a usable hostname:~n"
-                           "Options: ~p~n"
-                           "Error: ~p", [PeerOptions1, Error2]),
-                    stop_test_nodes(Peers),
-                    erlang:throw(Error2)
-            end;
         Error ->
             ct:pal("Failed to started peer node:~n"
                    "Options: ~p~n"
-                   "Error: ~p", [PeerOptions1, Error]),
+                   "Error: ~p", [PeerOptions2, Error]),
             stop_test_nodes(Peers),
             erlang:throw(Error)
     end;
 start_test_nodes(_Testcase, _NodeNumber, _Count, _PeerOptions, Peers) ->
     ct:pal("Peers: ~p", [Peers]),
     Peers.
-
-determine_hostname(PeerOptions) ->
-    %% Please wear eye protection glasses to read what's next!
-    %%
-    %% The Buildbuddy CI worker network configuration lacks an FQDN and we need
-    %% one to start an Erlang node with a long name. To work around this, we
-    %% modify `/etc/hosts' to add an FQDN for 127.0.0.1 and ::1.
-    %%
-    %% 1. We read the existing file
-    %% 2. We modify it to add the FQDN
-    %% 3. We write the modified file
-    %% 4. We put a coin in the swear jar
-    HostsFilename = "/etc/hosts",
-    case file:read_file(HostsFilename) of
-        {ok, HostsFile} ->
-            HostsFile1 = re:replace(
-                           HostsFile,
-                           "^(127\\.0\\.0\\.1|::1)\\s+.*",
-                           "& localhost.my.domain",
-                           [{return, binary}, multiline, global]),
-            ct:pal(
-              "Changing ~s from:~n"
-              "---8<---~n"
-              "~s"
-              "---8<---~n"
-              "to:~n"
-              "---8<---~n"
-              "~s"
-              "---8<---~n",
-              [HostsFilename, HostsFile, HostsFile1]),
-            case file:write_file(HostsFilename, HostsFile1) of
-                ok                 -> determine_hostname1(PeerOptions);
-                {error, _} = Error -> Error
-            end;
-        {error, _} = Error ->
-            Error
-    end.
-
-determine_hostname1(PeerOptions) ->
-    %% Now that we proudly have an FQDN, we query the IP
-    %% addresses and get the hostname(s) associated with each.
-    %%
-    %% In the end, we return the first hostname that matches
-    %% the short/long name criteria.
-    case inet:getifaddrs() of
-        {ok, IFaces} ->
-            ct:pal("Network interfaces: ~p", [IFaces]),
-            IPv4Addrs = [IPv4Addr
-                         || {_Name, Props} <- IFaces,
-                            {addr, IPv4Addr} <- Props,
-                            is_tuple(IPv4Addr) andalso size(IPv4Addr) =:= 4],
-            ct:pal("IPv4 addresses: ~p", [IPv4Addrs]),
-            determine_hostname2(IPv4Addrs, PeerOptions);
-        {error, _} = Error ->
-            Error
-    end.
-
-determine_hostname2([IPv4Addr | Rest], PeerOptions) ->
-    WantFQDN = maps:get(longnames, PeerOptions, false),
-    case inet:gethostbyaddr(IPv4Addr) of
-        {ok, #hostent{h_name = FQDN, h_aliases = ShortDNs}} ->
-            AllDNs = [FQDN | ShortDNs],
-            ct:pal(
-              "All domain names for IPv4 address ~p: ~p",
-              [IPv4Addr, AllDNs]),
-            ValidDNs = lists:filter(
-                         fun(DN) ->
-                                 lists:member($., DN) =:= WantFQDN
-                         end, AllDNs),
-            ct:pal(
-              "Valid domain names for IPv4 address ~p: ~p",
-              [IPv4Addr, ValidDNs]),
-            case ValidDNs of
-                [DN | _] ->
-                    {ok, DN};
-                [] ->
-                    ct:pal(
-                      "No valid hostnames found for IPv4 ~p: ~p",
-                      [IPv4Addr, AllDNs]),
-                    determine_hostname2(Rest, PeerOptions)
-            end;
-        {error, _} = Error ->
-            Error
-    end;
-determine_hostname2([], _PeerOptions) ->
-    {error, no_valid_hostnames_found}.
 
 setup_test_node(PeerPid, PeerOptions) ->
     peer:call(PeerPid, ?MODULE, do_setup_test_node, [PeerOptions]).
