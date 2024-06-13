@@ -165,7 +165,14 @@ virgin-node-tmpdir:
 ifdef LEAVE_PLUGINS_DISABLED
 RABBITMQ_ENABLED_PLUGINS ?=
 else
+# When running "make -C deps/plugin run-broker" we only want
+# "plugin" to be enabled. See rabbitmq-components.mk for where
+# this variable comes from.
+ifdef deps_dir_overriden
+RABBITMQ_ENABLED_PLUGINS ?= $(filter-out rabbit,$(PROJECT))
+else
 RABBITMQ_ENABLED_PLUGINS ?= ALL
+endif
 endif
 
 # --------------------------------------------------------------------
