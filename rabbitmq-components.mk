@@ -123,7 +123,11 @@ dep_khepri = hex 0.13.0
 dep_khepri_mnesia_migration = hex 0.4.0
 dep_looking_glass = git https://github.com/rabbitmq/looking_glass.git main
 dep_prometheus = hex 4.11.0
+<<<<<<< HEAD
 dep_ra = hex 2.10.0
+=======
+dep_ra = hex 2.11.0
+>>>>>>> fdaef55213 (Ra v2.11.0)
 dep_ranch = hex 2.1.0
 dep_recon = hex 2.5.3
 dep_redbug = hex 2.0.7
