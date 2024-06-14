@@ -8,7 +8,7 @@ build --local_test_jobs=1
 
 build --flag_alias=erlang_home=@rules_erlang//:erlang_home
 build --flag_alias=erlang_version=@rules_erlang//:erlang_version
-build --flag_alias=elixir_home=//:elixir_home
+build --flag_alias=elixir_home=@rules_elixir//:elixir_home
 build --flag_alias=test_build=//:enable_test_build
 
 build --test_timeout=7200

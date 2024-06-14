@@ -230,7 +230,7 @@ def rabbitmq_integration_suite(
         ":test_erlang_app",
         "//deps/rabbit_common:erlang_app",
         "//deps/rabbitmq_ct_helpers:erlang_app",
-        "//deps/rabbitmq_cli:elixir",
+        "@rules_elixir//elixir",
         "//deps/rabbitmq_cli:erlang_app",
         "//deps/rabbitmq_ct_client_helpers:erlang_app",
     ]
