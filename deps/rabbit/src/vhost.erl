@@ -29,6 +29,7 @@
   set_limits/2,
   set_metadata/2,
   merge_metadata/2,
+  new_metadata/3,
   is_tagged_with/2
 ]).
 
@@ -182,6 +183,15 @@ metadata_merger(default_queue_type, _, NewVHostDefaultQueueType) ->
 %% This is the case for all other VHost metadata keys.
 metadata_merger(_, _, NewMetadataValue) ->
     NewMetadataValue.
+
+-spec new_metadata(binary(), [atom()], rabbit_queue_type:queue_type() | 'undefined') -> metadata().
+new_metadata(Description, Tags, undefined) ->
+    #{description => Description,
+      tags => Tags};
+new_metadata(Description, Tags, DefaultQueueType) ->
+    #{description => Description,
+      tags => Tags,
+      default_queue_type => DefaultQueueType}.
 
 -spec is_tagged_with(vhost(), tag()) -> boolean().
 is_tagged_with(VHost, Tag) ->
