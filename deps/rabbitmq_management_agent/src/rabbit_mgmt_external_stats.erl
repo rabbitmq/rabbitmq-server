@@ -195,10 +195,11 @@ i(fd_used, State) ->
     get_used_fd(State);
 i(fd_total, #state{fd_total = FdTotal}=State) ->
     {State, FdTotal};
+%% sockets_used and sockets_total are unused since RabbitMQ 4.0.
 i(sockets_used, State) ->
-    {State, proplists:get_value(sockets_used, file_handle_cache:info([sockets_used]))};
+    {State, 0};
 i(sockets_total, State) ->
-    {State, proplists:get_value(sockets_limit, file_handle_cache:info([sockets_limit]))};
+    {State, 0};
 i(os_pid, State) ->
     {State, rabbit_data_coercion:to_utf8_binary(os:getpid())};
 i(mem_used, State) ->

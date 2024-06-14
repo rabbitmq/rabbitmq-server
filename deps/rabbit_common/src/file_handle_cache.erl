@@ -1087,9 +1087,8 @@ infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(total_limit,   #fhc_state{limit               = Limit}) -> Limit;
 i(total_used,    State)                                   -> used(State);
-i(sockets_limit, #fhc_state{obtain_limit        = Limit}) -> Limit;
-i(sockets_used,  #fhc_state{obtain_count_socket = Count,
-                            reserve_count_socket = RCount}) -> Count + RCount;
+i(sockets_limit, _) -> 0;
+i(sockets_used,  _) -> 0;
 i(files_reserved,  #fhc_state{reserve_count_file   = RCount}) -> RCount;
 i(Item, _) -> throw({bad_argument, Item}).
 

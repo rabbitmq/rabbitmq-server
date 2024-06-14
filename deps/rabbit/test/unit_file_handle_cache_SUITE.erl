@@ -25,7 +25,6 @@ groups() ->
     [
       {non_parallel_tests, [], [
           file_handle_cache, %% Change FHC limit.
-          file_handle_cache_reserve,
           file_handle_cache_reserve_release,
           file_handle_cache_reserve_monitor,
           file_handle_cache_reserve_open_file_above_limit
@@ -133,47 +132,6 @@ file_handle_cache1(_Config) ->
     [file:delete(File) || File <- Files],
     ok = file_handle_cache:set_limit(Limit),
     passed.
-
-file_handle_cache_reserve(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, file_handle_cache_reserve1, [Config]).
-
-file_handle_cache_reserve1(_Config) ->
-    Limit = file_handle_cache:get_limit(),
-    ok = file_handle_cache:set_limit(5),
-    %% Reserves are always accepted, even if above the limit
-    %% These are for special processes such as quorum queues
-    ok = file_handle_cache:set_reservation(7),
-
-    Self = self(),
-    spawn(fun () -> ok = file_handle_cache:obtain(),
-                    Self ! obtained
-          end),
-
-    Props = file_handle_cache:info([files_reserved, sockets_used]),
-    ?assertEqual(7, proplists:get_value(files_reserved, Props)),
-    ?assertEqual(0, proplists:get_value(sockets_used, Props)),
-
-    %% The obtain should still be blocked, as there are no file handles
-    %% available
-    receive
-        obtained ->
-            throw(error_file_obtained)
-    after 1000 ->
-            %% Let's release 5 file handles, that should leave
-            %% enough free for the `obtain` to go through
-            file_handle_cache:set_reservation(2),
-            Props0 = file_handle_cache:info([files_reserved, sockets_used]),
-            ?assertEqual(2, proplists:get_value(files_reserved, Props0)),
-            ?assertEqual(1, proplists:get_value(sockets_used, Props0)),
-            receive
-                obtained ->
-                    ok = file_handle_cache:set_limit(Limit),
-                    passed
-            after 5000 ->
-                    throw(error_file_not_released)
-            end
-    end.
 
 file_handle_cache_reserve_release(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
