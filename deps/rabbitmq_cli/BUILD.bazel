@@ -175,6 +175,7 @@ elixir_escript_main(
     app = ":erlang_app",
     env = {
         "HOME": '"$(mktemp -d)"',
+        "ELIXIR_ERL_OPTIONS": "+fnu",
     },
     main_module = "RabbitMQCtl",
     mix_config = "config/config.exs",
