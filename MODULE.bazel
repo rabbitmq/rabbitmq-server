@@ -41,7 +41,12 @@ bazel_dep(
 
 bazel_dep(
     name = "rules_erlang",
-    version = "3.15.1",
+    version = "3.15.3",
+)
+
+bazel_dep(
+    name = "rules_elixir",
+    version = "1.0.0",
 )
 
 bazel_dep(
@@ -80,7 +85,7 @@ use_repo(
 )
 
 elixir_config = use_extension(
-    "//bazel/bzlmod:extensions.bzl",
+    "@rules_elixir//bzlmod:extensions.bzl",
     "elixir_config",
 )
 

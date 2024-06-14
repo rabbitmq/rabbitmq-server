@@ -241,6 +241,10 @@ plt(
     ],
     for_target = ":erlang_app",
     ignore_warnings = True,
+<<<<<<< HEAD
+=======
+    libs = ["@rules_elixir//elixir"],  # keep
+>>>>>>> 5debebfaf3 (Use rules_elixir to build the cli without mix)
     plt = "//:base_plt",
     deps = [
         "@looking_glass//:erlang_app",  # keep
