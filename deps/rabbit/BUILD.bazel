@@ -129,8 +129,8 @@ _APP_ENV = """[
 	    {default_consumer_prefetch, {false, 0}},
 		%% interval at which the channel can perform periodic actions
 	    {channel_tick_interval, 60000},
-	    %% Default max message size is 128 MB
-	    {max_message_size, 134217728},
+	    %% Default max message size is 16 MB
+	    {max_message_size, 16777216},
 	    %% Socket writer will run GC every 1 GB of outgoing data
 	    {writer_gc_threshold, 1000000000},
 	    %% interval at which connection/channel tracking executes post operations
