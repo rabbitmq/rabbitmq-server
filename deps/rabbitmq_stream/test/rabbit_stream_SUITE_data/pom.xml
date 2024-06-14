@@ -31,7 +31,7 @@
         <assertj.version>3.26.0</assertj.version>
         <logback.version>1.2.13</logback.version>
         <maven.compiler.plugin.version>3.12.1</maven.compiler.plugin.version>
-        <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
+        <maven-surefire-plugin.version>3.3.0</maven-surefire-plugin.version>
         <spotless.version>2.43.0</spotless.version>
         <google-java-format.version>1.17.0</google-java-format.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
