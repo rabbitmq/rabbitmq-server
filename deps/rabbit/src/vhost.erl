@@ -163,10 +163,25 @@ set_metadata(VHost, Value) ->
     VHost#vhost{metadata = Value}.
 
 -spec merge_metadata(vhost(), metadata()) -> vhost().
-merge_metadata(VHost, Value) ->
-    Meta0 = get_metadata(VHost),
-    NewMeta = maps:merge(Meta0, Value),
-    VHost#vhost{metadata = NewMeta}.
+merge_metadata(VHost, NewVHostMeta) ->
+    CurrentVHostMeta = get_metadata(VHost),
+    FinalMeta =  maps:merge_with(
+                   fun metadata_merger/3, CurrentVHostMeta, NewVHostMeta),
+    VHost#vhost{metadata = FinalMeta}.
+
+%% This is the case where the existing VHost metadata has a default queue type
+%% value and the proposed value is `undefined`. We do not want the proposed
+%% value to overwrite the current value
+metadata_merger(default_queue_type, CurrentDefaultQueueType, undefined) ->
+    CurrentDefaultQueueType;
+%% This is the case where the existing VHost metadata has any default queue
+%% type value, and the proposed value is NOT `undefined`. It is OK for any
+%% proposed value to be used.
+metadata_merger(default_queue_type, _, NewVHostDefaultQueueType) ->
+    NewVHostDefaultQueueType;
+%% This is the case for all other VHost metadata keys.
+metadata_merger(_, _, NewMetadataValue) ->
+    NewMetadataValue.
 
 -spec is_tagged_with(vhost(), tag()) -> boolean().
 is_tagged_with(VHost, Tag) ->
