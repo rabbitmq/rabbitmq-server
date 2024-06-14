@@ -21,8 +21,7 @@
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, msg_store_dir_base/0, config_file_path/1, ensure_config_file/1]).
 -export([delete_storage/1]).
 -export([vhost_down/1]).
--export([put_vhost/5,
-         put_vhost/6]).
+-export([put_vhost/6]).
 
 %%
 %% API
@@ -295,15 +294,6 @@ delete(VHost, ActingUser) ->
     %% supervisors on all the nodes.
     rabbit_vhost_sup_sup:delete_on_all_nodes(VHost),
     Ret.
-
--spec put_vhost(vhost:name(),
-    binary(),
-    vhost:tags(),
-    boolean(),
-    rabbit_types:username()) ->
-    'ok' | {'error', any()} | {'EXIT', any()}.
-put_vhost(Name, Description, Tags0, Trace, Username) ->
-    put_vhost(Name, Description, Tags0, undefined, Trace, Username).
 
 -spec put_vhost(vhost:name(),
     binary(),
