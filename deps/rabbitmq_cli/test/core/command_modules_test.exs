@@ -20,6 +20,9 @@ defmodule CommandModulesTest do
   end
 
   test "command modules has existing commands" do
+    # true = Enum.take(RabbitMQ.CLI.Core.CommandModules.ctl_modules(), -15)
+    # true = Enum.find_index(RabbitMQ.CLI.Core.CommandModules.ctl_modules(), fn x -> x == RabbitMQ.CLI.Ctl.Commands.DuckCommand end)
+
     assert @subject.load_commands(:all, %{})["duck"] ==
              RabbitMQ.CLI.Ctl.Commands.DuckCommand
   end
