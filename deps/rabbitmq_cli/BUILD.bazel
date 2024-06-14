@@ -116,6 +116,8 @@ elixir_bytecode(
         "MIX_ENV": "prod",
         "DEPS_DIR": "$ERL_LIBS",
         "ERL_COMPILER_OPTIONS": "deterministic",
+        "LANG": "en_US.UTF-8",
+        "LC_ALL": "en_US.UTF-8",
     },
     ez_deps = [
         ":csv.ez",
@@ -175,7 +177,8 @@ elixir_escript_main(
     app = ":erlang_app",
     env = {
         "HOME": '"$(mktemp -d)"',
-        "ELIXIR_ERL_OPTIONS": "+fnu",
+        "LANG": "en_US.UTF-8",
+        "LC_ALL": "en_US.UTF-8",
     },
     main_module = "RabbitMQCtl",
     mix_config = "config/config.exs",
@@ -321,6 +324,8 @@ ex_unit_test(
         "MIX_ENV": "prod",
         "DEPS_DIR": "$ERL_LIBS",
         "ERL_COMPILER_OPTIONS": "deterministic",
+        "LANG": "en_US.UTF-8",
+        "LC_ALL": "en_US.UTF-8",
     },
     ez_deps = [
         ":amqp.ez",
