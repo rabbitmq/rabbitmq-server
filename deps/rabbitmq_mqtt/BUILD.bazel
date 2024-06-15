@@ -102,9 +102,9 @@ dialyze(
     name = "dialyze",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":deps_plt",
+    tags = ["manual"],
     target = ":erlang_app",
     warnings_as_errors = False,
-    tags = ["manual"],
 )
 
 eunit(
