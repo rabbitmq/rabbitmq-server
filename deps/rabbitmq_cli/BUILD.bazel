@@ -408,3 +408,34 @@ test_suite(
     name = "rabbitmqctl_tests",
     tests = ["tests"],
 )
+
+elixir_bytecode(
+    name = "compile_warnings_as_errors",
+    srcs = SRCS,
+    dest = "beam_files_werror",
+    elixirc_opts = [
+        "--warnings-as-errors",
+        "-e",
+        ":application.ensure_all_started(:mix)",
+    ],
+    env = {
+        "HOME": '"$(mktemp -d)"',
+        "MIX_ENV": "prod",
+        "DEPS_DIR": "$ERL_LIBS",
+        "ERL_COMPILER_OPTIONS": "deterministic",
+        "LANG": "en_US.UTF-8",
+        "LC_ALL": "en_US.UTF-8",
+    },
+    ez_deps = [
+        ":csv.ez",
+        ":json.ez",
+    ],
+    setup = """\
+mkdir -p _build/$MIX_ENV/lib/csv
+cp -RL $ERL_LIBS/csv/ebin _build/$MIX_ENV/lib/csv
+""",
+    deps = DEPS + [
+        "//deps/rabbit:erlang_app",
+    ],
+    tags = ["manual"],
+)

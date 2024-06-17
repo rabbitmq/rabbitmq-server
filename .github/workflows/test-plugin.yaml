@@ -140,6 +140,11 @@ jobs:
         cat << EOF >> user.bazelrc
           build --strategy=TestRunner=local
         EOF
+    - name: CLI COMPILE WARNINGS AS ERRORS
+      if: inputs.plugin == 'rabbitmq_cli'
+      run: |
+        bazel build //deps/rabbitmq_cli:compile_warnings_as_errors \
+          --verbose_failures
     - name: COMPUTE TESTS IN SHARD
       id: shard
       run: |
