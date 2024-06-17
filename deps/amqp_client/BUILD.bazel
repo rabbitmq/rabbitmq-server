@@ -107,6 +107,7 @@ rabbitmq_home(
     name = "broker-for-tests-home",
     plugins = [
         "//deps/rabbit:erlang_app",
+        "//deps/rabbitmq_cli:erlang_app",
     ],
 )
 
