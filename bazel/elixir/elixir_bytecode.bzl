@@ -50,13 +50,13 @@ set -x
         erl_libs_path = erl_libs_path,
         env = env,
         setup = ctx.attr.setup,
-        elixirc = ctx.executable._compiler.path,
+        elixirc = ctx.executable._elixirc.path,
         out_dir = ebin.path,
         elixirc_opts = " ".join([shell.quote(opt) for opt in ctx.attr.elixirc_opts]),
         srcs = " ".join([f.path for f in ctx.files.srcs]),
     )
 
-    compiler_runfiles = ctx.attr._compiler[DefaultInfo].default_runfiles
+    compiler_runfiles = ctx.attr._elixirc[DefaultInfo].default_runfiles
 
     inputs = depset(
         direct = ctx.files.srcs + erl_libs_files,
@@ -70,7 +70,7 @@ set -x
         outputs = [ebin],
         command = script,
         mnemonic = "ELIXIRC",
-        tools = [ctx.executable._compiler],
+        tools = [ctx.executable._elixirc],
     )
 
     return [
@@ -97,12 +97,10 @@ elixir_bytecode = rule(
             mandatory = True,
         ),
         "setup": attr.string(),
-        "_compiler": attr.label(
-            default = Label("@rules_elixir//tools:elixirc"),
-            allow_single_file = True,
+        "_elixirc": attr.label(
+            default = Label("@rules_elixir//tools:elixirc_wrapper"),
             executable = True,
-            cfg = "exec",
+            cfg = "target",
         ),
     },
-    # toolchains = ["@rules_elixir//:toolchain_type"],
 )
