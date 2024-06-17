@@ -686,7 +686,6 @@ rabbit:
 - rabbit_mirror_queue_misc
 - rabbit_mnesia
 - rabbit_msg_store
-- rabbit_msg_store_ets_index
 - rabbit_msg_store_gc
 - rabbit_networking
 - rabbit_networking_store
@@ -802,7 +801,6 @@ rabbit_common:
 - rabbit_json
 - rabbit_log
 - rabbit_misc
-- rabbit_msg_store_index
 - rabbit_net
 - rabbit_nodes_common
 - rabbit_numerical
