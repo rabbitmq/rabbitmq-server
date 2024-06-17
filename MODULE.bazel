@@ -10,7 +10,16 @@ bazel_dep(
 
 bazel_dep(
     name = "bazel_skylib",
+<<<<<<< HEAD
     version = "1.4.2",
+=======
+    version = "1.7.1",
+)
+
+bazel_dep(
+    name = "aspect_bazel_lib",
+    version = "2.5.3",
+>>>>>>> 1de9bb9aab (use the latest bazel_skylib)
 )
 
 bazel_dep(
