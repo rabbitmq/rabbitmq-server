@@ -88,11 +88,6 @@ APP_ENV = """[{scopes,[{'rabbitmq-plugins',plugins},
                        {'rabbitmq-upgrade',upgrade},
                        {'vmware-rabbitmq',vmware}]}]"""
 
-EXTRA_APPS = [
-    "elixir",
-    "logger",
-]
-
 SRCS = glob([
     "lib/**/*.ex",
 ])
@@ -137,8 +132,11 @@ app_file(
     app_env = APP_ENV,
     app_name = APP_NAME,
     app_version = APP_VERSION,
-    extra_apps = EXTRA_APPS,
     modules = [":beam_files"],
+    deps = [
+        "@rules_elixir//elixir",
+        "@rules_elixir//elixir:logger",
+    ],
 )
 
 elixir_ebin_dir(
@@ -161,7 +159,6 @@ erlang_app_info(
     hdrs = [],
     app_name = APP_NAME,
     beam = [":ebin"],
-    extra_apps = EXTRA_APPS,
     license_files = glob(["LICENSE*"]),
     priv = [],
     visibility = ["//visibility:public"],
@@ -223,11 +220,14 @@ app_file(
     app_env = APP_ENV,
     app_name = APP_NAME,
     app_version = APP_VERSION,
-    extra_apps = EXTRA_APPS,
     modules = [":beam_files"],
     synthetic_module_names = [
         "Elixir." + name
         for name in _TEST_MODULES
+    ],
+    deps = [
+        "@rules_elixir//elixir",
+        "@rules_elixir//elixir:logger",
     ],
 )
 
@@ -246,7 +246,6 @@ erlang_app_info(
     hdrs = [],
     app_name = APP_NAME,
     beam = [":test_ebin"],
-    extra_apps = EXTRA_APPS,
     license_files = glob(["LICENSE*"]),
     priv = [],
     visibility = ["//visibility:public"],
