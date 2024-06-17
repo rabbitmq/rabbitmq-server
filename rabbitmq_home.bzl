@@ -1,6 +1,6 @@
+load("@rules_erlang//:ct.bzl", "additional_file_dest_relative_path")
 load("@rules_erlang//:erlang_app_info.bzl", "ErlangAppInfo", "flat_deps")
 load("@rules_erlang//:util.bzl", "path_join")
-load("@rules_erlang//:ct.bzl", "additional_file_dest_relative_path")
 
 RabbitmqHomeInfo = provider(
     doc = "An assembled RABBITMQ_HOME dir",
