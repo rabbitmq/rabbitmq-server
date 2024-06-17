@@ -10,7 +10,7 @@ bazel_dep(
 
 bazel_dep(
     name = "bazel_skylib",
-    version = "1.5.0",
+    version = "1.7.1",
 )
 
 bazel_dep(
