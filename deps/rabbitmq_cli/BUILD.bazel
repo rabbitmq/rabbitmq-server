@@ -32,6 +32,10 @@ load(
     "//bazel/elixir:mix_archive_build.bzl",
     "mix_archive_build",
 )
+load(
+    "//bazel/elixir:mix_archive_extract.bzl",
+    "mix_archive_extract",
+)
 
 mix_archive_build(
     name = "csv_ez",
@@ -40,11 +44,32 @@ mix_archive_build(
     archives = ["@hex//:archive"],
 )
 
+mix_archive_extract(
+    name = "csv",
+    srcs = ["@csv//:sources"],
+    app_name = "csv",
+    archive = ":csv_ez",
+    deps = [
+        "@rules_elixir//elixir",
+    ],
+)
+
 mix_archive_build(
     name = "json_ez",
     srcs = ["@json//:sources"],
     out = "json.ez",
     archives = ["@hex//:archive"],
+)
+
+mix_archive_extract(
+    name = "json",
+    srcs = ["@json//:sources"],
+    app_name = "json",
+    archive = ":json_ez",
+    deps = [
+        "@rules_elixir//elixir",
+        "@rules_elixir//elixir:logger",
+    ],
 )
 
 mix_archive_build(
@@ -93,6 +118,8 @@ SRCS = glob([
 ])
 
 DEPS = [
+    ":csv",
+    ":json",
     "//deps/rabbit_common:erlang_app",
     "@observer_cli//:erlang_app",
     "@stdout_formatter//:erlang_app",
@@ -114,10 +141,6 @@ elixir_bytecode(
         "LANG": "en_US.UTF-8",
         "LC_ALL": "en_US.UTF-8",
     },
-    ez_deps = [
-        ":csv.ez",
-        ":json.ez",
-    ],
     setup = """\
 mkdir -p _build/$MIX_ENV/lib/csv
 cp -RL $ERL_LIBS/csv/ebin _build/$MIX_ENV/lib/csv
@@ -133,6 +156,7 @@ app_file(
     app_name = APP_NAME,
     app_version = APP_VERSION,
     modules = [":beam_files"],
+    # mix escripts do not include dependencies in the applications key
     deps = [
         "@rules_elixir//elixir",
         "@rules_elixir//elixir:logger",
@@ -225,6 +249,7 @@ app_file(
         "Elixir." + name
         for name in _TEST_MODULES
     ],
+    # mix escripts do not include dependencies in the applications key
     deps = [
         "@rules_elixir//elixir",
         "@rules_elixir//elixir:logger",
@@ -285,13 +310,11 @@ plt(
         "public_key",
         "runtime_tools",
     ],
-    ez_deps = [
-        ":csv_ez",
-        ":json_ez",
-    ],
     ignore_warnings = True,
     libs = ["@rules_elixir//elixir:elixir"],
     deps = [
+        ":csv",
+        ":json",
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
         "@rules_elixir//elixir",
@@ -328,8 +351,6 @@ ex_unit_test(
     },
     ez_deps = [
         ":amqp.ez",
-        ":csv.ez",
-        ":json.ez",
         ":temp.ez",
         ":x509.ez",
     ],
@@ -388,16 +409,12 @@ elixir_bytecode(
         "LANG": "en_US.UTF-8",
         "LC_ALL": "en_US.UTF-8",
     },
-    ez_deps = [
-        ":csv.ez",
-        ":json.ez",
-    ],
     setup = """\
 mkdir -p _build/$MIX_ENV/lib/csv
 cp -RL $ERL_LIBS/csv/ebin _build/$MIX_ENV/lib/csv
 """,
+    tags = ["manual"],
     deps = DEPS + [
         "//deps/rabbit:erlang_app",
     ],
-    tags = ["manual"],
 )
