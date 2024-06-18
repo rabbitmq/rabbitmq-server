@@ -166,7 +166,12 @@ suite() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config).
+    Config1 = rabbit_ct_helpers:merge_app_env(
+                Config, {rabbit, [
+                                  {quorum_tick_interval, 1000},
+                                  {stream_tick_interval, 1000}
+                                 ]}),
+    rabbit_ct_helpers:run_setup_steps(Config1).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
@@ -410,19 +415,21 @@ publish_to_all_queue_types(Config, QoS) ->
     declare_queue(Ch, SQ, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
     bind(Ch, SQ, Topic),
 
-    NumMsgs = 2000,
-    C = connect(?FUNCTION_NAME, Config, [{retry_interval, 2}]),
-    lists:foreach(fun(N) ->
-                          case emqtt:publish(C, Topic, integer_to_binary(N), QoS) of
-                              ok ->
-                                  ok;
-                              {ok, _} ->
-                                  ok;
-                              Other ->
-                                  ct:fail("Failed to publish: ~p", [Other])
-                          end
-                  end, lists:seq(1, NumMsgs)),
-
+    NumMsgs = 1000,
+    C = connect(?FUNCTION_NAME, Config, [{max_inflight, 200},
+                                         {retry_interval, 2}]),
+    Self = self(),
+    lists:foreach(
+      fun(N) ->
+              %% Publish async all messages at once to trigger flow control
+              ok = emqtt:publish_async(C, Topic, integer_to_binary(N), QoS,
+                                       {fun(N0, {ok, #{reason_code_name := success}}) ->
+                                                Self ! {self(), N0};
+                                           (N0, ok) ->
+                                                Self ! {self(), N0}
+                                        end, [N]})
+      end, lists:seq(1, NumMsgs)),
+    ok = await_confirms_ordered(C, 1, NumMsgs),
     eventually(?_assert(
                   begin
                       L = rabbitmqctl_list(Config, 0, ["list_queues", "messages", "--no-table-headers"]),
@@ -439,7 +446,7 @@ publish_to_all_queue_types(Config, QoS) ->
                                                 N < NumMsgs * 2
                                         end
                                 end, L)
-                  end), 2000, 10),
+                  end), 1000, 20),
 
     delete_queue(Ch, [CQ, QQ, SQ]),
     ok = emqtt:disconnect(C),
