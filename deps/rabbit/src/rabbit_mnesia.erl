@@ -817,12 +817,8 @@ execute_mnesia_transaction(TxFun) ->
                                 Res = mnesia:sync_transaction(TxFun),
                                 DiskLogAfter  = mnesia_dumper:get_log_writes(),
                                 case DiskLogAfter == DiskLogBefore of
-                                    true  -> file_handle_cache_stats:update(
-                                              mnesia_ram_tx),
-                                             Res;
-                                    false -> file_handle_cache_stats:update(
-                                              mnesia_disk_tx),
-                                             {sync, Res}
+                                    true  -> Res;
+                                    false -> {sync, Res}
                                 end;
                        true  -> mnesia:sync_transaction(TxFun)
                    end

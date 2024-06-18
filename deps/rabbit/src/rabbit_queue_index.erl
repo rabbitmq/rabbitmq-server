@@ -922,8 +922,6 @@ append_journal_to_segment(#segment { journal_entries = JEntries,
     case array:sparse_size(JEntries) of
         0 -> Segment;
         _ ->
-            file_handle_cache_stats:update(queue_index_write),
-
             {ok, Hdl} = file_handle_cache:open_with_absolute_path(
                           Path, ?WRITE_MODE,
                           [{write_buffer, infinity}]),
@@ -1172,7 +1170,6 @@ load_segment(KeepAcked, #segment { path = Path }) ->
     case rabbit_file:is_file(Path) of
         false -> Empty;
         true  -> Size = rabbit_file:file_size(Path),
-                 file_handle_cache_stats:update(queue_index_read),
                  {ok, Hdl} = file_handle_cache:open_with_absolute_path(
                                Path, ?READ_MODE, []),
                  {ok, 0} = file_handle_cache:position(Hdl, bof),

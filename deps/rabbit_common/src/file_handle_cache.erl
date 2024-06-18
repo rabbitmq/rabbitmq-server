@@ -660,19 +660,16 @@ get_client_state(Pid) ->
 %%----------------------------------------------------------------------------
 
 prim_file_read(Hdl, Size) ->
-    file_handle_cache_stats:update(
-      io_read, Size, fun() -> prim_file:read(Hdl, Size) end).
+    prim_file:read(Hdl, Size).
 
 prim_file_write(Hdl, Bytes) ->
-    file_handle_cache_stats:update(
-      io_write, iolist_size(Bytes), fun() -> prim_file:write(Hdl, Bytes) end).
+    prim_file:write(Hdl, Bytes).
 
 prim_file_sync(Hdl) ->
-    file_handle_cache_stats:update(io_sync, fun() -> prim_file:sync(Hdl) end).
+    prim_file:sync(Hdl).
 
 prim_file_position(Hdl, NewOffset) ->
-    file_handle_cache_stats:update(
-      io_seek, fun() -> prim_file:position(Hdl, NewOffset) end).
+    prim_file:position(Hdl, NewOffset).
 
 is_reader(Mode) -> lists:member(read, Mode).
 
@@ -766,8 +763,7 @@ reopen([{Ref, NewOrReopen, Handle = #handle { hdl          = closed,
         RefNewOrReopenHdls] = ToOpen, Tree, RefHdls) ->
     Mode = case NewOrReopen of
                new    -> Mode0;
-               reopen -> file_handle_cache_stats:update(io_reopen),
-                         [read | Mode0]
+               reopen -> [read | Mode0]
            end,
     case prim_file:open(Path, Mode) of
         {ok, Hdl} ->
@@ -1103,7 +1099,6 @@ used(#fhc_state{open_count          = C1,
 %%----------------------------------------------------------------------------
 
 init([AlarmSet, AlarmClear]) ->
-    _ = file_handle_cache_stats:init(),
     Limit = case application:get_env(file_handles_high_watermark) of
                 {ok, Watermark} when (is_integer(Watermark) andalso
                                       Watermark > 0) ->

@@ -699,7 +699,6 @@ flush_buffer(State0 = #qi { write_buffer = WriteBuffer0,
         {Fd, FoldState} = get_fd_for_segment(Segment, FoldState1),
         LocBytes = flush_buffer_consolidate(lists:sort(LocBytes0), 1),
         ok = file:pwrite(Fd, LocBytes),
-        file_handle_cache_stats:update(queue_index_write),
         FoldState
     end, State0, Writes),
     %% Update the cache. If we are flushing the entire write buffer,
@@ -961,7 +960,6 @@ read_from_disk(SeqIdsToRead0, State0 = #qi{ write_buffer = WriteBuffer }, Acc0) 
     ReadSize = (LastSeqId - FirstSeqId + 1) * ?ENTRY_SIZE,
     case get_fd(FirstSeqId, State0) of
         {Fd, OffsetForSeqId, State} ->
-            file_handle_cache_stats:update(queue_index_read),
             %% When reading further than the end of a partial file,
             %% file:pread/3 will return what it could read.
             case file:pread(Fd, OffsetForSeqId, ReadSize) of

@@ -767,7 +767,6 @@ rabbit_common:
 - delegate
 - delegate_sup
 - file_handle_cache
-- file_handle_cache_stats
 - gen_server2
 - mirrored_supervisor_locks
 - mnesia_sync

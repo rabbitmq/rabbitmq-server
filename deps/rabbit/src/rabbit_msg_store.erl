@@ -463,7 +463,6 @@ write(MsgRef, MsgId, Msg, CState) -> client_write(MsgRef, MsgId, Msg, noflow, CS
 
 read(MsgId, CState = #client_msstate { index_ets = IndexEts,
                                        cur_file_cache_ets = CurFileCacheEts }) ->
-    file_handle_cache_stats:update(msg_store_read),
     %% Check the cur file cache
     case ets:lookup(CurFileCacheEts, MsgId) of
         [] ->
@@ -480,7 +479,6 @@ read(MsgId, CState = #client_msstate { index_ets = IndexEts,
     -> {#{rabbit_types:msg_id() => msg()}, client_msstate()}.
 
 read_many(MsgIds, CState) ->
-    file_handle_cache_stats:inc(msg_store_read, length(MsgIds)),
     %% We receive MsgIds in rouhgly the younger->older order so
     %% we can look for messages in the cache directly.
     read_many_cache(MsgIds, CState, #{}).
@@ -592,7 +590,6 @@ client_write(MsgRef, MsgId, Msg, Flow,
              CState = #client_msstate { flying_ets         = FlyingEts,
                                         cur_file_cache_ets = CurFileCacheEts,
                                         client_ref         = CRef }) ->
-    file_handle_cache_stats:update(msg_store_write),
     %% We are guaranteed that the insert will succeed.
     %% This is true even for queue crashes because CRef will change.
     true = ets:insert_new(FlyingEts, {{CRef, MsgRef}, ?FLYING_WRITE}),
