@@ -1128,7 +1128,7 @@ many_qos1_messages(Config) ->
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
     NumMsgs = 16#ffff + 100,
     C = connect(ClientId, Config, 0, [{retry_interval, 600},
-                                      {max_inflight, NumMsgs div 4}]),
+                                      {max_inflight, NumMsgs div 8}]),
     {ok, _, [1]} = emqtt:subscribe(C, {Topic, qos1}),
     Payloads = lists:map(fun integer_to_binary/1, lists:seq(1, NumMsgs)),
     Self = self(),
@@ -1466,7 +1466,7 @@ block(Config) ->
 block_only_publisher(Config) ->
     Topic = atom_to_binary(?FUNCTION_NAME),
 
-    Opts = [{ack_timeout, 2}],
+    Opts = [{ack_timeout, 1}],
     Con = connect(<<"background-connection">>, Config, Opts),
     Sub = connect(<<"subscriber-connection">>, Config, Opts),
     Pub = connect(<<"publisher-connection">>, Config, Opts),
