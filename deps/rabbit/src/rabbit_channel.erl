@@ -265,7 +265,7 @@ do(Pid, Method) ->
 
 -spec do
         (pid(), rabbit_framing:amqp_method_record(),
-         rabbit_types:maybe(rabbit_types:content())) ->
+         rabbit_types:'maybe'(rabbit_types:content())) ->
             'ok'.
 
 do(Pid, Method, Content) ->
@@ -273,7 +273,7 @@ do(Pid, Method, Content) ->
 
 -spec do_flow
         (pid(), rabbit_framing:amqp_method_record(),
-         rabbit_types:maybe(rabbit_types:content())) ->
+         rabbit_types:'maybe'(rabbit_types:content())) ->
             'ok'.
 
 do_flow(Pid, Method, Content) ->
