@@ -76,6 +76,8 @@ jobs:
         cat << EOF >> user.bazelrc
           build --remote_cache=https://storage.googleapis.com/${{ secrets.REMOTE_CACHE_BUCKET_NAME }}
           build --google_default_credentials
+
+          build --experimental_guard_against_concurrent_changes
         EOF
         fi
         cat << EOF >> user.bazelrc
