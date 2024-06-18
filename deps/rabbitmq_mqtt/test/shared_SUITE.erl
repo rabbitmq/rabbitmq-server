@@ -1126,13 +1126,26 @@ amqp_to_mqtt_qos0(Config) ->
 %% Test that the server wraps around the packet identifier.
 many_qos1_messages(Config) ->
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
-    C = connect(ClientId, Config, 0, [{retry_interval, 600}]),
-    {ok, _, [1]} = emqtt:subscribe(C, {Topic, qos1}),
     NumMsgs = 16#ffff + 100,
+    C = connect(ClientId, Config, 0, [{retry_interval, 600},
+                                      {max_inflight, NumMsgs div 4}]),
+    {ok, _, [1]} = emqtt:subscribe(C, {Topic, qos1}),
     Payloads = lists:map(fun integer_to_binary/1, lists:seq(1, NumMsgs)),
+    Self = self(),
+    Target = lists:last(Payloads),
     lists:foreach(fun(P) ->
-                          {ok, _} = emqtt:publish(C, Topic, P, qos1)
+                          Cb = {fun(T, _) when T == Target ->
+                                        Self ! proceed;
+                                   (_, _) ->
+                                        ok
+                                end, [P]},
+                          ok = emqtt:publish_async(C, Topic, P, qos1, Cb)
                   end, Payloads),
+    receive
+        proceed -> ok
+    after 30000 ->
+              ct:fail("message to proceed never received")
+    end,
     ok = expect_publishes(C, Topic, Payloads),
     ok = emqtt:disconnect(C).
 
