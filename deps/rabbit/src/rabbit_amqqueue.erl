@@ -73,7 +73,6 @@
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
-         set_maximum_since_use/2,
          emit_consumers_local/3, internal_delete/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -1818,11 +1817,6 @@ forget_node_for_queue(Q) ->
 
 run_backing_queue(QPid, Mod, Fun) ->
     gen_server2:cast(QPid, {run_backing_queue, Mod, Fun}).
-
--spec set_maximum_since_use(pid(), non_neg_integer()) -> 'ok'.
-
-set_maximum_since_use(QPid, Age) ->
-    gen_server2:cast(QPid, {set_maximum_since_use, Age}).
 
 -spec is_replicated(amqqueue:amqqueue()) -> boolean().
 

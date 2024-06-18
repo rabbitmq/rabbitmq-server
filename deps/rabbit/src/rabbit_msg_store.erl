@@ -800,7 +800,6 @@ prioritise_call(Msg, _From, _Len, _State) ->
 prioritise_cast(Msg, _Len, _State) ->
     case Msg of
         {compacted_file, _File}       -> 8;
-        {set_maximum_since_use, _Age} -> 8;
         {client_dying, _Pid}          -> 7;
         _                             -> 0
     end.
