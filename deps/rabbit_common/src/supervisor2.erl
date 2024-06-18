@@ -71,7 +71,7 @@
 
 %% Internal exports
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3, format_status/2]).
+         terminate/2, code_change/3]).
 
 %% For release_handler only
 -export([get_callback_module/1]).
@@ -1605,12 +1605,6 @@ report_progress(Child, SupName) ->
                 report_cb=>fun logger:format_otp_report/1,
                 logger_formatter=>#{title=>"PROGRESS REPORT"},
                 error_logger=>#{tag=>info_report,type=>progress}}).
-
-format_status(terminate, [_PDict, State]) ->
-    State;
-format_status(_, [_PDict, State]) ->
-    [{data, [{"State", State}]},
-     {supervisor, [{"Callback", State#state.module}]}].
 
 %%%-----------------------------------------------------------------
 %%% Dynamics database access

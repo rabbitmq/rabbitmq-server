@@ -417,8 +417,7 @@ ensure_rabbitmq_run_secondary_cmd(Config) ->
     end.
 
 ensure_erl_call_cmd(Config) ->
-    ErlCallDir = code:lib_dir(erl_interface, bin),
-    ErlCall = filename:join(ErlCallDir, "erl_call"),
+    ErlCall = filename:join(code:lib_dir(erl_interface), "bin/erl_call"),
     Cmd = [ErlCall],
     case exec(Cmd, [{match_stdout, "Usage: "}]) of
         {ok, _} -> set_config(Config, {erl_call_cmd, ErlCall});
