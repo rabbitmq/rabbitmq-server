@@ -56,36 +56,33 @@ all() ->
     [{group, mqtt},
      {group, web_mqtt}].
 
+%% The code being tested under v3 and v4 is almost identical.
+%% To save time in CI, we therefore run only a very small subset of tests in v3.
 groups() ->
     [
      {mqtt, [],
-      [{v3, [],
-        [{cluster_size_1, [], cluster_size_1_tests()},
-         {cluster_size_3, [], cluster_size_3_tests()},
-         {mnesia_store, [], mnesia_store_tests()}]},
-       {v4, [],
-        [{cluster_size_1, [], cluster_size_1_tests()},
-         {cluster_size_3, [], cluster_size_3_tests()},
-         {mnesia_store, [], mnesia_store_tests()}]},
-       {v5, [],
-        [{cluster_size_1, [], cluster_size_1_tests()},
-         {cluster_size_3, [], cluster_size_3_tests()},
-         {mnesia_store, [], mnesia_store_tests()}]}
+      [{cluster_size_1, [],
+        [{v3, [], cluster_size_1_tests_v3()},
+         {v4, [], cluster_size_1_tests()},
+         {v5, [], cluster_size_1_tests()}]},
+       {cluster_size_3, [],
+        [{v4, [], cluster_size_3_tests()},
+         {v5, [], cluster_size_3_tests()}]}
       ]},
      {web_mqtt, [],
-      [{v3, [],
-        [{cluster_size_1, [], cluster_size_1_tests()},
-         {cluster_size_3, [], cluster_size_3_tests()},
-         {mnesia_store, [], mnesia_store_tests()}]},
-       {v4, [],
-        [{cluster_size_1, [], cluster_size_1_tests()},
-         {cluster_size_3, [], cluster_size_3_tests()},
-         {mnesia_store, [], mnesia_store_tests()}]},
-       {v5, [],
-        [{cluster_size_1, [], cluster_size_1_tests()},
-         {cluster_size_3, [], cluster_size_3_tests()},
-         {mnesia_store, [], mnesia_store_tests()}]}
+      [{cluster_size_1, [],
+        [{v3, [], cluster_size_1_tests_v3()},
+         {v4, [], cluster_size_1_tests()},
+         {v5, [], cluster_size_1_tests()}]},
+       {cluster_size_3, [],
+        [{v4, [], cluster_size_3_tests()},
+         {v5, [], cluster_size_3_tests()}]}
       ]}
+    ].
+
+cluster_size_1_tests_v3() ->
+    [global_counters,
+     events
     ].
 
 cluster_size_1_tests() ->
@@ -148,13 +145,9 @@ cluster_size_3_tests() ->
      session_reconnect,
      session_takeover,
      duplicate_client_id,
-     maintenance
-    ].
-
-mnesia_store_tests() ->
-    [
      publish_to_all_queue_types_qos0,
-     publish_to_all_queue_types_qos1
+     publish_to_all_queue_types_qos1,
+     maintenance
     ].
 
 suite() ->
@@ -166,7 +159,12 @@ suite() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config).
+    Config1 = rabbit_ct_helpers:merge_app_env(
+                Config, {rabbit, [
+                                  {quorum_tick_interval, 1000},
+                                  {stream_tick_interval, 1000}
+                                 ]}),
+    rabbit_ct_helpers:run_setup_steps(Config1).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
@@ -176,39 +174,31 @@ init_per_group(mqtt, Config) ->
 init_per_group(web_mqtt, Config) ->
     rabbit_ct_helpers:set_config(Config, {websocket, true});
 
-init_per_group(Group, Config)
+init_per_group(Group, Config0)
   when Group =:= v3;
        Group =:= v4;
        Group =:= v5 ->
-    rabbit_ct_helpers:set_config(Config, {mqtt_version, Group});
+    Config = rabbit_ct_helpers:set_config(Config0, {mqtt_version, Group}),
+    util:maybe_skip_v5(Config);
 
 init_per_group(Group, Config0) ->
     Nodes = case Group of
                 cluster_size_1 -> 1;
-                cluster_size_3 -> 3;
-                mnesia_store -> 3
+                cluster_size_3 -> 3
             end,
     Suffix = rabbit_ct_helpers:testcase_absname(Config0, "", "-"),
-    Config1 = case Group of
-                  mnesia_store ->
-                      rabbit_ct_helpers:set_config(Config0, {metadata_store, mnesia});
-                  _ ->
-                      Config0
-              end,
-    Config2 = rabbit_ct_helpers:set_config(
-                Config1,
-                [{rmq_nodes_count, Nodes},
-                 {rmq_nodename_suffix, Suffix}]),
-    Config = rabbit_ct_helpers:run_steps(
-               Config2,
-               rabbit_ct_broker_helpers:setup_steps() ++
-               rabbit_ct_client_helpers:setup_steps()),
-    util:maybe_skip_v5(Config).
+    Config = rabbit_ct_helpers:set_config(
+               Config0,
+               [{rmq_nodes_count, Nodes},
+                {rmq_nodename_suffix, Suffix}]),
+    rabbit_ct_helpers:run_steps(
+      Config,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(G, Config)
   when G =:= cluster_size_1;
-       G =:= cluster_size_3;
-       G =:= mnesia_store ->
+       G =:= cluster_size_3 ->
     rabbit_ct_helpers:run_steps(
       Config,
       rabbit_ct_client_helpers:teardown_steps() ++
@@ -410,19 +400,21 @@ publish_to_all_queue_types(Config, QoS) ->
     declare_queue(Ch, SQ, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
     bind(Ch, SQ, Topic),
 
-    NumMsgs = 2000,
-    C = connect(?FUNCTION_NAME, Config, [{retry_interval, 2}]),
-    lists:foreach(fun(N) ->
-                          case emqtt:publish(C, Topic, integer_to_binary(N), QoS) of
-                              ok ->
-                                  ok;
-                              {ok, _} ->
-                                  ok;
-                              Other ->
-                                  ct:fail("Failed to publish: ~p", [Other])
-                          end
-                  end, lists:seq(1, NumMsgs)),
-
+    NumMsgs = 1000,
+    C = connect(?FUNCTION_NAME, Config, [{max_inflight, 200},
+                                         {retry_interval, 2}]),
+    Self = self(),
+    lists:foreach(
+      fun(N) ->
+              %% Publish async all messages at once to trigger flow control
+              ok = emqtt:publish_async(C, Topic, integer_to_binary(N), QoS,
+                                       {fun(N0, {ok, #{reason_code_name := success}}) ->
+                                                Self ! {self(), N0};
+                                           (N0, ok) ->
+                                                Self ! {self(), N0}
+                                        end, [N]})
+      end, lists:seq(1, NumMsgs)),
+    ok = await_confirms_ordered(C, 1, NumMsgs),
     eventually(?_assert(
                   begin
                       L = rabbitmqctl_list(Config, 0, ["list_queues", "messages", "--no-table-headers"]),
@@ -439,7 +431,7 @@ publish_to_all_queue_types(Config, QoS) ->
                                                 N < NumMsgs * 2
                                         end
                                 end, L)
-                  end), 2000, 10),
+                  end), 1000, 20),
 
     delete_queue(Ch, [CQ, QQ, SQ]),
     ok = emqtt:disconnect(C),
@@ -1126,13 +1118,26 @@ amqp_to_mqtt_qos0(Config) ->
 %% Test that the server wraps around the packet identifier.
 many_qos1_messages(Config) ->
     Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
-    C = connect(ClientId, Config, 0, [{retry_interval, 600}]),
-    {ok, _, [1]} = emqtt:subscribe(C, {Topic, qos1}),
     NumMsgs = 16#ffff + 100,
+    C = connect(ClientId, Config, 0, [{retry_interval, 600},
+                                      {max_inflight, NumMsgs div 8}]),
+    {ok, _, [1]} = emqtt:subscribe(C, {Topic, qos1}),
     Payloads = lists:map(fun integer_to_binary/1, lists:seq(1, NumMsgs)),
+    Self = self(),
+    Target = lists:last(Payloads),
     lists:foreach(fun(P) ->
-                          {ok, _} = emqtt:publish(C, Topic, P, qos1)
+                          Cb = {fun(T, _) when T == Target ->
+                                        Self ! proceed;
+                                   (_, _) ->
+                                        ok
+                                end, [P]},
+                          ok = emqtt:publish_async(C, Topic, P, qos1, Cb)
                   end, Payloads),
+    receive
+        proceed -> ok
+    after 30000 ->
+              ct:fail("message to proceed never received")
+    end,
     ok = expect_publishes(C, Topic, Payloads),
     ok = emqtt:disconnect(C).
 
@@ -1453,7 +1458,7 @@ block(Config) ->
 block_only_publisher(Config) ->
     Topic = atom_to_binary(?FUNCTION_NAME),
 
-    Opts = [{ack_timeout, 2}],
+    Opts = [{ack_timeout, 1}],
     Con = connect(<<"background-connection">>, Config, Opts),
     Sub = connect(<<"subscriber-connection">>, Config, Opts),
     Pub = connect(<<"publisher-connection">>, Config, Opts),

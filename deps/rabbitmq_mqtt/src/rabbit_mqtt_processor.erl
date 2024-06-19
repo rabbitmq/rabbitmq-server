@@ -66,7 +66,6 @@
          published = false :: boolean(),
          ssl_login_name :: none | binary(),
          retainer_pid :: pid(),
-         delivery_flow, %% Deprecated since removal of CMQ in 4.0
          trace_state :: rabbit_trace:state(),
          prefetch :: non_neg_integer(),
          vhost :: rabbit_types:vhost(),
