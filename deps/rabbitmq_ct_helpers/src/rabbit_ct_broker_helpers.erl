@@ -255,6 +255,9 @@ run_make_dist(Config) ->
     case os:getenv("SKIP_MAKE_TEST_DIST") of
         false ->
             SrcDir = ?config(current_srcdir, Config),
+            %% Some flags should not be propagated to Make when testing.
+            os:unsetenv("FULL"),
+            os:unsetenv("MAKEFLAGS"),
             case rabbit_ct_helpers:make(Config, SrcDir, ["test-dist"]) of
                 {ok, _} ->
                     %% The caller can set $SKIP_MAKE_TEST_DIST to
