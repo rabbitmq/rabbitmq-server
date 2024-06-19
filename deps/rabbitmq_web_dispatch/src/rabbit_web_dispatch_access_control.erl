@@ -277,15 +277,8 @@ halt_response(Code, Type, Reason, ReqData, Context) ->
         rabbit_json:encode(Json), ReqData),
     {stop, ReqData1, Context}.
 
-not_authenticated(Reason, ReqData, Context,
-                  #auth_settings{auth_realm = AuthRealm} = AuthConfig) ->
-    case is_oauth2_enabled(AuthConfig) of
-      false ->
-            ReqData1 = cowboy_req:set_resp_header(<<"www-authenticate">>, AuthRealm, ReqData),
-            halt_response(401, not_authorized, Reason, ReqData1, Context);
-       true ->
-            halt_response(401, not_authorized, Reason, ReqData, Context)
-    end.
+not_authenticated(Reason, ReqData, Context, _AuthConfig) ->
+    halt_response(401, not_authorized, Reason, ReqData, Context).
 
 format_reason(Tuple) when is_tuple(Tuple) ->
     tuple(Tuple);
@@ -366,6 +359,3 @@ log_access_control_result(NotOK) ->
 
 is_basic_auth_disabled(#auth_settings{basic_auth_enabled = Enabled}) ->
     not Enabled.
-
-is_oauth2_enabled(#auth_settings{oauth2_enabled = Enabled}) ->
-    Enabled.

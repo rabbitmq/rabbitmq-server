@@ -271,7 +271,8 @@ internal_user(User) ->
 
 user(User) ->
     [{name, User#user.username},
-     {tags, tags_as_binaries(User#user.tags)}].
+     {tags, tags_as_binaries(User#user.tags)},
+     {backends, [ Module || {Module, _} <- User#user.authz_backends]}].
 
 tags_as_binaries(Tags) ->
     [to_binary(T) || T <- Tags].

@@ -710,6 +710,10 @@ function DisplayControl() {
 
 }
 
+function is_internal_user(user) {
+  return user.backends.includes("rabbit_auth_backend_internal");
+}
+
 // Set up the above vars
 function setup_global_vars(overview) {
     rates_mode = overview.rates_mode;
@@ -727,7 +731,7 @@ function setup_global_vars(overview) {
 
     user_name = fmt_escape_html(user.name);
     $('#header #logout').prepend(
-      'User ' + (user_administrator && !oauth.enabled ?  '<a href="#/users/' + user_name + '">' + user_name + '</a>' : user_name)
+      'User ' + (user_administrator && is_internal_user(user) ?  '<a href="#/users/' + user_name + '">' + user_name + '</a>' : user_name)
     );
 
     var product = overview.rabbitmq_version;
