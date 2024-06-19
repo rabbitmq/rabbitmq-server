@@ -250,7 +250,7 @@ rabbitmq_integration_suite(
         ":test_util_beam",
         ":test_event_recorder_beam",
     ],
-    shard_count = 18,
+    shard_count = 12,
     runtime_deps = [
         "//deps/rabbitmq_management_agent:erlang_app",
         "@emqtt//:erlang_app",
