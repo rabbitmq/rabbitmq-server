@@ -66,11 +66,7 @@ groups() ->
        {cluster_size_3, [],
         [{v3, [], cluster_size_3_tests()},
          {v4, [], cluster_size_3_tests()},
-         {v5, [], cluster_size_3_tests()}]},
-       {mnesia_store, [],
-        [{v3, [], mnesia_store_tests()},
-         {v4, [], mnesia_store_tests()},
-         {v5, [], mnesia_store_tests()}]}
+         {v5, [], cluster_size_3_tests()}]}
       ]},
      {web_mqtt, [],
       [{cluster_size_1, [],
@@ -80,11 +76,7 @@ groups() ->
        {cluster_size_3, [],
         [{v3, [], cluster_size_3_tests()},
          {v4, [], cluster_size_3_tests()},
-         {v5, [], cluster_size_3_tests()}]},
-       {mnesia_store, [],
-        [{v3, [], mnesia_store_tests()},
-         {v4, [], mnesia_store_tests()},
-         {v5, [], mnesia_store_tests()}]}
+         {v5, [], cluster_size_3_tests()}]}
       ]}
     ].
 
@@ -148,13 +140,9 @@ cluster_size_3_tests() ->
      session_reconnect,
      session_takeover,
      duplicate_client_id,
-     maintenance
-    ].
-
-mnesia_store_tests() ->
-    [
      publish_to_all_queue_types_qos0,
-     publish_to_all_queue_types_qos1
+     publish_to_all_queue_types_qos1,
+     maintenance
     ].
 
 suite() ->
@@ -190,30 +178,22 @@ init_per_group(Group, Config)
 init_per_group(Group, Config0) ->
     Nodes = case Group of
                 cluster_size_1 -> 1;
-                cluster_size_3 -> 3;
-                mnesia_store -> 3
+                cluster_size_3 -> 3
             end,
     Suffix = rabbit_ct_helpers:testcase_absname(Config0, "", "-"),
-    Config1 = case Group of
-                  mnesia_store ->
-                      rabbit_ct_helpers:set_config(Config0, {metadata_store, mnesia});
-                  _ ->
-                      Config0
-              end,
-    Config2 = rabbit_ct_helpers:set_config(
-                Config1,
+    Config1 = rabbit_ct_helpers:set_config(
+                Config0,
                 [{rmq_nodes_count, Nodes},
                  {rmq_nodename_suffix, Suffix}]),
     Config = rabbit_ct_helpers:run_steps(
-               Config2,
+               Config1,
                rabbit_ct_broker_helpers:setup_steps() ++
                rabbit_ct_client_helpers:setup_steps()),
     util:maybe_skip_v5(Config).
 
 end_per_group(G, Config)
   when G =:= cluster_size_1;
-       G =:= cluster_size_3;
-       G =:= mnesia_store ->
+       G =:= cluster_size_3 ->
     rabbit_ct_helpers:run_steps(
       Config,
       rabbit_ct_client_helpers:teardown_steps() ++
