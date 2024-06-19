@@ -36,8 +36,15 @@
 
 -import(rabbit_misc, [pget/2]).
 
--define(COLLECT_INTERVAL, 1000).
+-define(COLLECT_INTERVAL, 256).
 -define(PATH_PREFIX, "/custom-prefix").
+
+-define(AWAIT(Body),
+        await_condition(fun () ->
+                                begin
+                                    Body
+                                end
+                        end)).
 
 -compile([export_all, nowarn_export_all]).
 
@@ -173,9 +180,13 @@ all_tests() -> [
 %% -------------------------------------------------------------------
 merge_app_env(Config) ->
     Config1 = rabbit_ct_helpers:merge_app_env(Config,
-                                    {rabbit, [
-                                              {collect_statistics_interval, ?COLLECT_INTERVAL}
-                                             ]}),
+                                              {rabbit,
+                                               [
+                                                {collect_statistics_interval,
+                                                 ?COLLECT_INTERVAL},
+                                                {quorum_tick_interval, 256},
+                                                {stream_tick_interval, 256}
+                                               ]}),
     rabbit_ct_helpers:merge_app_env(Config1,
                                     {rabbitmq_management, [
                                      {sample_retention_policies,
@@ -935,12 +946,15 @@ connections_test_amqpl(Config) ->
              rabbit_mgmt_format:print(
                "/connections/127.0.0.1%3A~w%20-%3E%20127.0.0.1%3A~w",
                [LocalPort, amqp_port(Config)])),
-    timer:sleep(1500),
-    Connection = http_get(Config, Path, ?OK),
-    ?assert(maps:is_key(recv_oct, Connection)),
-    ?assert(maps:is_key(garbage_collection, Connection)),
-    ?assert(maps:is_key(send_oct_details, Connection)),
-    ?assert(maps:is_key(reductions, Connection)),
+    await_condition(
+      fun () ->
+              Connection = http_get(Config, Path, ?OK),
+              ?assert(maps:is_key(recv_oct, Connection)),
+              ?assert(maps:is_key(garbage_collection, Connection)),
+              ?assert(maps:is_key(send_oct_details, Connection)),
+              ?assert(maps:is_key(reductions, Connection)),
+              true
+      end),
     http_delete(Config, Path, {group, '2xx'}),
     %% TODO rabbit_reader:shutdown/2 returns before the connection is
     %% closed. It may not be worth fixing.
@@ -953,7 +967,7 @@ connections_test_amqpl(Config) ->
                           false
                   end
           end,
-    wait_until(Fun, 60),
+    await_condition(Fun),
     close_connection(Conn),
     passed.
 
@@ -1190,7 +1204,7 @@ crashed_queues_test(Config) ->
 
 quorum_queues_test(Config) ->
     %% Test in a loop that no metrics are left behing after deleting a queue
-    quorum_queues_test_loop(Config, 5).
+    quorum_queues_test_loop(Config, 2).
 
 quorum_queues_test_loop(_Config, 0) ->
     passed;
@@ -1208,18 +1222,19 @@ quorum_queues_test_loop(Config, N) ->
               end,
     Publish(),
     Publish(),
-    wait_until(fun() ->
-                       Num = maps:get(messages, http_get(Config, "/queues/%2f/qq?lengths_age=60&lengths_incr=5&msg_rates_age=60&msg_rates_incr=5&data_rates_age=60&data_rates_incr=5"), undefined),
-                       ct:pal("wait_until got ~w", [N]),
-                       2 == Num
-               end, 100),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Num = maps:get(messages, http_get(Config, "/queues/%2f/qq?lengths_age=60&lengths_incr=5&msg_rates_age=60&msg_rates_incr=5&data_rates_age=60&data_rates_incr=5"), undefined),
+              2 == Num
+      end, ?COLLECT_INTERVAL * 100),
 
     http_delete(Config, "/queues/%2f/qq", {group, '2xx'}),
     http_put(Config, "/queues/%2f/qq", Good, {group, '2xx'}),
 
-    wait_until(fun() ->
-                       0 == maps:get(messages, http_get(Config, "/queues/%2f/qq?lengths_age=60&lengths_incr=5&msg_rates_age=60&msg_rates_incr=5&data_rates_age=60&data_rates_incr=5"), undefined)
-               end, 100),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              0 == maps:get(messages, http_get(Config, "/queues/%2f/qq?lengths_age=60&lengths_incr=5&msg_rates_age=60&msg_rates_incr=5&data_rates_age=60&data_rates_incr=5"), undefined)
+      end, ?COLLECT_INTERVAL * 100),
 
     http_delete(Config, "/queues/%2f/qq", {group, '2xx'}),
     close_connection(Conn),
@@ -1230,17 +1245,17 @@ stream_queues_have_consumers_field(Config) ->
     http_get(Config, "/queues/%2f/sq", ?NOT_FOUND),
     http_put(Config, "/queues/%2f/sq", Good, {group, '2xx'}),
 
-    wait_until(fun() ->
-                       Qs = http_get(Config, "/queues/%2F"),
-                       length(Qs) == 1 andalso maps:is_key(consumers, lists:nth(1, Qs))
-               end, 50),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Qs = http_get(Config, "/queues/%2F"),
+              length(Qs) == 1 andalso maps:is_key(consumers, lists:nth(1, Qs))
+      end, ?COLLECT_INTERVAL * 100),
 
     Queues = http_get(Config, "/queues/%2F"),
     assert_list([#{name        => <<"sq">>,
                    arguments => #{'x-queue-type' => <<"stream">>},
                    consumers   => 0}],
                 Queues),
-
 
     http_delete(Config, "/queues/%2f/sq", {group, '2xx'}),
     ok.
@@ -1554,16 +1569,19 @@ permissions_connection_channel_consumer_test(Config) ->
     [amqp_channel:subscribe(
        Ch, #'basic.consume'{queue = <<"test">>}, self()) ||
         Ch <- [Ch1, Ch2, Ch3]],
-    timer:sleep(1500),
     AssertLength = fun (Path, User, Len) ->
                            Res = http_get(Config, Path, User, User, ?OK),
                            ?assertEqual(Len, length(Res))
                    end,
-    [begin
-         AssertLength(P, "user", 1),
-         AssertLength(P, "monitor", 3),
-         AssertLength(P, "guest", 3)
-     end || P <- ["/connections", "/channels", "/consumers", "/consumers/%2F"]],
+    await_condition(
+      fun () ->
+              [begin
+                   AssertLength(P, "user", 1),
+                   AssertLength(P, "monitor", 3),
+                   AssertLength(P, "guest", 3)
+               end || P <- ["/connections", "/channels", "/consumers", "/consumers/%2F"]],
+              true
+      end),
 
     AssertRead = fun(Path, UserStatus) ->
                          http_get(Config, Path, "user", "user", UserStatus),
@@ -1612,12 +1630,15 @@ consumers_test(Config, Args) ->
       Ch, #'basic.consume'{queue        = <<"test">>,
                            no_ack       = false,
                            consumer_tag = <<"my-ctag">> }, self()),
-    timer:sleep(1500),
-    assert_list([#{exclusive       => false,
-                   ack_required    => true,
-                   active          => true,
-                   activity_status => <<"up">>,
-                   consumer_tag    => <<"my-ctag">>}], http_get(Config, "/consumers")),
+    await_condition(
+      fun () ->
+              assert_list([#{exclusive       => false,
+                             ack_required    => true,
+                             active          => true,
+                             activity_status => <<"up">>,
+                             consumer_tag    => <<"my-ctag">>}], http_get(Config, "/consumers")),
+              true
+      end),
     amqp_connection:close(Conn),
     http_delete(Config, "/queues/%2F/test", {group, '2xx'}),
     passed.
@@ -1649,24 +1670,30 @@ single_active_consumer(Config, Url, QName, Args) ->
         Ch2, #'basic.consume'{queue        = QName,
             no_ack       = true,
             consumer_tag = <<"2">> }, self()),
-    timer:sleep(1500),
-    assert_list([#{exclusive       => false,
-                   ack_required    => false,
-                   active          => true,
-                   activity_status => <<"single_active">>,
-                   consumer_tag    => <<"1">>},
-                 #{exclusive       => false,
-                   ack_required    => false,
-                   active          => false,
-                   activity_status => <<"waiting">>,
-                   consumer_tag    => <<"2">>}], http_get(Config, "/consumers")),
+    await_condition(
+      fun () ->
+              assert_list([#{exclusive       => false,
+                             ack_required    => false,
+                             active          => true,
+                             activity_status => <<"single_active">>,
+                             consumer_tag    => <<"1">>},
+                           #{exclusive       => false,
+                             ack_required    => false,
+                             active          => false,
+                             activity_status => <<"waiting">>,
+                             consumer_tag    => <<"2">>}], http_get(Config, "/consumers")),
+              true
+      end),
     amqp_channel:close(Ch),
-    timer:sleep(1500),
-    assert_list([#{exclusive       => false,
-                   ack_required    => false,
-                   active          => true,
-                   activity_status => <<"single_active">>,
-                   consumer_tag    => <<"2">>}], http_get(Config, "/consumers")),
+    await_condition(
+      fun () ->
+              assert_list([#{exclusive       => false,
+                             ack_required    => false,
+                             active          => true,
+                             activity_status => <<"single_active">>,
+                             consumer_tag    => <<"2">>}], http_get(Config, "/consumers")),
+              true
+      end),
     amqp_connection:close(Conn),
     http_delete(Config, Url, {group, '2xx'}),
     passed.
@@ -2150,8 +2177,11 @@ exclusive_consumer_test(Config) ->
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     amqp_channel:subscribe(Ch, #'basic.consume'{queue     = QName,
                                                 exclusive = true}, self()),
-    timer:sleep(1500), %% Sadly we need to sleep to let the stats update
-    http_get(Config, "/queues/%2F/"), %% Just check we don't blow up
+    await_condition(
+      fun () ->
+              http_get(Config, "/queues/%2F/"), %% Just check we don't blow up
+              true
+      end),
     close_channel(Ch),
     close_connection(Conn),
     passed.
@@ -2161,15 +2191,18 @@ exclusive_queue_test(Config) ->
     {Conn, Ch} = open_connection_and_channel(Config),
     #'queue.declare_ok'{ queue = QName } =
     amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
-    timer:sleep(1500), %% Sadly we need to sleep to let the stats update
     Path = "/queues/%2F/" ++ rabbit_http_util:quote_plus(QName),
-    Queue = http_get(Config, Path),
-    assert_item(#{name        => QName,
-                  vhost       => <<"/">>,
-                  durable     => false,
-                  auto_delete => false,
-                  exclusive   => true,
-                  arguments   => #{}}, Queue),
+    await_condition(
+      fun () ->
+              Queue = http_get(Config, Path),
+              assert_item(#{name        => QName,
+                            vhost       => <<"/">>,
+                            durable     => false,
+                            auto_delete => false,
+                            exclusive   => true,
+                            arguments   => #{}}, Queue),
+              true
+      end),
     amqp_channel:close(Ch),
     close_connection(Conn),
     passed.
@@ -2184,24 +2217,26 @@ connections_channels_pagination_test(Config) ->
     Conn2     = open_unmanaged_connection(Config),
     {ok, Ch2} = amqp_connection:open_channel(Conn2),
 
-    %% for stats to update
-    timer:sleep(1500),
-    PageOfTwo = http_get(Config, "/connections?page=1&page_size=2", ?OK),
-    ?assertEqual(3, maps:get(total_count, PageOfTwo)),
-    ?assertEqual(3, maps:get(filtered_count, PageOfTwo)),
-    ?assertEqual(2, maps:get(item_count, PageOfTwo)),
-    ?assertEqual(1, maps:get(page, PageOfTwo)),
-    ?assertEqual(2, maps:get(page_size, PageOfTwo)),
-    ?assertEqual(2, maps:get(page_count, PageOfTwo)),
+    await_condition(
+      fun () ->
+              PageOfTwo = http_get(Config, "/connections?page=1&page_size=2", ?OK),
+              ?assertEqual(3, maps:get(total_count, PageOfTwo)),
+              ?assertEqual(3, maps:get(filtered_count, PageOfTwo)),
+              ?assertEqual(2, maps:get(item_count, PageOfTwo)),
+              ?assertEqual(1, maps:get(page, PageOfTwo)),
+              ?assertEqual(2, maps:get(page_size, PageOfTwo)),
+              ?assertEqual(2, maps:get(page_count, PageOfTwo)),
 
 
-    TwoOfTwo = http_get(Config, "/channels?page=2&page_size=2", ?OK),
-    ?assertEqual(3, maps:get(total_count, TwoOfTwo)),
-    ?assertEqual(3, maps:get(filtered_count, TwoOfTwo)),
-    ?assertEqual(1, maps:get(item_count, TwoOfTwo)),
-    ?assertEqual(2, maps:get(page, TwoOfTwo)),
-    ?assertEqual(2, maps:get(page_size, TwoOfTwo)),
-    ?assertEqual(2, maps:get(page_count, TwoOfTwo)),
+              TwoOfTwo = http_get(Config, "/channels?page=2&page_size=2", ?OK),
+              ?assertEqual(3, maps:get(total_count, TwoOfTwo)),
+              ?assertEqual(3, maps:get(filtered_count, TwoOfTwo)),
+              ?assertEqual(1, maps:get(item_count, TwoOfTwo)),
+              ?assertEqual(2, maps:get(page, TwoOfTwo)),
+              ?assertEqual(2, maps:get(page_size, TwoOfTwo)),
+              ?assertEqual(2, maps:get(page_count, TwoOfTwo)),
+              true
+      end),
 
     amqp_channel:close(Ch),
     amqp_connection:close(Conn),
@@ -2223,45 +2258,45 @@ exchanges_pagination_test(Config) ->
     http_put(Config, "/exchanges/%2F/test2_reg", QArgs, {group, '2xx'}),
     http_put(Config, "/exchanges/vh1/reg_test3", QArgs, {group, '2xx'}),
 
-    %% for stats to update
-    timer:sleep(1500),
-
     Total = length(rpc(Config, rabbit_exchange, list_names, [])),
+    await_condition(
+      fun () ->
+              PageOfTwo = http_get(Config, "/exchanges?page=1&page_size=2", ?OK),
+              ?assertEqual(Total, maps:get(total_count, PageOfTwo)),
+              ?assertEqual(Total, maps:get(filtered_count, PageOfTwo)),
+              ?assertEqual(2, maps:get(item_count, PageOfTwo)),
+              ?assertEqual(1, maps:get(page, PageOfTwo)),
+              ?assertEqual(2, maps:get(page_size, PageOfTwo)),
+              ?assertEqual(round(Total / 2), maps:get(page_count, PageOfTwo)),
+              assert_list([#{name => <<"">>, vhost => <<"/">>},
+                           #{name => <<"amq.direct">>, vhost => <<"/">>}
+                          ], maps:get(items, PageOfTwo)),
 
-    PageOfTwo = http_get(Config, "/exchanges?page=1&page_size=2", ?OK),
-    ?assertEqual(Total, maps:get(total_count, PageOfTwo)),
-    ?assertEqual(Total, maps:get(filtered_count, PageOfTwo)),
-    ?assertEqual(2, maps:get(item_count, PageOfTwo)),
-    ?assertEqual(1, maps:get(page, PageOfTwo)),
-    ?assertEqual(2, maps:get(page_size, PageOfTwo)),
-    ?assertEqual(round(Total / 2), maps:get(page_count, PageOfTwo)),
-    assert_list([#{name => <<"">>, vhost => <<"/">>},
-                 #{name => <<"amq.direct">>, vhost => <<"/">>}
-                ], maps:get(items, PageOfTwo)),
-
-    ByName = http_get(Config, "/exchanges?page=1&page_size=2&name=reg", ?OK),
-    ?assertEqual(Total, maps:get(total_count, ByName)),
-    ?assertEqual(2, maps:get(filtered_count, ByName)),
-    ?assertEqual(2, maps:get(item_count, ByName)),
-    ?assertEqual(1, maps:get(page, ByName)),
-    ?assertEqual(2, maps:get(page_size, ByName)),
-    ?assertEqual(1, maps:get(page_count, ByName)),
-    assert_list([#{name => <<"test2_reg">>, vhost => <<"/">>},
-                 #{name => <<"reg_test3">>, vhost => <<"vh1">>}
-                ], maps:get(items, ByName)),
+              ByName = http_get(Config, "/exchanges?page=1&page_size=2&name=reg", ?OK),
+              ?assertEqual(Total, maps:get(total_count, ByName)),
+              ?assertEqual(2, maps:get(filtered_count, ByName)),
+              ?assertEqual(2, maps:get(item_count, ByName)),
+              ?assertEqual(1, maps:get(page, ByName)),
+              ?assertEqual(2, maps:get(page_size, ByName)),
+              ?assertEqual(1, maps:get(page_count, ByName)),
+              assert_list([#{name => <<"test2_reg">>, vhost => <<"/">>},
+                           #{name => <<"reg_test3">>, vhost => <<"vh1">>}
+                          ], maps:get(items, ByName)),
 
 
-    RegExByName = http_get(Config,
-                           "/exchanges?page=1&page_size=2&name=%5E(?=%5Ereg)&use_regex=true",
-                           ?OK),
-    ?assertEqual(Total, maps:get(total_count, RegExByName)),
-    ?assertEqual(1, maps:get(filtered_count, RegExByName)),
-    ?assertEqual(1, maps:get(item_count, RegExByName)),
-    ?assertEqual(1, maps:get(page, RegExByName)),
-    ?assertEqual(2, maps:get(page_size, RegExByName)),
-    ?assertEqual(1, maps:get(page_count, RegExByName)),
-    assert_list([#{name => <<"reg_test3">>, vhost => <<"vh1">>}
-                ], maps:get(items, RegExByName)),
+              RegExByName = http_get(Config,
+                                     "/exchanges?page=1&page_size=2&name=%5E(?=%5Ereg)&use_regex=true",
+                                     ?OK),
+              ?assertEqual(Total, maps:get(total_count, RegExByName)),
+              ?assertEqual(1, maps:get(filtered_count, RegExByName)),
+              ?assertEqual(1, maps:get(item_count, RegExByName)),
+              ?assertEqual(1, maps:get(page, RegExByName)),
+              ?assertEqual(2, maps:get(page_size, RegExByName)),
+              ?assertEqual(1, maps:get(page_count, RegExByName)),
+              assert_list([#{name => <<"reg_test3">>, vhost => <<"vh1">>}
+                          ], maps:get(items, RegExByName)),
+              true
+      end),
 
 
     http_get(Config, "/exchanges?page=1000", ?BAD_REQUEST),
@@ -2293,18 +2328,19 @@ exchanges_pagination_permissions_test(Config) ->
     http_put(Config, "/exchanges/%2F/test0", QArgs, "admin", "admin", {group, '2xx'}),
     http_put(Config, "/exchanges/vh1/test1", QArgs, "non-admin", "non-admin", {group, '2xx'}),
 
-    %% for stats to update
-    timer:sleep(1500),
+    await_condition(
+      fun () ->
+              FirstPage = http_get(Config, "/exchanges?page=1&name=test1", "non-admin", "non-admin", ?OK),
 
-    FirstPage = http_get(Config, "/exchanges?page=1&name=test1", "non-admin", "non-admin", ?OK),
-
-    ?assertEqual(8, maps:get(total_count, FirstPage)),
-    ?assertEqual(1, maps:get(item_count, FirstPage)),
-    ?assertEqual(1, maps:get(page, FirstPage)),
-    ?assertEqual(100, maps:get(page_size, FirstPage)),
-    ?assertEqual(1, maps:get(page_count, FirstPage)),
-    assert_list([#{name => <<"test1">>, vhost => <<"vh1">>}
-                ], maps:get(items, FirstPage)),
+              ?assertEqual(8, maps:get(total_count, FirstPage)),
+              ?assertEqual(1, maps:get(item_count, FirstPage)),
+              ?assertEqual(1, maps:get(page, FirstPage)),
+              ?assertEqual(100, maps:get(page_size, FirstPage)),
+              ?assertEqual(1, maps:get(page_count, FirstPage)),
+              assert_list([#{name => <<"test1">>, vhost => <<"vh1">>}
+                          ], maps:get(items, FirstPage)),
+              true
+      end),
     http_delete(Config, "/exchanges/%2F/test0", {group, '2xx'}),
     http_delete(Config, "/exchanges/vh1/test1", {group, '2xx'}),
     http_delete(Config, "/users/admin", {group, '2xx'}),
@@ -2326,94 +2362,96 @@ queue_pagination_test(Config) ->
     http_put(Config, "/queues/%2F/test2_reg", QArgs, {group, '2xx'}),
     http_put(Config, "/queues/vh1/reg_test3", QArgs, {group, '2xx'}),
 
-    %% for stats to update
-    timer:sleep(1500),
+    ?AWAIT(
+       begin
+           Total = length(rpc(Config, rabbit_amqqueue, list_names, [])),
 
-    Total = length(rpc(Config, rabbit_amqqueue, list_names, [])),
+           PageOfTwo = http_get(Config, "/queues?page=1&page_size=2", ?OK),
+           ?assertEqual(Total, maps:get(total_count, PageOfTwo)),
+           ?assertEqual(Total, maps:get(filtered_count, PageOfTwo)),
+           ?assertEqual(2, maps:get(item_count, PageOfTwo)),
+           ?assertEqual(1, maps:get(page, PageOfTwo)),
+           ?assertEqual(2, maps:get(page_size, PageOfTwo)),
+           ?assertEqual(2, maps:get(page_count, PageOfTwo)),
+           assert_list([#{name => <<"test0">>, vhost => <<"/">>, storage_version => 2},
+                        #{name => <<"test2_reg">>, vhost => <<"/">>, storage_version => 2}
+                       ], maps:get(items, PageOfTwo)),
 
-    PageOfTwo = http_get(Config, "/queues?page=1&page_size=2", ?OK),
-    ?assertEqual(Total, maps:get(total_count, PageOfTwo)),
-    ?assertEqual(Total, maps:get(filtered_count, PageOfTwo)),
-    ?assertEqual(2, maps:get(item_count, PageOfTwo)),
-    ?assertEqual(1, maps:get(page, PageOfTwo)),
-    ?assertEqual(2, maps:get(page_size, PageOfTwo)),
-    ?assertEqual(2, maps:get(page_count, PageOfTwo)),
-    assert_list([#{name => <<"test0">>, vhost => <<"/">>, storage_version => 2},
-                 #{name => <<"test2_reg">>, vhost => <<"/">>, storage_version => 2}
-                ], maps:get(items, PageOfTwo)),
-
-    SortedByName = http_get(Config, "/queues?sort=name&page=1&page_size=2", ?OK),
-    ?assertEqual(Total, maps:get(total_count, SortedByName)),
-    ?assertEqual(Total, maps:get(filtered_count, SortedByName)),
-    ?assertEqual(2, maps:get(item_count, SortedByName)),
-    ?assertEqual(1, maps:get(page, SortedByName)),
-    ?assertEqual(2, maps:get(page_size, SortedByName)),
-    ?assertEqual(2, maps:get(page_count, SortedByName)),
-    assert_list([#{name => <<"reg_test3">>, vhost => <<"vh1">>},
-                 #{name => <<"test0">>, vhost => <<"/">>}
-                ], maps:get(items, SortedByName)),
-
-
-    FirstPage = http_get(Config, "/queues?page=1", ?OK),
-    ?assertEqual(Total, maps:get(total_count, FirstPage)),
-    ?assertEqual(Total, maps:get(filtered_count, FirstPage)),
-    ?assertEqual(4, maps:get(item_count, FirstPage)),
-    ?assertEqual(1, maps:get(page, FirstPage)),
-    ?assertEqual(100, maps:get(page_size, FirstPage)),
-    ?assertEqual(1, maps:get(page_count, FirstPage)),
-    assert_list([#{name => <<"test0">>, vhost => <<"/">>},
-                 #{name => <<"test1">>, vhost => <<"vh1">>},
-                 #{name => <<"test2_reg">>, vhost => <<"/">>},
-                 #{name => <<"reg_test3">>, vhost =><<"vh1">>}
-                ], maps:get(items, FirstPage)),
-    %% The reduced API version just has the most useful fields.
-    %% garbage_collection is not one of them
-    IsEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
-                  Config, detailed_queues_endpoint),
-    case IsEnabled of
-        true  ->
-            [?assertNot(maps:is_key(garbage_collection, Item)) ||
-                Item <- maps:get(items, FirstPage)];
-        false ->
-            [?assert(maps:is_key(garbage_collection, Item)) ||
-                Item <- maps:get(items, FirstPage)]
-    end,
-    ReverseSortedByName = http_get(Config,
-                                   "/queues?page=2&page_size=2&sort=name&sort_reverse=true",
-                                   ?OK),
-    ?assertEqual(Total, maps:get(total_count, ReverseSortedByName)),
-    ?assertEqual(Total, maps:get(filtered_count, ReverseSortedByName)),
-    ?assertEqual(2, maps:get(item_count, ReverseSortedByName)),
-    ?assertEqual(2, maps:get(page, ReverseSortedByName)),
-    ?assertEqual(2, maps:get(page_size, ReverseSortedByName)),
-    ?assertEqual(2, maps:get(page_count, ReverseSortedByName)),
-    assert_list([#{name => <<"test0">>, vhost => <<"/">>},
-                 #{name => <<"reg_test3">>, vhost => <<"vh1">>}
-                ], maps:get(items, ReverseSortedByName)),
+           SortedByName = http_get(Config, "/queues?sort=name&page=1&page_size=2", ?OK),
+           ?assertEqual(Total, maps:get(total_count, SortedByName)),
+           ?assertEqual(Total, maps:get(filtered_count, SortedByName)),
+           ?assertEqual(2, maps:get(item_count, SortedByName)),
+           ?assertEqual(1, maps:get(page, SortedByName)),
+           ?assertEqual(2, maps:get(page_size, SortedByName)),
+           ?assertEqual(2, maps:get(page_count, SortedByName)),
+           assert_list([#{name => <<"reg_test3">>, vhost => <<"vh1">>},
+                        #{name => <<"test0">>, vhost => <<"/">>}
+                       ], maps:get(items, SortedByName)),
 
 
-    ByName = http_get(Config, "/queues?page=1&page_size=2&name=reg", ?OK),
-    ?assertEqual(Total, maps:get(total_count, ByName)),
-    ?assertEqual(2, maps:get(filtered_count, ByName)),
-    ?assertEqual(2, maps:get(item_count, ByName)),
-    ?assertEqual(1, maps:get(page, ByName)),
-    ?assertEqual(2, maps:get(page_size, ByName)),
-    ?assertEqual(1, maps:get(page_count, ByName)),
-    assert_list([#{name => <<"test2_reg">>, vhost => <<"/">>},
-                 #{name => <<"reg_test3">>, vhost => <<"vh1">>}
-                ], maps:get(items, ByName)),
+           FirstPage = http_get(Config, "/queues?page=1", ?OK),
+           ?assertEqual(Total, maps:get(total_count, FirstPage)),
+           ?assertEqual(Total, maps:get(filtered_count, FirstPage)),
+           ?assertEqual(4, maps:get(item_count, FirstPage)),
+           ?assertEqual(1, maps:get(page, FirstPage)),
+           ?assertEqual(100, maps:get(page_size, FirstPage)),
+           ?assertEqual(1, maps:get(page_count, FirstPage)),
+           assert_list([#{name => <<"test0">>, vhost => <<"/">>},
+                        #{name => <<"test1">>, vhost => <<"vh1">>},
+                        #{name => <<"test2_reg">>, vhost => <<"/">>},
+                        #{name => <<"reg_test3">>, vhost =><<"vh1">>}
+                       ], maps:get(items, FirstPage)),
+           %% The reduced API version just has the most useful fields.
+           %% garbage_collection is not one of them
+           IsEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                         Config, detailed_queues_endpoint),
+           case IsEnabled of
+               true  ->
+                   [?assertNot(maps:is_key(garbage_collection, Item)) ||
+                    Item <- maps:get(items, FirstPage)];
+               false ->
+                   [?assert(maps:is_key(garbage_collection, Item)) ||
+                    Item <- maps:get(items, FirstPage)]
+           end,
+           ReverseSortedByName = http_get(Config,
+                                          "/queues?page=2&page_size=2&sort=name&sort_reverse=true",
+                                          ?OK),
+           ?assertEqual(Total, maps:get(total_count, ReverseSortedByName)),
+           ?assertEqual(Total, maps:get(filtered_count, ReverseSortedByName)),
+           ?assertEqual(2, maps:get(item_count, ReverseSortedByName)),
+           ?assertEqual(2, maps:get(page, ReverseSortedByName)),
+           ?assertEqual(2, maps:get(page_size, ReverseSortedByName)),
+           ?assertEqual(2, maps:get(page_count, ReverseSortedByName)),
+           assert_list([#{name => <<"test0">>, vhost => <<"/">>},
+                        #{name => <<"reg_test3">>, vhost => <<"vh1">>}
+                       ], maps:get(items, ReverseSortedByName)),
 
-    RegExByName = http_get(Config,
-                           "/queues?page=1&page_size=2&name=%5E(?=%5Ereg)&use_regex=true",
-                           ?OK),
-    ?assertEqual(Total, maps:get(total_count, RegExByName)),
-    ?assertEqual(1, maps:get(filtered_count, RegExByName)),
-    ?assertEqual(1, maps:get(item_count, RegExByName)),
-    ?assertEqual(1, maps:get(page, RegExByName)),
-    ?assertEqual(2, maps:get(page_size, RegExByName)),
-    ?assertEqual(1, maps:get(page_count, RegExByName)),
-    assert_list([#{name => <<"reg_test3">>, vhost => <<"vh1">>}
-                ], maps:get(items, RegExByName)),
+
+           ByName = http_get(Config, "/queues?page=1&page_size=2&name=reg", ?OK),
+           ?assertEqual(Total, maps:get(total_count, ByName)),
+           ?assertEqual(2, maps:get(filtered_count, ByName)),
+           ?assertEqual(2, maps:get(item_count, ByName)),
+           ?assertEqual(1, maps:get(page, ByName)),
+           ?assertEqual(2, maps:get(page_size, ByName)),
+           ?assertEqual(1, maps:get(page_count, ByName)),
+           assert_list([#{name => <<"test2_reg">>, vhost => <<"/">>},
+                        #{name => <<"reg_test3">>, vhost => <<"vh1">>}
+                       ], maps:get(items, ByName)),
+
+           RegExByName = http_get(Config,
+                                  "/queues?page=1&page_size=2&name=%5E(?=%5Ereg)&use_regex=true",
+                                  ?OK),
+           ?assertEqual(Total, maps:get(total_count, RegExByName)),
+           ?assertEqual(1, maps:get(filtered_count, RegExByName)),
+           ?assertEqual(1, maps:get(item_count, RegExByName)),
+           ?assertEqual(1, maps:get(page, RegExByName)),
+           ?assertEqual(2, maps:get(page_size, RegExByName)),
+           ?assertEqual(1, maps:get(page_count, RegExByName)),
+           assert_list([#{name => <<"reg_test3">>, vhost => <<"vh1">>}
+                       ], maps:get(items, RegExByName)),
+           true
+       end
+      ),
 
 
     http_get(Config, "/queues?page=1000", ?BAD_REQUEST),
@@ -2577,34 +2615,37 @@ samples_range_test(Config) ->
     {Conn, Ch} = open_connection_and_channel(Config),
 
     %% Channels
-    timer:sleep(2000),
-    [ConnInfo | _] = http_get(Config, "/channels?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+    ?AWAIT(
+       begin
+           [ConnInfo | _] = http_get(Config, "/channels?lengths_age=60&lengths_incr=1", ?OK),
+           http_get(Config, "/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
 
-    ConnDetails = maps:get(connection_details, ConnInfo),
-    ConnName0 = maps:get(name, ConnDetails),
-    ConnName = uri_string:recompose(#{path => binary_to_list(ConnName0)}),
-    ChanName = ConnName ++ uri_string:recompose(#{path => " (1)"}),
+           ConnDetails = maps:get(connection_details, ConnInfo),
+           ConnName0 = maps:get(name, ConnDetails),
+           ConnName = uri_string:recompose(#{path => binary_to_list(ConnName0)}),
+           ChanName = ConnName ++ uri_string:recompose(#{path => " (1)"}),
 
-    http_get(Config, "/channels/" ++ ChanName ++ "?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/channels/" ++ ChanName ++ "?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+           http_get(Config, "/channels/" ++ ChanName ++ "?lengths_age=60&lengths_incr=1", ?OK),
+           http_get(Config, "/channels/" ++ ChanName ++ "?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
 
-    http_get(Config, "/vhosts/%2F/channels?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/vhosts/%2F/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+           http_get(Config, "/vhosts/%2F/channels?lengths_age=60&lengths_incr=1", ?OK),
+           http_get(Config, "/vhosts/%2F/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
 
-    %% Connections.
+           %% Connections.
 
-    http_get(Config, "/connections?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/connections?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+           http_get(Config, "/connections?lengths_age=60&lengths_incr=1", ?OK),
+           http_get(Config, "/connections?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
 
-    http_get(Config, "/connections/" ++ ConnName ++ "?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/connections/" ++ ConnName ++ "?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+           http_get(Config, "/connections/" ++ ConnName ++ "?lengths_age=60&lengths_incr=1", ?OK),
+           http_get(Config, "/connections/" ++ ConnName ++ "?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
 
-    http_get(Config, "/connections/" ++ ConnName ++ "/channels?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/connections/" ++ ConnName ++ "/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+           http_get(Config, "/connections/" ++ ConnName ++ "/channels?lengths_age=60&lengths_incr=1", ?OK),
+           http_get(Config, "/connections/" ++ ConnName ++ "/channels?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
 
-    http_get(Config, "/vhosts/%2F/connections?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/vhosts/%2F/connections?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+           http_get(Config, "/vhosts/%2F/connections?lengths_age=60&lengths_incr=1", ?OK),
+           http_get(Config, "/vhosts/%2F/connections?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+           true
+       end),
 
     amqp_channel:close(Ch),
     amqp_connection:close(Conn),
@@ -2627,23 +2668,29 @@ samples_range_test(Config) ->
 
     %% Queues
     http_put(Config, "/queues/%2F/test-001", #{}, {group, '2xx'}),
-    timer:sleep(2000),
 
-    http_get(Config, "/queues/%2F?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/queues/%2F?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
-    http_get(Config, "/queues/%2F/test-001?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/queues/%2F/test-001?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+    ?AWAIT(
+       begin
+           http_get(Config, "/queues/%2F?lengths_age=60&lengths_incr=1", ?OK),
+           http_get(Config, "/queues/%2F?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+           http_get(Config, "/queues/%2F/test-001?lengths_age=60&lengths_incr=1", ?OK),
+           http_get(Config, "/queues/%2F/test-001?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+           true
+       end),
 
     http_delete(Config, "/queues/%2F/test-001", {group, '2xx'}),
 
     %% Vhosts
     http_put(Config, "/vhosts/vh1", none, {group, '2xx'}),
-    timer:sleep(2000),
 
-    http_get(Config, "/vhosts?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/vhosts?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
-    http_get(Config, "/vhosts/vh1?lengths_age=60&lengths_incr=1", ?OK),
-    http_get(Config, "/vhosts/vh1?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+    ?AWAIT(
+       begin
+           http_get(Config, "/vhosts?lengths_age=60&lengths_incr=1", ?OK),
+           http_get(Config, "/vhosts?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+           http_get(Config, "/vhosts/vh1?lengths_age=60&lengths_incr=1", ?OK),
+           http_get(Config, "/vhosts/vh1?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+           true
+       end),
 
     http_delete(Config, "/vhosts/vh1", {group, '2xx'}),
 
@@ -2658,31 +2705,34 @@ sorting_test(Config) ->
     http_put(Config, "/queues/vh19/test1", QArgs, {group, '2xx'}),
     http_put(Config, "/queues/%2F/test2", QArgs, {group, '2xx'}),
     http_put(Config, "/queues/vh19/test3", QArgs, {group, '2xx'}),
-    timer:sleep(2000),
-    assert_list([#{name => <<"test0">>},
-                 #{name => <<"test2">>},
-                 #{name => <<"test1">>},
-                 #{name => <<"test3">>}], http_get(Config, "/queues", ?OK)),
-    assert_list([#{name => <<"test0">>},
-                 #{name => <<"test1">>},
-                 #{name => <<"test2">>},
-                 #{name => <<"test3">>}], http_get(Config, "/queues?sort=name", ?OK)),
-    assert_list([#{name => <<"test0">>},
-                 #{name => <<"test2">>},
-                 #{name => <<"test1">>},
-                 #{name => <<"test3">>}], http_get(Config, "/queues?sort=vhost", ?OK)),
-    assert_list([#{name => <<"test3">>},
-                 #{name => <<"test1">>},
-                 #{name => <<"test2">>},
-                 #{name => <<"test0">>}], http_get(Config, "/queues?sort_reverse=true", ?OK)),
-    assert_list([#{name => <<"test3">>},
-                 #{name => <<"test2">>},
-                 #{name => <<"test1">>},
-                 #{name => <<"test0">>}], http_get(Config, "/queues?sort=name&sort_reverse=true", ?OK)),
-    assert_list([#{name => <<"test3">>},
-                 #{name => <<"test1">>},
-                 #{name => <<"test2">>},
-                 #{name => <<"test0">>}], http_get(Config, "/queues?sort=vhost&sort_reverse=true", ?OK)),
+    ?AWAIT(
+       begin
+           assert_list([#{name => <<"test0">>},
+                        #{name => <<"test2">>},
+                        #{name => <<"test1">>},
+                        #{name => <<"test3">>}], http_get(Config, "/queues", ?OK)),
+           assert_list([#{name => <<"test0">>},
+                        #{name => <<"test1">>},
+                        #{name => <<"test2">>},
+                        #{name => <<"test3">>}], http_get(Config, "/queues?sort=name", ?OK)),
+           assert_list([#{name => <<"test0">>},
+                        #{name => <<"test2">>},
+                        #{name => <<"test1">>},
+                        #{name => <<"test3">>}], http_get(Config, "/queues?sort=vhost", ?OK)),
+           assert_list([#{name => <<"test3">>},
+                        #{name => <<"test1">>},
+                        #{name => <<"test2">>},
+                        #{name => <<"test0">>}], http_get(Config, "/queues?sort_reverse=true", ?OK)),
+           assert_list([#{name => <<"test3">>},
+                        #{name => <<"test2">>},
+                        #{name => <<"test1">>},
+                        #{name => <<"test0">>}], http_get(Config, "/queues?sort=name&sort_reverse=true", ?OK)),
+           assert_list([#{name => <<"test3">>},
+                        #{name => <<"test1">>},
+                        #{name => <<"test2">>},
+                        #{name => <<"test0">>}], http_get(Config, "/queues?sort=vhost&sort_reverse=true", ?OK)),
+           true
+       end),
     %% Rather poor but at least test it doesn't blow up with dots
     http_get(Config, "/queues?sort=owner_pid_details.name", ?OK),
     http_delete(Config, "/queues/%2F/test0", {group, '2xx'}),
@@ -2698,11 +2748,15 @@ format_output_test(Config) ->
     http_put(Config, "/vhosts/vh129", none, {group, '2xx'}),
     http_put(Config, "/permissions/vh129/guest", PermArgs, {group, '2xx'}),
     http_put(Config, "/queues/%2F/test0", QArgs, {group, '2xx'}),
-    timer:sleep(2000),
-    assert_list([#{name => <<"test0">>,
-                   consumer_capacity => 0,
-                   consumer_utilisation => 0,
-                   exclusive_consumer_tag => null}], http_get(Config, "/queues", ?OK)),
+
+    ?AWAIT(
+       begin
+           assert_list([#{name => <<"test0">>,
+                          consumer_capacity => 0,
+                          consumer_utilisation => 0,
+                          exclusive_consumer_tag => null}], http_get(Config, "/queues", ?OK)),
+           true
+       end),
     http_delete(Config, "/queues/%2F/test0", {group, '2xx'}),
     http_delete(Config, "/vhosts/vh129", {group, '2xx'}),
     passed.
@@ -2714,9 +2768,13 @@ columns_test(Config) ->
     http_put(Config, Path, [{arguments, [{<<"x-message-ttl">>, TTL}]}],
              {group, '2xx'}),
     Item = #{arguments => #{'x-message-ttl' => TTL}, name => <<"columns.test">>},
-    timer:sleep(2000),
-    [Item] = http_get(Config, "/queues?columns=arguments.x-message-ttl,name", ?OK),
-    Item = http_get(Config, "/queues/%2F/columns.test?columns=arguments.x-message-ttl,name", ?OK),
+
+    ?AWAIT(
+       begin
+           [Item] = http_get(Config, "/queues?columns=arguments.x-message-ttl,name", ?OK),
+           Item = http_get(Config, "/queues/%2F/columns.test?columns=arguments.x-message-ttl,name", ?OK),
+           true
+       end),
     http_delete(Config, Path, {group, '2xx'}),
     passed.
 
@@ -2792,7 +2850,7 @@ get_encoding_test(Config) ->
     http_put(Config, "/queues/%2F/get_encoding_test", #{}, {group, '2xx'}),
     http_post(Config, "/exchanges/%2F/amq.default/publish", Utf8Msg, ?OK),
     http_post(Config, "/exchanges/%2F/amq.default/publish", BinMsg,  ?OK),
-    timer:sleep(250),
+
     [RecvUtf8Msg1, RecvBinMsg1] = http_post(Config, "/queues/%2F/get_encoding_test/get",
                                                           [{ackmode, ack_requeue_false},
                                                            {count,    2},
@@ -2952,7 +3010,7 @@ publish_base64_test(Config) ->
     http_post(Config, "/exchanges/%2F/amq.default/publish", Msg, ?OK),
     http_post(Config, "/exchanges/%2F/amq.default/publish", BadMsg1, ?BAD_REQUEST),
     http_post(Config, "/exchanges/%2F/amq.default/publish", BadMsg2, ?BAD_REQUEST),
-    timer:sleep(250),
+
     [Msg2] = http_post(Config, "/queues/%2F/publish_base64_test/get", [{ackmode, ack_requeue_false},
                                                            {count,    1},
                                                            {encoding, auto}], ?OK),
@@ -3871,17 +3929,6 @@ publish(Ch) ->
         publish(Ch)
     end.
 
-wait_until(_Fun, 0) ->
-    ?assert(wait_failed);
-wait_until(Fun, N) ->
-    case Fun() of
-    true ->
-        timer:sleep(1500);
-    false ->
-        timer:sleep(?COLLECT_INTERVAL + 100),
-        wait_until(Fun, N - 1)
-    end.
-
 http_post_json(Config, Path, Body, Assertion) ->
     http_upload_raw(Config,  post, Path, Body, "guest", "guest",
                     Assertion, [{"content-type", "application/json"}]).
@@ -3906,3 +3953,13 @@ get_auth_attempts(Protocol, Map) ->
                                P == Protocol
                        end, Map),
     A.
+
+await_condition(Fun) ->
+    rabbit_ct_helpers:await_condition(
+      fun () ->
+              try
+                  Fun()
+              catch _:_ ->
+                        false
+              end
+      end, ?COLLECT_INTERVAL * 100).
