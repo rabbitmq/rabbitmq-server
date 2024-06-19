@@ -31,8 +31,11 @@ def secondary_umbrella():
         strip_prefix = "rabbitmq_server-3.10.24",
         urls = [
 <<<<<<< HEAD
+<<<<<<< HEAD
             "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/rbe-25/package-generic-unix-for-mixed-version-testing-v3.10.24.tar.xz",
 =======
+=======
+>>>>>>> 91665228cc (fixup backport)
 <<<<<<< HEAD
             "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/rbe-25_0/package-generic-unix-for-mixed-version-testing-v3.11.18.tar.xz",
 =======
@@ -42,6 +45,12 @@ def secondary_umbrella():
             "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/26.1/package-generic-unix-for-mixed-version-testing-v3.13.1.tar.xz",
 >>>>>>> a2709dfd05 (Remove remaining buildbuddy usage)
 >>>>>>> b38dc84db5 (Remove remaining buildbuddy usage)
+<<<<<<< HEAD
 >>>>>>> f28ec6c5ed (Remove remaining buildbuddy usage)
+=======
+=======
+            "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/25.3/package-generic-unix-for-mixed-version-testing-v3.12.6.tar.xz",
+>>>>>>> f28089177a (fixup backport)
+>>>>>>> 91665228cc (fixup backport)
         ],
     )
