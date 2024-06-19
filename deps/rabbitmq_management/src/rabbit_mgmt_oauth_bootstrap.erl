@@ -33,10 +33,8 @@ bootstrap_oauth(Req0, State) ->
     {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"text/javascript; charset=utf-8">>}, JSContent, Req0), State}.
 
 set_oauth_settings(AuthSettings) ->    
-    case proplists:get_value(oauth_enabled, AuthSettings, false) of 
-        true ->  ["set_oauth_settings(", rabbit_json:encode(rabbit_mgmt_format:format_nulls(AuthSettings)), "); "];
-        false -> ["set_oauth_settings({oauth_enabled: false});"] 
-    end.
+    JsonAuthSettings = rabbit_json:encode(rabbit_mgmt_format:format_nulls(AuthSettings)),
+    ["set_oauth_settings(", JsonAuthSettings, ");"].
 
 set_token_auth(Req0) ->
     case application:get_env(rabbitmq_management, oauth_enabled, false) of
