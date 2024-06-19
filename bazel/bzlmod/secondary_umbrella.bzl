@@ -32,6 +32,7 @@ def secondary_umbrella():
         urls = [
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
             "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/rbe-25/package-generic-unix-for-mixed-version-testing-v3.10.24.tar.xz",
 =======
 =======
@@ -52,5 +53,8 @@ def secondary_umbrella():
             "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/25.3/package-generic-unix-for-mixed-version-testing-v3.12.6.tar.xz",
 >>>>>>> f28089177a (fixup backport)
 >>>>>>> 91665228cc (fixup backport)
+=======
+            "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/rbe-25_0/package-generic-unix-for-mixed-version-testing-v3.11.18.tar.xz"
+>>>>>>> 91b4d0f5b1 (Resolve a conflict #11488 #11478 #11500)
         ],
     )
