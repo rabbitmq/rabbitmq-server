@@ -552,17 +552,11 @@ vhost_is_created_with_default_user(Config) ->
     ct:pal("WANT: ~p", [WantPermissions]),
     ?assertEqual(WantPermissions, rabbit_ct_broker_helpers:rpc(Config, 0,
                             rabbit_auth_backend_internal, list_user_permissions, [Username])),
-    HaveUser = lists:search(
-              fun (U) ->
-                  case proplists:get_value(user, U) of
-                      Username  -> true;
-                      undefined -> false
-                  end
-              end,
+    ?assertEqual(true, lists:member(
+              WantUser,
               rabbit_ct_broker_helpers:rpc(Config, 0,
                                              rabbit_auth_backend_internal, list_users, [])
-            ),
-    ?assertEqual({value, WantUser}, HaveUser),
+            )),
     ?assertMatch({ok, _}, rabbit_ct_broker_helpers:rpc(Config, 0,
                             rabbit_auth_backend_internal, user_login_authentication, [Username, [{password, list_to_binary(Pwd)}]])),
     ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, 0,
