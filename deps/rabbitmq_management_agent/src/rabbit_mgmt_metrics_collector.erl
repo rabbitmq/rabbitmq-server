@@ -82,6 +82,8 @@ handle_call({override_lookups, Lookups}, _From, State) ->
                             lookup_exchange = pget(exchange, Lookups)}};
 handle_call({submit, Fun}, _From, State) ->
     {reply, Fun(), State};
+handle_call(wait, _From, State) ->
+    {reply, ok, State};
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
