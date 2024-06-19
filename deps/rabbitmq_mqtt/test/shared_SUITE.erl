@@ -174,11 +174,12 @@ init_per_group(mqtt, Config) ->
 init_per_group(web_mqtt, Config) ->
     rabbit_ct_helpers:set_config(Config, {websocket, true});
 
-init_per_group(Group, Config)
+init_per_group(Group, Config0)
   when Group =:= v3;
        Group =:= v4;
        Group =:= v5 ->
-    rabbit_ct_helpers:set_config(Config, {mqtt_version, Group});
+    Config = rabbit_ct_helpers:set_config(Config0, {mqtt_version, Group}),
+    util:maybe_skip_v5(Config);
 
 init_per_group(Group, Config0) ->
     Nodes = case Group of
@@ -186,15 +187,14 @@ init_per_group(Group, Config0) ->
                 cluster_size_3 -> 3
             end,
     Suffix = rabbit_ct_helpers:testcase_absname(Config0, "", "-"),
-    Config1 = rabbit_ct_helpers:set_config(
-                Config0,
-                [{rmq_nodes_count, Nodes},
-                 {rmq_nodename_suffix, Suffix}]),
-    Config = rabbit_ct_helpers:run_steps(
-               Config1,
-               rabbit_ct_broker_helpers:setup_steps() ++
-               rabbit_ct_client_helpers:setup_steps()),
-    util:maybe_skip_v5(Config).
+    Config = rabbit_ct_helpers:set_config(
+               Config0,
+               [{rmq_nodes_count, Nodes},
+                {rmq_nodename_suffix, Suffix}]),
+    rabbit_ct_helpers:run_steps(
+      Config,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(G, Config)
   when G =:= cluster_size_1;
