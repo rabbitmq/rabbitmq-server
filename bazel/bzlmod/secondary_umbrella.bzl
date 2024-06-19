@@ -32,6 +32,7 @@ def secondary_umbrella():
         # This file is produced just in time by the test-mixed-versions.yaml GitHub Actions workflow.
         urls = [
 <<<<<<< HEAD
+<<<<<<< HEAD
             "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/rbe-25_0/package-generic-unix-for-mixed-version-testing-v3.11.18.tar.xz",
 =======
 <<<<<<< HEAD
@@ -40,5 +41,8 @@ def secondary_umbrella():
             "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/26.1/package-generic-unix-for-mixed-version-testing-v3.13.1.tar.xz",
 >>>>>>> a2709dfd05 (Remove remaining buildbuddy usage)
 >>>>>>> b38dc84db5 (Remove remaining buildbuddy usage)
+=======
+            "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/25.3/package-generic-unix-for-mixed-version-testing-v3.12.6.tar.xz",
+>>>>>>> f28089177a (fixup backport)
         ],
     )
