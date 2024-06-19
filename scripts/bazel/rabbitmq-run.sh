@@ -4,6 +4,8 @@ set -euo pipefail
 GREEN='\033[0;32m'
 NO_COLOR='\033[0m'
 
+export PATH="{ERLANG_HOME}/bin:$PATH"
+
 rmq_realpath() {
     local path=$1
 

@@ -249,7 +249,7 @@ plt(
     ],
     for_target = ":erlang_app",
     ignore_warnings = True,
-    libs = ["//deps/rabbitmq_cli:elixir"],  # keep
+    libs = ["@rules_elixir//elixir"],  # keep
     plt = "//:base_plt",
     deps = [
         "//deps/rabbitmq_cli:erlang_app",  # keep
