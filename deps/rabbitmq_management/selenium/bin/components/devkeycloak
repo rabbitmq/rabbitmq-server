@@ -47,7 +47,7 @@ start_devkeycloak() {
 
   wait_for_oidc_endpoint devkeycloak $DEVKEYCLOAK_URL $MOUNT_DEVKEYCLOAK_CONF_DIR/ca_certificate.pem
   end "devkeycloak is ready"
-  print " Note: If you modify devkeycloak configuration. Make sure to run the following command to export the configuration."
+  print " Note: If you modify devkeycloak configuration, make sure to run the following command to export the configuration."
   print " docker exec -it devkeycloak /opt/keycloak/bin/kc.sh export --users realm_file --realm test --dir /opt/keycloak/data/import/"
 
 }

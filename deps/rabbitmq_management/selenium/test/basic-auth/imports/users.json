@@ -44,6 +44,13 @@
         "monitoring"
       ],
       "limits": {}
+    },
+    {
+      "name": "rabbit_no_management",
+      "password_hash": "Joz9zzUBOrX10lB3GisWN5oTXK+wj0gxS/nyrfTYmBOuhps5",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": [ ],
+      "limits": {}
     }
   ],
   "vhosts": [
@@ -61,6 +68,13 @@
     },
     {
       "user": "management",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "rabbit_no_management",
       "vhost": "/",
       "configure": ".*",
       "write": ".*",
