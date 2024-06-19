@@ -56,28 +56,33 @@ all() ->
     [{group, mqtt},
      {group, web_mqtt}].
 
+%% The code being tested under v3 and v4 is almost identical.
+%% To save time in CI, we therefore run only a very small subset of tests in v3.
 groups() ->
     [
      {mqtt, [],
       [{cluster_size_1, [],
-        [{v3, [], cluster_size_1_tests()},
+        [{v3, [], cluster_size_1_tests_v3()},
          {v4, [], cluster_size_1_tests()},
          {v5, [], cluster_size_1_tests()}]},
        {cluster_size_3, [],
-        [{v3, [], cluster_size_3_tests()},
-         {v4, [], cluster_size_3_tests()},
+        [{v4, [], cluster_size_3_tests()},
          {v5, [], cluster_size_3_tests()}]}
       ]},
      {web_mqtt, [],
       [{cluster_size_1, [],
-        [{v3, [], cluster_size_1_tests()},
+        [{v3, [], cluster_size_1_tests_v3()},
          {v4, [], cluster_size_1_tests()},
          {v5, [], cluster_size_1_tests()}]},
        {cluster_size_3, [],
-        [{v3, [], cluster_size_3_tests()},
-         {v4, [], cluster_size_3_tests()},
+        [{v4, [], cluster_size_3_tests()},
          {v5, [], cluster_size_3_tests()}]}
       ]}
+    ].
+
+cluster_size_1_tests_v3() ->
+    [global_counters,
+     events
     ].
 
 cluster_size_1_tests() ->
