@@ -377,9 +377,9 @@ erlang_dev_package.git_package(
 
 erlang_dev_package.git_package(
     name = "emqtt",
-    branch = "master",
+    tag = "1.11.0",
     build_file = "@rabbitmq-server//bazel:BUILD.emqtt",
-    repository = "rabbitmq/emqtt",
+    repository = "emqx/emqtt",
 )
 
 erlang_dev_package.git_package(
