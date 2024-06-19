@@ -6,6 +6,7 @@ const FORM = By.css('div#login form')
 const USERNAME = By.css('input[name="username"]')
 const PASSWORD = By.css('input[name="password"]')
 const LOGIN_BUTTON = By.css('div#outer div#login form input[type=submit]')
+const WARNING = By.css('div#outer div#login div#login-status p')
 
 module.exports = class LoginPage extends BasePage {
   async isLoaded () {
@@ -22,4 +23,26 @@ module.exports = class LoginPage extends BasePage {
   async getLoginButton () {
     return this.getValue(LOGIN_BUTTON)
   }
+
+
+  async isWarningVisible () {
+    try {
+      await this.waitForDisplayed(WARNING)
+      return Promise.resolve(true)
+    } catch (e) {
+      return Promise.resolve(false)
+    }
+  }
+  async getWarnings() {
+    try
+    {
+      return driver.findElements(WARNING)
+    } catch (NoSuchElement) {
+      return Promise.resolve([])
+    }
+  }
+  async getWarning () {
+    return this.getText(WARNING)
+  }
+  
 }

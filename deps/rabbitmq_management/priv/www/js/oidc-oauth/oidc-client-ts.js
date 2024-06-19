@@ -3180,3 +3180,4 @@ var oidc = (() => {
   return __toCommonJS(src_exports);
 })();
 //# sourceMappingURL=oidc-client-ts.js.map
+export {oidc};
