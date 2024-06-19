@@ -86,6 +86,29 @@ function auth_settings_apply_defaults(authSettings) {
   return authSettings;
 }
 
+var oauth_settings = { oauth_enabled : false}
+
+export function set_oauth_settings(settings) {
+  oauth_settings = settings
+}
+function get_oauth_settings() {
+  return oauth_settings
+}
+
+export function oauth_initialize_if_required(state = "index") {
+  let oauth = oauth_initialize(get_oauth_settings())
+  if (!oauth.enabled) return oauth;
+  switch (state) { 
+    case 'login-callback': 
+      oauth_completeLogin(); break; 
+    case 'logout-callback': 
+      oauth_completeLogout(); break; 
+    default: 
+      oauth = oauth_initiate(oauth);
+  }
+  return oauth; 
+}
+
 export function oauth_initiate(oauth) {
   if (oauth.enabled) {
     if (!oauth.sp_initiated) {
