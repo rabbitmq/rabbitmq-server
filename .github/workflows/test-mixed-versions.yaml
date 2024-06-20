@@ -72,7 +72,7 @@ jobs:
       uses: erlef/setup-beam@v1.17
       with:
         otp-version: ${{ steps.check.outputs.otp_version }}
-        elixir-version: 1.15
+        elixir-version: 1.14
         hexpm-mirrors: |
           https://builds.hex.pm
           https://cdn.jsdelivr.net/hex
