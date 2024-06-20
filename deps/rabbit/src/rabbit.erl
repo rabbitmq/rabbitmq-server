@@ -1654,7 +1654,8 @@ start_fhc() ->
     ok = rabbit_sup:start_restartable_child(
       file_handle_cache,
       [fun(_) -> ok end, fun(_) -> ok end]),
-    ensure_working_fhc().
+    ensure_working_fhc(),
+    maybe_warn_low_fd_limit().
 
 ensure_working_fhc() ->
     %% To test the file handle cache, we simply read a file we know it
@@ -1692,6 +1693,16 @@ ensure_working_fhc() ->
         {'EXIT', TestPid, Exception} -> throw({ensure_working_fhc, Exception})
     after Timeout ->
             throw({ensure_working_fhc, {timeout, TestPid}})
+    end.
+
+maybe_warn_low_fd_limit() ->
+    case file_handle_cache:ulimit() of
+        %% unknown is included as atom() > integer().
+        L when L > 1024 ->
+            ok;
+        L ->
+            rabbit_log:warning("Available file handles: ~tp. "
+                "Please consider increasing system limits", [L])
     end.
 
 %% Any configuration that
