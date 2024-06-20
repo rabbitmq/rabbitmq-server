@@ -164,6 +164,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
           "#{category}: #{IU.convert(val[:bytes], unit)} #{unit} (#{val[:percentage]} %)"
         end)
 
+    file_descriptors = [
+      "\n#{bright("File Descriptors")}\n",
+      "Total: #{m[:file_descriptors][:total_used]}, limit: #{m[:file_descriptors][:total_limit]}"
+    ]
+
     disk_space_section = [
       "\n#{bright("Free Disk Space")}\n",
       "Low free disk space watermark: #{IU.convert(m[:disk_free_limit], unit)} #{unit}",
@@ -194,7 +199,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
         log_section ++
         alarms_section ++
         memory_section ++
-        disk_space_section ++ totals_section ++ listeners_section
+        file_descriptors ++ disk_space_section ++ totals_section ++ listeners_section
 
     {:ok, Enum.join(lines, line_separator())}
   end
@@ -258,6 +263,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       vm_memory_high_watermark_limit: Keyword.get(result, :vm_memory_limit),
       disk_free_limit: Keyword.get(result, :disk_free_limit),
       disk_free: Keyword.get(result, :disk_free),
+      file_descriptors: Enum.into(Keyword.get(result, :file_descriptors), %{}),
       alarms: Keyword.get(result, :alarms),
       listeners: listener_maps(Keyword.get(result, :listeners, [])),
       memory: Keyword.get(result, :memory) |> Enum.into(%{}),
