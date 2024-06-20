@@ -1,14 +1,40 @@
+load("@rules_elixir//:ex_unit_test.bzl", "ex_unit_test")
+load(
+    "@rules_elixir//private:elixir_ebin_dir.bzl",
+    "elixir_ebin_dir",
+)
+load(
+    "@rules_elixir//private:erlang_app_filter_module_conflicts.bzl",
+    "erlang_app_filter_module_conflicts",
+)
+load("@rules_erlang//:app_file2.bzl", "app_file")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
-load(":rabbitmqctl.bzl", "rabbitmqctl")
-load(":rabbitmqctl_check_formatted.bzl", "rabbitmqctl_check_formatted_test")
-load(":rabbitmqctl_compile_warnings_as_errors.bzl", "rabbitmqctl_compile_warnings_as_errors_test")
-load(":rabbitmqctl_test.bzl", "rabbitmqctl_test")
+load("@rules_erlang//:erlang_app_info.bzl", "erlang_app_info")
+load("@rules_erlang//:escript.bzl", "escript_archive")
+load(
+    "//:rabbitmq.bzl",
+    "APP_VERSION",
+    "RABBITMQ_DIALYZER_OPTS",
+    "STARTS_BACKGROUND_BROKER_TAG",
+    "without",
+)
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
-load("//:rabbitmq.bzl", "RABBITMQ_DIALYZER_OPTS", "STARTS_BACKGROUND_BROKER_TAG", "without")
 load(
-    "@rabbitmq-server//bazel/elixir:mix_archive_build.bzl",
+    "//bazel/elixir:elixir_bytecode.bzl",
+    "elixir_bytecode",
+)
+load(
+    "//bazel/elixir:elixir_escript_main.bzl",
+    "elixir_escript_main",
+)
+load(
+    "//bazel/elixir:mix_archive_build.bzl",
     "mix_archive_build",
+)
+load(
+    "//bazel/elixir:mix_archive_extract.bzl",
+    "mix_archive_extract",
 )
 
 mix_archive_build(
@@ -18,6 +44,16 @@ mix_archive_build(
     archives = ["@hex//:archive"],
 )
 
+mix_archive_extract(
+    name = "csv",
+    srcs = ["@csv//:sources"],
+    app_name = "csv",
+    archive = ":csv_ez",
+    deps = [
+        "@rules_elixir//elixir",
+    ],
+)
+
 mix_archive_build(
     name = "json_ez",
     srcs = ["@json//:sources"],
@@ -25,35 +61,230 @@ mix_archive_build(
     archives = ["@hex//:archive"],
 )
 
-# Note: All the various rabbitmq-* scripts are just copies of rabbitmqctl
-rabbitmqctl(
-    name = "rabbitmqctl",
-    srcs = [
-        "config/config.exs",
-        "mix.exs",
-    ] + glob([
-        "lib/**/*.ex",
-    ]),
-    archives = [
-        "@hex//:archive",
+mix_archive_extract(
+    name = "json",
+    srcs = ["@json//:sources"],
+    app_name = "json",
+    archive = ":json_ez",
+    deps = [
+        "@rules_elixir//elixir",
+        "@rules_elixir//elixir:logger",
     ],
-    license_files = glob(["LICENSE*"]),
-    source_deps = {
-        "@csv//:sources": "csv",
-        "@json//:sources": "json",
+)
+
+mix_archive_build(
+    name = "amqp_ez",
+    testonly = True,
+    srcs = ["@amqp//:sources"],
+    out = "amqp.ez",
+    archives = ["@hex//:archive"],
+    setup = """\
+export DEPS_DIR="$ERL_LIBS"
+""",
+    deps = [
+        "//deps/amqp_client:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+    ],
+)
+
+mix_archive_build(
+    name = "temp_ez",
+    testonly = True,
+    srcs = ["@temp//:sources"],
+    out = "temp.ez",
+    archives = ["@hex//:archive"],
+)
+
+mix_archive_build(
+    name = "x509_ez",
+    testonly = True,
+    srcs = ["@x509//:sources"],
+    out = "x509.ez",
+    archives = ["@hex//:archive"],
+)
+
+APP_NAME = "rabbitmqctl"
+
+APP_ENV = """[{scopes,[{'rabbitmq-plugins',plugins},
+                       {rabbitmqctl,ctl},
+                       {'rabbitmq-diagnostics',diagnostics},
+                       {'rabbitmq-queues',queues},
+                       {'rabbitmq-streams',streams},
+                       {'rabbitmq-upgrade',upgrade},
+                       {'vmware-rabbitmq',vmware}]}]"""
+
+SRCS = glob([
+    "lib/**/*.ex",
+])
+
+DEPS = [
+    ":csv",
+    ":json",
+    "//deps/rabbit_common:erlang_app",
+    "@observer_cli//:erlang_app",
+    "@stdout_formatter//:erlang_app",
+]
+
+elixir_bytecode(
+    name = "beam_files",
+    srcs = SRCS,
+    dest = "beam_files",
+    elixirc_opts = [
+        "-e",
+        ":application.ensure_all_started(:mix)",
+    ],
+    env = {
+        "HOME": '"$(mktemp -d)"',
+        "MIX_ENV": "prod",
+        "DEPS_DIR": "$ERL_LIBS",
+        "ERL_COMPILER_OPTIONS": "deterministic",
+        "LANG": "en_US.UTF-8",
+        "LC_ALL": "en_US.UTF-8",
     },
+    setup = """\
+mkdir -p _build/$MIX_ENV/lib/csv
+cp -RL $ERL_LIBS/csv/ebin _build/$MIX_ENV/lib/csv
+""",
+    deps = DEPS,
+)
+
+app_file(
+    name = "app_file",
+    out = "%s.app" % APP_NAME,
+    app_description = APP_NAME,
+    app_env = APP_ENV,
+    app_name = APP_NAME,
+    app_version = APP_VERSION,
+    modules = [":beam_files"],
+    # mix escripts do not include dependencies in the applications key
+    deps = [
+        "@rules_elixir//elixir",
+        "@rules_elixir//elixir:logger",
+    ],
+)
+
+elixir_ebin_dir(
+    name = "ebin",
+    app_file = ":app_file",
+    beam_files_dir = ":beam_files",
+    dest = "ebin",
+)
+
+erlang_app_filter_module_conflicts(
+    name = "elixir_without_rabbitmqctl_overlap",
+    src = "@rules_elixir//elixir",
+    dest = "unconsolidated",
+    without = [":ebin"],
+)
+
+erlang_app_info(
+    name = "erlang_app",
+    srcs = SRCS,
+    hdrs = [],
+    app_name = APP_NAME,
+    beam = [":ebin"],
+    license_files = glob(["LICENSE*"]),
+    priv = [],
     visibility = ["//visibility:public"],
     deps = [
-        "//deps/rabbit_common:erlang_app",
-        "@observer_cli//:erlang_app",
-        "@stdout_formatter//:erlang_app",
+        ":elixir_without_rabbitmqctl_overlap",
+        "@rules_elixir//elixir:logger",
+    ] + DEPS,
+)
+
+elixir_escript_main(
+    name = "escript_main",
+    out = "rabbitmqctl_escript.beam",
+    app = ":erlang_app",
+    env = {
+        "HOME": '"$(mktemp -d)"',
+        "LANG": "en_US.UTF-8",
+        "LC_ALL": "en_US.UTF-8",
+    },
+    main_module = "RabbitMQCtl",
+    mix_config = "config/config.exs",
+)
+
+# Note: All the various rabbitmq-* scripts are just copies of rabbitmqctl
+escript_archive(
+    name = "rabbitmqctl",
+    app = ":erlang_app",
+    beam = [":escript_main"],
+    drop_hrl = True,
+    flat = True,
+    headers = [
+        "shebang",
+        '{emu_args, "-escript main rabbitmqctl_escript -hidden"}',
     ],
+    visibility = ["//visibility:public"],
+)
+
+_TEST_MODULES = [
+    "RabbitMQ.CLI.Ctl.Commands.DuckCommand",
+    "RabbitMQ.CLI.Ctl.Commands.GrayGooseCommand",
+    "RabbitMQ.CLI.Ctl.Commands.UglyDucklingCommand",
+    "RabbitMQ.CLI.Plugins.Commands.StorkCommand",
+    "RabbitMQ.CLI.Plugins.Commands.HeronCommand",
+    "RabbitMQ.CLI.Custom.Commands.CrowCommand",
+    "RabbitMQ.CLI.Custom.Commands.RavenCommand",
+    "RabbitMQ.CLI.Seagull.Commands.SeagullCommand",
+    "RabbitMQ.CLI.Seagull.Commands.PacificGullCommand",
+    "RabbitMQ.CLI.Seagull.Commands.HerringGullCommand",
+    "RabbitMQ.CLI.Seagull.Commands.HermannGullCommand",
+    "RabbitMQ.CLI.Wolf.Commands.CanisLupusCommand",
+    "RabbitMQ.CLI.Wolf.Commands.CanisLatransCommand",
+    "RabbitMQ.CLI.Wolf.Commands.CanisAureusCommand",
+]
+
+app_file(
+    name = "test_app_file",
+    testonly = True,
+    out = "test/%s.app" % APP_NAME,
+    app_description = APP_NAME,
+    app_env = APP_ENV,
+    app_name = APP_NAME,
+    app_version = APP_VERSION,
+    modules = [":beam_files"],
+    synthetic_module_names = [
+        "Elixir." + name
+        for name in _TEST_MODULES
+    ],
+    # mix escripts do not include dependencies in the applications key
+    deps = [
+        "@rules_elixir//elixir",
+        "@rules_elixir//elixir:logger",
+    ],
+)
+
+elixir_ebin_dir(
+    name = "test_ebin",
+    testonly = True,
+    app_file = ":test_app_file",
+    beam_files_dir = ":beam_files",
+    dest = "test_ebin",
+)
+
+erlang_app_info(
+    name = "test_erlang_app",
+    testonly = True,
+    srcs = SRCS,
+    hdrs = [],
+    app_name = APP_NAME,
+    beam = [":test_ebin"],
+    license_files = glob(["LICENSE*"]),
+    priv = [],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":elixir_without_rabbitmqctl_overlap",
+        "@rules_elixir//elixir:logger",
+    ] + DEPS,
 )
 
 rabbitmq_home(
     name = "broker-for-cli-tests-home",
     testonly = True,
     plugins = [
+        ":test_erlang_app",
         "//deps/rabbit:erlang_app",
         "//deps/rabbitmq_federation:erlang_app",
         "//deps/rabbitmq_stomp:erlang_app",
@@ -69,81 +300,6 @@ rabbitmq_run(
     visibility = ["//visibility:public"],
 )
 
-rabbitmqctl_check_formatted_test(
-    name = "check_formatted",
-    size = "small",
-    srcs = [
-        ".formatter.exs",
-        "config/config.exs",
-        "mix.exs",
-    ] + glob([
-        "lib/**/*.ex",
-        "test/**/*.exs",
-    ]),
-    data = glob(["test/fixtures/**/*"]),
-    target_compatible_with = select({
-        "@platforms//os:macos": [
-            "@platforms//os:macos",
-            "@elixir_config//:elixir_1_15",
-        ],
-        "//conditions:default": [
-            "@platforms//os:linux",
-            "@elixir_config//:elixir_1_15",
-        ],
-    }),
-)
-
-test_suite(
-    name = "rabbitmqctl_check_formatted",
-    tests = ["check_formatted"],
-)
-
-rabbitmqctl_compile_warnings_as_errors_test(
-    name = "compile_warnings_as_errors",
-    size = "small",
-    srcs = [
-        ".formatter.exs",
-        "config/config.exs",
-        "mix.exs",
-    ] + glob([
-        "lib/**/*.ex",
-        "test/**/*.exs",
-    ]),
-    archives = [
-        "@hex//:archive",
-    ],
-    data = glob(["test/fixtures/**/*"]),
-    source_deps = {
-        "@amqp//:sources": "amqp",
-        "@csv//:sources": "csv",
-        "@json//:sources": "json",
-        "@temp//:sources": "temp",
-        "@x509//:sources": "x509",
-    },
-    target_compatible_with = select({
-        "@platforms//os:macos": [
-            "@platforms//os:macos",
-            "@elixir_config//:elixir_1_15",
-        ],
-        "//conditions:default": [
-            "@platforms//os:linux",
-            "@elixir_config//:elixir_1_15",
-        ],
-    }),
-    deps = [
-        "//deps/amqp_client:erlang_app",
-        "//deps/rabbit:erlang_app",
-        "//deps/rabbit_common:erlang_app",
-        "@observer_cli//:erlang_app",
-        "@stdout_formatter//:erlang_app",
-    ],
-)
-
-test_suite(
-    name = "rabbitmqctl_compile_warnings_as_errors",
-    tests = ["compile_warnings_as_errors"],
-)
-
 plt(
     name = "deps_plt",
     apps = [
@@ -154,17 +310,15 @@ plt(
         "public_key",
         "runtime_tools",
     ],
-    ez_deps = [
-        ":csv_ez",
-        ":json_ez",
-    ],
     ignore_warnings = True,
-    libs = [":elixir"],
+    libs = ["@rules_elixir//elixir:elixir"],
     deps = [
-        ":elixir",
-        "//bazel/elixir:logger",
+        ":csv",
+        ":json",
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
+        "@rules_elixir//elixir",
+        "@rules_elixir//elixir:logger",
     ],
 )
 
@@ -174,36 +328,57 @@ dialyze(
         "-Wunknown",
         RABBITMQ_DIALYZER_OPTS,
     ),
-    libs = [":elixir"],
+    libs = ["@rules_elixir//elixir:elixir"],
     plt = ":deps_plt",
 )
 
-rabbitmqctl_test(
+ex_unit_test(
     name = "tests",
-    size = "large",
     srcs = [
-        ".formatter.exs",
-        "config/config.exs",
-        "mix.exs",
+        "test/test_helper.exs",
     ] + glob([
-        "lib/**/*.ex",
-        "test/**/*.exs",
+        "test/**/*_test.exs",
     ]),
-    archives = [
-        "@hex//:archive",
-    ],
-    data = glob(["test/fixtures/**/*"]),
-    flaky = True,
-    rabbitmq_run = ":rabbitmq-for-cli-tests-run",
-    source_deps = {
-        "@amqp//:sources": "amqp",
-        "@csv//:sources": "csv",
-        "@json//:sources": "json",
-        "@temp//:sources": "temp",
-        "@x509//:sources": "x509",
+    data = glob([
+        "test/fixtures/**/*",
+    ]),
+    env = {
+        "MIX_ENV": "prod",
+        "DEPS_DIR": "$ERL_LIBS",
+        "ERL_COMPILER_OPTIONS": "deterministic",
+        "LANG": "en_US.UTF-8",
+        "LC_ALL": "en_US.UTF-8",
     },
+    ez_deps = [
+        ":amqp.ez",
+        ":temp.ez",
+        ":x509.ez",
+    ],
+    setup = """\
+# pretend that mix build the deps, as some modules add mix code paths in
+# their module definitions
+for app in amqp csv json temp x509; do
+    mkdir -p _build/$MIX_ENV/lib/$app
+    ln -s $ERL_LIBS/$app/ebin _build/$MIX_ENV/lib/$app/ebin
+done
+
+# we need a running broker with certain plugins for this to pass
+export TEST_TMPDIR=${TEST_UNDECLARED_OUTPUTS_DIR}
+trap 'catch $?' EXIT
+catch() {
+    pid=$(cat ${TEST_TMPDIR}/*/*.pid)
+    echo "stopping broker (pid ${pid})"
+    kill -TERM "${pid}"
+}
+$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_cli/rabbitmq-for-cli-tests-run \\
+    start-background-broker\
+""",
     tags = [STARTS_BACKGROUND_BROKER_TAG],
+    tools = [
+        ":rabbitmq-for-cli-tests-run",
+    ],
     deps = [
+        ":test_erlang_app",
         "//deps/amqp_client:erlang_app",
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
@@ -215,4 +390,31 @@ rabbitmqctl_test(
 test_suite(
     name = "rabbitmqctl_tests",
     tests = ["tests"],
+)
+
+elixir_bytecode(
+    name = "compile_warnings_as_errors",
+    srcs = SRCS,
+    dest = "beam_files_werror",
+    elixirc_opts = [
+        "--warnings-as-errors",
+        "-e",
+        ":application.ensure_all_started(:mix)",
+    ],
+    env = {
+        "HOME": '"$(mktemp -d)"',
+        "MIX_ENV": "prod",
+        "DEPS_DIR": "$ERL_LIBS",
+        "ERL_COMPILER_OPTIONS": "deterministic",
+        "LANG": "en_US.UTF-8",
+        "LC_ALL": "en_US.UTF-8",
+    },
+    setup = """\
+mkdir -p _build/$MIX_ENV/lib/csv
+cp -RL $ERL_LIBS/csv/ebin _build/$MIX_ENV/lib/csv
+""",
+    tags = ["manual"],
+    deps = DEPS + [
+        "//deps/rabbit:erlang_app",
+    ],
 )

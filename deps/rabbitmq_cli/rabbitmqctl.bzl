@@ -1,5 +1,11 @@
 load("@bazel_skylib//lib:shell.bzl", "shell")
 load(
+    "@rules_elixir//private:elixir_toolchain.bzl",
+    "elixir_dirs",
+    "erlang_dirs",
+    "maybe_install_erlang",
+)
+load(
     "@rules_erlang//:erlang_app_info.bzl",
     "ErlangAppInfo",
     "flat_deps",
@@ -11,12 +17,6 @@ load(
 load(
     "@rules_erlang//private:util.bzl",
     "additional_file_dest_relative_path",
-)
-load(
-    "//bazel/elixir:elixir_toolchain.bzl",
-    "elixir_dirs",
-    "erlang_dirs",
-    "maybe_install_erlang",
 )
 
 ElixirAppInfo = provider(
@@ -249,7 +249,7 @@ rabbitmqctl_private = rule(
         "source_deps": attr.label_keyed_string_dict(),
     },
     toolchains = [
-        "//bazel/elixir:toolchain_type",
+        "@rules_elixir//:toolchain_type",
     ],
     provides = [ElixirAppInfo],
     executable = True,
@@ -373,7 +373,7 @@ elixir_app_to_erlang_app = rule(
         ),
     },
     toolchains = [
-        "//bazel/elixir:toolchain_type",
+        "@rules_elixir//:toolchain_type",
     ],
     provides = [ErlangAppInfo],
 )
@@ -407,7 +407,7 @@ def rabbitmqctl(
 
     elixir_app_to_erlang_app(
         name = "elixir",
-        elixir_as_app = Label("//bazel/elixir:erlang_app"),
+        elixir_as_app = Label("@rules_elixir//elixir:elixir"),
         elixir_app = ":" + name,
         mode = "elixir",
         visibility = visibility,
@@ -415,7 +415,7 @@ def rabbitmqctl(
 
     elixir_app_to_erlang_app(
         name = "erlang_app",
-        elixir_as_app = Label("//bazel/elixir:erlang_app"),
+        elixir_as_app = Label("@rules_elixir//elixir:elixir"),
         elixir_app = ":" + name,
         mode = "app",
         visibility = visibility,
