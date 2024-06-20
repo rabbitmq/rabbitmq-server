@@ -69,14 +69,13 @@ filegroup(
     ],
 )
 
-## Uncomment when rabbitmq/horus#22 is merged
-# filegroup(
-#    name = "license_files",
-#    srcs = [
-#        "LICENSE-Apache-2.0",
-#        "LICENSE-MPL-2.0",
-#    ],
-# )
+filegroup(
+    name = "license_files",
+    srcs = [
+        "LICENSE-Apache-2.0",
+        "LICENSE-MPL-2.0",
+    ],
+)
 
 filegroup(
     name = "public_and_private_hdrs",
@@ -104,8 +103,7 @@ erlang_app(
         "compiler",
         "tools",
     ],
-    ## Uncomment when rabbitmq/horus#22 is merged
-    # license_files = [":license_files"],
+    license_files = [":license_files"],
     priv = [":priv"],
 )
 
