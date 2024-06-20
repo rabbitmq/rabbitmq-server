@@ -127,6 +127,14 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
+        name = "test_ibmmq_ct_helpers_beam",
+        testonly = True,
+        srcs = ["test/ibmmq_ct_helpers.erl"],
+        outs = ["test/ibmmq_ct_helpers.beam"],
+        app_name = "amqp10_client",
+        erlc_opts = "//:test_erlc_opts",
+    )
+    erlang_bytecode(
         name = "test_mock_server_beam",
         testonly = True,
         srcs = ["test/mock_server.erl"],

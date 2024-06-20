@@ -70,11 +70,14 @@
 -type input_handle() :: link_handle().
 
 -type terminus_durability() :: none | configuration | unsettled_state.
+-type terminus_capabilities() :: binary() | [binary(),...].
 
 -type target_def() :: #{address => link_address(),
-                        durable => terminus_durability()}.
+                        durable => terminus_durability(),
+                        capabilities => terminus_capabilities()}.
 -type source_def() :: #{address => link_address(),
-                        durable => terminus_durability()}.
+                        durable => terminus_durability(),
+                        capabilities => terminus_capabilities()}.
 
 -type attach_role() :: {sender, target_def()} | {receiver, source_def(), pid()}.
 
@@ -706,20 +709,24 @@ make_source(#{role := {sender, _}}) ->
 make_source(#{role := {receiver, #{address := Address} = Source, _Pid}, filter := Filter}) ->
     Durable = translate_terminus_durability(maps:get(durable, Source, none)),
     TranslatedFilter = translate_filters(Filter),
+    Capabilities = translate_terminus_capabilities(maps:get(capabilities, Source, [])),
     #'v1_0.source'{address = {utf8, Address},
                    durable = {uint, Durable},
-                   filter = TranslatedFilter}.
+                   filter = TranslatedFilter,
+                   capabilities = Capabilities}.
 
 make_target(#{role := {receiver, _Source, _Pid}}) ->
     #'v1_0.target'{};
 make_target(#{role := {sender, #{address := Address} = Target}}) ->
     Durable = translate_terminus_durability(maps:get(durable, Target, none)),
+    Capabilities = translate_terminus_capabilities(maps:get(capabilities, Target, [])),
     TargetAddr = case is_binary(Address) of
                      true -> {utf8, Address};
                      false -> Address
                  end,
     #'v1_0.target'{address = TargetAddr,
-                   durable = {uint, Durable}}.
+                   durable = {uint, Durable},
+                   capabilities = Capabilities}.
 
 max_message_size(#{max_message_size := Size})
   when is_integer(Size) andalso
@@ -761,6 +768,17 @@ filter_value_type(VList) when is_list(VList) ->
 filter_value_type({T, _} = V) when is_atom(T) ->
     %% looks like an already tagged type, just pass it through
     V.
+
+translate_terminus_capabilities(Capabilities) when is_binary(Capabilities) ->
+    {symbol, Capabilities};
+translate_terminus_capabilities(CapabilitiesList) when is_list(CapabilitiesList) ->
+    {array, symbol, [filter_capability(V) || V <- CapabilitiesList]}.
+
+filter_capability(V) when is_binary(V) ->
+    {symbol, V};
+filter_capability(_) ->
+    %% Any other type is ignored
+    {}.
 
 % https://people.apache.org/~rgodfrey/amqp-1.0/apache-filters.html
 translate_legacy_amqp_headers_binding(LegacyHeaders) ->
@@ -837,6 +855,7 @@ send_attach(Send, #{name := Name, role := RoleTuple} = Args, {FromPid, _},
                             rcv_settle_mode = rcv_settle_mode(Args),
                             target = Target,
                             max_message_size = MaxMessageSize},
+
     ok = Send(Attach, State),
 
     Ref = make_link_ref(Role, self(), OutHandle),

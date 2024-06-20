@@ -24,6 +24,7 @@ all() ->
      {group, rabbitmq},
      {group, rabbitmq_strict},
      {group, activemq},
+     {group, ibmmq},
      {group, activemq_no_anon},
      {group, mock}
     ].
@@ -32,6 +33,10 @@ groups() ->
     [
      {rabbitmq, [], shared() ++ [notify_with_performative]},
      {activemq, [], shared()},
+     {ibmmq, [], [
+        open_close_connection,
+        basic_roundtrip_ibmmq
+     ]},
      {rabbitmq_strict, [], [
                             basic_roundtrip_tls,
                             roundtrip_tls_global_config,
@@ -53,7 +58,10 @@ groups() ->
      {mock, [], [
                  insufficient_credit,
                  incoming_heartbeat,
-                 multi_transfer_without_delivery_id
+                 multi_transfer_without_delivery_id,
+                 set_receiver_capabilities,
+                 set_sender_capabilities,
+                 set_sender_sync_capabilities
                 ]}
     ].
 
@@ -122,6 +130,14 @@ init_per_group(activemq, Config0) ->
     Config = rabbit_ct_helpers:set_config(Config0, {sasl, anon}),
     rabbit_ct_helpers:run_steps(Config,
                                 activemq_ct_helpers:setup_steps("activemq.xml"));
+
+init_per_group(ibmmq, Config) ->    
+    ct:log("Found arch: ~p", [erlang:system_info(system_architecture)]),
+    case string:find(erlang:system_info(system_architecture), "x86_64") of
+        nomatch  -> {skip, no_arm64_docker_image_for_ibmmq};
+        _ ->  rabbit_ct_helpers:run_steps(Config, ibmmq_ct_helpers:setup_steps())
+    end;
+
 init_per_group(activemq_no_anon, Config0) ->
     Config = rabbit_ct_helpers:set_config(
                Config0, {sasl, {plain, <<"user">>, <<"password">>}}),
@@ -137,7 +153,9 @@ init_per_group(azure, Config) ->
                                         ]);
 init_per_group(mock, Config) ->
     rabbit_ct_helpers:set_config(Config, [{mock_port, 25000},
+                                          {tcp_port_amqp, 25000},
                                           {mock_host, "localhost"},
+                                          {tcp_hostname_amqp, "localhost"},
                                           {sasl, none}
                                          ]).
 end_per_group(rabbitmq, Config) ->
@@ -146,6 +164,8 @@ end_per_group(rabbitmq_strict, Config) ->
     rabbit_ct_helpers:run_steps(Config, rabbit_ct_broker_helpers:teardown_steps());
 end_per_group(activemq, Config) ->
     rabbit_ct_helpers:run_steps(Config, activemq_ct_helpers:teardown_steps());
+end_per_group(ibmmq, Config) ->
+    rabbit_ct_helpers:run_steps(Config, ibmmq_ct_helpers:teardown_steps());
 end_per_group(activemq_no_anon, Config) ->
     rabbit_ct_helpers:run_steps(Config, activemq_ct_helpers:teardown_steps());
 end_per_group(_, Config) ->
@@ -156,9 +176,11 @@ end_per_group(_, Config) ->
 %% -------------------------------------------------------------------
 
 init_per_testcase(_Test, Config) ->
+    ct:log("Setting per test case"),
     case lists:keyfind(mock_port, 1, Config) of
         {_, Port} ->
             M = mock_server:start(Port),
+            ct:log("Setting mock server"),
             rabbit_ct_helpers:set_config(Config, {mock_server, M});
         _ -> Config
     end.
@@ -175,19 +197,19 @@ open_close_connection(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     %% an address list
-    OpnConf = #{addresses => [Hostname],
+    OpenConf = #{addresses => [Hostname],
                 port => Port,
                 notify => self(),
                 container_id => <<"open_close_connection_container">>,
                 sasl => ?config(sasl, Config)},
-    {ok, Connection} = amqp10_client:open_connection(Hostname, Port),
-    {ok, Connection2} = amqp10_client:open_connection(OpnConf),
+    ct:log("Connecting to ~p", [OpenConf]),
+    {ok, Connection2} = amqp10_client:open_connection(OpenConf),
     receive
-        {amqp10_event, {connection, Connection2, opened}} -> ok
+        {amqp10_event, {connection, Connection2, opened}} -> ct:log("connection opened"), ok
     after 5000 -> exit(connection_timeout)
     end,
     ok = amqp10_client:close_connection(Connection2),
-    ok = amqp10_client:close_connection(Connection).
+    ct:log("Closed connection .").
 
 open_connection_plain_sasl(Config) ->
     Hostname = ?config(rmq_hostname, Config),
@@ -253,10 +275,10 @@ open_connection_plain_sasl_failure(Config) ->
     ok = amqp10_client:close_connection(Connection).
 
 basic_roundtrip(Config) ->
-    application:start(sasl),
+    application:start(sasl),    
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    OpenConf = #{address => Hostname, port => Port, sasl => anon},
+    OpenConf = #{address => Hostname, port => Port, sasl => ?config(sasl, Config)},
     roundtrip(OpenConf).
 
 basic_roundtrip_tls(Config) ->
@@ -323,54 +345,100 @@ roundtrip_large_messages(Config) ->
     DataMb = rand:bytes(1024 * 1024),
     Data8Mb = rand:bytes(8 * 1024 * 1024),
     Data64Mb = rand:bytes(64 * 1024 * 1024),
-    ok = roundtrip(OpenConf, DataKb),
-    ok = roundtrip(OpenConf, DataMb),
-    ok = roundtrip(OpenConf, Data8Mb),
-    ok = roundtrip(OpenConf, Data64Mb).
+    ok = roundtrip(OpenConf, [{body, DataKb}]),
+    ok = roundtrip(OpenConf, [{body, DataMb}]),
+    ok = roundtrip(OpenConf, [{body, Data8Mb}]),
+    ok = roundtrip(OpenConf, [{body, Data64Mb}]).
+
+basic_roundtrip_ibmmq(Config) ->
+    application:start(sasl),
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    OpenConf = #{address => Hostname, port => Port, sasl => ?config(sasl, Config)},
+    roundtrip(OpenConf, [
+            {body, <<"banana">>},
+            {destination, <<"DEV.QUEUE.3">>},
+            {sender_capabilities, <<"queue">>},
+            {receiver_capabilities, <<"queue">>},
+            {message_annotations, #{}}
+        ], [creation_time]).
 
 roundtrip(OpenConf) ->
-    roundtrip(OpenConf, <<"banana">>).
+    roundtrip(OpenConf, [], []).
 
-roundtrip(OpenConf, Body) ->
+roundtrip(OpenConf, Args) ->
+    roundtrip(OpenConf, Args, []).
+
+roundtrip(OpenConf, Args, DoNotAssertMessageProperties) ->
+    Body = proplists:get_value(body, Args, <<"banana">>),
+    Destination = proplists:get_value(destination, Args, <<"test1">>),
+    SenderCapabilities = proplists:get_value(sender_capabilities, Args, <<>>),
+    ReceiverCapabilities = proplists:get_value(receiver_capabilities, Args, <<>>),
+    MessageAnnotations = proplists:get_value(message_annotations, Args,
+                                                #{<<"x-key">> => <<"x-value">>,
+                                                  <<"x_key">> => <<"x_value">>}),
+
     {ok, Connection} = amqp10_client:open_connection(OpenConf),
     {ok, Session} = amqp10_client:begin_session(Connection),
-    {ok, Sender} = amqp10_client:attach_sender_link(
-                     Session, <<"banana-sender">>, <<"test1">>, settled, unsettled_state),
-    await_link(Sender, credited, link_credit_timeout),
+    SenderAttachArgs = #{name => <<"banana-sender">>,
+                   role => {sender, #{address => Destination,
+                                      durable => unsettled_state,
+                                      capabilities => SenderCapabilities}},
+                   snd_settle_mode => settled,
+                   rcv_settle_mode => first,
+                   filter => #{},
+                   properties => #{}
+                   },
+    {ok, Sender} = amqp10_client:attach_link(Session, SenderAttachArgs),
+    await_link(Sender, attached, attached_timeout),
 
     Now = os:system_time(millisecond),
-    Props = #{creation_time => Now,
-              message_id => <<"my message ID">>,
-              correlation_id => <<"my correlation ID">>,
+    Props = #{content_encoding => <<"my content encoding">>,
               content_type => <<"my content type">>,
-              content_encoding => <<"my content encoding">>,
-              group_id => <<"my group ID">>},
+              correlation_id => <<"my correlation ID">>,
+              creation_time => Now,
+              group_id => <<"my group ID">>,
+              message_id => <<"my message ID">>,
+              to => <<"localhost">>
+              },
     Msg0 = amqp10_msg:new(<<"my-tag">>, Body, true),
     Msg1 = amqp10_msg:set_application_properties(#{"a_key" => "a_value"}, Msg0),
     Msg2 = amqp10_msg:set_properties(Props, Msg1),
-    Msg = amqp10_msg:set_message_annotations(#{<<"x-key 1">> => "value 1",
-                                               <<"x-key 2">> => "value 2"}, Msg2),
+    Msg = amqp10_msg:set_message_annotations(MessageAnnotations, Msg2),
     ok = amqp10_client:send_msg(Sender, Msg),
     ok = amqp10_client:detach_link(Sender),
     await_link(Sender, {detached, normal}, link_detach_timeout),
 
     {error, link_not_found} = amqp10_client:detach_link(Sender),
-    {ok, Receiver} = amqp10_client:attach_receiver_link(
-                       Session, <<"banana-receiver">>, <<"test1">>, settled, unsettled_state),
+    ReceiverAttachArgs = #{
+                   name => <<"banana-receiver">>,
+                   role => {receiver, #{address => Destination,
+                                        durable => unsettled_state,
+                                        capabilities => ReceiverCapabilities}, self()},
+                   snd_settle_mode => settled,
+                   rcv_settle_mode => first,
+                   filter => #{},
+                   properties => #{}
+                   },
+    {ok, Receiver} = amqp10_client:attach_link(Session, ReceiverAttachArgs),
     {ok, OutMsg} = amqp10_client:get_msg(Receiver, 4 * 60_000),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
 
     % ct:pal(?LOW_IMPORTANCE, "roundtrip message Out: ~tp~nIn: ~tp~n", [OutMsg, Msg]),
-    ?assertMatch(Props, amqp10_msg:properties(OutMsg)),
+    ActualProps = amqp10_msg:properties(OutMsg),
+    [ ?assertEqual(V, maps:get(K, ActualProps)) || K := V <- Props, 
+        not lists:member(K, DoNotAssertMessageProperties)],
+    
     ?assertEqual(#{<<"a_key">> => <<"a_value">>}, amqp10_msg:application_properties(OutMsg)),
-    ?assertMatch(#{<<"x-key 1">> := <<"value 1">>,
-                   <<"x-key 2">> := <<"value 2">>}, amqp10_msg:message_annotations(OutMsg)),
+    ActualMessageAnnotations = amqp10_msg:message_annotations(OutMsg),
+    [ ?assertEqual(V, maps:get(K, ActualMessageAnnotations)) || K := V <- MessageAnnotations],
+
     ?assertEqual([Body], amqp10_msg:body(OutMsg)),
     ok.
 
 filtered_roundtrip(OpenConf) ->
-    filtered_roundtrip(OpenConf, <<"banana">>).
+    filtered_roundtrip(OpenConf, <<"test1">>).
 
 filtered_roundtrip(OpenConf, Body) ->
     {ok, Connection} = amqp10_client:open_connection(OpenConf),
@@ -389,7 +457,7 @@ filtered_roundtrip(OpenConf, Body) ->
 
     {ok, DefaultReceiver} = amqp10_client:attach_receiver_link(Session,
                                                         <<"default-receiver">>,
-                                                        <<"test1">>,
+                                                         <<"test1">>,
                                                         settled,
                                                         unsettled_state),
     ok = amqp10_client:send_msg(Sender, Msg1),
@@ -405,12 +473,14 @@ filtered_roundtrip(OpenConf, Body) ->
 
     ok = amqp10_client:send_msg(Sender, Msg2),
 
+    SelectorFilter = #{<<"apache.org:selector-filter:string">> =>
+        <<"amqp.annotation.x-opt-enqueuedtimeutc > ", Now2Binary/binary>>},
     {ok, FilteredReceiver} = amqp10_client:attach_receiver_link(Session,
                                                         <<"filtered-receiver">>,
-                                                        <<"test1">>,
+                                                         <<"test1">>,
                                                         settled,
                                                         unsettled_state,
-                                                        #{<<"apache.org:selector-filter:string">> => <<"amqp.annotation.x-opt-enqueuedtimeutc > ", Now2Binary/binary>>}),
+                                                        SelectorFilter),
 
     {ok, OutMsg2} = amqp10_client:get_msg(DefaultReceiver, 60_000 * 4),
     ?assertEqual(<<"msg-2-tag">>, amqp10_msg:delivery_tag(OutMsg2)),
@@ -759,6 +829,7 @@ subscribe_with_auto_flow_unsettled(Config) ->
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
 
+
 insufficient_credit(Config) ->
     Hostname = ?config(mock_host, Config),
     Port = ?config(mock_port, Config),
@@ -857,6 +928,188 @@ multi_transfer_without_delivery_id(Config) ->
     after 2000 ->
               exit(delivery_timeout)
     end,
+
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
+    ok.
+
+set_receiver_capabilities(Config) ->
+    Hostname = ?config(tcp_hostname_amqp, Config),
+    Port = ?config(tcp_port_amqp, Config),
+
+%    Hostname = ?config(mock_host, Config),
+%    Port = ?config(mock_port, Config),
+
+    OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
+                       {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>}}]}
+               end,
+    BeginStep = fun({1 = Ch, #'v1_0.begin'{}, _Pay}) ->
+                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, 1},
+                                             next_outgoing_id = {uint, 1},
+                                             incoming_window = {uint, 1000},
+                                             outgoing_window = {uint, 1000}}
+                                             ]}
+                end,
+    AttachStep = fun({1 = Ch, #'v1_0.attach'{role = true,
+                                             name = Name,
+                                             source = #'v1_0.source'{
+                                                capabilities = {symbol, <<"capability-1">>}}}, <<>>}) ->
+                         {Ch, [#'v1_0.attach'{name = Name,
+                                              handle = {uint, 99},
+                                              initial_delivery_count = {uint, 1},
+                                              role = false}
+                              ]}
+                 end,
+
+    LinkCreditStep = fun({1 = Ch, #'v1_0.flow'{}, <<>>}) ->
+                             {Ch, {multi, [[#'v1_0.transfer'{handle = {uint, 99},
+                                                             delivery_id = {uint, 12},
+                                                             more = true},
+                                            #'v1_0.data'{content = <<"hello ">>}],
+                                           [#'v1_0.transfer'{handle = {uint, 99},
+                                                             % delivery_id can be omitted
+                                                             % for continuation frames
+                                                             delivery_id = undefined,
+                                                             settled = undefined,
+                                                             more = false},
+                                            #'v1_0.data'{content = <<"world">>}]
+                                          ]}}
+                     end,
+    Steps = [fun mock_server:recv_amqp_header_step/1,
+             fun mock_server:send_amqp_header_step/1,
+             mock_server:amqp_step(OpenStep),
+             mock_server:amqp_step(BeginStep),
+             mock_server:amqp_step(AttachStep),
+             mock_server:amqp_step(LinkCreditStep)
+            ],
+
+    ok = mock_server:set_steps(?config(mock_server, Config), Steps),
+
+    Cfg = #{address => Hostname, port => Port, sasl => none, notify => self()},
+    {ok, Connection} = amqp10_client:open_connection(Cfg),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    AttachArgs = #{name => <<"mock1-received">>,
+                   role => {receiver, #{address => <<"test">>,
+                                        durable => none,
+                                        capabilities => <<"capability-1">>}, self()},
+                   snd_settle_mode => setlled,
+                   rcv_settle_mode => first,
+                   filter => #{},
+                   properties => #{}},
+    {ok, Receiver} = amqp10_client:attach_link(Session, AttachArgs),
+    amqp10_client:flow_link_credit(Receiver, 100, 50),
+    receive
+        {amqp10_msg, Receiver, _InMsg} ->
+            ok
+    after 2000 ->
+              exit(delivery_timeout)
+    end,
+
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
+    ok.
+
+set_sender_capabilities(Config) ->
+    Hostname = ?config(tcp_hostname_amqp, Config),
+    Port = ?config(tcp_port_amqp, Config),
+    OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
+                       {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>}}]}
+               end,
+    BeginStep = fun({1 = Ch, #'v1_0.begin'{}, _Pay}) ->
+                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, 1},
+                                             next_outgoing_id = {uint, 1},
+                                             incoming_window = {uint, 1000},
+                                             outgoing_window = {uint, 1000}}
+                                             ]}
+                end,
+    AttachStep = fun({1 = Ch, #'v1_0.attach'{role = false,
+                                             name = Name,
+                                             source = #'v1_0.source'{
+
+                                             },
+                                             target = #'v1_0.target'{
+                                                capabilities = {symbol, <<"capability-1">>}}}, <<>>}) ->
+                         {Ch, [#'v1_0.attach'{name = Name,
+                                              handle = {uint, 99},
+                                              role = true}]}
+                 end,
+    Steps = [fun mock_server:recv_amqp_header_step/1,
+             fun mock_server:send_amqp_header_step/1,
+             mock_server:amqp_step(OpenStep),
+             mock_server:amqp_step(BeginStep),
+             mock_server:amqp_step(AttachStep)],
+
+    ok = mock_server:set_steps(?config(mock_server, Config), Steps),
+
+    Cfg = #{address => Hostname, port => Port, sasl => none, notify => self()},
+    {ok, Connection} = amqp10_client:open_connection(Cfg),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    AttachArgs = #{name => <<"mock1-sender">>,
+                role => {sender, #{address => <<"test">>,
+                                    durable => none,
+                                    capabilities => <<"capability-1">>}},
+                snd_settle_mode => mixed,
+                rcv_settle_mode => first},
+    {ok, Sender} = amqp10_client:attach_link(Session, AttachArgs),
+    await_link(Sender, attached, attached_timeout),
+    Msg = amqp10_msg:new(<<"mock-tag">>, <<"banana">>, true),
+    {error, insufficient_credit} = amqp10_client:send_msg(Sender, Msg),
+
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
+    ok.
+
+
+set_sender_sync_capabilities(Config) ->
+    Hostname = ?config(tcp_hostname_amqp, Config),
+    Port = ?config(tcp_port_amqp, Config),
+
+    OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
+                       {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>}}]}
+               end,
+    BeginStep = fun({1 = Ch, #'v1_0.begin'{}, _Pay}) ->
+                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, 1},
+                                             next_outgoing_id = {uint, 1},
+                                             incoming_window = {uint, 1000},
+                                             outgoing_window = {uint, 1000}}
+                                             ]}
+                end,
+    AttachStep = fun({1 = Ch, #'v1_0.attach'{role = false,
+                                             name = Name,
+                                             source = #'v1_0.source'{
+
+                                             },
+                                             target = #'v1_0.target'{
+                                                capabilities = {array, symbol, [
+                                                                {symbol,<<"capability-1">>},
+                                                                {symbol,<<"capability-2">>}
+                                                                ]}
+                                             }}, <<>>}) ->
+                         {Ch, [#'v1_0.attach'{name = Name,
+                                              handle = {uint, 99},
+                                              role = true}]}
+                 end,
+    Steps = [fun mock_server:recv_amqp_header_step/1,
+             fun mock_server:send_amqp_header_step/1,
+             mock_server:amqp_step(OpenStep),
+             mock_server:amqp_step(BeginStep),
+             mock_server:amqp_step(AttachStep)],
+
+    ok = mock_server:set_steps(?config(mock_server, Config), Steps),
+
+    Cfg = #{address => Hostname, port => Port, sasl => none, notify => self()},
+    {ok, Connection} = amqp10_client:open_connection(Cfg),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    AttachArgs = #{name => <<"mock1-sender">>,
+                   role => {sender, #{address => <<"test">>,
+                                      durable => none,
+                                      capabilities => [<<"capability-1">>,<<"capability-2">>]}},
+                   snd_settle_mode => mixed,
+                   rcv_settle_mode => first},
+    {ok, Sender} = amqp10_client:attach_link(Session, AttachArgs),
+    await_link(Sender, attached, attached_timeout),
+    Msg = amqp10_msg:new(<<"mock-tag">>, <<"banana">>, true),
+    {error, insufficient_credit} = amqp10_client:send_msg(Sender, Msg),
 
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
