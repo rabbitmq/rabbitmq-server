@@ -29,7 +29,7 @@
          publish/5, publish_delivered/4, discard/3, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
          ackfold/4, fold/3, len/1, is_empty/1, depth/1,
-         set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
+         update_rates/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
          set_queue_version/2,
@@ -326,18 +326,10 @@ depth(#state{bq = BQ, bqss = BQSs}) ->
 depth(#passthrough{bq = BQ, bqs = BQS}) ->
     BQ:depth(BQS).
 
-set_ram_duration_target(DurationTarget, State = #state{bq = BQ}) ->
-    foreach1(fun (_P, BQSN) ->
-                     BQ:set_ram_duration_target(DurationTarget, BQSN)
-             end, State);
-set_ram_duration_target(DurationTarget,
-                        State = #passthrough{bq = BQ, bqs = BQS}) ->
-    ?passthrough1(set_ram_duration_target(DurationTarget, BQS)).
-
-ram_duration(State = #state{bq = BQ}) ->
-    fold_min2(fun (_P, BQSN) -> BQ:ram_duration(BQSN) end, State);
-ram_duration(State = #passthrough{bq = BQ, bqs = BQS}) ->
-    ?passthrough2(ram_duration(BQS)).
+update_rates(State = #state{bq = BQ}) ->
+    fold_min2(fun (_P, BQSN) -> BQ:update_rates(BQSN) end, State);
+update_rates(State = #passthrough{bq = BQ, bqs = BQS}) ->
+    ?passthrough1(update_rates(BQS)).
 
 needs_timeout(#state{bq = BQ, bqss = BQSs}) ->
     fold0(fun (_P, _BQSN, timed) -> timed;

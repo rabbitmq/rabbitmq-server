@@ -33,7 +33,6 @@
 -type purged_msg_count() :: non_neg_integer().
 -type async_callback() ::
         fun ((atom(), fun ((atom(), state()) -> state())) -> 'ok').
--type duration() :: ('undefined' | 'infinity' | number()).
 
 -type msg_fun(A) :: fun ((mc:state(), ack(), A) -> A).
 -type msg_pred() :: fun ((rabbit_types:message_properties()) -> boolean()).
@@ -190,21 +189,8 @@
 %% What's the queue depth, where depth = length + number of pending acks
 -callback depth(state()) -> non_neg_integer().
 
-%% For the next three functions, the assumption is that you're
-%% monitoring something like the ingress and egress rates of the
-%% queue. The RAM duration is thus the length of time represented by
-%% the messages held in RAM given the current rates. If you want to
-%% ignore all of this stuff, then do so, and return 0 in
-%% ram_duration/1.
-
-%% The target is to have no more messages in RAM than indicated by the
-%% duration and the current queue rates.
--callback set_ram_duration_target(duration(), state()) -> state().
-
-%% Optionally recalculate the duration internally (likely to be just
-%% update your internal rates), and report how many seconds the
-%% messages in RAM represent given the current rates of the queue.
--callback ram_duration(state()) -> {duration(), state()}.
+%% Update the internal message rates.
+-callback update_rates(state()) -> state().
 
 %% Should 'timeout' be called as soon as the queue process can manage
 %% (either on an empty mailbox, or when a timer fires)?

@@ -14,7 +14,7 @@
          discard/3, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
          ackfold/4, fold/3, len/1, is_empty/1, depth/1,
-         set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
+         update_rates/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
          set_queue_version/2,
@@ -278,11 +278,8 @@ is_empty(State) -> 0 == len(State).
 depth(State) ->
     rabbit_variable_queue:depth(State).
 
-set_ram_duration_target(DurationTarget, State) ->
-    rabbit_variable_queue:set_ram_duration_target(DurationTarget, State).
-
-ram_duration(State) ->
-    rabbit_variable_queue:ram_duration(State).
+update_rates(State) ->
+    rabbit_variable_queue:update_rates(State).
 
 needs_timeout(State) ->
     rabbit_variable_queue:needs_timeout(State).

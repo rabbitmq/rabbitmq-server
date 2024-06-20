@@ -148,13 +148,6 @@
                    [{description, "kernel ready"},
                     {requires,    external_infrastructure}]}).
 
--rabbit_boot_step({rabbit_memory_monitor,
-                   [{description, "memory monitor"},
-                    {mfa,         {rabbit_sup, start_restartable_child,
-                                   [rabbit_memory_monitor]}},
-                    {requires,    rabbit_alarm},
-                    {enables,     core_initialized}]}).
-
 -rabbit_boot_step({guid_generator,
                    [{description, "guid generator"},
                     {mfa,         {rabbit_sup, start_restartable_child,

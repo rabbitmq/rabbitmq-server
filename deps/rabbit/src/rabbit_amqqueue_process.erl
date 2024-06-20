@@ -11,9 +11,9 @@
 
 -behaviour(gen_server2).
 
--define(SYNC_INTERVAL,                 200). %% milliseconds
--define(RAM_DURATION_UPDATE_INTERVAL, 5000).
--define(CONSUMER_BIAS_RATIO,           2.0). %% i.e. consume 100% faster
+-define(SYNC_INTERVAL,         200). %% milliseconds
+-define(UPDATE_RATES_INTERVAL, 5000).
+-define(CONSUMER_BIAS_RATIO,   2.0). %% i.e. consume 100% faster
 
 -export([info_keys/0]).
 
@@ -48,7 +48,7 @@
             expires,
             %% timer used to periodically sync (flush) queue index
             sync_timer_ref,
-            %% timer used to update ingress/egress rates and queue RAM duration target
+            %% timer used to update ingress/egress rates
             rate_timer_ref,
             %% timer used to clean up this queue due to TTL (on when unused)
             expiry_timer_ref,
@@ -212,9 +212,6 @@ init_it2(Recover, From, State = #q{q                   = Q,
                 true ->
                     ok = file_handle_cache:register_callback(
                            rabbit_amqqueue, set_maximum_since_use, [self()]),
-                    ok = rabbit_memory_monitor:register(
-                           self(), {rabbit_amqqueue,
-                                    set_ram_duration_target, [self()]}),
                     BQ = backing_queue_module(),
                     BQS = bq_init(BQ, Q, TermsOrNew),
                     send_reply(From, {new, Q}),
@@ -364,8 +361,7 @@ terminate_shutdown(Fun, #q{status = Status} = State) ->
                      fun stop_ttl_timer/1]),
     case BQS of
         undefined -> State1;
-        _         -> ok = rabbit_memory_monitor:deregister(self()),
-                     QName = qname(State),
+        _         -> QName = qname(State),
                      notify_decorators(shutdown, State),
                      [emit_consumer_deleted(Ch, CTag, QName, ActingUser) ||
                          {Ch, CTag, _, _, _, _, _, _} <-
@@ -529,8 +525,8 @@ stop_sync_timer(State) -> rabbit_misc:stop_timer(State, #q.sync_timer_ref).
 
 ensure_rate_timer(State) ->
     rabbit_misc:ensure_timer(State, #q.rate_timer_ref,
-                             ?RAM_DURATION_UPDATE_INTERVAL,
-                             update_ram_duration).
+                             ?UPDATE_RATES_INTERVAL,
+                             update_rates).
 
 stop_rate_timer(State) -> rabbit_misc:stop_timer(State, #q.rate_timer_ref).
 
@@ -1193,7 +1189,6 @@ prioritise_cast(Msg, _Len, State) ->
     case Msg of
         delete_immediately                   -> 8;
         {delete_exclusive, _Pid}             -> 8;
-        {set_ram_duration_target, _Duration} -> 8;
         {set_maximum_since_use, _Age}        -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
         {ack, _AckTags, _ChPid}              -> 4; %% [1]
@@ -1221,13 +1216,12 @@ consumer_bias(#q{backing_queue = BQ, backing_queue_state = BQS}, Low, High) ->
 prioritise_info(Msg, _Len, #q{q = Q}) ->
     DownPid = amqqueue:get_exclusive_owner(Q),
     case Msg of
-        {'DOWN', _, process, DownPid, _}     -> 8;
-        update_ram_duration                  -> 8;
-        {maybe_expire, _Version}             -> 8;
-        {drop_expired, _Version}             -> 8;
-        emit_stats                           -> 7;
-        sync_timeout                         -> 6;
-        _                                    -> 0
+        {'DOWN', _, process, DownPid, _} -> 8;
+        {maybe_expire, _Version}         -> 8;
+        {drop_expired, _Version}         -> 8;
+        emit_stats                       -> 7;
+        sync_timeout                     -> 6;
+        _                                -> 0
     end.
 
 handle_call({init, Recover}, From, State) ->
@@ -1505,11 +1499,6 @@ handle_cast({deactivate_limit, ChPid}, State) ->
     noreply(possibly_unblock(rabbit_queue_consumers:deactivate_limit_fun(),
                              ChPid, State));
 
-handle_cast({set_ram_duration_target, Duration},
-            State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
-    BQS1 = BQ:set_ram_duration_target(Duration, BQS),
-    noreply(State#q{backing_queue_state = BQS1});
-
 handle_cast({set_maximum_since_use, Age}, State) ->
     ok = file_handle_cache:set_maximum_since_use(Age),
     noreply(State);
@@ -1659,15 +1648,12 @@ handle_info({'DOWN', _MonitorRef, process, DownPid, _Reason}, State) ->
         {stop, State1} -> stop(State1)
     end;
 
-handle_info(update_ram_duration, State = #q{backing_queue = BQ,
-                                            backing_queue_state = BQS}) ->
-    {RamDuration, BQS1} = BQ:ram_duration(BQS),
-    DesiredDuration =
-        rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
-    BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
+handle_info(update_rates, State = #q{backing_queue = BQ,
+                                     backing_queue_state = BQS}) ->
+    BQS1 = BQ:update_rates(BQS),
     %% Don't call noreply/1, we don't want to set timers
     {State1, Timeout} = next_state(State#q{rate_timer_ref      = undefined,
-                                           backing_queue_state = BQS2}),
+                                           backing_queue_state = BQS1}),
     {noreply, State1, Timeout};
 
 handle_info(sync_timeout, State) ->
@@ -1697,11 +1683,8 @@ handle_pre_hibernate(State = #q{backing_queue_state = undefined}) ->
     {hibernate, State};
 handle_pre_hibernate(State = #q{backing_queue = BQ,
                                 backing_queue_state = BQS}) ->
-    {RamDuration, BQS1} = BQ:ram_duration(BQS),
-    DesiredDuration =
-        rabbit_memory_monitor:report_ram_duration(self(), RamDuration),
-    BQS2 = BQ:set_ram_duration_target(DesiredDuration, BQS1),
-    BQS3 = BQ:handle_pre_hibernate(BQS2),
+    BQS1 = BQ:update_rates(BQS),
+    BQS3 = BQ:handle_pre_hibernate(BQS1),
     rabbit_event:if_enabled(
       State, #q.stats_timer,
       fun () -> emit_stats(State,
