@@ -31,25 +31,17 @@ jobs:
       id: configure
       shell: bash
       run: |
-        if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
+        if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME }}" ]; then
         cat << EOF >> user.bazelrc
-          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
+          build --remote_cache=https://storage.googleapis.com/${{ secrets.REMOTE_CACHE_BUCKET_NAME }}
+          build --google_default_credentials
         EOF
         fi
         cat << EOF >> user.bazelrc
           startup --output_user_root=C:/tmp
           startup --windows_enable_symlinks
           build --enable_runfiles
-
-          build:buildbuddy --build_metadata=ROLE=CI
-          build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
-          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-windows
-          # build:buildbuddy --repository_cache=/home/runner/repo-cache/
-          build:buildbuddy --color=yes
-          build:buildbuddy --disk_cache=
-          build:buildbuddy --noexperimental_remote_cache_compression
-          build:buildbuddy --noexperimental_remote_cache_async
-          build:buildbuddy --remote_build_event_upload=all
+          build --color=yes
         EOF
 
         bazelisk info release

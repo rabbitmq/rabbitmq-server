@@ -54,9 +54,9 @@ jobs:
         fi
         echo "exists=${exists}" | tee $GITHUB_ENV
 
-        OTP_VERSION_ID=${ARCHIVE_URL#*secondary-umbrellas/rbe-}
-        OTP_VERSION_ID=${OTP_VERSION_ID%*/package-generic-unix-for-mixed-version-testing-v*.tar.xz}
-        echo "otp_version_id=${OTP_VERSION_ID}" | tee -a $GITHUB_OUTPUT
+        OTP_VERSION=${ARCHIVE_URL#*secondary-umbrellas/}
+        OTP_VERSION=${OTP_VERSION%*/package-generic-unix-for-mixed-version-testing-v*.tar.xz}
+        echo "otp_version=${OTP_VERSION}" | tee -a $GITHUB_OUTPUT
 
         VERSION=${ARCHIVE_URL#*package-generic-unix-for-mixed-version-testing-v}
         VERSION=${VERSION%*.tar.xz}
@@ -67,35 +67,42 @@ jobs:
       with:
         ref: v${{ steps.check.outputs.version }}
         path: secondary-umbrella
+    - name: CONFIGURE OTP & ELIXIR
+      if: env.exists != 'true'
+      uses: erlef/setup-beam@v1.17
+      with:
+        otp-version: ${{ steps.check.outputs.otp_version }}
+        elixir-version: 1.14
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://cdn.jsdelivr.net/hex
+    - name: AUTHENTICATE TO GOOGLE CLOUD
+      uses: google-github-actions/auth@v2.1.3
+      with:
+        credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
     - name: BUILD SECONDARY UMBRELLA ARCHIVE
       if: env.exists != 'true'
       working-directory: secondary-umbrella
       run: |
-        if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
+        if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME }}" ]; then
         cat << EOF >> user.bazelrc
-          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
+          build --remote_cache=https://storage.googleapis.com/${{ secrets.REMOTE_CACHE_BUCKET_NAME }}
+          build --google_default_credentials
+
+          build --remote_download_toplevel
         EOF
         fi
-        cat << EOF >> user.bazelrc
-          build:buildbuddy --build_metadata=ROLE=CI
-          build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
-          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-secondary-umbrella
-          build:buildbuddy --color=yes
-
-          build:buildbuddy --remote_download_toplevel
-        EOF
 
         sed -i"_orig" -E "/APP_VERSION/ s/3\.[0-9]+\.[0-9]+/${{ steps.check.outputs.version }}/" rabbitmq.bzl
         bazelisk build :package-generic-unix \
-          --config=rbe-${{ steps.check.outputs.otp_version_id }} \
           --test_build \
           --verbose_failures
 
         OUTPUT_DIR=${{ github.workspace }}/output
-        mkdir -p ${OUTPUT_DIR}/rbe-${{ steps.check.outputs.otp_version_id }}
+        mkdir -p ${OUTPUT_DIR}/${{ steps.check.outputs.otp_version }}
         cp \
           bazel-bin/package-generic-unix.tar.xz \
-          ${OUTPUT_DIR}/rbe-${{ steps.check.outputs.otp_version_id }}/package-generic-unix-for-mixed-version-testing-v${{ steps.check.outputs.version }}.tar.xz
+          ${OUTPUT_DIR}/${{ steps.check.outputs.otp_version }}/package-generic-unix-for-mixed-version-testing-v${{ steps.check.outputs.version }}.tar.xz
     - name: UPLOAD THE ARCHIVE TO S3
       if: env.exists != 'true'
       uses: jakejarvis/s3-sync-action@v0.5.1
