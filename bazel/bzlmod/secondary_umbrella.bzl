@@ -31,6 +31,6 @@ def secondary_umbrella():
         strip_prefix = "rabbitmq_server-3.11.18",
         # This file is produced just in time by the test-mixed-versions.yaml GitHub Actions workflow.
         urls = [
-            "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/rbe-25_0/package-generic-unix-for-mixed-version-testing-v3.11.18.tar.xz",
+            "https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/25.0/package-generic-unix-for-mixed-version-testing-v3.11.18.tar.xz",
         ],
     )

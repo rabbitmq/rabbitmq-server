@@ -9,11 +9,6 @@ load(
 )
 load("@rules_erlang//:app_file2.bzl", "app_file")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
-<<<<<<< HEAD
-load(":rabbitmqctl.bzl", "rabbitmqctl")
-load(":rabbitmqctl_check_formatted.bzl", "rabbitmqctl_check_formatted_test")
-load(":rabbitmqctl_test.bzl", "rabbitmqctl_test")
-=======
 load("@rules_erlang//:erlang_app_info.bzl", "erlang_app_info")
 load("@rules_erlang//:escript.bzl", "escript_archive")
 load(
@@ -23,7 +18,6 @@ load(
     "STARTS_BACKGROUND_BROKER_TAG",
     "without",
 )
->>>>>>> 7f585d4102 (Use rules_elixir to build the cli without mix)
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
@@ -306,38 +300,6 @@ rabbitmq_run(
     visibility = ["//visibility:public"],
 )
 
-<<<<<<< HEAD
-rabbitmqctl_check_formatted_test(
-    name = "check_formatted",
-    size = "small",
-    srcs = [
-        ".formatter.exs",
-        "config/config.exs",
-        "mix.exs",
-    ] + glob([
-        "lib/**/*.ex",
-        "test/**/*.exs",
-    ]),
-    data = glob(["test/fixtures/**/*"]),
-    target_compatible_with = select({
-        "@platforms//os:macos": [
-            "@platforms//os:macos",
-            "@elixir_config//:elixir_1_15",
-        ],
-        "//conditions:default": [
-            "@platforms//os:linux",
-            "@elixir_config//:elixir_1_15",
-        ],
-    }),
-)
-
-test_suite(
-    name = "rabbitmqctl_check_formatted",
-    tests = ["check_formatted"],
-)
-
-=======
->>>>>>> 7f585d4102 (Use rules_elixir to build the cli without mix)
 plt(
     name = "deps_plt",
     apps = [

@@ -82,12 +82,8 @@ plt(
     plt = "//:base_plt",
     deps = [
         "//deps/rabbit:erlang_app",  # keep
-<<<<<<< HEAD
         "//deps/rabbit/apps/rabbitmq_prelaunch:erlang_app",  # keep
-        "//deps/rabbitmq_cli:elixir",  # keep
-=======
         "@rules_elixir//elixir",  # keep
->>>>>>> 7f585d4102 (Use rules_elixir to build the cli without mix)
         "//deps/rabbitmq_cli:erlang_app",  # keep
         "//deps/rabbitmq_management_agent:erlang_app",  # keep
         "@proper//:erlang_app",  # keep
