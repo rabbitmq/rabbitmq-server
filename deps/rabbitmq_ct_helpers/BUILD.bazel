@@ -82,11 +82,11 @@ plt(
     plt = "//:base_plt",
     deps = [
         "//deps/rabbit:erlang_app",  # keep
-        "@rules_elixir//elixir",  # keep
         "//deps/rabbitmq_cli:erlang_app",  # keep
         "//deps/rabbitmq_management_agent:erlang_app",  # keep
         "//deps/rabbitmq_prelaunch:erlang_app",  # keep
         "@proper//:erlang_app",  # keep
+        "@rules_elixir//elixir",  # keep
     ],
 )
 
