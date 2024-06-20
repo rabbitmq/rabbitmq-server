@@ -1,4 +1,5 @@
 load("@rules_elixir//:ex_unit_test.bzl", "ex_unit_test")
+load("@rules_elixir//private:elixir_bytecode.bzl", "elixir_bytecode")
 load(
     "@rules_elixir//private:elixir_ebin_dir.bzl",
     "elixir_ebin_dir",
@@ -20,10 +21,6 @@ load(
 )
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
-load(
-    "//bazel/elixir:elixir_bytecode.bzl",
-    "elixir_bytecode",
-)
 load(
     "//bazel/elixir:elixir_escript_main.bzl",
     "elixir_escript_main",
