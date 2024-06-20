@@ -67,7 +67,10 @@ groups() ->
          {v5, [], cluster_size_1_tests()}]},
        {cluster_size_3, [],
         [{v4, [], cluster_size_3_tests()},
-         {v5, [], cluster_size_3_tests()}]}
+         {v5, [], cluster_size_3_tests()}]},
+       {mnesia_store, [],
+        [{v4, [], mnesia_store_tests()},
+         {v5, [], mnesia_store_tests()}]}
       ]},
      {web_mqtt, [],
       [{cluster_size_1, [],
@@ -76,7 +79,10 @@ groups() ->
          {v5, [], cluster_size_1_tests()}]},
        {cluster_size_3, [],
         [{v4, [], cluster_size_3_tests()},
-         {v5, [], cluster_size_3_tests()}]}
+         {v5, [], cluster_size_3_tests()}]},
+       {mnesia_store, [],
+        [{v4, [], mnesia_store_tests()},
+         {v5, [], mnesia_store_tests()}]}
       ]}
     ].
 
@@ -145,7 +151,6 @@ cluster_size_3_tests() ->
      session_reconnect,
      session_takeover,
      duplicate_client_id,
-<<<<<<< HEAD
      maintenance
     ].
 
@@ -153,11 +158,8 @@ mnesia_store_tests() ->
     [
      consuming_classic_mirrored_queue_down,
      flow_classic_mirrored_queue,
-=======
->>>>>>> 077c027d52 (MQTT: speed up shared_SUITE:many_qos1_messages (#11477))
      publish_to_all_queue_types_qos0,
-     publish_to_all_queue_types_qos1,
-     maintenance
+     publish_to_all_queue_types_qos1
     ].
 
 suite() ->
@@ -194,10 +196,10 @@ init_per_group(Group, Config0)
 init_per_group(Group, Config0) ->
     Nodes = case Group of
                 cluster_size_1 -> 1;
-                cluster_size_3 -> 3
+                cluster_size_3 -> 3;
+                mnesia_store -> 3
             end,
     Suffix = rabbit_ct_helpers:testcase_absname(Config0, "", "-"),
-<<<<<<< HEAD
     Config1 = case Group of
                   mnesia_store ->
                       rabbit_ct_helpers:set_config(Config0, {metadata_store, mnesia});
@@ -208,28 +210,18 @@ init_per_group(Group, Config0) ->
                 Config1,
                 [{rmq_nodes_count, Nodes},
                  {rmq_nodename_suffix, Suffix}]),
-    Config3 = rabbit_ct_helpers:merge_app_env(
-                Config2,
-                {rabbit, [{classic_queue_default_version, 2}]}),
-    Config = rabbit_ct_helpers:run_steps(
-               Config3,
-               rabbit_ct_broker_helpers:setup_steps() ++
-               rabbit_ct_client_helpers:setup_steps()),
-    util:maybe_skip_v5(Config).
-=======
-    Config = rabbit_ct_helpers:set_config(
-               Config0,
-               [{rmq_nodes_count, Nodes},
-                {rmq_nodename_suffix, Suffix}]),
+    Config = rabbit_ct_helpers:merge_app_env(
+               Config2,
+               {rabbit, [{classic_queue_default_version, 2}]}),
     rabbit_ct_helpers:run_steps(
       Config,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
->>>>>>> 077c027d52 (MQTT: speed up shared_SUITE:many_qos1_messages (#11477))
 
 end_per_group(G, Config)
   when G =:= cluster_size_1;
-       G =:= cluster_size_3 ->
+       G =:= cluster_size_3;
+       G =:= mnesia_store ->
     rabbit_ct_helpers:run_steps(
       Config,
       rabbit_ct_client_helpers:teardown_steps() ++

@@ -66,10 +66,7 @@
          published = false :: boolean(),
          ssl_login_name :: none | binary(),
          retainer_pid :: pid(),
-<<<<<<< HEAD
          delivery_flow :: flow | noflow,
-=======
->>>>>>> 077c027d52 (MQTT: speed up shared_SUITE:many_qos1_messages (#11477))
          trace_state :: rabbit_trace:state(),
          prefetch :: non_neg_integer(),
          vhost :: rabbit_types:vhost(),
