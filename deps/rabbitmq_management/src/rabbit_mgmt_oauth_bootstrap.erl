@@ -20,31 +20,38 @@ bootstrap_oauth(Req0, State) ->
     Dependencies = oauth_dependencies(),
     JSContent = import_dependencies(Dependencies) ++ 
                 set_oauth_settings(AuthSettings) ++ 
-                case proplists:get_value(oauth_enabled, AuthSettings, false) of             
-                    true -> set_token_auth(Req0) ++ export_dependencies(oauth_dependencies());
-                    false -> export_dependencies(["oauth_initialize_if_required", "set_oauth_settings"])
-                end,
-    {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"text/javascript; charset=utf-8">>}, JSContent, Req0), State}.
+                set_token_auth(AuthSettings, Req0) ++ 
+                export_dependencies(Dependencies),                
+    {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"text/javascript; charset=utf-8">>}, 
+        JSContent, Req0), State}.
 
 set_oauth_settings(AuthSettings) ->    
     JsonAuthSettings = rabbit_json:encode(rabbit_mgmt_format:format_nulls(AuthSettings)),
     ["set_oauth_settings(", JsonAuthSettings, ");"].
-
-set_token_auth(Req0) ->
-    case application:get_env(rabbitmq_management, oauth_enabled, false) of
-        true ->
+    
+set_token_auth(AuthSettings, Req0) ->
+    case proplists:get_value(oauth_enabled, AuthSettings, false) of      
+        true ->       
             case cowboy_req:parse_header(<<"authorization">>, Req0) of
                 {bearer, Token} ->  ["set_token_auth('", Token, "');"];
                 _ -> []
             end;
-        false -> []
+        false -> 
+            []
     end.
 
 import_dependencies(Dependencies) ->
     ["import {", string:join(Dependencies, ","), "} from './helper.js';"].
 
 oauth_dependencies() ->
-    ["oauth_initialize_if_required", "hasAnyResourceServerReady", "oauth_initialize", "oauth_initiate", "oauth_initiateLogin", "oauth_initiateLogout", "oauth_completeLogin", "oauth_completeLogout", "set_oauth_settings"].
+    ["oauth_initialize_if_required",
+        "hasAnyResourceServerReady", 
+        "oauth_initialize", "oauth_initiate", 
+        "oauth_initiateLogin",
+        "oauth_initiateLogout", 
+        "oauth_completeLogin", 
+        "oauth_completeLogout", 
+        "set_oauth_settings"].
 
 export_dependencies(Dependencies) ->
     [ io_lib:format("window.~s = ~s;", [Dep, Dep]) || Dep <- Dependencies ].
