@@ -680,7 +680,6 @@ rabbit:
 - rabbit_logger_exchange_h
 - rabbit_looking_glass
 - rabbit_maintenance
-- rabbit_memory_monitor
 - rabbit_message_interceptor
 - rabbit_metrics
 - rabbit_mirror_queue_misc

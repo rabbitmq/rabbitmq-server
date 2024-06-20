@@ -27,10 +27,8 @@
     variable_queue_drop,
     variable_queue_fold_msg_on_disk,
     variable_queue_dropfetchwhile,
-    variable_queue_dropwhile_varying_ram_duration,
     variable_queue_dropwhile_restart,
     variable_queue_dropwhile_sync_restart,
-    variable_queue_fetchwhile_varying_ram_duration,
     variable_queue_ack_limiting,
     variable_queue_purge,
     variable_queue_requeue,
@@ -1018,8 +1016,6 @@ bq_variable_queue_delete_msg_store_files_callback1(Config) ->
     Count = 30,
     QTState = publish_and_confirm(Q, Payload, Count),
 
-    rabbit_amqqueue:set_ram_duration_target(QPid, 0),
-
     {ok, Limiter} = rabbit_limiter:start_link(no_id),
 
     CountMinusOne = Count - 1,
@@ -1111,17 +1107,16 @@ variable_queue_partial_segments_delta_thing2(VQ0, _QName) ->
     HalfSegment = SegmentSize div 2,
     OneAndAHalfSegment = SegmentSize + HalfSegment,
     VQ1 = variable_queue_publish(true, OneAndAHalfSegment, VQ0),
-    {_Duration, VQ2} = rabbit_variable_queue:ram_duration(VQ1),
+    VQ2 = rabbit_variable_queue:update_rates(VQ1),
     VQ3 = check_variable_queue_status(
-            variable_queue_set_ram_duration_target(0, VQ2),
+            VQ2,
             %% We only have one message in memory because the amount in memory
             %% depends on the consume rate, which is nil in this test.
             [{delta, {delta, 1, OneAndAHalfSegment - 1, 0, OneAndAHalfSegment}},
              {q3, 1},
              {len, OneAndAHalfSegment}]),
-    VQ4 = variable_queue_set_ram_duration_target(infinity, VQ3),
     VQ5 = check_variable_queue_status(
-            variable_queue_publish(true, 1, VQ4),
+            variable_queue_publish(true, 1, VQ3),
             %% one alpha, but it's in the same segment as the deltas
             %% @todo That's wrong now! v1/v2
             [{delta, {delta, 1, OneAndAHalfSegment, 0, OneAndAHalfSegment + 1}},
@@ -1158,9 +1153,8 @@ variable_queue_all_the_bits_not_covered_elsewhere_A2(VQ0, QName) ->
     Count = 2 * IndexMod:next_segment_boundary(0),
     VQ1 = variable_queue_publish(true, Count, VQ0),
     VQ2 = variable_queue_publish(false, Count, VQ1),
-    VQ3 = variable_queue_set_ram_duration_target(0, VQ2),
     {VQ4, _AckTags}  = variable_queue_fetch(Count, true, false,
-                                            Count + Count, VQ3),
+                                            Count + Count, VQ2),
     {VQ5, _AckTags1} = variable_queue_fetch(Count, false, false,
                                             Count, VQ4),
     _VQ6 = rabbit_variable_queue:terminate(shutdown, VQ5),
@@ -1168,8 +1162,7 @@ variable_queue_all_the_bits_not_covered_elsewhere_A2(VQ0, QName) ->
     {{_Msg1, true, _AckTag1}, VQ8} = rabbit_variable_queue:fetch(true, VQ7),
     Count1 = rabbit_variable_queue:len(VQ8),
     VQ9 = variable_queue_publish(false, 1, VQ8),
-    VQ10 = variable_queue_set_ram_duration_target(0, VQ9),
-    {VQ11, _AckTags2} = variable_queue_fetch(Count1, true, true, Count, VQ10),
+    {VQ11, _AckTags2} = variable_queue_fetch(Count1, true, true, Count, VQ9),
     {VQ12, _AckTags3} = variable_queue_fetch(1, false, false, 1, VQ11),
     VQ12.
 
@@ -1182,8 +1175,7 @@ variable_queue_all_the_bits_not_covered_elsewhere_B1(Config) ->
       fun variable_queue_all_the_bits_not_covered_elsewhere_B2/2,
       ?config(variable_queue_type, Config)).
 
-variable_queue_all_the_bits_not_covered_elsewhere_B2(VQ0, QName) ->
-    VQ1 = variable_queue_set_ram_duration_target(0, VQ0),
+variable_queue_all_the_bits_not_covered_elsewhere_B2(VQ1, QName) ->
     VQ2 = variable_queue_publish(false, 4, VQ1),
     {VQ3, AckTags} = variable_queue_fetch(2, false, false, 4, VQ2),
     {_Guids, VQ4} =
@@ -1364,51 +1356,6 @@ variable_queue_dropwhile_sync_restart2(VQ0, QName) ->
 
     VQ5.
 
-variable_queue_dropwhile_varying_ram_duration(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_dropwhile_varying_ram_duration1, [Config]).
-
-variable_queue_dropwhile_varying_ram_duration1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_dropwhile_varying_ram_duration2/2,
-      ?config(variable_queue_type, Config)).
-
-variable_queue_dropwhile_varying_ram_duration2(VQ0, _QName) ->
-    test_dropfetchwhile_varying_ram_duration(
-      fun (VQ1) ->
-              {_, VQ2} = rabbit_variable_queue:dropwhile(
-                           fun (_) -> false end, VQ1),
-              VQ2
-      end, VQ0).
-
-variable_queue_fetchwhile_varying_ram_duration(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_fetchwhile_varying_ram_duration1, [Config]).
-
-variable_queue_fetchwhile_varying_ram_duration1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_fetchwhile_varying_ram_duration2/2,
-      ?config(variable_queue_type, Config)).
-
-variable_queue_fetchwhile_varying_ram_duration2(VQ0, _QName) ->
-    test_dropfetchwhile_varying_ram_duration(
-      fun (VQ1) ->
-              {_, ok, VQ2} = rabbit_variable_queue:fetchwhile(
-                               fun (_) -> false end,
-                               fun (_, _, A) -> A end,
-                               ok, VQ1),
-              VQ2
-      end, VQ0).
-
-test_dropfetchwhile_varying_ram_duration(Fun, VQ0) ->
-    VQ1 = variable_queue_publish(false, 1, VQ0),
-    VQ2 = variable_queue_set_ram_duration_target(0, VQ1),
-    VQ3 = Fun(VQ2),
-    VQ4 = variable_queue_set_ram_duration_target(infinity, VQ3),
-    VQ5 = variable_queue_publish(false, 1, VQ4),
-    VQ6 = Fun(VQ5),
-    VQ6.
-
 variable_queue_ack_limiting(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, variable_queue_ack_limiting1, [Config]).
@@ -1427,8 +1374,8 @@ variable_queue_ack_limiting2(VQ0, _Config) ->
     Churn = Len div 32,
     VQ2 = publish_fetch_and_ack(Churn, Len, VQ1),
 
-    %% update stats for duration
-    {_Duration, VQ3} = rabbit_variable_queue:ram_duration(VQ2),
+    %% update stats
+    VQ3 = rabbit_variable_queue:update_rates(VQ2),
 
     %% fetch half the messages
     {VQ4, _AckTags} = variable_queue_fetch(Len div 2, false, false, Len, VQ3),
@@ -1437,9 +1384,7 @@ variable_queue_ack_limiting2(VQ0, _Config) ->
     %% that's the only predictable stats we got.
     VQ5 = check_variable_queue_status(VQ4, [{len, Len div 2}]),
 
-    VQ6 = variable_queue_set_ram_duration_target(0, VQ5),
-
-    VQ6.
+    VQ5.
 
 variable_queue_purge(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -1509,8 +1454,7 @@ variable_queue_requeue_ram_beta2(VQ0, _Config) ->
     {VQ2, AcksR} = variable_queue_fetch(Count, false, false, Count, VQ1),
     {Back, Front} = lists:split(Count div 2, AcksR),
     {_, VQ3} = rabbit_variable_queue:requeue(erlang:tl(Back), VQ2),
-    VQ4 = variable_queue_set_ram_duration_target(0, VQ3),
-    {_, VQ5} = rabbit_variable_queue:requeue([erlang:hd(Back)], VQ4),
+    {_, VQ5} = rabbit_variable_queue:requeue([erlang:hd(Back)], VQ3),
     VQ6 = requeue_one_by_one(Front, VQ5),
     {VQ7, AcksAll} = variable_queue_fetch(Count, false, true, Count, VQ6),
     {_, VQ8} = rabbit_variable_queue:ack(AcksAll, VQ7),
@@ -1570,8 +1514,7 @@ variable_queue_mode_change2(VQ0, _Config) ->
     {Back, Front} = lists:split(Count div 2, AcksR),
     {_, VQ5} = rabbit_variable_queue:requeue(erlang:tl(Back), VQ4),
     VQ6 = maybe_switch_queue_mode(VQ5),
-    VQ7 = variable_queue_set_ram_duration_target(0, VQ6),
-    VQ8 = maybe_switch_queue_mode(VQ7),
+    VQ8 = maybe_switch_queue_mode(VQ6),
     {_, VQ9} = rabbit_variable_queue:requeue([erlang:hd(Back)], VQ8),
     VQ10 = maybe_switch_queue_mode(VQ9),
     VQ11 = requeue_one_by_one(Front, VQ10),
@@ -1827,10 +1770,6 @@ assert_props(List, PropVals) ->
         Error -> error(Error -- [ok])
     end.
 
-variable_queue_set_ram_duration_target(Duration, VQ) ->
-    variable_queue_wait_for_shuffling_end(
-      rabbit_variable_queue:set_ram_duration_target(Duration, VQ)).
-
 publish_fetch_and_ack(0, _Len, VQ0) ->
     VQ0;
 publish_fetch_and_ack(N, Len, VQ0) ->
@@ -1883,8 +1822,7 @@ variable_queue_with_holes(VQ0) ->
     VQ1 = variable_queue_publish(
             false, 1, Count,
             fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ0),
-    VQ2 = variable_queue_set_ram_duration_target(0, VQ1),
-    {VQ3, AcksR} = variable_queue_fetch(Count, false, false, Count, VQ2),
+    {VQ3, AcksR} = variable_queue_fetch(Count, false, false, Count, VQ1),
     Acks = lists:reverse(AcksR),
     AckSeqs = lists:zip(Acks, Seq),
     [{Subset1, _Seq1}, {Subset2, _Seq2}, {Subset3, Seq3}] =
@@ -1896,11 +1834,10 @@ variable_queue_with_holes(VQ0) ->
     VQ5 = requeue_one_by_one(Subset1, VQ4),
     %% by now we have some messages (and holes) in delta
     VQ6 = requeue_one_by_one(Subset2, VQ5),
-    VQ7 = variable_queue_set_ram_duration_target(infinity, VQ6),
     %% add the q1 tail
     VQ8 = variable_queue_publish(
             true, Count + 1, Interval,
-            fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ7),
+            fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ6),
     %% assertions
     vq_with_holes_assertions(VQ8),
     Depth = Count + Interval,
