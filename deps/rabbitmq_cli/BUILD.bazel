@@ -334,6 +334,7 @@ dialyze(
 
 ex_unit_test(
     name = "tests",
+    size = "large",
     srcs = [
         "test/test_helper.exs",
     ] + glob([
