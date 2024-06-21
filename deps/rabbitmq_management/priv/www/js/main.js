@@ -1,17 +1,19 @@
 
-$(document).ready(function() {
-   var url_string = window.location.href;
-   var url = new URL(url_string);
-   var error = url.searchParams.get('error');
-   if (error) {
-     renderWarningMessageInLoginStatus(fmt_escape_html(error));
-   } else {
-      if (oauth.enabled) {
-        startWithOAuthLogin();
-      } else {
-        startWithLoginPage();
-      }
+$(document).ready(function() {    
+  var url_string = window.location.href;
+  var url = new URL(url_string);
+  var error = url.searchParams.get('error');
+  if (error) {
+    if (oauth.enabled) {
+      renderWarningMessageInLoginStatus(oauth, fmt_escape_html(error));
     }
+  } else {
+    if (oauth.enabled) {
+      startWithOAuthLogin(oauth);
+    } else {
+      startWithLoginPage();
+      }
+  }
 });
 
 function startWithLoginPage() {
@@ -27,85 +29,18 @@ function removeDuplicates(array){
   }
   return output
 }
-function warningMessageOAuthResource(oauthResource, reason) {
-  return "OAuth resource [<b>" + (oauthResource["label"] != null ? oauthResource.label : oauthResource.id) +
-    "</b>] not available. OpenId Discovery endpoint " + readiness_url(oauthResource) + reason
-}
-function warningMessageOAuthResources(commonProviderURL, oauthResources, reason) {
-  return "OAuth resources [ <b>" + oauthResources.map(resource => resource["label"] != null ? resource.label : resource.id).join("</b>,<b>")
-    + "</b>] not available. OpenId Discovery endpoint " + commonProviderURL + reason
-}
 
-function startWithOAuthLogin () {
+
+function startWithOAuthLogin (oauth) {
   store_pref("oauth-return-to", window.location.hash);
 
   if (!oauth.logged_in) {
-
-    // Find out how many distinct oauthServers are configured
-    let oauthServers = removeDuplicates(oauth.resource_servers.filter((resource) => resource.sp_initiated))
-    oauthServers.forEach(function(entry) { console.log(readiness_url(entry)) })
-    if (oauthServers.length > 0) {   // some resources are sp_initiated but there could be idp_initiated too
-      Promise.allSettled(oauthServers.map(oauthServer => fetch(readiness_url(oauthServer)).then(res => res.json())))
-        .then(results => {
-          results.forEach(function(entry) { console.log(entry) })
-          let notReadyServers = []
-          let notCompliantServers = []
-
-          for (let i = 0; i < results.length; i++) {
-            switch (results[i].status) {
-              case "fulfilled":
-                try {
-                  validate_openid_configuration(results[i].value)
-                }catch(e) {
-                  console.log("Unable to connect to " + oauthServers[i].oauth_provider_url + ". " + e)
-                  notCompliantServers.push(oauthServers[i].oauth_provider_url)
-                }
-                break
-              case "rejected":
-                notReadyServers.push(oauthServers[i].oauth_provider_url)
-                break
-            }
-          }
-          const spOauthServers = oauth.resource_servers.filter((resource) => resource.sp_initiated)
-          const groupByProviderURL = spOauthServers.reduce((group, oauthServer) => {
-            const { oauth_provider_url } = oauthServer;
-            group[oauth_provider_url] = group[oauth_provider_url] ?? [];
-            group[oauth_provider_url].push(oauthServer);
-            return group;
-          }, {})
-          let warnings = []
-          for(var url in groupByProviderURL){
-            console.log(url + ': ' + groupByProviderURL[url]);
-            const notReadyResources = groupByProviderURL[url].filter((oauthserver) => notReadyServers.includes(oauthserver.oauth_provider_url))
-            const notCompliantResources = groupByProviderURL[url].filter((oauthserver) => notCompliantServers.includes(oauthserver.oauth_provider_url))
-            if (notReadyResources.length == 1) {
-              warnings.push(warningMessageOAuthResource(notReadyResources[0], " not reachable"))
-            }else if (notReadyResources.length > 1) {
-              warnings.push(warningMessageOAuthResources(url, notReadyResources, " not reachable"))
-            }
-            if (notCompliantResources.length == 1) {
-              warnings.push(warningMessageOAuthResource(notCompliantResources[0], " not compliant"))
-            }else if (notCompliantResources.length > 1) {
-              warnings.push(warningMessageOAuthResources(url, notCompliantResources, " not compliant"))
-            }
-          }
-          console.log("warnings:" + warnings)
-          oauth.declared_resource_servers_count = oauth.resource_servers.length
-          oauth.resource_servers = oauth.resource_servers.filter((resource) =>
-            !notReadyServers.includes(resource.oauth_provider_url) && !notCompliantServers.includes(resource.oauth_provider_url))
-          render_login_oauth(warnings)
-          start_app_login()
-
-        })
-    }else { // there are only idp_initiated resources
-      render_login_oauth()
-      start_app_login()
-    }
+    hasAnyResourceServerReady(oauth, (oauth, warnings) => {  render_login_oauth(oauth, warnings); start_app_login(); })
   } else {
     start_app_login()
   }
 }
-function render_login_oauth(messages) {
+function render_login_oauth(oauth, messages) {
   let formatData = {}
   formatData.warnings = []
   formatData.notAuthorized = false
@@ -118,7 +53,6 @@ function render_login_oauth(messages) {
   } else if (typeof messages == "string") {
     formatData.warnings = [messages]
     formatData.notAuthorized = messages == "Not authorized"
-    console.log("Single error message")
   }
   replace_content('outer', format('login_oauth', formatData))
 
@@ -127,12 +61,10 @@ function render_login_oauth(messages) {
   $('#login').on('click', 'div.section h2, div.section-hidden h2', function() {
           toggle_visibility($(this));
       });
-
 }
-function renderWarningMessageInLoginStatus(message) {
-  render_login_oauth(message)
+function renderWarningMessageInLoginStatus(oauth, message) {
+  render_login_oauth(oauth, message)
 }
-
 
 function dispatcher_add(fun) {
     dispatcher_modules.push(fun);
@@ -187,9 +119,10 @@ function check_login () {
   if (user == false || user.error) {
     clear_auth();
     if (oauth.enabled) {
-      hide_popup_warn();
-      renderWarningMessageInLoginStatus('Not authorized');
+      //hide_popup_warn();
+      renderWarningMessageInLoginStatus(oauth, 'Not authorized');
     } else {
+      //hide_popup_warn();
       replace_content('login-status', '<p>Login failed</p>');
     }
     return false;
@@ -323,6 +256,7 @@ function dynamic_load(filename) {
     element.setAttribute('type', 'text/javascript');
     element.setAttribute('src', 'js/' + filename);
     document.getElementsByTagName('head')[0].appendChild(element);
+    return element;
 }
 
 function update_interval() {
@@ -350,7 +284,11 @@ function update_interval() {
 function go_to(url) {
     this.location = url;
 }
-
+function go_to_home() {
+    // location.href = rabbit_path_prefix() + "/"
+    location.href =  "/"
+  }
+  
 function set_timer_interval(interval) {
     timer_interval = interval;
     reset_timer();
@@ -1472,16 +1410,16 @@ function sync_req(type, params0, path_template, options) {
         else
             // rabbitmq/rabbitmq-management#732
             // https://developer.mozilla.org/en-US/docs/Glossary/Truthy
-            return {result: true, http_status: req.status, req_params: params};
+            return {result: true, http_status: req.status, req_params: params, responseText: req.responseText};
     }
     else {
         return false;
     }
 }
-function initiate_logout(error = "") {
+function initiate_logout(oauth, error = "") {
     clear_pref('auth');
-    clear_cookie_value('auth');
-    renderWarningMessageInLoginStatus(error);
+    clear_cookie_value('auth');    
+    renderWarningMessageInLoginStatus(oauth, error);
 }
 function check_bad_response(req, full_page_404) {
     // 1223 == 204 - see https://www.enhanceie.com/ie/bugs.asp
@@ -1502,7 +1440,7 @@ function check_bad_response(req, full_page_404) {
 
         if (error == 'bad_request' || error == 'not_found' || error == 'not_authorised' || error == 'not_authorized') {
             if ((req.status == 401 || req.status == 403) && oauth.enabled) {
-              initiate_logout(reason);
+              initiate_logout(oauth, reason);
             } else {
               show_popup('warn', fmt_escape_html(reason));
             }

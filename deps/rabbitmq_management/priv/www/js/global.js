@@ -698,6 +698,7 @@ function DisplayControl() {
 
 }
 
+
 // Set up the above vars
 function setup_global_vars(overview) {
     rates_mode = overview.rates_mode;
@@ -713,9 +714,9 @@ function setup_global_vars(overview) {
       '<li>Cluster ' + (user_administrator ?  '<a href="#/cluster-name">' + cluster_name + '</a>' : cluster_name) + '</li>'
     );
 
-    user_name = fmt_escape_html(user.name);
+    user_name = fmt_escape_html(user.name); 
     $('#header #logout').prepend(
-      'User ' + (user_administrator && !oauth.enabled ?  '<a href="#/users/' + user_name + '">' + user_name + '</a>' : user_name)
+      'User ' + (user_administrator && user.is_internal_user ?  '<a href="#/users/' + user_name + '">' + user_name + '</a>' : user_name)
     );
 
     var product = overview.rabbitmq_version;

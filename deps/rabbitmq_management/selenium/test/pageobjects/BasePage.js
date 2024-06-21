@@ -13,6 +13,9 @@ const EXCHANGES_TAB = By.css('div#menu ul#tabs li#exchanges')
 const ADMIN_TAB = By.css('div#menu ul#tabs li#admin')
 const STREAM_CONNECTIONS_TAB = By.css('div#menu ul#tabs li#stream-connections')
 
+const FORM_POPUP = By.css('div.form-popup-warn')
+const FORM_POPUP_CLOSE_BUTTON = By.css('div.form-popup-warn span')
+
 module.exports = class BasePage {
   driver
   timeout
@@ -24,7 +27,6 @@ module.exports = class BasePage {
     this.timeout = parseInt(process.env.SELENIUM_TIMEOUT) || 1000 // max time waiting to locate an element. Should be less that test timeout
     this.polling = parseInt(process.env.SELENIUM_POLLING) || 500 // how frequent selenium searches for an element
     this.interactionDelay = parseInt(process.env.SELENIUM_INTERACTION_DELAY) || 0 // slow down interactions (when rabbit is behind a http proxy)
-    console.log("Interaction Delay : " + this.interactionDelay)
   }
 
 
@@ -86,7 +88,7 @@ module.exports = class BasePage {
     return this.waitForDisplayed(QUEUES_AND_STREAMS_TAB)
   }
 
-  async clickOnStreamTab () {    
+  async clickOnStreamTab () {
     return this.click(STREAM_CONNECTIONS_TAB)
   }
   async waitForStreamConnectionsTab() {
@@ -138,7 +140,14 @@ module.exports = class BasePage {
     return table_model
   }
   async isPopupWarningDisplayed() {
-    const element = "form-popup-warn"
+    try  {      
+      let element = await driver.findElement(FORM_POPUP)
+      return element.isDisplayed()
+    } catch(e) {
+      return Promise.resolve(false)
+    }
+    /*
+    let element = await driver.findElement(FORM_POPUP)
     return this.driver.wait(until.elementIsVisible(element), this.timeout / 2,
       'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
       this.polling / 2).then(function onWarningVisible(e) {
@@ -146,18 +155,21 @@ module.exports = class BasePage {
       }, function onError(e) {
           return Promise.resolve(false)
       })
+      */
   }
   async getPopupWarning() {
-    const element = "form-popup-warn"
+    let element = await driver.findElement(FORM_POPUP)
     return this.driver.wait(until.elementIsVisible(element), this.timeout,
       'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
-      this.polling)
+      this.polling).getText().then((value) => value.substring(0, value.search('\n\nClose')))
   }
-
+  async closePopupWarning() {
+    return this.click(FORM_POPUP_CLOSE_BUTTON)
+  }
   async isDisplayed(locator) {
       try {
-        element = await driver.findElement(locator)
-        
+        let element = await driver.findElement(locator)
+
         return this.driver.wait(until.elementIsVisible(element), this.timeout,
           'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
           this.polling / 2)
@@ -190,13 +202,13 @@ module.exports = class BasePage {
 
 
   async waitForDisplayed (locator) {
-    if (this.interactionDelay && this.interactionDelay > 0) await this.driver.sleep(this.interactionDelay)    
+    if (this.interactionDelay && this.interactionDelay > 0) await this.driver.sleep(this.interactionDelay)
     try {
       return this.waitForVisible(await this.waitForLocated(locator))
     }catch(error) {
       console.error("Failed to waitForDisplayed for locator " + locator)
       throw error
-    } 
+    }
   }
 
   async getText (locator) {
