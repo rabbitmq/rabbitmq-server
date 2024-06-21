@@ -1,4 +1,4 @@
-import {oidc} from './oidc-client-ts.js';
+import {oidc} from './oidc-client-ts.3.0.1.min.js';
 
 var mgr;
 var _management_logger;
