@@ -15,7 +15,7 @@
 
 -spec start_link(atom()) -> rabbit_types:ok_pid_or_error().
 
--export([name/1]).
+-export([name/1, all_names/0]).
 -export([start_link/1]).
 -export([override_lookups/2, reset_lookups/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -48,6 +48,9 @@ reset(Table) ->
 
 name(Table) ->
     list_to_atom((atom_to_list(Table) ++ "_metrics_collector")).
+
+all_names() ->
+    [name(Table) || {Table, _} <- ?CORE_TABLES].
 
 
 start_link(Table) ->
@@ -83,6 +86,11 @@ handle_call({override_lookups, Lookups}, _From, State) ->
 handle_call({submit, Fun}, _From, State) ->
     {reply, Fun(), State};
 handle_call(wait, _From, State) ->
+    {reply, ok, State};
+handle_call(force_collect, _From, State0) ->
+    Timestamp = exometer_slide:timestamp(),
+    State = aggregate_metrics(Timestamp, State0),
+    %% used for testing
     {reply, ok, State};
 handle_call(_Request, _From, State) ->
     {noreply, State}.

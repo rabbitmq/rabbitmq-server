@@ -28,9 +28,10 @@
 
 -import(rabbit_misc, [pget/2]).
 
--define(COLLECT_INTERVAL, 1000).
+-define(COLLECT_INTERVAL, 256).
 -define(PATH_PREFIX, "/custom-prefix").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 all() ->
@@ -82,9 +83,13 @@ all_tests() -> [
 %% -------------------------------------------------------------------
 merge_app_env(Config, DisableStats) ->
     Config1 = rabbit_ct_helpers:merge_app_env(Config,
-                                    {rabbit, [
-                                              {collect_statistics_interval, ?COLLECT_INTERVAL}
-                                             ]}),
+                                              {rabbit,
+                                               [
+                                                {collect_statistics_interval,
+                                                 ?COLLECT_INTERVAL},
+                                                {quorum_tick_interval, 256},
+                                                {stream_tick_interval, 256}
+                                               ]}),
     rabbit_ct_helpers:merge_app_env(Config1,
                                     {rabbitmq_management, [
                                      {disable_management_stats, DisableStats},
