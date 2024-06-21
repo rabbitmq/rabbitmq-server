@@ -82,6 +82,7 @@ init_per_group0(Group, Config) ->
             ok = rabbit_ct_broker_helpers:rpc(
                    Config2, 0, application, set_env,
                    [rabbit, channel_tick_interval, 100]),
+<<<<<<< HEAD
             %% HACK: the larger cluster sizes benefit for a bit more time
             %% after clustering before running the tests.
             case Group of
@@ -93,6 +94,8 @@ init_per_group0(Group, Config) ->
             EnableFF = rabbit_ct_broker_helpers:enable_feature_flag(Config2,
                                                                     message_containers),
             ct:pal("message_containers ff ~p", [EnableFF]),
+=======
+>>>>>>> 13a1a7c7fe (speed up rabbit_stream_queue_SUITE)
             Config2
     end.
 
