@@ -43,19 +43,23 @@ all() ->
 
 groups() ->
     [
-     {all_tests_with_prefix, [], all_tests()},
-     {all_tests_without_prefix, [], all_tests()},
+     {all_tests_with_prefix, [], some_tests() ++ all_tests()},
+     {all_tests_without_prefix, [], some_tests()},
      {stats_disabled_on_request, [], [disable_with_disable_stats_parameter_test]},
      {invalid_config, [], [invalid_config_test]}
     ].
 
-all_tests() -> [
+some_tests() ->
+    [
     overview_test,
     nodes_test,
     vhosts_test,
     connections_test,
     exchanges_test,
-    queues_test,
+    queues_test
+    ].
+
+all_tests() -> [
     quorum_queues_test,
     permissions_vhost_test,
     permissions_connection_channel_consumer_test,
@@ -310,7 +314,7 @@ connections_test(Config) ->
                           false
                   end
           end,
-    wait_until(Fun, 60),
+    await_condition(Fun),
     close_connection(Conn),
     passed.
 
@@ -479,7 +483,7 @@ queues_enable_totals_test(Config) ->
                   length(rabbit_ct_broker_helpers:rpc(Config, 0, ets, tab2list,
                                                       [queue_coarse_metrics])) == 2
           end,
-    wait_until(Fun, 60),
+    await_condition(Fun),
 
     Queues = http_get(Config, "/queues/%2F"),
     Queue = http_get(Config, "/queues/%2F/foo"),
@@ -1638,17 +1642,16 @@ publish(Ch) ->
         publish(Ch)
     end.
 
-wait_until(_Fun, 0) ->
-    ?assert(wait_failed);
-wait_until(Fun, N) ->
-    case Fun() of
-    true ->
-        timer:sleep(1500);
-    false ->
-        timer:sleep(?COLLECT_INTERVAL + 100),
-        wait_until(Fun, N - 1)
-    end.
-
 http_post_json(Config, Path, Body, Assertion) ->
     http_upload_raw(Config,  post, Path, Body, "guest", "guest",
                     Assertion, [{"Content-Type", "application/json"}]).
+
+await_condition(Fun) ->
+    rabbit_ct_helpers:await_condition(
+      fun () ->
+              try
+                  Fun()
+              catch _:_ ->
+                        false
+              end
+      end, ?COLLECT_INTERVAL * 100).
