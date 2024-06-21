@@ -30,7 +30,7 @@
 -export([list_by_type/1, sample_local_queues/0, sample_n_by_name/2, sample_n/2]).
 -export([force_event_refresh/1, notify_policy_changed/1]).
 -export([consumers/1, consumers_all/1,  emit_consumers_all/4, consumer_info_keys/0]).
--export([basic_get/5, basic_consume/12, basic_cancel/5, notify_decorators/1]).
+-export([basic_get/5, basic_consume/12, notify_decorators/1]).
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
 -export([notify_down_all/2, notify_down_all/3, activate_limit_all/2]).
 -export([on_node_up/1, on_node_down/1]).
@@ -1741,14 +1741,6 @@ basic_consume(Q, NoAck, ChPid, LimiterPid,
              ok_msg => OkMsg,
              acting_user =>  ActingUser},
     rabbit_queue_type:consume(Q, Spec, QStates).
-
--spec basic_cancel(amqqueue:amqqueue(), rabbit_types:ctag(), any(),
-                   rabbit_types:username(),
-                   rabbit_queue_type:state()) ->
-    {ok, rabbit_queue_type:state()} | {error, term()}.
-basic_cancel(Q, ConsumerTag, OkMsg, ActingUser, QStates) ->
-    rabbit_queue_type:cancel(Q, ConsumerTag,
-                             OkMsg, ActingUser, QStates).
 
 -spec notify_decorators(amqqueue:amqqueue()) -> 'ok'.
 

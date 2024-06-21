@@ -1231,7 +1231,10 @@ handle_control(Detach = #'v1_0.detach'{handle = ?UINT(HandleInt)},
                       %% and we ideally disallow "updating" an AMQP consumer.
                       %% If such an API is not added, we also must return messages in the outgoing_pending queue
                       %% which haven't made it to the outgoing_unsettled map yet.
-                      case rabbit_queue_type:cancel(Q, Ctag, undefined, Username, QStates0) of
+                      Spec = #{consumer_tag => Ctag,
+                               reason => remove,
+                               user => Username},
+                      case rabbit_queue_type:cancel(Q, Spec, QStates0) of
                           {ok, QStates1} ->
                               {Unsettled1, MsgIds} = remove_link_from_outgoing_unsettled_map(Ctag, Unsettled0),
                               case MsgIds of

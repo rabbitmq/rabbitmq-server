@@ -24,7 +24,7 @@
          delete/4,
          delete_immediately/1]).
 -export([state_info/1, info/2, stat/1, infos/1, infos/2]).
--export([settle/5, dequeue/5, consume/3, cancel/5]).
+-export([settle/5, dequeue/5, consume/3, cancel/3]).
 -export([credit_v1/5, credit/6]).
 -export([purge/1]).
 -export([stateless_deliver/2, deliver/3]).
@@ -912,8 +912,8 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
             {ok, QState}
     end.
 
-cancel(_Q, ConsumerTag, OkMsg, _ActingUser, State) ->
-    maybe_send_reply(self(), OkMsg),
+cancel(_Q, #{consumer_tag := ConsumerTag} = Spec, State) ->
+    maybe_send_reply(self(), maps:get(ok_msg, Spec, undefined)),
     rabbit_fifo_client:cancel_checkout(quorum_ctag(ConsumerTag), State).
 
 emit_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName, PrefetchCount, Args, Ref, ActingUser) ->

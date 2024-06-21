@@ -19,7 +19,7 @@
          recover/2,
          is_recoverable/1,
          consume/3,
-         cancel/5,
+         cancel/3,
          handle_event/3,
          deliver/3,
          settle/5,
@@ -447,8 +447,10 @@ begin_stream(#stream_client{name = QName,
                    reader_options = Options},
     {ok, State#stream_client{readers = Readers0#{Tag => Str0}}}.
 
-cancel(_Q, ConsumerTag, OkMsg, ActingUser, #stream_client{readers = Readers0,
-                                                          name = QName} = State) ->
+cancel(_Q, #{consumer_tag := ConsumerTag,
+             user := ActingUser} = Spec,
+       #stream_client{readers = Readers0,
+                      name = QName} = State) ->
     case maps:take(ConsumerTag, Readers0) of
         {#stream{log = Log}, Readers} ->
             ok = close_log(Log),
@@ -458,7 +460,7 @@ cancel(_Q, ConsumerTag, OkMsg, ActingUser, #stream_client{readers = Readers0,
                                  {channel, self()},
                                  {queue, QName},
                                  {user_who_performed_action, ActingUser}]),
-            maybe_send_reply(self(), OkMsg),
+            maybe_send_reply(self(), maps:get(ok_msg, Spec, undefined)),
             {ok, State#stream_client{readers = Readers}};
         error ->
             {ok, State}
