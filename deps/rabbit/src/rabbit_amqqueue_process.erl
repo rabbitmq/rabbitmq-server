@@ -825,13 +825,6 @@ over_max_length(#q{max_length          = MaxLen,
                    backing_queue_state = BQS}) ->
     BQ:len(BQS) > MaxLen orelse BQ:info(message_bytes_ready, BQS) > MaxBytes.
 
-requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
-                                    backing_queue_state = BQS}) ->
-    WasEmpty = BQ:is_empty(BQS),
-    {_MsgIds, BQS1} = BQ:requeue(AckTags, BQS),
-    {_Dropped, State1} = maybe_drop_head(State#q{backing_queue_state = BQS1}),
-    run_message_queue(notify_decorators_if_became_empty(WasEmpty, drop_expired_msgs(State1))).
-
 fetch(AckRequired, State = #q{backing_queue       = BQ,
                               backing_queue_state = BQS}) ->
     %% @todo We should first drop expired messages then fetch
@@ -852,6 +845,20 @@ ack(AckTags, ChPid, State) ->
 requeue(AckTags, ChPid, State) ->
     subtract_acks(ChPid, AckTags, State,
                   fun (State1) -> requeue_and_run(AckTags, State1) end).
+
+requeue(AckTags, State0 = #q{backing_queue = BQ,
+                             backing_queue_state = BQS0}) ->
+    {_MsgIds, BQS} = BQ:requeue(AckTags, BQS0),
+    State1 = State0#q{backing_queue_state = BQS},
+    {_Dropped, State} = maybe_drop_head(State1),
+    drop_expired_msgs(State).
+
+requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
+                                    backing_queue_state = BQS}) ->
+    WasEmpty = BQ:is_empty(BQS),
+    State1 = requeue(AckTags, State),
+    State2 = notify_decorators_if_became_empty(WasEmpty, State1),
+    run_message_queue(State2).
 
 possibly_unblock(Update, ChPid, State = #q{consumers = Consumers}) ->
     case rabbit_queue_consumers:possibly_unblock(Update, ChPid, Consumers) of
@@ -1337,33 +1344,45 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
             reply(ok, run_message_queue(State1))
     end;
 
-handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser}, _From,
-            State = #q{consumers                 = Consumers,
-                       active_consumer           = Holder,
-                       single_active_consumer_on = SingleActiveConsumerOn }) ->
+handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser}, From, State) ->
+    handle_call({stop_consumer, #{pid => ChPid,
+                                  consumer_tag => ConsumerTag,
+                                  ok_msg => OkMsg,
+                                  user => ActingUser}},
+                From, State);
+
+handle_call({stop_consumer, #{pid := ChPid,
+                              consumer_tag := ConsumerTag,
+                              user := ActingUser} = Spec},
+            _From,
+            State = #q{consumers = Consumers,
+                       active_consumer = Holder,
+                       single_active_consumer_on = SingleActiveConsumerOn}) ->
+    Reason = maps:get(reason, Spec, cancel),
+    OkMsg = maps:get(ok_msg, Spec, undefined),
     ok = maybe_send_reply(ChPid, OkMsg),
-    case rabbit_queue_consumers:remove(ChPid, ConsumerTag, Consumers) of
+    case rabbit_queue_consumers:remove(ChPid, ConsumerTag, Reason, Consumers) of
         not_found ->
             reply(ok, State);
-        Consumers1 ->
-            Holder1 = new_single_active_consumer_after_basic_cancel(ChPid, ConsumerTag,
-                Holder, SingleActiveConsumerOn, Consumers1
-            ),
-            State1 = State#q{consumers          = Consumers1,
-                             active_consumer    = Holder1},
+        {AckTags, Consumers1} ->
+            Holder1 = new_single_active_consumer_after_basic_cancel(
+                        ChPid, ConsumerTag, Holder, SingleActiveConsumerOn, Consumers1),
+            State1 = State#q{consumers = Consumers1,
+                             active_consumer = Holder1},
             maybe_notify_consumer_updated(State1, Holder, Holder1),
             emit_consumer_deleted(ChPid, ConsumerTag, qname(State1), ActingUser),
             notify_decorators(State1),
             case should_auto_delete(State1) of
                 false ->
-                    State2 = run_message_queue(Holder =/= Holder1, State1),
-                    reply(ok, ensure_expiry_timer(State2));
+                    State2 = requeue(AckTags, State1),
+                    State3 = run_message_queue(Holder =/= Holder1, State2),
+                    reply(ok, ensure_expiry_timer(State3));
                 true  ->
                     log_auto_delete(
-                        io_lib:format(
-                            "because its last consumer with tag '~ts' was cancelled",
-                            [ConsumerTag]),
-                        State),
+                      io_lib:format(
+                        "because its last consumer with tag '~ts' was cancelled",
+                        [ConsumerTag]),
+                      State),
                     stop(ok, State1)
             end
     end;

@@ -126,8 +126,9 @@
                           args => rabbit_framing:amqp_table(),
                           ok_msg := term(),
                           acting_user := rabbit_types:username()}.
+-type cancel_reason() :: cancel | remove.
 -type cancel_spec() :: #{consumer_tag := rabbit_types:ctag(),
-                         reason => cancel | remove,
+                         reason => cancel_reason(),
                          ok_msg => term(),
                          user := rabbit_types:username()}.
 
@@ -139,6 +140,7 @@
 -export_type([state/0,
               consume_mode/0,
               consume_spec/0,
+              cancel_reason/0,
               cancel_spec/0,
               delivery_options/0,
               credit_reply_action/0,
