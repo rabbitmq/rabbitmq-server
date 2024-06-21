@@ -17,7 +17,7 @@
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 export ERLANG_MK_FILENAME
 
-ERLANG_MK_VERSION = 2022.05.31-69-gb54e4b5-dirty
+ERLANG_MK_VERSION = 3967614
 ERLANG_MK_WITHOUT = 
 
 # Make 3.81 and 3.82 are deprecated.
@@ -186,7 +186,7 @@ core_eq = $(and $(findstring $(1),$(2)),$(findstring $(2),$(1)))
 
 # We skip files that contain spaces because they end up causing issues.
 # Files that begin with a dot are already ignored by the wildcard function.
-core_find = $(foreach f,$(wildcard $(1:%/=%)/$2),$(if $(wildcard $f/.),$(call core_find,$f,$2),$(if $(wildcard $f),$f)))
+core_find = $(foreach f,$(wildcard $(1:%/=%)/*),$(if $(wildcard $f/.),$(call core_find,$f,$2),$(if $(filter $(subst *,%,$2),$f),$(if $(wildcard $f),$f))))
 
 core_lc = $(subst A,a,$(subst B,b,$(subst C,c,$(subst D,d,$(subst E,e,$(subst F,f,$(subst G,g,$(subst H,h,$(subst I,i,$(subst J,j,$(subst K,k,$(subst L,l,$(subst M,m,$(subst N,n,$(subst O,o,$(subst P,p,$(subst Q,q,$(subst R,r,$(subst S,s,$(subst T,t,$(subst U,u,$(subst V,v,$(subst W,w,$(subst X,x,$(subst Y,y,$(subst Z,z,$(1)))))))))))))))))))))))))))
 
