@@ -46,7 +46,7 @@ start_prodkeycloak() {
 
   wait_for_oidc_endpoint prodkeycloak $PRODKEYCLOAK_URL $MOUNT_PRODKEYCLOAK_CONF_DIR/ca_certificate.pem
   end "prodkeycloak is ready"
-  print " Note: If you modify prodkeycloak configuration. Make sure to run the following command to export the configuration."
+  print " Note: If you modify prodkeycloak configuration, make sure to run the following command to export the configuration."
   print " docker exec -it prodkeycloak /opt/keycloak/bin/kc.sh export --users realm_file --realm test --dir /opt/keycloak/data/import/"
 
 }
