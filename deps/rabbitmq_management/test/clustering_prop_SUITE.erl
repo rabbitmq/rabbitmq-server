@@ -36,6 +36,8 @@ groups() ->
                               ]}
     ].
 
+-define(COLLECT_INTERVAL, 500).
+
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
@@ -44,7 +46,8 @@ merge_app_env(Config) ->
     Config1 = rabbit_ct_helpers:merge_app_env(Config,
                                     {rabbit, [
                                               {collect_statistics, fine},
-                                              {collect_statistics_interval, 500}
+                                              {collect_statistics_interval,
+                                               ?COLLECT_INTERVAL}
                                              ]}),
     rabbit_ct_helpers:merge_app_env(Config1,
                                     {rabbitmq_management, [
@@ -161,7 +164,9 @@ force_stats(Config) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Names = force_all(Nodes),
     %% wait for all collectors to do their work
-    [gen_server:call(Name, wait) || Name <- Names],
+    %% need to catch as mixed versions tests may timeout
+    [catch gen_server:call(Name, wait, ?COLLECT_INTERVAL * 2)
+     || Name <- Names],
     ok.
 
 force_all(Nodes) ->
