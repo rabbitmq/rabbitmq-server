@@ -10,17 +10,25 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
+<<<<<<< HEAD
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_metrics.hrl").
 -include("rabbit_mgmt.hrl").
+=======
+>>>>>>> de821c33f8 (rabbitmq_management: speed up rabbit_mgmt_test_db_SUITE.erl)
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 -import(rabbit_mgmt_test_util, [assert_list/2,
                                 reset_management_settings/1]).
 
 -import(rabbit_misc, [pget/2]).
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 -compile({no_auto_import, [ceil/1]}).
 
+-define(AWAIT(Body),
+        await_condition(fun () ->
+                                Body,
+                                true
+                        end)).
 all() ->
     [
      {group, non_parallel_tests}
@@ -49,14 +57,23 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
-init_per_group(_, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-                                                    {rmq_nodename_suffix, ?MODULE}
-                                                   ]),
-    Config2 = rabbit_ct_helpers:merge_app_env(
-        rabbit_mgmt_test_util:merge_stats_app_env(Config1, 1000, 1),
-            {rabbitmq_management_agent, [{rates_mode, detailed}]}),
-    rabbit_ct_helpers:run_setup_steps(Config2,
+init_per_group(_, Config0) ->
+    Config1 = rabbit_ct_helpers:set_config(Config0,
+                                           [
+                                            {rmq_nodename_suffix, ?MODULE},
+                                            {collect_statistics_interval, 256}
+                                           ]),
+    %% it isn't possible to configure a sample interval lower than 1s which
+    %% means there are a lot of 1s+ sleeps in this suite.
+    SampleInterval = 1,
+    Config = rabbit_ct_helpers:merge_app_env(
+               Config1, {rabbitmq_management_agent,
+                         [{rates_mode, detailed},
+                          {sample_retention_policies,
+                           [{global, [{605, SampleInterval}]},
+                            {basic, [{605, SampleInterval}]},
+                            {detailed, [{10, SampleInterval}]}]}]}),
+    rabbit_ct_helpers:run_setup_steps(Config,
                                       rabbit_ct_broker_helpers:setup_steps() ++
                                           rabbit_ct_client_helpers:setup_steps()).
 
@@ -66,11 +83,9 @@ end_per_group(_, Config) ->
                                              rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config) ->
-    reset_management_settings(Config),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
-    reset_management_settings(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
@@ -96,25 +111,32 @@ queue_coarse_test1(_Config) ->
      || {T, _} <- ?CORE_TABLES],
     First = exometer_slide:timestamp(),
     stats_series(fun stats_q/2, [[{test, 1}, {test2, 1}], [{test, 10}], [{test, 20}]]),
-    timer:sleep(1150 * 2), %% The x2 factor is arbitrary: it makes CI happy.
-    Last = exometer_slide:timestamp(),
     Interval = 1,
-    R = range(First, Last, Interval),
-    simple_details(get_q(test, R), messages, 20, R),
-    simple_details(get_vhost(R), messages, 21, R),
-    simple_details(get_overview_q(R), messages, 21, R),
+    ?AWAIT(
+       begin
+           Last = exometer_slide:timestamp(),
+           R = range(First, Last, Interval),
+           simple_details(get_q(test, R), messages, 20, R),
+           simple_details(get_vhost(R), messages, 21, R),
+           simple_details(get_overview_q(R), messages, 21, R)
+       end),
     delete_q(test),
-    timer:sleep(1150),
-    Next = last_ts(First, Interval),
-    R1 = range(First, Next, Interval),
-    simple_details(get_vhost(R1), messages, 1, R1),
-    simple_details(get_overview_q(R1), messages, 1, R1),
+
+    ?AWAIT(
+       begin
+           Next = last_ts(First, Interval),
+           R1 = range(First, Next, Interval),
+           simple_details(get_vhost(R1), messages, 1, R1),
+           simple_details(get_overview_q(R1), messages, 1, R1)
+       end),
     delete_q(test2),
-    timer:sleep(1150),
-    Next2 = last_ts(First, Interval),
-    R2 = range(First, Next2, Interval),
-    simple_details(get_vhost(R2), messages, 0, R2),
-    simple_details(get_overview_q(R2), messages, 0, R2),
+    ?AWAIT(
+       begin
+           Next2 = last_ts(First, Interval),
+           R2 = range(First, Next2, Interval),
+           simple_details(get_vhost(R2), messages, 0, R2),
+           simple_details(get_overview_q(R2), messages, 0, R2)
+       end),
     [rabbit_mgmt_metrics_collector:reset_lookups(T) || {T, _} <- ?CORE_TABLES],
     ok.
 
@@ -139,16 +161,23 @@ connection_coarse_test1(_Config) ->
     First = exometer_slide:timestamp(),
     create_conn(test),
     create_conn(test2),
-    stats_series(fun stats_conn/2, [[{test, 2}, {test2, 5}], [{test, 5}, {test2, 1}],
+    stats_series(fun stats_conn/2, [[{test, 2}, {test2, 5}],
+                                    [{test, 5}, {test2, 1}],
                                     [{test, 10}]]),
     Last = last_ts(First, 5),
     R = range(First, Last, 5),
-    simple_details(get_conn(test, R), recv_oct, 10, R),
-    simple_details(get_conn(test2, R), recv_oct, 1, R),
+    ?AWAIT(
+       begin
+           simple_details(get_conn(test, R), recv_oct, 10, R),
+           simple_details(get_conn(test2, R), recv_oct, 1, R)
+       end),
     delete_conn(test),
     delete_conn(test2),
-    timer:sleep(1150),
-    assert_list([], rabbit_mgmt_db:get_all_connections(R)),
+
+    ?AWAIT(
+       begin
+           assert_list([], rabbit_mgmt_db:get_all_connections(R))
+       end),
     ok.
 
 fine_stats_aggregation_test(Config) ->
@@ -170,12 +199,16 @@ fine_stats_aggregation_test1(_Config) ->
     channel_series(ch2, [{[{x, 5}], [{q1, x, 15}, {q2, x, 1}], []},
                          {[{x, 2}], [{q1, x, 10}, {q2, x, 2}], []},
                          {[{x, 3}], [{q1, x, 25}, {q2, x, 2}], []}]),
-    timer:sleep(1150),
 
-    fine_stats_aggregation_test0(true, First),
+    ?AWAIT(
+       begin
+           fine_stats_aggregation_test0(true, First)
+       end),
     delete_q(q2),
-    timer:sleep(1150),
-    fine_stats_aggregation_test0(false, First),
+    ?AWAIT(
+       begin
+           fine_stats_aggregation_test0(false, First)
+       end),
     delete_ch(ch1),
     delete_ch(ch2),
     delete_conn(test),
@@ -229,7 +262,8 @@ fine_stats_aggregation_test0(Q2Exists, First) ->
 
 fine_stats_aggregation_time_test(Config) ->
     %% trace_fun(Config, [{rabbit_mgmt_db, get_data_from_nodes}]),
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, fine_stats_aggregation_time_test1, [Config]).
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,
+                                      fine_stats_aggregation_time_test1, [Config]).
 
 fine_stats_aggregation_time_test1(_Config) ->
     [rabbit_mgmt_metrics_collector:override_lookups(T, [{exchange, fun dummy_lookup/1},
@@ -240,23 +274,27 @@ fine_stats_aggregation_time_test1(_Config) ->
     channel_series(ch, [{[{x, 50}], [{q, x, 15}], [{q, 5}]},
                         {[{x, 25}], [{q, x, 10}], [{q, 5}]},
                         {[{x, 25}], [{q, x, 25}], [{q, 10}]}]),
-    timer:sleep(1150),
+
     Last = exometer_slide:timestamp(),
 
     channel_series(ch, [{[{x, 10}], [{q, x, 5}], [{q, 2}]}]),
     Next = exometer_slide:timestamp(),
 
-
     R1 = range(First, Last, 1),
-    assert_fine_stats(m, publish,     100, get_ch(ch, R1), R1),
-    assert_fine_stats(m, publish,     50,  get_q(q, R1), R1),
-    assert_fine_stats(m, deliver_get, 20,  get_q(q, R1), R1),
+
+    ct:pal("ch ~p", [get_ch(ch, R1)]),
+    ?AWAIT(
+       begin
+           assert_fine_stats(m, publish,     100, get_ch(ch, R1), R1),
+           assert_fine_stats(m, publish,     50,  get_q(q, R1), R1),
+           assert_fine_stats(m, deliver_get, 20,  get_q(q, R1), R1),
 
 
-    R2 = range(Last, Next, 1),
-    assert_fine_stats(m, publish,     110, get_ch(ch, R2), R2),
-    assert_fine_stats(m, publish,     55,  get_q(q, R2), R2),
-    assert_fine_stats(m, deliver_get, 22,  get_q(q, R2), R2),
+           R2 = range(Last, Next, 1),
+           assert_fine_stats(m, publish,     110, get_ch(ch, R2), R2),
+           assert_fine_stats(m, publish,     55,  get_q(q, R2), R2),
+           assert_fine_stats(m, deliver_get, 22,  get_q(q, R2), R2)
+       end),
 
     delete_q(q),
     delete_ch(ch),
@@ -291,9 +329,11 @@ all_consumers_test1(_Config) ->
                                                         {queue,    fun dummy_lookup/1}])
      || {T, _} <- ?CORE_TABLES],
     create_cons(q1, ch1, <<"ctag">>, false, true, 0, []),
-    timer:sleep(1150),
-    [Consumer] = rabbit_mgmt_db:get_all_consumers(),
-    [] = proplists:get_value(channel_details, Consumer),
+    ?AWAIT(
+       begin
+           [Consumer] = rabbit_mgmt_db:get_all_consumers(),
+           [] = proplists:get_value(channel_details, Consumer)
+       end),
     %% delete_cons(co),
     [rabbit_mgmt_metrics_collector:reset_lookups(T) || {T, _} <- ?CORE_TABLES],
     ok.
@@ -318,8 +358,7 @@ create_cons(QName, ChName, Tag, Exclusive, AckRequired, PrefetchCount, Args) ->
 
 stats_series(Fun, ListsOfPairs) ->
     [begin
-     [Fun(Name, Msgs) || {Name, Msgs} <- List],
-     timer:sleep(1150)
+     [Fun(Name, Msgs) || {Name, Msgs} <- List]
      end || List <- ListsOfPairs].
 
 stats_q(Name, Msgs) ->
@@ -330,8 +369,9 @@ stats_conn(Name, Oct) ->
 
 channel_series(Name, ListOfStats) ->
     [begin
-     stats_ch(Name, XStats, QXStats, QStats),
-     timer:sleep(1150)
+         stats_ch(Name, XStats, QXStats, QStats),
+         timer:sleep(1000),
+         force_collect_all()
      end || {XStats, QXStats, QStats} <- ListOfStats].
 
 stats_ch(Name, XStats, QXStats, QStats) ->
@@ -467,3 +507,19 @@ pid_del(Name) ->
 a2b(A) -> list_to_binary(atom_to_list(A)).
 
 dummy_lookup(_Thing) -> true.
+
+await_condition(Fun) ->
+    rabbit_ct_helpers:await_condition(
+      fun () ->
+              try
+                  Fun()
+              catch _:_ ->
+                        false
+              end
+      end, 256 * 100).
+
+force_collect_all() ->
+    [begin
+         gen_server:call(N, force_collect)
+     end || N <- rabbit_mgmt_metrics_collector:all_names()],
+    ok.
