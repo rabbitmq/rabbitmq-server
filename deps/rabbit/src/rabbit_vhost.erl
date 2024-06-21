@@ -21,8 +21,7 @@
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, msg_store_dir_base/0, config_file_path/1, ensure_config_file/1]).
 -export([delete_storage/1]).
 -export([vhost_down/1]).
--export([put_vhost/5,
-         put_vhost/6]).
+-export([put_vhost/6]).
 
 %%
 %% API
@@ -251,11 +250,10 @@ update_metadata(Name, Metadata0, ActingUser) ->
 
 -spec update(vhost:name(), binary(), [atom()], rabbit_queue_type:queue_type() | 'undefined', rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 update(Name, Description, Tags, DefaultQueueType, ActingUser) ->
-    Metadata = #{description => Description, tags => Tags, default_queue_type => DefaultQueueType},
+    Metadata = vhost:new_metadata(Description, Tags, DefaultQueueType),
     update_metadata(Name, Metadata, ActingUser).
 
 -spec delete(vhost:name(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
-
 delete(VHost, ActingUser) ->
     %% FIXME: We are forced to delete the queues and exchanges outside
     %% the TX below. Queue deletion involves sending messages to the queue
@@ -298,17 +296,8 @@ delete(VHost, ActingUser) ->
 
 -spec put_vhost(vhost:name(),
     binary(),
-    vhost:tags(),
-    boolean(),
-    rabbit_types:username()) ->
-    'ok' | {'error', any()} | {'EXIT', any()}.
-put_vhost(Name, Description, Tags0, Trace, Username) ->
-    put_vhost(Name, Description, Tags0, undefined, Trace, Username).
-
--spec put_vhost(vhost:name(),
-    binary(),
     vhost:unparsed_tags() | vhost:tags(),
-    rabbit_queue_type:queue_type() | 'undefined',
+    rabbit_queue_type:queue_type() | 'undefined' | binary(),
     boolean(),
     rabbit_types:username()) ->
     'ok' | {'error', any()} | {'EXIT', any()}.
@@ -320,25 +309,14 @@ put_vhost(Name, Description, Tags0, DefaultQueueType0, Trace, Username) ->
       "null"      -> <<"">>;
       Other       -> Other
     end,
-    DefaultQueueType = case DefaultQueueType0 of
-        <<"undefined">> -> undefined;
-        _ -> DefaultQueueType0
-    end,
+    DefaultQueueType = rabbit_data_coercion:to_atom(DefaultQueueType0),
     ParsedTags = parse_tags(Tags),
     rabbit_log:debug("Parsed tags ~tp to ~tp", [Tags, ParsedTags]),
     Result = case exists(Name) of
                  true  ->
                      update(Name, Description, ParsedTags, DefaultQueueType, Username);
                  false ->
-                     Metadata0 = #{description => Description,
-                                   tags => ParsedTags},
-                     Metadata = case DefaultQueueType of
-                                    undefined ->
-                                        Metadata0;
-                                    _ ->
-                                        Metadata0#{default_queue_type =>
-                                                       DefaultQueueType}
-                                end,
+                     Metadata = vhost:new_metadata(Description, ParsedTags, DefaultQueueType),
                      case catch do_add(Name, Metadata, Username) of
                          ok ->
                              %% wait for up to 45 seconds for the vhost to initialise
