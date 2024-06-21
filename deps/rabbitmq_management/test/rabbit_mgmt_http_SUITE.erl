@@ -40,11 +40,7 @@
 -define(PATH_PREFIX, "/custom-prefix").
 
 -define(AWAIT(Body),
-        await_condition(fun () ->
-                                begin
-                                    Body
-                                end
-                        end)).
+        await_condition(fun () -> Body end)).
 
 -compile([export_all, nowarn_export_all]).
 
@@ -56,8 +52,18 @@ all() ->
 
 groups() ->
     [
-     {all_tests_with_prefix, [], all_tests()},
-     {all_tests_without_prefix, [], all_tests()}
+     {all_tests_with_prefix, [], some_tests() ++ all_tests()},
+     {all_tests_without_prefix, [], some_tests()}
+    ].
+
+some_tests() ->
+    [
+     users_test,
+     exchanges_test,
+     queues_test,
+     bindings_test,
+     policy_test,
+     policy_permissions_test
     ].
 
 all_tests() -> [
@@ -73,7 +79,6 @@ all_tests() -> [
     vhosts_test,
     vhosts_description_test,
     vhosts_trace_test,
-    users_test,
     users_legacy_administrator_test,
     adding_a_user_with_password_test,
     adding_a_user_with_password_hash_test,
@@ -93,12 +98,9 @@ all_tests() -> [
     connections_test_amqpl,
     connections_test_amqp,
     multiple_invalid_connections_test,
-    exchanges_test,
-    queues_test,
     crashed_queues_test,
     quorum_queues_test,
     stream_queues_have_consumers_field,
-    bindings_test,
     bindings_post_test,
     bindings_null_routing_key_test,
     bindings_e2e_test,
@@ -151,8 +153,6 @@ all_tests() -> [
     global_parameters_test,
     disabled_operator_policy_test,
     operator_policy_test,
-    policy_test,
-    policy_permissions_test,
     issue67_test,
     extensions_test,
     cors_test,
