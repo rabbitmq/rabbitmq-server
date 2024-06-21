@@ -9,12 +9,6 @@
 
 -export([init/2]).
 
-<<<<<<< HEAD
--include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
--include_lib("amqp_client/include/amqp_client.hrl").
-
-=======
->>>>>>> ccb0059cd4 (Dynamically load oauth-related libraries)
 %%--------------------------------------------------------------------
 
 init(Req0, State) ->
