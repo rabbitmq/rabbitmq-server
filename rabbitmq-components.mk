@@ -108,9 +108,8 @@ dep_toke                              = git_rmq           toke $(current_rmq_ref
 
 # Third-party dependencies version pinning.
 #
-# We do that in this file, which is copied in all projects, to ensure
-# all projects use the same versions. It avoids conflicts and makes it
-# possible to work with rabbitmq-public-umbrella.
+# We do that in this file, which is included by all projects, to ensure
+# all projects use the same versions. It avoids conflicts.
 
 dep_accept = hex 0.3.5
 dep_cowboy = hex 2.12.0
@@ -352,38 +351,14 @@ prepare-dist::
 	@:
 
 # --------------------------------------------------------------------
-# Umbrella-specific settings.
+# Monorepo-specific settings.
 # --------------------------------------------------------------------
 
 # If the top-level project is a RabbitMQ component, we override
 # $(DEPS_DIR) for this project to point to the top-level's one.
-#
-# We also verify that the guessed DEPS_DIR is actually named `deps`,
-# to rule out any situation where it is a coincidence that we found a
-# `rabbitmq-components.mk` up upper directories.
 
-possible_deps_dir_1 = $(abspath ..)
-possible_deps_dir_2 = $(abspath ../../..)
-
-ifeq ($(notdir $(possible_deps_dir_1)),deps)
-ifneq ($(wildcard $(possible_deps_dir_1)/../rabbitmq-components.mk),)
-deps_dir_overriden = 1
-DEPS_DIR ?= $(possible_deps_dir_1)
-DISABLE_DISTCLEAN = 1
-endif
-endif
-
-ifeq ($(deps_dir_overriden),)
-ifeq ($(notdir $(possible_deps_dir_2)),deps)
-ifneq ($(wildcard $(possible_deps_dir_2)/../rabbitmq-components.mk),)
-deps_dir_overriden = 1
-DEPS_DIR ?= $(possible_deps_dir_2)
-DISABLE_DISTCLEAN = 1
-endif
-endif
-endif
-
-ifneq ($(wildcard UMBRELLA.md),)
+ifneq ($(PROJECT),rabbitmq_server_release)
+DEPS_DIR ?= $(abspath ..)
 DISABLE_DISTCLEAN = 1
 endif
 
