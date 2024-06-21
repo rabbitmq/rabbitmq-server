@@ -21,10 +21,11 @@ merge_stats_app_env(Config, Interval, SampleInterval) ->
     Config1 = rabbit_ct_helpers:merge_app_env(
         Config, {rabbit, [{collect_statistics_interval, Interval}]}),
     rabbit_ct_helpers:merge_app_env(
-      Config1, {rabbitmq_management_agent, [{sample_retention_policies,
-                       [{global,   [{605, SampleInterval}]},
-                        {basic,    [{605, SampleInterval}]},
-                        {detailed, [{10, SampleInterval}]}] }]}).
+      Config1, {rabbitmq_management_agent,
+                [{sample_retention_policies,
+                  [{global,   [{605, SampleInterval}]},
+                   {basic,    [{605, SampleInterval}]},
+                   {detailed, [{10, SampleInterval}]}] }]}).
 http_get_from_node(Config, Node, Path) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
         req(Config, Node, get, Path, [auth_header("guest", "guest")]),

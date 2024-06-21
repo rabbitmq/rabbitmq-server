@@ -16,9 +16,9 @@
                                 req/4,
                                 auth_header/2]).
 
--define(COLLECT_INTERVAL, 1000).
 -define(PATH_PREFIX, "/custom-prefix").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 all() ->

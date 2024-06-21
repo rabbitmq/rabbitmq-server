@@ -18,7 +18,9 @@
 -import(rabbit_mgmt_test_util, [http_get/2, http_get_from_node/3]).
 -import(rabbit_misc, [pget/2]).
 
--compile([export_all, nowarn_format]).
+-compile([export_all,
+          nowarn_format,
+          nowarn_export_all]).
 
 -export_type([rmqnode/0, queues/0]).
 
@@ -33,6 +35,8 @@ groups() ->
                               ]}
     ].
 
+-define(COLLECT_INTERVAL, 500).
+
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
@@ -41,7 +45,8 @@ merge_app_env(Config) ->
     Config1 = rabbit_ct_helpers:merge_app_env(Config,
                                     {rabbit, [
                                               {collect_statistics, fine},
-                                              {collect_statistics_interval, 500}
+                                              {collect_statistics_interval,
+                                               ?COLLECT_INTERVAL}
                                              ]}),
     rabbit_ct_helpers:merge_app_env(Config1,
                                     {rabbitmq_management, [
@@ -107,10 +112,13 @@ prop_connection_channel_counts(Config) ->
                 Cons = lists:foldl(fun (Op, Agg) ->
                                           execute_op(Config, Op, Agg)
                                    end, [], Ops),
-                force_stats(),
+                force_stats(Config),
                 Res = validate_counts(Config, Cons),
                 cleanup(Cons),
-                force_stats(),
+                rabbit_ct_helpers:await_condition(
+                  fun () -> validate_counts(Config, []) end,
+                  60000),
+                force_stats(Config),
                 Res
             end).
 
@@ -147,25 +155,32 @@ execute_op(_Config, rem_conn, []) ->
 execute_op(_Config, rem_conn, [{conn, Conn, _Chans} | Rem]) ->
     rabbit_ct_client_helpers:close_connection(Conn),
     Rem;
-execute_op(_Config, force_stats, State) ->
-    force_stats(),
+execute_op(Config, force_stats, State) ->
+    force_stats(Config),
     State.
 
 %%----------------------------------------------------------------------------
 %%
 
-force_stats() ->
-    force_all(),
-    timer:sleep(5000).
+force_stats(Config) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Names = force_all(Nodes),
+    %% wait for all collectors to do their work
+    %% need to catch as mixed versions tests may timeout
+    [catch gen_server:call(Name, wait, ?COLLECT_INTERVAL * 2)
+     || Name <- Names],
+    ok.
 
-force_all() ->
-    [begin
-          {rabbit_mgmt_external_stats, N} ! emit_update,
-          timer:sleep(100),
-          [{rabbit_mgmt_metrics_collector:name(Table), N} ! collect_metrics
-           || {Table, _} <- ?CORE_TABLES]
-     end
-     || N <- [node() | nodes()]].
+force_all(Nodes) ->
+    lists:append(
+      [begin
+           [begin
+                Name = {rabbit_mgmt_metrics_collector:name(Table), N},
+                Name ! collect_metrics,
+                Name
+            end
+            || {Table, _} <- ?CORE_TABLES]
+       end || N <- Nodes]).
 
 clear_all_table_data() ->
     [ets:delete_all_objects(T) || {T, _} <- ?CORE_TABLES],
