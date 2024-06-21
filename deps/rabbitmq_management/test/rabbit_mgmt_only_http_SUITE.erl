@@ -57,15 +57,10 @@ some_tests() ->
     vhosts_test,
     connections_test,
     exchanges_test,
-<<<<<<< HEAD
-    queues_test,
-    mirrored_queues_test,
-=======
     queues_test
     ].
 
 all_tests() -> [
->>>>>>> 51033093fd (speed up more)
     quorum_queues_test,
     permissions_vhost_test,
     permissions_connection_channel_consumer_test,

@@ -186,7 +186,7 @@ ha_queue_hosted_on_other_node(Config) ->
     consume(Chan, <<"ha-queue">>),
 
     timer:sleep(5100),
-    force_stats(),
+    force_stats(Config),
     Res = http_get(Config, "/queues/%2F/ha-queue"),
 
     % assert some basic data is there
@@ -214,13 +214,13 @@ ha_queue_with_multiple_consumers(Config) ->
     _ = wait_for_mirrored_queue(Config, "/queues/%2F/ha-queue3"),
 
     consume(Chan, <<"ha-queue3">>),
-    force_stats(),
+    force_stats(Config),
 
     {ok, Chan2} = amqp_connection:open_channel(?config(conn, Config)),
     consume(Chan2, <<"ha-queue3">>),
 
     timer:sleep(5100),
-    force_stats(),
+    force_stats(Config),
 
     Res = http_get(Config, "/queues/%2F/ha-queue3"),
 
@@ -947,12 +947,6 @@ trace_fun(Config, MFs) ->
     [ dbg:tpl(M, F, cx) || {M, F} <- MFs],
     [ dbg:tpl(M, F, A, cx) || {M, F, A} <- MFs].
 
-dump_table(Config, Table) ->
-    Data = rabbit_ct_broker_helpers:rpc(Config, 0, ets, tab2list, [Table]),
-    ct:pal(?LOW_IMPORTANCE, "Node 0: Dump of table ~tp:~n~tp~n", [Table, Data]),
-    Data0 = rabbit_ct_broker_helpers:rpc(Config, 1, ets, tab2list, [Table]),
-    ct:pal(?LOW_IMPORTANCE, "Node 1: Dump of table ~tp:~n~tp~n", [Table, Data0]).
-
 force_stats(Config) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     force_all(Nodes),
@@ -960,23 +954,23 @@ force_stats(Config) ->
 
 force_all(Nodes) ->
     lists:append(
-      [begin
-           ExtStats = {rabbit_mgmt_external_stats, N},
-           ExtStats ! emit_update,
-           [ExtStats |
+        [begin
+            ExtStats = {rabbit_mgmt_external_stats, N},
+            ExtStats ! emit_update,
+            [ExtStats |
             [begin
-                 Name = {rabbit_mgmt_metrics_collector:name(Table), N},
-                 Name ! collect_metrics,
-                 Name
-             end
-             || {Table, _} <- ?CORE_TABLES]]
-       end || N <- Nodes]).
+                    Name = {rabbit_mgmt_metrics_collector:name(Table), N},
+                    Name ! collect_metrics,
+                    Name
+                end
+                || {Table, _} <- ?CORE_TABLES]]
+        end || N <- Nodes]).
 
 send_to_all_collectors(Msg) ->
     [begin
-          [{rabbit_mgmt_metrics_collector:name(Table), N} ! Msg
-           || {Table, _} <- ?CORE_TABLES]
-     end || N <- [node() | nodes()]].
+            [{rabbit_mgmt_metrics_collector:name(Table), N} ! Msg
+            || {Table, _} <- ?CORE_TABLES]
+        end || N <- [node() | nodes()]].
 
 listener_protos(Listeners) ->
   [listener_proto(L) || L <- Listeners].
