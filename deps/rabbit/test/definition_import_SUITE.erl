@@ -56,7 +56,7 @@ groups() ->
                                import_case20,
                                import_case21
                               ]},
-        
+
         {boot_time_import_using_classic_source, [], [
             import_on_a_booting_node_using_classic_local_source
         ]},
@@ -259,15 +259,20 @@ import_case16(Config) ->
     VHostIsImported =
     fun () ->
             case vhost_lookup(Config, VHost) of
-                {error, {no_such_vhosts, _}} -> false;
+                {error, {no_such_vhost, _}} -> false;
+                {error, _} -> false;
                 _       -> true
             end
     end,
     rabbit_ct_helpers:await_condition(VHostIsImported, 20000),
     VHostRec = vhost_lookup(Config, VHost),
-    ?assertEqual(<<"A case16 description">>, vhost:get_description(VHostRec)),
-    ?assertEqual(<<"quorum">>, vhost:get_default_queue_type(VHostRec)),
-    ?assertEqual([multi_dc_replication,ab,cde], vhost:get_tags(VHostRec)),
+    case VHostRec of
+        {error, _} -> ct:fail("Failed to import virtual host named 'tagged' in case 16");
+        Val when is_tuple(Val) ->
+            ?assertEqual(<<"A case16 description">>, vhost:get_description(VHostRec)),
+            ?assertEqual(<<"quorum">>, vhost:get_default_queue_type(VHostRec)),
+            ?assertEqual([multi_dc_replication,ab,cde], vhost:get_tags(VHostRec))
+    end,
 
     ok.
 
