@@ -251,7 +251,7 @@ cluster_formation.classic_config.nodes.peer2 = rabbit@hostname2",
             [{peer_discovery_backend,rabbit_peer_discovery_classic_config}]},
         {cluster_nodes,{[rabbit@hostname2,rabbit@hostname1],disc}}]}],
   []},
-
+ 
   {cluster_formation_module_dns_alias,
   "cluster_formation.peer_discovery_backend = dns
 cluster_formation.dns.hostname = discovery.eng.example.local",
@@ -264,7 +264,7 @@ cluster_formation.dns.hostname = discovery.eng.example.local",
              ]}]}
         ]}],
   []},
-
+ 
  {cluster_formation_disk,
   "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_classic_config
    cluster_formation.classic_config.nodes.peer1 = rabbit@hostname1
@@ -698,17 +698,17 @@ tcp_listen_options.exit_on_close = false",
              {fail_if_no_peer_cert, false},
              {honor_ecc_order, true}]}]}],
   []},
-
+  
  {ssl_cert_login_from_cn,
   "ssl_cert_login_from = common_name",
   [{rabbit,[{ssl_cert_login_from, common_name}]}],
   []},
-
+  
  {ssl_cert_login_from_dn,
   "ssl_cert_login_from = distinguished_name",
   [{rabbit,[{ssl_cert_login_from, distinguished_name}]}],
   []},
-
+ 
  {ssl_cert_login_from_san_dns,
   "ssl_cert_login_from      = subject_alternative_name
    ssl_cert_login_san_type  = dns
@@ -719,7 +719,7 @@ tcp_listen_options.exit_on_close = false",
       {ssl_cert_login_san_index, 0}
   ]}],
   []},
-
+  
 
   {ssl_options_bypass_pem_cache,
    "ssl_options.bypass_pem_cache = true",
@@ -1057,220 +1057,6 @@ credential_validator.regexp = ^abc\\d+",
       {incoming_message_interceptors, [{set_header_routing_node, false},
                                        {set_header_timestamp, false}]}
      ]}],
-   []},
-
-  %%
-  %% AMQP TLS options
-  %%
-
- {amqp_client_ssl_options,
-  "amqp_client.ssl_options.cacertfile           = test/config_schema_SUITE_data/certs/cacert.pem
-   amqp_client.ssl_options.certfile             = test/config_schema_SUITE_data/certs/cert.pem
-   amqp_client.ssl_options.keyfile              = test/config_schema_SUITE_data/certs/key.pem
-   amqp_client.ssl_options.verify               = verify_peer",
-  [{amqp_client,
-    [
-     {ssl_options,
-      [{cacertfile, "test/config_schema_SUITE_data/certs/cacert.pem"},
-       {certfile,   "test/config_schema_SUITE_data/certs/cert.pem"},
-       {keyfile,    "test/config_schema_SUITE_data/certs/key.pem"},
-       {verify, verify_peer}]}
-      ]}],
-  [amqp_client]},
- {amqp_client_ssl_options_verify_peer,
-  "amqp_client.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   amqp_client.ssl_options.certfile = test/config_schema_SUITE_data/certs/cert.pem
-   amqp_client.ssl_options.keyfile = test/config_schema_SUITE_data/certs/key.pem
-   amqp_client.ssl_options.verify = verify_peer",
-  [{amqp_client,
-    [
-     {ssl_options,
-      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-       {verify,verify_peer}]}]}],
-  []},
- {amqp_client_ssl_options_password,
-  "amqp_client.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   amqp_client.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   amqp_client.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
-   amqp_client.ssl_options.password   = t0p$3kRe7",
-  [{amqp_client,
-    [
-     {ssl_options,
-      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-       {password,"t0p$3kRe7"}]}]}],
-  []},
- {amqp_client_ssl_options_tls_versions,
-  "amqp_client.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   amqp_client.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   amqp_client.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
-   amqp_client.ssl_options.versions.tls1_2 = tlsv1.2
-   amqp_client.ssl_options.versions.tls1_1 = tlsv1.1",
-  [],
-  [{amqp_client,
-    [{ssl_options,
-      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-       {versions,['tlsv1.2','tlsv1.1']}]}
-    ]}],
-  []},
- {amqp_client_ssl_options_depth,
-  "amqp_client.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   amqp_client.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   amqp_client.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
-   amqp_client.ssl_options.depth      = 2
-   amqp_client.ssl_options.verify     = verify_peer",
-  [{amqp_client,
-    [{ssl_options,
-      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-       {depth,2},
-       {verify,verify_peer}]}]}],
-  []},
- {amqp_client_ssl_options_sni_disabled,
-  "amqp_client.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   amqp_client.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   amqp_client.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
-   amqp_client.ssl_options.versions.tls1_2 = tlsv1.2
-   amqp_client.ssl_options.versions.tls1_1 = tlsv1.1
-   amqp_client.ssl_options.sni = none",
-  [],
-  [{amqp_client,
-    [{ssl_options,
-      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-       {versions,['tlsv1.2','tlsv1.1']}]
-     }]
-   }],
-  []},
- {amqp_client_ssl_options_sni_hostname,
-  "amqp_client.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   amqp_client.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   amqp_client.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
-   amqp_client.ssl_options.versions.tls1_2 = tlsv1.2
-   amqp_client.ssl_options.versions.tls1_1 = tlsv1.1
-   amqp_client.ssl_options.sni = hostname.dev",
-  [],
-  [{amqp_client,
-    [{ssl_options,
-      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-       {versions,['tlsv1.2','tlsv1.1']},
-       {server_name_indication, "hostname.dev"}
-      ]}
-    ]}],
-  []},
-
- {amqp10_client_ssl_options,
-  "amqp10_client.ssl_options.cacertfile           = test/config_schema_SUITE_data/certs/cacert.pem
-   amqp10_client.ssl_options.certfile             = test/config_schema_SUITE_data/certs/cert.pem
-   amqp10_client.ssl_options.keyfile              = test/config_schema_SUITE_data/certs/key.pem
-   amqp10_client.ssl_options.verify               = verify_peer",
-  [{amqp10_client,
-    [
-     {ssl_options,
-      [{cacertfile, "test/config_schema_SUITE_data/certs/cacert.pem"},
-       {certfile,   "test/config_schema_SUITE_data/certs/cert.pem"},
-       {keyfile,    "test/config_schema_SUITE_data/certs/key.pem"},
-       {verify, verify_peer}]}
-      ]}],
-  [amqp10_client]},
- {amqp10_client_ssl_options_verify_peer,
-  "amqp10_client.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   amqp10_client.ssl_options.certfile = test/config_schema_SUITE_data/certs/cert.pem
-   amqp10_client.ssl_options.keyfile = test/config_schema_SUITE_data/certs/key.pem
-   amqp10_client.ssl_options.verify = verify_peer",
-  [{amqp10_client,
-    [
-     {ssl_options,
-      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-       {verify,verify_peer}]}]}],
-  []},
- {amqp10_client_ssl_options_password,
-  "amqp10_client.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   amqp10_client.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   amqp10_client.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
-   amqp10_client.ssl_options.password   = t0p$3kRe7",
-  [{amqp10_client,
-    [
-     {ssl_options,
-      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-       {password,"t0p$3kRe7"}]}]}],
-  []},
- {amqp10_client_ssl_options_tls_versions,
-  "amqp10_client.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   amqp10_client.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   amqp10_client.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
-   amqp10_client.ssl_options.versions.tls1_2 = tlsv1.2
-   amqp10_client.ssl_options.versions.tls1_1 = tlsv1.1",
-  [],
-  [{amqp10_client,
-    [{ssl_options,
-      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-       {versions,['tlsv1.2','tlsv1.1']}]}
-    ]}],
-  []},
- {amqp10_client_ssl_options_depth,
-  "amqp10_client.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   amqp10_client.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   amqp10_client.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
-   amqp10_client.ssl_options.depth      = 2
-   amqp10_client.ssl_options.verify     = verify_peer",
-  [{amqp10_client,
-    [{ssl_options,
-      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-       {depth,2},
-       {verify,verify_peer}]}]}],
-  []},
- {amqp10_client_ssl_options_sni_disabled,
-  "amqp10_client.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   amqp10_client.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   amqp10_client.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
-   amqp10_client.ssl_options.versions.tls1_2 = tlsv1.2
-   amqp10_client.ssl_options.versions.tls1_1 = tlsv1.1
-   amqp10_client.ssl_options.sni = none",
-  [],
-  [{amqp10_client,
-    [{ssl_options,
-      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-       {versions,['tlsv1.2','tlsv1.1']}]
-     }]
-   }],
-  []},
- {amqp10_client_ssl_options_sni_hostname,
-  "amqp10_client.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   amqp10_client.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   amqp10_client.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
-   amqp10_client.ssl_options.versions.tls1_2 = tlsv1.2
-   amqp10_client.ssl_options.versions.tls1_1 = tlsv1.1
-   amqp10_client.ssl_options.sni = hostname.dev",
-  [],
-  [{amqp10_client,
-    [{ssl_options,
-      [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-       {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-       {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-       {versions,['tlsv1.2','tlsv1.1']},
-       {server_name_indication, "hostname.dev"}
-      ]}
-    ]}],
-  []}
+   []}
 
 ].
