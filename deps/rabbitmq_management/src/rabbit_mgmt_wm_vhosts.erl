@@ -64,4 +64,6 @@ augmented(ReqData, #context{user = User}) ->
     end.
 
 basic() ->
-    rabbit_vhost:info_all([name]).
+    %% when updating this list, make sure to also update
+    %% rabbit_mgmt_wm_definitions:rw_state/0
+    rabbit_vhost:info_all([name, metadata, default_queue_type, limits]).
