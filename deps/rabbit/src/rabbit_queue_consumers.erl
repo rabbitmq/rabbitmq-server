@@ -40,8 +40,8 @@
 %% channel record
 -record(cr, {ch_pid,
              monitor_ref,
-             acktags,
-             consumer_count,
+             acktags :: ?QUEUE:?QUEUE({ack(), rabbit_types:ctag() | none}),
+             consumer_count :: non_neg_integer(),
              %% Queue of {ChPid, #consumer{}} for consumers which have
              %% been blocked (rate/prefetch limited) for any reason
              blocked_consumers,

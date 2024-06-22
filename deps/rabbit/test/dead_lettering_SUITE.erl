@@ -33,6 +33,8 @@ groups() ->
                        dead_letter_reject_requeue,
                        dead_letter_max_length_drop_head,
                        dead_letter_reject_requeue_reject_norequeue,
+                       dead_letter_nack_requeue_nack_norequeue_basic_get,
+                       dead_letter_nack_requeue_nack_norequeue_basic_consume,
                        dead_letter_missing_exchange,
                        dead_letter_routing_key,
                        dead_letter_headers_should_be_appended_for_each_event,
@@ -567,6 +569,136 @@ dead_letter_reject_requeue_reject_norequeue(Config) ->
     consume_empty(Ch, DLXQName),
     consume_empty(Ch, QName),
     ?assertEqual(1, counted(messages_dead_lettered_rejected_total, Config)).
+
+dead_letter_nack_requeue_nack_norequeue_basic_get(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    DLXQName = ?config(queue_name_dlx, Config),
+    ok = rabbit_ct_broker_helpers:set_policy(Config, 0, ?config(policy, Config), QName,
+                                             <<"queues">>, [{<<"delivery-limit">>, 50}]),
+    declare_dead_letter_queues(Ch, Config, QName, DLXQName),
+
+    P1 = <<"msg1">>,
+    P2 = <<"msg2">>,
+    P3 = <<"msg3">>,
+    %% Publish 3 messages
+    publish(Ch, QName, [P1, P2, P3]),
+
+    wait_for_messages(Config, [[QName, <<"3">>, <<"3">>, <<"0">>]]),
+    [_DTag1, DTag2, _DTag3] = consume(Ch, QName, [P1, P2, P3]),
+    wait_for_messages(Config, [[QName, <<"3">>, <<"0">>, <<"3">>]]),
+
+    %% Nack 2 out of 3 with requeue
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag2,
+                                        multiple = true,
+                                        requeue = true}),
+    wait_for_messages(Config, [[QName, <<"3">>, <<"2">>, <<"1">>]]),
+
+    [_DTag4, DTag5] = consume(Ch, QName, [P1, P2]),
+    wait_for_messages(Config, [[QName, <<"3">>, <<"0">>, <<"3">>]]),
+
+    %% Nack all 3 without requeue
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag5,
+                                        multiple = true,
+                                        requeue = false}),
+    wait_for_messages(Config, [[DLXQName, <<"3">>, <<"3">>, <<"0">>]]),
+
+    %% We should receive all 3 messages in the same order as we just nacked.
+    [_, _, _] = consume(Ch, DLXQName, [P3, P1, P2]),
+    consume_empty(Ch, DLXQName),
+    consume_empty(Ch, QName),
+    ?assertEqual(3, counted(messages_dead_lettered_rejected_total, Config)).
+
+dead_letter_nack_requeue_nack_norequeue_basic_consume(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    DLXQName = ?config(queue_name_dlx, Config),
+    ok = rabbit_ct_broker_helpers:set_policy(Config, 0, ?config(policy, Config), QName,
+                                             <<"queues">>, [{<<"delivery-limit">>, 50}]),
+    declare_dead_letter_queues(Ch, Config, QName, DLXQName),
+
+    %% Publish 3 messages
+    publish(Ch, QName, [<<"m1">>, <<"m2">>, <<"m3">>]),
+
+    Ctag1 = <<"ctag 1">>,
+    amqp_channel:subscribe(Ch,
+                           #'basic.consume'{queue = QName,
+                                            consumer_tag = Ctag1},
+                           self()),
+    receive #'basic.consume_ok'{consumer_tag = Ctag1} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    Ctag2 = <<"ctag 2">>,
+    amqp_channel:subscribe(Ch,
+                           #'basic.consume'{queue = DLXQName,
+                                            consumer_tag = Ctag2},
+                           self()),
+    receive #'basic.consume_ok'{consumer_tag = Ctag2} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    receive {#'basic.deliver'{},
+             #amqp_msg{payload = <<"m1">>}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    D2 = receive {#'basic.deliver'{delivery_tag = Del2},
+                  #amqp_msg{payload = <<"m2">>}} -> Del2
+         after 5000 -> ct:fail({missing_event, ?LINE})
+         end,
+    receive {#'basic.deliver'{},
+             #amqp_msg{payload = <<"m3">>}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    wait_for_messages(Config, [[QName, <<"3">>, <<"0">>, <<"3">>]]),
+
+    %% Nack 2 out of 3 with requeue
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = D2,
+                                        multiple = true,
+                                        requeue = true}),
+
+    %% m1 and m2 should be redelivered in the same order.
+    receive {#'basic.deliver'{},
+             #amqp_msg{payload = P1a}} ->
+                ?assertEqual(<<"m1">>, P1a)
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    D5 = receive {#'basic.deliver'{delivery_tag = Del5},
+                  #amqp_msg{payload = P2a}} ->
+                     ?assertEqual(<<"m2">>, P2a),
+                     Del5
+         after 5000 -> ct:fail({missing_event, ?LINE})
+         end,
+
+    %% Nack all 3 without requeue
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = D5,
+                                        multiple = true,
+                                        requeue = false}),
+
+    %% We should receive all 3 messages in the same order as we just nacked.
+    receive {#'basic.deliver'{},
+             #amqp_msg{payload = P3b}} ->
+                ?assertEqual(<<"m3">>, P3b)
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    receive {#'basic.deliver'{},
+             #amqp_msg{payload = P1b}} ->
+                ?assertEqual(<<"m1">>, P1b)
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    LastD = receive {#'basic.deliver'{delivery_tag = LastDel},
+                     #amqp_msg{payload = P2b}} ->
+                        ?assertEqual(<<"m2">>, P2b),
+                        LastDel
+            after 5000 -> ct:fail({missing_event, ?LINE})
+            end,
+    wait_for_messages(Config, [[DLXQName, <<"3">>, <<"0">>, <<"3">>]]),
+
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = LastD,
+                                       multiple = true}),
+    wait_for_messages(Config, [[QName, <<"0">>, <<"0">>, <<"0">>]]),
+    wait_for_messages(Config, [[DLXQName, <<"0">>, <<"0">>, <<"0">>]]),
+    ?assertEqual(3, counted(messages_dead_lettered_rejected_total, Config)).
 
 %% Another strategy: reject-publish-dlx
 dead_letter_max_length_reject_publish_dlx(Config) ->

@@ -108,6 +108,14 @@ groups() ->
        classic_priority_queue,
        dead_letter_headers_exchange,
        dead_letter_reject,
+       dead_letter_reject_message_order_classic_queue,
+       dead_letter_reject_message_order_quorum_queue,
+       dead_letter_reject_many_message_order_classic_queue,
+       dead_letter_reject_many_message_order_quorum_queue,
+       accept_multiple_message_order_classic_queue,
+       accept_multiple_message_order_quorum_queue,
+       release_multiple_message_order_classic_queue,
+       release_multiple_message_order_quorum_queue,
        immutable_bare_message,
        receive_many_made_available_over_time_classic_queue,
        receive_many_made_available_over_time_quorum_queue,
@@ -158,7 +166,10 @@ groups() ->
 init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(amqp10_client),
     rabbit_ct_helpers:log_environment(),
-    Config.
+    rabbit_ct_helpers:merge_app_env(
+      Config, {rabbit, [{quorum_tick_interval, 1000},
+                        {stream_tick_interval, 1000}
+                       ]}).
 
 end_per_suite(Config) ->
     Config.
@@ -3747,6 +3758,186 @@ dead_letter_reject(Config) ->
     ok = end_session_sync(Session),
     ok = amqp10_client:close_connection(Connection).
 
+dead_letter_reject_message_order_classic_queue(Config) ->
+    dead_letter_reject_message_order(<<"classic">>, Config).
+
+dead_letter_reject_message_order_quorum_queue(Config) ->
+    dead_letter_reject_message_order(<<"quorum">>, Config).
+
+dead_letter_reject_message_order(QType, Config) ->
+    {Connection, Session, LinkPair} = init(Config),
+    QName1 = <<"q1">>,
+    QName2 = <<"q2">>,
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(
+                               LinkPair,
+                               QName1,
+                               #{arguments => #{<<"x-queue-type">> => {utf8, QType},
+                                                <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                                                <<"x-dead-letter-routing-key">> => {utf8, QName2}
+                                               }}),
+    %% We don't care about the target dead letter queue type.
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName2, #{}),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(
+                     Session, <<"sender">>, <<"/queue/", QName1/binary>>, unsettled),
+    wait_for_credit(Sender),
+    {ok, Receiver1} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 1">>, <<"/queue/", QName1/binary>>, unsettled),
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 2">>, <<"/queue/", QName2/binary>>, unsettled),
+
+    [begin
+         Bin = integer_to_binary(N),
+         Msg = amqp10_msg:new(Bin, Bin, true),
+         ok = amqp10_client:send_msg(Sender, Msg)
+     end || N <- lists:seq(1, 5)],
+
+    {ok, Msg1} = amqp10_client:get_msg(Receiver1),
+    {ok, Msg2} = amqp10_client:get_msg(Receiver1),
+    {ok, _Msg3} = amqp10_client:get_msg(Receiver1),
+    {ok, Msg4} = amqp10_client:get_msg(Receiver1),
+    {ok, Msg5} = amqp10_client:get_msg(Receiver1),
+    assert_messages(QName1, 5, 5, Config),
+
+    %% Reject messages in the following order: 2, 3, 4, 1, 5
+    ok = amqp10_client_session:disposition(
+           Receiver1,
+           amqp10_msg:delivery_id(Msg2),
+           amqp10_msg:delivery_id(Msg4),
+           true,
+           rejected),
+    ok = amqp10_client_session:disposition(
+           Receiver1,
+           amqp10_msg:delivery_id(Msg1),
+           amqp10_msg:delivery_id(Msg5),
+           true,
+           rejected),
+
+    assert_messages(QName1, 0, 0, Config),
+    %% All 5 messages should be in the dead letter queue.
+    assert_messages(QName2, 5, 0, Config),
+
+    {ok, MsgDead2} = amqp10_client:get_msg(Receiver2),
+    {ok, MsgDead3} = amqp10_client:get_msg(Receiver2),
+    {ok, MsgDead4} = amqp10_client:get_msg(Receiver2),
+    {ok, MsgDead1} = amqp10_client:get_msg(Receiver2),
+    {ok, MsgDead5} = amqp10_client:get_msg(Receiver2),
+    assert_messages(QName2, 5, 5, Config),
+
+    %% Messages should be dead lettered in the order we rejected.
+    ?assertEqual(<<"2">>, amqp10_msg:body_bin(MsgDead2)),
+    ?assertEqual(<<"3">>, amqp10_msg:body_bin(MsgDead3)),
+    ?assertEqual(<<"4">>, amqp10_msg:body_bin(MsgDead4)),
+    ?assertEqual(<<"1">>, amqp10_msg:body_bin(MsgDead1)),
+    ?assertEqual(<<"5">>, amqp10_msg:body_bin(MsgDead5)),
+
+    %% Accept all messages in the dead letter queue.
+    ok = amqp10_client_session:disposition(
+           Receiver2,
+           amqp10_msg:delivery_id(MsgDead2),
+           amqp10_msg:delivery_id(MsgDead5),
+           true,
+           accepted),
+    assert_messages(QName2, 0, 0, Config),
+
+    ok = amqp10_client:detach_link(Receiver1),
+    ok = amqp10_client:detach_link(Receiver2),
+    ok = amqp10_client:detach_link(Sender),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName1),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName2),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+dead_letter_reject_many_message_order_classic_queue(Config) ->
+    dead_letter_reject_many_message_order(<<"classic">>, Config).
+
+dead_letter_reject_many_message_order_quorum_queue(Config) ->
+    dead_letter_reject_many_message_order(<<"quorum">>, Config).
+
+dead_letter_reject_many_message_order(QType, Config) ->
+    {Connection, Session, LinkPair} = init(Config),
+    QName1 = <<"q1">>,
+    QName2 = <<"q2">>,
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(
+                               LinkPair,
+                               QName1,
+                               #{arguments => #{<<"x-queue-type">> => {utf8, QType},
+                                                <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                                                <<"x-dead-letter-routing-key">> => {utf8, QName2}
+                                               }}),
+    %% We don't care about the target dead letter queue type.
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName2, #{}),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(
+                     Session, <<"sender">>, <<"/queue/", QName1/binary>>, unsettled),
+    wait_for_credit(Sender),
+    {ok, Receiver1} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 1">>, <<"/queue/", QName1/binary>>, unsettled),
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 2">>, <<"/queue/", QName2/binary>>, unsettled),
+
+    Num = 100,
+    Bins = [integer_to_binary(N) || N <- lists:seq(1, Num)],
+    [begin
+         Msg = amqp10_msg:new(Bin, Bin, true),
+         ok = amqp10_client:send_msg(Sender, Msg)
+     end || Bin <- Bins],
+
+    ok = amqp10_client:flow_link_credit(Receiver1, Num, never),
+    Msgs = receive_messages(Receiver1, Num),
+    [begin
+         {ExpectedBody, Msg} = Elem,
+         ?assertEqual(ExpectedBody, amqp10_msg:body_bin(Msg))
+     end || Elem <- lists:zip(Bins, Msgs)],
+    assert_messages(QName1, Num, Num, Config),
+
+    %% Accept the 2nd message.
+    ok = amqp10_client:accept_msg(Receiver1, lists:nth(2, Msgs)),
+    %% Reject all other messages.
+    %% Here, we intentionally settle a range larger than the number of unacked messages.
+    ok = amqp10_client_session:disposition(
+           Receiver1,
+           amqp10_msg:delivery_id(hd(Msgs)),
+           amqp10_msg:delivery_id(lists:last(Msgs)),
+           true,
+           rejected),
+
+    assert_messages(QName1, 0, 0, Config),
+    assert_messages(QName2, Num - 1, 0, Config),
+
+    ok = amqp10_client:flow_link_credit(Receiver2, Num, never),
+    DeadLetteredMsgs = receive_messages(Receiver2, Num - 1),
+    %% Messages should be dead lettered in the order we rejected.
+    ExpectedBodies = [hd(Bins) | lists:nthtail(2, Bins)],
+    [begin
+         {ExpectedBody, Msg} = Elem,
+         ?assertEqual(ExpectedBody, amqp10_msg:body_bin(Msg))
+     end || Elem <- lists:zip(ExpectedBodies, DeadLetteredMsgs)],
+    assert_messages(QName2, Num - 1, Num - 1, Config),
+
+    %% Accept the 10th message in the dead letter queue.
+    ok = amqp10_client:accept_msg(Receiver2, lists:nth(10, DeadLetteredMsgs)),
+    assert_messages(QName2, Num - 2, Num - 2, Config),
+    %% Accept all other messages.
+    %% Here, we intentionally settle a range larger than the number of unacked messages.
+    ok = amqp10_client_session:disposition(
+           Receiver2,
+           amqp10_msg:delivery_id(hd(DeadLetteredMsgs)),
+           amqp10_msg:delivery_id(lists:last(DeadLetteredMsgs)),
+           true,
+           accepted),
+    assert_messages(QName2, 0, 0, Config),
+
+    ok = amqp10_client:detach_link(Receiver1),
+    ok = amqp10_client:detach_link(Receiver2),
+    ok = amqp10_client:detach_link(Sender),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName1),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName2),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
 %% Dead letter from a quorum queue into a stream.
 dead_letter_into_stream(Config) ->
     {Connection0, Session0, LinkPair0} = init(0, Config),
@@ -3819,6 +4010,124 @@ dead_letter_into_stream(Config) ->
     ok = end_session_sync(Session1),
     ok = amqp10_client:close_connection(Connection0),
     ok = amqp10_client:close_connection(Connection1).
+
+accept_multiple_message_order_classic_queue(Config) ->
+    accept_multiple_message_order(<<"classic">>, Config).
+
+accept_multiple_message_order_quorum_queue(Config) ->
+    accept_multiple_message_order(<<"quorum">>, Config).
+
+accept_multiple_message_order(QType, Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = <<"/queue/", QName/binary>>,
+
+    {Connection, Session, LinkPair} = init(Config),
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType}}},
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address, settled),
+    ok = wait_for_credit(Sender),
+    [begin
+         Bin = integer_to_binary(N),
+         Msg = amqp10_msg:new(Bin, Bin, true),
+         ok = amqp10_client:send_msg(Sender, Msg)
+     end || N <- lists:seq(1, 5)],
+    ok = amqp10_client:detach_link(Sender),
+    assert_messages(QName, 5, 0, Config),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, QName, unsettled),
+    {ok, Msg1} = amqp10_client:get_msg(Receiver),
+    {ok, Msg2} = amqp10_client:get_msg(Receiver),
+    {ok, _Msg3} = amqp10_client:get_msg(Receiver),
+    {ok, Msg4} = amqp10_client:get_msg(Receiver),
+    {ok, Msg5} = amqp10_client:get_msg(Receiver),
+    assert_messages(QName, 5, 5, Config),
+
+    %% Accept messages out of order.
+    ok = amqp10_client_session:disposition(
+           Receiver,
+           amqp10_msg:delivery_id(Msg2),
+           amqp10_msg:delivery_id(Msg4),
+           true,
+           accepted),
+    assert_messages(QName, 2, 2, Config),
+
+    ok = amqp10_client:accept_msg(Receiver, Msg5),
+    assert_messages(QName, 1, 1, Config),
+
+    ok = amqp10_client:accept_msg(Receiver, Msg1),
+    assert_messages(QName, 0, 0, Config),
+
+    ok = amqp10_client:detach_link(Receiver),
+    ?assertMatch({ok, #{message_count := 0}}, rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+release_multiple_message_order_classic_queue(Config) ->
+    release_multiple_message_order(<<"classic">>, Config).
+
+release_multiple_message_order_quorum_queue(Config) ->
+    release_multiple_message_order(<<"quorum">>, Config).
+
+release_multiple_message_order(QType, Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = <<"/queue/", QName/binary>>,
+
+    {Connection, Session, LinkPair} = init(Config),
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType}}},
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address, settled),
+    ok = wait_for_credit(Sender),
+    [begin
+         Bin = integer_to_binary(N),
+         Msg = amqp10_msg:new(Bin, Bin, true),
+         ok = amqp10_client:send_msg(Sender, Msg)
+     end || N <- lists:seq(1, 4)],
+    ok = amqp10_client:detach_link(Sender),
+    assert_messages(QName, 4, 0, Config),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, QName, unsettled),
+    {ok, Msg1} = amqp10_client:get_msg(Receiver),
+    {ok, Msg2} = amqp10_client:get_msg(Receiver),
+    {ok, Msg3} = amqp10_client:get_msg(Receiver),
+    {ok, Msg4} = amqp10_client:get_msg(Receiver),
+    assert_messages(QName, 4, 4, Config),
+
+    %% Release messages out of order.
+    ok = amqp10_client_session:disposition(
+           Receiver,
+           amqp10_msg:delivery_id(Msg2),
+           amqp10_msg:delivery_id(Msg3),
+           true,
+           released),
+    %% Both messages should be requeued and redelivered.
+    assert_messages(QName, 4, 2, Config),
+
+    {ok, Msg2b} = amqp10_client:get_msg(Receiver),
+    {ok, Msg3b} = amqp10_client:get_msg(Receiver),
+    assert_messages(QName, 4, 4, Config),
+    ?assertEqual([<<"2">>], amqp10_msg:body(Msg2b)),
+    ?assertEqual([<<"3">>], amqp10_msg:body(Msg3b)),
+
+    ok = amqp10_client_session:disposition(
+           Receiver,
+           amqp10_msg:delivery_id(Msg4),
+           amqp10_msg:delivery_id(Msg3b),
+           true,
+           accepted),
+    assert_messages(QName, 1, 1, Config),
+
+    ok = amqp10_client:accept_msg(Receiver, Msg1),
+    assert_messages(QName, 0, 0, Config),
+
+    ok = amqp10_client:detach_link(Receiver),
+    ?assertMatch({ok, #{message_count := 0}}, rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
 
 %% This test asserts the following §3.2 requirement:
 %% "The bare message is immutable within the AMQP network. That is, none of the sections can be
@@ -4359,6 +4668,7 @@ tcp_back_pressure_rabbitmq_internal_flow(QType, Config) ->
     ok = end_session_sync(Session),
     ok = amqp10_client:close_connection(Connection).
 
+
 %% internal
 %%
 
@@ -4592,13 +4902,16 @@ send_messages_with_group_id(Sender, N, GroupId) ->
      end || I <- lists:seq(1, N)].
 
 assert_messages(QNameBin, NumTotalMsgs, NumUnackedMsgs, Config) ->
+    assert_messages(QNameBin, NumTotalMsgs, NumUnackedMsgs, Config, 0).
+
+assert_messages(QNameBin, NumTotalMsgs, NumUnackedMsgs, Config, Node) ->
     Vhost = ?config(rmq_vhost, Config),
     eventually(
       ?_assertEqual(
          lists:sort([{messages, NumTotalMsgs}, {messages_unacknowledged, NumUnackedMsgs}]),
          begin
-             {ok, Q} = rpc(Config, rabbit_amqqueue, lookup, [QNameBin, Vhost]),
-             Infos = rpc(Config, rabbit_amqqueue, info, [Q, [messages, messages_unacknowledged]]),
+             {ok, Q} = rpc(Config, Node, rabbit_amqqueue, lookup, [QNameBin, Vhost]),
+             Infos = rpc(Config, Node, rabbit_amqqueue, info, [Q, [messages, messages_unacknowledged]]),
              lists:sort(Infos)
          end
         ), 500, 5).

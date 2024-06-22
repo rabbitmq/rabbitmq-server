@@ -59,10 +59,7 @@ compare(A, B) ->
     [serial_number()].
 usort(L) ->
     lists:usort(fun(A, B) ->
-                        case compare(A, B) of
-                            greater -> false;
-                            _ -> true
-                        end
+                        compare(A, B) =/= greater
                 end, L).
 
 %% Takes a list of serial numbers and returns tuples

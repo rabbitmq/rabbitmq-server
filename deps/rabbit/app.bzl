@@ -2134,3 +2134,12 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app"],
     )
+    erlang_bytecode(
+        name = "amqpl_consumer_ack_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/amqpl_consumer_ack_SUITE.erl"],
+        outs = ["test/amqpl_consumer_ack_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/amqp_client:erlang_app"],
+    )
