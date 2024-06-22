@@ -111,6 +111,8 @@
     add_vhost/2,
     add_vhost/3,
     add_vhost/4,
+    add_vhost_with_metadata/4,
+    add_vhost_with_metadata/5,
     delete_vhost/2,
     delete_vhost/3,
     delete_vhost/4,
@@ -1509,6 +1511,15 @@ add_vhost(Config, Node, VHost) ->
 
 add_vhost(Config, Node, VHost, Username) ->
     catch rpc(Config, Node, rabbit_vhost, add, [VHost, Username]).
+
+add_vhost_with_metadata(Config, Node, VHost, Metadata) ->
+    add_vhost_with_metadata(Config, Node, VHost, Metadata, <<"acting-user">>).
+
+add_vhost_with_metadata(Config, Node, VHost, Description, Tags) ->
+    add_vhost_with_metadata(Config, Node, VHost, Description, Tags, <<"acting-user">>).
+
+add_vhost_with_metadata(Config, Node, VHost, Description, Tags, Username) ->
+    catch rpc(Config, Node, rabbit_vhost, add, [VHost, Description, Tags, Username]).
 
 delete_vhost(Config, VHost) ->
     delete_vhost(Config, 0, VHost).
