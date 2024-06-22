@@ -260,6 +260,8 @@ discover(<<"classic">>) ->
     rabbit_classic_queue;
 discover(<<"stream">>) ->
     rabbit_stream_queue;
+discover(Other) when is_atom(Other) ->
+    discover(rabbit_data_coercion:to_binary(Other));
 discover(Other) when is_binary(Other) ->
     T = rabbit_registry:binary_to_type(Other),
     {ok, Mod} = rabbit_registry:lookup_module(queue, T),

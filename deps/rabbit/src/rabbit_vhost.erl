@@ -167,6 +167,7 @@ do_add(Name, Metadata, ActingUser) ->
     case Metadata of
         #{default_queue_type := DQT} ->
             %% check that the queue type is known
+            rabbit_log:debug("Default queue type of virtual host '~ts' is ~tp", [Name, DQT]),
             try rabbit_queue_type:discover(DQT) of
                 _ ->
                     case rabbit_queue_type:feature_flag_name(DQT) of
@@ -178,7 +179,7 @@ do_add(Name, Metadata, ActingUser) ->
                             end
                     end
             catch _:_ ->
-                      throw({error, invalid_queue_type})
+                throw({error, invalid_queue_type, DQT})
             end;
         _ ->
             ok
@@ -301,7 +302,7 @@ delete(VHost, ActingUser) ->
     boolean(),
     rabbit_types:username()) ->
     'ok' | {'error', any()} | {'EXIT', any()}.
-put_vhost(Name, Description, Tags0, DefaultQueueType0, Trace, Username) ->
+put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
     Tags = case Tags0 of
       undefined   -> <<"">>;
       null        -> <<"">>;
@@ -309,9 +310,8 @@ put_vhost(Name, Description, Tags0, DefaultQueueType0, Trace, Username) ->
       "null"      -> <<"">>;
       Other       -> Other
     end,
-    DefaultQueueType = rabbit_data_coercion:to_atom(DefaultQueueType0),
     ParsedTags = parse_tags(Tags),
-    rabbit_log:debug("Parsed tags ~tp to ~tp", [Tags, ParsedTags]),
+    rabbit_log:debug("Parsed virtual host tags ~tp to ~tp", [Tags, ParsedTags]),
     Result = case exists(Name) of
                  true  ->
                      update(Name, Description, ParsedTags, DefaultQueueType, Username);
