@@ -1121,6 +1121,8 @@ check_queue_type(Val, _Args) when is_binary(Val) ->
         true  -> ok;
         false -> {error, rabbit_misc:format("unsupported queue type '~ts'", [Val])}
     end;
+check_queue_type(Val, Args) when is_atom(Val) ->
+    check_queue_type(rabbit_data_coercion:to_binary(Val), Args);
 check_queue_type(_Val, _Args) ->
     {error, invalid_queue_type}.
 
