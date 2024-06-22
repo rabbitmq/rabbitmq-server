@@ -403,7 +403,8 @@ all_replica_states() ->
                              {K, promotable};
                          ({K, follower, non_voter}) ->
                              {K, non_voter};
-                         ({K, S, voter}) ->
+                         ({K, S, _}) ->
+                             %% voter or unknown
                              {K, S};
                          (T) ->
                              T

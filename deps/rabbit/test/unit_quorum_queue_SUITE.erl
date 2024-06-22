@@ -53,16 +53,18 @@ all_replica_states_includes_nonvoters(_Config) ->
                           {q1, leader, voter},
                           {q2, follower, voter},
                           {q3, follower, promotable},
+                          {q4, init, unknown},
                           %% pre ra-2.7.0
-                          {q4, leader},
-                          {q5, follower}
+                          {q5, leader},
+                          {q6, follower}
                          ]),
     {_, #{
           q1 := leader,
           q2 := follower,
           q3 := promotable,
-          q4 := leader,
-          q5 := follower
+          q4 := init,
+          q5 := leader,
+          q6 := follower
          }} = rabbit_quorum_queue:all_replica_states(),
 
     true = ets:delete(ra_state),
