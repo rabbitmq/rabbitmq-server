@@ -275,9 +275,7 @@ cancel(Q, ConsumerTag, OkMsg, ActingUser, State) ->
 -spec settle(rabbit_amqqueue:name(), rabbit_queue_type:settle_op(),
              rabbit_types:ctag(), [non_neg_integer()], state()) ->
     {state(), rabbit_queue_type:actions()}.
-settle(_QName, Op, _CTag, MsgIds0, State = #?STATE{pid = Pid}) ->
-    %% Classic queues expect message IDs in sorted order.
-    MsgIds = lists:usort(MsgIds0),
+settle(_QName, Op, _CTag, MsgIds, State = #?STATE{pid = Pid}) ->
     Arg = case Op of
               complete ->
                   {ack, MsgIds, self()};

@@ -1307,9 +1307,13 @@ handle_control(#'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
             case DispositionRangeSize =< UnsettledMapSize of
                 true ->
                     %% It is cheaper to iterate over the range of settled delivery IDs.
-                    serial_number:foldl(fun settle_delivery_id/2, {#{}, UnsettledMap0}, First, Last);
+                    serial_number:foldl(fun settle_delivery_id/2,
+                                        {#{}, UnsettledMap0},
+                                        First, Last);
                 false ->
                     %% It is cheaper to iterate over the outgoing unsettled map.
+                    Iter = maps:iterator(UnsettledMap0,
+                                         fun(D1, D2) -> compare(D1, D2) =/= greater end),
                     {Settled0, UnsettledList} =
                     maps:fold(
                       fun (DeliveryId,
@@ -1329,14 +1333,15 @@ handle_control(#'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
                                       {SettledAcc, [{DeliveryId, Unsettled} | UnsettledAcc]}
                               end
                       end,
-                      {#{}, []}, UnsettledMap0),
+                      {#{}, []}, Iter),
                     {Settled0, maps:from_list(UnsettledList)}
             end,
 
             SettleOp = settle_op_from_outcome(Outcome),
             {QStates, Actions} =
             maps:fold(
-              fun({QName, Ctag}, MsgIds, {QS0, ActionsAcc}) ->
+              fun({QName, Ctag}, MsgIdsRev, {QS0, ActionsAcc}) ->
+                      MsgIds = lists:reverse(MsgIdsRev),
                       case rabbit_queue_type:settle(QName, SettleOp, Ctag, MsgIds, QS0) of
                           {ok, QS, Actions0} ->
                               messages_acknowledged(SettleOp, QName, QS, MsgIds),

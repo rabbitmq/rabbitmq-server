@@ -1972,7 +1972,7 @@ collect_acks(AcknowledgedAcc, RemainingAcc, UAMQ, DeliveryTag, Multiple) ->
     end.
 
 %% Settles (acknowledges) messages at the queue replica process level.
-%% This happens in the youngest-first order (ascending by delivery tag).
+%% This happens in the oldest-first order (ascending by delivery tag).
 settle_acks(Acks, State = #ch{queue_states = QueueStates0}) ->
     {QueueStates, Actions} =
         foreach_per_queue(

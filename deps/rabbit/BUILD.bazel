@@ -403,6 +403,10 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+    name = "amqpl_consumer_ack_SUITE",
+)
+
+rabbitmq_integration_suite(
     name = "message_containers_deaths_v2_SUITE",
     size = "medium",
     shard_count = 1,
