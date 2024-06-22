@@ -584,7 +584,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbit_mgmt_test_db_SUITE.erl"],
         outs = ["test/rabbit_mgmt_test_db_SUITE.beam"],
-        hdrs = ["include/rabbit_mgmt.hrl"],
         app_name = "rabbitmq_management",
         erlc_opts = "//:test_erlc_opts",
         deps = [
