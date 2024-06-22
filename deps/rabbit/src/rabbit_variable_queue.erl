@@ -13,7 +13,7 @@
          discard/3, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
          ackfold/4, fold/3, len/1, is_empty/1, depth/1,
-         set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
+         update_rates/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
          set_queue_version/2, zip_msgs_and_acks/4]).
@@ -350,12 +350,12 @@
 
 -define(MICROS_PER_SECOND, 1000000.0).
 
-%% We're sampling every 5s for RAM duration; a half life that is of
+%% We're updating rates every 5s at most; a half life that is of
 %% the same order of magnitude is probably about right.
 -define(RATE_AVG_HALF_LIFE, 5.0).
 
-%% We will recalculate the #rates{} every time we get asked for our
-%% RAM duration, or every N messages published, whichever is
+%% We will recalculate the #rates{} every 5 seconds,
+%% or every N messages published, whichever is
 %% sooner. We do this since the priority calculations in
 %% rabbit_amqqueue_process need fairly fresh rates.
 -define(MSGS_PER_RATE_CALC, 100).
@@ -670,9 +670,6 @@ is_empty(State) -> 0 == len(State).
 depth(State) ->
     len(State) + count_pending_acks(State).
 
-set_ram_duration_target(_DurationTarget, State) ->
-    State.
-
 maybe_update_rates(State = #vqstate{ in_counter  = InCount,
                                      out_counter = OutCount })
   when InCount + OutCount > ?MSGS_PER_RATE_CALC ->
@@ -711,12 +708,6 @@ update_rate(Now, TS, Count, Rate) ->
         true      -> rabbit_misc:moving_average(Time, ?RATE_AVG_HALF_LIFE,
                                                 Count / Time, Rate)
     end.
-
-%% @todo Should be renamed since it's only used to update_rates.
-%%       Can do this after mirroring gets removed.
-ram_duration(State) ->
-    State1 = update_rates(State),
-    {infinity, State1}.
 
 needs_timeout(#vqstate { index_state = IndexState,
                          unconfirmed_simple = UCS }) ->

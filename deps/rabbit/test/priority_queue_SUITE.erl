@@ -120,7 +120,7 @@ end_per_testcase(Testcase, Config) ->
 %% * len/1, is_empty/1      - info items
 %% * handle_pre_hibernate/1 - hibernation
 %%
-%% * set_ram_duration_target/2, ram_duration/1, status/1
+%% * status/1
 %%   - maybe need unit testing?
 %%
 %% [0] publish enough to get credit flow from msg store
@@ -471,19 +471,6 @@ unknown_info_key(Config) ->
     delete(Ch, Q),
     rabbit_ct_client_helpers:close_channel(Ch),
     rabbit_ct_client_helpers:close_connection(Conn),
-    passed.
-
-ram_duration(_Config) ->
-    QName = rabbit_misc:r(<<"/">>, queue, <<"ram_duration-queue">>),
-    Q0 = rabbit_amqqueue:pseudo_queue(QName, self()),
-    Q1 = amqqueue:set_arguments(Q0, [{<<"x-max-priority">>, long, 5}]),
-    PQ = rabbit_priority_queue,
-    BQS1 = PQ:init(Q1, new, fun(_, _) -> ok end),
-    {_Duration1, BQS2} = PQ:ram_duration(BQS1),
-    BQS3 = PQ:set_ram_duration_target(infinity, BQS2),
-    BQS4 = PQ:set_ram_duration_target(1, BQS3),
-    {_Duration2, BQS5} = PQ:ram_duration(BQS4),
-    PQ:delete_and_terminate(a_whim, BQS5),
     passed.
 
 %%----------------------------------------------------------------------------

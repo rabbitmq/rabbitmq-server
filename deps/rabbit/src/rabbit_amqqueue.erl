@@ -74,7 +74,7 @@
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
-         set_ram_duration_target/2, set_maximum_since_use/2,
+         set_maximum_since_use/2,
          emit_consumers_local/3, internal_delete/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -1789,11 +1789,6 @@ forget_node_for_queue(Q) ->
 
 run_backing_queue(QPid, Mod, Fun) ->
     gen_server2:cast(QPid, {run_backing_queue, Mod, Fun}).
-
--spec set_ram_duration_target(pid(), number() | 'infinity') -> 'ok'.
-
-set_ram_duration_target(QPid, Duration) ->
-    gen_server2:cast(QPid, {set_ram_duration_target, Duration}).
 
 -spec set_maximum_since_use(pid(), non_neg_integer()) -> 'ok'.
 
