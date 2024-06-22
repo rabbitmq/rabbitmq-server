@@ -88,12 +88,7 @@ filegroup(name = "private_hdrs")
 
 filegroup(name = "public_hdrs")
 
-filegroup(
-    name = "priv",
-    srcs = [
-        "ebin/ranch.appup",  # keep
-    ],
-)
+filegroup(name = "priv")
 
 filegroup(
     name = "licenses",

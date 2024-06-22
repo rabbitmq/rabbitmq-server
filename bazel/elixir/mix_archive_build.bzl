@@ -1,13 +1,23 @@
 load("@bazel_skylib//lib:shell.bzl", "shell")
 load(
-    "@rules_erlang//private:util.bzl",
-    "additional_file_dest_relative_path",
-)
-load(
-    "//bazel/elixir:elixir_toolchain.bzl",
+    "@rules_elixir//private:elixir_toolchain.bzl",
     "elixir_dirs",
     "erlang_dirs",
     "maybe_install_erlang",
+)
+load(
+    "@rules_erlang//:erlang_app_info.bzl",
+    "ErlangAppInfo",
+    "flat_deps",
+)
+load(
+    "@rules_erlang//:util.bzl",
+    "path_join",
+)
+load(
+    "@rules_erlang//private:util.bzl",
+    "additional_file_dest_relative_path",
+    "erl_libs_contents",
 )
 
 def _impl(ctx):
@@ -16,6 +26,27 @@ def _impl(ctx):
 
     out = ctx.actions.declare_file(ctx.attr.out.name)
     mix_invocation_dir = ctx.actions.declare_directory("{}_mix".format(ctx.label.name))
+
+    erl_libs_dir = ctx.label.name + "_deps"
+
+    erl_libs_files = erl_libs_contents(
+        ctx,
+        target_info = None,
+        headers = True,
+        dir = erl_libs_dir,
+        deps = flat_deps(ctx.attr.deps),
+        ez_deps = ctx.files.ez_deps,
+        expand_ezs = True,
+    )
+
+    erl_libs_path = ""
+    if len(erl_libs_files) > 0:
+        erl_libs_path = path_join(
+            ctx.bin_dir.path,
+            ctx.label.workspace_root,
+            ctx.label.package,
+            erl_libs_dir,
+        )
 
     copy_srcs_commands = []
     for src in ctx.attr.srcs:
@@ -35,6 +66,10 @@ def _impl(ctx):
     script = """set -euo pipefail
 
 {maybe_install_erlang}
+
+if [ -n "{erl_libs_path}" ]; then
+    export ERL_LIBS=$PWD/{erl_libs_path}
+fi
 
 if [[ "{elixir_home}" == /* ]]; then
     ABS_ELIXIR_HOME="{elixir_home}"
@@ -61,12 +96,15 @@ export ERL_COMPILER_OPTIONS=deterministic
 for archive in {archives}; do
     "${{ABS_ELIXIR_HOME}}"/bin/mix archive.install --force $ORIGINAL_DIR/$archive
 done
-if [[ -n "{ez_deps}" ]]; then
+if [[ -n "{erl_libs_path}" ]]; then
     mkdir -p _build/${{MIX_ENV}}/lib
-    for ez_dep in {ez_deps}; do
-        unzip -q $ORIGINAL_DIR/$ez_dep -d _build/${{MIX_ENV}}/lib
+    for dep in "$ERL_LIBS"/*; do
+        ln -s $dep _build/${{MIX_ENV}}/lib
     done
 fi
+
+{setup}
+
 "${{ABS_ELIXIR_HOME}}"/bin/mix archive.build \\
     --no-deps-check \\
     -o "${{ABS_OUT_PATH}}"
@@ -76,12 +114,13 @@ fi
 find . -type l -delete
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
+        erl_libs_path = erl_libs_path,
         erlang_home = erlang_home,
         elixir_home = elixir_home,
         mix_invocation_dir = mix_invocation_dir.path,
         copy_srcs_commands = "\n".join(copy_srcs_commands),
         archives = " ".join([shell.quote(a.path) for a in ctx.files.archives]),
-        ez_deps = " ".join([shell.quote(a.path) for a in ctx.files.ez_deps]),
+        setup = ctx.attr.setup,
         out = out.path,
     )
 
@@ -91,7 +130,7 @@ find . -type l -delete
             erlang_runfiles.files,
             elixir_runfiles.files,
             depset(ctx.files.archives),
-            depset(ctx.files.ez_deps),
+            depset(erl_libs_files),
         ],
     )
 
@@ -121,12 +160,16 @@ mix_archive_build = rule(
         "archives": attr.label_list(
             allow_files = [".ez"],
         ),
+        "setup": attr.string(),
         "ez_deps": attr.label_list(
             allow_files = [".ez"],
+        ),
+        "deps": attr.label_list(
+            providers = [ErlangAppInfo],
         ),
         "out": attr.output(),
     },
     toolchains = [
-        ":toolchain_type",
+        "@rules_elixir//:toolchain_type",
     ],
 )
