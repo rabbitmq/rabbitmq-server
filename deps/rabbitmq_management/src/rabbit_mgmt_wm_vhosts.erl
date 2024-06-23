@@ -55,7 +55,7 @@ augment(Basic, ReqData) ->
 
 augmented(ReqData, #context{user = User}) ->
     case rabbit_mgmt_util:disable_stats(ReqData) of
-        false ->            
+        false ->
             rabbit_mgmt_db:augment_vhosts(
               [rabbit_vhost:info(V) || V <- rabbit_mgmt_util:list_visible_vhosts(User)],
               rabbit_mgmt_util:range(ReqData));
@@ -64,4 +64,4 @@ augmented(ReqData, #context{user = User}) ->
     end.
 
 basic() ->
-    rabbit_vhost:info_all([name]).
+    rabbit_vhost:info_all([name, description, tags, default_queue_type, metadata]).
