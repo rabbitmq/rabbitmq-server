@@ -12,7 +12,3 @@ it, use [rabbitmq-plugins](https://www.rabbitmq.com/man/rabbitmq-plugins.1.man.h
 ## Documentation
 
 [RabbitMQ STOMP plugin documentation](https://www.rabbitmq.com/stomp.html).
-
-## Continuous Integration
-
-[![Build Status](https://travis-ci.org/rabbitmq/rabbitmq-stomp.svg?branch=master)](https://travis-ci.org/rabbitmq/rabbitmq-stomp)

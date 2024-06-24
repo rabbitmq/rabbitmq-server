@@ -829,10 +829,6 @@ queue weight can be provided at the time of binding.
 The state of the hash space is distributed across all cluster nodes.
 
 
-## Continuous Integration
-
-[![Build Status](https://travis-ci.org/rabbitmq/rabbitmq-consistent-hash-exchange.svg?branch=master)](https://travis-ci.org/rabbitmq/rabbitmq-consistent-hash-exchange)
-
 ## Copyright and License
 
 (c) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.

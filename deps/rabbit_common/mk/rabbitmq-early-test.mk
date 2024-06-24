@@ -41,7 +41,7 @@ endif
 
 CT_OPTS += -hidden
 
-# Enable the following common_test hooks on Travis and Concourse:
+# Enable the following common_test hooks on GH and Concourse:
 #
 # cth_fail_fast
 #   This hook will make sure the first failure puts an end to the
@@ -56,15 +56,8 @@ CT_OPTS += -hidden
 # from its UI. Furthermore, it displays a graph showing evolution of the
 # results over time.
 
-ifndef TRAVIS
 CT_HOOKS ?= cth_styledout
 TEST_DEPS += cth_styledout
-endif
-
-ifdef TRAVIS
-FAIL_FAST = 1
-SKIP_AS_ERROR = 1
-endif
 
 ifdef CONCOURSE
 FAIL_FAST = 1
@@ -82,21 +75,6 @@ dep_cth_styledout = git https://github.com/rabbitmq/cth_styledout.git master
 
 CT_HOOKS_PARAM_VALUE = $(patsubst %,and %,$(CT_HOOKS))
 CT_OPTS += -ct_hooks $(wordlist 2,$(words $(CT_HOOKS_PARAM_VALUE)),$(CT_HOOKS_PARAM_VALUE))
-
-# Disable most messages on Travis because it might exceed the limit
-# set by Travis.
-#
-# CAUTION: All arguments after -erl_args are passed to the emulator and
-# common_test doesn't interpret them! Therefore, all common_test flags
-# *MUST* appear before.
-
-CT_QUIET_FLAGS = -verbosity 50 \
-		 -erl_args \
-		 -kernel error_logger silent
-
-ifdef TRAVIS
-CT_OPTS += $(CT_QUIET_FLAGS)
-endif
 
 # On CI, set $RABBITMQ_CT_SKIP_AS_ERROR so that any skipped
 # testsuite/testgroup/testcase is considered an error.

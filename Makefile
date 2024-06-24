@@ -145,7 +145,6 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '*.pyc'			\
 	       --exclude '.git*'			\
 	       --exclude '.hg*'				\
-	       --exclude '.travis.yml*'			\
 	       --exclude '.*.plt'			\
 	       --exclude '*.bzl'			\
 	       --exclude '*.bazel'			\
