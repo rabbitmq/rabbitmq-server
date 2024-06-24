@@ -16,6 +16,7 @@
     cluster_members_online/2
 ]).
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 all() ->
