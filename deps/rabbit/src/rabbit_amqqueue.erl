@@ -203,9 +203,9 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
     declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser, node()).
 
 
-%% The Node argument suggests where the queue (leader if mirrored)
-%% should be. Note that in some cases (e.g. with "nodes" policy in
-%% effect) this might not be possible to satisfy.
+%% The Node argument suggests where the queue leader replica
+%% should be placed. Note that this function does not guarantee that
+%% this suggestion will be satisfied.
 
 -spec declare(name(),
               boolean(),
