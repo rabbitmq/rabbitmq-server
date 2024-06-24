@@ -695,7 +695,11 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_queue_utils_beam",
     ],
+<<<<<<< HEAD
     shard_count = 6,
+=======
+    shard_count = 3,
+>>>>>>> 3bb5030132 (speed up queue_parallel_SUITE)
 )
 
 rabbitmq_integration_suite(
