@@ -22,8 +22,13 @@
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, msg_store_dir_base/0, config_file_path/1, ensure_config_file/1]).
 -export([delete_storage/1]).
 -export([vhost_down/1]).
+<<<<<<< HEAD
 -export([put_vhost/5,
          put_vhost/6]).
+=======
+-export([put_vhost/6]).
+-export([default_queue_type/1, default_queue_type/2]).
+>>>>>>> f3b7a346f9 (Make 'queue.declare' aware of virtual host DQT)
 
 %%
 %% API
@@ -502,6 +507,22 @@ default_name() ->
         {ok, Value} -> Value;
         undefined   -> <<"/">>
     end.
+
+-spec default_queue_type(VirtualHost :: vhost:name()) -> rabbit_queue_type:queue_type().
+default_queue_type(VirtualHost) ->
+    default_queue_type(VirtualHost, rabbit_queue_type:fallback()).
+-spec default_queue_type(VirtualHost :: vhost:name(), Fallback :: rabbit_queue_type:queue_type()) -> rabbit_queue_type:queue_type().
+default_queue_type(VirtualHost, FallbackQueueType) ->
+    case exists(VirtualHost) of
+        false -> FallbackQueueType;
+        true ->
+            Record = lookup(VirtualHost),
+            case vhost:get_default_queue_type(Record) of
+                undefined       -> FallbackQueueType;
+                <<"undefined">> -> FallbackQueueType;
+                Type            -> Type
+            end
+end.
 
 -spec lookup(vhost:name()) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
 lookup(VHostName) ->
