@@ -8,6 +8,7 @@
 -module(stats_SUITE).
 
 -include_lib("proper/include/proper.hrl").
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
 -compile(export_all).
@@ -175,4 +176,4 @@ format_range_constant(_Config) ->
                                          SamplesFun),
     5 = proplists:get_value(publish, Got),
     PD = proplists:get_value(publish_details, Got),
-    0.0 = proplists:get_value(rate, PD).
+    ?assertEqual(0.0, proplists:get_value(rate, PD)).
