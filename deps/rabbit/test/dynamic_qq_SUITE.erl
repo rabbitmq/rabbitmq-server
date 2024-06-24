@@ -27,13 +27,7 @@ groups() ->
       {clustered, [], [
           {cluster_size_3, [], [
               vhost_deletion,
-              quorum_unaffected_after_vhost_failure
-            ]},
-          {cluster_size_5, [], [
-              %% Khepri does not work on a cluster in minority. Thus, to test these
-              %% specific cases with quorum queues in minority we need a bigger cluster.
-              %% 5-nodes RMQ and 3-nodes quorum queues allows to test the same test
-              %% cases than a 3-nodes mnesia cluster.
+              quorum_unaffected_after_vhost_failure,
               recover_follower_after_standalone_restart,
               force_delete_if_no_consensus,
               takeover_on_failure,
