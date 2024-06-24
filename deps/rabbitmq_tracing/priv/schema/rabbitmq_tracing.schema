@@ -8,3 +8,11 @@
 {mapping, "tracing.dir", "rabbitmq_tracing.directory", [
     {datatype, string},
     {validators, ["dir_writable"]}]}.
+
+{mapping, "tracing.username", "rabbitmq_tracing.username", [
+    {datatype, string}
+]}.
+
+{mapping, "tracing.password", "rabbitmq_tracing.password", [
+    {datatype, string}
+]}.

@@ -90,6 +90,10 @@ eunit(
 broker_for_integration_suites()
 
 rabbitmq_integration_suite(
+    name = "config_schema_SUITE",
+)
+
+rabbitmq_integration_suite(
     name = "rabbit_tracing_SUITE",
 )
 
