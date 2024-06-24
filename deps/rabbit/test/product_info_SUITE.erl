@@ -55,53 +55,43 @@ init_per_suite(Config) ->
     end.
 
 end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config).
-
-init_per_group(_, Config) ->
     Config.
 
-end_per_group(_, Config) ->
-    Config.
-
-init_per_testcase(Testcase, Config) ->
-    rabbit_ct_helpers:testcase_started(Config, Testcase),
+init_per_group(Group, Config0) ->
     ClusterSize = 1,
-    TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
+    PrivDir = ?config(priv_dir, Config0),
+    MotdFile = filename:join(PrivDir, "motd.txt"),
+    ok = file:write_file(MotdFile, <<"My MOTD\n">>),
     Config1 = rabbit_ct_helpers:set_config(
-                Config,
+                Config0,
                 [
-                 {rmq_nodename_suffix, Testcase},
-                 {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
+                 {rmq_nodename_suffix, Group},
+                 {tcp_ports_base, {skip_n_nodes, ClusterSize}},
+                 {motd_file, MotdFile}
                 ]),
-    Config2 = case Testcase of
-                  override_product_name_in_conf ->
-                      rabbit_ct_helpers:merge_app_env(
-                        Config1,
-                        {rabbit, [{product_name, "MyProduct"}]});
-                  override_product_version_in_conf ->
-                      rabbit_ct_helpers:merge_app_env(
-                        Config1,
-                        {rabbit, [{product_version, "MyVersion"}]});
-                  set_motd_in_conf ->
-                      PrivDir = ?config(priv_dir, Config),
-                      MotdFile = filename:join(PrivDir, "motd.txt"),
-                      ok = file:write_file(MotdFile, <<"My MOTD\n">>),
-                      C2 = rabbit_ct_helpers:set_config(
-                             Config1,
-                             {motd_file, MotdFile}),
-                      rabbit_ct_helpers:merge_app_env(
-                        C2,
-                        {rabbit, [{motd_file, MotdFile}]})
-              end,
-    rabbit_ct_helpers:run_steps(Config2,
+
+    Config = rabbit_ct_helpers:merge_app_env(
+               Config1,
+               {rabbit, [
+                         {product_name, "MyProduct"},
+                         {product_version, "MyVersion"},
+                         {motd_file, MotdFile}]}),
+    rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
+end_per_group(_, Config) ->
+    rabbit_ct_helpers:run_steps(Config,
+                                rabbit_ct_client_helpers:teardown_steps() ++
+                                rabbit_ct_broker_helpers:teardown_steps()).
+
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    Config.
+
 end_per_testcase(Testcase, Config) ->
-    Config1 = rabbit_ct_helpers:run_steps(Config,
-      rabbit_ct_client_helpers:teardown_steps() ++
-      rabbit_ct_broker_helpers:teardown_steps()),
-    rabbit_ct_helpers:testcase_finished(Config1, Testcase).
+    rabbit_ct_helpers:testcase_finished(Config, Testcase),
+    Config.
 
 %% -------------------------------------------------------------------
 %% Testcases.
