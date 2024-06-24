@@ -15,7 +15,7 @@ all() ->
     ].
 
 %% -------------------------------------------------------------------
-%% Testsuite setup/teardown.
+%% Test suite setup/teardown.
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
@@ -43,7 +43,7 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config1, Testcase).
 
 %% -------------------------------------------------------------------
-%% Testcases.
+%% Test cases
 %% -------------------------------------------------------------------
 
 run_snippets(Config) ->
