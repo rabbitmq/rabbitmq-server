@@ -826,7 +826,7 @@ assert_args_equivalence(Q, NewArgs) ->
 maybe_inject_default_queue_type_shortcut_into_args(Args0, DefaultQueueType) ->
     case rabbit_misc:table_lookup(Args0, <<"x-queue-type">>) of
         undefined ->
-            inject_default_queue_type_shortcut_into_args([], DefaultQueueType);
+            inject_default_queue_type_shortcut_into_args(Args0, DefaultQueueType);
         {longstr, undefined} ->
             %% Important: use a shortcut such as 'quorum' or 'stream' that for the given queue type module
             inject_default_queue_type_shortcut_into_args(Args0, DefaultQueueType);
