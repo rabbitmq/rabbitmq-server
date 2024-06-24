@@ -44,18 +44,6 @@ CODEGEN_DIR = $(DEPS_DIR)/rabbitmq_codegen
 PYTHONPATH = $(CODEGEN_DIR)
 export PYTHONPATH
 
-ANT ?= ant
-ANT_FLAGS += -Dmake.bin=$(MAKE) \
-	     -DUMBRELLA_AVAILABLE=true \
-	     -Drabbitmqctl.bin=$(RABBITMQCTL) \
-	     -Dsibling.codegen.dir=$(CODEGEN_DIR)
-ifeq ($(PROJECT),rabbitmq_test)
-ANT_FLAGS += -Dsibling.rabbitmq_test.dir=$(CURDIR)
-else
-ANT_FLAGS += -Dsibling.rabbitmq_test.dir=$(DEPS_DIR)/rabbitmq_test
-endif
-export ANT ANT_FLAGS
-
 node_tmpdir = $(TEST_TMPDIR)/$(1)
 node_pid_file = $(call node_tmpdir,$(1))/$(1).pid
 node_log_base = $(call node_tmpdir,$(1))/log
