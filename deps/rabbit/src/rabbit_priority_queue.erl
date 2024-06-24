@@ -129,7 +129,9 @@ priorities(Q) when ?is_amqqueue(Q) ->
             case lists:member(Type, Ints) of
                 false -> none;
                 true  ->
-                    Max = min(RequestedMax, ?MAX_SUPPORTED_PRIORITY),
+                    %% make sure the value is no greater than ?MAX_SUPPORTED_PRIORITY but
+                    %% also is not negative
+                    Max = max(1, min(RequestedMax, ?MAX_SUPPORTED_PRIORITY)),
                     lists:reverse(lists:seq(0, Max))
             end;
         _                    -> none
