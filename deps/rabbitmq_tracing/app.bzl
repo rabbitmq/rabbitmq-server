@@ -82,6 +82,7 @@ def all_srcs(name = "all_srcs"):
     filegroup(
         name = "priv",
         srcs = [
+            "priv/schema/rabbitmq_tracing.schema",
             "priv/www/js/tmpl/traces.ejs",
             "priv/www/js/tracing.js",
         ],
@@ -127,4 +128,12 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         app_name = "rabbitmq_tracing",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "config_schema_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/config_schema_SUITE.erl"],
+        outs = ["test/config_schema_SUITE.beam"],
+        app_name = "rabbitmq_tracing",
+        erlc_opts = "//:test_erlc_opts",
     )
