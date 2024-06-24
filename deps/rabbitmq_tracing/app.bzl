@@ -82,6 +82,7 @@ def all_srcs(name = "all_srcs"):
     filegroup(
         name = "priv",
         srcs = [
+            "priv/schema/rabbitmq_tracing.schema",
             "priv/www/js/tmpl/traces.ejs",
             "priv/www/js/tracing.js",
         ],
