@@ -63,7 +63,7 @@
 -export([is_server_named_allowed/1]).
 
 -export([check_max_age/1]).
--export([get_queue_type/1, get_resource_vhost_name/1, get_resource_name/1]).
+-export([get_queue_type/1, get_queue_type/2, get_resource_vhost_name/1, get_resource_name/1]).
 
 -export([deactivate_limit_all/2]).
 
@@ -220,8 +220,10 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
         Owner, ActingUser, Node) ->
-    ok = check_declare_arguments(QueueName, Args),
-    Type = get_queue_type(Args),
+    %% note: this is a module name, not a shortcut such as <<"quorum">>
+    DQT = rabbit_vhost:default_queue_type(VHost, rabbit_queue_type:fallback()),
+    ok = check_declare_arguments(QueueName, Args, DQT),
+    Type = get_queue_type(Args, DQT),
     case rabbit_queue_type:is_enabled(Type) of
         true ->
             Q = amqqueue:new(QueueName,
@@ -248,10 +250,25 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
              [rabbit_misc:rs(QueueName), Type, Node]}
     end.
 
+-spec get_queue_type(Args :: rabbit_framing:amqp_table()) -> rabbit_queue_type:queue_type().
+%% This version is not virtual host metadata-aware but will use
+%% the node-wide default type as well as 'rabbit_queue_type:fallback/0'.
+get_queue_type([]) ->
+    rabbit_queue_type:default();
 get_queue_type(Args) ->
+    get_queue_type(Args, rabbit_queue_type:default()).
+
+%% This version should be used together with 'rabbit_vhost:default_queue_type/{1,2}'
+get_queue_type([], DefaultQueueType) ->
+    rabbit_queue_type:discover(DefaultQueueType);
+get_queue_type(Args, DefaultQueueType) ->
     case rabbit_misc:table_lookup(Args, <<"x-queue-type">>) of
         undefined ->
-            rabbit_queue_type:default();
+            rabbit_queue_type:discover(DefaultQueueType);
+        {longstr, undefined} ->
+            rabbit_queue_type:discover(DefaultQueueType);
+        {longstr, <<"undefined">>} ->
+            rabbit_queue_type:discover(DefaultQueueType);
         {_, V} ->
             rabbit_queue_type:discover(V)
     end.
@@ -733,7 +750,7 @@ augment_declare_args(VHost, Durable, Exclusive, AutoDelete, Args0) ->
             case IsPermitted andalso IsCompatible of
                 true ->
                     %% patch up declare arguments with x-queue-type if there
-                    %% is a vhost default set the queue is druable and not exclusive
+                    %% is a vhost default set the queue is durable and not exclusive
                     %% and there is no queue type argument
                     %% present
                     rabbit_misc:set_table_value(Args0,
@@ -741,7 +758,12 @@ augment_declare_args(VHost, Durable, Exclusive, AutoDelete, Args0) ->
                                                 longstr,
                                                 DefaultQueueType);
                 false ->
-                    Args0
+                    %% if the properties are incompatible with the declared
+                    %% DQT, use the fall back type
+                    rabbit_misc:set_table_value(Args0,
+                                                <<"x-queue-type">>,
+                                                longstr,
+                                                rabbit_queue_type:short_alias_of(rabbit_queue_type:fallback()))
             end;
         _ ->
             Args0
@@ -783,7 +805,33 @@ assert_args_equivalence(Q, NewArgs) ->
     QueueTypeArgs = rabbit_queue_type:arguments(queue_arguments, Type),
     rabbit_misc:assert_args_equivalence(ExistingArgs, NewArgs, QueueName, QueueTypeArgs).
 
-check_declare_arguments(QueueName, Args) ->
+-spec maybe_inject_default_queue_type_shortcut_into_args(
+    rabbit_framing:amqp_table(), rabbit_queue_type:queue_type()) -> rabbit_framing:amqp_table().
+maybe_inject_default_queue_type_shortcut_into_args(Args0, DefaultQueueType) ->
+    case rabbit_misc:table_lookup(Args0, <<"x-queue-type">>) of
+        undefined ->
+            inject_default_queue_type_shortcut_into_args(Args0, DefaultQueueType);
+        {longstr, undefined} ->
+            %% Important: use a shortcut such as 'quorum' or 'stream' that for the given queue type module
+            inject_default_queue_type_shortcut_into_args(Args0, DefaultQueueType);
+        {longstr, <<"undefined">>} ->
+            %% Important: use a shortcut such as 'quorum' or 'stream' that for the given queue type module
+            inject_default_queue_type_shortcut_into_args(Args0, DefaultQueueType);
+        _ValueIsAlreadySet ->
+            Args0
+    end.
+
+-spec inject_default_queue_type_shortcut_into_args(
+    rabbit_framing:amqp_table(), rabbit_queue_type:queue_type()) -> rabbit_framing:amqp_table().
+inject_default_queue_type_shortcut_into_args(Args0, QueueType) ->
+    Shortcut = rabbit_queue_type:short_alias_of(QueueType),
+    NewVal = rabbit_data_coercion:to_binary(Shortcut),
+    rabbit_misc:set_table_value(Args0, <<"x-queue-type">>, longstr, NewVal).
+
+check_declare_arguments(QueueName, Args0, DefaultQueueType) ->
+    %% If the x-queue-type was not provided by the client, inject the
+    %% (virtual host, global or fallback) default before performing validation. MK.
+    Args = maybe_inject_default_queue_type_shortcut_into_args(Args0, DefaultQueueType),
     check_arguments_type_and_value(QueueName, Args, [{<<"x-queue-type">>, fun check_queue_type/2}]),
     Type = get_queue_type(Args),
     QueueTypeArgs = rabbit_queue_type:arguments(queue_arguments, Type),

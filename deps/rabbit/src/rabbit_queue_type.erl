@@ -18,9 +18,11 @@
          init/0,
          close/1,
          discover/1,
+         short_alias_of/1,
          feature_flag_name/1,
          to_binary/1,
          default/0,
+         fallback/0,
          is_enabled/1,
          is_compatible/4,
          declare/2,
@@ -70,7 +72,7 @@
 %% sequence number typically
 -type correlation() :: term().
 -type arguments() :: queue_arguments | consumer_arguments.
--type queue_type() :: rabbit_classic_queue | rabbit_quorum_queue | rabbit_stream_queue.
+-type queue_type() :: rabbit_classic_queue | rabbit_quorum_queue | rabbit_stream_queue | module().
 %% see AMQP 1.0 §2.6.7
 -type delivery_count() :: sequence_no().
 -type credit() :: uint().
@@ -253,19 +255,48 @@
 -callback notify_decorators(amqqueue:amqqueue()) ->
     ok.
 
+-spec discover(binary() | atom()) -> queue_type().
+discover(<<"undefined">>) ->
+    fallback();
+discover(undefined) ->
+    fallback();
 %% TODO: should this use a registry that's populated on boot?
 discover(<<"quorum">>) ->
     rabbit_quorum_queue;
+discover(rabbit_quorum_queue) ->
+    rabbit_quorum_queue;
 discover(<<"classic">>) ->
     rabbit_classic_queue;
+discover(rabbit_classic_queue) ->
+    rabbit_classic_queue;
+discover(rabbit_stream_queue) ->
+    rabbit_stream_queue;
 discover(<<"stream">>) ->
     rabbit_stream_queue;
 discover(Other) when is_atom(Other) ->
     discover(rabbit_data_coercion:to_binary(Other));
 discover(Other) when is_binary(Other) ->
     T = rabbit_registry:binary_to_type(Other),
+    rabbit_log:debug("Queue type discovery: will look up a module for type '~tp'", [T]),
     {ok, Mod} = rabbit_registry:lookup_module(queue, T),
     Mod.
+
+-spec short_alias_of(queue_type()) -> binary().
+%% The opposite of discover/1: returns a short alias given a module name
+short_alias_of(<<"rabbit_quorum_queue">>) ->
+    <<"quorum">>;
+short_alias_of(rabbit_quorum_queue) ->
+    <<"quorum">>;
+short_alias_of(<<"rabbit_classic_queue">>) ->
+    <<"classic">>;
+short_alias_of(rabbit_classic_queue) ->
+    <<"classic">>;
+short_alias_of(<<"rabbit_stream_queue">>) ->
+    <<"stream">>;
+short_alias_of(rabbit_stream_queue) ->
+    <<"stream">>;
+short_alias_of(_Other) ->
+    undefined.
 
 feature_flag_name(<<"quorum">>) ->
     quorum_queue;
@@ -276,10 +307,19 @@ feature_flag_name(<<"stream">>) ->
 feature_flag_name(_) ->
     undefined.
 
+%% If the client does not specify the type, the virtual host does not have any
+%% metadata default, and rabbit.default_queue_type is not set in the application env,
+%% use this type as the last resort.
+-spec fallback() -> queue_type().
+fallback() ->
+    rabbit_classic_queue.
+
+-spec default() -> queue_type().
 default() ->
-    rabbit_misc:get_env(rabbit,
-                        default_queue_type,
-                        rabbit_classic_queue).
+    V = rabbit_misc:get_env(rabbit,
+                            default_queue_type,
+                            fallback()),
+    rabbit_data_coercion:to_atom(V).
 
 -spec to_binary(module()) -> binary().
 to_binary(rabbit_classic_queue) ->
