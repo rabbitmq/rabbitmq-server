@@ -2303,95 +2303,95 @@ queue_pagination_test(Config) ->
     http_put(Config, "/queues/vh1/reg_test3", QArgs, {group, '2xx'}),
 
     ?AWAIT(
-       begin
-           Total = length(rpc(Config, rabbit_amqqueue, list_names, [])),
+        begin
+            Total = length(rpc(Config, rabbit_amqqueue, list_names, [])),
 
-           PageOfTwo = http_get(Config, "/queues?page=1&page_size=2", ?OK),
-           ?assertEqual(Total, maps:get(total_count, PageOfTwo)),
-           ?assertEqual(Total, maps:get(filtered_count, PageOfTwo)),
-           ?assertEqual(2, maps:get(item_count, PageOfTwo)),
-           ?assertEqual(1, maps:get(page, PageOfTwo)),
-           ?assertEqual(2, maps:get(page_size, PageOfTwo)),
-           ?assertEqual(2, maps:get(page_count, PageOfTwo)),
-           assert_list([#{name => <<"test0">>, vhost => <<"/">>, storage_version => 2},
+            PageOfTwo = http_get(Config, "/queues?page=1&page_size=2", ?OK),
+            ?assertEqual(Total, maps:get(total_count, PageOfTwo)),
+            ?assertEqual(Total, maps:get(filtered_count, PageOfTwo)),
+            ?assertEqual(2, maps:get(item_count, PageOfTwo)),
+            ?assertEqual(1, maps:get(page, PageOfTwo)),
+            ?assertEqual(2, maps:get(page_size, PageOfTwo)),
+            ?assertEqual(2, maps:get(page_count, PageOfTwo)),
+            assert_list([#{name => <<"test0">>, vhost => <<"/">>, storage_version => 2},
                         #{name => <<"test2_reg">>, vhost => <<"/">>, storage_version => 2}
-                       ], maps:get(items, PageOfTwo)),
+                        ], maps:get(items, PageOfTwo)),
 
-           SortedByName = http_get(Config, "/queues?sort=name&page=1&page_size=2", ?OK),
-           ?assertEqual(Total, maps:get(total_count, SortedByName)),
-           ?assertEqual(Total, maps:get(filtered_count, SortedByName)),
-           ?assertEqual(2, maps:get(item_count, SortedByName)),
-           ?assertEqual(1, maps:get(page, SortedByName)),
-           ?assertEqual(2, maps:get(page_size, SortedByName)),
-           ?assertEqual(2, maps:get(page_count, SortedByName)),
-           assert_list([#{name => <<"reg_test3">>, vhost => <<"vh1">>},
+            SortedByName = http_get(Config, "/queues?sort=name&page=1&page_size=2", ?OK),
+            ?assertEqual(Total, maps:get(total_count, SortedByName)),
+            ?assertEqual(Total, maps:get(filtered_count, SortedByName)),
+            ?assertEqual(2, maps:get(item_count, SortedByName)),
+            ?assertEqual(1, maps:get(page, SortedByName)),
+            ?assertEqual(2, maps:get(page_size, SortedByName)),
+            ?assertEqual(2, maps:get(page_count, SortedByName)),
+            assert_list([#{name => <<"reg_test3">>, vhost => <<"vh1">>},
                         #{name => <<"test0">>, vhost => <<"/">>}
-                       ], maps:get(items, SortedByName)),
+                        ], maps:get(items, SortedByName)),
 
 
-           FirstPage = http_get(Config, "/queues?page=1", ?OK),
-           ?assertEqual(Total, maps:get(total_count, FirstPage)),
-           ?assertEqual(Total, maps:get(filtered_count, FirstPage)),
-           ?assertEqual(4, maps:get(item_count, FirstPage)),
-           ?assertEqual(1, maps:get(page, FirstPage)),
-           ?assertEqual(100, maps:get(page_size, FirstPage)),
-           ?assertEqual(1, maps:get(page_count, FirstPage)),
-           assert_list([#{name => <<"test0">>, vhost => <<"/">>},
+            FirstPage = http_get(Config, "/queues?page=1", ?OK),
+            ?assertEqual(Total, maps:get(total_count, FirstPage)),
+            ?assertEqual(Total, maps:get(filtered_count, FirstPage)),
+            ?assertEqual(4, maps:get(item_count, FirstPage)),
+            ?assertEqual(1, maps:get(page, FirstPage)),
+            ?assertEqual(100, maps:get(page_size, FirstPage)),
+            ?assertEqual(1, maps:get(page_count, FirstPage)),
+            assert_list([#{name => <<"test0">>, vhost => <<"/">>},
                         #{name => <<"test1">>, vhost => <<"vh1">>},
                         #{name => <<"test2_reg">>, vhost => <<"/">>},
                         #{name => <<"reg_test3">>, vhost =><<"vh1">>}
-                       ], maps:get(items, FirstPage)),
-           %% The reduced API version just has the most useful fields.
-           %% garbage_collection is not one of them
-           IsEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
-                         Config, detailed_queues_endpoint),
-           case IsEnabled of
-               true  ->
-                   [?assertNot(maps:is_key(garbage_collection, Item)) ||
+                        ], maps:get(items, FirstPage)),
+            %% The reduced API version just has the most useful fields.
+            %% garbage_collection is not one of them
+            IsEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                            Config, detailed_queues_endpoint),
+            case IsEnabled of
+                true  ->
+                    [?assertNot(maps:is_key(garbage_collection, Item)) ||
                     Item <- maps:get(items, FirstPage)];
-               false ->
-                   [?assert(maps:is_key(garbage_collection, Item)) ||
+                false ->
+                    [?assert(maps:is_key(garbage_collection, Item)) ||
                     Item <- maps:get(items, FirstPage)]
-           end,
-           ReverseSortedByName = http_get(Config,
-                                          "/queues?page=2&page_size=2&sort=name&sort_reverse=true",
-                                          ?OK),
-           ?assertEqual(Total, maps:get(total_count, ReverseSortedByName)),
-           ?assertEqual(Total, maps:get(filtered_count, ReverseSortedByName)),
-           ?assertEqual(2, maps:get(item_count, ReverseSortedByName)),
-           ?assertEqual(2, maps:get(page, ReverseSortedByName)),
-           ?assertEqual(2, maps:get(page_size, ReverseSortedByName)),
-           ?assertEqual(2, maps:get(page_count, ReverseSortedByName)),
-           assert_list([#{name => <<"test0">>, vhost => <<"/">>},
+            end,
+            ReverseSortedByName = http_get(Config,
+                                            "/queues?page=2&page_size=2&sort=name&sort_reverse=true",
+                                            ?OK),
+            ?assertEqual(Total, maps:get(total_count, ReverseSortedByName)),
+            ?assertEqual(Total, maps:get(filtered_count, ReverseSortedByName)),
+            ?assertEqual(2, maps:get(item_count, ReverseSortedByName)),
+            ?assertEqual(2, maps:get(page, ReverseSortedByName)),
+            ?assertEqual(2, maps:get(page_size, ReverseSortedByName)),
+            ?assertEqual(2, maps:get(page_count, ReverseSortedByName)),
+            assert_list([#{name => <<"test0">>, vhost => <<"/">>},
                         #{name => <<"reg_test3">>, vhost => <<"vh1">>}
-                       ], maps:get(items, ReverseSortedByName)),
+                        ], maps:get(items, ReverseSortedByName)),
 
 
-           ByName = http_get(Config, "/queues?page=1&page_size=2&name=reg", ?OK),
-           ?assertEqual(Total, maps:get(total_count, ByName)),
-           ?assertEqual(2, maps:get(filtered_count, ByName)),
-           ?assertEqual(2, maps:get(item_count, ByName)),
-           ?assertEqual(1, maps:get(page, ByName)),
-           ?assertEqual(2, maps:get(page_size, ByName)),
-           ?assertEqual(1, maps:get(page_count, ByName)),
-           assert_list([#{name => <<"test2_reg">>, vhost => <<"/">>},
+            ByName = http_get(Config, "/queues?page=1&page_size=2&name=reg", ?OK),
+            ?assertEqual(Total, maps:get(total_count, ByName)),
+            ?assertEqual(2, maps:get(filtered_count, ByName)),
+            ?assertEqual(2, maps:get(item_count, ByName)),
+            ?assertEqual(1, maps:get(page, ByName)),
+            ?assertEqual(2, maps:get(page_size, ByName)),
+            ?assertEqual(1, maps:get(page_count, ByName)),
+            assert_list([#{name => <<"test2_reg">>, vhost => <<"/">>},
                         #{name => <<"reg_test3">>, vhost => <<"vh1">>}
-                       ], maps:get(items, ByName)),
+                        ], maps:get(items, ByName)),
 
-           RegExByName = http_get(Config,
-                                  "/queues?page=1&page_size=2&name=%5E(?=%5Ereg)&use_regex=true",
-                                  ?OK),
-           ?assertEqual(Total, maps:get(total_count, RegExByName)),
-           ?assertEqual(1, maps:get(filtered_count, RegExByName)),
-           ?assertEqual(1, maps:get(item_count, RegExByName)),
-           ?assertEqual(1, maps:get(page, RegExByName)),
-           ?assertEqual(2, maps:get(page_size, RegExByName)),
-           ?assertEqual(1, maps:get(page_count, RegExByName)),
-           assert_list([#{name => <<"reg_test3">>, vhost => <<"vh1">>}
-                       ], maps:get(items, RegExByName)),
-           true
-       end
-      ),
+            RegExByName = http_get(Config,
+                                    "/queues?page=1&page_size=2&name=%5E(?=%5Ereg)&use_regex=true",
+                                    ?OK),
+            ?assertEqual(Total, maps:get(total_count, RegExByName)),
+            ?assertEqual(1, maps:get(filtered_count, RegExByName)),
+            ?assertEqual(1, maps:get(item_count, RegExByName)),
+            ?assertEqual(1, maps:get(page, RegExByName)),
+            ?assertEqual(2, maps:get(page_size, RegExByName)),
+            ?assertEqual(1, maps:get(page_count, RegExByName)),
+            assert_list([#{name => <<"reg_test3">>, vhost => <<"vh1">>}
+                        ], maps:get(items, RegExByName)),
+            true
+        end
+        ),
 
 
     http_get(Config, "/queues?page=1000", ?BAD_REQUEST),
@@ -2426,7 +2426,7 @@ queue_pagination_columns_test(Config) ->
     ?assertEqual(2, maps:get(page_size, PageOfTwo)),
     ?assertEqual(2, maps:get(page_count, PageOfTwo)),
     assert_list([#{name => <<"queue_a">>},
-                 #{name => <<"queue_c">>}
+                    #{name => <<"queue_c">>}
     ], maps:get(items, PageOfTwo)),
 
     ColumnNameVhost = http_get(Config, "/queues/vh1?columns=name&page=1&page_size=2", ?OK),
@@ -2437,7 +2437,7 @@ queue_pagination_columns_test(Config) ->
     ?assertEqual(2, maps:get(page_size, ColumnNameVhost)),
     ?assertEqual(1, maps:get(page_count, ColumnNameVhost)),
     assert_list([#{name => <<"queue_b">>},
-                 #{name => <<"queue_d">>}
+                    #{name => <<"queue_d">>}
     ], maps:get(items, ColumnNameVhost)),
 
     ColumnsNameVhost = http_get(Config, "/queues?columns=name,vhost&page=2&page_size=2", ?OK),
@@ -2449,22 +2449,22 @@ queue_pagination_columns_test(Config) ->
     ?assertEqual(2, maps:get(page_count, ColumnsNameVhost)),
     assert_list([
         #{name  => <<"queue_b">>,
-          vhost => <<"vh1">>},
+            vhost => <<"vh1">>},
         #{name  => <<"queue_d">>,
-          vhost => <<"vh1">>}
+            vhost => <<"vh1">>}
     ], maps:get(items, ColumnsNameVhost)),
 
     ?awaitMatch(
-       true,
-       begin
-           ColumnsGarbageCollection = http_get(Config, "/queues?columns=name,garbage_collection&page=2&page_size=2", ?OK),
-           %% The reduced API version just has the most useful fields,
-           %% but we can still query any info item using `columns`
-           lists:all(fun(Item) ->
-                             maps:is_key(garbage_collection, Item)
-                     end,
-                     maps:get(items, ColumnsGarbageCollection))
-       end, 30000),
+        true,
+        begin
+            ColumnsGarbageCollection = http_get(Config, "/queues?columns=name,garbage_collection&page=2&page_size=2", ?OK),
+            %% The reduced API version just has the most useful fields,
+            %% but we can still query any info item using `columns`
+            lists:all(fun(Item) ->
+                                maps:is_key(garbage_collection, Item)
+                        end,
+                        maps:get(items, ColumnsGarbageCollection))
+        end, 30000),
 
     http_delete(Config, "/queues/%2F/queue_a", {group, '2xx'}),
     http_delete(Config, "/queues/vh1/queue_b", {group, '2xx'}),
@@ -2513,12 +2513,12 @@ queues_detailed_test(Config) ->
 
 queues_pagination_permissions_test(Config) ->
     http_put(Config, "/users/non-admin", [{password, <<"non-admin">>},
-                                          {tags, <<"management">>}], {group, '2xx'}),
+                                            {tags, <<"management">>}], {group, '2xx'}),
     http_put(Config, "/users/admin",   [{password, <<"admin">>},
                                         {tags, <<"administrator">>}], {group, '2xx'}),
     Perms = [{configure, <<".*">>},
-             {write,     <<".*">>},
-             {read,      <<".*">>}],
+                {write,     <<".*">>},
+                {read,      <<".*">>}],
     http_put(Config, "/vhosts/vh1", none, {group, '2xx'}),
     http_put(Config, "/permissions/vh1/non-admin",   Perms, {group, '2xx'}),
     http_put(Config, "/permissions/%2F/admin",   Perms, {group, '2xx'}),
@@ -2542,7 +2542,7 @@ queues_pagination_permissions_test(Config) ->
     ?assertEqual(100, maps:get(page_size, FirstPageAdm)),
     ?assertEqual(1, maps:get(page_count, FirstPageAdm)),
     assert_list([#{name => <<"test1">>, vhost => <<"vh1">>},
-                 #{name => <<"test0">>, vhost => <<"/">>}
+                    #{name => <<"test0">>, vhost => <<"/">>}
                 ], maps:get(items, FirstPageAdm)),
 
     http_delete(Config, "/queues/%2F/test0", {group, '2xx'}),
@@ -2646,33 +2646,33 @@ sorting_test(Config) ->
     http_put(Config, "/queues/%2F/test2", QArgs, {group, '2xx'}),
     http_put(Config, "/queues/vh19/test3", QArgs, {group, '2xx'}),
     ?AWAIT(
-       begin
-           assert_list([#{name => <<"test0">>},
+        begin
+            assert_list([#{name => <<"test0">>},
                         #{name => <<"test2">>},
                         #{name => <<"test1">>},
                         #{name => <<"test3">>}], http_get(Config, "/queues", ?OK)),
-           assert_list([#{name => <<"test0">>},
+            assert_list([#{name => <<"test0">>},
                         #{name => <<"test1">>},
                         #{name => <<"test2">>},
                         #{name => <<"test3">>}], http_get(Config, "/queues?sort=name", ?OK)),
-           assert_list([#{name => <<"test0">>},
+            assert_list([#{name => <<"test0">>},
                         #{name => <<"test2">>},
                         #{name => <<"test1">>},
                         #{name => <<"test3">>}], http_get(Config, "/queues?sort=vhost", ?OK)),
-           assert_list([#{name => <<"test3">>},
+            assert_list([#{name => <<"test3">>},
                         #{name => <<"test1">>},
                         #{name => <<"test2">>},
                         #{name => <<"test0">>}], http_get(Config, "/queues?sort_reverse=true", ?OK)),
-           assert_list([#{name => <<"test3">>},
+            assert_list([#{name => <<"test3">>},
                         #{name => <<"test2">>},
                         #{name => <<"test1">>},
                         #{name => <<"test0">>}], http_get(Config, "/queues?sort=name&sort_reverse=true", ?OK)),
-           assert_list([#{name => <<"test3">>},
+            assert_list([#{name => <<"test3">>},
                         #{name => <<"test1">>},
                         #{name => <<"test2">>},
                         #{name => <<"test0">>}], http_get(Config, "/queues?sort=vhost&sort_reverse=true", ?OK)),
-           true
-       end),
+            true
+        end),
     %% Rather poor but at least test it doesn't blow up with dots
     http_get(Config, "/queues?sort=owner_pid_details.name", ?OK),
     http_delete(Config, "/queues/%2F/test0", {group, '2xx'}),
@@ -2690,13 +2690,13 @@ format_output_test(Config) ->
     http_put(Config, "/queues/%2F/test0", QArgs, {group, '2xx'}),
 
     ?AWAIT(
-       begin
-           assert_list([#{name => <<"test0">>,
-                          consumer_capacity => 0,
-                          consumer_utilisation => 0,
-                          exclusive_consumer_tag => null}], http_get(Config, "/queues", ?OK)),
-           true
-       end),
+        begin
+            assert_list([#{name => <<"test0">>,
+                            consumer_capacity => 0,
+                            consumer_utilisation => 0,
+                            exclusive_consumer_tag => null}], http_get(Config, "/queues", ?OK)),
+            true
+        end),
     http_delete(Config, "/queues/%2F/test0", {group, '2xx'}),
     http_delete(Config, "/vhosts/vh129", {group, '2xx'}),
     passed.
