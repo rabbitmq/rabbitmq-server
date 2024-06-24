@@ -656,7 +656,7 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_queue_utils_beam",
     ],
-    shard_count = 5,
+    shard_count = 3,
 )
 
 rabbitmq_integration_suite(
