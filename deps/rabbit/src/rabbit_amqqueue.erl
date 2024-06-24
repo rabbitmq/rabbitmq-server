@@ -773,7 +773,7 @@ augment_declare_args(VHost, Durable, Exclusive, AutoDelete, Args0) ->
             case IsPermitted andalso IsCompatible of
                 true ->
                     %% patch up declare arguments with x-queue-type if there
-                    %% is a vhost default set the queue is druable and not exclusive
+                    %% is a vhost default set the queue is durable and not exclusive
                     %% and there is no queue type argument
                     %% present
                     rabbit_misc:set_table_value(Args0,
@@ -781,7 +781,12 @@ augment_declare_args(VHost, Durable, Exclusive, AutoDelete, Args0) ->
                                                 longstr,
                                                 DefaultQueueType);
                 false ->
-                    Args0
+                    %% if the properties are incompatible with the declared
+                    %% DQT, use the fall back type
+                    rabbit_misc:set_table_value(Args0,
+                                                <<"x-queue-type">>,
+                                                longstr,
+                                                rabbit_queue_type:short_alias_of(rabbit_queue_type:fallback()))
             end;
         _ ->
             Args0
