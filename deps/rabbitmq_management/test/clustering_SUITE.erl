@@ -186,7 +186,7 @@ ha_queue_hosted_on_other_node(Config) ->
     consume(Chan, <<"ha-queue">>),
 
     timer:sleep(5100),
-    force_stats(),
+    force_stats(Config),
     Res = http_get(Config, "/queues/%2F/ha-queue"),
 
     % assert some basic data is there
@@ -214,13 +214,13 @@ ha_queue_with_multiple_consumers(Config) ->
     _ = wait_for_mirrored_queue(Config, "/queues/%2F/ha-queue3"),
 
     consume(Chan, <<"ha-queue3">>),
-    force_stats(),
+    force_stats(Config),
 
     {ok, Chan2} = amqp_connection:open_channel(?config(conn, Config)),
     consume(Chan2, <<"ha-queue3">>),
 
     timer:sleep(5100),
-    force_stats(),
+    force_stats(Config),
 
     Res = http_get(Config, "/queues/%2F/ha-queue3"),
 
