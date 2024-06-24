@@ -15,6 +15,10 @@
 
 -import(rabbit_ct_client_helpers, [close_connection/1, close_channel/1,
                                    open_unmanaged_connection/1]).
+-import(rabbit_ct_broker_helpers, [rpc/4]).
+-import(rabbit_ct_helpers,
+        [eventually/3,
+            eventually/1]).
 -import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2,
                                 assert_keys/2, assert_no_keys/2,
                                 http_get/2, http_get/3, http_get/5,
@@ -450,7 +454,6 @@ auth_test(Config) ->
     %% NOTE: this one won't have www-authenticate in the response,
     %% because user/password are ok, tags are not
     test_auth(Config, ?NOT_AUTHORISED, [auth_header("user", "user")]),
-    WrongAuthResponseHeaders = test_auth(Config, ?NOT_AUTHORISED, [auth_header("guest", "gust")]),
     %?assertEqual(true, lists:keymember("www-authenticate", 1,  WrongAuthResponseHeaders)),
     test_auth(Config, ?OK, [auth_header("guest", "guest")]),
     http_delete(Config, "/users/user", {group, '2xx'}),
@@ -2703,66 +2706,75 @@ columns_test(Config) ->
     TTL = 30000,
     http_delete(Config, Path, [{group, '2xx'}, 404]),
     http_put(Config, Path, [{arguments, [{<<"x-message-ttl">>, TTL}]}],
-             {group, '2xx'}),
+                {group, '2xx'}),
     Item = #{arguments => #{'x-message-ttl' => TTL}, name => <<"columns.test">>},
 
     ?AWAIT(
-       begin
-           [Item] = http_get(Config, "/queues?columns=arguments.x-message-ttl,name", ?OK),
-           Item = http_get(Config, "/queues/%2F/columns.test?columns=arguments.x-message-ttl,name", ?OK),
-           true
-       end),
+        begin
+            [Item] = http_get(Config, "/queues?columns=arguments.x-message-ttl,name", ?OK),
+            Item = http_get(Config, "/queues/%2F/columns.test?columns=arguments.x-message-ttl,name", ?OK),
+            true
+        end),
     http_delete(Config, Path, {group, '2xx'}),
+    passed.
+
+get_test(Config) ->
+    %% Real world example...
+    Headers = [{<<"x-forwarding">>, array,
+                [{table,
+                    [{<<"uri">>, longstr,
+                    <<"amqp://localhost/%2F/upstream">>}]}]}],
     http_put(Config, "/queues/%2F/myqueue", #{}, {group, '2xx'}),
     {Conn, Ch} = open_connection_and_channel(Config),
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     Publish = fun (Payload) ->
-                      amqp_channel:cast(
+                        amqp_channel:cast(
                         Ch, #'basic.publish'{exchange = <<>>,
-                                             routing_key = <<"myqueue">>},
+                                                routing_key = <<"myqueue">>},
                         #amqp_msg{props = #'P_basic'{headers = Headers},
-                                  payload = Payload}),
-              end,
+                                    payload = Payload}),
+                        amqp_channel:wait_for_confirms_or_die(Ch, 5)
+                end,
     Publish(<<"1aaa">>),
     Publish(<<"2aaa">>),
     Publish(<<"3aaa">>),
     [Msg] = http_post(Config, "/queues/%2F/myqueue/get", [{ackmode, ack_requeue_false},
-                                                          {count,    1},
-                                                          {encoding, auto},
-                                                          {truncate, 1}], ?OK),
+                                                            {count,    1},
+                                                            {encoding, auto},
+                                                            {truncate, 1}], ?OK),
     false         = maps:get(redelivered, Msg),
     <<>>          = maps:get(exchange,    Msg),
     <<"myqueue">> = maps:get(routing_key, Msg),
     <<"1">>       = maps:get(payload,     Msg),
     #{'x-forwarding' :=
-      [#{uri := <<"amqp://localhost/%2F/upstream">>}]} =
+        [#{uri := <<"amqp://localhost/%2F/upstream">>}]} =
         maps:get(headers, maps:get(properties, Msg)),
 
     [M2, M3] = http_post(Config, "/queues/%2F/myqueue/get", [{ackmode,  ack_requeue_true},
-                                                             {count,    5},
-                                                             {encoding, auto}], ?OK),
+                                                                {count,    5},
+                                                                {encoding, auto}], ?OK),
     <<"2aaa">> = maps:get(payload, M2),
     <<"3aaa">> = maps:get(payload, M3),
     2 = length(http_post(Config, "/queues/%2F/myqueue/get", [{ackmode,  ack_requeue_false},
-                                                             {count,    5},
-                                                             {encoding, auto}], ?OK)),
+                                                                {count,    5},
+                                                                {encoding, auto}], ?OK)),
     Publish(<<"4aaa">>),
     Publish(<<"5aaa">>),
     [M4, M5] = http_post(Config, "/queues/%2F/myqueue/get",
-                         [{ackmode,  reject_requeue_true},
-                          {count,    5},
-                          {encoding, auto}], ?OK),
+                            [{ackmode,  reject_requeue_true},
+                            {count,    5},
+                            {encoding, auto}], ?OK),
 
     <<"4aaa">> = maps:get(payload, M4),
     <<"5aaa">> = maps:get(payload, M5),
     2 = length(http_post(Config, "/queues/%2F/myqueue/get",
-                         [{ackmode,  ack_requeue_false},
-                          {count,    5},
-                          {encoding, auto}], ?OK)),
+                            [{ackmode,  ack_requeue_false},
+                            {count,    5},
+                            {encoding, auto}], ?OK)),
 
     [] = http_post(Config, "/queues/%2F/myqueue/get", [{ackmode,  ack_requeue_false},
-                                                       {count,    5},
-                                                       {encoding, auto}], ?OK),
+                                                        {count,    5},
+                                                        {encoding, auto}], ?OK),
     http_delete(Config, "/queues/%2F/myqueue", {group, '2xx'}),
     amqp_channel:close(Ch),
     close_connection(Conn),
