@@ -57,15 +57,10 @@ some_tests() ->
     vhosts_test,
     connections_test,
     exchanges_test,
-<<<<<<< HEAD
-    queues_test,
-    mirrored_queues_test,
-=======
     queues_test
     ].
 
 all_tests() -> [
->>>>>>> 51033093fd (speed up more)
     quorum_queues_test,
     permissions_vhost_test,
     permissions_connection_channel_consumer_test,
@@ -153,14 +148,6 @@ init_per_testcase(Testcase = permissions_vhost_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"myvhost2">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase);
 
-init_per_testcase(mirrored_queues_test = Testcase, Config) ->
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        mnesia ->
-            rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"rabbit_mgmt_only_http_SUITE:init_per_testcase">>),
-            rabbit_ct_helpers:testcase_started(Config, Testcase);
-        {khepri, _} ->
-            {skip, "Classic queue mirroring not supported by Khepri"}
-    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"rabbit_mgmt_only_http_SUITE:init_per_testcase">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -546,41 +533,6 @@ queues_enable_totals_test(Config) ->
     close_connection(Conn),
 
     passed.
-
-mirrored_queues_test(Config) ->
-    Policy = [{pattern,    <<".*">>},
-              {definition, [{<<"ha-mode">>, <<"all">>}]}],
-    http_put(Config, "/policies/%2F/HA", Policy, {group, '2xx'}),
-
-    Good = [{durable, true}, {arguments, []}],
-    http_get(Config, "/queues/%2f/ha", ?NOT_FOUND),
-    http_put(Config, "/queues/%2f/ha", Good, {group, '2xx'}),
-
-    {Conn, Ch} = open_connection_and_channel(Config),
-    Publish = fun() ->
-                      amqp_channel:call(
-                        Ch, #'basic.publish'{exchange = <<"">>,
-                                             routing_key = <<"ha">>},
-                        #amqp_msg{payload = <<"message">>})
-              end,
-    Publish(),
-    Publish(),
-
-    Queue = http_get(Config, "/queues/%2f/ha?lengths_age=60&lengths_incr=5&msg_rates_age=60&msg_rates_incr=5&data_rates_age=60&data_rates_incr=5"),
-
-    %% It's really only one node, but the only thing that matters in this test is to verify the
-    %% key exists
-    Nodes = lists:sort(rabbit_ct_broker_helpers:get_node_configs(Config, nodename)),
-
-    ?assert(not maps:is_key(messages, Queue)),
-    ?assert(not maps:is_key(messages_details, Queue)),
-    ?assert(not maps:is_key(reductions_details, Queue)),
-    ?assert(true, lists:member(maps:get(node, Queue), Nodes)),
-    ?assertEqual([], get_nodes(slave_nodes, Queue)),
-    ?assertEqual([], get_nodes(synchronised_slave_nodes, Queue)),
-
-    http_delete(Config, "/queues/%2f/ha", {group, '2xx'}),
-    close_connection(Conn).
 
 quorum_queues_test(Config) ->
     Good = [{durable, true}, {arguments, [{'x-queue-type', 'quorum'}]}],
