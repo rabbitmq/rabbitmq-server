@@ -11,10 +11,11 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
--define(CONSUMER_TIMEOUT, 3000).
--define(RECEIVE_TIMEOUT, 5000).
+-define(CONSUMER_TIMEOUT, 2000).
+-define(RECEIVE_TIMEOUT, ?CONSUMER_TIMEOUT * 2).
 
 -define(GROUP_CONFIG,
         #{global_consumer_timeout => [{rabbit, [{consumer_timeout, ?CONSUMER_TIMEOUT}]},
@@ -100,8 +101,9 @@ init_per_group(Group, Config0) ->
             GroupConfig = maps:get(Group, ?GROUP_CONFIG),
             ClusterSize = 3,
             Config = rabbit_ct_helpers:merge_app_env(
-                       Config0, {rabbit, [{channel_tick_interval, 1000},
-                                          {quorum_tick_interval, 1000}] ++ ?config(rabbit, GroupConfig)}),
+                       Config0, {rabbit, [{channel_tick_interval, 256},
+                                          {quorum_tick_interval, 256}] ++
+                                 ?config(rabbit, GroupConfig)}),
             Config1 = rabbit_ct_helpers:set_config(
                         Config, [ {rmq_nodename_suffix, Group},
                                   {rmq_nodes_count, ClusterSize}
