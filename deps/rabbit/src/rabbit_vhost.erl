@@ -22,6 +22,7 @@
 -export([delete_storage/1]).
 -export([vhost_down/1]).
 -export([put_vhost/6]).
+-export([default_queue_type/1, default_queue_type/2]).
 
 %%
 %% API
@@ -480,6 +481,22 @@ default_name() ->
         {ok, Value} -> Value;
         undefined   -> <<"/">>
     end.
+
+-spec default_queue_type(VirtualHost :: vhost:name()) -> rabbit_queue_type:queue_type().
+default_queue_type(VirtualHost) ->
+    default_queue_type(VirtualHost, rabbit_queue_type:fallback()).
+-spec default_queue_type(VirtualHost :: vhost:name(), Fallback :: rabbit_queue_type:queue_type()) -> rabbit_queue_type:queue_type().
+default_queue_type(VirtualHost, FallbackQueueType) ->
+    case exists(VirtualHost) of
+        false -> FallbackQueueType;
+        true ->
+            Record = lookup(VirtualHost),
+            case vhost:get_default_queue_type(Record) of
+                undefined       -> FallbackQueueType;
+                <<"undefined">> -> FallbackQueueType;
+                Type            -> Type
+            end
+end.
 
 -spec lookup(vhost:name()) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
 lookup(VHostName) ->
