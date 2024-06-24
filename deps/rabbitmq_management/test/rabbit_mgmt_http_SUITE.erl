@@ -35,14 +35,10 @@
 -define(COLLECT_INTERVAL, 256).
 -define(PATH_PREFIX, "/custom-prefix").
 
-<<<<<<< HEAD
--compile(export_all).
-=======
 -define(AWAIT(Body),
         await_condition(fun () -> Body end)).
 
 -compile([export_all, nowarn_export_all]).
->>>>>>> a9ac9c46cf (rabbitmq_management: speed up rabbit_mgmt_http_SUITE.erl)
 
 all() ->
     [
@@ -2199,12 +2195,6 @@ exchanges_pagination_test(Config) ->
     http_put(Config, "/exchanges/%2F/test2_reg", QArgs, {group, '2xx'}),
     http_put(Config, "/exchanges/vh1/reg_test3", QArgs, {group, '2xx'}),
 
-<<<<<<< HEAD
-    %% for stats to update
-    timer:sleep(1500),
-
-    Total     = length(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, list_names, [])),
-=======
     Total = length(rpc(Config, rabbit_exchange, list_names, [])),
     await_condition(
       fun () ->
@@ -2218,7 +2208,6 @@ exchanges_pagination_test(Config) ->
               assert_list([#{name => <<"">>, vhost => <<"/">>},
                            #{name => <<"amq.direct">>, vhost => <<"/">>}
                           ], maps:get(items, PageOfTwo)),
->>>>>>> a9ac9c46cf (rabbitmq_management: speed up rabbit_mgmt_http_SUITE.erl)
 
               ByName = http_get(Config, "/exchanges?page=1&page_size=2&name=reg", ?OK),
               ?assertEqual(Total, maps:get(total_count, ByName)),
@@ -2314,31 +2303,6 @@ queue_pagination_test(Config) ->
        begin
            Total = length(rpc(Config, rabbit_amqqueue, list_names, [])),
 
-<<<<<<< HEAD
-    Total     = length(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list_names, [])),
-
-    PageOfTwo = http_get(Config, "/queues?page=1&page_size=2", ?OK),
-    ?assertEqual(Total, maps:get(total_count, PageOfTwo)),
-    ?assertEqual(Total, maps:get(filtered_count, PageOfTwo)),
-    ?assertEqual(2, maps:get(item_count, PageOfTwo)),
-    ?assertEqual(1, maps:get(page, PageOfTwo)),
-    ?assertEqual(2, maps:get(page_size, PageOfTwo)),
-    ?assertEqual(2, maps:get(page_count, PageOfTwo)),
-    assert_list([#{name => <<"test0">>, vhost => <<"/">>, storage_version => 1},
-                 #{name => <<"test2_reg">>, vhost => <<"/">>, storage_version => 1}
-                ], maps:get(items, PageOfTwo)),
-
-    SortedByName = http_get(Config, "/queues?sort=name&page=1&page_size=2", ?OK),
-    ?assertEqual(Total, maps:get(total_count, SortedByName)),
-    ?assertEqual(Total, maps:get(filtered_count, SortedByName)),
-    ?assertEqual(2, maps:get(item_count, SortedByName)),
-    ?assertEqual(1, maps:get(page, SortedByName)),
-    ?assertEqual(2, maps:get(page_size, SortedByName)),
-    ?assertEqual(2, maps:get(page_count, SortedByName)),
-    assert_list([#{name => <<"reg_test3">>, vhost => <<"vh1">>},
-                 #{name => <<"test0">>, vhost => <<"/">>}
-                ], maps:get(items, SortedByName)),
-=======
            PageOfTwo = http_get(Config, "/queues?page=1&page_size=2", ?OK),
            ?assertEqual(Total, maps:get(total_count, PageOfTwo)),
            ?assertEqual(Total, maps:get(filtered_count, PageOfTwo)),
@@ -2360,7 +2324,6 @@ queue_pagination_test(Config) ->
            assert_list([#{name => <<"reg_test3">>, vhost => <<"vh1">>},
                         #{name => <<"test0">>, vhost => <<"/">>}
                        ], maps:get(items, SortedByName)),
->>>>>>> a9ac9c46cf (rabbitmq_management: speed up rabbit_mgmt_http_SUITE.erl)
 
 
            FirstPage = http_get(Config, "/queues?page=1", ?OK),
@@ -2722,14 +2685,6 @@ format_output_test(Config) ->
     http_put(Config, "/vhosts/vh129", none, {group, '2xx'}),
     http_put(Config, "/permissions/vh129/guest", PermArgs, {group, '2xx'}),
     http_put(Config, "/queues/%2F/test0", QArgs, {group, '2xx'}),
-<<<<<<< HEAD
-    timer:sleep(2000),
-    assert_list([#{name => <<"test0">>,
-                   consumer_capacity => 0,
-                   consumer_utilisation => 0,
-                   exclusive_consumer_tag => null,
-                   recoverable_slaves => null}], http_get(Config, "/queues", ?OK)),
-=======
 
     ?AWAIT(
        begin
@@ -2739,7 +2694,6 @@ format_output_test(Config) ->
                           exclusive_consumer_tag => null}], http_get(Config, "/queues", ?OK)),
            true
        end),
->>>>>>> a9ac9c46cf (rabbitmq_management: speed up rabbit_mgmt_http_SUITE.erl)
     http_delete(Config, "/queues/%2F/test0", {group, '2xx'}),
     http_delete(Config, "/vhosts/vh129", {group, '2xx'}),
     passed.
@@ -2759,14 +2713,6 @@ columns_test(Config) ->
            true
        end),
     http_delete(Config, Path, {group, '2xx'}),
-    passed.
-
-get_test(Config) ->
-    %% Real world example...
-    Headers = [{<<"x-forwarding">>, array,
-                [{table,
-                  [{<<"uri">>, longstr,
-                    <<"amqp://localhost/%2F/upstream">>}]}]}],
     http_put(Config, "/queues/%2F/myqueue", #{}, {group, '2xx'}),
     {Conn, Ch} = open_connection_and_channel(Config),
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
@@ -2776,7 +2722,6 @@ get_test(Config) ->
                                              routing_key = <<"myqueue">>},
                         #amqp_msg{props = #'P_basic'{headers = Headers},
                                   payload = Payload}),
-                      amqp_channel:wait_for_confirms_or_die(Ch, 5)
               end,
     Publish(<<"1aaa">>),
     Publish(<<"2aaa">>),
