@@ -5,9 +5,9 @@
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 -module(metrics_SUITE).
+-compile(nowarn_export_all).
 -compile(export_all).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -142,7 +142,12 @@ connection_metric_idemp(Config, {N, R}) ->
                                5000),
     Table2 = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_coarse_metrics)],
     % refresh stats 'R' times
-    [[Pid ! emit_stats || Pid <- Table] || _ <- lists:seq(1, R)],
+    [[begin
+          Pid ! emit_stats
+      end|| Pid <- Table] || _ <- lists:seq(1, R)],
+    [begin
+         _ = gen_server:call(Pid, {info, [pid]})
+     end|| Pid <- Table],
     force_metric_gc(Config),
     TableAfter = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_metrics)],
     TableAfter2 = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_coarse_metrics)],
@@ -159,6 +164,9 @@ channel_metric_idemp(Config, {N, R}) ->
     Table2 = [ Pid || {Pid, _} <- read_table_rpc(Config, channel_process_metrics)],
     % refresh stats 'R' times
     [[Pid ! emit_stats || Pid <- Table] || _ <- lists:seq(1, R)],
+    [begin
+         _ = gen_server:call(Pid, {info, [pid]})
+     end|| Pid <- Table],
     force_metric_gc(Config),
     TableAfter = [ Pid || {Pid, _} <- read_table_rpc(Config, channel_metrics)],
     TableAfter2 = [ Pid || {Pid, _} <- read_table_rpc(Config, channel_process_metrics)],
@@ -182,7 +190,10 @@ queue_metric_idemp(Config, {N, R}) ->
     Table2 = [ Pid || {Pid, _, _} <- read_table_rpc(Config, queue_coarse_metrics)],
     % refresh stats 'R' times
     ChanTable = read_table_rpc(Config, channel_created),
-    [[Pid ! emit_stats || {Pid, _, _} <- ChanTable ] || _ <- lists:seq(1, R)],
+    [[begin
+          Pid ! emit_stats,
+         gen_server2:call(Pid, flush)
+      end|| {Pid, _, _} <- ChanTable ] || _ <- lists:seq(1, R)],
     force_metric_gc(Config),
     TableAfter = [ Pid || {Pid, _, _} <- read_table_rpc(Config,  queue_metrics)],
     TableAfter2 = [ Pid || {Pid, _, _} <- read_table_rpc(Config, queue_coarse_metrics)],
@@ -383,8 +394,13 @@ ensure_channel_queue_metrics_populated(Chan, Queue) ->
     {#'basic.get_ok'{}, #amqp_msg{}} = amqp_channel:call(Chan, Get).
 
 force_channel_stats(Config) ->
-    [ Pid ! emit_stats || {Pid, _} <- read_table_rpc(Config, channel_created) ],
-    timer:sleep(100).
+    [begin
+         Pid ! emit_stats,
+         gen_server2:call(Pid, flush)
+     end
+         || {Pid, _} <- read_table_rpc(Config, channel_created)
+         ],
+    ok.
 
 read_table_rpc(Config, Table) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, read_table, [Table]).
@@ -397,7 +413,6 @@ read_table(Table) ->
     ets:tab2list(Table).
 
 force_metric_gc(Config) ->
-    timer:sleep(300),
     rabbit_ct_broker_helpers:rpc(Config, 0, erlang, send,
                                  [rabbit_core_metrics_gc, start_gc]),
     rabbit_ct_broker_helpers:rpc(Config, 0, gen_server, call,
