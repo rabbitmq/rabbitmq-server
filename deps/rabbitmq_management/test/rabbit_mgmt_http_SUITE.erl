@@ -104,6 +104,7 @@ all_tests() -> [
     definitions_server_named_queue_test,
     definitions_with_charset_test,
     definitions_default_queue_type_test,
+    definitions_vhost_metadata_test,
     long_definitions_test,
     long_definitions_multipart_test,
     aliveness_test,
@@ -439,7 +440,6 @@ auth_test(Config) ->
     %% NOTE: this one won't have www-authenticate in the response,
     %% because user/password are ok, tags are not
     test_auth(Config, ?NOT_AUTHORISED, [auth_header("user", "user")]),
-    WrongAuthResponseHeaders = test_auth(Config, ?NOT_AUTHORISED, [auth_header("guest", "gust")]),
     %?assertEqual(true, lists:keymember("www-authenticate", 1,  WrongAuthResponseHeaders)),
     test_auth(Config, ?OK, [auth_header("guest", "guest")]),
     http_delete(Config, "/users/user", {group, '2xx'}),
@@ -1795,6 +1795,48 @@ defs_default_queue_type_vhost(Config, QueueType) ->
     %% And check whether it was indeed created with the default type
     Q = http_get(Config, "/queues/test-vhost/test-queue", ?OK),
     ?assertEqual(QueueType, maps:get(type, Q)),
+
+    %% Remove the test vhost
+    http_delete(Config, "/vhosts/test-vhost", {group, '2xx'}),
+    ok.
+
+definitions_vhost_metadata_test(Config) ->
+    register_parameters_and_policy_validator(Config),
+
+    VHostName = <<"test-vhost">>,
+    Desc = <<"Created by definitions_vhost_metadata_test">>,
+    DQT = <<"quorum">>,
+    Tags = [<<"one">>, <<"tag-two">>],
+    Metadata = #{
+        description => Desc,
+        default_queue_type => DQT,
+        tags => Tags
+    },
+
+    %% Create a test vhost
+    http_put(Config, "/vhosts/test-vhost", Metadata, {group, '2xx'}),
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+    http_put(Config, "/permissions/test-vhost/guest", PermArgs, {group, '2xx'}),
+
+    %% Get the definitions
+    Definitions = http_get(Config, "/definitions", ?OK),
+
+    %% Check if vhost definition is correct
+    VHosts = maps:get(vhosts, Definitions),
+    {value, VH} = lists:search(fun(VH) ->
+                                   maps:get(name, VH) =:= VHostName
+                               end, VHosts),
+    ct:pal("VHost: ~p", [VH]),
+    ?assertEqual(#{
+        name => VHostName,
+        description => Desc,
+        default_queue_type => DQT,
+        tags => Tags,
+        metadata => Metadata
+    }, VH),
+
+    %% Post the definitions back
+    http_post(Config, "/definitions", Definitions, {group, '2xx'}),
 
     %% Remove the test vhost
     http_delete(Config, "/vhosts/test-vhost", {group, '2xx'}),
