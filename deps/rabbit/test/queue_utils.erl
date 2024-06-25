@@ -18,17 +18,23 @@
          has_local_stream_member_rpc/1
         ]).
 
+-define(WFM_SLEEP, 256).
+-define(WFM_DEFAULT_NUMS, 30_000 div ?WFM_SLEEP). %% ~30s
+
 wait_for_messages_ready(Servers, QName, Ready) ->
     wait_for_messages(Servers, QName, Ready,
-                      fun rabbit_fifo:query_messages_ready/1, 60).
+                      fun rabbit_fifo:query_messages_ready/1,
+                      ?WFM_DEFAULT_NUMS).
 
 wait_for_messages_pending_ack(Servers, QName, Ready) ->
     wait_for_messages(Servers, QName, Ready,
-                      fun rabbit_fifo:query_messages_checked_out/1, 60).
+                      fun rabbit_fifo:query_messages_checked_out/1,
+                      ?WFM_DEFAULT_NUMS).
 
 wait_for_messages_total(Servers, QName, Total) ->
     wait_for_messages(Servers, QName, Total,
-                      fun rabbit_fifo:query_messages_total/1, 60).
+                      fun rabbit_fifo:query_messages_total/1,
+                      ?WFM_DEFAULT_NUMS).
 
 wait_for_messages(Servers, QName, Number, Fun, 0) ->
     Msgs = dirty_query(Servers, QName, Fun),
@@ -52,12 +58,12 @@ wait_for_messages(Servers, QName, Number, Fun, N) ->
         true ->
             ok;
         _ ->
-            timer:sleep(500),
+            timer:sleep(?WFM_SLEEP),
             wait_for_messages(Servers, QName, Number, Fun, N - 1)
     end.
 
 wait_for_messages(Config, Stats) ->
-    wait_for_messages(Config, lists:sort(Stats), 60).
+    wait_for_messages(Config, lists:sort(Stats), ?WFM_DEFAULT_NUMS).
 
 wait_for_messages(Config, Stats, 0) ->
     ?assertEqual(Stats,
@@ -75,12 +81,12 @@ wait_for_messages(Config, Stats, N) ->
         Stats0 when Stats0 == Stats ->
             ok;
         _ ->
-            timer:sleep(500),
+            timer:sleep(?WFM_SLEEP),
             wait_for_messages(Config, Stats, N - 1)
     end.
 
 wait_for_min_messages(Config, Queue, Msgs) ->
-    wait_for_min_messages(Config, Queue, Msgs, 60).
+    wait_for_min_messages(Config, Queue, Msgs, ?WFM_DEFAULT_NUMS).
 
 wait_for_min_messages(Config, Queue, Msgs, 0) ->
     [[_, Got]] = filter_queues([[Queue, Msgs]],
@@ -97,16 +103,16 @@ wait_for_min_messages(Config, Queue, Msgs, N) ->
                 true ->
                     ok;
                 false ->
-                    timer:sleep(500),
+                    timer:sleep(?WFM_SLEEP),
                     wait_for_min_messages(Config, Queue, Msgs, N - 1)
             end;
         _ ->
-            timer:sleep(500),
+            timer:sleep(?WFM_SLEEP),
             wait_for_min_messages(Config, Queue, Msgs, N - 1)
     end.
 
 wait_for_max_messages(Config, Queue, Msgs) ->
-    wait_for_max_messages(Config, Queue, Msgs, 60).
+    wait_for_max_messages(Config, Queue, Msgs, ?WFM_DEFAULT_NUMS).
 
 wait_for_max_messages(Config, Queue, Msgs, 0) ->
     [[_, Got]] = filter_queues([[Queue, Msgs]],
@@ -123,11 +129,11 @@ wait_for_max_messages(Config, Queue, Msgs, N) ->
                 true ->
                     ok;
                 false ->
-                    timer:sleep(500),
+                    timer:sleep(?WFM_SLEEP),
                     wait_for_max_messages(Config, Queue, Msgs, N - 1)
             end;
         _ ->
-            timer:sleep(500),
+            timer:sleep(?WFM_SLEEP),
             wait_for_max_messages(Config, Queue, Msgs, N - 1)
     end.
 
