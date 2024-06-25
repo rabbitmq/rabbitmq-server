@@ -646,12 +646,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    name = "queue_master_location_SUITE",
-    size = "large",
-    shard_count = 2,
-)
-
-rabbitmq_integration_suite(
     name = "queue_parallel_SUITE",
     size = "large",
     additional_beam = [
