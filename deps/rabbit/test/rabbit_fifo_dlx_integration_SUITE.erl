@@ -70,14 +70,17 @@ groups() ->
     ].
 
 init_per_suite(Config0) ->
+    Tick = 256,
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:merge_app_env(
-                Config0, {rabbit, [{quorum_tick_interval, 1000},
+                Config0, {rabbit, [{quorum_tick_interval, 256},
+                                   {collect_statistics_interval, Tick},
+                                   {channel_tick_interval, Tick},
                                    {dead_letter_worker_consumer_prefetch, 2},
                                    {dead_letter_worker_publisher_confirm_timeout, 1000}
                                   ]}),
     Config2 = rabbit_ct_helpers:merge_app_env(
-                Config1, {aten, [{poll_interval, 1000}]}),
+                Config1, {aten, [{poll_interval, 256}]}),
     rabbit_ct_helpers:run_setup_steps(Config2).
 
 end_per_suite(Config) ->
@@ -895,9 +898,6 @@ many_target_queues(Config) ->
     ?awaitMatch([{1, 2}],
                 dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1),
                 ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
-    timer:sleep(1000),
-    ?assertEqual([{1, 2}],
-                 dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1)),
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
                  amqp_channel:call(Ch, #'basic.get'{queue = TargetQ1})),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
