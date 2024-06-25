@@ -469,6 +469,28 @@ return_test(Config) ->
                    when map_size(C2) == 1, State3#rabbit_fifo.consumers),
     ok.
 
+return_multiple_test(Config) ->
+    Cid = {<<"cid">>, self()},
+    {State0, _} = enq(Config, 1, 1, first, test_init(?FUNCTION_NAME)),
+    {State1, _} = enq(Config, 2, 2, second, State0),
+    {State2, _} = enq(Config, 3, 3, third, State1),
+
+    {State3,
+     #{key := CKey,
+       next_msg_id := NextMsgId},
+     Effects0} = checkout(Config, ?LINE, Cid, 3, State2),
+    ?ASSERT_EFF({log, [1, 2, 3], _Fun, _Local}, Effects0),
+
+    {_, _, Effects1} = apply(meta(Config, ?LINE),
+                             rabbit_fifo:make_return(
+                               CKey,
+                               %% Return messages in following order: 3, 1, 2
+                               [NextMsgId + 2, NextMsgId, NextMsgId + 1]),
+                             State3),
+    %% We expect messages to be re-delivered in the same order in which we previously returned.
+    ?ASSERT_EFF({log, [3, 1, 2], _Fun, _Local}, Effects1),
+    ok.
+
 return_dequeue_delivery_limit_test(C) ->
     Init = init(#{name => test,
                   queue_resource => rabbit_misc:r("/", queue,
@@ -495,7 +517,7 @@ return_dequeue_delivery_limit_test(C) ->
 return_non_existent_test(Config) ->
     Cid = {<<"cid">>, self()},
     {State0, _} = enq(Config, 1, 1, second, test_init(test)),
-    % return non-existent, check it doesnt crash
+    % return non-existent, check it doesn't crash
     {_State2, _} = apply(meta(Config, 3), rabbit_fifo:make_return(Cid, [99]), State0),
     ok.
 
@@ -2097,8 +2119,9 @@ meta(Config, Idx, Timestamp, ReplyMode) ->
 
 enq(Config, Idx, MsgSeq, Msg, State) ->
     strip_reply(
-        rabbit_fifo:apply(meta(Config, Idx, 0, {notify, MsgSeq, self()}),
-                          rabbit_fifo:make_enqueue(self(), MsgSeq, Msg), State)).
+      apply(meta(Config, Idx, 0, {notify, MsgSeq, self()}),
+            rabbit_fifo:make_enqueue(self(), MsgSeq, Msg),
+            State)).
 
 deq(Config, Idx, Cid, Settlement, Msg, State0) ->
     {State, _, Effs} =

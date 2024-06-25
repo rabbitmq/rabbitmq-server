@@ -23,6 +23,20 @@
         #consumer{cfg = #consumer_cfg{tag = Tag,
                                       pid = Pid}}).
 
+-ifdef(TEST).
+-define(SIZE(Msg),
+        case mc:is(Msg) of
+            true ->
+                mc:size(Msg);
+            false when is_binary(Msg) ->
+                {0, byte_size(Msg)};
+            false ->
+                {0, erts_debug:size(Msg)}
+        end).
+-else.
+-define(SIZE(Msg), mc:size(Msg)).
+-endif.
+
 -export([
          %% ra_machine callbacks
          init/1,
@@ -250,8 +264,8 @@ apply(Meta, #discard{consumer_key = ConsumerKey,
               cfg = #cfg{dead_letter_handler = DLH}} = State0) ->
     case find_consumer(ConsumerKey, Consumers) of
         {ConsumerKey, #consumer{checked_out = Checked} = Con} ->
-            % Publishing to dead-letter exchange must maintain same order as
-            % messages got rejected.
+            %% We publish to dead-letter exchange in the same order
+            %% as messages got rejected by the client.
             DiscardMsgs = lists:filtermap(
                             fun(Id) ->
                                     case maps:get(Id, Checked, undefined) of
@@ -272,9 +286,8 @@ apply(Meta, #return{consumer_key = ConsumerKey,
                     msg_ids = MsgIds},
       #?STATE{consumers = Cons0} = State) ->
     case find_consumer(ConsumerKey, Cons0) of
-        {ActualConsumerKey, #consumer{checked_out = Checked0}} ->
-            Returned = maps:with(MsgIds, Checked0),
-            return(Meta, ActualConsumerKey, Returned, [], State);
+        {ActualConsumerKey, #consumer{checked_out = Checked}} ->
+            return(Meta, ActualConsumerKey, MsgIds, Checked, [], State);
         _ ->
             {State, ok}
     end;
@@ -1734,12 +1747,19 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
     end.
 
 return(#{index := IncomingRaftIdx} = Meta,
-       ConsumerKey, Returned, Effects0, State0) ->
-    {State1, Effects1} = maps:fold(
-                           fun(MsgId, {_At, Msg}, {S0, E0}) ->
-                                   return_one(Meta, MsgId, Msg,
-                                              S0, E0, ConsumerKey)
-                           end, {State0, Effects0}, Returned),
+       ConsumerKey, MsgIds, Checked, Effects0, State0) ->
+    %% We requeue in the same order as messages got returned by the client.
+    {State1, Effects1} = lists:foldl(
+                           fun(MsgId, Acc = {S0, E0}) ->
+                                   case Checked of
+                                       #{MsgId := Val} ->
+                                           {_At, Msg} = Val,
+                                           return_one(Meta, MsgId, Msg,
+                                                      S0, E0, ConsumerKey);
+                                       #{} ->
+                                           Acc
+                                   end
+                           end, {State0, Effects0}, MsgIds),
     State2 = case State1#?STATE.consumers of
                  #{ConsumerKey := Con} ->
                      update_or_remove_con(Meta, ConsumerKey, Con, State1);
@@ -2454,7 +2474,8 @@ is_below(undefined, _Num) ->
 is_below(Val, Num) when is_integer(Val) andalso is_integer(Num) ->
     Num =< trunc(Val * ?LOW_LIMIT).
 
--spec make_enqueue(option(pid()), option(msg_seqno()), raw_msg()) -> protocol().
+-spec make_enqueue(option(pid()), option(msg_seqno()), raw_msg()) ->
+    protocol().
 make_enqueue(Pid, Seq, Msg) ->
     case is_v4() of
         true when is_pid(Pid) andalso
@@ -2462,7 +2483,7 @@ make_enqueue(Pid, Seq, Msg) ->
             %% more compact format
             #?ENQ_V2{seq = Seq,
                      msg = Msg,
-                     size = mc:size(Msg)};
+                     size = ?SIZE(Msg)};
         _ ->
             #enqueue{pid = Pid, seq = Seq, msg = Msg}
     end.
