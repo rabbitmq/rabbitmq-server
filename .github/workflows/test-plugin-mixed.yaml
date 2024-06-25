@@ -15,7 +15,7 @@ on:
         default: 1
         type: number
     secrets:
-      REMOTE_CACHE_BUCKET_NAME:
+      REMOTE_CACHE_BUCKET_NAME_MIXED:
         required: true
       REMOTE_CACHE_CREDENTIALS_JSON:
         required: true
@@ -56,9 +56,9 @@ jobs:
         credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
     - name: CONFIGURE BAZEL
       run: |
-        if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME }}" ]; then
+        if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME_MIXED }}" ]; then
         cat << EOF >> user.bazelrc
-          build --remote_cache=https://storage.googleapis.com/${{ secrets.REMOTE_CACHE_BUCKET_NAME }}
+          build --remote_cache=https://storage.googleapis.com/${{ secrets.REMOTE_CACHE_BUCKET_NAME_MIXED }}
           build --google_default_credentials
 
           build --experimental_guard_against_concurrent_changes
