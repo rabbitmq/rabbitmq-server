@@ -746,7 +746,6 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
       {"RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=+S 2 +sbwt very_short +A 24 ~ts", [AdditionalErlArgs]},
       "RABBITMQ_LOG=debug",
       "RMQCTL_WAIT_TIMEOUT=180",
-      "FAST_RUN_BROKER=0",
       {"TEST_TMPDIR=~ts", [PrivDir]}
       | ExtraArgs],
     Cmd = ["start-background-broker" | MakeVars],

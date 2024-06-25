@@ -98,11 +98,18 @@ RABBITMQ_ENABLED_PLUGINS_FILE ?= $(call node_enabled_plugins_file,$(RABBITMQ_NOD
 RABBITMQ_LOG ?= debug,+color
 export RABBITMQ_LOG
 
-FAST_RUN_BROKER ?= 1
+FAST_RUN_BROKER ?= $(if $(filter run-broker run-tls-broker start-brokers start-cluster,$(MAKECMDGOALS)),1,0)
 
 ifeq ($(FAST_RUN_BROKER),1)
 DIST_TARGET = $(if $(NOBUILD),,all)
 PLUGINS_FROM_DEPS_DIR = 1
+
+# When running "make -C deps/plugin run-broker" we only want
+# "plugin" to be enabled. See rabbitmq-components.mk for where
+# this variable comes from.
+ifdef deps_dir_overriden
+RABBITMQ_ENABLED_PLUGINS ?= $(filter-out rabbit,$(PROJECT))
+endif
 endif
 
 ifdef PLUGINS_FROM_DEPS_DIR
