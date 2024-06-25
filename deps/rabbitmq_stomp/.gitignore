@@ -14,7 +14,6 @@
 /plugins.lock
 /sbin/
 /sbin.lock
-/xrefr
 
 rabbitmq_stomp.d
 

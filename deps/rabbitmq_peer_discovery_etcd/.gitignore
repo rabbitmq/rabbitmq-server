@@ -21,6 +21,5 @@ tags
 /sbin.lock
 /test/config_schema_SUITE_data/schema/
 /test/ct.cover.spec
-/xrefr
 
 /rabbitmq_peer_discovery_etcd.d

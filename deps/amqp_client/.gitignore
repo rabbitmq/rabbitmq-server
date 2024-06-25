@@ -18,5 +18,4 @@
 /rebar.lock
 /sbin
 /test/ct.cover.spec
-/xrefr
 /amqp_client.d

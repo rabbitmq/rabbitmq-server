@@ -14,7 +14,6 @@
 /plugins.lock
 /sbin/
 /sbin.lock
-/xrefr
 elvis
 
 amqp10_client.d

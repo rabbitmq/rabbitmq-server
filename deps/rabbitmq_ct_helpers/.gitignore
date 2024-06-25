@@ -18,7 +18,6 @@ terraform.tfstate*
 /plugins.lock
 /sbin/
 /sbin.lock
-/xrefr
 
 /rabbitmq_ct_helpers.d
 /.rabbitmq_ct_helpers.plt

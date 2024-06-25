@@ -7,7 +7,6 @@
 /.erlang.mk/
 /logs/
 /rabbitmq_prelaunch.d
-/xrefr
 
 # Dialyzer
 *.plt

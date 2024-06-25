@@ -17,7 +17,6 @@ MnesiaCore.*
 /plugins.lock
 /sbin/
 /sbin.lock
-/xrefr
 
 rabbitmq_management.d
 .rabbitmq_management.plt

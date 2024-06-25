@@ -26,7 +26,6 @@ erl_crash.dump
 /ebin/
 /logs/
 /plugins/
-/xrefr
 elvis
 callgrind*
 ct.coverdata

@@ -175,7 +175,6 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --include 'cli/plugins'			\
 	       --exclude '$(notdir $(DIST_DIR))/'	\
 	       --exclude 'test'				\
-	       --exclude 'xrefr'			\
 	       --exclude '/$(notdir $(PACKAGES_DIR))/'	\
 	       --exclude '/PACKAGES/'			\
 	       --exclude '/amqp_client/doc/'		\
