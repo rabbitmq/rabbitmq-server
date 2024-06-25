@@ -175,7 +175,9 @@ all_tests() ->
      validate_messages_on_queue,
      amqpl_headers,
      priority_queue_fifo,
-     priority_queue_2_1_ratio
+     priority_queue_2_1_ratio,
+     requeue_multiple_true,
+     requeue_multiple_false
     ].
 
 memory_tests() ->
@@ -3749,6 +3751,88 @@ select_nodes_with_least_replicas_node_down(Config) ->
     [?assertMatch(#'queue.delete_ok'{},
                   amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
      || Q <- Qs].
+
+requeue_multiple_true(Config) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-delivery-limit">>, long, 3}])),
+    Num = 100,
+    Payloads = [integer_to_binary(N) || N <- lists:seq(1, Num)],
+    [publish(Ch, QQ, P) || P <- Payloads],
+
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue = QQ}, self()),
+    receive #'basic.consume_ok'{} -> ok
+    end,
+
+    DTags = [receive {#'basic.deliver'{redelivered = false,
+                                       delivery_tag = D},
+                      #amqp_msg{payload = P0}} ->
+                         ?assertEqual(P, P0),
+                         D
+             after 5000 -> ct:fail({basic_deliver_timeout, P, ?LINE})
+             end || P <- Payloads],
+
+    %% Requeue all messages.
+    ok = amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = lists:last(DTags),
+                                             multiple = true,
+                                             requeue = true}),
+
+    %% We expect to get all messages re-delivered in the order in which we requeued
+    %% (which is the same order as messages were sent to us previously).
+    [receive {#'basic.deliver'{redelivered = true},
+              #amqp_msg{payload = P1}} ->
+                 ?assertEqual(P, P1)
+     after 5000 -> ct:fail({basic_deliver_timeout, P, ?LINE})
+     end || P <- Payloads],
+
+    ?assertEqual(#'queue.delete_ok'{message_count = 0},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ})).
+
+requeue_multiple_false(Config) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-delivery-limit">>, long, 3}])),
+    Num = 100,
+    Payloads = [integer_to_binary(N) || N <- lists:seq(1, Num)],
+    [publish(Ch, QQ, P) || P <- Payloads],
+
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue = QQ}, self()),
+    receive #'basic.consume_ok'{} -> ok
+    end,
+
+    DTags = [receive {#'basic.deliver'{redelivered = false,
+                                       delivery_tag = D},
+                      #amqp_msg{payload = P0}} ->
+                         ?assertEqual(P, P0),
+                         D
+             after 5000 -> ct:fail({basic_deliver_timeout, P, ?LINE})
+             end || P <- Payloads],
+
+    %% The delivery tags we received via AMQP 0.9.1 are ordered from 1-100.
+    %% Sanity check:
+    ?assertEqual(lists:seq(1, Num), DTags),
+
+    %% Requeue each message individually in random order.
+    Tuples = [{rand:uniform(), D} || D <- DTags],
+    DTagsShuffled = [D || {_, D} <- lists:sort(Tuples)],
+    [ok = amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = D,
+                                              multiple = false,
+                                              requeue = true})
+     || D <- DTagsShuffled],
+
+    %% We expect to get all messages re-delivered in the order in which we requeued.
+    [receive {#'basic.deliver'{redelivered = true},
+              #amqp_msg{payload = P1}} ->
+                 ?assertEqual(integer_to_binary(D), P1)
+     after 5000 -> ct:fail({basic_deliver_timeout, ?LINE})
+     end || D <- DTagsShuffled],
+
+    ?assertEqual(#'queue.delete_ok'{message_count = 0},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ})).
 
 %%----------------------------------------------------------------------------
 
