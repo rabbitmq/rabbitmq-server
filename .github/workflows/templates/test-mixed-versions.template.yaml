@@ -106,9 +106,9 @@ jobs:
       if: env.exists != 'true'
       working-directory: secondary-umbrella
       run: |
-        if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME }}" ]; then
+        if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME_MIXED }}" ]; then
         cat << EOF >> user.bazelrc
-          build --remote_cache=https://storage.googleapis.com/${{ secrets.REMOTE_CACHE_BUCKET_NAME }}
+          build --remote_cache=https://storage.googleapis.com/${{ secrets.REMOTE_CACHE_BUCKET_NAME_MIXED }}
           build --google_default_credentials
 
           build --remote_download_toplevel
