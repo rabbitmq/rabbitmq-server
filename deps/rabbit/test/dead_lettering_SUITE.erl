@@ -79,7 +79,8 @@ groups() ->
                                dead_letter_routing_key_cycle_max_length,
                                dead_letter_headers_reason_maxlen,
                                %% tested separately in rabbit_fifo_dlx_integration_SUITE
-                               dead_letter_missing_exchange
+                               dead_letter_missing_exchange,
+                               dead_letter_routing_key_cycle_ttl
                               ]}
                             ]
        },
@@ -96,9 +97,13 @@ suite() ->
 %% -------------------------------------------------------------------
 
 init_per_suite(Config0) ->
+    Tick = 256,
     rabbit_ct_helpers:log_environment(),
     Config = rabbit_ct_helpers:merge_app_env(
-               Config0, {rabbit, [{dead_letter_worker_publisher_confirm_timeout, 2000}]}),
+               Config0, {rabbit, [{dead_letter_worker_publisher_confirm_timeout, 2000},
+                                  {channel_tick_interval, Tick},
+                                  {quorum_tick_interval, Tick},
+                                  {stream_tick_interval, Tick}]}),
     rabbit_ct_helpers:run_setup_steps(Config).
 
 end_per_suite(Config) ->
