@@ -101,6 +101,7 @@ init_per_suite(Config0) ->
     rabbit_ct_helpers:log_environment(),
     Config = rabbit_ct_helpers:merge_app_env(
                Config0, {rabbit, [{dead_letter_worker_publisher_confirm_timeout, 2000},
+                                  {collect_statistics_interval, Tick},
                                   {channel_tick_interval, Tick},
                                   {quorum_tick_interval, Tick},
                                   {stream_tick_interval, Tick}]}),
