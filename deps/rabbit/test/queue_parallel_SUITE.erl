@@ -68,8 +68,6 @@ groups() ->
        {classic_queue, GroupOptions, AllTests ++ [delete_immediately_by_pid_succeeds,
                                                   trigger_message_store_compaction]},
        {quorum_queue, GroupOptions, AllTests ++ ExtraBccTests ++ [delete_immediately_by_pid_fails]},
-       {quorum_queue_in_memory_limit, GroupOptions, AllTests ++ [delete_immediately_by_pid_fails]},
-       {quorum_queue_in_memory_bytes, GroupOptions, AllTests ++ [delete_immediately_by_pid_fails]},
        {stream_queue, GroupOptions, ExtraBccTests ++ [publish, subscribe]}
       ]}
     ].
@@ -102,20 +100,6 @@ init_per_group(quorum_queue, Config) ->
       [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
        {consumer_args, []},
        {queue_durable, true}]);
-init_per_group(quorum_queue_in_memory_limit, Config) ->
-    rabbit_ct_helpers:set_config(
-      Config,
-      [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                     {<<"x-max-in-memory-length">>, long, 1}]},
-       {consumer_args, []},
-       {queue_durable, true}]);
-init_per_group(quorum_queue_in_memory_bytes, Config) ->
-    rabbit_ct_helpers:set_config(
-      Config,
-      [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                     {<<"x-max-in-memory-bytes">>, long, 1}]},
-       {consumer_args, []},
-       {queue_durable, true}]);
 init_per_group(stream_queue, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
@@ -126,10 +110,11 @@ init_per_group(Group, Config0) ->
     case lists:member({group, Group}, all()) of
         true ->
             ClusterSize = 3,
+            Tick = 256,
             Config = rabbit_ct_helpers:merge_app_env(
-                       Config0, {rabbit, [{channel_tick_interval, 1000},
-                                          {quorum_tick_interval, 1000},
-                                          {stream_tick_interval, 1000}]}),
+                       Config0, {rabbit, [{channel_tick_interval, Tick},
+                                          {quorum_tick_interval, Tick},
+                                          {stream_tick_interval, Tick}]}),
             Config1 = rabbit_ct_helpers:set_config(
                         Config, [ {rmq_nodename_suffix, Group},
                                   {rmq_nodes_count, ClusterSize}

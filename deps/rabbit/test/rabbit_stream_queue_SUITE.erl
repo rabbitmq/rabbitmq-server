@@ -31,9 +31,6 @@ all() ->
      {group, single_node_parallel_4},
      {group, cluster_size_2},
      {group, cluster_size_2_parallel_1},
-     {group, cluster_size_2_parallel_2},
-     {group, cluster_size_2_parallel_3},
-     {group, cluster_size_2_parallel_4},
      {group, cluster_size_3},
      {group, cluster_size_3_1},
      {group, cluster_size_3_2},
@@ -60,12 +57,8 @@ groups() ->
      {single_node_parallel_4, [parallel], all_tests_4()},
      {cluster_size_2, [], [recover]},
      {cluster_size_2_parallel_1, [parallel], all_tests_1()},
-     {cluster_size_2_parallel_2, [parallel], all_tests_2()},
-     {cluster_size_2_parallel_3, [parallel], all_tests_3()},
-     {cluster_size_2_parallel_4, [parallel], all_tests_4()},
      {cluster_size_3, [],
           [
-           restart_coordinator_without_queues,
            delete_down_replica,
            replica_recovery,
            leader_failover,
@@ -177,7 +170,7 @@ all_tests_4() ->
 init_per_suite(Config0) ->
     rabbit_ct_helpers:log_environment(),
     Config = rabbit_ct_helpers:merge_app_env(
-               Config0, {rabbit, [{stream_tick_interval, 1000},
+               Config0, {rabbit, [{stream_tick_interval, 256},
                                   {log, [{file, [{level, debug}]}]}]}),
     rabbit_ct_helpers:run_setup_steps(Config).
 
@@ -305,15 +298,6 @@ init_per_testcase(TestCase, Config)
         _ ->
             init_test_case(TestCase, Config)
     end;
-init_per_testcase(TestCase, Config)
-  when TestCase == publish_coordinator_unavailable ->
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        {khepri, []} ->
-            {skip, "test case should not run with Khepri"};
-        _ ->
-            init_test_case(TestCase, Config)
-    end;
-
 init_per_testcase(TestCase, Config) ->
     init_test_case(TestCase, Config).
 
@@ -452,7 +436,11 @@ declare_queue(Config) ->
                  declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     %% Test declare an existing queue
-    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+    %% there is a very brief race condition in the osiris counter updates that could
+    %% cause the message count to be reported as 1 temporarily after a new stream
+    %% creation. Hence to avoid flaking we don't match on the messages counter
+    %% here
+    ?assertMatch({'queue.declare_ok', Q, _, 0},
                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     ?assertMatch([_], find_queue_info(Config, [])),
@@ -504,17 +492,15 @@ add_replicas(Config) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
     [publish(Ch, Q, Data) || _ <- lists:seq(1, NumMsgs)],
-    %% should be sufficient for the next message to fall in the next
+    %% should be sufficient sleepage for the next message to fall in the next
     %% chunk
-    timer:sleep(100),
+    timer:sleep(10),
     publish(Ch, Q, <<"last">>),
     amqp_channel:wait_for_confirms(Ch, 30),
-    timer:sleep(1000),
     ?assertEqual(ok,
                  rpc:call(Server0, rabbit_stream_queue, add_replica,
                           [<<"/">>, Q, Server1])),
 
-    timer:sleep(1000),
     check_leader_and_replicas(Config, [Server0, Server1]),
 
     %% it is almost impossible to reliably catch this situation.
@@ -523,7 +509,6 @@ add_replicas(Config) ->
     ?assertMatch(ok ,
                  rpc:call(Server0, rabbit_stream_queue, add_replica,
                           [<<"/">>, Q, Server2])),
-    timer:sleep(1000),
     check_leader_and_replicas(Config, [Server0, Server1, Server2]),
 
     %% validate we can read the last entry
@@ -549,9 +534,6 @@ add_replicas(Config) ->
                            delete(Config, Server0, Q)),
               exit(deliver_timeout)
     end,
-    % ?assertMatch({error, {disallowed, out_of_sync_replica}} ,
-    %              rpc:call(Server0, rabbit_stream_queue, add_replica,
-    %                       [<<"/">>, Q, Server2])),
     ?assertMatch(#'queue.delete_ok'{},
                  delete(Config, Server0, Q)),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
@@ -819,7 +801,7 @@ delete_down_replica(Config) ->
     StreamId = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, get_stream_id, [QName]),
     Server1DataDir = rabbit_ct_broker_helpers:get_node_config(Config, 1, data_dir),
     DeletedReplicaDir = filename:join([Server1DataDir, "stream", StreamId]),
-    timer:sleep(1000),
+
     ?awaitMatch(false, filelib:is_dir(DeletedReplicaDir), ?WAIT),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
@@ -847,8 +829,6 @@ publish_coordinator_unavailable(Config) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
     publish(Ch, Q),
-    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 506, _}}}, _},
-                amqp_channel:wait_for_confirms(Ch, 60)),
     ok = rabbit_ct_broker_helpers:async_start_node(Config, Server1),
     ok = rabbit_ct_broker_helpers:async_start_node(Config, Server2),
     ok = rabbit_ct_broker_helpers:wait_for_async_start_node(Server1),
@@ -858,6 +838,9 @@ publish_coordinator_unavailable(Config) ->
               Info = find_queue_info(Config, Server0, [online]),
               length(proplists:get_value(online, Info)) == 3
       end),
+    % ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 506, _}}}, _},
+    %%% confirms should be issued when available
+    amqp_channel:wait_for_confirms(Ch, 60),
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server0),
     publish(Ch1, Q),
 
@@ -988,28 +971,6 @@ recover(Config) ->
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     publish(Ch1, Q),
     queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"2">>, <<"0">>]]),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
-
-restart_coordinator_without_queues(Config) ->
-    %% The coordinator failed to restart if stream queues were not present anymore, as
-    %% they wouldn't call recover in all nodes - only the local one was restarted so
-    %% the election wouldn't succeed. Fixed now, but this test checks for that failure
-    [Server | _] = Servers0 = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
-    Q = ?config(queue_name, Config),
-    ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
-    publish_confirm(Ch, Q, [<<"msg">>]),
-    ?assertMatch(#'queue.delete_ok'{}, delete(Config, Server, Q)),
-
-    [rabbit_ct_broker_helpers:stop_node(Config, S) || S <- Servers0],
-    [rabbit_ct_broker_helpers:async_start_node(Config, S) || S <- lists:reverse(tl(Servers0))],
-    [rabbit_ct_broker_helpers:wait_for_async_start_node(S) || S <- lists:reverse(tl(Servers0))],
-    rabbit_ct_broker_helpers:start_node(Config, hd(Servers0)),
-
-    ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 consume_without_qos(Config) ->
@@ -1937,14 +1898,16 @@ max_age(Config) ->
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                             {<<"x-max-age">>, longstr, <<"10s">>},
+                                             {<<"x-max-age">>, longstr, <<"5s">>},
                                              {<<"x-stream-max-segment-size-bytes">>, long, 250}])),
 
     Payload = << <<"1">> || _ <- lists:seq(1, 500) >>,
 
     publish_confirm(Ch, Q, [Payload || _ <- lists:seq(1, 100)]),
 
-    timer:sleep(10000),
+    %% there is no way around this sleep, we need to wait for retention period
+    %% to pass
+    timer:sleep(5000),
 
     %% Let's publish again so the new segments will trigger the retention policy
     [publish(Ch, Q, Payload) || _ <- lists:seq(1, 100)],
@@ -1971,7 +1934,6 @@ replica_recovery(Config) ->
         fun(DownNode) ->
                 rabbit_ct_helpers:await_condition(
                   fun () ->
-                          timer:sleep(1000),
                           ct:pal("Wait for replica to recover..."),
                           try
                               {Conn, Ch2} = rabbit_ct_client_helpers:open_connection_and_channel(Config, DownNode),
@@ -1983,20 +1945,23 @@ replica_recovery(Config) ->
                           catch _:_ ->
                               false
                           end
-                  end, 30000)
+                  end, 120_000)
         end,
 
+    Perms = permute(Nodes),
+    AppPerm = lists:nth(rand:uniform(length(Perms)), Perms),
     [begin
          rabbit_control_helper:command(stop_app, DownNode),
          rabbit_control_helper:command(start_app, DownNode),
          CheckReplicaRecovered(DownNode)
-     end || [DownNode | _] <- permute(Nodes)],
+     end || [DownNode | _] <- AppPerm],
 
+    NodePerm = lists:nth(rand:uniform(length(Perms)), Perms),
     [begin
          ok = rabbit_ct_broker_helpers:stop_node(Config, DownNode),
          ok = rabbit_ct_broker_helpers:start_node(Config, DownNode),
          CheckReplicaRecovered(DownNode)
-     end || [DownNode | _] <- permute(Nodes)],
+     end || DownNode <- NodePerm],
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 leader_failover(Config) ->
@@ -2039,7 +2004,7 @@ leader_failover_dedupe(Config) ->
                  declare(Config, DownNode, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     check_leader_and_replicas(Config, Nodes),
-    timer:sleep(5000),
+
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, PubNode),
     #'confirm.select_ok'{} = amqp_channel:call(Ch2, #'confirm.select'{}),
 

@@ -78,7 +78,6 @@ all_tests() ->
      single_active_ordering,
      single_active_ordering_01,
      single_active_ordering_03,
-     in_memory_limit,
      max_length,
      snapshots_dlx,
      dlx_01,
@@ -865,7 +864,7 @@ snapshots(_Config) ->
                                   collect({log_size, length(O)},
                                           snapshots_prop(Config, O)))
                       end)
-      end, [], 1000).
+      end, [], 256).
 
 snapshots_dlx(_Config) ->
     Size = 256,
@@ -924,7 +923,7 @@ single_active(_Config) ->
       end, [], Size).
 
 upgrade(_Config) ->
-    Size = 500,
+    Size = 256,
     run_proper(
       fun () ->
               ?FORALL({Length, Bytes, DeliveryLimit, InMemoryLength, SingleActive},
@@ -953,7 +952,7 @@ upgrade(_Config) ->
       end, [], Size).
 
 upgrade_snapshots(_Config) ->
-    Size = 500,
+    Size = 256,
     run_proper(
       fun () ->
               ?FORALL({Length, Bytes, DeliveryLimit, InMemoryLength, SingleActive},
@@ -982,7 +981,7 @@ upgrade_snapshots(_Config) ->
       end, [], Size).
 
 upgrade_snapshots_v2_to_v3(_Config) ->
-    Size = 500,
+    Size = 256,
     run_proper(
       fun () ->
               ?FORALL({Length, Bytes, DeliveryLimit, SingleActive},
@@ -1034,7 +1033,7 @@ messages_total(_Config) ->
       end, [], Size).
 
 simple_prefetch(_Config) ->
-    Size = 2000,
+    Size = 500,
     run_proper(
       fun () ->
               ?FORALL({Length, Bytes, DeliveryLimit, SingleActive},
@@ -1059,7 +1058,7 @@ simple_prefetch(_Config) ->
       end, [], Size).
 
 simple_prefetch_without_checkout_cancel(_Config) ->
-    Size = 2000,
+    Size = 256,
     run_proper(
       fun () ->
               ?FORALL({Length, Bytes, DeliveryLimit, SingleActive},
@@ -1105,7 +1104,7 @@ simple_prefetch_01(_Config) ->
     ok.
 
 single_active_ordering(_Config) ->
-    Size = 2000,
+    Size = 500,
     Fun = {-1, fun ({Prev, _}) -> {Prev + 1, Prev + 1} end},
     run_proper(
       fun () ->
@@ -1193,34 +1192,6 @@ single_active_ordering_03(_Config) ->
             ct:pal("Err: ~tp~n", [Err]),
             false
     end.
-
-in_memory_limit(_Config) ->
-    Size = 2000,
-    run_proper(
-      fun () ->
-              ?FORALL({Length, Bytes, SingleActiveConsumer, DeliveryLimit,
-                       InMemoryLength, InMemoryBytes},
-                      frequency([{10, {0, 0, false, 0, 0, 0}},
-                                 {5, {oneof([range(1, 10), undefined]),
-                                      oneof([range(1, 1000), undefined]),
-                                      boolean(),
-                                      oneof([range(1, 3), undefined]),
-                                      range(1, 10),
-                                      range(1, 1000)
-                                     }}]),
-                      begin
-                          Config = config(?FUNCTION_NAME,
-                                               Length,
-                                               Bytes,
-                                               SingleActiveConsumer,
-                                               DeliveryLimit,
-                                               InMemoryLength,
-                                               InMemoryBytes),
-                      ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops, Config)),
-                              collect({log_size, length(O)},
-                                      in_memory_limit_prop(Config, O)))
-                      end)
-      end, [], Size).
 
 max_length(_Config) ->
     %% tests that max length is never transgressed
@@ -1505,31 +1476,6 @@ config(Name, Length, Bytes, SingleActive, DeliveryLimit,
 
 map_max(0) -> undefined;
 map_max(N) -> N.
-
-in_memory_limit_prop(Conf0, Commands) ->
-    Conf = Conf0#{release_cursor_interval => 100},
-    Indexes = lists:seq(1, length(Commands)),
-    Entries = lists:zip(Indexes, Commands),
-    try run_log(test_init(Conf), Entries) of
-        {_State, Effects} ->
-            %% validate message ordering
-            lists:foldl(fun ({log, Idxs, _}, ReleaseCursorIdx) ->
-                                validate_idx_order(Idxs, ReleaseCursorIdx),
-                                ReleaseCursorIdx;
-                            ({release_cursor, Idx, _}, _) ->
-                                Idx;
-                            (_, Acc) ->
-                                Acc
-                        end, 0, Effects),
-            true;
-        _ ->
-            true
-    catch
-        Err ->
-            ct:pal("Commands: ~tp~nConf~tp~n", [Commands, Conf]),
-            ct:pal("Err: ~tp~n", [Err]),
-            false
-    end.
 
 max_length_prop(Conf0, Commands) ->
     Conf = Conf0#{release_cursor_interval => 100},

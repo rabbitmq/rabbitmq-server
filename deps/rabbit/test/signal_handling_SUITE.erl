@@ -36,14 +36,16 @@ all() ->
 
 groups() ->
     Signals = [sighup,
-               sigterm,
-               sigtstp],
+               sigtstp,
+               sigterm],
     Tests = [list_to_existing_atom(rabbit_misc:format("send_~ts", [Signal]))
              || Signal <- Signals],
     [
      {signal_sent_to_pid_in_pidfile, [], Tests},
      {signal_sent_to_pid_from_os_getpid, [], Tests}
     ].
+
+-define(SLEEP, 5000).
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -61,31 +63,32 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(_, Config) ->
-    Config.
-
-end_per_group(_, Config) ->
-    Config.
-
-init_per_testcase(Testcase, Config) ->
-    rabbit_ct_helpers:testcase_started(Config, Testcase),
+init_per_group(Group, Config) ->
     ClusterSize = 1,
-    TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
+    % TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
     Config1 = rabbit_ct_helpers:set_config(
                 Config,
                 [
-                 {rmq_nodename_suffix, Testcase},
-                 {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
+                 {rmq_nodename_suffix, Group},
+                 {tcp_ports_base, {skip_n_nodes, ClusterSize}}
                 ]),
     rabbit_ct_helpers:run_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
-end_per_testcase(Testcase, Config) ->
+end_per_group(_, Config) ->
     Config1 = rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()),
-    rabbit_ct_helpers:testcase_finished(Config1, Testcase).
+    Config1.
+
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    Config.
+
+end_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Testcase),
+    Config.
 
 %% -------------------------------------------------------------------
 %% Testcases.
@@ -97,7 +100,7 @@ send_sighup(Config) ->
     %% A SIGHUP signal should be ignored and the node should still be
     %% running.
     send_signal(Pid, "HUP"),
-    timer:sleep(10000),
+    timer:sleep(?SLEEP),
     A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     ?assert(rabbit_ct_broker_helpers:rpc(Config, A, rabbit, is_running, [])),
     ?assert(filelib:is_regular(PidFile)).
@@ -108,10 +111,18 @@ send_sigterm(Config) ->
     %% After sending a SIGTERM to the process, we expect the node to
     %% exit.
     send_signal(Pid, "TERM"),
-    wait_for_node_exit(Pid),
+    rabbit_ct_helpers:await_condition(
+      fun () ->
+              rabbit_misc:is_os_process_alive(Pid) == false
+      end),
 
     %% After a clean exit, the PID file should be removed.
-    ?assertNot(filelib:is_regular(PidFile)).
+    ?assertNot(filelib:is_regular(PidFile)),
+    %% restart node
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server),
+    ok.
+
 
 send_sigtstp(Config) ->
     {PidFile, Pid} = get_pidfile_and_pid(Config),
@@ -119,7 +130,7 @@ send_sigtstp(Config) ->
     %% A SIGHUP signal should be ignored and the node should still be
     %% running.
     send_signal(Pid, "TSTP"),
-    timer:sleep(10000),
+    timer:sleep(?SLEEP),
     A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     ?assert(rabbit_ct_broker_helpers:rpc(Config, A, rabbit, is_running, [])),
     ?assert(filelib:is_regular(PidFile)).
@@ -149,12 +160,3 @@ send_signal(Pid, Signal) ->
            "-" ++ Signal,
            Pid],
     ?assertMatch({ok, _}, rabbit_ct_helpers:exec(Cmd)).
-
-wait_for_node_exit(Pid) ->
-    case rabbit_misc:is_os_process_alive(Pid) of
-        true ->
-            timer:sleep(1000),
-            wait_for_node_exit(Pid);
-        false ->
-            ok
-    end.
