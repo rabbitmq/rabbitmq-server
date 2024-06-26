@@ -580,6 +580,7 @@ do_query_node_props(Nodes) when Nodes =/= [] ->
                        fun() ->
                                erpc:multicall(Nodes, rabbit_nodes, all, [])
                        end),
+    ?LOG_ALERT("Peer discovery: rabbit_nodes:all():~n  Nodes=~p~nRet=~p", [Nodes, MembersPerNode]),
     query_node_props1(Nodes, MembersPerNode, [], ProxyGroupLeader).
 
 with_group_leader_proxy(ProxyGroupLeader, Fun) ->
@@ -629,9 +630,12 @@ query_node_props2([{Node, Members} | Rest], NodesAndProps, ProxyGroupLeader) ->
           Node, logger, debug,
           ["Peer discovery: temporary hidden node '~ts' queries properties "
            "from node '~ts'", [node(), Node]]),
+        ?LOG_ALERT("Peer discovery: Querying start time for node ~s", [Node]),
         StartTime = get_node_start_time(Node, microsecond, ProxyGroupLeader),
+        ?LOG_ALERT("Peer discovery: Querying is db ready for node ~s", [Node]),
         IsReady = is_node_db_ready(Node, ProxyGroupLeader),
         NodeAndProps = {Node, Members, StartTime, IsReady},
+        ?LOG_ALERT("Peer discovery: Props for node ~s: ~0p", [Node, NodeAndProps]),
         NodesAndProps1 = [NodeAndProps | NodesAndProps],
         query_node_props2(Rest, NodesAndProps1, ProxyGroupLeader)
     catch
@@ -652,6 +656,7 @@ query_node_props2([], NodesAndProps, ProxyGroupLeader) ->
     NodesAndProps1 = lists:reverse(NodesAndProps),
     NodesAndProps2 = sort_nodes_and_props(NodesAndProps1),
     %% Wait for the proxy group leader to flush its inbox.
+    ?LOG_ALERT("Peer discovery: Stopping proxy group leader"),
     ProxyGroupLeader ! stop_proxy,
     receive
         proxy_stopped ->
@@ -690,10 +695,13 @@ get_node_start_time(Node, Unit, ProxyGroupLeader) ->
     with_group_leader_proxy(
       ProxyGroupLeader,
       fun() ->
+              ?LOG_ALERT("Peer discovery:    erlang:system_info() on node ~s", [Node]),
               NativeStartTime = erpc:call(
                                   Node, erlang, system_info, [start_time]),
+              ?LOG_ALERT("Peer discovery:    erlang:time_offset() on node ~s", [Node]),
               TimeOffset = erpc:call(Node, erlang, time_offset, []),
               SystemStartTime = NativeStartTime + TimeOffset,
+              ?LOG_ALERT("Peer discovery:    erlang:convert_time_unit() on node ~s", [Node]),
               StartTime = erpc:call(
                             Node, erlang, convert_time_unit,
                             [SystemStartTime, native, Unit]),
@@ -724,6 +732,7 @@ is_node_db_ready(Node, ProxyGroupLeader) ->
             with_group_leader_proxy(
               ProxyGroupLeader,
               fun() ->
+                      ?LOG_ALERT("Peer discovery:    rabbit_db:is_init_finished() on node ~s", [Node]),
                       try
                           erpc:call(Node, rabbit_db, is_init_finished, [])
                       catch
