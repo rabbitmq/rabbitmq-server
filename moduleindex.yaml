@@ -692,7 +692,6 @@ rabbit:
 - rabbit_queue_decorator
 - rabbit_queue_index
 - rabbit_queue_location
-- rabbit_queue_master_locator
 - rabbit_queue_type
 - rabbit_queue_type_util
 - rabbit_quorum_memory_manager
