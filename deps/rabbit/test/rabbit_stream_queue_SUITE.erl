@@ -170,7 +170,7 @@ all_tests_4() ->
 init_per_suite(Config0) ->
     rabbit_ct_helpers:log_environment(),
     Config = rabbit_ct_helpers:merge_app_env(
-               Config0, {rabbit, [{stream_tick_interval, 1000},
+               Config0, {rabbit, [{stream_tick_interval, 256},
                                   {log, [{file, [{level, debug}]}]}]}),
     rabbit_ct_helpers:run_setup_steps(Config).
 
@@ -436,7 +436,11 @@ declare_queue(Config) ->
                  declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     %% Test declare an existing queue
-    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+    %% there is a very brief race condition in the osiris counter updates that could
+    %% cause the message count to be reported as 1 temporarily after a new stream
+    %% creation. Hence to avoid flaking we don't match on the messages counter
+    %% here
+    ?assertMatch({'queue.declare_ok', Q, _, 0},
                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     ?assertMatch([_], find_queue_info(Config, [])),
