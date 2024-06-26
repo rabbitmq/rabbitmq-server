@@ -23,8 +23,15 @@
 init() ->
     disabled.
 
--spec start(IntervalSeconds :: non_neg_integer(), inet:socket()) -> ok.
+-spec start(IntervalSeconds :: non_neg_integer(), inet:socket() | rabbit_net:web_socket()) -> ok.
 start(0, _Sock) ->
+    ok;
+%% Temporarily disable the keep-alive mechanism for WebSocket.
+%% @todo Implement an alternative that doesn't require polling the socket.
+%%       That can be done with the usual timers on receiving data
+%%       in rabbit_mqtt_processor:process_packet/2. The change should
+%%       be benchmarked against the previous mechanism as well.
+start(_, #{} = _WebSocket) ->
     ok;
 start(Seconds, Sock)
   when is_integer(Seconds) andalso Seconds > 0 ->

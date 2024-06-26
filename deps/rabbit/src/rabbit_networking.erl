@@ -132,6 +132,7 @@ boot_tls(NumAcceptors, ConcurrentConnsSupsCount) ->
 
 -spec ensure_ssl() -> rabbit_types:infos().
 
+%% @todo There is no need to start ssl as it is a dependency of Ranch.
 ensure_ssl() ->
     {ok, SslAppsConfig} = application:get_env(rabbit, ssl_apps),
     ok = app_utils:start_applications(SslAppsConfig),

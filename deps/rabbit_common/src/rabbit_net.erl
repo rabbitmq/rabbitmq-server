@@ -28,6 +28,9 @@
 -type ok_val_or_error(A) :: rabbit_types:ok_or_error2(A, any()).
 -type ok_or_any_error() :: rabbit_types:ok_or_error(any()).
 -type socket() :: port() | ssl:sslsocket().
+-type web_socket() :: #{
+    %% @todo
+}.
 -type opts() :: [{atom(), any()} |
                  {raw, non_neg_integer(), non_neg_integer(), binary()}].
 -type hostname() :: inet:hostname().
@@ -60,15 +63,16 @@
 -spec send(socket(), iodata()) -> ok_or_any_error().
 -spec close(socket()) -> ok_or_any_error().
 -spec fast_close(socket()) -> ok_or_any_error().
--spec sockname(socket()) ->
+-spec sockname(socket() | web_socket()) ->
           ok_val_or_error({inet:ip_address(), ip_port()}).
--spec peername(socket()) ->
+-spec peername(socket() | web_socket()) ->
           ok_val_or_error({inet:ip_address(), ip_port()}).
--spec peercert(socket()) ->
+-spec peercert(socket() | web_socket()) ->
           'nossl' | ok_val_or_error(rabbit_cert_info:certificate()).
--spec connection_string(socket(), 'inbound' | 'outbound') ->
+-spec connection_string(socket() | web_socket(), 'inbound' | 'outbound') ->
           ok_val_or_error(string()).
-% -spec socket_ends(socket() | ranch_proxy:proxy_socket() | ranch_proxy_ssl:ssl_socket(),
+%% @todo Fix rather than comment?
+% -spec socket_ends(socket() | web_socket()| ranch_proxy:proxy_socket() | ranch_proxy_ssl:ssl_socket(),
 %                   'inbound' | 'outbound') ->
 %           ok_val_or_error({host_or_ip(), ip_port(),
 %                            host_or_ip(), ip_port()}).
@@ -203,13 +207,17 @@ fast_close(Sock) when is_port(Sock) ->
     catch port_close(Sock), ok.
 
 sockname(Sock)   when ?IS_SSL(Sock) -> ssl:sockname(Sock);
-sockname(Sock)   when is_port(Sock) -> inet:sockname(Sock).
+sockname(Sock)   when is_port(Sock) -> inet:sockname(Sock);
+sockname(#{sock := Sock}) -> {ok, Sock}.
 
 peername(Sock)   when ?IS_SSL(Sock) -> ssl:peername(Sock);
-peername(Sock)   when is_port(Sock) -> inet:peername(Sock).
+peername(Sock)   when is_port(Sock) -> inet:peername(Sock);
+peername(#{peer := Peer}) -> {ok, Peer}.
 
 peercert(Sock)   when ?IS_SSL(Sock) -> ssl:peercert(Sock);
-peercert(Sock)   when is_port(Sock) -> nossl.
+peercert(Sock)   when is_port(Sock) -> nossl;
+peercert(#{cert := undefined}) -> nossl;
+peercert(#{cert := Cert}) -> {ok, Cert}.
 
 connection_string(Sock, Direction) ->
     case socket_ends(Sock, Direction) of
@@ -222,6 +230,7 @@ connection_string(Sock, Direction) ->
             Error
     end.
 
+%% @todo This doesn't accept a TCP socket somehow?
 socket_ends(Sock, Direction) when ?IS_SSL(Sock);
     is_port(Sock) ->
     {From, To} = sock_funs(Direction),
@@ -240,6 +249,7 @@ socket_ends({rabbit_proxy_socket, Sock, ProxyInfo}, Direction) ->
         #{command := local} ->
             socket_ends(Sock, Direction);
         %% PROXY header: use the IP/ports from the proxy header.
+        %% @todo This doesn't correctly take Direction into account?
         #{
           src_address := FromAddress,
           src_port := FromPort,
@@ -248,7 +258,24 @@ socket_ends({rabbit_proxy_socket, Sock, ProxyInfo}, Direction) ->
          } ->
             {ok, {rdns(FromAddress), FromPort,
                   rdns(ToAddress),   ToPort}}
-    end.
+    end;
+%% @todo We don't take Direction into account.
+socket_ends(#{proxy_header := #{command := proxy} = ProxyHeader}, _Direction) ->
+    #{
+        src_address := FromAddress,
+        src_port := FromPort,
+        dest_address := ToAddress,
+        dest_port := ToPort
+    } = ProxyHeader,
+    {ok, {rdns(FromAddress), FromPort,
+          rdns(ToAddress),   ToPort}};
+socket_ends(WebSocket, _Direction) ->
+    #{
+        peer := {FromAddress, FromPort},
+        sock := {ToAddress, ToPort}
+    } = WebSocket,
+    {ok, {rdns(FromAddress), FromPort,
+          rdns(ToAddress),   ToPort}}.
 
 maybe_ntoab(Addr) when is_tuple(Addr) -> rabbit_misc:ntoab(Addr);
 maybe_ntoab(Host)                     -> Host.

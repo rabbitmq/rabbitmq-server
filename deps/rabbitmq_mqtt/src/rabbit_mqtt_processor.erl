@@ -2277,6 +2277,11 @@ mailbox_soft_limit_exceeded() ->
             false
     end.
 
+is_socket_busy(#{} = _WebSocket) ->
+    %% We cannot get socket stats for a WebSocket as
+    %% the real socket is a few layers below us when
+    %% using HTTP/2+.
+    false;
 is_socket_busy(Socket) ->
     case rabbit_net:getstat(Socket, [send_pend]) of
         {ok, [{send_pend, NumBytes}]}

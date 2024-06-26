@@ -16,13 +16,14 @@
 -export([init/1]).
 
 start(_Type, _StartArgs) ->
-    {ok, Listener} = application:get_env(rabbitmq_web_mqtt_examples, listener),
-    {ok, _} = rabbit_web_dispatch:register_static_context(
-                web_mqtt_examples, Listener, "web-mqtt-examples", ?MODULE,
-                "priv", "WEB-MQTT: examples"),
+    Routes = cowboy_router:compile([{'_', [
+        {"/web-mqtt-examples/[...]", cowboy_static, {priv_dir, rabbitmq_web_mqtt_examples, "", []}}
+    ]}]),
+    rabbit_web:add_routes_to_listeners(rabbit_web_mqtt, Routes),
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 stop(_State) ->
+    %% @todo Remove routes.
     rabbit_web_dispatch:unregister_context(web_mqtt_examples),
     ok.
 
