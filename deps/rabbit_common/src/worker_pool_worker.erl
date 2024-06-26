@@ -17,7 +17,6 @@
 -export([start_link/1, next_job_from/2, submit/3, submit_async/2,
          run/1]).
 
--export([set_maximum_since_use/2]).
 -export([set_timeout/2, set_timeout/3, clear_timeout/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -32,7 +31,6 @@
 -spec submit(pid(), fun (() -> A) | mfargs(), 'reuse' | 'single') -> A.
 -spec submit_async(pid(), fun (() -> any()) | mfargs()) -> 'ok'.
 -spec run(fun (() -> A)) -> A; (mfargs()) -> any().
--spec set_maximum_since_use(pid(), non_neg_integer()) -> 'ok'.
 
 %%----------------------------------------------------------------------------
 
@@ -52,9 +50,6 @@ submit(Pid, Fun, ProcessModel) ->
 
 submit_async(Pid, Fun) ->
     gen_server2:cast(Pid, {submit_async, Fun, self()}).
-
-set_maximum_since_use(Pid, Age) ->
-    gen_server2:cast(Pid, {set_maximum_since_use, Age}).
 
 run({M, F, A}) -> apply(M, F, A);
 run(Fun)       -> Fun().
@@ -76,15 +71,12 @@ run(Fun, single) ->
 %%----------------------------------------------------------------------------
 
 init([PoolName]) ->
-    ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
-                                             [self()]),
     ok = worker_pool:ready(PoolName, self()),
     put(worker_pool_worker, true),
     put(worker_pool_name, PoolName),
     {ok, undefined, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-prioritise_cast({set_maximum_since_use, _Age}, _Len, _State) -> 8;
 prioritise_cast({next_job_from, _CPid},        _Len, _State) -> 7;
 prioritise_cast(_Msg,                          _Len, _State) -> 0.
 
@@ -119,10 +111,6 @@ handle_cast({submit_async, Fun, CPid}, {from, CPid, MRef}) ->
     run(Fun),
     ok = worker_pool:idle(get(worker_pool_name), self()),
     {noreply, undefined, hibernate};
-
-handle_cast({set_maximum_since_use, Age}, State) ->
-    ok = file_handle_cache:set_maximum_since_use(Age),
-    {noreply, State, hibernate};
 
 handle_cast(Msg, State) ->
     {stop, {unexpected_cast, Msg}, State}.

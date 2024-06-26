@@ -136,7 +136,6 @@ var ALL_COLUMNS =
                         ['rate-deliver', 'deliver / get', true]]},
      'overview':
      {'Statistics': [['file_descriptors',   'File descriptors',   true],
-                     ['socket_descriptors', 'Socket descriptors', true],
                      ['erlang_processes',   'Erlang processes',   true],
                      ['memory',             'Memory',             true],
                      ['disk_space',         'Disk space',         true]],
@@ -314,20 +313,13 @@ var HELP = {
     'file-descriptors':
       '<p>File descriptor count and limit, as reported by the operating \
       system. The count includes network sockets and file handles.</p> \
-      <p>To optimize disk access RabbitMQ uses as many free descriptors as are \
-      available, so the count may safely approach the limit. \
-      However, if most of the file descriptors are used by sockets then \
-      persister performance will be negatively impacted.</p> \
+      <p>To optimize disk access RabbitMQ uses as many file descriptors as \
+      needed, so the limit must be high enough for safe operation.</p> \
       <p>To change the limit on Unix / Linux, use "ulimit -n". To change \
       the limit on Windows, set the ERL_MAX_PORTS environment variable</p> \
       <p>To report used file handles on Windows, handle.exe from \
       sysinternals must be installed in your path. You can download it \
       <a target="_blank" href="https://technet.microsoft.com/en-us/sysinternals/bb896655">here</a>.</p>',
-
-    'socket-descriptors':
-      'The network sockets count and limit managed by RabbitMQ.<br/> \
-      When the limit is exhausted RabbitMQ will stop accepting new \
-      network connections.',
 
     'memory-alarm':
       '<p>The <a target="_blank" href="https://www.rabbitmq.com/memory.html#memsup">memory \

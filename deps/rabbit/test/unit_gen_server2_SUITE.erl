@@ -65,8 +65,8 @@ gen_server2_with_state(Config) ->
       ?MODULE, gen_server2_with_state1, [Config]).
 
 gen_server2_with_state1(_Config) ->
-    fhc_state = gen_server2:with_state(file_handle_cache,
-                                       fun (S) -> element(1, S) end),
+    state = gen_server2:with_state(background_gc,
+                                   fun (S) -> element(1, S) end),
     passed.
 
 

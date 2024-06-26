@@ -97,8 +97,7 @@ init_per_group(Group, Config) ->
             rabbit_ct_helpers:run_steps(Config1,
               rabbit_ct_broker_helpers:setup_steps() ++
               rabbit_ct_client_helpers:setup_steps() ++ [
-                fun(C) -> init_per_group1(Group, C) end,
-                fun setup_file_handle_cache/1
+                fun(C) -> init_per_group1(Group, C) end
               ]);
         false ->
             rabbit_ct_helpers:run_steps(Config, [
@@ -136,17 +135,6 @@ init_per_group1(from_cluster_node2, Config) ->
     rabbit_ct_helpers:set_config(Config, {test_direction, {1, 0}});
 init_per_group1(_, Config) ->
     Config.
-
-setup_file_handle_cache(Config) ->
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, setup_file_handle_cache1, []),
-    Config.
-
-setup_file_handle_cache1() ->
-    %% FIXME: Why are we doing this?
-    application:set_env(rabbit, file_handles_high_watermark, 100),
-    ok = file_handle_cache:set_limit(100),
-    ok.
 
 end_per_group(Group, Config) ->
     case lists:member({group, Group}, all()) of

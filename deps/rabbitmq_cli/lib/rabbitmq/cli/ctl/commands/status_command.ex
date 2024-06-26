@@ -166,8 +166,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
 
     file_descriptors = [
       "\n#{bright("File Descriptors")}\n",
-      "Total: #{m[:file_descriptors][:total_used]}, limit: #{m[:file_descriptors][:total_limit]}",
-      "Sockets: #{m[:file_descriptors][:sockets_used]}, limit: #{m[:file_descriptors][:sockets_limit]}"
+      "Total: #{m[:file_descriptors][:total_used]}, limit: #{m[:file_descriptors][:total_limit]}"
     ]
 
     disk_space_section = [

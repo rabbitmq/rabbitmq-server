@@ -41,8 +41,7 @@
           conserve = false :: boolean(),
           stats_timer :: option(rabbit_event:state()),
           keepalive = rabbit_mqtt_keepalive:init() :: rabbit_mqtt_keepalive:state(),
-          conn_name :: option(binary()),
-          should_use_fhc :: rabbit_types:option(boolean())
+          conn_name :: option(binary())
         }).
 
 -type state() :: #state{}.
@@ -82,15 +81,10 @@ init(Req, Opts) ->
                 true ->
                     WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
                     WsOpts  = maps:merge(#{compress => true}, WsOpts0),
-                    ShouldUseFHC = application:get_env(?APP, use_file_handle_cache, true),
-                    case ShouldUseFHC of
-                      true  -> ?LOG_INFO("Web MQTT: file handle cache use is enabled");
-                      false -> ?LOG_INFO("Web MQTT: file handle cache use is disabled")
-                    end,
 
                     {?MODULE,
                      cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, <<"mqtt">>, Req),
-                     #state{socket = maps:get(proxy_header, Req, undefined), should_use_fhc = ShouldUseFHC},
+                     #state{socket = maps:get(proxy_header, Req, undefined)},
                      WsOpts}
             end
     end.
@@ -111,15 +105,8 @@ info(Pid, Items) ->
 -spec websocket_init(state()) ->
     {cowboy_websocket:commands(), state()} |
     {cowboy_websocket:commands(), state(), hibernate}.
-websocket_init(State0 = #state{socket = Sock, should_use_fhc = ShouldUseFHC}) ->
+websocket_init(State0 = #state{socket = Sock}) ->
     logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CONN ++ [web_mqtt]}),
-    case ShouldUseFHC of
-      true  ->
-        ok = file_handle_cache:obtain();
-      false -> ok;
-      undefined ->
-        ok = file_handle_cache:obtain()
-    end,
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
             ConnName = rabbit_data_coercion:to_binary(ConnStr),
@@ -271,18 +258,10 @@ terminate(Reason, Request, #state{} = State) ->
 terminate(_Reason, _Request,
           {SendWill, #state{conn_name = ConnName,
                             proc_state = PState,
-                            keepalive = KState,
-                            should_use_fhc = ShouldUseFHC} = State}) ->
+                            keepalive = KState} = State}) ->
     ?LOG_INFO("Web MQTT closing connection ~ts", [ConnName]),
     maybe_emit_stats(State),
     _ = rabbit_mqtt_keepalive:cancel_timer(KState),
-    case ShouldUseFHC of
-      true  ->
-        ok = file_handle_cache:release();
-      false -> ok;
-      undefined ->
-        ok = file_handle_cache:release()
-    end,
     case PState of
         connect_packet_unprocessed ->
             ok;
@@ -296,12 +275,9 @@ terminate(_Reason, _Request,
 no_supported_sub_protocol(Protocol, Req) ->
     %% The client MUST include “mqtt” in the list of WebSocket Sub Protocols it offers [MQTT-6.0.0-3].
     ?LOG_ERROR("Web MQTT: 'mqtt' not included in client offered subprotocols: ~tp", [Protocol]),
-    %% Set should_use_fhc to false, because at this early stage of init no fhc
-    %% obtain was called, so terminate/3 should not call fhc release
-    %% (even if use_file_handle_cache is true)
     {ok,
      cowboy_req:reply(400, #{<<"connection">> => <<"close">>}, Req),
-     #state{should_use_fhc = false}}.
+     #state{}}.
 
 handle_data(Data, State0 = #state{}) ->
     case handle_data1(Data, State0) of

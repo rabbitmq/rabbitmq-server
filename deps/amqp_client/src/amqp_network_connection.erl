@@ -118,7 +118,6 @@ do_connect({Addr, Family},
                                              connection_timeout = Timeout,
                                              socket_options     = ExtraOpts},
            SIF, State) ->
-    ok = obtain(),
     case gen_tcp:connect(Addr, Port,
                          [Family | ?RABBIT_TCP_OPTS] ++ ExtraOpts,
                          Timeout) of
@@ -134,7 +133,6 @@ do_connect({Addr, Family},
            SIF, State) ->
     {ok, GlobalSslOpts} = application:get_env(amqp_client, ssl_options),
     app_utils:start_applications([asn1, crypto, public_key, ssl]),
-    ok = obtain(),
     case gen_tcp:connect(Addr, Port,
                          [Family | ?RABBIT_TCP_OPTS] ++ ExtraOpts,
                          Timeout) of
@@ -377,12 +375,6 @@ handshake_recv(Expecting) ->
             _ ->
                 exit(handshake_receive_timed_out)
         end
-    end.
-
-obtain() ->
-    case code:is_loaded(file_handle_cache) of
-        false -> ok;
-        _     -> file_handle_cache:obtain()
     end.
 
 get_reason(#'connection.close'{reply_code = ErrCode}) ->

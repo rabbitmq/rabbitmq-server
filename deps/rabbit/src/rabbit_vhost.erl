@@ -36,8 +36,6 @@ recover() ->
     %% faster than other nodes handled DOWN messages from us.
     rabbit_amqqueue:on_node_down(node()),
 
-    rabbit_amqqueue:warn_file_limit(),
-
     %% Prepare rabbit_semi_durable_route table
     {Time, _} = timer:tc(fun() ->
                                  rabbit_binding:recover()

@@ -18,8 +18,6 @@
 -export([filename_as_a_directory/1]).
 -export([filename_to_binary/1, binary_to_filename/1]).
 
--import(file_handle_cache, [with_handle/1, with_handle/2]).
-
 -define(TMP_EXT, ".tmp").
 
 %%----------------------------------------------------------------------------
@@ -56,7 +54,7 @@ file_size(File) ->
 
 -spec ensure_dir((file:filename())) -> ok_or_error().
 
-ensure_dir(File) -> with_handle(fun () -> ensure_dir_internal(File) end).
+ensure_dir(File) -> ensure_dir_internal(File).
 
 ensure_dir_internal("/")  ->
     ok;
@@ -81,16 +79,17 @@ wildcard(Pattern, Dir) ->
 -spec list_dir(file:filename()) ->
           rabbit_types:ok_or_error2([file:filename()], any()).
 
-list_dir(Dir) -> with_handle(fun () -> prim_file:list_dir(Dir) end).
+list_dir(Dir) -> prim_file:list_dir(Dir).
 
 read_file_info(File) ->
-    with_handle(fun () -> file:read_file_info(File, [raw]) end).
+    file:read_file_info(File, [raw]).
 
 -spec read_term_file
         (file:filename()) -> {'ok', [any()]} | rabbit_types:error(any()).
 
 read_term_file(File) ->
     try
+        %% @todo OTP-27+ has file:read_file(File, [raw]).
         F = fun() ->
                     {ok, FInfo} = file:read_file_info(File, [raw]),
                     {ok, Fd} = file:open(File, [read, raw, binary]),
@@ -100,7 +99,7 @@ read_term_file(File) ->
                         file:close(Fd)
                     end
             end,
-        {ok, Data} = with_handle(F),
+        {ok, Data} = F(),
         {ok, Tokens, _} = erl_scan:string(binary_to_list(Data)),
         TokenGroups = group_tokens(Tokens),
         {ok, [begin
@@ -166,22 +165,19 @@ with_synced_copy(Path, Modes, Fun) ->
         true ->
             {error, append_not_supported, Path};
         false ->
-            with_handle(
-              fun () ->
-                      Bak = Path ++ ?TMP_EXT,
-                      case prim_file:open(Bak, Modes) of
-                          {ok, Hdl} ->
-                              try
-                                  Result = Fun(Hdl),
-                                  ok = prim_file:sync(Hdl),
-                                  ok = prim_file:rename(Bak, Path),
-                                  Result
-                              after
-                                  prim_file:close(Hdl)
-                              end;
-                          {error, _} = E -> E
-                      end
-              end)
+            Bak = Path ++ ?TMP_EXT,
+            case prim_file:open(Bak, Modes) of
+                {ok, Hdl} ->
+                    try
+                        Result = Fun(Hdl),
+                        ok = prim_file:sync(Hdl),
+                        ok = prim_file:rename(Bak, Path),
+                        Result
+                    after
+                        prim_file:close(Hdl)
+                    end;
+                {error, _} = E -> E
+            end
     end.
 
 %% TODO the semantics of this function are rather odd. But see bug 25021.
@@ -198,16 +194,12 @@ append_file(File, Suffix) ->
 append_file(_, _, "") ->
     ok;
 append_file(File, 0, Suffix) ->
-    with_handle(fun () ->
-                        case prim_file:open([File, Suffix], [append]) of
-                            {ok, Fd} -> prim_file:close(Fd);
-                            Error    -> Error
-                        end
-                end);
+    case prim_file:open([File, Suffix], [append]) of
+        {ok, Fd} -> prim_file:close(Fd);
+        Error    -> Error
+    end;
 append_file(File, _, Suffix) ->
-    case with_handle(2, fun () ->
-                                file:copy(File, {[File, Suffix], [append]})
-                        end) of
+    case file:copy(File, {[File, Suffix], [append]}) of
         {ok, _BytesCopied} -> ok;
         Error              -> Error
     end.
@@ -223,21 +215,19 @@ ensure_parent_dirs_exist(Filename) ->
 
 -spec rename(file:filename(), file:filename()) -> ok_or_error().
 
-rename(Old, New) -> with_handle(fun () -> prim_file:rename(Old, New) end).
+rename(Old, New) -> prim_file:rename(Old, New).
 
 -spec delete([file:filename()]) -> ok_or_error().
 
-delete(File) -> with_handle(fun () -> prim_file:delete(File) end).
+delete(File) -> prim_file:delete(File).
 
 -spec recursive_delete([file:filename()]) ->
           rabbit_types:ok_or_error({file:filename(), any()}).
 
 recursive_delete(Files) ->
-    with_handle(
-      fun () -> lists:foldl(fun (Path,  ok) -> recursive_delete1(Path);
-                                (_Path, {error, _Err} = Error) -> Error
-                            end, ok, Files)
-      end).
+    lists:foldl(fun (Path,  ok) -> recursive_delete1(Path);
+                    (_Path, {error, _Err} = Error) -> Error
+                end, ok, Files).
 
 recursive_delete1(Path) ->
     case is_dir_no_handle(Path) and not(is_symlink_no_handle(Path)) of
@@ -315,10 +305,8 @@ recursive_copy(Src, Dest) ->
 lock_file(Path) ->
     case is_file(Path) of
         true  -> {error, eexist};
-        false -> with_handle(
-                   fun () -> {ok, Lock} = prim_file:open(Path, [write]),
-                             ok = prim_file:close(Lock)
-                   end)
+        false -> {ok, Lock} = prim_file:open(Path, [write]),
+                 ok = prim_file:close(Lock)
     end.
 
 -spec filename_as_a_directory(file:filename()) -> file:filename().

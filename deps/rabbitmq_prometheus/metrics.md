@@ -132,9 +132,7 @@ These metrics are specific to the stream protocol.
 | rabbitmq_disk_space_available_limit_bytes | Free disk space low watermark in bytes             |
 | rabbitmq_identity_info                    | RabbitMQ node & cluster identity info              |
 | rabbitmq_process_max_fds                  | Open file descriptors limit                        |
-| rabbitmq_process_max_tcp_sockets          | Open TCP sockets limit                             |
 | rabbitmq_process_open_fds                 | Open file descriptors                              |
-| rabbitmq_process_open_tcp_sockets         | Open TCP sockets                                   |
 | rabbitmq_process_resident_memory_bytes    | Memory used in bytes                               |
 | rabbitmq_resident_memory_limit_bytes      | Memory high watermark in bytes                     |
 
