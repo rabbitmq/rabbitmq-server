@@ -66,6 +66,13 @@ include mk/github-actions.mk
 include mk/bazel.mk
 include mk/topic-branches.mk
 
+# If PLUGINS was set when we use run-broker we want to
+# fill in the enabled plugins list. PLUGINS is a more
+# natural space-separated list.
+ifdef PLUGINS
+RABBITMQ_ENABLED_PLUGINS ?= $(call comma_list,$(PLUGINS))
+endif
+
 # --------------------------------------------------------------------
 # Mix Hex cache management.
 # --------------------------------------------------------------------
