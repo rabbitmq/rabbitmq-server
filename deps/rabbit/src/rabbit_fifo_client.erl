@@ -142,7 +142,7 @@ enqueue(_QName, _Correlation, _Msg,
                cfg = #cfg{}} = State) ->
     {reject_publish, State};
 enqueue(QName, Correlation, Msg,
-        #state{slow = Slow,
+        #state{slow = WasSlow,
                pending = Pending,
                queue_status = go,
                next_seq = Seq,
@@ -152,19 +152,15 @@ enqueue(QName, Correlation, Msg,
     % by default there is no correlation id
     Cmd = rabbit_fifo:make_enqueue(self(), EnqueueSeq, Msg),
     ok = ra:pipeline_command(ServerId, Cmd, Seq, low),
-    Tag = case map_size(Pending) >= SftLmt of
-              true -> slow;
-              false -> ok
-          end,
+    IsSlow = map_size(Pending) >= SftLmt,
     State = State0#state{pending = Pending#{Seq => {Correlation, Cmd}},
                          next_seq = Seq + 1,
                          next_enqueue_seq = EnqueueSeq + 1,
-                         slow = Tag == slow},
-    case Tag of
-        slow when not Slow ->
-            {ok, set_timer(QName, State), [{block, cluster_name(State)}]};
-        _ ->
-            {ok, State, []}
+                         slow = IsSlow},
+    if IsSlow andalso not WasSlow ->
+           {ok, set_timer(QName, State), [{block, cluster_name(State)}]};
+       true ->
+           {ok, State, []}
     end.
 
 %% @doc Enqueues a message.
@@ -608,7 +604,7 @@ handle_ra_event(QName, From, {applied, Seqs},
                       %% is sequence numer agnostic: it handles any correlation terms.
                       [{settled, QName, Corrs} | Actions0]
               end,
-    case maps:size(State1#state.pending) < SftLmt of
+    case map_size(State1#state.pending) < SftLmt of
         true when State1#state.slow == true ->
             % we have exited soft limit state
             % send any unsent commands and cancel the time as
@@ -914,32 +910,20 @@ consumer_key(ConsumerTag, #state{consumers = Consumers}) ->
 consumer_id(ConsumerTag) when is_binary(ConsumerTag) ->
     {ConsumerTag, self()}.
 
-send_command(Server, Correlation, Command, _Priority,
-             #state{pending = Pending,
-                    next_seq = Seq,
-                    cfg = #cfg{soft_limit = SftLmt}} = State)
-  when element(1, Command) == return ->
-    %% returns are sent to the aux machine for pre-evaluation
-    ok = ra:cast_aux_command(Server, {Command, Seq, self()}),
-    Tag = case map_size(Pending) >= SftLmt of
-              true -> slow;
-              false -> ok
-          end,
-    State#state{pending = Pending#{Seq => {Correlation, Command}},
-                next_seq = Seq + 1,
-                slow = Tag == slow};
 send_command(Server, Correlation, Command, Priority,
              #state{pending = Pending,
                     next_seq = Seq,
                     cfg = #cfg{soft_limit = SftLmt}} = State) ->
-    ok = ra:pipeline_command(Server, Command, Seq, Priority),
-    Tag = case map_size(Pending) >= SftLmt of
-              true -> slow;
-              false -> ok
-          end,
+    ok = case element(1, Command) of
+             return ->
+                 %% returns are sent to the aux machine for pre-evaluation
+                 ra:cast_aux_command(Server, {Command, Seq, self()});
+             _ ->
+                 ra:pipeline_command(Server, Command, Seq, Priority)
+         end,
     State#state{pending = Pending#{Seq => {Correlation, Command}},
                 next_seq = Seq + 1,
-                slow = Tag == slow}.
+                slow = map_size(Pending) >= SftLmt}.
 
 resend_command(ServerId, Correlation, Command,
                #state{pending = Pending,
