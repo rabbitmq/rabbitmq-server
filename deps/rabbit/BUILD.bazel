@@ -1014,6 +1014,14 @@ rabbitmq_suite(
     size = "small",
 )
 
+rabbitmq_suite(
+    name = "unit_queue_location_SUITE",
+    size = "small",
+    deps = [
+        "@meck//:erlang_app",
+    ]
+)
+
 rabbitmq_integration_suite(
     name = "unit_stats_and_metrics_SUITE",
     size = "medium",
