@@ -132,11 +132,11 @@ endef
 
 LOCAL_DEPS = sasl os_mon inets compiler public_key crypto ssl syntax_tools xmerl
 
-BUILD_DEPS = rabbitmq_cli looking_glass
+BUILD_DEPS = rabbitmq_cli
 DEPS = ranch rabbit_common amqp10_common rabbitmq_prelaunch ra sysmon_handler stdout_formatter recon redbug observer_cli osiris syslog systemd seshat khepri khepri_mnesia_migration cuttlefish gen_batch_server
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers meck proper amqp_client rabbitmq_amqp_client rabbitmq_amqp1_0
 
-PLT_APPS += mnesia runtime_tools looking_glass
+PLT_APPS += mnesia runtime_tools
 
 dep_syslog = git https://github.com/schlagert/syslog 4.0.0
 dep_osiris = git https://github.com/rabbitmq/osiris v1.8.1

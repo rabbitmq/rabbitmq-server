@@ -14,11 +14,11 @@ PACKAGES_DIR ?= $(abspath PACKAGES)
 include plugins.mk
 
 # An additional list of plugins to include in a RabbitMQ release,
-# on top of the standard plugins. For example, looking_glass.
+# on top of the standard plugins.
 #
 # Note: When including NIFs in a release make sure to build
 # them on the appropriate platform for the target environment.
-# For example build looking_glass on Linux when targeting Docker.
+# For example build on Linux when targeting Docker.
 ADDITIONAL_PLUGINS ?=
 
 DEPS = rabbit_common rabbit $(PLUGINS) $(ADDITIONAL_PLUGINS)

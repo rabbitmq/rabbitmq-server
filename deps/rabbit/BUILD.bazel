@@ -186,8 +186,6 @@ test_suite_beam_files(name = "test_suite_beam_files")
 # gazelle:erlang_app_dep sysmon_handler
 # gazelle:erlang_app_dep systemd
 
-# gazelle:erlang_app_dep_exclude looking_glass
-
 rabbitmq_app(
     name = "erlang_app",
     srcs = [":all_srcs"],
@@ -253,7 +251,6 @@ plt(
     plt = "//:base_plt",
     deps = [
         "//deps/rabbitmq_cli:erlang_app",  # keep
-        "@looking_glass//:erlang_app",  # keep
     ],
 )
 

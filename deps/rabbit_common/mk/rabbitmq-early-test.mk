@@ -70,28 +70,3 @@ CT_OPTS += -ct_hooks $(wordlist 2,$(words $(CT_HOOKS_PARAM_VALUE)),$(CT_HOOKS_PA
 ifeq ($(SKIP_AS_ERROR),1)
 export RABBITMQ_CT_SKIP_AS_ERROR = true
 endif
-
-# --------------------------------------------------------------------
-# Looking Glass rules.
-# --------------------------------------------------------------------
-
-ifneq ("$(RABBITMQ_TRACER)","")
-BUILD_DEPS += looking_glass
-ERL_LIBS := "$(ERL_LIBS):../looking_glass:../lz4"
-export RABBITMQ_TRACER
-endif
-
-define lg_callgrind.erl
-lg_callgrind:profile_many("traces.lz4.*", "callgrind.out", #{running => true}),
-halt().
-endef
-
-.PHONY: profile clean-profile
-
-profile:
-	$(gen_verbose) $(call erlang,$(call lg_callgrind.erl))
-
-clean:: clean-profile
-
-clean-profile:
-	$(gen_verbose) rm -f traces.lz4.* callgrind.out.*
