@@ -86,13 +86,6 @@ RABBITMQ_ENABLED_PLUGINS_FILE ?= $(call node_enabled_plugins_file,$(RABBITMQ_NOD
 RABBITMQ_LOG ?= debug,+color
 export RABBITMQ_LOG
 
-FAST_RUN_BROKER ?= 1
-
-ifeq ($(FAST_RUN_BROKER),1)
-DIST_TARGET = $(if $(NOBUILD),,all)
-PLUGINS_FROM_DEPS_DIR = 1
-endif
-
 ifdef PLUGINS_FROM_DEPS_DIR
 RMQ_PLUGINS_DIR = $(DEPS_DIR)
 DIST_ERL_LIBS = $(ERL_LIBS)
@@ -153,13 +146,7 @@ virgin-node-tmpdir:
 ifdef LEAVE_PLUGINS_DISABLED
 RABBITMQ_ENABLED_PLUGINS ?=
 else
-# When running "make -C deps/plugin run-broker" we only want
-# "plugin" to be enabled.
-ifeq ($(PROJECT),rabbitmq_server_release)
 RABBITMQ_ENABLED_PLUGINS ?= ALL
-else
-RABBITMQ_ENABLED_PLUGINS ?= $(filter-out rabbit,$(PROJECT))
-endif
 endif
 
 # --------------------------------------------------------------------
