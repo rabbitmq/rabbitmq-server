@@ -2148,6 +2148,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         deps = ["//deps/amqp_client:erlang_app"],
     )
     erlang_bytecode(
+        name = "rabbit_fifo_q_SUITE_beam_files",
         testonly = True,
         srcs = ["test/rabbit_fifo_q_SUITE.erl"],
         outs = ["test/rabbit_fifo_q_SUITE.beam"],
