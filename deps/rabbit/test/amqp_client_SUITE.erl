@@ -3134,7 +3134,7 @@ available_messages(QType, Config) ->
     receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
     after 5000 -> ct:fail({missing_event, ?LINE})
     end,
-    ?assertEqual(5000, get_available_messages(Receiver)),
+    eventually(?_assertEqual(5000, get_available_messages(Receiver))),
 
     ok = amqp10_client:detach_link(Sender),
     ok = amqp10_client:detach_link(Receiver),
