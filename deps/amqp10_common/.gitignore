@@ -18,7 +18,6 @@
 /sbin/
 /sbin.lock
 /test/ct.cover.spec
-/xrefr
 _build
 
 /amqp10_common.d

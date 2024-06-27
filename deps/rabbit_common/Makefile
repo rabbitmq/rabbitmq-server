@@ -56,7 +56,6 @@ HEX_TARBALL_FILES += rabbitmq-components.mk \
 		     mk/rabbitmq-dist.mk \
 		     mk/rabbitmq-early-test.mk \
 		     mk/rabbitmq-hexpm.mk \
-		     mk/rabbitmq-macros.mk \
 		     mk/rabbitmq-test.mk \
 		     mk/rabbitmq-tools.mk
 

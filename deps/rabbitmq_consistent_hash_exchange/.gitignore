@@ -14,6 +14,5 @@
 /plugins.lock
 /sbin/
 /sbin.lock
-/xrefr
 
 rabbitmq_consistent_hash_exchange.d

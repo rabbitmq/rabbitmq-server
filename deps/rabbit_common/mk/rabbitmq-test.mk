@@ -4,20 +4,6 @@ ct-slow ct-fast:
 	$(MAKE) ct CT_SUITES='$(CT_SUITES)'
 
 # --------------------------------------------------------------------
-# xref
-# --------------------------------------------------------------------
-
-# We need the list of dependencies of the current project. We use it in
-# xrefr(1) to scan for Elixir-based projects. For those, we need to add
-# the path inside `_build` to the xref code path.
-
-ifneq ($(filter xref,$(MAKECMDGOALS)),)
-export ERLANG_MK_RECURSIVE_DEPS_LIST
-endif
-
-xref: $(ERLANG_MK_RECURSIVE_DEPS_LIST)
-
-# --------------------------------------------------------------------
 # Helpers to run Make targets on Concourse.
 # --------------------------------------------------------------------
 

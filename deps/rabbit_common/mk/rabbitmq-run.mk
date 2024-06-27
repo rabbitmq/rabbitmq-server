@@ -44,18 +44,6 @@ CODEGEN_DIR = $(DEPS_DIR)/rabbitmq_codegen
 PYTHONPATH = $(CODEGEN_DIR)
 export PYTHONPATH
 
-ANT ?= ant
-ANT_FLAGS += -Dmake.bin=$(MAKE) \
-	     -DUMBRELLA_AVAILABLE=true \
-	     -Drabbitmqctl.bin=$(RABBITMQCTL) \
-	     -Dsibling.codegen.dir=$(CODEGEN_DIR)
-ifeq ($(PROJECT),rabbitmq_test)
-ANT_FLAGS += -Dsibling.rabbitmq_test.dir=$(CURDIR)
-else
-ANT_FLAGS += -Dsibling.rabbitmq_test.dir=$(DEPS_DIR)/rabbitmq_test
-endif
-export ANT ANT_FLAGS
-
 node_tmpdir = $(TEST_TMPDIR)/$(1)
 node_pid_file = $(call node_tmpdir,$(1))/$(1).pid
 node_log_base = $(call node_tmpdir,$(1))/log
@@ -97,13 +85,6 @@ RABBITMQ_ENABLED_PLUGINS_FILE ?= $(call node_enabled_plugins_file,$(RABBITMQ_NOD
 # To change this, set RABBITMQ_LOG to info, notice, warning etc.
 RABBITMQ_LOG ?= debug,+color
 export RABBITMQ_LOG
-
-FAST_RUN_BROKER ?= 1
-
-ifeq ($(FAST_RUN_BROKER),1)
-DIST_TARGET = $(if $(NOBUILD),,all)
-PLUGINS_FROM_DEPS_DIR = 1
-endif
 
 ifdef PLUGINS_FROM_DEPS_DIR
 RMQ_PLUGINS_DIR = $(DEPS_DIR)
@@ -165,14 +146,7 @@ virgin-node-tmpdir:
 ifdef LEAVE_PLUGINS_DISABLED
 RABBITMQ_ENABLED_PLUGINS ?=
 else
-# When running "make -C deps/plugin run-broker" we only want
-# "plugin" to be enabled. See rabbitmq-components.mk for where
-# this variable comes from.
-ifdef deps_dir_overriden
-RABBITMQ_ENABLED_PLUGINS ?= $(filter-out rabbit,$(PROJECT))
-else
 RABBITMQ_ENABLED_PLUGINS ?= ALL
-endif
 endif
 
 # --------------------------------------------------------------------

@@ -222,12 +222,6 @@
                     {requires,    [core_initialized, recovery]},
                     {enables,     routing_ready}]}).
 
--rabbit_boot_step({rabbit_looking_glass,
-                   [{description, "Looking Glass tracer and profiler"},
-                    {mfa,         {rabbit_looking_glass, boot, []}},
-                    {requires,    [core_initialized, recovery]},
-                    {enables,     routing_ready}]}).
-
 -rabbit_boot_step({rabbit_observer_cli,
                    [{description, "Observer CLI configuration"},
                     {mfa,         {rabbit_observer_cli, init, []}},

@@ -13,6 +13,5 @@
 /plugins.lock
 /sbin/
 /sbin.lock
-/xrefr
 
 rabbitmq_federation.d

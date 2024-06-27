@@ -19,7 +19,6 @@ MnesiaCore.*
 /plugins.lock
 /test/ct.cover.spec
 /test/config_schema_SUITE_data/schema/**
-/xrefr
 /sbin/
 /sbin.lock
 rabbit.d

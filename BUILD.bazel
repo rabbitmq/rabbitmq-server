@@ -134,10 +134,7 @@ plt(
 
 PLUGINS = all_plugins(
     rabbitmq_workspace = "",
-) + select({
-    "@rules_erlang//:debug_build": ["@looking_glass//:erlang_app"],
-    "//conditions:default": [],
-})
+)
 
 rabbitmq_home(
     name = "broker-home",
@@ -286,7 +283,6 @@ moduleindex(
         "@ct_helper//:erlang_app",
         "@emqtt//:erlang_app",
         "@inet_tcp_proxy_dist//:erlang_app",
-        "@looking_glass//:erlang_app",
         "@meck//:erlang_app",
         "@proper//:erlang_app",
         "//deps/rabbitmq_ct_client_helpers:erlang_app",

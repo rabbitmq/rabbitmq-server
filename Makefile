@@ -14,11 +14,11 @@ PACKAGES_DIR ?= $(abspath PACKAGES)
 include plugins.mk
 
 # An additional list of plugins to include in a RabbitMQ release,
-# on top of the standard plugins. For example, looking_glass.
+# on top of the standard plugins.
 #
 # Note: When including NIFs in a release make sure to build
 # them on the appropriate platform for the target environment.
-# For example build looking_glass on Linux when targeting Docker.
+# For example build on Linux when targeting Docker.
 ADDITIONAL_PLUGINS ?=
 
 DEPS = rabbit_common rabbit $(PLUGINS) $(ADDITIONAL_PLUGINS)
@@ -65,6 +65,13 @@ include erlang.mk
 include mk/github-actions.mk
 include mk/bazel.mk
 include mk/topic-branches.mk
+
+# If PLUGINS was set when we use run-broker we want to
+# fill in the enabled plugins list. PLUGINS is a more
+# natural space-separated list.
+ifdef PLUGINS
+RABBITMQ_ENABLED_PLUGINS ?= $(call comma_list,$(PLUGINS))
+endif
 
 # --------------------------------------------------------------------
 # Mix Hex cache management.
@@ -145,7 +152,6 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '*.pyc'			\
 	       --exclude '.git*'			\
 	       --exclude '.hg*'				\
-	       --exclude '.travis.yml*'			\
 	       --exclude '.*.plt'			\
 	       --exclude '*.bzl'			\
 	       --exclude '*.bazel'			\
@@ -176,7 +182,6 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --include 'cli/plugins'			\
 	       --exclude '$(notdir $(DIST_DIR))/'	\
 	       --exclude 'test'				\
-	       --exclude 'xrefr'			\
 	       --exclude '/$(notdir $(PACKAGES_DIR))/'	\
 	       --exclude '/PACKAGES/'			\
 	       --exclude '/amqp_client/doc/'		\

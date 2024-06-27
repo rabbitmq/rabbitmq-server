@@ -31,7 +31,6 @@ erl_crash.dump
 /plugins.lock
 /sbin/
 /sbin.lock
-/xrefr
 elvis
 callgrind*
 ct.coverdata

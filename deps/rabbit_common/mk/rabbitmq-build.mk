@@ -2,10 +2,6 @@
 # Compiler flags.
 # --------------------------------------------------------------------
 
-ifeq ($(filter rabbitmq-macros.mk,$(notdir $(MAKEFILE_LIST))),)
-include $(dir $(lastword $(MAKEFILE_LIST)))rabbitmq-macros.mk
-endif
-
 # NOTE: This plugin is loaded twice because Erlang.mk recurses. That's
 # why ERL_LIBS may contain twice the path to Elixir libraries or
 # ERLC_OPTS may contain duplicated flags.

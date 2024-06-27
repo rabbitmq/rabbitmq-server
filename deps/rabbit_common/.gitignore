@@ -21,6 +21,5 @@
 /sbin/
 /sbin.lock
 /test/ct.cover.spec
-/xrefr
 
 /rabbit_common.d

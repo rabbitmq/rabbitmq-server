@@ -17,7 +17,6 @@
 /sbin/
 /sbin.lock
 /test/ct.cover.spec
-/xrefr
 debug/*
 *.plt
 
