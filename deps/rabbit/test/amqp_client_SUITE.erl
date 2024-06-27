@@ -417,13 +417,14 @@ sender_settle_mode_mixed(Config) ->
     QProps = #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}},
     {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
 
-    Address = <<"/amq/queue/", QName/binary>>,
+    Address = <<"/queue/", QName/binary>>,
     {ok, Sender} = amqp10_client:attach_sender_link(
                      Session, <<"test-sender">>, Address, mixed),
     ok = wait_for_credit(Sender),
 
-    %% Send many messages aync.
-    NumMsgs = 30,
+    %% Send many messages async.
+    %% The last message (31) will be sent unsettled.
+    NumMsgs = 31,
     DTags = lists:filtermap(
               fun(N) ->
                       DTag = integer_to_binary(N),
@@ -434,8 +435,8 @@ sender_settle_mode_mixed(Config) ->
                       Msg = amqp10_msg:new(DTag, <<"body">>, Settled),
                       ok = amqp10_client:send_msg(Sender, Msg),
                       Ret
-              end,  lists:seq(1, NumMsgs)),
-    20 = length(DTags),
+              end, lists:seq(1, NumMsgs)),
+    21 = length(DTags),
 
     %% Wait for confirms.
     [receive {amqp10_disposition, {accepted, DTag}} -> ok
