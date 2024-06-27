@@ -27,13 +27,7 @@ groups() ->
       {clustered, [], [
           {cluster_size_3, [], [
               vhost_deletion,
-              quorum_unaffected_after_vhost_failure
-            ]},
-          {cluster_size_5, [], [
-              %% Khepri does not work on a cluster in minority. Thus, to test these
-              %% specific cases with quorum queues in minority we need a bigger cluster.
-              %% 5-nodes RMQ and 3-nodes quorum queues allows to test the same test
-              %% cases than a 3-nodes mnesia cluster.
+              quorum_unaffected_after_vhost_failure,
               recover_follower_after_standalone_restart,
               force_delete_if_no_consensus,
               takeover_on_failure,
@@ -136,8 +130,11 @@ force_delete_if_no_consensus(Config) ->
     ACh = rabbit_ct_client_helpers:open_channel(Config, A),
     rabbit_ct_client_helpers:publish(ACh, QName, 10),
 
-    ok = rabbit_ct_broker_helpers:restart_node(Config, B),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, A),
+    %% Delete a member on one node
+    ?assertEqual(ok,
+                 rpc:call(Server, rabbit_quorum_queue, delete_member,
+                          [<<"/">>, QName, B])),
+    %% stop another node
     ok = rabbit_ct_broker_helpers:stop_node(Config, C),
 
     BCh = rabbit_ct_client_helpers:open_channel(Config, B),
@@ -151,6 +148,7 @@ force_delete_if_no_consensus(Config) ->
     BCh2 = rabbit_ct_client_helpers:open_channel(Config, B),
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(BCh2, #'queue.delete'{queue = QName})),
+    ok = rabbit_ct_broker_helpers:restart_node(Config, C),
     ok.
 
 takeover_on_failure(Config) ->
@@ -229,56 +227,38 @@ quorum_unaffected_after_vhost_failure(Config) ->
        60000).
 
 recover_follower_after_standalone_restart(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-      false ->
-            %% Tests that followers can be brought up standalone after forgetting the
-            %% rest of the cluster. Consensus won't be reached as there is only one node in the
-            %% new cluster.
-            [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-            Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    %% Tests that quorum queues shrink when forget_cluster_node
+    %% operations are issues.
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
 
-            QName = ?config(queue_name, Config),
-            Args = ?config(queue_args, Config),
-            amqp_channel:call(Ch, #'queue.declare'{queue = QName,
-                                                   arguments = Args,
-                                                   durable = true
-                                                  }),
+    QName = ?config(queue_name, Config),
+    Args = ?config(queue_args, Config),
+    amqp_channel:call(Ch, #'queue.declare'{queue = QName,
+                                           arguments = Args,
+                                           durable = true
+                                          }),
 
-            RaName = queue_utils:ra_name(QName),
-            {ok, [{_, A}, {_, B}, {_, C}], _} = ra:members({RaName, Server}),
-            Servers = [A, B, C],
+    RaName = queue_utils:ra_name(QName),
+    {ok, [{_, A}, {_, B}, {_, C}], _} = ra:members({RaName, Server}),
+    Servers = [A, B, C],
 
-            rabbit_ct_client_helpers:publish(Ch, QName, 15),
-            rabbit_ct_client_helpers:close_channel(Ch),
+    Name = ra_name(QName),
 
-            Name = ra_name(QName),
-            wait_for_messages_ready(Servers, Name, 15),
+    rabbit_ct_client_helpers:publish(Ch, QName, 15),
+    wait_for_messages_ready(Servers, Name, 15),
+    rabbit_ct_client_helpers:close_channel(Ch),
 
-            rabbit_ct_broker_helpers:stop_node(Config, C),
-            rabbit_ct_broker_helpers:stop_node(Config, B),
-            rabbit_ct_broker_helpers:stop_node(Config, A),
+    %% Restart one follower
+    forget_cluster_node(Config, B, C),
+    wait_for_messages_ready([B], Name, 15),
+    forget_cluster_node(Config, B, A),
+    wait_for_messages_ready([B], Name, 15),
 
-            %% Restart one follower
-            forget_cluster_node(Config, B, C),
-            forget_cluster_node(Config, B, A),
-
-            ok = rabbit_ct_broker_helpers:start_node(Config, B),
-            wait_for_messages_ready([B], Name, 15),
-            ok = rabbit_ct_broker_helpers:stop_node(Config, B),
-
-            %% Restart the other
-            forget_cluster_node(Config, C, B),
-            forget_cluster_node(Config, C, A),
-
-            ok = rabbit_ct_broker_helpers:start_node(Config, C),
-            wait_for_messages_ready([C], Name, 15),
-            ok = rabbit_ct_broker_helpers:stop_node(Config, C),
-            ok;
-        _ ->
-            {skip, "cannot be run in mixed mode"}
-    end.
+    ok.
 
 %%----------------------------------------------------------------------------
 forget_cluster_node(Config, Node, NodeToRemove) ->
+    ok = rabbit_control_helper:command(stop_app, NodeToRemove),
     rabbit_ct_broker_helpers:rabbitmqctl(
-      Config, Node, ["forget_cluster_node", "--offline", NodeToRemove]).
+      Config, Node, ["forget_cluster_node", NodeToRemove]).
