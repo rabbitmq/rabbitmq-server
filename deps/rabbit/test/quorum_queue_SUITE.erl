@@ -192,7 +192,8 @@ all_tests() ->
      priority_queue_2_1_ratio,
      requeue_multiple_true,
      requeue_multiple_false,
-     subscribe_from_each
+     subscribe_from_each,
+     leader_health_check
     ].
 
 memory_tests() ->
@@ -4144,6 +4145,23 @@ amqpl_headers(Config) ->
 
     ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
                                             multiple = true}).
+
+leader_health_check(Config) ->
+    [Server | _] = _Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    [?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>}]))
+        || Q <- [<<"Q.1">>, <<"Q.2">>, <<"Q.3">>]],
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<".*">>, <<"/">>])),
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<"Q.*">>, <<"/">>])),
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<"Q.1">>, <<"/">>])),
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<"Q.2">>, <<"/">>])),
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<"Q.3">>, <<"/">>])).
 
 leader_locator_client_local(Config) ->
     [Server1 | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
