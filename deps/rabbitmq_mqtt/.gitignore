@@ -1,26 +1,4 @@
-.sw?
-.*.sw?
-*.beam
-*.coverdata
-.idea/*
-/.erlang.mk/
-/cover/
-/deps/
-/doc/
-/ebin/
-/escript/
-/escript.lock
 /log/
-/logs/
-/plugins/
-/plugins.lock
-/sbin/
-/sbin.lock
-/test/ct.cover.spec
 debug/*
-*.plt
 
 test/config_schema_SUITE_data/schema/
-test/.idea/*
-
-rabbitmq_mqtt.d
