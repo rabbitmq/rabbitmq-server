@@ -914,8 +914,8 @@ send_command(Server, Correlation, Command, Priority,
              #state{pending = Pending,
                     next_seq = Seq,
                     cfg = #cfg{soft_limit = SftLmt}} = State) ->
-    ok = case element(1, Command) of
-             return ->
+    ok = case rabbit_fifo:is_return(Command) of
+             true ->
                  %% returns are sent to the aux machine for pre-evaluation
                  ra:cast_aux_command(Server, {Command, Seq, self()});
              _ ->

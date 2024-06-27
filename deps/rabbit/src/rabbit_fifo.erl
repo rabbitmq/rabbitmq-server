@@ -83,6 +83,7 @@
          make_checkout/3,
          make_settle/2,
          make_return/2,
+         is_return/1,
          make_discard/2,
          make_credit/4,
          make_defer/2,
@@ -2507,6 +2508,10 @@ make_settle(ConsumerKey, MsgIds) when is_list(MsgIds) ->
 -spec make_return(consumer_id(), [msg_id()]) -> protocol().
 make_return(ConsumerKey, MsgIds) ->
     #return{consumer_key = ConsumerKey, msg_ids = MsgIds}.
+
+-spec is_return(protocol()) -> boolean().
+is_return(Command) ->
+    is_record(Command, return).
 
 -spec make_discard(consumer_id(), [msg_id()]) -> protocol().
 make_discard(ConsumerKey, MsgIds) ->
