@@ -1810,9 +1810,11 @@ stop(QType, Config) ->
     Msgs1 = receive_messages(Receiver, NumRemaining),
     ?assertEqual([<<"1">>], amqp10_msg:body(lists:last(Msgs1))),
 
+    ok = amqp10_client:detach_link(Receiver),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection),
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
-    ok = rabbit_ct_client_helpers:close_channel(Ch),
-    ok = amqp10_client:close_connection(Connection).
+    ok = rabbit_ct_client_helpers:close_channel(Ch).
 
 single_active_consumer_classic_queue(Config) ->
     single_active_consumer(<<"classic">>, Config).
