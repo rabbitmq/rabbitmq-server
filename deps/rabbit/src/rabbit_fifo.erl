@@ -906,11 +906,6 @@ state_enter0(eol, #?STATE{enqueuers = Enqs,
      || P <- maps:keys(maps:merge(Enqs, AllConsumers))] ++
     [{aux, eol}
      | Effects];
-state_enter0(State, #?STATE{cfg = #cfg{resource = _Resource}}, Effects)
-  when State =/= leader ->
-    FHReservation = {mod_call, rabbit_quorum_queue,
-                     file_handle_other_reservation, []},
-    [FHReservation | Effects];
 state_enter0(_, _, Effects) ->
     %% catch all as not handling all states
     Effects.

@@ -75,6 +75,11 @@
 -export([force_shrink_member_to_current_member/2,
          force_all_queues_shrink_member_to_current_member/0]).
 
+%% for backwards compatibility
+-export([file_handle_leader_reservation/1,
+         file_handle_other_reservation/0,
+         file_handle_release_reservation/0]).
+
 -ifdef(TEST).
 -export([filter_promotable/2]).
 -endif.
@@ -1907,3 +1912,13 @@ wait_for_projections(Node, QName, N) ->
             timer:sleep(100),
             wait_for_projections(Node, QName, N - 1)
     end.
+
+%% backwards compat
+file_handle_leader_reservation(_QName) ->
+    ok.
+
+file_handle_other_reservation() ->
+    ok.
+
+file_handle_release_reservation() ->
+    ok.
