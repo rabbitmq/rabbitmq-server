@@ -82,6 +82,8 @@
          file_handle_other_reservation/0,
          file_handle_release_reservation/0]).
 
+-export([leader_health_check/2, run_leader_health_check/4]).
+
 -ifdef(TEST).
 -export([filter_promotable/2,
          ra_machine_config/1]).
@@ -144,6 +146,8 @@
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
 % -define(UNLIMITED_PREFETCH_COUNT, 2000). %% something large for ra
 -define(MIN_CHECKPOINT_INTERVAL, 8192). %% the ra default is 16384
+-define(QQ_LEADER_HEALTH_CHECK_TIMEOUT, 1_000).
+-define(QQ_GLOBAL_LEADER_HEALTH_CHECK_TIMEOUT, 60_000).
 
 %%----------- QQ policies ---------------------------------------------------
 
@@ -2145,3 +2149,63 @@ file_handle_other_reservation() ->
 file_handle_release_reservation() ->
     ok.
 
+leader_health_check(QueueNameOrRegEx, VHost) ->
+    %% Set a process limit threshold to 40% of ErlangVM process limit, beyond which
+    %% we cannot spawn any new processes for executing QQ leader health checks.
+    ProcessLimitThreshold = round(0.4 * erlang:system_info(process_limit)),
+
+    HealthCheckRef = make_ref(),
+    HealthCheckPids =
+        lists:flatten(
+            [begin
+                {resource, VHost, queue, QueueName} = QResource = amqqueue:get_name(Q),
+                case check_process_limit_safety(ProcessLimitThreshold) of
+                    true ->
+                        case re:run(QueueName, QueueNameOrRegEx, [{capture, none}]) of
+                            match ->
+                                {ClusterName, _} = rabbit_amqqueue:pid_of(Q),
+                                _Pid = spawn(fun() -> run_leader_health_check(ClusterName, QResource, HealthCheckRef, self()) end);
+                            _ ->
+                                []
+                        end;
+                    false ->
+                        []
+                end
+            end || Q <- rabbit_amqqueue:list(VHost), amqqueue:get_type(Q) == ?MODULE]),
+    wait_for_leader_health_checks(HealthCheckRef, length(HealthCheckPids), []).
+
+run_leader_health_check(ClusterName, QResource, HealthCheckRef, From) ->
+    Leader = ra_leaderboard:lookup_leader(ClusterName),
+    case ra_server_proc:ping(Leader, ?QQ_LEADER_HEALTH_CHECK_TIMEOUT) of
+        {pong,leader} ->
+            From ! {ok, HealthCheckRef, QResource};
+        _ ->
+            From ! {error, HealthCheckRef, QResource}
+    end,
+    ok.
+
+wait_for_leader_health_checks(Ref, N, UnhealthyAcc) ->
+    receive
+        {ok, Ref, _QResource} when N == 1 ->
+            UnhealthyAcc;
+        {error, Ref, QResource} when N == 1 ->
+            [cli_format(QResource) | UnhealthyAcc];
+        {ok, Ref, _QResource} ->
+            wait_for_leader_health_checks(Ref, N - 1, UnhealthyAcc);
+        {error, Ref, QResource} ->
+            wait_for_leader_health_checks(Ref, N - 1, [cli_format(QResource) | UnhealthyAcc])
+    after
+        ?QQ_GLOBAL_LEADER_HEALTH_CHECK_TIMEOUT ->
+            UnhealthyAcc
+    end.
+
+check_process_limit_safety(ProcessLimitThreshold) ->
+    erlang:system_info(process_count) < ProcessLimitThreshold.
+
+cli_format(QResource = {resource, VHost, queue, QName}) ->
+    #{
+        <<"readable_name">> => rabbit_data_coercion:to_binary(rabbit_misc:rs(QResource)),
+        <<"name">> => QName,
+        <<"virtual_host">> => VHost,
+        <<"type">> => <<"quorum">>
+    }.
