@@ -17,7 +17,7 @@
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 export ERLANG_MK_FILENAME
 
-ERLANG_MK_VERSION = 3967614
+ERLANG_MK_VERSION = 2022.05.31-72-gb8a27ab-dirty
 ERLANG_MK_WITHOUT = 
 
 # Make 3.81 and 3.82 are deprecated.
@@ -4442,6 +4442,49 @@ ERLANG_MK_QUERY_REL_DEPS_FILE = $(ERLANG_MK_TMP)/query-rel-deps.log
 ERLANG_MK_QUERY_TEST_DEPS_FILE = $(ERLANG_MK_TMP)/query-test-deps.log
 ERLANG_MK_QUERY_SHELL_DEPS_FILE = $(ERLANG_MK_TMP)/query-shell-deps.log
 
+# Copyright (c) 2024, Loïc Hoguin <essen@ninenines.eu>
+# This file is part of erlang.mk and subject to the terms of the ISC License.
+
+.PHONY: beam-cache-restore-app beam-cache-restore-test clean-beam-cache distclean-beam-cache
+
+BEAM_CACHE_DIR ?= $(ERLANG_MK_TMP)/beam-cache
+PROJECT_BEAM_CACHE_DIR = $(BEAM_CACHE_DIR)/$(PROJECT)
+
+clean:: clean-beam-cache
+
+clean-beam-cache:
+	$(verbose) rm -rf $(PROJECT_BEAM_CACHE_DIR)
+
+distclean:: distclean-beam-cache
+
+$(PROJECT_BEAM_CACHE_DIR):
+	$(verbose) mkdir -p $(PROJECT_BEAM_CACHE_DIR)
+
+distclean-beam-cache:
+	$(gen_verbose) rm -rf $(BEAM_CACHE_DIR)
+
+beam-cache-restore-app: | $(PROJECT_BEAM_CACHE_DIR)
+	$(verbose) rm -rf $(PROJECT_BEAM_CACHE_DIR)/ebin-test
+ifneq ($(wildcard ebin/),)
+	$(verbose) mv ebin/ $(PROJECT_BEAM_CACHE_DIR)/ebin-test
+endif
+ifneq ($(wildcard $(PROJECT_BEAM_CACHE_DIR)/ebin-app),)
+	$(gen_verbose) mv $(PROJECT_BEAM_CACHE_DIR)/ebin-app ebin/
+else
+	$(verbose) $(MAKE) --no-print-directory clean-app
+endif
+
+beam-cache-restore-test: | $(PROJECT_BEAM_CACHE_DIR)
+	$(verbose) rm -rf $(PROJECT_BEAM_CACHE_DIR)/ebin-app
+ifneq ($(wildcard ebin/),)
+	$(verbose) mv ebin/ $(PROJECT_BEAM_CACHE_DIR)/ebin-app
+endif
+ifneq ($(wildcard $(PROJECT_BEAM_CACHE_DIR)/ebin-test),)
+	$(gen_verbose) mv $(PROJECT_BEAM_CACHE_DIR)/ebin-test ebin/
+else
+	$(verbose) $(MAKE) --no-print-directory clean-app
+endif
+
 # Copyright (c) 2013-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
@@ -4497,7 +4540,7 @@ ifneq ($(wildcard src/),)
 
 # Targets.
 
-app:: $(if $(wildcard ebin/test),clean) deps
+app:: $(if $(wildcard ebin/test),beam-cache-restore-app) deps
 	$(verbose) $(MAKE) --no-print-directory $(PROJECT).d
 	$(verbose) $(MAKE) --no-print-directory app-build
 
@@ -4891,7 +4934,7 @@ endif
 
 test-build:: IS_TEST=1
 test-build:: ERLC_OPTS=$(TEST_ERLC_OPTS)
-test-build:: $(if $(wildcard src),$(if $(wildcard ebin/test),,clean)) $(if $(IS_APP),,deps test-deps)
+test-build:: $(if $(wildcard src),$(if $(wildcard ebin/test),,beam-cache-restore-test)) $(if $(IS_APP),,deps test-deps)
 # We already compiled everything when IS_APP=1.
 ifndef IS_APP
 ifneq ($(wildcard src),)
@@ -5495,7 +5538,7 @@ endif
 	$(verbose) mkdir config/
 	$(verbose) $(call core_render,bs_sys_config,config/sys.config)
 	$(verbose) $(call core_render,bs_vm_args,config/vm.args)
-	$(verbose) awk '/^include erlang.mk/ && !ins {print "BUILD_DEPS += relx";ins=1};{print}' Makefile > Makefile.bak
+	$(verbose) awk '/^include erlang.mk/ && !ins {print "REL_DEPS += relx";ins=1};{print}' Makefile > Makefile.bak
 	$(verbose) mv Makefile.bak Makefile
 
 new-app:
