@@ -20,26 +20,18 @@ suite() ->
 
 all() ->
     [
-     {group, mnesia_store},
-     {group, khepri_store},
+     % {group, tests},
      {group, khepri_migration},
-     {group, mnesia_cluster},
-     {group, khepri_cluster}
+     {group, cluster}
     ].
 
 groups() ->
     [
-     {mnesia_store, [], all_tests()},
-     {khepri_store, [], all_tests()},
+     % {tests, [], all_tests()},
      {khepri_migration, [], [
                              from_mnesia_to_khepri
                             ]},
-     {mnesia_cluster, [], [
-                           transient_queue_on_node_down
-                          ]},
-     {khepri_cluster, [], [
-                           transient_queue_on_node_down
-                          ]}
+     {cluster, [], all_tests()}
     ].
 
 all_tests() ->
@@ -61,7 +53,8 @@ all_tests() ->
      bind_and_unbind_exchange,
      bind_and_delete_exchange_source,
      bind_and_delete_exchange_destination,
-     bind_to_unknown_exchange
+     bind_to_unknown_exchange,
+     transient_queue_on_node_down
     ].
 
 %% -------------------------------------------------------------------
@@ -75,27 +68,24 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(mnesia_store = Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
-    init_per_group_common(Group, Config, 1);
-init_per_group(khepri_store = Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, khepri}]),
-    init_per_group_common(Group, Config, 1);
-init_per_group(khepri_migration = Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
-    init_per_group_common(Group, Config, 1);
-init_per_group(mnesia_cluster = Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
-    init_per_group_common(Group, Config, 3);
-init_per_group(khepri_cluster = Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, khepri}]),
+% init_per_group(tests = Group, Config) ->
+%     init_per_group_common(Group, Config, 1);
+init_per_group(khepri_migration = Group, Config) ->
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        {khepri, _} ->
+            {skip, "skip khepri migration test when khepri already configured"};
+        mnesia ->
+            init_per_group_common(Group, Config, 1)
+    end;
+init_per_group(cluster = Group, Config) ->
     init_per_group_common(Group, Config, 3).
 
 init_per_group_common(Group, Config, Size) ->
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [{rmq_nodes_count, Size},
                                             {rmq_nodename_suffix, Group},
-                                            {tcp_ports_base}]),
+                                            {tcp_ports_base, {skip_n_nodes, Size}}
+                                            ]),
     rabbit_ct_helpers:run_steps(Config1, rabbit_ct_broker_helpers:setup_steps()).
 
 end_per_group(_, Config) ->
@@ -853,7 +843,8 @@ transient_queue_on_node_down(Config) ->
                   rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_binding, list, [<<"/">>])),
                 30000),
 
-    rabbit_ct_broker_helpers:stop_node(Config, Server),
+
+    ?assertEqual(ok, rabbit_control_helper:command(stop_app, Server)),
 
     ?awaitMatch([DirectBinding],
                 lists:sort(
@@ -863,7 +854,7 @@ transient_queue_on_node_down(Config) ->
                 rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_amqqueue, list, [<<"/">>]),
                 30000),
 
-    rabbit_ct_broker_helpers:start_node(Config, Server),
+    ?assertEqual(ok, rabbit_control_helper:command(start_app, Server)),
 
     Bindings2 = lists:sort([DefaultBinding, DirectBinding]),
     ?awaitMatch(Bindings2,
