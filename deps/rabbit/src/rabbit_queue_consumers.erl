@@ -191,11 +191,8 @@ remove(ChPid, CTag, Reason, State = #state{consumers = Consumers}) ->
                                   remove ->
                                       AckTags1 = ?QUEUE:to_list(AckTags0),
                                       {AckTags2, AckTags3} = lists:partition(
-                                                               fun({_, Tag})
-                                                                     when Tag =:= CTag ->
-                                                                       true;
-                                                                  (_) ->
-                                                                       false
+                                                               fun({_, Tag}) ->
+                                                                       Tag =:= CTag
                                                                end, AckTags1),
                                       {lists:map(fun({Ack, _}) -> Ack end, AckTags2),
                                        ?QUEUE:from_list(AckTags3)};

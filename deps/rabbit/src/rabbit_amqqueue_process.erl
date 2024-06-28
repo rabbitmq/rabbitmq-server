@@ -634,8 +634,6 @@ discard(#delivery{confirm = Confirm,
     BQS1 = BQ:discard(MsgId, SenderPid, BQS),
     {BQS1, MTC1}.
 
-run_message_queue(State) -> run_message_queue(false, State).
-
 run_message_queue(ActiveConsumersChanged, State) ->
     case is_empty(State) of
         true  -> maybe_notify_decorators(ActiveConsumersChanged, State);
@@ -844,21 +842,19 @@ ack(AckTags, ChPid, State) ->
 
 requeue(AckTags, ChPid, State) ->
     subtract_acks(ChPid, AckTags, State,
-                  fun (State1) -> requeue_and_run(AckTags, State1) end).
+                  fun (State1) -> requeue_and_run(AckTags, false, State1) end).
 
-requeue(AckTags, State0 = #q{backing_queue = BQ,
-                             backing_queue_state = BQS0}) ->
+requeue_and_run(AckTags,
+                ActiveConsumersChanged,
+                #q{backing_queue = BQ,
+                   backing_queue_state = BQS0} = State0) ->
+    WasEmpty = BQ:is_empty(BQS0),
     {_MsgIds, BQS} = BQ:requeue(AckTags, BQS0),
     State1 = State0#q{backing_queue_state = BQS},
-    {_Dropped, State} = maybe_drop_head(State1),
-    drop_expired_msgs(State).
-
-requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
-                                    backing_queue_state = BQS}) ->
-    WasEmpty = BQ:is_empty(BQS),
-    State1 = requeue(AckTags, State),
-    State2 = notify_decorators_if_became_empty(WasEmpty, State1),
-    run_message_queue(State2).
+    {_Dropped, State2} = maybe_drop_head(State1),
+    State3 = drop_expired_msgs(State2),
+    State = notify_decorators_if_became_empty(WasEmpty, State3),
+    run_message_queue(ActiveConsumersChanged, State).
 
 possibly_unblock(Update, ChPid, State = #q{consumers = Consumers}) ->
     case rabbit_queue_consumers:possibly_unblock(Update, ChPid, Consumers) of
@@ -905,15 +901,17 @@ handle_ch_down(DownPid, State = #q{consumers                 = Consumers,
             maybe_notify_consumer_updated(State2, Holder, Holder1),
             notify_decorators(State2),
             case should_auto_delete(State2) of
-                true  ->
+                true ->
                     log_auto_delete(
                         io_lib:format(
                             "because all of its consumers (~tp) were on a channel that was closed",
                             [length(ChCTags)]),
                         State),
                     {stop, State2};
-                false -> {ok, requeue_and_run(ChAckTags,
-                                              ensure_expiry_timer(State2))}
+                false ->
+                    State3 = ensure_expiry_timer(State2),
+                    State4 = requeue_and_run(ChAckTags, false, State3),
+                    {ok, State4}
             end
     end.
 
@@ -1341,7 +1339,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                 AckRequired, QName, PrefetchCount,
                 Args, none, ActingUser),
             notify_decorators(State1),
-            reply(ok, run_message_queue(State1))
+            reply(ok, run_message_queue(false, State1))
     end;
 
 handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser}, From, State) ->
@@ -1374,9 +1372,9 @@ handle_call({stop_consumer, #{pid := ChPid,
             notify_decorators(State1),
             case should_auto_delete(State1) of
                 false ->
-                    State2 = requeue(AckTags, State1),
-                    State3 = run_message_queue(Holder =/= Holder1, State2),
-                    reply(ok, ensure_expiry_timer(State3));
+                    State2 = requeue_and_run(AckTags, Holder =/= Holder1, State1),
+                    State3 = ensure_expiry_timer(State2),
+                    reply(ok, State3);
                 true  ->
                     log_auto_delete(
                       io_lib:format(
