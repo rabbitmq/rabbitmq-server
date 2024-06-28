@@ -1751,7 +1751,7 @@ handle_consuming_queue_down_or_eol(QName,
                        {ok, CTags} -> CTags
                    end,
     gb_sets:fold(
-      fun (CTag, StateN = #ch{consumer_mapping = CMap}) ->
+      fun (CTag, StateN = #ch{}) ->
               cancel_consumer(CTag, QName, StateN)
       end, State#ch{queue_consumers = maps:remove(QName, QCons)}, ConsumerTags).
 
