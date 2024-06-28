@@ -4161,7 +4161,38 @@ leader_health_check(Config) ->
     ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
                                       [<<"Q.2">>, <<"/">>])),
     ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
-                                      [<<"Q.3">>, <<"/">>])).
+                                      [<<"Q.3">>, <<"/">>])),
+
+    Qs = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list, []),
+
+    [{Q1_ClusterName, Q1Res}, {Q2_ClusterName, Q2Res}, {Q3_ClusterName, Q3Res}] =
+        lists:usort(
+            [begin
+                {ClusterName, _} = amqqueue:get_pid(Q),
+                {ClusterName, amqqueue:get_name(Q)}
+            end
+                || Q <- Qs, amqqueue:get_type(Q) == rabbit_quorum_queue]),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, ra_leaderboard, clear, [Q1_ClusterName]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ra_leaderboard, clear, [Q2_ClusterName]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ra_leaderboard, clear, [Q3_ClusterName]),
+
+    Q1Data = amqqueue:to_printable(Q1Res, rabbit_quorum_queue),
+    Q2Data = amqqueue:to_printable(Q2Res, rabbit_quorum_queue),
+    Q3Data = amqqueue:to_printable(Q3Res, rabbit_quorum_queue),
+
+    ?assertEqual([Q1Data], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<"Q.1">>, <<"/">>])),
+    ?assertEqual([Q2Data], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<"Q.2">>, <<"/">>])),
+    ?assertEqual([Q3Data], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<"Q.3">>, <<"/">>])),
+    ?assertEqual([Q1Data, Q2Data, Q3Data],
+        lists:usort(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                        [<<".*">>, <<"/">>]))),
+    ?assertEqual([Q1Data, Q2Data, Q3Data],
+        lists:usort(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                        [<<"Q.*">>, <<"/">>]))).
 
 leader_locator_client_local(Config) ->
     [Server1 | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

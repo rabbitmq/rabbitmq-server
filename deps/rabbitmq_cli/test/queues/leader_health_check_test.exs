@@ -43,7 +43,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.LeaderHealthCheckCommandTest do
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc" do
     assert match?(
-             {:badrpc, _},
+            {:error, {:badrpc, :nodedown}},
              @command.run(
                ["quorum.queue.*"],
                %{node: :jake@thedog, vhost: "/", timeout: 200}
