@@ -70,6 +70,7 @@
          set_immutable/1,
          qnode/1,
          to_printable/1,
+         to_printable/2,
          macros/0]).
 
 -define(record_version, amqqueue_v2).
@@ -559,6 +560,14 @@ qnode({_, Node}) ->
 -spec to_printable(amqqueue()) -> #{binary() => any()}.
 to_printable(#amqqueue{name = QName = #resource{name = Name},
                        vhost = VHost, type = Type}) ->
+     #{<<"readable_name">> => rabbit_data_coercion:to_binary(rabbit_misc:rs(QName)),
+       <<"name">> => Name,
+       <<"virtual_host">> => VHost,
+       <<"type">> => Type}.
+
+-spec to_printable(rabbit_types:r(), atom() | binary()) -> #{binary() => any()}.
+to_printable(QName = #resource{name = Name, virtual_host = VHost}, Type) ->
+    _ = rabbit_queue_type:discover(Type),
      #{<<"readable_name">> => rabbit_data_coercion:to_binary(rabbit_misc:rs(QName)),
        <<"name">> => Name,
        <<"virtual_host">> => VHost,
