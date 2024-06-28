@@ -295,17 +295,14 @@ confirm_nack1(Config) ->
         #'confirm.select_ok'{} -> ok
     after ?TIMEOUT -> throw(failed_to_enable_confirms)
     end,
+    %% stop the queue
+    ok = gen_server:stop(QPid1, shutdown, 5000),
     %% Publish a message
     rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"amq.direct">>,
                                            routing_key = <<"confirms-magic">>
                                           },
                       rabbit_basic:build_content(
                         #'P_basic'{delivery_mode = 2}, <<"">>)),
-    %% We must not kill the queue before the channel has processed the
-    %% 'publish'.
-    ok = rabbit_channel:flush(Ch),
-    %% Crash the queue
-    QPid1 ! boom,
     %% Wait for a nack
     receive
         #'basic.nack'{} -> ok;
