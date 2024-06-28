@@ -2154,6 +2154,7 @@ leader_health_check(QueueNameOrRegEx, VHost) ->
     %% we cannot spawn any new processes for executing QQ leader health checks.
     ProcessLimitThreshold = round(0.4 * erlang:system_info(process_limit)),
 
+    ParentPID = self(),
     HealthCheckRef = make_ref(),
     HealthCheckPids =
         lists:flatten(
@@ -2164,12 +2165,13 @@ leader_health_check(QueueNameOrRegEx, VHost) ->
                         case re:run(QueueName, QueueNameOrRegEx, [{capture, none}]) of
                             match ->
                                 {ClusterName, _} = rabbit_amqqueue:pid_of(Q),
-                                _Pid = spawn(fun() -> run_leader_health_check(ClusterName, QResource, HealthCheckRef, self()) end);
+                                _Pid = spawn(fun() -> run_leader_health_check(ClusterName, QResource, HealthCheckRef, ParentPID) end);
                             _ ->
                                 []
                         end;
                     false ->
-                        []
+                        rabbit_log:warning("Leader health check failed from exceeded process limit threshold"),
+                        throw({error, leader_health_check_process_limit_exceeded})
                 end
             end || Q <- rabbit_amqqueue:list(VHost), amqqueue:get_type(Q) == ?MODULE]),
     wait_for_leader_health_checks(HealthCheckRef, length(HealthCheckPids), []).
@@ -2189,11 +2191,11 @@ wait_for_leader_health_checks(Ref, N, UnhealthyAcc) ->
         {ok, Ref, _QResource} when N == 1 ->
             UnhealthyAcc;
         {error, Ref, QResource} when N == 1 ->
-            [cli_format(QResource) | UnhealthyAcc];
+            [amqqueue:to_printable(QResource, ?MODULE) | UnhealthyAcc];
         {ok, Ref, _QResource} ->
             wait_for_leader_health_checks(Ref, N - 1, UnhealthyAcc);
         {error, Ref, QResource} ->
-            wait_for_leader_health_checks(Ref, N - 1, [cli_format(QResource) | UnhealthyAcc])
+            wait_for_leader_health_checks(Ref, N - 1, [amqqueue:to_printable(QResource, ?MODULE) | UnhealthyAcc])
     after
         ?QQ_GLOBAL_LEADER_HEALTH_CHECK_TIMEOUT ->
             UnhealthyAcc
@@ -2201,11 +2203,3 @@ wait_for_leader_health_checks(Ref, N, UnhealthyAcc) ->
 
 check_process_limit_safety(ProcessLimitThreshold) ->
     erlang:system_info(process_count) < ProcessLimitThreshold.
-
-cli_format(QResource = {resource, VHost, queue, QName}) ->
-    #{
-        <<"readable_name">> => rabbit_data_coercion:to_binary(rabbit_misc:rs(QResource)),
-        <<"name">> => QName,
-        <<"virtual_host">> => VHost,
-        <<"type">> => <<"quorum">>
-    }.
