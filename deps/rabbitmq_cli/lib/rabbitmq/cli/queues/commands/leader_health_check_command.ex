@@ -14,17 +14,8 @@ defmodule RabbitMQ.CLI.Queues.Commands.LeaderHealthCheckCommand do
   def scopes(), do: [:queues]
 
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
-
+  use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.MergesDefaultVirtualHost
-
-  def validate(args, _) when length(args) < 1 do
-    {:validation_failure, :not_enough_args}
-  end
-
-  def validate(args, _) when length(args) > 1 do
-    {:validation_failure, :too_many_args}
-  end
-
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([pattern] = _args, %{node: node_name, vhost: vhost}) do
@@ -41,7 +32,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.LeaderHealthCheckCommand do
     {:error, :check_passed}
   end
 
-  def output({:error, unhealthy_queues}, %{vhost: vhost, formatter: "json"}) when is_list(unhealthy_queues) do
+  def output({:error, unhealthy_queues}, %{vhost: _vhost, formatter: "json"}) when is_list(unhealthy_queues) do
     lines = queue_lines(unhealthy_queues)
 
     {:error, :check_failed, Enum.join(lines, line_separator())}
