@@ -518,8 +518,7 @@ capabilities() ->
                           <<"x-overflow">>, <<"x-queue-mode">>, <<"x-queue-version">>,
                           <<"x-single-active-consumer">>, <<"x-queue-type">>,
                           <<"x-queue-master-locator">>],
-      consumer_arguments => [<<"x-cancel-on-ha-failover">>,
-                             <<"x-priority">>, <<"x-credit">>],
+      consumer_arguments => [<<"x-priority">>, <<"x-credit">>],
       server_named => true}.
 
 notify_decorators(Q) when ?is_amqqueue(Q) ->

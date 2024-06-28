@@ -877,7 +877,6 @@ declare_args() ->
      {<<"x-queue-leader-locator">>, fun check_queue_leader_locator_arg/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
-                   {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2},
                    {<<"x-stream-offset">>, fun check_stream_offset_arg/2}].
 
 check_int_arg({Type, _}, _) ->

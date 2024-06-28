@@ -1752,20 +1752,8 @@ handle_consuming_queue_down_or_eol(QName,
                        {ok, CTags} -> CTags
                    end,
     gb_sets:fold(
-      fun (CTag, StateN = #ch{consumer_mapping = CMap}) ->
-              case queue_down_consumer_action(CTag, CMap) of
-                  remove ->
-                      cancel_consumer(CTag, QName, StateN);
-                  {recover, {NoAck, ConsumerPrefetch, Exclusive, Args}} ->
-                      case catch basic_consume(
-                                   QName, NoAck, ConsumerPrefetch, CTag,
-                                   Exclusive, Args, true, StateN) of
-                          {ok, StateN1} ->
-                              StateN1;
-                          _Err ->
-                              cancel_consumer(CTag, QName, StateN)
-                      end
-              end
+      fun (CTag, StateN = #ch{}) ->
+              cancel_consumer(CTag, QName, StateN)
       end, State#ch{queue_consumers = maps:remove(QName, QCons)}, ConsumerTags).
 
 %% [0] There is a slight danger here that if a queue is deleted and
@@ -1787,13 +1775,6 @@ cancel_consumer(CTag, QName,
                                            {channel,      self()},
                                            {queue,        QName}]),
     State#ch{consumer_mapping = maps:remove(CTag, CMap)}.
-
-queue_down_consumer_action(CTag, CMap) ->
-    {_, {_, _, _, Args} = ConsumeSpec} = maps:get(CTag, CMap),
-    case rabbit_misc:table_lookup(Args, <<"x-cancel-on-ha-failover">>) of
-        {bool, true} -> remove;
-        _            -> {recover, ConsumeSpec}
-    end.
 
 binding_action_with_checks(
   Action, SourceNameBin0, DestinationType, DestinationNameBin0,
