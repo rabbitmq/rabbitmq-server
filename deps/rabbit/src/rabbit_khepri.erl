@@ -96,6 +96,7 @@
 
 -export([setup/0,
          setup/1,
+         stop/0,
          can_join_cluster/1,
          add_member/2,
          remove_member/1,
@@ -292,6 +293,9 @@ wait_for_leader(Timeout, Retries) ->
         {error, Reason} ->
             throw(Reason)
     end.
+
+stop() ->
+    ok = khepri:stop(?RA_CLUSTER_NAME).
 
 %% @private
 
@@ -511,8 +515,21 @@ reset() ->
 %% @private
 
 force_reset() ->
-    DataDir = maps:get(data_dir, ra_system:fetch(coordination)),
-    ok = rabbit_file:recursive_delete(filelib:wildcard(DataDir ++ "/*")).
+    %% The Ra `coordination' system is stopped at this point; we assert that
+    %% with the `ra_system:fetch/1' call below. Therefore, we take the data
+    %% directory from the configuration.
+    RaSystem = coordination,
+    ?assertEqual(undefined, ra_system:fetch(RaSystem)),
+    Config = rabbit_ra_systems:get_config(RaSystem),
+    DataDir = maps:get(data_dir, Config),
+    ?assert(string:length(DataDir) > 0), %% Assertion to not `rm -rf /'.
+    ?LOG_INFO(
+       "Deleting Ra `coordination` system data directory as part of "
+       "Khepri reset: ~ts",
+       [DataDir],
+       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    Glob = filename:join(DataDir, "*"),
+    ok = rabbit_file:recursive_delete(filelib:wildcard(Glob)).
 
 %% @private
 

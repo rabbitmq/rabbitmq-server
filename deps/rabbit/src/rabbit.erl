@@ -1099,6 +1099,21 @@ stop(State) ->
         [] -> rabbit_prelaunch:set_stop_reason(normal);
         _  -> rabbit_prelaunch:set_stop_reason(State)
     end,
+
+    %% We need to stop Ra servers and Ra systems that we started but live
+    %% under the Ra supervision tree. The order is important:
+    %% 1. The `quorum_queues` Ra system because it may host Ra servers that
+    %%    depend on Khepri.
+    %% 2. The stream coordinator because it depends on Khepri.
+    %% 3. The Khepri store; it could be stopped automatically with the
+    %%    termination of the underlying Ra system, but Khepri needs to do some
+    %%    cleanup too.
+    %% 4. The remaining Ra systems.
+    rabbit_ra_systems:ensure_ra_system_stopped(quorum_queues),
+    _ = rabbit_stream_coordinator:stop(),
+    rabbit_khepri:stop(),
+    rabbit_ra_systems:ensure_stopped(),
+
     rabbit_db:clear_init_finished(),
     rabbit_boot_state:set(stopped),
     ok.
