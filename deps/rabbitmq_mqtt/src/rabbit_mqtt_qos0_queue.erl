@@ -48,7 +48,7 @@
          close/1,
          update/2,
          consume/3,
-         cancel/5,
+         cancel/3,
          handle_event/3,
          settle/5,
          credit_v1/5,
@@ -269,8 +269,8 @@ update(A1,A2) ->
 consume(A1,A2,A3) ->
     ?UNSUPPORTED([A1,A2,A3]).
 
-cancel(A1,A2,A3,A4,A5) ->
-    ?UNSUPPORTED([A1,A2,A3,A4,A5]).
+cancel(A1,A2,A3) ->
+    ?UNSUPPORTED([A1,A2,A3]).
 
 handle_event(A1,A2,A3) ->
     ?UNSUPPORTED([A1,A2,A3]).

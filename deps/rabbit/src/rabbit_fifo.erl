@@ -808,7 +808,7 @@ purge_node(Meta, Node, State, Effects) ->
                         {S, E0 ++ E}
                 end, {State, Effects}, all_pids_for(Node, State)).
 
-%% any downs that re not noconnection
+%% any downs that are not noconnection
 handle_down(Meta, Pid, #?MODULE{consumers = Cons0,
                                 enqueuers = Enqs0} = State0) ->
     % Remove any enqueuer for the down pid

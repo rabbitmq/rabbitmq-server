@@ -167,7 +167,7 @@
 
 -rabbit_feature_flag(
    {credit_api_v2,
-    #{desc          => "Credit API v2 between queue clients and queue processes",
+    #{desc          => "Credit and cancel API v2 between queue clients and queue processes",
       stability     => stable
      }}).
 

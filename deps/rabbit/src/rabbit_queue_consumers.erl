@@ -8,7 +8,7 @@
 -module(rabbit_queue_consumers).
 
 -export([new/0, max_active_priority/1, inactive/1, all/1, all/3, count/0,
-         unacknowledged_message_count/0, add/9, remove/3, erase_ch/2,
+         unacknowledged_message_count/0, add/9, remove/4, erase_ch/2,
          deliver/5, record_ack/3, subtract_acks/3,
          possibly_unblock/3,
          resume_fun/0, notify_sent_fun/1, activate_limit_fun/0,
@@ -176,29 +176,40 @@ add(ChPid, CTag, NoAck, LimiterPid, LimiterActive,
     State#state{consumers = add_consumer({ChPid, Consumer}, Consumers),
                 use       = update_use(CUInfo, active)}.
 
--spec remove(ch(), rabbit_types:ctag(), state()) ->
-                    'not_found' | state().
-
-remove(ChPid, CTag, State = #state{consumers = Consumers}) ->
+-spec remove(ch(), rabbit_types:ctag(), rabbit_queue_type:cancel_reason(), state()) ->
+    not_found | {[ack()], state()}.
+remove(ChPid, CTag, Reason, State = #state{consumers = Consumers}) ->
     case lookup_ch(ChPid) of
         not_found ->
             not_found;
-        C = #cr{consumer_count    = Count,
-                limiter           = Limiter,
+        C = #cr{acktags = AckTags0,
+                consumer_count = Count,
+                limiter = Limiter,
                 blocked_consumers = Blocked,
                 link_states = LinkStates} ->
-            Blocked1 = remove_consumer(ChPid, CTag, Blocked),
+            {Acks, AckTags} = case Reason of
+                                  remove ->
+                                      AckTags1 = ?QUEUE:to_list(AckTags0),
+                                      {AckTags2, AckTags3} = lists:partition(
+                                                               fun({_, Tag}) ->
+                                                                       Tag =:= CTag
+                                                               end, AckTags1),
+                                      {lists:map(fun({Ack, _}) -> Ack end, AckTags2),
+                                       ?QUEUE:from_list(AckTags3)};
+                                  _ ->
+                                      {[], AckTags0}
+                              end,
             Limiter1 = case Count of
                            1 -> rabbit_limiter:deactivate(Limiter);
                            _ -> Limiter
                        end,
             Limiter2 = rabbit_limiter:forget_consumer(Limiter1, CTag),
-            update_ch_record(C#cr{consumer_count    = Count - 1,
-                                  limiter           = Limiter2,
-                                  blocked_consumers = Blocked1,
+            update_ch_record(C#cr{acktags = AckTags,
+                                  consumer_count = Count - 1,
+                                  limiter = Limiter2,
+                                  blocked_consumers = remove_consumer(ChPid, CTag, Blocked),
                                   link_states = maps:remove(CTag, LinkStates)}),
-            State#state{consumers =
-                        remove_consumer(ChPid, CTag, Consumers)}
+            {Acks, State#state{consumers = remove_consumer(ChPid, CTag, Consumers)}}
     end.
 
 -spec erase_ch(ch(), state()) ->

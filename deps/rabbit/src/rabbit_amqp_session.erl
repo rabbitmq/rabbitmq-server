@@ -285,9 +285,9 @@
           %% However, they are buffered here due to session flow control
           %% (when remote_incoming_window <= 0) before being sent to the AMQP client.
           %%
-          %% FLOW frames are stored here as well because for a specific outgoing link the order
-          %% in which we send TRANSFER and FLOW frames is important. An outgoing FLOW frame with link flow
-          %% control information must not overtake a TRANSFER frame for the same link just because
+          %% FLOW frames (and credit reply actions) are stored here as well because for a specific outgoing link
+          %% the order in which we send TRANSFER and FLOW frames is important. An outgoing FLOW frame with link
+          %% flow control information must not overtake a TRANSFER frame for the same link just because
           %% we are throttled by session flow control. (However, we can still send outgoing FLOW frames
           %% that contain only session flow control information, i.e. where the FLOW's 'handle' field is not set.)
           %% Example:
@@ -296,8 +296,8 @@
           %% client (once the remote_incoming_window got opened) followed by the FLOW with drain=true and credit=0
           %% and advanced delivery count. Otherwise, we would violate the AMQP protocol spec.
           outgoing_pending = queue:new() :: queue:queue(#pending_delivery{} |
-                                                        #pending_management_delivery{} |
                                                         rabbit_queue_type:credit_reply_action() |
+                                                        #pending_management_delivery{} |
                                                         #'v1_0.flow'{}),
 
           %% The link or session endpoint assigns each message a unique delivery-id
@@ -757,7 +757,8 @@ destroy_links(#resource{kind = queue,
               GrantCredits0,
               #state{incoming_links = IncomingLinks0,
                      outgoing_links = OutgoingLinks0,
-                     outgoing_unsettled_map = Unsettled0} = State0) ->
+                     outgoing_unsettled_map = Unsettled0,
+                     outgoing_pending = Pending0} = State0) ->
     {Frames1,
      GrantCredits,
      IncomingLinks} = maps:fold(fun(Handle, Link, Acc) ->
@@ -765,15 +766,20 @@ destroy_links(#resource{kind = queue,
                                 end, {Frames0, GrantCredits0, IncomingLinks0}, IncomingLinks0),
     {Frames,
      Unsettled,
+     Pending,
      OutgoingLinks} = maps:fold(fun(Handle, Link, Acc) ->
                                         destroy_outgoing_link(Handle, Link, QNameBin, Acc)
-                                end, {Frames1, Unsettled0, OutgoingLinks0}, OutgoingLinks0),
+                                end, {Frames1, Unsettled0, Pending0, OutgoingLinks0}, OutgoingLinks0),
     State = State0#state{incoming_links = IncomingLinks,
                          outgoing_links = OutgoingLinks,
-                         outgoing_unsettled_map = Unsettled},
+                         outgoing_unsettled_map = Unsettled,
+                         outgoing_pending = Pending},
     {Frames, GrantCredits, State}.
 
-destroy_incoming_link(Handle, Link = #incoming_link{queue_name_bin = QNameBin}, QNameBin, {Frames, GrantCreds, Links}) ->
+destroy_incoming_link(Handle,
+                      Link = #incoming_link{queue_name_bin = QNameBin},
+                      QNameBin,
+                      {Frames, GrantCreds, Links}) ->
     {[detach(Handle, Link, ?V_1_0_AMQP_ERROR_RESOURCE_DELETED) | Frames],
      %% Don't grant credits for a link that we destroy.
      maps:remove(Handle, GrantCreds),
@@ -781,10 +787,14 @@ destroy_incoming_link(Handle, Link = #incoming_link{queue_name_bin = QNameBin}, 
 destroy_incoming_link(_, _, _, Acc) ->
     Acc.
 
-destroy_outgoing_link(Handle, Link = #outgoing_link{queue_name = #resource{name = QNameBin}}, QNameBin, {Frames, Unsettled0, Links}) ->
-    {Unsettled, _RemovedMsgIds} = remove_link_from_outgoing_unsettled_map(Handle, Unsettled0),
+destroy_outgoing_link(Handle,
+                      Link = #outgoing_link{queue_name = #resource{name = QNameBin}},
+                      QNameBin,
+                      {Frames, Unsettled0, Pending0, Links}) ->
+    {Unsettled, Pending} = remove_outgoing_link(Handle, Unsettled0, Pending0),
     {[detach(Handle, Link, ?V_1_0_AMQP_ERROR_RESOURCE_DELETED) | Frames],
      Unsettled,
+     Pending,
      maps:remove(Handle, Links)};
 destroy_outgoing_link(_, _, _, Acc) ->
     Acc.
@@ -1203,67 +1213,43 @@ handle_control(#'v1_0.flow'{handle = Handle} = Flow,
     {noreply, S};
 
 handle_control(Detach = #'v1_0.detach'{handle = ?UINT(HandleInt)},
-               State0 = #state{queue_states = QStates0,
-                               incoming_links = IncomingLinks,
+               State0 = #state{incoming_links = IncomingLinks,
                                outgoing_links = OutgoingLinks0,
                                outgoing_unsettled_map = Unsettled0,
+                               outgoing_pending = Pending0,
+                               queue_states = QStates0,
                                cfg = #cfg{user = #user{username = Username}}}) ->
-    Ctag = handle_to_ctag(HandleInt),
-    %% TODO delete queue if closed flag is set to true? see 2.6.6
-    %% TODO keep the state around depending on the lifetime
-    {QStates, Unsettled, OutgoingLinks}
-    = case maps:take(HandleInt, OutgoingLinks0) of
-          {#outgoing_link{queue_name = QName}, OutgoingLinks1} ->
-              case rabbit_amqqueue:lookup(QName) of
-                  {ok, Q} ->
-                      %%TODO Add a new rabbit_queue_type:remove_consumer API that - from the point of view of
-                      %% the queue process - behaves as if our session process terminated: All messages checked out
-                      %% to this consumer should be re-queued automatically instead of us requeueing them here after cancelling
-                      %% consumption.
-                      %% For AMQP legacy (and STOMP / MQTT) consumer cancellation not requeueing messages is a good approach as
-                      %% clients may want to ack any in-flight messages.
-                      %% For AMQP however, the consuming client can stop cancellations via link-credit=0 and drain=true being
-                      %% sure that no messages are in flight before detaching the link. Hence, AMQP doesn't need the
-                      %% rabbit_queue_type:cancel API semantics.
-                      %% A rabbit_queue_type:remove_consumer API has also the advantage to simplify reasoning about clients
-                      %% first detaching and then re-attaching to the same session with the same link handle (the handle
-                      %% becomes available for re-use once a link is closed): This will result in the same consumer tag,
-                      %% and we ideally disallow "updating" an AMQP consumer.
-                      %% If such an API is not added, we also must return messages in the outgoing_pending queue
-                      %% which haven't made it to the outgoing_unsettled map yet.
-                      case rabbit_queue_type:cancel(Q, Ctag, undefined, Username, QStates0) of
-                          {ok, QStates1} ->
-                              {Unsettled1, MsgIds} = remove_link_from_outgoing_unsettled_map(Ctag, Unsettled0),
-                              case MsgIds of
-                                  [] ->
-                                      {QStates1, Unsettled0, OutgoingLinks1};
-                                  _ ->
-                                      case rabbit_queue_type:settle(QName, requeue, Ctag, MsgIds, QStates1) of
-                                          {ok, QStates2, _Actions = []} ->
-                                              {QStates2, Unsettled1, OutgoingLinks1};
-                                          {protocol_error, _ErrorType, Reason, ReasonArgs} ->
-                                              protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                                             Reason, ReasonArgs)
-                                      end
-                              end;
-                          {error, Reason} ->
-                              protocol_error(
-                                ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                "Failed to cancel consuming from ~s: ~tp",
-                                [rabbit_misc:rs(amqqueue:get_name(Q)), Reason])
-                      end;
-                  {error, not_found} ->
-                      {Unsettled1, _RemovedMsgIds} = remove_link_from_outgoing_unsettled_map(Ctag, Unsettled0),
-                      {QStates0, Unsettled1, OutgoingLinks1}
-              end;
-          error ->
-              {Unsettled1, _RemovedMsgIds} = remove_link_from_outgoing_unsettled_map(Ctag, Unsettled0),
-              {QStates0, Unsettled1, OutgoingLinks0}
-      end,
-    State1 = State0#state{queue_states = QStates,
-                          incoming_links = maps:remove(HandleInt, IncomingLinks),
+    {OutgoingLinks, Unsettled, Pending, QStates} =
+    case maps:take(HandleInt, OutgoingLinks0) of
+        {#outgoing_link{queue_name = QName}, OutgoingLinks1} ->
+            Ctag = handle_to_ctag(HandleInt),
+            {Unsettled1, Pending1} = remove_outgoing_link(Ctag, Unsettled0, Pending0),
+            case rabbit_amqqueue:lookup(QName) of
+                {ok, Q} ->
+                    Spec = #{consumer_tag => Ctag,
+                             reason => remove,
+                             user => Username},
+                    case rabbit_queue_type:cancel(Q, Spec, QStates0) of
+                        {ok, QStates1} ->
+                            {OutgoingLinks1, Unsettled1, Pending1, QStates1};
+                        {error, Reason} ->
+                            protocol_error(
+                              ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                              "Failed to remove consumer from ~s: ~tp",
+                              [rabbit_misc:rs(amqqueue:get_name(Q)), Reason])
+                    end;
+                {error, not_found} ->
+                    {OutgoingLinks1, Unsettled1, Pending1, QStates0}
+            end;
+        error ->
+            {OutgoingLinks0, Unsettled0, Pending0, QStates0}
+    end,
+
+    State1 = State0#state{incoming_links = maps:remove(HandleInt, IncomingLinks),
                           outgoing_links = OutgoingLinks,
-                          outgoing_unsettled_map = Unsettled},
+                          outgoing_unsettled_map = Unsettled,
+                          outgoing_pending = Pending,
+                          queue_states = QStates},
     State = maybe_detach_mgmt_link(HandleInt, State1),
     maybe_detach_reply(Detach, State, State0),
     publisher_or_consumer_deleted(State, State0),
@@ -3099,23 +3085,30 @@ queue_is_durable(undefined) ->
     %% [3.5.3]
     queue_is_durable(?V_1_0_TERMINUS_DURABILITY_NONE).
 
--spec remove_link_from_outgoing_unsettled_map(link_handle() | rabbit_types:ctag(), Map) ->
-    {Map, [rabbit_amqqueue:msg_id()]}
+-spec remove_outgoing_link(link_handle() | rabbit_types:ctag(), Map, queue:queue()) ->
+    {Map, queue:queue()}
       when Map :: #{delivery_number() => #outgoing_unsettled{}}.
-remove_link_from_outgoing_unsettled_map(Handle, Map)
+remove_outgoing_link(Handle, Map, Queue)
   when is_integer(Handle) ->
-    remove_link_from_outgoing_unsettled_map(handle_to_ctag(Handle), Map);
-remove_link_from_outgoing_unsettled_map(Ctag, Map)
+    Ctag = handle_to_ctag(Handle),
+    remove_outgoing_link(Ctag, Map, Queue);
+remove_outgoing_link(Ctag, OutgoingUnsettledMap0, OutgoingPending0)
   when is_binary(Ctag) ->
-    maps:fold(fun(DeliveryId,
-                  #outgoing_unsettled{consumer_tag = Tag,
-                                      msg_id = Id},
-                  {M, Ids})
-                    when Tag =:= Ctag ->
-                      {maps:remove(DeliveryId, M), [Id | Ids]};
-                 (_, _, Acc) ->
-                      Acc
-              end, {Map, []}, Map).
+    OutgoingUnsettledMap = maps:filter(
+                             fun(_DeliveryId, #outgoing_unsettled{consumer_tag = Tag}) ->
+                                     Tag =/= Ctag
+                             end, OutgoingUnsettledMap0),
+    OutgoingPending = queue:filter(
+                        fun(#pending_delivery{outgoing_unsettled = #outgoing_unsettled{consumer_tag = Tag}}) ->
+                                Tag =/= Ctag;
+                           ({credit_reply, Tag, _DeliveryCount, _Credit, _Available, _Drain}) ->
+                                Tag =/= Ctag;
+                           (#pending_management_delivery{}) ->
+                                true;
+                           (#'v1_0.flow'{}) ->
+                                true
+                        end, OutgoingPending0),
+    {OutgoingUnsettledMap, OutgoingPending}.
 
 messages_received(Settled) ->
     rabbit_global_counters:messages_received(?PROTOCOL, 1),

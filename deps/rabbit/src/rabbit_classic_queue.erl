@@ -37,7 +37,7 @@
          close/1,
          update/2,
          consume/3,
-         cancel/5,
+         cancel/3,
          handle_event/3,
          deliver/3,
          settle/5,
@@ -262,13 +262,20 @@ consume_backwards_compat({credited, credit_api_v1}, Args) ->
      [{<<"x-credit">>, table, [{<<"credit">>, long, 0},
                                {<<"drain">>,  bool, false}]} | Args]}.
 
-cancel(Q, ConsumerTag, OkMsg, ActingUser, State) ->
-    QPid = amqqueue:get_pid(Q),
-    case delegate:invoke(QPid, {gen_server2, call,
-                                [{basic_cancel, self(), ConsumerTag,
-                                  OkMsg, ActingUser}, infinity]}) of
-        ok ->
-            {ok, State};
+cancel(Q, Spec, State) ->
+    %% Cancel API v2 reuses feature flag credit_api_v2.
+    Request = case rabbit_feature_flags:is_enabled(credit_api_v2) of
+                  true ->
+                      {stop_consumer, Spec#{pid => self()}};
+                  false ->
+                      #{consumer_tag := ConsumerTag,
+                        user := ActingUser} = Spec,
+                      OkMsg = maps:get(ok_msg, Spec, undefined),
+                      {basic_cancel, self(), ConsumerTag, OkMsg, ActingUser}
+              end,
+    case delegate:invoke(amqqueue:get_pid(Q),
+                         {gen_server2, call, [Request, infinity]}) of
+        ok -> {ok, State};
         Err -> Err
     end.
 
