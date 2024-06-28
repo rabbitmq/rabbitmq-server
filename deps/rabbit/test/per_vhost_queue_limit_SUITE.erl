@@ -12,6 +12,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 -import(rabbit_ct_client_helpers, [open_unmanaged_connection/3,
@@ -21,20 +22,15 @@
 
 all() ->
     [
-     {group, mnesia_store},
-     {group, khepri_store}
+     {group, tests}
     ].
 
 groups() ->
     [
-     {mnesia_store, [], [
-                         {cluster_size_1, [], cluster_size_1_tests()},
-                         {cluster_size_2, [], cluster_size_2_tests()}
-                         ]},
-     {khepri_store, [], [
-                         {cluster_size_1, [], cluster_size_1_tests()},
-                         {cluster_size_2, [], cluster_size_2_tests()}
-                        ]}
+     {tests, [], [
+                  {cluster_size_1, [], cluster_size_1_tests()},
+                  {cluster_size_2, [], cluster_size_2_tests()}
+                 ]}
     ].
 
 cluster_size_1_tests() ->
@@ -78,10 +74,8 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(mnesia_store, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{metadata_store, mnesia}]);
-init_per_group(khepri_store, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{metadata_store, khepri}]);
+init_per_group(tests, Config) ->
+    Config;
 init_per_group(cluster_size_1 = Group, Config) ->
     init_per_multinode_group(Group, Config, 1);
 init_per_group(cluster_size_2 = Group, Config) ->
@@ -97,7 +91,7 @@ init_per_multinode_group(_Group, Config, NodeCount) ->
                                 rabbit_ct_broker_helpers:setup_steps() ++
                                     rabbit_ct_client_helpers:setup_steps()).
 
-end_per_group(Group, Config) when Group == mnesia_store; Group == khepri_store ->
+end_per_group(tests, Config) ->
     Config;
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_steps(Config,
