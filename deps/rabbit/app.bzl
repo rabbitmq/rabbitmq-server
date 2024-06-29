@@ -2124,3 +2124,12 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
     )
+    erlang_bytecode(
+        name = "classic_queue_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/classic_queue_SUITE.erl"],
+        outs = ["test/classic_queue_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
+    )

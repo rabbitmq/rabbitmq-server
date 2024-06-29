@@ -672,6 +672,11 @@ rabbitmq_integration_suite(
     shard_count = 6,
 )
 
+rabbitmq_integration_suite(
+    name = "classic_queue_SUITE",
+    size = "medium",
+)
+
 rabbitmq_suite(
     name = "rabbit_confirms_SUITE",
     size = "small",
