@@ -4927,8 +4927,11 @@ define compile_test_erl
 endef
 
 ERL_TEST_FILES = $(call core_find,$(TEST_DIR)/,*.erl)
+
 $(ERLANG_MK_TMP)/$(PROJECT).last-testdir-build: $(ERL_TEST_FILES) $(MAKEFILE_LIST)
-	$(eval FILES_TO_COMPILE := $(if $(filter $(MAKEFILE_LIST),$?),$(filter $(ERL_TEST_FILES),$^),$?))
+# When we have to recompile files in src/ the .d file always gets rebuilt.
+# Therefore we want to ignore it when rebuilding test files.
+	$(eval FILES_TO_COMPILE := $(if $(filter $(filter-out $(PROJECT).d,$(MAKEFILE_LIST)),$?),$(filter $(ERL_TEST_FILES),$^),$(filter $(ERL_TEST_FILES),$?)))
 	$(if $(strip $(FILES_TO_COMPILE)),$(call compile_test_erl,$(FILES_TO_COMPILE)) && touch $@)
 endif
 
