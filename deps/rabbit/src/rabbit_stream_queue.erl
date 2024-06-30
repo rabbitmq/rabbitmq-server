@@ -167,7 +167,7 @@ create_stream(Q0) ->
     InitialClusterSize = initial_cluster_size(
                            args_policy_lookup(<<"initial-cluster-size">>,
                                               fun policy_precedence/2, Q0)),
-    {Leader, Followers} = rabbit_queue_location:select_leader_and_followers(Q0, InitialClusterSize, rabbit_stream_queue),
+    {Leader, Followers} = rabbit_queue_location:select_leader_and_followers(Q0, InitialClusterSize),
     Conf = maps:merge(Conf0, #{nodes => [Leader | Followers],
                                leader_node => Leader,
                                replica_nodes => Followers}),

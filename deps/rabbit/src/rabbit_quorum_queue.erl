@@ -237,7 +237,7 @@ start_cluster(Q) ->
                      rabbit_data_coercion:to_atom(ra:new_uid(N))
              end,
     {LeaderNode, FollowerNodes} =
-        rabbit_queue_location:select_leader_and_followers(Q, QuorumSize, rabbit_quorum_queue),
+        rabbit_queue_location:select_leader_and_followers(Q, QuorumSize),
     LeaderId = {RaName, LeaderNode},
     NewQ0 = amqqueue:set_pid(Q, LeaderId),
     NewQ1 = amqqueue:set_type_state(NewQ0,
