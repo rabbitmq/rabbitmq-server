@@ -4,6 +4,7 @@ on:
   - cron: '0 4 * * *'
 jobs:
   bazel-run-gazelle:
+    if: github.repository_owner == 'rabbitmq'
     name: bazel run gazelle
     runs-on: ubuntu-latest
     strategy:

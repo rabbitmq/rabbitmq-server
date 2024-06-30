@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
 jobs:
   check-main:
+    if: github.repository_owner == 'rabbitmq'
     uses: ./.github/workflows/check-build-system-equivalence.yaml
     with:
       ref: refs/heads/main
@@ -13,6 +14,7 @@ jobs:
       project_version: 4.0.0
 
   check-v3_13_x:
+    if: github.repository_owner == 'rabbitmq'
     uses: ./.github/workflows/check-build-system-equivalence.yaml
     with:
       ref: refs/heads/v3.13.x
@@ -21,6 +23,7 @@ jobs:
       project_version: 3.13.0
 
   check-v3_12_x:
+    if: github.repository_owner == 'rabbitmq'
     uses: ./.github/workflows/check-build-system-equivalence.yaml
     with:
       ref: refs/heads/v3.12.x
