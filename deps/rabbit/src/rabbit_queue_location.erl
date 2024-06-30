@@ -10,7 +10,7 @@
 -include("amqqueue.hrl").
 
 -export([queue_leader_locators/0,
-         select_leader_and_followers/3]).
+         select_leader_and_followers/2]).
 
 %% these are needed because of they are called with ?MODULE:
 %% to allow mecking them in tests
@@ -32,11 +32,12 @@
 queue_leader_locators() ->
     ?QUEUE_LEADER_LOCATORS.
 
--spec select_leader_and_followers(amqqueue:amqqueue(), pos_integer(), atom()) ->
+-spec select_leader_and_followers(amqqueue:amqqueue(), pos_integer()) ->
     {Leader :: node(), Followers :: [node()]}.
-select_leader_and_followers(Q, Size, QueueType)
+select_leader_and_followers(Q, Size)
   when (?amqqueue_is_quorum(Q) orelse ?amqqueue_is_stream(Q) orelse ?amqqueue_is_classic(Q)) andalso is_integer(Size) ->
     LeaderLocator = leader_locator(Q),
+    QueueType = amqqueue:get_type(Q),
     do_select_leader_and_followers(Size, QueueType, LeaderLocator).
 
 -spec do_select_leader_and_followers(pos_integer(), atom(), queue_leader_locator()) ->

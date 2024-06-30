@@ -100,7 +100,7 @@ declare(Q, Node) when ?amqqueue_is_classic(Q) ->
                 {_, true} ->
                     Node;
                 _ ->
-                    {Node0, _} = rabbit_queue_location:select_leader_and_followers(Q, 1, rabbit_classic_queue),
+                    {Node0, _} = rabbit_queue_location:select_leader_and_followers(Q, 1),
                     Node0
             end,
     case rabbit_vhost_sup_sup:get_vhost_sup(VHost, Node1) of
