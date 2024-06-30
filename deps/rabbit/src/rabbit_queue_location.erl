@@ -99,7 +99,7 @@ leader_locator0(_) ->
     %% default
     <<"client-local">>.
 
--spec select_members(pos_integer(), term(), [node(),...], [node(),...],
+-spec select_members(pos_integer(), rabbit_queue_type:queue_type(), [node(),...], [node(),...],
                       non_neg_integer(), non_neg_integer(), function()) ->
     {[node(),...], function()}.
 select_members(Size, _, AllNodes, _, _, _, Fun)
@@ -111,9 +111,6 @@ select_members(Size, _, AllNodes, _, _, _, Fun)
 %% to declare this queue locally rather than randomly. However, currently,
 %% counting queues on each node is relatively expensive. Users can use
 %% the client-local strategy if they know their connections are well balanced
-select_members(1, rabbit_classic_queue, _AllNodes, RunningNodes, QueueCount, QueueCountStartRandom, GetQueues)
-  when QueueCount >= QueueCountStartRandom ->
-    {RunningNodes, GetQueues};
 select_members(1, rabbit_classic_queue, _, RunningNodes, _, _, GetQueues) ->
     {RunningNodes, GetQueues};
 %% Quorum queues and streams
@@ -135,10 +132,7 @@ select_members(Size, _, AllNodes, RunningNodes, _, _, GetQueues) ->
     Counters0 = maps:from_list([{N, 0} || N <- lists:delete(?MODULE:node(), AllNodes)]),
     Queues = GetQueues(),
     Counters = lists:foldl(fun(Q, Acc) ->
-                                   Nodes = case amqqueue:get_type(Q) of
-                                               rabbit_classic_queue -> [amqqueue:qnode(Q)];
-                                               _ -> maps:get(nodes, amqqueue:get_type_state(Q))
-                                           end,
+                                   #{nodes := Nodes} = amqqueue:get_type_state(Q),
                                    lists:foldl(fun(N, A)
                                                      when is_map_key(N, A) ->
                                                        maps:update_with(N, fun(C) -> C+1 end, A);
