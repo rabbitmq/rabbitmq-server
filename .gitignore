@@ -129,7 +129,6 @@ callgraph.dot*
 .exrc
 .ignore
 /genhtml/
-/topic-branch-scratch/
 
 # @todo Should be moved to rabbitmq_stomp directly.
 deps/rabbitmq_stomp/test/python_SUITE_data/src/deps
