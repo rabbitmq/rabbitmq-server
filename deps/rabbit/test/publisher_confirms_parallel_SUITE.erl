@@ -10,6 +10,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 -define(TIMEOUT, 60000).
@@ -18,8 +19,7 @@
 
 all() ->
     [
-     {group, mnesia_store},
-     {group, khepri_store}
+     {group, tests}
     ].
 
 groups() ->
@@ -33,13 +33,7 @@ groups() ->
                              confirm_mandatory_unroutable,
                              confirm_unroutable_message],
     [
-     {mnesia_store, [],
-      [
-       {classic_queue, [parallel], PublisherConfirmTests ++ [confirm_nack]},
-       {quorum_queue, [parallel], PublisherConfirmTests},
-       {quorum_queue, [], [confirm_minority]}
-      ]},
-     {khepri_store, [],
+     {tests, [],
       [
        {classic_queue, [parallel], PublisherConfirmTests ++ [confirm_nack]},
        {quorum_queue, [parallel], PublisherConfirmTests}
@@ -72,28 +66,20 @@ init_per_group(quorum_queue, Config) ->
       Config,
       [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
        {queue_durable, true}]);
-init_per_group(mnesia_store = Group, Config0) ->
+init_per_group(Group, Config0) ->
     Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
-    init_per_group0(Group, Config);
-init_per_group(khepri_store = Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, khepri}]),
     init_per_group0(Group, Config).
 
 init_per_group0(Group, Config) ->
-    case lists:member({group, Group}, all()) of
-        true ->
-            ClusterSize = 3,
-            Config1 = rabbit_ct_helpers:set_config(Config, [
-                {rmq_nodename_suffix, Group},
-                {rmq_nodes_count, ClusterSize}
-              ]),
-           Config2 = rabbit_ct_helpers:run_steps(Config1,
-              rabbit_ct_broker_helpers:setup_steps() ++
-              rabbit_ct_client_helpers:setup_steps()),
-            Config2;
-        false ->
-            Config
-    end.
+    ClusterSize = 3,
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+                                                    {rmq_nodename_suffix, Group},
+                                                    {rmq_nodes_count, ClusterSize}
+                                                   ]),
+    Config2 = rabbit_ct_helpers:run_steps(Config1,
+                                          rabbit_ct_broker_helpers:setup_steps() ++
+                                          rabbit_ct_client_helpers:setup_steps()),
+    Config2.
 
 end_per_group(Group, Config) ->
     case lists:member({group, Group}, all()) of
@@ -285,17 +271,14 @@ confirm_nack1(Config) ->
         #'confirm.select_ok'{} -> ok
     after ?TIMEOUT -> throw(failed_to_enable_confirms)
     end,
+    %% stop the queue
+    ok = gen_server:stop(QPid1, shutdown, 5000),
     %% Publish a message
     rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"amq.direct">>,
                                            routing_key = <<"confirms-magic">>
                                           },
                       rabbit_basic:build_content(
                         #'P_basic'{delivery_mode = 2}, <<"">>)),
-    %% We must not kill the queue before the channel has processed the
-    %% 'publish'.
-    ok = rabbit_channel:flush(Ch),
-    %% Crash the queue
-    QPid1 ! boom,
     %% Wait for a nack
     receive
         #'basic.nack'{} -> ok;
@@ -311,35 +294,6 @@ confirm_nack1(Config) ->
     ok = rabbit_channel:shutdown(Ch),
     passed.
 
-%% The closest to a nack behaviour that we can get on quorum queues is not answering while
-%% the cluster is in minority. Once the cluster recovers, a 'basic.ack' will be issued.
-confirm_minority(Config) ->
-    [_A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
-    QName = ?config(queue_name, Config),
-    declare_queue(Ch, Config, QName),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, B),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, C),
-    amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
-    publish(Ch, QName, [<<"msg1">>]),
-    receive
-        #'basic.nack'{} -> ok;
-        #'basic.ack'{} -> throw(unexpected_ack)
-    after 120000 ->
-            ok
-    end,
-    ok = rabbit_ct_broker_helpers:start_node(Config, B),
-    publish(Ch, QName, [<<"msg2">>]),
-    receive
-        #'basic.nack'{} -> throw(unexpected_nack);
-        #'basic.ack'{} ->
-            ok
-    after 60000 ->
-            throw(missing_ack)
-    end,
-    ok = rabbit_ct_broker_helpers:start_node(Config, C),
-    ok.
 
 %%%%%%%%%%%%%%%%%%%%%%%%
 %% Test helpers

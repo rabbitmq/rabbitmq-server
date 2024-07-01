@@ -492,9 +492,9 @@ add_replicas(Config) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
     [publish(Ch, Q, Data) || _ <- lists:seq(1, NumMsgs)],
-    %% should be sufficient sleepage for the next message to fall in the next
-    %% chunk
-    timer:sleep(10),
+    %% wait for confirms here to ensure the next message ends up in a chunk
+    %% of it's own
+    amqp_channel:wait_for_confirms(Ch, 30),
     publish(Ch, Q, <<"last">>),
     amqp_channel:wait_for_confirms(Ch, 30),
     ?assertEqual(ok,
