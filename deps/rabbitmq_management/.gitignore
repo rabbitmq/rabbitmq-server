@@ -1,30 +1,6 @@
-../../../.gitignore
-.sw?
-.*.sw?
-*.beam
-erl_crash.dump
-MnesiaCore.*
-/.erlang.mk/
-/cover/
 /debug/
-/deps/
-/doc/
-/ebin/
-/escript/
-/escript.lock
-/logs/
-/plugins/
-/plugins.lock
-/sbin/
-/sbin.lock
-
-rabbitmq_management.d
-.rabbitmq_management.plt
-
-*.coverdata
 
 test/config_schema_SUITE_data/schema/
-.vscode/*
 
 selenium/node_modules
 selenium/package-lock.json

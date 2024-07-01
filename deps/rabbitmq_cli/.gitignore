@@ -1,13 +1,1 @@
-/_build
-/cover
-/deps
-/escript
-/log
-/.erlang.mk/
-/ebin
-/sbin
-erl_crash.dump
-mix.lock
-*.ez
-.sw?
-.*.sw?
+/deps/

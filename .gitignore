@@ -1,11 +1,30 @@
+# Editor/OS temporary and unwanted files.
 *~
+\#*
+.#*
 .sw?
-*.tmp
 .*.sw?
-/.erlang.mk/
-/_build/
-/ebin/
-/bin/
+*.orig
+*.tmp
+.idea/
+.tool-versions
+.vscode/
+.DS_Store
+
+# Erlang.mk temporary files and outputs.
+*.plt
+*.d
+.erlang.mk/
+cover/
+docs/*.html
+ebin/
+logs/
+**/test/*.beam
+**/test/ct.cover.spec
+
+elvis
+
+# Dependencies excluding RabbitMQ applications.
 /deps/*
 !/deps/rabbit/
 !/deps/rabbit_common/
@@ -59,44 +78,57 @@
 !/deps/rabbitmq_web_stomp/
 !/deps/rabbitmq_web_stomp_examples/
 !/deps/trust_store_http/
-/escript/
-/escript.lock
-/plugins/
-/plugins.lock
-/sbin/
-/sbin.lock
-ct.cover.spec
-erl_crash.dump
+
+# Rebar3/Elixir temporary files and outputs.
+.rebar3/
+_build/
+_checkouts/
 rebar3.crashdump
-.envrc
-.exrc
-.ignore
-*.plt
+
+# Automatically generated rebar.config files.
+rebar.config
+!/deps/amqp10_common/rebar.config
+!/rebar.config
+
+# Bazel.
+.bazelrc
+user.bazelrc
+bazel-*
+extra_deps/
+
+# Erlang/OTP unwanted files.
+.erlang.cookie
+erl_crash.dump
+MnesiaCore.*
+
+# RabbitMQ Makefiles temporary files and outputs.
 *.lock
-
-/logs/
-/genhtml/
-
-/topic-branch-scratch/
+escript/
+plugins/
+sbin/
+git-revisions.txt
 
 PACKAGES/
-packaging/docker-image/rabbitmq_server-*/
-
-# Source distribution.
 rabbitmq-server-*/
 rabbitmq-server-*.tar.gz
 rabbitmq-server-*.tar.bz2
 rabbitmq-server-*.tar.xz
 rabbitmq-server-*.zip
 
+# Trace tools output.
+*-ttb
+*.ti
+*.lz4*
 traces*
+callgrind.out*
+callgraph.dot*
+
+# Unknown. If you know in which category this belongs to,
+# please move it there. Thank you.
+.envrc
+.exrc
+.ignore
+/genhtml/
+
+# @todo Should be moved to rabbitmq_stomp directly.
 deps/rabbitmq_stomp/test/python_SUITE_data/src/deps
-callgrand*
-
-/user.bazelrc
-/bazel-*
-/extra_deps/
-
-.tool-versions
-.vscode
-.idea

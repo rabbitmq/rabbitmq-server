@@ -355,9 +355,14 @@ prepare-dist::
 
 # If the top-level project is a RabbitMQ component, we override
 # $(DEPS_DIR) for this project to point to the top-level's one.
+#
+# We do the same for $(ERLANG_MK_TMP) as we want to keep the
+# beam cache regardless of where we build. We also want to
+# share Hex tarballs.
 
 ifneq ($(PROJECT),rabbitmq_server_release)
 DEPS_DIR ?= $(abspath ..)
+ERLANG_MK_TMP ?= $(abspath ../../.erlang.mk)
 DISABLE_DISTCLEAN = 1
 endif
 
