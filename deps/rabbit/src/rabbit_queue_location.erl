@@ -10,7 +10,8 @@
 -include("amqqueue.hrl").
 
 -export([queue_leader_locators/0,
-         select_leader_and_followers/2]).
+         select_leader_and_followers/2,
+         master_locator_permitted/0]).
 
 %% these are needed because of they are called with ?MODULE:
 %% to allow mecking them in tests
@@ -20,6 +21,15 @@
 -ifdef(TEST).
 -export([select_members/7, leader_node/6, leader_locator/1]).
 -endif.
+
+-rabbit_deprecated_feature(
+   {queue_master_locator,
+    #{deprecation_phase => permitted_by_default,
+      messages =>
+      #{when_permitted =>
+        "queue-master-locator is deprecated. "
+        "queue-leader-locator should be used instead. Allowed values are 'client-local' and 'balanced'."}}
+   }).
 
 -define(QUEUE_LEADER_LOCATORS_DEPRECATED, [<<"random">>, <<"least-leaders">>, <<"min-masters">>]).
 -define(QUEUE_LEADER_LOCATORS, [<<"client-local">>, <<"balanced">>] ++ ?QUEUE_LEADER_LOCATORS_DEPRECATED).
@@ -215,3 +225,6 @@ queues_per_node(Nodes, GetQueues) ->
 %% for unit testing
 -spec node() -> node().
 node() -> erlang:node().
+
+master_locator_permitted() ->
+    rabbit_deprecated_features:is_permitted(queue_master_locator).

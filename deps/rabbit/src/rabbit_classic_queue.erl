@@ -79,9 +79,14 @@
 
 validate_policy(Args) ->
     Strategy = proplists:get_value(<<"queue-master-locator">>, Args, unknown),
-    case lists:member(Strategy, rabbit_queue_location:queue_leader_locators()) of
-        true -> ok;
-        false -> {error, "~tp is not a valid master locator", [Strategy]}
+    case rabbit_queue_location:master_locator_permitted() of
+        true ->
+            case lists:member(Strategy, rabbit_queue_location:queue_leader_locators()) of
+                true -> ok;
+                false -> {error, "~tp is not a valid master locator", [Strategy]}
+            end;
+        false ->
+            {error, "use of deprecated queue-master-locator argument is not permitted", []}
     end.
 
 -spec is_enabled() -> boolean().
@@ -91,7 +96,29 @@ is_enabled() -> true.
 is_compatible(_, _, _) ->
     true.
 
+validate_arguments(Args) ->
+    case lists:keyfind(<<"x-queue-master-locator">>, 1, Args) of
+        false ->
+            ok;
+        _ ->
+            case rabbit_queue_location:master_locator_permitted() of
+                true ->
+                    ok;
+                false ->
+                    error
+            end
+    end.
+
 declare(Q, Node) when ?amqqueue_is_classic(Q) ->
+    case validate_arguments(amqqueue:get_arguments(Q)) of
+        ok -> do_declare(Q, Node);
+        error ->
+            Warning = rabbit_deprecated_features:get_warning(
+                        queue_master_locator),
+            {protocol_error, internal_error, "~ts", [Warning]}
+    end.
+
+do_declare(Q, Node) when ?amqqueue_is_classic(Q) ->
     QName = amqqueue:get_name(Q),
     VHost = amqqueue:get_vhost(Q),
     Node1 = case {Node, rabbit_amqqueue:is_exclusive(Q)} of
@@ -536,7 +563,10 @@ capabilities() ->
                           <<"x-max-length-bytes">>, <<"x-max-priority">>,
                           <<"x-overflow">>, <<"x-queue-mode">>, <<"x-queue-version">>,
                           <<"x-single-active-consumer">>, <<"x-queue-type">>,
-                          <<"x-queue-master-locator">>, <<"x-queue-leader-locator">>],
+                          <<"x-queue-leader-locator">>] ++ case rabbit_queue_location:master_locator_permitted() of
+                                                               true -> [<<"x-queue-master-locator">>];
+                                                               false -> []
+                                                           end,
       consumer_arguments => [<<"x-priority">>, <<"x-credit">>],
       server_named => true}.
 
