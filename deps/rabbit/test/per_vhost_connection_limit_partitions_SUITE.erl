@@ -7,11 +7,10 @@
 
 -module(per_vhost_connection_limit_partitions_SUITE).
 
--include_lib("common_test/include/ct.hrl").
--include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 -import(rabbit_ct_client_helpers, [open_unmanaged_connection/2,
