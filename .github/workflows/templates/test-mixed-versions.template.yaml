@@ -187,7 +187,7 @@ jobs:
 
   test-rabbitmq_cli:
     needs: check-workflow
-    uses: ./.github/workflows/test-plugin.yaml
+    uses: ./.github/workflows/test-plugin-mixed.yaml
     with:
       repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
       plugin: rabbitmq_cli
