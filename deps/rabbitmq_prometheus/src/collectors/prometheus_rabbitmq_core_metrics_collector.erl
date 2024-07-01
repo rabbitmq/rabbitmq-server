@@ -160,15 +160,6 @@
         {2, undefined, queue_disk_writes_total, counter, "Total number of times queue wrote messages to disk", disk_writes},
         {2, undefined, stream_segments, counter, "Total number of stream segment files", segments}
     ]},
-    {queue_counter_metrics, [
-        {2, undefined, queue_get_ack_total, counter, "Total number of messages fetched with basic.get in manual acknowledgement mode"},
-        {3, undefined, queue_get_total, counter, "Total number of messages fetched with basic.get in automatic acknowledgement mode"},
-        {4, undefined, queue_messages_delivered_ack_total, counter, "Total number of messages delivered to consumers in manual acknowledgement mode"},
-        {5, undefined, queue_messages_delivered_total, counter, "Total number of messages delivered to consumers in automatic acknowledgement mode"},
-        {6, undefined, queue_messages_redelivered_total, counter, "Total number of messages redelivered to consumers"},
-        {7, undefined, queue_messages_acked_total, counter, "Total number of messages acknowledged by consumers"},
-        {8, undefined, queue_get_empty_total, counter, "Total number of times basic.get operations fetched no message"}
-    ]},
 %%% Metrics that contain reference to a channel. Some of them also have
 %%% a queue name, but in this case filtering on it doesn't make any
 %%% sense, as the queue is not an object of interest here.
@@ -180,13 +171,6 @@
         {2, undefined, channel_acks_uncommitted, gauge, "Message acknowledgements in a transaction not yet committed", acks_uncommitted},
         {2, undefined, consumer_prefetch, gauge, "Limit of unacknowledged messages for each consumer", prefetch_count},
         {2, undefined, channel_prefetch, gauge, "Total limit of unacknowledged messages for all consumers on a channel", global_prefetch_count}
-    ]},
-
-    {exchange_metrics, [
-        {2, undefined, exchange_messages_published_total, counter, "Total number of messages published into an exchange on a channel"},
-        {3, undefined, exchange_messages_confirmed_total, counter, "Total number of messages published into an exchange and confirmed on the channel"},
-        {4, undefined, exchange_messages_unroutable_returned_total, counter, "Total number of messages published as mandatory into an exchange and returned to the publisher as unroutable"},
-        {5, undefined, exchange_messages_unroutable_dropped_total, counter, "Total number of messages published as non-mandatory into an exchange and dropped as unroutable"}
     ]},
 
     {channel_exchange_metrics, [
@@ -223,12 +207,8 @@
         {2, undefined, connection_channels, gauge, "Channels on a connection", channels}
     ]},
 
-    {queue_exchange_metrics, [
-        {2, undefined, queue_exchange_messages_published_total, counter, "Total number of messages published to queues"}
-    ]},
-
     {channel_queue_exchange_metrics, [
-        {2, undefined, queue_messages_published_total, counter, "Total number of messages published to queues"}
+        {2, undefined, queue_messages_published_total, counter, "Total number of messages published into a queue through a exchange on a channel"}
     ]}
 ]).
 
@@ -242,8 +222,25 @@
     ]},
     {exchange_names, [
         {2, undefined, exchange_name, gauge, "Enumerates exchanges without any additional info. This value is cluster-wide. A cheaper alternative to `exchange_bindings`"}
-    ]}
-]).
+    ]},
+    {queue_exchange_metrics, [
+        {2, undefined, queue_exchange_messages_published_total, counter, "Total number of messages published into a queue through an exchange"}
+    ]},
+    {exchange_metrics, [
+        {2, undefined, exchange_messages_published_total, counter, "Total number of messages published into an exchange"},
+        {3, undefined, exchange_messages_confirmed_total, counter, "Total number of messages published into an exchange and confirmed"},
+        {4, undefined, exchange_messages_unroutable_returned_total, counter, "Total number of messages published as mandatory into an exchange and returned to the publisher as unroutable"},
+        {5, undefined, exchange_messages_unroutable_dropped_total, counter, "Total number of messages published as non-mandatory into an exchange and dropped as unroutable"}
+    ]},
+    {queue_counter_metrics, [
+        {2, undefined, queue_get_ack_total, counter, "Total number of messages fetched from a queue with basic.get in manual acknowledgement mode"},
+        {3, undefined, queue_get_total, counter, "Total number of messages fetched from a queue with basic.get in automatic acknowledgement mode"},
+        {4, undefined, queue_messages_delivered_ack_total, counter, "Total number of messages delivered from a queue to consumers in manual acknowledgement mode"},
+        {5, undefined, queue_messages_delivered_total, counter, "Total number of messages delivered from a queue to consumers in automatic acknowledgement mode"},
+        {6, undefined, queue_messages_redelivered_total, counter, "Total number of messages redelivered from a queue to consumers"},
+        {7, undefined, queue_messages_acked_total, counter, "Total number of messages acknowledged by consumers on a queue"},
+        {8, undefined, queue_get_empty_total, counter, "Total number of times basic.get operations fetched no message on a queue"}
+    ]}]).
 
 -define(TOTALS, [
     %% ordering differs from metrics above, refer to list comprehension
