@@ -10,12 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
-<<<<<<< HEAD
--include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
-
-=======
 -compile(nowarn_export_all).
->>>>>>> a277713105 (speed up limit and tracking* suites)
 -compile(export_all).
 
 -import(clustering_utils, [

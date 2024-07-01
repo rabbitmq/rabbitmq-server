@@ -34,18 +34,7 @@ groups() ->
                              confirm_mandatory_unroutable,
                              confirm_unroutable_message],
     [
-<<<<<<< HEAD
-     {mnesia_store, [],
-      [
-       {classic_queue, [parallel], PublisherConfirmTests ++ [confirm_nack]},
-       {mirrored_queue, [parallel], PublisherConfirmTests ++ [confirm_nack]},
-       {quorum_queue, [parallel], PublisherConfirmTests},
-       {quorum_queue, [], [confirm_minority]}
-      ]},
-     {khepri_store, [],
-=======
      {tests, [],
->>>>>>> a5819bf41e (Remove meta data store groups from publisher_confirms_parallel_SUITE)
       [
        {classic_queue, [parallel], PublisherConfirmTests ++ [confirm_nack]},
        {quorum_queue, [parallel], PublisherConfirmTests}
@@ -78,19 +67,7 @@ init_per_group(quorum_queue, Config) ->
       Config,
       [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
        {queue_durable, true}]);
-<<<<<<< HEAD
-init_per_group(mirrored_queue, Config) ->
-    rabbit_ct_broker_helpers:set_ha_policy(Config, 0, <<"^max_length.*queue">>,
-        <<"all">>, [{<<"ha-sync-mode">>, <<"automatic">>}]),
-    Config1 = rabbit_ct_helpers:set_config(
-                Config, [{is_mirrored, true},
-                         {queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
-                         {queue_durable, true}]),
-    rabbit_ct_helpers:run_steps(Config1, []);
-init_per_group(mnesia_store = Group, Config0) ->
-=======
 init_per_group(Group, Config0) ->
->>>>>>> a5819bf41e (Remove meta data store groups from publisher_confirms_parallel_SUITE)
     Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
     init_per_group0(Group, Config).
 
