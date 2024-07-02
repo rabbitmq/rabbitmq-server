@@ -92,7 +92,7 @@ gc_leader_data(Id, Table, GbSet) ->
 gc_global_queues() ->
     GbSet = gb_sets:from_list(rabbit_amqqueue:list_names()),
     gc_process_and_entity(channel_queue_metrics, GbSet),
-    gc_process_and_entity(queue_counter_metrics, GbSet),
+    gc_entity(queue_counter_metrics, GbSet),
     gc_process_and_entity(consumer_created, GbSet),
     ExchangeGbSet = gb_sets:from_list(rabbit_exchange:list_names()),
     gc_process_and_entities(channel_queue_exchange_metrics, GbSet, ExchangeGbSet),
