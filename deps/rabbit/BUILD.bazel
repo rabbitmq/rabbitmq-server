@@ -646,12 +646,6 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    name = "queue_master_location_SUITE",
-    size = "large",
-    shard_count = 2,
-)
-
-rabbitmq_integration_suite(
     name = "queue_parallel_SUITE",
     size = "large",
     additional_beam = [
@@ -676,6 +670,11 @@ rabbitmq_integration_suite(
         ":test_clustering_utils_beam",
     ],
     shard_count = 6,
+)
+
+rabbitmq_integration_suite(
+    name = "classic_queue_SUITE",
+    size = "medium",
 )
 
 rabbitmq_suite(
@@ -1018,6 +1017,14 @@ rabbitmq_suite(
 rabbitmq_suite(
     name = "unit_queue_consumers_SUITE",
     size = "small",
+)
+
+rabbitmq_suite(
+    name = "unit_queue_location_SUITE",
+    size = "small",
+    deps = [
+        "@meck//:erlang_app",
+    ]
 )
 
 rabbitmq_integration_suite(

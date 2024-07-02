@@ -206,7 +206,6 @@ SLOW_CT_SUITES := backing_queue \
 		  priority_queue \
 		  priority_queue_recovery \
 		  publisher_confirms_parallel \
-		  queue_master_location \
 		  queue_parallel \
 		  quorum_queue \
 		  rabbit_core_metrics_gc \
