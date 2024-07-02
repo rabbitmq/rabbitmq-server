@@ -28,6 +28,14 @@
                             {auth_attempt_metrics, set},
                             {auth_attempt_detailed_metrics, set}]).
 
+% `CORE_NON_CHANNEL_TABLES` are tables that store counters representing the 
+% same info as some of the channel_queue_metrics, channel_exchange_metrics and
+% channel_queue_exchange_metrics but without including the channel ID in the 
+% key.
+-define(CORE_NON_CHANNEL_TABLES, [{queue_counter_metrics, set},
+                                  {exchange_metrics, set},
+                                  {queue_exchange_metrics, set}]).
+
 -define(CONNECTION_CHURN_METRICS, {node(), 0, 0, 0, 0, 0, 0, 0}).
 
 %% connection_created :: {connection_id, proplist}
