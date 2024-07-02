@@ -63,6 +63,7 @@ start_activemq_nodes(Config) ->
     ActivemqCmd = ?config(activemq_cmd, Config1),
     TCPPort = rabbit_ct_broker_helpers:get_node_config(Config1, 0, tcp_port_amqp),
     ConfigFile = ?config(activemq_config_filename, Config1),
+    ct:log("Running ~p", [ActivemqCmd]),
     Cmd = [ActivemqCmd,
            "start",
            {"-Dtestsuite.tcp_port_amqp=~b", [TCPPort]},

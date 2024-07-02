@@ -4,3 +4,5 @@
 
 # Downloaded ActiveMQ.
 /test/system_SUITE_data/apache-activemq-*
+/test/system_SUITE_data/ibmmq/mq-container
+/test/system_SUITE_data/ibmmq/*.tar.gz
