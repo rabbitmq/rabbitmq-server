@@ -868,7 +868,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/clustering_management_SUITE.beam"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
+        deps = ["//deps/amqp_client:erlang_app"],
     )
     erlang_bytecode(
         name = "test_clustering_utils_beam",
@@ -1142,7 +1142,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/peer_discovery_tmp_hidden_node_SUITE.beam"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
+        deps = ["//deps/rabbit_common:erlang_app"],
     )
     erlang_bytecode(
         name = "per_user_connection_channel_limit_SUITE_beam_files",
@@ -1196,7 +1196,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/per_vhost_connection_limit_partitions_SUITE.beam"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
+        deps = ["//deps/rabbitmq_ct_helpers:erlang_app"],
     )
     erlang_bytecode(
         name = "per_vhost_msg_store_SUITE_beam_files",

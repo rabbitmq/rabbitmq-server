@@ -82,7 +82,8 @@ eunit(
     name = "eunit",
     compiled_suites = [
         ":test_oauth_http_mock_beam",
-        ":test_oauth2_client_test_util_beam"],
+        ":test_oauth2_client_test_util_beam",
+    ],
     target = ":test_erlang_app",
 )
 
@@ -112,7 +113,6 @@ rabbitmq_integration_suite(
         "@cowboy//:erlang_app",
     ],
 )
-
 
 rabbitmq_suite(
     name = "unit_SUITE",
