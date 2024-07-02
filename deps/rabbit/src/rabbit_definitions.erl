@@ -783,6 +783,9 @@ add_vhost(VHost, ActingUser) ->
     Tags             = maps:get(tags, VHost, maps:get(tags, Metadata, [])),
     DefaultQueueType = maps:get(default_queue_type, Metadata, undefined),
 
+    rabbit_log:debug("Definition import: asked to import a virtual host '~ts' with default queue type of '~tp'",
+                     [Name, DefaultQueueType]),
+
     rabbit_vhost:put_vhost(Name, Description, Tags, DefaultQueueType, IsTracingEnabled, ActingUser).
 
 add_permission(Permission, ActingUser) ->

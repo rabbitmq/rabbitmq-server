@@ -255,7 +255,20 @@ update_metadata(Name, Metadata0, ActingUser) ->
 
 -spec update(vhost:name(), binary(), [atom()], rabbit_queue_type:queue_type() | 'undefined', rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 update(Name, Description, Tags, DefaultQueueType, ActingUser) ->
-    Metadata = #{description => Description, tags => Tags, default_queue_type => DefaultQueueType},
+    ResolvedDQT = rabbit_queue_type:short_alias_of(rabbit_queue_type:discover(DefaultQueueType)),
+    Metadata = case ResolvedDQT of
+        undefined ->
+            #{
+                description => Description,
+                tags => Tags
+            };
+        _ ->
+            #{
+                description => Description,
+                tags => Tags,
+                default_queue_type => DefaultQueueType
+            }
+    end,
     update_metadata(Name, Metadata, ActingUser).
 
 -spec delete(vhost:name(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).

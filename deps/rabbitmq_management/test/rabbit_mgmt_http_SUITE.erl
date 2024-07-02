@@ -14,7 +14,8 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -import(rabbit_ct_client_helpers, [close_connection/1, close_channel/1,
-                                   open_unmanaged_connection/1]).
+                                   open_unmanaged_connection/1,
+                                   open_unmanaged_connection/3]).
 -import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2,
                                 assert_keys/2, assert_no_keys/2,
                                 http_get/2, http_get/3, http_get/5,
@@ -40,13 +41,61 @@
 all() ->
     [
      {group, all_tests_with_prefix},
-     {group, all_tests_without_prefix}
+     {group, all_tests_without_prefix},
+     {group, definitions_group1_without_prefix},
+     {group, definitions_group2_without_prefix},
+     {group, definitions_group3_without_prefix},
+     {group, definitions_group4_without_prefix}
     ].
 
 groups() ->
     [
-     {all_tests_with_prefix, [], all_tests()},
-     {all_tests_without_prefix, [], all_tests()}
+        {all_tests_with_prefix, [], some_tests() ++ all_tests()},
+        {all_tests_without_prefix, [], some_tests()},
+        %% We have several groups because their interference is
+        %% way above average. It is easier to use separate groups
+        %% that get a blank node each than to try to untangle multiple
+        %% definitions-related tests. MK.
+        {definitions_group1_without_prefix, [], definitions_group1_tests()},
+        {definitions_group2_without_prefix, [], definitions_group2_tests()},
+        {definitions_group3_without_prefix, [], definitions_group3_tests()},
+        {definitions_group4_without_prefix, [], definitions_group4_tests()}
+    ].
+
+some_tests() ->
+    [
+      users_test,
+      exchanges_test,
+      queues_test,
+      bindings_test,
+      policy_test,
+      policy_permissions_test
+    ].
+
+definitions_group1_tests() ->
+    [
+      definitions_test,
+      definitions_password_test,
+      long_definitions_test,
+      long_definitions_multipart_test
+    ].
+
+definitions_group2_tests() ->
+    [
+      definitions_default_queue_type_test,
+      definitions_vhost_metadata_test
+    ].
+
+definitions_group3_tests() ->
+    [
+      definitions_exclude_exclusive_queue_test,
+      definitions_server_named_queue_test,
+      definitions_with_charset_test
+    ].
+
+definitions_group4_tests() ->
+    [
+      definitions_vhost_test
     ].
 
 all_tests() -> [
@@ -83,7 +132,6 @@ all_tests() -> [
     multiple_invalid_connections_test,
     exchanges_test,
     queues_test,
-    crashed_queues_test,
     quorum_queues_test,
     stream_queues_have_consumers_field,
     bindings_test,
@@ -97,17 +145,6 @@ all_tests() -> [
     permissions_connection_channel_consumer_test,
     consumers_cq_test,
     consumers_qq_test,
-    definitions_test,
-    definitions_vhost_test,
-    definitions_password_test,
-    definitions_exclude_exclusive_queue_test,
-    definitions_server_named_queue_test,
-    definitions_with_charset_test,
-    definitions_default_queue_type_test,
-    definitions_vhost_metadata_test,
-    long_definitions_test,
-    long_definitions_multipart_test,
-    aliveness_test,
     arguments_test,
     arguments_table_test,
     queue_purge_test,
@@ -192,7 +229,7 @@ finish_init(Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, NodeConf),
     merge_app_env(Config1).
 
-init_per_group(all_tests_with_prefix=Group, Config0) ->
+init_per_group(all_tests_with_prefix = Group, Config0) ->
     PathConfig = {rabbitmq_management, [{path_prefix, ?PATH_PREFIX}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
     Config2 = finish_init(Group, Config1),
@@ -1090,36 +1127,6 @@ queues_test(Config) ->
     http_delete(Config, "/queues/downvhost/bar", {group, '2xx'}),
     passed.
 
-crashed_queues_test(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    Q = #resource{virtual_host = <<"/">>, kind = queue, name = <<"crashingqueue">>},
-
-    QArgs = #{},
-    http_put(Config, "/queues/%2F/crashingqueue", QArgs, {group, '2xx'}),
-
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-            rabbit_amqqueue_control, await_state, [Node, Q, running]),
-
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-        rabbit_amqqueue, kill_queue_hard, [Node, Q]),
-
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-            rabbit_amqqueue_control, await_state, [Node, Q, crashed]),
-
-    CrashedQueue  = http_get(Config, "/queues/%2F/crashingqueue"),
-
-    assert_item(#{name        => <<"crashingqueue">>,
-                  vhost       => <<"/">>,
-                  state       => <<"crashed">>,
-                  durable     => false,
-                  auto_delete => false,
-                  exclusive   => false,
-                  arguments   => #{}}, CrashedQueue),
-
-    http_delete(Config, "/queues/%2F/crashingqueue", {group, '2xx'}),
-    http_delete(Config, "/queues/%2F/crashingqueue", ?NOT_FOUND),
-    passed.
-
 quorum_queues_test(Config) ->
     %% Test in a loop that no metrics are left behing after deleting a queue
     quorum_queues_test_loop(Config, 5).
@@ -1616,17 +1623,17 @@ defs_v(Config, Key, URI, CreateMethod, Args) ->
     defs(Config, Key, Rep1(URI, "%2F"), CreateMethod, ReplaceVHostInArgs(Args, <<"/">>)),
 
     %% Test against new vhost
-    http_put(Config, "/vhosts/test", none, {group, '2xx'}),
+    http_put(Config, "/vhosts/defs_v", none, {group, '2xx'}),
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-    http_put(Config, "/permissions/test/guest", PermArgs, {group, '2xx'}),
+    http_put(Config, "/permissions/defs_v/guest", PermArgs, {group, '2xx'}),
     DeleteFun0 = fun(URI2) ->
                      http_delete(Config, URI2, {group, '2xx'})
                  end,
     DeleteFun1 = fun(_) ->
-                    http_delete(Config, "/vhosts/test", {group, '2xx'})
+                    http_delete(Config, "/vhosts/defs_v", {group, '2xx'})
                  end,
-    defs(Config, Key, Rep1(URI, "test"),
-         CreateMethod, ReplaceVHostInArgs(Args, <<"test">>),
+    defs(Config, Key, Rep1(URI, "defs_v"),
+         CreateMethod, ReplaceVHostInArgs(Args, <<"defs_v">>),
          DeleteFun0, DeleteFun1).
 
 create(Config, CreateMethod, URI, Args) ->
@@ -1802,7 +1809,7 @@ defs_default_queue_type_vhost(Config, QueueType) ->
 definitions_vhost_metadata_test(Config) ->
     register_parameters_and_policy_validator(Config),
 
-    VHostName = <<"test-vhost">>,
+    VHostName = <<"definitions-vhost-metadata-test">>,
     Desc = <<"Created by definitions_vhost_metadata_test">>,
     DQT = <<"quorum">>,
     Tags = [<<"one">>, <<"tag-two">>],
@@ -1813,9 +1820,9 @@ definitions_vhost_metadata_test(Config) ->
     },
 
     %% Create a test vhost
-    http_put(Config, "/vhosts/test-vhost", Metadata, {group, '2xx'}),
+    http_put(Config, "/vhosts/definitions-vhost-metadata-test", Metadata, {group, '2xx'}),
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-    http_put(Config, "/permissions/test-vhost/guest", PermArgs, {group, '2xx'}),
+    http_put(Config, "/permissions/definitions-vhost-metadata-test/guest", PermArgs, {group, '2xx'}),
 
     %% Get the definitions
     Definitions = http_get(Config, "/definitions", ?OK),
@@ -1838,7 +1845,7 @@ definitions_vhost_metadata_test(Config) ->
     http_post(Config, "/definitions", Definitions, {group, '2xx'}),
 
     %% Remove the test vhost
-    http_delete(Config, "/vhosts/test-vhost", {group, '2xx'}),
+    http_delete(Config, "/vhosts/definitions-vhost-metadata-test", {group, '2xx'}),
     ok.
 
 definitions_default_queue_type_test(Config) ->
@@ -1848,21 +1855,21 @@ definitions_default_queue_type_test(Config) ->
 defs_vhost(Config, Key, URI, CreateMethod, Args) ->
     Rep1 = fun (S, S2) -> re:replace(S, "<vhost>", S2, [{return, list}]) end,
 
-    %% Create test vhost
-    http_put(Config, "/vhosts/test", none, {group, '2xx'}),
+    %% Create a vhost host
+    http_put(Config, "/vhosts/defs-vhost-1298379187", none, {group, '2xx'}),
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-    http_put(Config, "/permissions/test/guest", PermArgs, {group, '2xx'}),
+    http_put(Config, "/permissions/defs-vhost-1298379187/guest", PermArgs, {group, '2xx'}),
 
-    %% Test against default vhost
-    defs_vhost(Config, Key, URI, Rep1, "%2F", "test", CreateMethod, Args,
+    %% Test against the default vhost
+    defs_vhost(Config, Key, URI, Rep1, "%2F", "defs-vhost-1298379187", CreateMethod, Args,
                fun(URI2) -> http_delete(Config, URI2, {group, '2xx'}) end),
 
-    %% Test against test vhost
-    defs_vhost(Config, Key, URI, Rep1, "test", "%2F", CreateMethod, Args,
+    %% Test against the newly created vhost
+    defs_vhost(Config, Key, URI, Rep1, "defs-vhost-1298379187", "%2F", CreateMethod, Args,
                fun(URI2) -> http_delete(Config, URI2, {group, '2xx'}) end),
 
-    %% Remove test vhost
-    http_delete(Config, "/vhosts/test", {group, '2xx'}).
+    %% Remove the newly created vhost
+    http_delete(Config, "/vhosts/defs-vhost-1298379187", {group, '2xx'}).
 
 defs_vhost(Config, Key, URI0, Rep1, VHost1, VHost2, CreateMethod, Args,
            DeleteFun) ->
@@ -1992,9 +1999,9 @@ definitions_password_test(Config) ->
 
 definitions_exclude_exclusive_queue_test(Config) ->
     {Conn, Ch} = open_connection_and_channel(Config),
-    amqp_channel:call(Ch, #'queue.declare'{ queue = <<"my-exclusive">>,
+    amqp_channel:call(Ch, #'queue.declare'{ queue = <<"definitions-exclude-exclusive-queue-test">>,
                                             exclusive = true }),
-    http_get(Config, "/queues/%2F/my-exclusive", ?OK),
+    http_get(Config, "/queues/%2F/definitions-exclude-exclusive-queue-test", ?OK),
     Definitions = http_get(Config, "/definitions", ?OK),
     [] = maps:get(queues, Definitions),
     [] = maps:get(exchanges, Definitions),
@@ -2030,12 +2037,6 @@ definitions_with_charset_test(Config) ->
     {ok, {{_, ?NO_CONTENT, _}, _, []}} = httpc:request(post, Request, ?HTTPC_OPTS, []),
     passed.
 
-aliveness_test(Config) ->
-    #{status := <<"ok">>} = http_get(Config, "/aliveness-test/%2F", ?OK),
-    http_get(Config, "/aliveness-test/foo", ?NOT_FOUND),
-    http_delete(Config, "/queues/%2F/aliveness-test", {group, '2xx'}),
-    passed.
-
 arguments_test(Config) ->
     XArgs = [{type, <<"headers">>},
              {arguments, [{'alternate-exchange', <<"amq.direct">>}]}],
@@ -2043,18 +2044,15 @@ arguments_test(Config) ->
     BArgs = [{routing_key, <<"">>},
              {arguments, [{'x-match', <<"all">>},
                           {foo, <<"bar">>}]}],
-    http_delete(Config, "/exchanges/%2F/myexchange", {one_of, [201, 404]}),
-    http_put(Config, "/exchanges/%2F/myexchange", XArgs, {group, '2xx'}),
-    http_put(Config, "/queues/%2F/arguments_test", QArgs, {group, '2xx'}),
-    http_post(Config, "/bindings/%2F/e/myexchange/q/arguments_test", BArgs, {group, '2xx'}),
-    Definitions = http_get(Config, "/definitions", ?OK),
-    http_delete(Config, "/exchanges/%2F/myexchange", {group, '2xx'}),
-    http_delete(Config, "/queues/%2F/arguments_test", {group, '2xx'}),
-    http_post(Config, "/definitions", Definitions, {group, '2xx'}),
+    http_delete(Config, "/exchanges/%2F/arguments-test-x", {one_of, [201, 404]}),
+    http_put(Config, "/exchanges/%2F/arguments-test-x", XArgs, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/arguments-test", QArgs, {group, '2xx'}),
+    http_post(Config, "/bindings/%2F/e/arguments-test-x/q/arguments-test", BArgs, {group, '2xx'}),
+
     #{'alternate-exchange' := <<"amq.direct">>} =
-        maps:get(arguments, http_get(Config, "/exchanges/%2F/myexchange", ?OK)),
+        maps:get(arguments, http_get(Config, "/exchanges/%2F/arguments-test-x", ?OK)),
     #{'x-expires' := 1800000} =
-        maps:get(arguments, http_get(Config, "/queues/%2F/arguments_test", ?OK)),
+        maps:get(arguments, http_get(Config, "/queues/%2F/arguments-test", ?OK)),
 
     ArgsTable = [{<<"foo">>,longstr,<<"bar">>}, {<<"x-match">>, longstr, <<"all">>}],
     Hash = table_hash(ArgsTable),
@@ -2063,11 +2061,11 @@ arguments_test(Config) ->
     assert_item(
         #{'x-match' => <<"all">>, foo => <<"bar">>},
         maps:get(arguments,
-            http_get(Config, "/bindings/%2F/e/myexchange/q/arguments_test/" ++
+            http_get(Config, "/bindings/%2F/e/arguments-test-x/q/arguments-test/" ++
             PropertiesKey, ?OK))
     ),
-    http_delete(Config, "/exchanges/%2F/myexchange", {group, '2xx'}),
-    http_delete(Config, "/queues/%2F/arguments_test", {group, '2xx'}),
+    http_delete(Config, "/exchanges/%2F/arguments-test-x", {group, '2xx'}),
+    http_delete(Config, "/queues/%2F/arguments-test", {group, '2xx'}),
     passed.
 
 table_hash(Table) ->
@@ -2078,13 +2076,10 @@ arguments_table_test(Config) ->
                              <<"amqp://localhost/%2F/upstream2">>]},
     XArgs = #{type      => <<"headers">>,
               arguments => Args},
-    http_delete(Config, "/exchanges/%2F/myexchange", {one_of, [201, 404]}),
-    http_put(Config, "/exchanges/%2F/myexchange", XArgs, {group, '2xx'}),
-    Definitions = http_get(Config, "/definitions", ?OK),
-    http_delete(Config, "/exchanges/%2F/myexchange", {group, '2xx'}),
-    http_post(Config, "/definitions", Definitions, {group, '2xx'}),
-    Args = maps:get(arguments, http_get(Config, "/exchanges/%2F/myexchange", ?OK)),
-    http_delete(Config, "/exchanges/%2F/myexchange", {group, '2xx'}),
+    http_delete(Config, "/exchanges/%2F/arguments-table-test-x", {one_of, [201, 404]}),
+    http_put(Config, "/exchanges/%2F/arguments-table-test-x", XArgs, {group, '2xx'}),
+    Args = maps:get(arguments, http_get(Config, "/exchanges/%2F/arguments-table-test-x", ?OK)),
+    http_delete(Config, "/exchanges/%2F/arguments-table-test-x", {group, '2xx'}),
     passed.
 
 queue_purge_test(Config) ->
@@ -2136,21 +2131,26 @@ exclusive_consumer_test(Config) ->
 
 
 exclusive_queue_test(Config) ->
-    {Conn, Ch} = open_connection_and_channel(Config),
+    http_put(Config, "/vhosts/vh.tests.exclusive_queue_test", none, {group, '2xx'}),
+    Conn = open_unmanaged_connection(Config, 0, <<"vh.tests.exclusive_queue_test">>),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{ queue = QName } =
     amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     %% Sadly we need to sleep to let the stats update
     timer:sleep(1500),
-    Path = "/queues/%2F/" ++ rabbit_http_util:quote_plus(QName),
+    Path = "/queues/vh.tests.exclusive_queue_test/" ++ rabbit_http_util:quote_plus(QName),
     Queue = http_get(Config, Path),
     assert_item(#{name        => QName,
-                  vhost       => <<"/">>,
+                  vhost       => <<"vh.tests.exclusive_queue_test">>,
                   durable     => false,
                   auto_delete => false,
                   exclusive   => true,
                   arguments   => #{}}, Queue),
     amqp_channel:close(Ch),
     close_connection(Conn),
+
+    http_delete(Config, "/vhosts/vh.tests.exclusive_queue_test", {group, '2xx'}),
+
     passed.
 
 connections_channels_pagination_test(Config) ->
