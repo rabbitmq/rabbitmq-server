@@ -8,6 +8,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -define(RA_EVENT_TIMEOUT, 5000).
 -define(RA_SYSTEM, quorum_queues).
@@ -23,6 +24,7 @@ all_tests() ->
      return,
      rabbit_fifo_returns_correlation,
      resends_lost_command,
+     returns,
      returns_after_down,
      resends_after_lost_applied,
      handles_reject_notification,
@@ -99,14 +101,13 @@ basics(Config) ->
 
     rabbit_quorum_queue:wal_force_roll_over(node()),
     % create segment the segment will trigger a snapshot
-    timer:sleep(1000),
+    ra_log_segment_writer:await(ra_log_segment_writer),
 
     {ok, FState2, []} = rabbit_fifo_client:enqueue(ClusterName, one, FState1),
 
     DeliverFun = fun DeliverFun(S0, F) ->
                          receive
                              {ra_event, From, Evt} ->
-                                 ct:pal("ra_event ~p", [Evt]),
                                  case rabbit_fifo_client:handle_ra_event(ClusterName, From, Evt, S0) of
                                      {ok, S1,
                                       [{deliver, C, true,
@@ -289,28 +290,90 @@ detects_lost_delivery(Config) ->
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
+returns(Config) ->
+    ClusterName = ?config(cluster_name, Config),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterName, [ServerId]),
+
+    F0 = rabbit_fifo_client:init([ServerId]),
+    Msg1 = mk_msg(<<"msg1">>),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, Msg1, F0),
+    {_, _, _F2} = process_ra_events(receive_ra_events(1, 0), ClusterName, F1),
+
+    FC = rabbit_fifo_client:init([ServerId]),
+    {ok, _, FC1} = rabbit_fifo_client:checkout(<<"tag">>,
+                                             {simple_prefetch, 10},
+                                             #{}, FC),
+
+    {FC3, _} =
+    receive
+        {ra_event, Qname, {machine, {delivery, _, [{MsgId, {_, _}}]}} = Evt1} ->
+            {ok, FC2, Actions1} =
+                rabbit_fifo_client:handle_ra_event(Qname, Qname, Evt1, FC1),
+            [{deliver, _, true,
+              [{_, _, _, _, Msg1Out0}]}] = Actions1,
+            ?assert(mc:is(Msg1Out0)),
+            ?assertEqual(undefined, mc:get_annotation(<<"x-delivery-count">>, Msg1Out0)),
+            ?assertEqual(undefined, mc:get_annotation(delivery_count, Msg1Out0)),
+            rabbit_fifo_client:return(<<"tag">>, [MsgId], FC2)
+    after 5000 ->
+              flush(),
+              exit(await_delivery_timeout)
+    end,
+    receive
+        {ra_event, Qname2,
+         {machine, {delivery, _, [{_MsgId, {_, _Msg1Out}}]}} = Evt2} ->
+            {ok, _FC4, Actions2} =
+                rabbit_fifo_client:handle_ra_event(Qname2, Qname2, Evt2, FC3),
+            % ct:pal("Actions2 ~p", [Actions2]),
+            [{deliver, _tag, true,
+              [{_, _, _, _, Msg1Out}]}] = Actions2,
+            ?assert(mc:is(Msg1Out)),
+            ?assertEqual(1, mc:get_annotation(<<"x-delivery-count">>, Msg1Out)),
+            ?assertEqual(0, mc:get_annotation(delivery_count, Msg1Out)),
+            ok
+    after 5000 ->
+              flush(),
+              exit(await_delivery_timeout)
+    end,
+    rabbit_quorum_queue:stop_server(ServerId),
+    ok.
+
 returns_after_down(Config) ->
     ClusterName = ?config(cluster_name, Config),
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
 
     F0 = rabbit_fifo_client:init([ServerId]),
-    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, msg1, F0),
+    Msg1 = mk_msg(<<"msg1">>),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, Msg1, F0),
     {_, _, F2} = process_ra_events(receive_ra_events(1, 0), ClusterName, F1),
     % start a consumer in a separate processes
     % that exits after checkout
     Self = self(),
-    _Pid = spawn(fun () ->
-                         F = rabbit_fifo_client:init([ServerId]),
-                         {ok, _, _} = rabbit_fifo_client:checkout(<<"tag">>,
-                                                                  {simple_prefetch, 10},
-                                                                  #{}, F),
-                         Self ! checkout_done
-                 end),
-    receive checkout_done -> ok after 1000 -> exit(checkout_done_timeout) end,
-    timer:sleep(1000),
+    Pid = spawn(fun () ->
+                        F = rabbit_fifo_client:init([ServerId]),
+                        {ok, _, _} = rabbit_fifo_client:checkout(<<"tag">>,
+                                                                 {simple_prefetch, 10},
+                                                                 #{}, F),
+                        Self ! checkout_done
+                end),
+    receive checkout_done -> ok
+    after 1000 ->
+              exit(checkout_done_timeout)
+    end,
+    MonRef = erlang:monitor(process, Pid),
+    receive
+        {'DOWN', MonRef, _, _, _} ->
+            ok
+    after 5000 ->
+              ct:fail("waiting for process exit timed out")
+    end,
     % message should be available for dequeue
-    {ok, _, {_, _, _, _, msg1}, _} = rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F2),
+    {ok, _, {_, _, _, _, Msg1Out}, _} =
+        rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F2),
+    ?assertEqual(1, mc:get_annotation(<<"x-delivery-count">>, Msg1Out)),
+    ?assertEqual(1, mc:get_annotation(delivery_count, Msg1Out)),
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
@@ -811,3 +874,12 @@ flush() ->
     after 10 ->
               ok
     end.
+
+mk_msg(Body) when is_binary(Body) ->
+    mc_amqpl:from_basic_message(
+             #basic_message{routing_keys = [<<"">>],
+                            exchange_name = #resource{name = <<"x">>,
+                                                      kind = exchange,
+                                                      virtual_host = <<"v">>},
+                            content = #content{properties = #'P_basic'{},
+                                               payload_fragments_rev = [Body]}}).

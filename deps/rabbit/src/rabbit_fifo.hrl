@@ -42,11 +42,13 @@
                       optimised_tuple(msg_size(), Expiry :: milliseconds()) |
                       #{size := msg_size(),
                         delivery_count => non_neg_integer(),
+                        return_count => non_neg_integer(),
                         expiry => milliseconds()}.
 %% The message header:
 %% size: The size of the message payload in bytes.
-%% delivery_count: the number of unsuccessful delivery attempts.
+%% delivery_count: The number of unsuccessful delivery attempts.
 %%                 A non-zero value indicates a previous attempt.
+%% return_count: The number of explicit returns.
 %% expiry: Epoch time in ms when a message expires. Set during enqueue.
 %%         Value is determined by per-queue or per-message message TTL.
 %% If it contains only the size it can be condensed to an integer.

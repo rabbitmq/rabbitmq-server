@@ -208,12 +208,7 @@ dequeue(QueueName, ConsumerTag, Settlement,
         {ok, {dequeue, empty}, Leader} ->
             {empty, State0#state{leader = Leader}};
         {ok, {dequeue, {MsgId, {MsgHeader, Msg0}}, MsgsReady}, Leader} ->
-            Count = case MsgHeader of
-                        #{delivery_count := C} -> C;
-                       _ -> 0
-                    end,
-            IsDelivered = Count > 0,
-            Msg = add_delivery_count_header(Msg0, Count),
+            {Msg, IsDelivered} = add_delivery_count_header(Msg0, MsgHeader),
             {ok, MsgsReady,
              {QueueName, qref(Leader), MsgId, IsDelivered, Msg},
              State0#state{leader = Leader}};
@@ -223,14 +218,21 @@ dequeue(QueueName, ConsumerTag, Settlement,
             Err
     end.
 
-add_delivery_count_header(Msg, Count) ->
-    case mc:is(Msg) of
-        true when is_integer(Count) andalso
-                  Count > 0 ->
-            mc:set_annotation(<<"x-delivery-count">>, Count, Msg);
+add_delivery_count_header(Msg, #{delivery_count := DelCount} = Header)
+  when is_integer(DelCount) ->
+    {case mc:is(Msg) of
+        true ->
+             %% the "delivery-count" header in the AMQP spec does not include
+             %% returns (released outcomes)
+             AmqpDelCount = DelCount - maps:get(return_count, Header, 0),
+             mc:set_annotation(delivery_count, AmqpDelCount,
+                               mc:set_annotation(<<"x-delivery-count">>,
+                                                 DelCount, Msg));
         _ ->
             Msg
-    end.
+    end, DelCount > 0};
+add_delivery_count_header(Msg, _Header) ->
+    {Msg, false}.
 
 
 %% @doc Settle a message. Permanently removes message from the queue.
@@ -840,13 +842,7 @@ handle_delivery(_QName, _Leader, {delivery, Tag, [_ | _] = IdMsgs},
 transform_msgs(QName, QRef, Msgs) ->
     lists:map(
       fun({MsgId, {MsgHeader, Msg0}}) ->
-              {Msg, Redelivered} = case MsgHeader of
-                                       #{delivery_count := C} ->
-                                           {add_delivery_count_header(Msg0, C), true};
-                                       _ ->
-                                           {Msg0, false}
-                                   end,
-
+              {Msg, Redelivered} = add_delivery_count_header(Msg0, MsgHeader),
               {QName, QRef, MsgId, Redelivered, Msg}
       end, Msgs).
 
