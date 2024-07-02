@@ -115,7 +115,8 @@
 -opaque state() :: #?STATE{}.
 
 %% Delete atom 'credit_api_v1' when feature flag credit_api_v2 becomes required.
--type consume_mode() :: {simple_prefetch, non_neg_integer()} | {credited, Initial :: delivery_count() | credit_api_v1}.
+-type consume_mode() :: {simple_prefetch, Prefetch :: non_neg_integer()} |
+                        {credited, Initial :: delivery_count() | credit_api_v1}.
 -type consume_spec() :: #{no_ack := boolean(),
                           channel_pid := pid(),
                           limiter_pid => pid() | none,
@@ -189,7 +190,8 @@
 -callback is_stateful() -> boolean().
 
 %% intitialise and return a queue type specific session context
--callback init(amqqueue:amqqueue()) -> {ok, queue_state()} | {error, Reason :: term()}.
+-callback init(amqqueue:amqqueue()) ->
+    {ok, queue_state()} | {error, Reason :: term()}.
 
 -callback close(queue_state()) -> ok.
 %% update the queue type state from amqqrecord

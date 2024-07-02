@@ -185,3 +185,11 @@
       stability     => stable,
       depends_on    => [message_containers]
      }}).
+
+-rabbit_feature_flag(
+   {quorum_queues_v4,
+    #{desc => "Unlocks QQ v4 goodies",
+      stability => stable,
+      depends_on => [quorum_queue,
+                     credit_api_v2]
+     }}).

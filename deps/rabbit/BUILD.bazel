@@ -698,6 +698,9 @@ rabbitmq_suite(
 rabbitmq_suite(
     name = "rabbit_fifo_int_SUITE",
     size = "medium",
+    additional_beam = [
+        ":test_test_util_beam",
+    ],
     deps = [
         "//deps/rabbit_common:erlang_app",
         "@aten//:erlang_app",
@@ -716,6 +719,7 @@ rabbitmq_suite(
     deps = [
         "//deps/rabbit_common:erlang_app",
         "@proper//:erlang_app",
+        "@meck//:erlang_app",
         "@ra//:erlang_app",
     ],
 )
@@ -724,6 +728,15 @@ rabbitmq_suite(
     name = "rabbit_fifo_dlx_SUITE",
     size = "small",
     deps = [
+        "//deps/rabbit_common:erlang_app",
+    ],
+)
+
+rabbitmq_suite(
+    name = "rabbit_fifo_q_SUITE",
+    size = "small",
+    deps = [
+        "@proper//:erlang_app",
         "//deps/rabbit_common:erlang_app",
     ],
 )
