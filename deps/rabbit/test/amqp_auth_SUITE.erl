@@ -413,7 +413,7 @@ v1_attach_target_internal_exchange(Config) ->
 attach_source_queue(Config) ->
     {Conn, Session, LinkPair} = init_pair(Config),
     QName = <<"🍿"/utf8>>,
-    Address = <<"/queue/", QName/binary>>,
+    Address = rabbitmq_amqp_address:queue(QName),
 
     %% missing read permission to queue
     ok = set_permissions(Config, QName, <<>>, <<>>),
@@ -433,8 +433,8 @@ attach_source_queue(Config) ->
 
 attach_target_exchange(Config) ->
     XName = <<"amq.fanout">>,
-    Address1 = <<"/exchange/", XName/binary>>,
-    Address2 = <<"/exchange/", XName/binary, "/key/some-key", XName/binary>>,
+    Address1 = rabbitmq_amqp_address:exchange(XName),
+    Address2 = rabbitmq_amqp_address:exchange(XName, <<"some-key">>),
 
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
@@ -457,13 +457,14 @@ attach_target_exchange(Config) ->
     ok = amqp10_client:close_connection(Connection).
 
 attach_target_topic_exchange(Config) ->
-    TargetAddress = <<"/exchange/amq.topic/key/test vhost.test user.a.b">>,
+    TargetAddress = rabbitmq_amqp_address:exchange(
+                      <<"amq.topic">>, <<"test vhost.test user.a.b">>),
     ok = send_to_topic(TargetAddress, Config).
 
 attach_target_queue(Config) ->
     {Conn, Session, LinkPair} = init_pair(Config),
     QName = <<"🍿"/utf8>>,
-    Address = <<"/queue/", QName/binary>>,
+    Address = rabbitmq_amqp_address:queue(QName),
 
     %% missing write permission to default exchange
     ok = set_permissions(Config, QName, <<>>, <<>>),
@@ -480,8 +481,8 @@ attach_target_queue(Config) ->
 
 target_per_message_exchange(Config) ->
     TargetAddress = null,
-    To1 = <<"/exchange/amq.fanout">>,
-    To2 = <<"/queue/q1">>,
+    To1 = rabbitmq_amqp_address:exchange(<<"amq.fanout">>),
+    To2 = rabbitmq_amqp_address:queue(<<"q1">>),
     %% missing write permission to default exchange
     ok = set_permissions(Config, <<>>, <<"amq.fanout">>, <<>>),
 
@@ -516,7 +517,7 @@ target_per_message_internal_exchange(Config) ->
     XName = <<"my internal exchange">>,
     XProps = #{internal => true},
     TargetAddress = null,
-    To = <<"/exchange/", XName/binary>>,
+    To = rabbitmq_amqp_address:exchange(XName),
 
     ok = set_permissions(Config, XName, XName, <<>>),
     {Conn1, Session1, LinkPair1} = init_pair(Config),
@@ -541,8 +542,8 @@ target_per_message_internal_exchange(Config) ->
 
 target_per_message_topic(Config) ->
     TargetAddress = null,
-    To1 = <<"/exchange/amq.topic/key/.a">>,
-    To2 = <<"/exchange/amq.topic/key/.a.b">>,
+    To1 = rabbitmq_amqp_address:exchange(<<"amq.topic">>, <<".a">>),
+    To2 = rabbitmq_amqp_address:exchange(<<"amq.topic">>, <<".a.b">>),
     User = ?config(test_user, Config),
     Vhost = ?config(test_vhost, Config),
     ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, Vhost),

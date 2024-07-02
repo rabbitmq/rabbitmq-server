@@ -22,7 +22,7 @@
 all() ->
     [
      {group, v1_permitted},
-     {group, v2}
+     {group, v1_denied}
     ].
 
 groups() ->
@@ -30,7 +30,7 @@ groups() ->
      {v1_permitted, [shuffle],
       common_tests()
      },
-     {v2, [shuffle],
+     {v1_denied, [shuffle],
       [
        target_queue_absent,
        source_queue_absent,
@@ -70,7 +70,7 @@ end_per_suite(Config) ->
 init_per_group(Group, Config0) ->
     PermitV1 = case Group of
                    v1_permitted -> true;
-                   v2 -> false
+                   v1_denied -> false
                end,
     Config = rabbit_ct_helpers:merge_app_env(
                Config0,
@@ -97,14 +97,14 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% Test v2 target address
-%% /exchange/:exchange/key/:routing-key
+%% /e/:exchange/:routing-key
 target_exchange_routing_key(Config) ->
     XName = <<"👉"/utf8>>,
     RKey = <<"🗝️"/utf8>>,
     target_exchange_routing_key0(XName, RKey, Config).
 
 %% Test v2 target address
-%% /exchange/:exchange/key/:routing-key
+%% /e/:exchange/:routing-key
 %% where both :exchange and :routing-key contains a "/" character.
 target_exchange_routing_key_with_slash(Config) ->
     XName = <<"my/exchange">>,
@@ -112,14 +112,14 @@ target_exchange_routing_key_with_slash(Config) ->
     target_exchange_routing_key0(XName, RKey, Config).
 
 target_exchange_routing_key0(XName, RKey, Config) ->
-    TargetAddr = <<"/exchange/", XName/binary, "/key/", RKey/binary>>,
+    TargetAddr = rabbitmq_amqp_address:exchange(XName, RKey),
     QName = atom_to_binary(?FUNCTION_NAME),
 
     Init = {_, LinkPair = #link_pair{session = Session}} = init(Config),
     ok = rabbitmq_amqp_client:declare_exchange(LinkPair, XName, #{}),
     {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
     ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName, XName, RKey, #{}),
-    SrcAddr = <<"/queue/", QName/binary>>,
+    SrcAddr = rabbitmq_amqp_address:queue(QName),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, SrcAddr),
 
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, TargetAddr),
@@ -141,17 +141,17 @@ target_exchange_routing_key0(XName, RKey, Config) ->
     ok = cleanup(Init).
 
 %% Test v2 target address
-%% /exchange/:exchange/key/
+%% /e/:exchange/
 %% Routing key is empty.
 target_exchange_routing_key_empty(Config) ->
     XName = <<"amq.fanout">>,
+    TargetAddr = rabbitmq_amqp_address:exchange(XName, <<>>),
     QName = atom_to_binary(?FUNCTION_NAME),
-    TargetAddr = <<"/exchange/", XName/binary, "/key/">>,
 
     Init = {_, LinkPair = #link_pair{session = Session}} = init(Config),
     {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
     ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName, XName, <<"ignored">>, #{}),
-    SrcAddr = <<"/queue/", QName/binary>>,
+    SrcAddr = rabbitmq_amqp_address:queue(QName),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, SrcAddr),
 
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, TargetAddr),
@@ -167,17 +167,17 @@ target_exchange_routing_key_empty(Config) ->
     ok = cleanup(Init).
 
 %% Test v2 target address
-%% /exchange/:exchange
+%% /e/:exchange
 %% Routing key is empty.
 target_exchange(Config) ->
     XName = <<"amq.fanout">>,
-    TargetAddr = <<"/exchange/", XName/binary>>,
+    TargetAddr = rabbitmq_amqp_address:exchange(XName),
     QName = atom_to_binary(?FUNCTION_NAME),
 
     Init = {_, LinkPair = #link_pair{session = Session}} = init(Config),
     {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
     ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName, XName, <<"ignored">>, #{}),
-    SrcAddr = <<"/queue/", QName/binary>>,
+    SrcAddr = rabbitmq_amqp_address:queue(QName),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, SrcAddr),
 
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, TargetAddr),
@@ -193,11 +193,11 @@ target_exchange(Config) ->
     ok = cleanup(Init).
 
 %% Test v2 target address
-%% /exchange/:exchange
+%% /e/:exchange
 %% where the target exchange does not exist.
 target_exchange_absent(Config) ->
     XName = <<"🎈"/utf8>>,
-    TargetAddr = <<"/exchange/", XName/binary>>,
+    TargetAddr = rabbitmq_amqp_address:exchange(XName),
 
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
@@ -220,20 +220,20 @@ target_exchange_absent(Config) ->
     ok = amqp10_client:close_connection(Connection).
 
 %% Test v2 target and source address
-%% /queue/:queue
+%% /q/:queue
 queue(Config) ->
     QName = <<"🎈"/utf8>>,
     queue0(QName, Config).
 
 %% Test v2 target and source address
-%% /queue/:queue
+%% /q/:queue
 %% where :queue contains a "/" character.
 queue_with_slash(Config) ->
     QName = <<"my/queue">>,
     queue0(QName, Config).
 
 queue0(QName, Config) ->
-    Addr = <<"/queue/", QName/binary>>,
+    Addr = rabbitmq_amqp_address:queue(QName),
 
     Init = {_, LinkPair = #link_pair{session = Session}} = init(Config),
     {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
@@ -252,11 +252,11 @@ queue0(QName, Config) ->
     ok = cleanup(Init).
 
 %% Test v2 target address
-%% /queue/:queue
+%% /q/:queue
 %% where the target queue does not exist.
 target_queue_absent(Config) ->
     QName = <<"🎈"/utf8>>,
-    TargetAddr = <<"/queue/", QName/binary>>,
+    TargetAddr = rabbitmq_amqp_address:queue(QName),
 
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
@@ -279,15 +279,15 @@ target_queue_absent(Config) ->
     ok = amqp10_client:close_connection(Connection).
 
 %% Test v2 target address 'null' and 'to'
-%% /exchange/:exchange/key/:routing-key
+%% /e/:exchange/:routing-key
 %% with varying routing keys.
 target_per_message_exchange_routing_key(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     DirectX = <<"amq.direct">>,
     RKey1 = <<"🗝️1"/utf8>>,
     RKey2 = <<"🗝️2"/utf8>>,
-    To1 = <<"/exchange/", DirectX/binary, "/key/", RKey1/binary>>,
-    To2 = <<"/exchange/", DirectX/binary, "/key/", RKey2/binary>>,
+    To1 = rabbitmq_amqp_address:exchange(DirectX, RKey1),
+    To2 = rabbitmq_amqp_address:exchange(DirectX, RKey2),
 
     Init = {_, LinkPair = #link_pair{session = Session}} = init(Config),
     {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
@@ -315,13 +315,13 @@ target_per_message_exchange_routing_key(Config) ->
     ok = cleanup(Init).
 
 %% Test v2 target address 'null' and 'to'
-%% /exchange/:exchange
+%% /e/:exchange
 %% with varying exchanges.
 target_per_message_exchange(Config) ->
     XFanout = <<"amq.fanout">>,
     XHeaders = <<"amq.headers">>,
-    To1 = <<"/exchange/", XFanout/binary>>,
-    To2 = <<"/exchange/", XHeaders/binary>>,
+    To1 = rabbitmq_amqp_address:exchange(XFanout),
+    To2 = rabbitmq_amqp_address:exchange(XHeaders),
     QName = atom_to_binary(?FUNCTION_NAME),
 
     Init = {_, LinkPair = #link_pair{session = Session}} = init(Config),
@@ -349,14 +349,14 @@ target_per_message_exchange(Config) ->
     ok = cleanup(Init).
 
 %% Test v2 target address 'null' and 'to'
-%% /queue/:queue
+%% /q/:queue
 target_per_message_queue(Config) ->
     Q1 = <<"q1">>,
     Q2 = <<"q2">>,
     Q3 = <<"q3">>,
-    To1 = <<"/queue/", Q1/binary>>,
-    To2 = <<"/queue/", Q2/binary>>,
-    To3 = <<"/queue/", Q3/binary>>,
+    To1 = rabbitmq_amqp_address:queue(Q1),
+    To2 = rabbitmq_amqp_address:queue(Q2),
+    To3 = rabbitmq_amqp_address:queue(Q3),
 
     Init = {_, LinkPair = #link_pair{session = Session}} = init(Config),
     {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, Q1, #{}),
@@ -414,10 +414,23 @@ bad_v2_addresses() ->
      <<"myqueue">>,
      <<"/queue">>,
      %% bad v2 target addresses
+     <<>>,
+     <<0>>,
+     <<"/">>,
+     <<"//">>,
+     <<"/q">>,
+     <<"/q/">>,
      <<"/queue/">>,
+     <<"/e">>,
+     %% default exchange in v2 target address is disallowed
+     <<"/e/">>,
+     <<"/e//">>,
+     <<"/e//mykey">>,
+     <<"/e/amq.default">>,
+     <<"/e/amq.default/">>,
+     <<"/e/amq.default/mykey">>,
      <<"/ex/✋"/utf8>>,
      <<"/exchange">>,
-     %% default exchange in v2 target address is disallowed
      <<"/exchange/">>,
      <<"/exchange/amq.default">>,
      <<"/exchange//key/">>,
@@ -458,7 +471,7 @@ target_per_message_bad_to_address0(Address, Config) ->
 target_per_message_exchange_absent(Config) ->
     Init = {_, LinkPair = #link_pair{session = Session}} = init(Config),
     XName = <<"🎈"/utf8>>,
-    Address = <<"/exchange/", XName/binary>>,
+    Address = rabbitmq_amqp_address:exchange(XName),
     ok = rabbitmq_amqp_client:declare_exchange(LinkPair, XName, #{}),
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, null),
     ok = wait_for_credit(Sender),
@@ -514,11 +527,11 @@ target_bad_address0(TargetAddress, Config) ->
     ok = amqp10_client:close_connection(Connection).
 
 %% Test v2 source address
-%% /queue/:queue
+%% /q/:queue
 %% where the source queue does not exist.
 source_queue_absent(Config) ->
     QName = <<"🎈"/utf8>>,
-    SourceAddr = <<"/queue/", QName/binary>>,
+    SourceAddr = rabbitmq_amqp_address:queue(QName),
 
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),

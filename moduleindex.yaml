@@ -807,6 +807,7 @@ rabbit_common:
 - worker_pool_sup
 - worker_pool_worker
 rabbitmq_amqp_client:
+- rabbitmq_amqp_address
 - rabbitmq_amqp_client
 rabbitmq_amqp1_0:
 - rabbitmq_amqp1_0_noop
