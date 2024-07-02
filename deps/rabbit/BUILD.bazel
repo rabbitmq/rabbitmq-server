@@ -705,6 +705,9 @@ rabbitmq_suite(
 rabbitmq_suite(
     name = "rabbit_fifo_int_SUITE",
     size = "medium",
+    additional_beam = [
+        ":test_test_util_beam",
+    ],
     deps = [
         "//deps/rabbit_common:erlang_app",
         "@aten//:erlang_app",

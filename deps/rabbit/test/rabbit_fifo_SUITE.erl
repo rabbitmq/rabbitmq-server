@@ -15,7 +15,7 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit/src/rabbit_fifo.hrl").
 
--define(PROTOMOD, rabbit_framing_amqp_0_9_1).
+% -define(PROTOMOD, rabbit_framing_amqp_0_9_1).
 %%%===================================================================
 %%% Common Test callbacks
 %%%===================================================================
@@ -570,11 +570,44 @@ return_auto_checked_out_test(Config) ->
      [_Monitor, {log, [1], Fun1, _} ]} = checkout(Config, ?LINE, Cid, 1, State0),
     [{send_msg, _, {delivery, _, [{MsgId, _}]}, _}] = Fun1([Msg1]),
     % return should include another delivery
-    {_State2, _, Effects} = apply(meta(Config, 3),
+    {State2, _, Effects} = apply(meta(Config, 3),
                                   rabbit_fifo:make_return(CKey, [MsgId]), State1),
     [{log, [1], Fun2, _} | _] = Effects,
-    [{send_msg, _, {delivery, _, [{_MsgId2, {#{delivery_count := 1}, first}}]}, _}]
-        = Fun2([Msg1]),
+    [{send_msg, _, {delivery, _, [{_MsgId2, {#{delivery_count := 1,
+                                               return_count := 1}, first}}]}, _}]
+    = Fun2([Msg1]),
+
+    %% a down does not increment the return_count
+    {State3, _, _} = apply(meta(Config, ?LINE), {down, self(), noproc}, State2),
+
+    {_State4, #{key := _CKey2,
+                next_msg_id := _},
+     [_, {log, [1], Fun3, _} ]} = checkout(Config, ?LINE, Cid, 1, State3),
+
+    [{send_msg, _, {delivery, _, [{_, {#{delivery_count := 2,
+                                         return_count := 1}, first}}]}, _}]
+    = Fun3([Msg1]),
+    ok.
+
+requeue_test(Config) ->
+    Cid = {<<"cid">>, self()},
+    Msg1 = rabbit_fifo:make_enqueue(self(), 1, first),
+    {State0, _} = enq(Config, 1, 1, first, test_init(test)),
+    % it first active then inactive as the consumer took on but cannot take
+    % any more
+    {State1, #{key := CKey,
+               next_msg_id := MsgId},
+     [_Monitor, {log, [1], Fun1, _} ]} = checkout(Config, ?LINE, Cid, 1, State0),
+    [{send_msg, _, {delivery, _, [{MsgId, {H1, _}}]}, _}] = Fun1([Msg1]),
+    % return should include another delivery
+    [{append, Requeue, _}] = rabbit_fifo:make_requeue(CKey, {notify, 1, self()},
+                                                      [{MsgId, 1, H1, Msg1}], []),
+    {_State2, _, Effects} = apply(meta(Config, 3), Requeue, State1),
+    [{log, [_], Fun2, _} | _] = Effects,
+    [{send_msg, _,
+      {delivery, _, [{_MsgId2, {#{delivery_count := 1,
+                                  return_count := 1}, first}}]}, _}]
+    = Fun2([Msg1]),
     ok.
 
 cancelled_checkout_empty_queue_test(Config) ->
@@ -1250,7 +1283,7 @@ single_active_consumer_all_disconnected_test(Config) ->
      ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{status = up,
                                                          credit = 1}}})
     ],
-    {State1, _} = run_log(Config, State0, Entries),
+    {_State1, _} = run_log(Config, State0, Entries),
     ok.
 
 single_active_consumer_state_enter_leader_include_waiting_consumers_test(Config) ->

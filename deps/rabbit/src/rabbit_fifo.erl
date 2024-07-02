@@ -96,7 +96,8 @@
 -ifdef(TEST).
 -export([update_header/4,
          chunk_disk_msgs/3,
-         smallest_raft_index/1]).
+         smallest_raft_index/1,
+         make_requeue/4]).
 -endif.
 
 -import(serial_number, [add/2, diff/2]).
@@ -308,7 +309,8 @@ apply(#{index := Idx} = Meta,
           when is_map_key(MsgId, Checked0) ->
             %% construct a message with the current raft index
             %% and update delivery count before adding it to the message queue
-            Header = update_header(delivery_count, fun incr/1, 1, Header0),
+            Header1 = update_header(delivery_count, fun incr/1, 1, Header0),
+            Header = update_header(return_count, fun incr/1, 1, Header1),
             State0 = add_bytes_return(Header, State00),
             Con = Con0#consumer{checked_out = maps:remove(MsgId, Checked0),
                                 credit = increase_credit(Con0, 1)},
@@ -1745,17 +1747,19 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
 return(#{index := IncomingRaftIdx} = Meta,
        ConsumerKey, MsgIds, Checked, Effects0, State0) ->
     %% We requeue in the same order as messages got returned by the client.
-    {State1, Effects1} = lists:foldl(
-                           fun(MsgId, Acc = {S0, E0}) ->
-                                   case Checked of
-                                       #{MsgId := Val} ->
-                                           {_At, Msg} = Val,
-                                           return_one(Meta, MsgId, Msg,
-                                                      S0, E0, ConsumerKey);
-                                       #{} ->
-                                           Acc
-                                   end
-                           end, {State0, Effects0}, MsgIds),
+    {State1, Effects1} =
+        lists:foldl(
+          fun(MsgId, Acc = {S0, E0}) ->
+                  case Checked of
+                      #{MsgId := {_At, Msg0}} ->
+                          Msg = update_msg_header(return_count, fun incr/1, 1,
+                                                  Msg0),
+                          return_one(Meta, MsgId, Msg,
+                                     S0, E0, ConsumerKey);
+                      #{} ->
+                          Acc
+                  end
+          end, {State0, Effects0}, MsgIds),
     State2 = case State1#?STATE.consumers of
                  #{ConsumerKey := Con} ->
                      update_or_remove_con(Meta, ConsumerKey, Con, State1);
@@ -1904,11 +1908,13 @@ update_header(Key, UpdateFun, Default, Size)
   when is_integer(Size) ->
     update_header(Key, UpdateFun, Default, #{size => Size});
 update_header(Key, UpdateFun, Default, ?TUPLE(Size, Expiry))
-  when is_integer(Size), is_integer(Expiry) ->
+  when is_integer(Size) andalso
+       is_integer(Expiry) ->
     update_header(Key, UpdateFun, Default, #{size => Size,
                                              expiry => Expiry});
 update_header(Key, UpdateFun, Default, Header)
-  when is_map(Header), is_map_key(size, Header) ->
+  when is_map(Header) andalso
+       is_map_key(size, Header) ->
     maps:update_with(Key, UpdateFun, Default, Header).
 
 get_msg_header(?MSG(_Idx, Header)) ->
