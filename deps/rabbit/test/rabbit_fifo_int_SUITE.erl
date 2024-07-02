@@ -350,19 +350,13 @@ returns_after_down(Config) ->
     {_, _, F2} = process_ra_events(receive_ra_events(1, 0), ClusterName, F1),
     % start a consumer in a separate processes
     % that exits after checkout
-    Self = self(),
-    Pid = spawn(fun () ->
-                        F = rabbit_fifo_client:init([ServerId]),
-                        {ok, _, _} = rabbit_fifo_client:checkout(<<"tag">>,
-                                                                 {simple_prefetch, 10},
-                                                                 #{}, F),
-                        Self ! checkout_done
-                end),
-    receive checkout_done -> ok
-    after 1000 ->
-              exit(checkout_done_timeout)
-    end,
-    MonRef = erlang:monitor(process, Pid),
+    {_, MonRef} = spawn_monitor(
+                    fun () ->
+                            F = rabbit_fifo_client:init([ServerId]),
+                            {ok, _, _} = rabbit_fifo_client:checkout(<<"tag">>,
+                                                                     {simple_prefetch, 10},
+                                                                     #{}, F)
+                    end),
     receive
         {'DOWN', MonRef, _, _, _} ->
             ok
