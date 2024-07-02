@@ -48,7 +48,7 @@ recover(VHost) ->
 
 callback(X = #exchange{decorators = Decorators, name = XName}, Fun, Serial, Args) ->
     case Fun of
-        delete -> rabbit_db_exchange:delete_serial(XName);
+        delete -> ok = rabbit_db_exchange:delete_serial(XName);
         _ -> ok
     end,
     Modules = rabbit_exchange_decorator:select(all, Decorators),
@@ -91,10 +91,17 @@ serial(X) ->
         true -> rabbit_db_exchange:next_serial(X#exchange.name)
     end.
 
--spec declare
-        (name(), type(), boolean(), boolean(), boolean(),
-         rabbit_framing:amqp_table(), rabbit_types:username())
-        -> rabbit_types:exchange().
+-spec declare(Name, Type, Durable, AutoDelete, Internal, Args, Username) -> Ret
+    when
+      Name :: name(),
+      Type :: type(),
+      Durable :: boolean(),
+      AutoDelete :: boolean(),
+      Internal :: boolean(),
+      Args :: rabbit_framing:amqp_table(),
+      Username :: rabbit_types:username(),
+      Ret :: {ok, Exchange} | {error, timeout},
+      Exchange :: rabbit_types:exchange().
 
 declare(XName, Type, Durable, AutoDelete, Internal, Args, Username) ->
     X = rabbit_exchange_decorator:set(
@@ -121,14 +128,16 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args, Username) ->
                     Serial = serial(Exchange),
                     ok = callback(X, create, Serial, [Exchange]),
                     rabbit_event:notify(exchange_created, info(Exchange)),
-                    Exchange;
+                    {ok, Exchange};
                 {existing, Exchange} ->
-                    Exchange
+                    {ok, Exchange};
+                {error, _} = Error ->
+                    Error
             end;
         _ ->
             rabbit_log:warning("ignoring exchange.declare for exchange ~tp,
                                 exchange.delete in progress~n.", [XName]),
-            X
+            {ok, X}
     end.
 
 %% Used with binaries sent over the wire; the type may not exist.
@@ -444,9 +453,13 @@ cons_if_present(XName, L) ->
 
 -spec delete
         (name(),  'true', rabbit_types:username()) ->
-                    'ok'| rabbit_types:error('not_found' | 'in_use');
+                    'ok'
+                    | rabbit_types:error('not_found' | 'in_use')
+                    | rabbit_khepri:timeout_error();
         (name(), 'false', rabbit_types:username()) ->
-                    'ok' | rabbit_types:error('not_found').
+                    'ok'
+                    | rabbit_types:error('not_found')
+                    | rabbit_khepri:timeout_error().
 
 delete(XName, IfUnused, Username) ->
     try

@@ -84,9 +84,9 @@ topic(Config) ->
 
 topic1(_Config) ->
     XName = rabbit_misc:r(?VHOST, exchange, <<"topic_matching-exchange">>),
-    X = rabbit_exchange:declare(
-          XName, topic, _Durable = true, _AutoDelete = false,
-          _Internal = false, _Args = [], ?USER),
+    {ok, X} = rabbit_exchange:declare(
+                XName, topic, _Durable = true, _AutoDelete = false,
+                _Internal = false, _Args = [], ?USER),
 
     %% add some bindings
     Bindings = [#binding{source = XName,

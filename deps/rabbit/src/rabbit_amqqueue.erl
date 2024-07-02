@@ -176,6 +176,7 @@ find_local_durable_queues(VHostName) ->
     {'new', amqqueue:amqqueue(), rabbit_fifo_client:state()} |
     {'absent', amqqueue:amqqueue(), absent_reason()} |
     {'error', Type :: atom(), Reason :: string(), Args :: term()} |
+    {'error', Err :: term()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
     declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser, node()).
@@ -195,6 +196,7 @@ declare(QueueName, Durable, AutoDelete, Args, Owner, ActingUser) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
     {'absent', amqqueue:amqqueue(), absent_reason()} |
     {'error', Type :: atom(), Reason :: string(), Args :: term()} |
+    {'error', Err :: term()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
         Owner, ActingUser, Node) ->
@@ -251,8 +253,13 @@ get_queue_type(Args, DefaultQueueType) ->
             rabbit_queue_type:discover(V)
     end.
 
--spec internal_declare(amqqueue:amqqueue(), boolean()) ->
-    {created | existing, amqqueue:amqqueue()} | queue_absent().
+-spec internal_declare(Q, Recover) -> Ret when
+      Q :: amqqueue:amqqueue(),
+      Recover :: boolean(),
+      Ret :: {created, amqqueue:amqqueue()}
+             | {existing, amqqueue:amqqueue()}
+             | queue_absent()
+             | rabbit_khepri:timeout_error().
 
 internal_declare(Q, Recover) ->
     do_internal_declare(Q, Recover).
@@ -284,7 +291,7 @@ update(Name, Fun) ->
 ensure_rabbit_queue_record_is_initialized(Q) ->
     store_queue(Q).
 
--spec store_queue(amqqueue:amqqueue()) -> 'ok'.
+-spec store_queue(amqqueue:amqqueue()) -> 'ok' | {error, timeeout}.
 
 store_queue(Q0) ->
     Q = rabbit_queue_decorator:set(Q0),
@@ -324,12 +331,10 @@ is_server_named_allowed(Args) ->
     Type = get_queue_type(Args),
     rabbit_queue_type:is_server_named_allowed(Type).
 
--spec lookup
-        (name()) ->
-            rabbit_types:ok(amqqueue:amqqueue()) |
-            rabbit_types:error('not_found');
-        ([name()]) ->
-            [amqqueue:amqqueue()].
+-spec lookup(QueueName) -> Ret when
+      QueueName :: name(),
+      Ret :: rabbit_types:ok(amqqueue:amqqueue())
+             | rabbit_types:error('not_found').
 
 lookup(Name) when is_record(Name, resource) ->
     rabbit_db_queue:get(Name).
@@ -1841,7 +1846,12 @@ on_node_up(_Node) ->
 on_node_down(Node) ->
     {Time, Ret} = timer:tc(fun() -> rabbit_db_queue:delete_transient(filter_transient_queues_to_delete(Node)) end),
     case Ret of
-        ok -> ok;
+        {error, timeout} ->
+            %% This type of failure is only possible with Khepri but transient
+            %% entities are going away as Khepri stabilizes.
+            rabbit_log:warning("Failed to delete transient queues on node "
+                               "down due to a timeout"),
+            ok;
         {QueueNames, Deletions} ->
             case length(QueueNames) of
                 0 -> ok;

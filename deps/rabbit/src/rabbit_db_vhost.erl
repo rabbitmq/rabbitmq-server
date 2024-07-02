@@ -61,7 +61,7 @@
       VHostName :: vhost:name(),
       Limits :: vhost:limits(),
       Metadata :: vhost:metadata(),
-      Ret :: {existing | new, VHost},
+      Ret :: {existing | new, VHost} | no_return(),
       VHost :: vhost:vhost().
 %% @doc Writes a virtual host record if it doesn't exist already or returns
 %% the existing one.
@@ -419,8 +419,9 @@ with_fun_in_khepri_tx(VHostName, Thunk) ->
 %% delete().
 %% -------------------------------------------------------------------
 
--spec delete(VHostName) -> Existed when
+-spec delete(VHostName) -> Ret when
       VHostName :: vhost:name(),
+      Ret :: Existed | rabbit_khepri:timeout_error(),
       Existed :: boolean().
 %% @doc Deletes a virtual host record from the database.
 %%
@@ -448,14 +449,14 @@ delete_in_khepri(VHostName) ->
     case rabbit_khepri:delete_or_fail(Path) of
         ok -> true;
         {error, {node_not_found, _}} -> false;
-        _ -> false
+        {error, _} = Err -> Err
     end.
 
 %% -------------------------------------------------------------------
 %% clear().
 %% -------------------------------------------------------------------
 
--spec clear() -> ok.
+-spec clear() -> ok | rabbit_khepri:timeout_error().
 %% @doc Deletes all vhosts.
 %%
 %% @private
@@ -471,10 +472,7 @@ clear_in_mnesia() ->
 
 clear_in_khepri() ->
     Path = khepri_vhosts_path(),
-    case rabbit_khepri:delete(Path) of
-        ok    -> ok;
-        Error -> throw(Error)
-    end.
+    rabbit_khepri:delete(Path).
 
 %% --------------------------------------------------------------
 %% Paths

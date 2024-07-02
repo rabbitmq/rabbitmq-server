@@ -41,7 +41,8 @@
 -type bind_ok_or_error() :: 'ok' | bind_errors() |
                             rabbit_types:error({'binding_invalid', string(), [any()]}) |
                             %% inner_fun() result
-                            rabbit_types:error(rabbit_types:amqp_error()).
+                            rabbit_types:error(rabbit_types:amqp_error()) |
+                            rabbit_khepri:timeout_error().
 -type bind_res() :: bind_ok_or_error() | rabbit_misc:thunk(bind_ok_or_error()).
 -type inner_fun() ::
         fun((rabbit_types:exchange(),

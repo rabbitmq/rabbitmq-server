@@ -1822,6 +1822,9 @@ binding_action(Action, Binding, Username, ConnPid) ->
             rabbit_misc:protocol_error(precondition_failed, Fmt, Args);
         {error, #amqp_error{} = Error} ->
             rabbit_misc:protocol_error(Error);
+        {error, timeout} ->
+            rabbit_misc:protocol_error(
+              internal_error, "Could not ~s binding due to timeout", [Action]);
         ok ->
             ok
     end.
@@ -2471,7 +2474,12 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                 {error, queue_limit_exceeded, Reason, ReasonArgs} ->
                     rabbit_misc:precondition_failed(Reason, ReasonArgs);
                 {protocol_error, ErrorType, Reason, ReasonArgs} ->
-                    rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs)
+                    rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs);
+                {error, timeout} ->
+                    rabbit_misc:protocol_error(
+                      internal_error,
+                      "Could not declare queue '~ts' due to timeout",
+                      [rabbit_misc:rs(QueueName)])
             end;
         {error, {absent, Q, Reason}} ->
             rabbit_amqqueue:absent(Q, Reason)
@@ -2514,6 +2522,11 @@ handle_method(#'exchange.delete'{exchange  = ExchangeNameBin,
             ok;
         {error, in_use} ->
             rabbit_misc:precondition_failed("~ts in use", [rabbit_misc:rs(ExchangeName)]);
+        {error, timeout} ->
+            rabbit_misc:protocol_error(
+              internal_error,
+              "Could not delete exchange '~ts' due to timeout",
+              [rabbit_misc:rs(ExchangeName)]);
         ok ->
             ok
     end;
@@ -2563,13 +2576,21 @@ handle_method(#'exchange.declare'{exchange    = XNameBin,
                                  check_write_permitted(AName, User, AuthzContext),
                                  ok
                 end,
-                rabbit_exchange:declare(ExchangeName,
-                                        CheckedType,
-                                        Durable,
-                                        AutoDelete,
-                                        Internal,
-                                        Args,
-                                        Username)
+                case rabbit_exchange:declare(ExchangeName,
+                                             CheckedType,
+                                             Durable,
+                                             AutoDelete,
+                                             Internal,
+                                             Args,
+                                             Username) of
+                    {ok, DeclaredX} ->
+                        DeclaredX;
+                    {error, timeout} ->
+                        rabbit_misc:protocol_error(
+                          internal_error,
+                          "Could not create exchange '~ts' due to timeout",
+                          [rabbit_misc:rs(ExchangeName)])
+                end
         end,
     ok = rabbit_exchange:assert_equivalence(X, CheckedType, Durable,
                                             AutoDelete, Internal, Args);

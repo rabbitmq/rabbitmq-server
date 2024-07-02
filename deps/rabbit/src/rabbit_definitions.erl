@@ -705,6 +705,8 @@ format({no_such_vhost, VHost}) ->
                          [VHost]));
 format({vhost_limit_exceeded, ErrMsg}) ->
     rabbit_data_coercion:to_binary(ErrMsg);
+format({timeout, ErrMsg}) ->
+    rabbit_data_coercion:to_binary(ErrMsg);
 format({shutdown, _} = Error) ->
     rabbit_log:debug("Metadata store is unavailable: ~p", [Error]),
     rabbit_data_coercion:to_binary(
@@ -739,7 +741,7 @@ add_parameter(VHost, Param, Username) ->
 add_global_parameter(Param, Username) ->
     Key   = maps:get(name,      Param, undefined),
     Term  = maps:get(value,     Param, undefined),
-    case is_map(Term) of
+    Result = case is_map(Term) of
         true ->
             %% coerce maps to proplists for backwards compatibility.
             %% See rabbitmq-management#528.
@@ -747,6 +749,13 @@ add_global_parameter(Param, Username) ->
             rabbit_runtime_parameters:set_global(Key, TermProplist, Username);
         _ ->
             rabbit_runtime_parameters:set_global(Key, Term, Username)
+    end,
+    case Result of
+        ok               -> ok;
+        {error, timeout} ->
+            exit(rabbit_misc:format(
+                   "Could not set global parameter '~ts' because the "
+                   "operation timed out", [Key]))
     end.
 
 add_policy(Param, Username) ->
@@ -863,13 +872,21 @@ add_exchange_int(Exchange, Name, ActingUser) ->
                            undefined -> false; %% =< 2.2.0
                            I         -> I
                        end,
-            rabbit_exchange:declare(Name,
-                                    rabbit_exchange:check_type(maps:get(type, Exchange, undefined)),
-                                    maps:get(durable,                         Exchange, undefined),
-                                    maps:get(auto_delete,                     Exchange, undefined),
-                                    Internal,
-                                    args(maps:get(arguments, Exchange, undefined)),
-                                    ActingUser)
+            case rabbit_exchange:declare(Name,
+                                         rabbit_exchange:check_type(maps:get(type, Exchange, undefined)),
+                                         maps:get(durable,                         Exchange, undefined),
+                                         maps:get(auto_delete,                     Exchange, undefined),
+                                         Internal,
+                                         args(maps:get(arguments, Exchange, undefined)),
+                                         ActingUser) of
+                {ok, _} ->
+                    ok;
+                {error, timeout} ->
+                    ErrMsg = rabbit_misc:format(
+                               "Failed to declare exchange '~ts' due to a "
+                               "timeout", [Name]),
+                    exit({timeout, ErrMsg})
+            end
     end.
 
 add_binding(Binding, ActingUser) ->

@@ -44,10 +44,10 @@
 
 -export([parse_set/5, set/5, set_any/5, clear/4, clear_any/4, list/0, list/1,
          list_component/1, list/2, list_formatted/1, list_formatted/3,
-         lookup/3, value/3, value/4, info_keys/0, clear_vhost/2,
+         lookup/3, value/3, info_keys/0, clear_vhost/2,
          clear_component/2]).
 
--export([parse_set_global/3, set_global/3, value_global/1, value_global/2,
+-export([parse_set_global/3, set_global/3, value_global/1,
          list_global/0, list_global_formatted/0, list_global_formatted/2,
          lookup_global/1, global_info_keys/0, clear_global/2]).
 
@@ -94,37 +94,49 @@ set(VHost, Component, Name, Term, User) ->
 parse_set_global(Name, String, ActingUser) ->
     Definition = rabbit_data_coercion:to_binary(String),
     case rabbit_json:try_decode(Definition) of
-        {ok, Term} when is_map(Term) -> set_global(Name, maps:to_list(Term), ActingUser);
-        {ok, Term} -> set_global(Name, Term, ActingUser);
+        {ok, Term0} ->
+            Term = case is_map(Term0) of
+                       true  -> maps:to_list(Term0);
+                       false -> Term0
+                   end,
+            case set_global(Name, Term, ActingUser) of
+                ok ->
+                    ok;
+                {error, timeout} ->
+                    Msg = rabbit_misc:format(
+                            "Could not set global parameter '~ts' because the "
+                            "operation timed out", [Name]),
+                    {error_string, Msg}
+            end;
         {error, Reason} ->
             {error_string, rabbit_misc:format("Could not parse JSON document: ~tp", [Reason])}
     end.
 
--spec set_global(atom(), term(), rabbit_types:username()) -> 'ok'.
+-spec set_global(Name, Term, ActingUser) -> Ret when
+      Name :: atom(),
+      Term :: term(),
+      ActingUser :: rabbit_types:username(),
+      Ret :: ok | {error, timeout}.
 
 set_global(Name, Term, ActingUser)  ->
     NameAsAtom = rabbit_data_coercion:to_atom(Name),
     rabbit_log:debug("Setting global parameter '~ts' to ~tp", [NameAsAtom, Term]),
-    _ = rabbit_db_rtparams:set(NameAsAtom, Term),
-    event_notify(parameter_set, none, global, [{name,  NameAsAtom},
-                                               {value, Term},
-                                               {user_who_performed_action, ActingUser}]),
-    ok.
-
-format_error(L) ->
-    {error_string, rabbit_misc:format_many([{"Validation failed~n", []} | L])}.
+    case rabbit_db_rtparams:set(NameAsAtom, Term) of
+        {ok, _}  ->
+            event_notify(parameter_set, none, global,
+                         [{name,  NameAsAtom},
+                          {value, Term},
+                          {user_who_performed_action, ActingUser}]),
+            ok;
+        {error, timeout} = Err ->
+            Err
+    end.
 
 -spec set_any(rabbit_types:vhost(), binary(), binary(), term(),
               rabbit_types:user() | rabbit_types:username() | 'none')
              -> ok_or_error_string().
 
 set_any(VHost, Component, Name, Term, User) ->
-    case set_any0(VHost, Component, Name, Term, User) of
-        ok          -> ok;
-        {errors, L} -> format_error(L)
-    end.
-
-set_any0(VHost, Component, Name, Term, User) ->
     rabbit_log:debug("Asked to set or update runtime parameter '~ts' in vhost '~ts' "
                      "for component '~ts', value: ~tp",
                      [Name, VHost, Component, Term]),
@@ -135,27 +147,36 @@ set_any0(VHost, Component, Name, Term, User) ->
                     case flatten_errors(Mod:validate(VHost, Component, Name, Term, get_user(User)))  of
                         ok ->
                             case rabbit_db_rtparams:set(VHost, Component, Name, Term) of
-                                {old, Term} ->
+                                {ok, {old, Term}} ->
                                     ok;
-                                _           ->
+                                {ok, _NewOrUpdated} ->
                                     ActingUser = get_username(User),
                                     event_notify(
-                                    parameter_set, VHost, Component,
-                                    [{name,  Name},
-                                    {value, Term},
-                                    {user_who_performed_action, ActingUser}]),
-                                    Mod:notify(VHost, Component, Name, Term, ActingUser)
-                            end,
-                            ok;
-                        E ->
-                            E
+                                      parameter_set, VHost, Component,
+                                      [{name,  Name},
+                                       {value, Term},
+                                       {user_who_performed_action, ActingUser}]),
+                                    Mod:notify(VHost, Component, Name, Term, ActingUser),
+                                    ok;
+                                {error, timeout} ->
+                                    Msg = rabbit_misc:format(
+                                            "Could not set runtime parameter "
+                                            "'~ts' because the operation "
+                                            "timed out", [Name]),
+                                    {error_string, Msg}
+                            end;
+                        {errors, Errs} ->
+                            format_validation_errors(Errs)
                     end;
-                E ->
-                    E
+                {errors, Errs} ->
+                    format_validation_errors(Errs)
             end;
-        E ->
-            E
+        {errors, Errs} ->
+            format_validation_errors(Errs)
     end.
+
+format_validation_errors(Errs) ->
+    {error_string, rabbit_misc:format_many([{"Validation failed~n", []} | Errs])}.
 
 -spec is_within_limit(binary()) -> ok | {errors, list()}.
 
@@ -201,10 +222,19 @@ clear_global(Key, ActingUser) ->
         not_found ->
             {error_string, "Parameter does not exist"};
         _         ->
-            ok = rabbit_db_rtparams:delete(KeyAsAtom),
-            event_notify(parameter_cleared, none, global,
-                         [{name,  KeyAsAtom},
-                          {user_who_performed_action, ActingUser}])
+            case rabbit_db_rtparams:delete(KeyAsAtom) of
+                ok ->
+                    event_notify(parameter_cleared, none, global,
+                                 [{name,  KeyAsAtom},
+                                  {user_who_performed_action, ActingUser}]),
+                    ok;
+                {error, timeout} ->
+                    Msg = rabbit_misc:format(
+                            "Could not delete global runtime parameter '~ts' "
+                            "because the operation timed out",
+                            [Key]),
+                    {error_string, Msg}
+            end
     end.
 
 clear_vhost(VHostName, ActingUser) when is_binary(VHostName) ->
@@ -230,10 +260,24 @@ clear_vhost(VHostName, ActingUser) when is_binary(VHostName) ->
             Err
     end.
 
+-spec clear_component(Component, ActingUser) -> Ret when
+      Component :: binary(),
+      ActingUser :: rabbit_types:username(),
+      Ret :: ok_or_error_string().
+
 clear_component(<<"policy">>, _) ->
     {error_string, "policies may not be cleared using this method"};
 clear_component(Component, _ActingUser) ->
-    ok = rabbit_db_rtparams:delete('_', Component, '_').
+    case rabbit_db_rtparams:delete('_', Component, '_') of
+        ok ->
+            ok;
+        {error, timeout} ->
+            Msg = rabbit_misc:format(
+                    "Could not delete component '~ts' because the operation "
+                    "timed out",
+                    [Component]),
+            {error_string, Msg}
+    end.
 
 -spec clear_any(rabbit_types:vhost(), binary(), binary(), rabbit_types:username())
                      -> ok_thunk_or_error_string().
@@ -242,14 +286,24 @@ clear_any(VHost, Component, Name, ActingUser) ->
     case lookup(VHost, Component, Name) of
         not_found -> {error_string, "Parameter does not exist"};
         _         ->
-            rabbit_db_rtparams:delete(VHost, Component, Name),
-            case lookup_component(Component) of
-                {ok, Mod} -> event_notify(
-                               parameter_cleared, VHost, Component,
-                               [{name, Name},
-                                {user_who_performed_action, ActingUser}]),
-                             Mod:notify_clear(VHost, Component, Name, ActingUser);
-                _         -> ok
+            case rabbit_db_rtparams:delete(VHost, Component, Name) of
+                ok ->
+                    case lookup_component(Component) of
+                        {ok, Mod} ->
+                            event_notify(
+                              parameter_cleared, VHost, Component,
+                              [{name, Name},
+                               {user_who_performed_action, ActingUser}]),
+                            Mod:notify_clear(VHost, Component, Name, ActingUser);
+                        _ ->
+                            ok
+                    end;
+                {error, timeout} ->
+                    Msg = rabbit_misc:format(
+                            "Could not delete parameter '~ts' because the "
+                            "operation timed out",
+                            [Name]),
+                    {error_string, Msg}
             end
     end.
 
@@ -347,19 +401,10 @@ lookup_global(Name)  ->
 
 value(VHost, Comp, Name) -> value0({VHost, Comp, Name}).
 
--spec value(rabbit_types:vhost(), binary(), binary(), term()) -> term().
-
-value(VHost, Comp, Name, Def) -> value0({VHost, Comp, Name}, Def).
-
 -spec value_global(atom()) -> term() | 'not_found'.
 
 value_global(Key) ->
     value0(Key).
-
--spec value_global(atom(), term()) -> term().
-
-value_global(Key, Default) ->
-    value0(Key, Default).
 
 value0(Key) ->
     case lookup0(Key, rabbit_misc:const(not_found)) of
@@ -367,18 +412,11 @@ value0(Key) ->
         Params    -> Params#runtime_parameters.value
     end.
 
-value0(Key, Default) ->
-    Params = lookup0(Key, fun () -> lookup_missing(Key, Default) end),
-    Params#runtime_parameters.value.
-
 lookup0(Key, DefaultFun) ->
     case rabbit_db_rtparams:get(Key) of
         undefined -> DefaultFun();
         Record    -> Record
     end.
-
-lookup_missing(Key, Default) ->
-    rabbit_db_rtparams:get_or_set(Key, Default).
 
 p(#runtime_parameters{key = {VHost, Component, Name}, value = Value}) ->
     [{vhost,     VHost},

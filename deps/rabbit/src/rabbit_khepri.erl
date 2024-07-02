@@ -180,6 +180,10 @@
          clear_forced_metadata_store/0]).
 -endif.
 
+-type timeout_error() :: khepri:error(timeout).
+
+-export_type([timeout_error/0]).
+
 -compile({no_auto_import, [get/1, get/2, nodes/0]}).
 
 -define(RA_SYSTEM, coordination).
@@ -287,7 +291,7 @@ wait_for_leader(Timeout, Retries) ->
         Exists when is_boolean(Exists) ->
             rabbit_log:info("Khepri leader elected"),
             ok;
-        {error, {timeout, _ServerId}} ->
+        {error, timeout} ->
             wait_for_leader(Timeout, Retries -1);
         {error, Reason} ->
             throw(Reason)
@@ -491,13 +495,13 @@ remove_down_member(NodeToRemove) ->
                [NodeToRemove, ?RA_CLUSTER_NAME, Reason],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
             Error;
-        {timeout, _} = Reason ->
+        {timeout, _LeaderId} ->
             ?LOG_ERROR(
                "Failed to remove remote down node ~s from Khepri "
-               "cluster \"~s\": ~p",
-               [NodeToRemove, ?RA_CLUSTER_NAME, Reason],
+               "cluster \"~s\" due to timeout",
+               [NodeToRemove, ?RA_CLUSTER_NAME],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-            {error, Reason}
+            {error, timeout}
     end.
 
 %% @private

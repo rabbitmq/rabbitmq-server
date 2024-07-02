@@ -256,9 +256,10 @@ count_in_khepri() ->
 %% update().
 %% -------------------------------------------------------------------
 
--spec update(ExchangeName, UpdateFun) -> ok when
+-spec update(ExchangeName, UpdateFun) -> Ret when
       ExchangeName :: rabbit_exchange:name(),
-      UpdateFun :: fun((Exchange) -> Exchange).
+      UpdateFun :: fun((Exchange) -> Exchange),
+      Ret :: ok | rabbit_khepri:timeout_error().
 %% @doc Updates an existing exchange record using the result of
 %% `UpdateFun'.
 %%
@@ -358,7 +359,9 @@ update_in_khepri_tx(Name, Fun) ->
 
 -spec create_or_get(Exchange) -> Ret when
       Exchange :: rabbit_types:exchange(),
-      Ret :: {new, Exchange} | {existing, Exchange}.
+      Ret :: {new, Exchange} |
+             {existing, Exchange} |
+             rabbit_khepri:timeout_error().
 %% @doc Writes an exchange record if it doesn't exist already or returns
 %% the existing one.
 %%
@@ -390,15 +393,18 @@ create_or_get_in_khepri(#exchange{name = XName} = X) ->
         ok ->
             {new, X};
         {error, {khepri, mismatching_node, #{node_props := #{data := ExistingX}}}} ->
-            {existing, ExistingX}
+            {existing, ExistingX};
+        {error, _} = Error ->
+            Error
     end.
 
 %% -------------------------------------------------------------------
 %% set().
 %% -------------------------------------------------------------------
 
--spec set([Exchange]) -> ok when
-      Exchange :: rabbit_types:exchange().
+-spec set([Exchange]) -> Ret when
+      Exchange :: rabbit_types:exchange(),
+      Ret :: ok | rabbit_khepri:timeout_error().
 %% @doc Writes the exchange records.
 %%
 %% @returns ok.
@@ -414,16 +420,16 @@ set(Xs) ->
 set_in_mnesia(Xs) when is_list(Xs) ->
     rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
-              [mnesia:write(rabbit_durable_exchange, X, write) || X <- Xs]
-      end),
-    ok.
+              _ = [mnesia:write(rabbit_durable_exchange, X, write) || X <- Xs],
+              ok
+      end).
 
 set_in_khepri(Xs) when is_list(Xs) ->
     rabbit_khepri:transaction(
       fun() ->
-              [set_in_khepri_tx(X) || X <- Xs]
-      end, rw),
-    ok.
+              _ = [set_in_khepri_tx(X) || X <- Xs],
+              ok
+      end, rw).
 
 set_in_khepri_tx(X) ->
     Path = khepri_exchange_path(X#exchange.name),
@@ -474,8 +480,9 @@ peek_serial_in_khepri(XName) ->
 %% next_serial().
 %% -------------------------------------------------------------------
 
--spec next_serial(ExchangeName) -> Serial when
+-spec next_serial(ExchangeName) -> Ret when
       ExchangeName :: rabbit_exchange:name(),
+      Ret :: Serial | no_return(),
       Serial :: integer().
 %% @doc Returns the next serial number and increases it.
 %%
@@ -505,39 +512,30 @@ next_serial_in_mnesia_tx(XName) ->
     Serial.
 
 next_serial_in_khepri(XName) ->
-    %% Just storing the serial number is enough, no need to keep #exchange_serial{}
-    Path = khepri_exchange_serial_path(XName),
-    Ret1 = rabbit_khepri:adv_get(Path),
-    case Ret1 of
-        {ok, #{data := Serial,
-               payload_version := Vsn}} ->
-            UpdatePath =
-                khepri_path:combine_with_conditions(
-                  Path, [#if_payload_version{version = Vsn}]),
-            case rabbit_khepri:put(UpdatePath, Serial + 1) of
-                ok ->
-                    Serial;
-                {error, {khepri, mismatching_node, _}} ->
-                    next_serial_in_khepri(XName);
-                Err ->
-                    Err
-            end;
-        _ ->
-            Serial = 1,
-            ok = rabbit_khepri:put(Path, Serial + 1),
+    Ret = rabbit_khepri:transaction(
+            fun() ->
+                    next_serial_in_khepri_tx(XName)
+            end, rw),
+    case Ret of
+        {error, Reason} ->
+            erlang:error(Reason);
+        Serial ->
             Serial
     end.
 
 -spec next_serial_in_khepri_tx(Exchange) -> Serial when
-      Exchange :: rabbit_types:exchange(),
+      Exchange :: rabbit_types:exchange() | rabbit_exchange:name(),
       Serial :: integer().
 
 next_serial_in_khepri_tx(#exchange{name = XName}) ->
+    next_serial_in_khepri_tx(XName);
+next_serial_in_khepri_tx(#resource{} = XName) ->
     Path = khepri_exchange_serial_path(XName),
     Serial = case khepri_tx:get(Path) of
                  {ok, Serial0} -> Serial0;
                  _ -> 1
              end,
+    %% Just storing the serial number is enough, no need to keep #exchange_serial{}
     ok = khepri_tx:put(Path, Serial + 1),
     Serial.
 
@@ -551,7 +549,10 @@ next_serial_in_khepri_tx(#exchange{name = XName}) ->
       Exchange :: rabbit_types:exchange(),
       Binding :: rabbit_types:binding(),
       Deletions :: dict:dict(),
-      Ret :: {error, not_found} | {error, in_use} | {deleted, Exchange, [Binding], Deletions}.
+      Ret :: {error, not_found}
+             | {error, in_use}
+             | {deleted, Exchange, [Binding], Deletions}
+             | rabbit_khepri:timeout_error().
 %% @doc Deletes an exchange record from the database. If `IfUnused' is set
 %% to `true', it is only deleted when there are no bindings present on the
 %% exchange.
@@ -636,11 +637,12 @@ delete_in_khepri(X = #exchange{name = XName}, OnlyDurable, RemoveBindingsForSour
 %% delete_serial().
 %% -------------------------------------------------------------------
 
--spec delete_serial(ExchangeName) -> ok when
-      ExchangeName :: rabbit_exchange:name().
+-spec delete_serial(ExchangeName) -> Ret when
+      ExchangeName :: rabbit_exchange:name(),
+      Ret :: ok | rabbit_khepri:timeout_error().
 %% @doc Deletes an exchange serial record from the database.
 %%
-%% @returns ok
+%% @returns ok if the deletion succeeds or an error tuple otherwise.
 %%
 %% @private
 
@@ -658,7 +660,7 @@ delete_serial_in_mnesia(XName) ->
 
 delete_serial_in_khepri(XName) ->
     Path = khepri_exchange_serial_path(XName),
-    ok = rabbit_khepri:delete(Path).
+    rabbit_khepri:delete(Path).
 
 %% -------------------------------------------------------------------
 %% recover().
@@ -779,7 +781,7 @@ exists_in_khepri(Name) ->
 %% clear().
 %% -------------------------------------------------------------------
 
--spec clear() -> ok.
+-spec clear() -> ok | no_return().
 %% @doc Deletes all exchanges.
 %%
 %% @private
@@ -803,7 +805,7 @@ clear_in_khepri() ->
 khepri_delete(Path) ->
     case rabbit_khepri:delete(Path) of
         ok -> ok;
-        Error -> throw(Error)
+        {error, _} = Error -> erlang:error(Error)
     end.
 
 %% -------------------------------------------------------------------

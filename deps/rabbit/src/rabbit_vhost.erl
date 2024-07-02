@@ -287,7 +287,9 @@ delete(VHost, ActingUser) ->
                         [{name, VHost},
                          {user_who_performed_action, ActingUser}]);
              false ->
-                 {error, {no_such_vhost, VHost}}
+                 {error, {no_such_vhost, VHost}};
+             {error, _} = Err ->
+                 Err
          end,
     %% After vhost was deleted from the database, we try to stop vhost
     %% supervisors on all the nodes.
