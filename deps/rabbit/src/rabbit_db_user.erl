@@ -12,6 +12,8 @@
 -include_lib("khepri/include/khepri.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+-include("include/khepri.hrl").
+
 -export([create/1,
          update/2,
          get/1,
@@ -29,7 +31,8 @@
          clear_topic_permissions/3,
          clear_matching_topic_permissions/3,
          delete/1,
-         clear_all_permissions_for_vhost/1]).
+         clear_all_permissions_for_vhost/1,
+         clear_in_khepri/0]).
 
 -export([khepri_users_path/0,
          khepri_user_path/1,
@@ -451,13 +454,12 @@ set_user_permissions_in_khepri(Username, VHostName, UserPermission) ->
           end)), rw).
 
 set_user_permissions_in_khepri_tx(Username, VHostName, UserPermission) ->
+    %% TODO: Check user presence in a transaction.
     Path = khepri_user_permission_path(
-             #if_all{conditions =
-                         [Username,
-                          #if_node_exists{exists = true}]},
+             Username,
              VHostName),
     Extra = #{keep_while =>
-                  #{rabbit_db_vhost:khepri_vhost_path(VHostName) =>
+                  #{rabbit_db_user:khepri_user_path(Username) =>
                         #if_node_exists{exists = true}}},
     Ret = khepri_tx:put(
             Path, UserPermission, Extra),
@@ -839,14 +841,13 @@ set_topic_permissions_in_khepri(Username, VHostName, TopicPermission) ->
 set_topic_permissions_in_khepri_tx(Username, VHostName, TopicPermission) ->
     #topic_permission{topic_permission_key =
                           #topic_permission_key{exchange = ExchangeName}} = TopicPermission,
+    %% TODO: Check user presence in a transaction.
     Path = khepri_topic_permission_path(
-             #if_all{conditions =
-                         [Username,
-                          #if_node_exists{exists = true}]},
+             Username,
              VHostName,
              ExchangeName),
     Extra = #{keep_while =>
-                  #{rabbit_db_vhost:khepri_vhost_path(VHostName) =>
+                  #{rabbit_db_user:khepri_user_path(Username) =>
                         #if_node_exists{exists = true}}},
     Ret = khepri_tx:put(Path, TopicPermission, Extra),
     case Ret of
@@ -1054,11 +1055,13 @@ clear_in_khepri() ->
 %% Paths
 %% --------------------------------------------------------------
 
-khepri_users_path()        -> [?MODULE, users].
-khepri_user_path(Username) -> [?MODULE, users, Username].
+khepri_users_path()        -> ?KHEPRI_ROOT_PATH ++ [users].
+khepri_user_path(Username) -> khepri_users_path() ++ [Username].
 
 khepri_user_permission_path(Username, VHostName) ->
-    [?MODULE, users, Username, user_permissions, VHostName].
+    (rabbit_db_vhost:khepri_vhost_path(VHostName) ++
+     [user_permissions, Username]).
 
 khepri_topic_permission_path(Username, VHostName, Exchange) ->
-    [?MODULE, users, Username, topic_permissions, VHostName, Exchange].
+    (rabbit_db_exchange:khepri_exchange_path(VHostName, Exchange) ++
+     [user_permissions, Username]).

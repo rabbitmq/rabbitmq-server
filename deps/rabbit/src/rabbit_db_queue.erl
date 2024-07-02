@@ -65,7 +65,8 @@
          update_in_mnesia_tx/2,
          update_in_khepri_tx/2,
          get_durable_in_mnesia_tx/1,
-         get_in_khepri_tx/1
+         get_in_khepri_tx/1,
+         clear_in_khepri/0
         ]).
 
 %% For testing
@@ -73,7 +74,7 @@
 
 -export([
          khepri_queue_path/1,
-         khepri_queues_path/0
+         khepri_queue_path/2
         ]).
 
 -dialyzer({nowarn_function, [foreach_transient/1,
@@ -646,10 +647,10 @@ update_durable_in_mnesia(UpdateFun, FilterFun) ->
     ok.
 
 update_durable_in_khepri(UpdateFun, FilterFun) ->
-    PathPattern = khepri_queues_path() ++
-        [?KHEPRI_WILDCARD_STAR,
-         #if_data_matches{
-            pattern = amqqueue:pattern_match_on_durable(true)}],
+    PathPattern = khepri_queue_path(
+                    ?KHEPRI_WILDCARD_STAR,
+                    #if_data_matches{
+                       pattern = amqqueue:pattern_match_on_durable(true)}),
     %% The `FilterFun' or `UpdateFun' might attempt to do something
     %% incompatible with Khepri transactions (such as dynamic apply, sending
     %% a message, etc.), so this function cannot be written as a regular
@@ -779,7 +780,10 @@ get_all_by_pattern_in_mnesia(Pattern) ->
     rabbit_db:list_in_mnesia(?MNESIA_TABLE, Pattern).
 
 get_all_by_pattern_in_khepri(Pattern) ->
-    rabbit_db:list_in_khepri(khepri_queues_path() ++ [rabbit_khepri:if_has_data([?KHEPRI_WILDCARD_STAR_STAR, #if_data_matches{pattern = Pattern}])]).
+    rabbit_db:list_in_khepri(
+      khepri_queue_path(
+        ?KHEPRI_WILDCARD_STAR_STAR,
+        #if_data_matches{pattern = Pattern})).
 
 %% -------------------------------------------------------------------
 %% get_all_by_type_and_node().
@@ -814,7 +818,10 @@ get_all_by_type_and_node_in_mnesia(VHostName, Type, Node) ->
 
 get_all_by_type_and_node_in_khepri(VHostName, Type, Node) ->
     Pattern = amqqueue:pattern_match_on_type(Type),
-    Qs = rabbit_db:list_in_khepri(khepri_queues_path() ++ [VHostName, rabbit_khepri:if_has_data([?KHEPRI_WILDCARD_STAR_STAR, #if_data_matches{pattern = Pattern}])]),
+    Qs = rabbit_db:list_in_khepri(
+           khepri_queue_path(
+             VHostName,
+             #if_data_matches{pattern = Pattern})),
     [Q || Q <- Qs, amqqueue:qnode(Q) == Node].
 
 %% -------------------------------------------------------------------
@@ -1011,10 +1018,10 @@ partition_queues(T) ->
     [T].
 
 delete_transient_in_khepri(FilterFun) ->
-    PathPattern = khepri_queues_path() ++
-        [?KHEPRI_WILDCARD_STAR,
-         #if_data_matches{
-            pattern = amqqueue:pattern_match_on_durable(false)}],
+    PathPattern = khepri_queue_path(
+                    ?KHEPRI_WILDCARD_STAR,
+                    #if_data_matches{
+                       pattern = amqqueue:pattern_match_on_durable(false)}),
     %% The `FilterFun' might try to determine if the queue's process is alive.
     %% This can cause a `calling_self' exception if we use the `FilterFun'
     %% within the function passed to `khepri:fold/5' since the Khepri server
@@ -1027,13 +1034,13 @@ delete_transient_in_khepri(FilterFun) ->
                      fun(Path, Queue, Acc) when ?is_amqqueue(Queue) ->
                              case FilterFun(Queue) of
                                  true ->
-                                     QueueName = khepri_queue_path_to_name(
-                                                   Path),
-                                     case delete_in_khepri(QueueName, false) of
+                                     QName = khepri_queue_path_to_resource(
+                                               Path),
+                                     case delete_in_khepri(QName, false) of
                                          ok ->
                                              Acc;
                                          Deletions ->
-                                             [{QueueName, Deletions} | Acc]
+                                             [{QName, Deletions} | Acc]
                                      end;
                                  false ->
                                      Acc
@@ -1072,10 +1079,10 @@ foreach_transient_in_mnesia(UpdateFun) ->
       end).
 
 foreach_transient_in_khepri(UpdateFun) ->
-    PathPattern = khepri_queues_path() ++
-        [?KHEPRI_WILDCARD_STAR,
-         #if_data_matches{
-            pattern = amqqueue:pattern_match_on_durable(false)}],
+    PathPattern = khepri_queue_path(
+                    ?KHEPRI_WILDCARD_STAR,
+                    #if_data_matches{
+                       pattern = amqqueue:pattern_match_on_durable(false)}),
     %% The `UpdateFun' might try to determine if the queue's process is alive.
     %% This can cause a `calling_self' exception if we use the `UpdateFun'
     %% within the function passed to `khepri:fold/5' since the Khepri server
@@ -1123,10 +1130,10 @@ foreach_durable_in_mnesia(UpdateFun, FilterFun) ->
     ok.
 
 foreach_durable_in_khepri(UpdateFun, FilterFun) ->
-    Path = khepri_queues_path() ++
-        [?KHEPRI_WILDCARD_STAR,
-         #if_data_matches{
-            pattern = amqqueue:pattern_match_on_durable(true)}],
+    Path = khepri_queue_path(
+             ?KHEPRI_WILDCARD_STAR,
+             #if_data_matches{
+                pattern = amqqueue:pattern_match_on_durable(true)}),
     case rabbit_khepri:filter(Path, fun(_, #{data := Q}) ->
                                             FilterFun(Q)
                                     end) of
@@ -1242,7 +1249,7 @@ clear_in_mnesia() ->
     ok.
 
 clear_in_khepri() ->
-    Path = khepri_queues_path(),
+    Path = khepri_queue_path(?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
     case rabbit_khepri:delete(Path) of
         ok -> ok;
         Error -> throw(Error)
@@ -1309,11 +1316,14 @@ list_with_possible_retry_in_khepri(Fun) ->
 %% Khepri paths
 %% --------------------------------------------------------------
 
-khepri_queues_path() ->
-    [?MODULE, queues].
-
 khepri_queue_path(#resource{virtual_host = VHost, name = Name}) ->
-    [?MODULE, queues, VHost, Name].
+    khepri_queue_path(VHost, Name).
 
-khepri_queue_path_to_name([?MODULE, queues, VHost, Name]) ->
+khepri_queue_path(VHost, Name) ->
+    rabbit_db_vhost:khepri_vhost_path(VHost) ++ [queues, Name].
+
+khepri_queue_path_to_resource(Path) ->
+    VHost = rabbit_db_vhost:khepri_vhost_path_to_name(Path),
+    Prefix = rabbit_db_vhost:khepri_vhost_path(VHost),
+    {Prefix, [queues, Name | _]} = lists:split(length(Prefix), Path),
     rabbit_misc:r(VHost, queue, Name).

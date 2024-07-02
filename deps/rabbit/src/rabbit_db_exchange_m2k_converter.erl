@@ -129,12 +129,6 @@ delete_from_khepri(rabbit_exchange_serial = Table, Key, State) ->
       Table :: atom().
 
 clear_data_in_khepri(rabbit_exchange) ->
-    khepri_delete(rabbit_db_exchange:khepri_exchanges_path());
+    rabbit_db_exchange:clear_exchanges_in_khepri();
 clear_data_in_khepri(rabbit_exchange_serial) ->
-    khepri_delete(rabbit_db_exchange:khepri_exchange_serials_path()).
-
-khepri_delete(Path) ->
-    case rabbit_khepri:delete(Path) of
-        ok -> ok;
-        Error -> throw(Error)
-    end.
+    rabbit_db_exchange:clear_exchange_serials_in_khepri().

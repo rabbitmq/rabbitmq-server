@@ -293,15 +293,6 @@ init_feature_flags(Config) ->
 %% This simply avoids compiler warnings.
 -define(with(T), fun(_With) -> T end).
 
--define(vhost_path(V),
-        [rabbit_db_vhost, V]).
--define(user_path(U),
-        [rabbit_db_user, users, U]).
--define(user_perm_path(U, V),
-        [rabbit_db_user, users, U, user_permissions, V]).
--define(topic_perm_path(U, V, E),
-        [rabbit_db_user, users, U, topic_permissions, V, E]).
-
 %%
 %% Virtual hosts.
 %%
@@ -330,8 +321,8 @@ write_non_existing_vhost(_) ->
      ?with(check_storage(
              _With,
              [{mnesia, rabbit_vhost, [VHost]},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostName) => VHost}}]))
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}}]))
     ],
 
     ?assertEqual(
@@ -371,8 +362,8 @@ write_existing_vhost(_) ->
      ?with(check_storage(
              _With,
              [{mnesia, rabbit_vhost, [VHost]},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostName) => VHost}}]))
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}}]))
     ],
 
     ?assertEqual(
@@ -404,8 +395,8 @@ check_vhost_exists(_) ->
      ?with(check_storage(
              _With,
              [{mnesia, rabbit_vhost, [VHost]},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostName) => VHost}}]))
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}}]))
     ],
 
     ?assertEqual(
@@ -447,9 +438,9 @@ list_vhost_names(_) ->
      ?with(check_storage(
              _With,
              [{mnesia, rabbit_vhost, [VHostA, VHostB]},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostNameA) => VHostA,
-                 ?vhost_path(VHostNameB) => VHostB}}]))
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostNameA) => VHostA,
+                 rabbit_db_vhost:khepri_vhost_path(VHostNameB) => VHostB}}]))
     ],
 
     ?assertEqual(
@@ -491,9 +482,9 @@ list_vhost_objects(_) ->
      ?with(check_storage(
              _With,
              [{mnesia, rabbit_vhost, [VHostA, VHostB]},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostNameA) => VHostA,
-                 ?vhost_path(VHostNameB) => VHostB}}]))
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostNameA) => VHostA,
+                 rabbit_db_vhost:khepri_vhost_path(VHostNameB) => VHostB}}]))
     ],
 
     ?assertEqual(
@@ -530,7 +521,7 @@ update_non_existing_vhost(_) ->
      ?with(check_storage(
              _With,
              [{mnesia, rabbit_vhost, []},
-              {khepri, [rabbit_db_vhost],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
                #{}}]))
     ],
 
@@ -571,8 +562,8 @@ update_existing_vhost(_) ->
      ?with(check_storage(
              _With,
              [{mnesia, rabbit_vhost, [UpdatedVHost]},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostName) => UpdatedVHost}}]))
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostName) => UpdatedVHost}}]))
     ],
 
     ?assertEqual(
@@ -601,7 +592,7 @@ update_non_existing_vhost_desc_and_tags(_) ->
      ?with(check_storage(
              _With,
              [{mnesia, rabbit_vhost, []},
-              {khepri, [rabbit_db_vhost],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
                #{}}]))
     ],
 
@@ -647,8 +638,8 @@ update_existing_vhost_desc_and_tags(_) ->
      ?with(check_storage(
              _With,
              [{mnesia, rabbit_vhost, [UpdatedVHost]},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostName) => UpdatedVHost}}]))
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostName) => UpdatedVHost}}]))
     ],
 
     ?assertEqual(
@@ -675,7 +666,7 @@ delete_non_existing_vhost(_) ->
      ?with(check_storage(
              _With,
              [{mnesia, rabbit_vhost, []},
-              {khepri, [rabbit_db_vhost],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
                #{}}]))
     ],
 
@@ -713,7 +704,7 @@ delete_existing_vhost(_) ->
      ?with(check_storage(
              _With,
              [{mnesia, rabbit_vhost, []},
-              {khepri, [rabbit_db_vhost],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
                #{}}]))
     ],
 
@@ -746,8 +737,8 @@ write_non_existing_user(_) ->
      ?with(check_storage(
              _With,
              [{mnesia, rabbit_user, [User]},
-              {khepri, [rabbit_db_user],
-               #{?user_path(Username) => User}}]))
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
@@ -781,8 +772,8 @@ write_existing_user(_) ->
      ?with(check_storage(
              _With,
              [{mnesia, rabbit_user, [User]},
-              {khepri, [rabbit_db_user],
-               #{?user_path(Username) => User}}]))
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
@@ -812,9 +803,9 @@ list_users(_) ->
      ?with(check_storage(
              _With,
              [{mnesia, rabbit_user, [UserA, UserB]},
-              {khepri, [rabbit_db_user],
-               #{?user_path(UsernameA) => UserA,
-                 ?user_path(UsernameB) => UserB}}]))
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(UsernameA) => UserA,
+                 rabbit_db_user:khepri_user_path(UsernameB) => UserB}}]))
     ],
 
     ?assertEqual(
@@ -846,7 +837,7 @@ update_non_existing_user(_) ->
      ?with(check_storage(
              _With,
              [{mnesia, rabbit_user, []},
-              {khepri, [rabbit_db_user],
+              {khepri, rabbit_db_user:khepri_users_path(),
                #{}}]))
     ],
 
@@ -882,8 +873,8 @@ update_existing_user(_) ->
      ?with(check_storage(
              _With,
              [{mnesia, rabbit_user, [UpdatedUser]},
-              {khepri, [rabbit_db_user],
-               #{?user_path(Username) => UpdatedUser}}]))
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(Username) => UpdatedUser}}]))
     ],
 
     ?assertEqual(
@@ -910,7 +901,7 @@ delete_non_existing_user(_) ->
      ?with(check_storage(
              _With,
              [{mnesia, rabbit_user, []},
-              {khepri, [rabbit_db_user],
+              {khepri, rabbit_db_user:khepri_users_path(),
                #{}}]))
     ],
 
@@ -942,7 +933,7 @@ delete_existing_user(_) ->
      ?with(check_storage(
              _With,
              [{mnesia, rabbit_user, []},
-              {khepri, [rabbit_db_user],
+              {khepri, rabbit_db_user:khepri_users_path(),
                #{}}]))
     ],
 
@@ -987,10 +978,10 @@ write_user_permission_for_non_existing_vhost(_) ->
              [{mnesia, rabbit_vhost, []},
               {mnesia, rabbit_user, [User]},
               {mnesia, rabbit_user_permission, []},
-              {khepri, [rabbit_db_vhost],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
                #{}},
-              {khepri, [rabbit_db_user],
-               #{?user_path(Username) => User}}]))
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
@@ -1036,9 +1027,9 @@ write_user_permission_for_non_existing_user(_) ->
              [{mnesia, rabbit_vhost, [VHost]},
               {mnesia, rabbit_user, []},
               {mnesia, rabbit_user_permission, []},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostName) => VHost}},
-              {khepri, [rabbit_db_user],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}},
+              {khepri, rabbit_db_user:khepri_users_path(),
                #{}}]))
     ],
 
@@ -1091,11 +1082,11 @@ write_user_permission_for_existing_user(_) ->
              [{mnesia, rabbit_vhost, [VHost]},
               {mnesia, rabbit_user, [User]},
               {mnesia, rabbit_user_permission, [UserPermission]},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostName) => VHost}},
-              {khepri, [rabbit_db_user],
-               #{?user_path(Username) => User,
-                 ?user_perm_path(Username, VHostName) => UserPermission}}]))
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost,
+                 rabbit_db_user:khepri_user_permission_path(Username, VHostName) => UserPermission}},
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
@@ -1175,9 +1166,9 @@ list_user_permissions_on_non_existing_vhost(_) ->
              [{mnesia, rabbit_vhost, []},
               {mnesia, rabbit_user, [User]},
               {mnesia, rabbit_user_permission, []},
-              {khepri, [rabbit_db_vhost], #{}},
-              {khepri, [rabbit_db_user],
-               #{?user_path(Username) => User}}]))
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(), #{}},
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
@@ -1217,8 +1208,10 @@ list_user_permissions_for_non_existing_user(_) ->
              [{mnesia, rabbit_vhost, [VHost]},
               {mnesia, rabbit_user, []},
               {mnesia, rabbit_user_permission, []},
-              {khepri, [rabbit_db_vhost], #{?vhost_path(VHostName) => VHost}},
-              {khepri, [rabbit_db_user], #{}}]))
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}},
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{}}]))
     ],
 
     ?assertEqual(
@@ -1320,18 +1313,18 @@ list_user_permissions(_) ->
               {mnesia, rabbit_user_permission, [UserPermissionA1,
                                                 UserPermissionA2,
                                                 UserPermissionB1]},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostNameA) => VHostA,
-                 ?vhost_path(VHostNameB) => VHostB}},
-              {khepri, [rabbit_db_user],
-               #{?user_path(UsernameA) => UserA,
-                 ?user_path(UsernameB) => UserB,
-                 ?user_perm_path(UsernameA, VHostNameA) =>
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostNameA) => VHostA,
+                 rabbit_db_vhost:khepri_vhost_path(VHostNameB) => VHostB,
+                 rabbit_db_user:khepri_user_permission_path(UsernameA, VHostNameA) =>
                  UserPermissionA1,
-                 ?user_perm_path(UsernameA, VHostNameB) =>
+                 rabbit_db_user:khepri_user_permission_path(UsernameA, VHostNameB) =>
                  UserPermissionA2,
-                 ?user_perm_path(UsernameB, VHostNameA) =>
-                 UserPermissionB1}}]))
+                 rabbit_db_user:khepri_user_permission_path(UsernameB, VHostNameA) =>
+                 UserPermissionB1}},
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(UsernameA) => UserA,
+                 rabbit_db_user:khepri_user_path(UsernameB) => UserB}}]))
     ],
 
     ?assertEqual(
@@ -1363,10 +1356,10 @@ clear_user_permission_for_non_existing_vhost(_) ->
              [{mnesia, rabbit_vhost, []},
               {mnesia, rabbit_user, [User]},
               {mnesia, rabbit_user_permission, []},
-              {khepri, [rabbit_db_vhost],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
                #{}},
-              {khepri, [rabbit_db_user],
-               #{?user_path(Username) => User}}]))
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
@@ -1404,9 +1397,9 @@ clear_user_permission_for_non_existing_user(_) ->
              [{mnesia, rabbit_vhost, [VHost]},
               {mnesia, rabbit_user, []},
               {mnesia, rabbit_user_permission, []},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostName) => VHost}},
-              {khepri, [rabbit_db_user],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}},
+              {khepri, rabbit_db_user:khepri_users_path(),
                #{}}]))
     ],
 
@@ -1462,10 +1455,10 @@ clear_user_permission(_) ->
              [{mnesia, rabbit_vhost, [VHost]},
               {mnesia, rabbit_user, [User]},
               {mnesia, rabbit_user_permission, []},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostName) => VHost}},
-              {khepri, [rabbit_db_user],
-               #{?user_path(Username) => User}}]))
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}},
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
@@ -1524,9 +1517,9 @@ delete_user_and_check_resource_access(_) ->
              [{mnesia, rabbit_vhost, [VHost]},
               {mnesia, rabbit_user, []},
               {mnesia, rabbit_user_permission, []},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostName) => VHost}},
-              {khepri, [rabbit_db_user],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}},
+              {khepri, rabbit_db_user:khepri_users_path(),
                #{}}]))
     ],
 
@@ -1581,10 +1574,10 @@ delete_vhost_and_check_resource_access(_) ->
              [{mnesia, rabbit_vhost, []},
               {mnesia, rabbit_user, [User]},
               {mnesia, rabbit_user_permission, [UserPermission]},
-              {khepri, [rabbit_db_vhost],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
                #{}},
-              {khepri, [rabbit_db_user],
-               #{?user_path(Username) => User}}]))
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     %% In mnesia the permissions have to be deleted explicitly
@@ -1657,10 +1650,10 @@ write_topic_permission_for_non_existing_vhost(_) ->
              [{mnesia, rabbit_vhost, []},
               {mnesia, rabbit_user, [User]},
               {mnesia, rabbit_topic_permission, []},
-              {khepri, [rabbit_db_vhost],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
                #{}},
-              {khepri, [rabbit_db_user],
-               #{?user_path(Username) => User}}]))
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
@@ -1718,9 +1711,9 @@ write_topic_permission_for_non_existing_user(_) ->
              [{mnesia, rabbit_vhost, [VHost]},
               {mnesia, rabbit_user, []},
               {mnesia, rabbit_topic_permission, []},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostName) => VHost}},
-              {khepri, [rabbit_db_user],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}},
+              {khepri, rabbit_db_user:khepri_users_path(),
                #{}}]))
     ],
 
@@ -1786,12 +1779,12 @@ write_topic_permission_for_existing_user(_) ->
              [{mnesia, rabbit_vhost, [VHost]},
               {mnesia, rabbit_user, [User]},
               {mnesia, rabbit_topic_permission, [TopicPermission]},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostName) => VHost}},
-              {khepri, [rabbit_db_user],
-               #{?user_path(Username) => User,
-                 ?topic_perm_path(Username, VHostName, Exchange) =>
-                 TopicPermission}}]))
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost,
+                 rabbit_db_user:khepri_topic_permission_path(Username, VHostName, Exchange) =>
+                 TopicPermission}},
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
@@ -1823,10 +1816,10 @@ list_topic_permissions_on_non_existing_vhost(_) ->
              [{mnesia, rabbit_vhost, []},
               {mnesia, rabbit_user, [User]},
               {mnesia, rabbit_topic_permission, []},
-              {khepri, [rabbit_db_vhost],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
                #{}},
-              {khepri, [rabbit_db_user],
-               #{?user_path(Username) => User}}]))
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
@@ -1866,8 +1859,8 @@ list_topic_permissions_for_non_existing_user(_) ->
              [{mnesia, rabbit_vhost, [VHost]},
               {mnesia, rabbit_user, []},
               {mnesia, rabbit_topic_permission, []},
-              {khepri, [rabbit_db_vhost], #{?vhost_path(VHostName) => VHost}},
-              {khepri, [rabbit_db_user], #{}}]))
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(), #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}},
+              {khepri, rabbit_db_user:khepri_users_path(), #{}}]))
     ],
 
     ?assertEqual(
@@ -1980,18 +1973,18 @@ list_topic_permissions(_) ->
               {mnesia, rabbit_topic_permission, [TopicPermissionA1,
                                                  TopicPermissionA2,
                                                  TopicPermissionB1]},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostNameA) => VHostA,
-                 ?vhost_path(VHostNameB) => VHostB}},
-              {khepri, [rabbit_db_user],
-               #{?user_path(UsernameA) => UserA,
-                 ?user_path(UsernameB) => UserB,
-                 ?topic_perm_path(UsernameA, VHostNameA, ExchangeA) =>
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostNameA) => VHostA,
+                 rabbit_db_vhost:khepri_vhost_path(VHostNameB) => VHostB,
+                 rabbit_db_user:khepri_topic_permission_path(UsernameA, VHostNameA, ExchangeA) =>
                  TopicPermissionA1,
-                 ?topic_perm_path(UsernameA, VHostNameB, ExchangeB) =>
+                 rabbit_db_user:khepri_topic_permission_path(UsernameA, VHostNameB, ExchangeB) =>
                  TopicPermissionA2,
-                 ?topic_perm_path(UsernameB, VHostNameA, ExchangeA) =>
-                 TopicPermissionB1}}]))
+                 rabbit_db_user:khepri_topic_permission_path(UsernameB, VHostNameA, ExchangeA) =>
+                 TopicPermissionB1}},
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(UsernameA) => UserA,
+                 rabbit_db_user:khepri_user_path(UsernameB) => UserB}}]))
     ],
 
     ?assertEqual(
@@ -2031,10 +2024,10 @@ clear_specific_topic_permission_for_non_existing_vhost(_) ->
              [{mnesia, rabbit_vhost, []},
               {mnesia, rabbit_user, [User]},
               {mnesia, rabbit_user_permission, []},
-              {khepri, [rabbit_db_vhost],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
                #{}},
-              {khepri, [rabbit_db_user],
-               #{?user_path(Username) => User}}]))
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
@@ -2080,9 +2073,9 @@ clear_specific_topic_permission_for_non_existing_user(_) ->
              [{mnesia, rabbit_vhost, [VHost]},
               {mnesia, rabbit_user, []},
               {mnesia, rabbit_user_permission, []},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostName) => VHost}},
-              {khepri, [rabbit_db_user],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}},
+              {khepri, rabbit_db_user:khepri_users_path(),
                #{}}]))
     ],
 
@@ -2186,12 +2179,12 @@ clear_specific_topic_permission(_) ->
              [{mnesia, rabbit_vhost, [VHost]},
               {mnesia, rabbit_user, [User]},
               {mnesia, rabbit_topic_permission, [TopicPermissionB]},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostName) => VHost}},
-              {khepri, [rabbit_db_user],
-               #{?user_path(Username) => User,
-                 ?topic_perm_path(Username, VHostName, ExchangeB) =>
-                 TopicPermissionB}}]))
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost,
+                 rabbit_db_user:khepri_topic_permission_path(Username, VHostName, ExchangeB) =>
+                 TopicPermissionB}},
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
@@ -2231,10 +2224,10 @@ clear_all_topic_permission_for_non_existing_vhost(_) ->
              [{mnesia, rabbit_vhost, []},
               {mnesia, rabbit_user, [User]},
               {mnesia, rabbit_user_permission, []},
-              {khepri, [rabbit_db_vhost],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
                #{}},
-              {khepri, [rabbit_db_user],
-               #{?user_path(Username) => User}}]))
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
@@ -2280,9 +2273,9 @@ clear_all_topic_permission_for_non_existing_user(_) ->
              [{mnesia, rabbit_vhost, [VHost]},
               {mnesia, rabbit_user, []},
               {mnesia, rabbit_user_permission, []},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostName) => VHost}},
-              {khepri, [rabbit_db_user],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}},
+              {khepri, rabbit_db_user:khepri_users_path(),
                #{}}]))
     ],
 
@@ -2388,10 +2381,10 @@ clear_all_topic_permissions(_) ->
              [{mnesia, rabbit_vhost, [VHost]},
               {mnesia, rabbit_user, [User]},
               {mnesia, rabbit_topic_permission, []},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostName) => VHost}},
-              {khepri, [rabbit_db_user],
-               #{?user_path(Username) => User}}]))
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}},
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
@@ -2464,9 +2457,9 @@ delete_user_and_check_topic_access(_) ->
              [{mnesia, rabbit_vhost, [VHost]},
               {mnesia, rabbit_user, []},
               {mnesia, rabbit_topic_permission, []},
-              {khepri, [rabbit_db_vhost],
-               #{?vhost_path(VHostName) => VHost}},
-              {khepri, [rabbit_db_user],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
+               #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}},
+              {khepri, rabbit_db_user:khepri_users_path(),
                #{}}]))
     ],
 
@@ -2530,10 +2523,10 @@ delete_vhost_and_check_topic_access(_) ->
              [{mnesia, rabbit_vhost, []},
               {mnesia, rabbit_user, [User]},
               {mnesia, rabbit_topic_permission, [TopicPermission]},
-              {khepri, [rabbit_db_vhost],
+              {khepri, rabbit_db_vhost:khepri_vhosts_path(),
                #{}},
-              {khepri, [rabbit_db_user],
-               #{?user_path(Username) => User}}]))
+              {khepri, rabbit_db_user:khepri_users_path(),
+               #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     %% In mnesia the permissions have to be deleted explicitly

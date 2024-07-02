@@ -73,14 +73,12 @@ copy_to_khepri(
        [Table, Username, VHost],
        #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
     Path = rabbit_db_user:khepri_user_permission_path(
-             #if_all{conditions =
-                         [Username,
-                          #if_node_exists{exists = true}]},
+             Username,
              VHost),
     rabbit_db_m2k_converter:with_correlation_id(
       fun(CorrId) ->
               Extra = #{keep_while =>
-                            #{rabbit_db_vhost:khepri_vhost_path(VHost) =>
+                            #{rabbit_db_user:khepri_user_path(Username) =>
                                   #if_node_exists{exists = true}},
                         async => CorrId},
               ?LOG_DEBUG(
@@ -103,15 +101,13 @@ copy_to_khepri(
        [Table, Username, VHost],
        #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
     Path = rabbit_db_user:khepri_topic_permission_path(
-             #if_all{conditions =
-                         [Username,
-                          #if_node_exists{exists = true}]},
+             Username,
              VHost,
              Exchange),
     rabbit_db_m2k_converter:with_correlation_id(
       fun(CorrId) ->
               Extra = #{keep_while =>
-                            #{rabbit_db_vhost:khepri_vhost_path(VHost) =>
+                            #{rabbit_db_user:khepri_user_path(Username) =>
                                   #if_node_exists{exists = true}},
                         async => CorrId},
               ?LOG_DEBUG(
@@ -192,10 +188,6 @@ delete_from_khepri(rabbit_topic_permission = Table, Key, State) ->
       Table :: atom().
 
 clear_data_in_khepri(rabbit_user) ->
-    Path = rabbit_db_user:khepri_users_path(),
-    case rabbit_khepri:delete(Path) of
-        ok    -> ok;
-        Error -> throw(Error)
-    end;
+    rabbit_db_user:clear_in_khepri();
 clear_data_in_khepri(_) ->
     ok.
