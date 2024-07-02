@@ -2088,6 +2088,16 @@ deliver_to_queues(XName,
                     ok
             end,
             State;
+        %% When sending to QQs we may get an error when the process shuts
+        %% down or gets killed. In that case we retry. We can retry safely
+        %% because we are sending to a single queue in this function clause.
+        %%
+        %% We do not need to worry about infinite loops because this
+        %% is only sent when the process exits.
+        {error, {shutdown, _}} ->
+            deliver_to_queues({Delivery, [QName]}, State0);
+        {error, {killed, _}} ->
+            deliver_to_queues({Delivery, [QName]}, State0);
         {error, {stream_not_found, Resource}} ->
             rabbit_misc:protocol_error(
               resource_error,
