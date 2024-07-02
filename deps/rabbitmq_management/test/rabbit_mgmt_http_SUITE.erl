@@ -2412,7 +2412,6 @@ queue_pagination_test(Config) ->
     passed.
 
 queue_pagination_columns_test(Config) ->
-    VHostName = <<"queue_pagination_columns_test">>,
     QArgs = #{},
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put(Config, "/vhosts/vh.tests.queue_pagination_columns_test", none, [?CREATED, ?NO_CONTENT]),
