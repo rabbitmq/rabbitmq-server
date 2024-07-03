@@ -550,7 +550,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                             fun() -> emit_stats(State2) end),
     put_operation_timeout(),
     State3 = init_tick_timer(State2),
-    {ok, State3, hibernate}.
+    {ok, State3}.
 
 prioritise_call(Msg, _From, _Len, _State) ->
     case Msg of
@@ -726,7 +726,7 @@ handle_info(emit_stats, State) ->
     State1 = rabbit_event:reset_stats_timer(State, #ch.stats_timer),
     %% NB: don't call noreply/1 since we don't want to kick off the
     %% stats timer.
-    {noreply, send_confirms_and_nacks(State1), hibernate};
+    {noreply, send_confirms_and_nacks(State1)};
 
 handle_info({{'DOWN', QName}, _MRef, process, QPid, Reason},
             #ch{queue_states = QStates0} = State0) ->
@@ -821,14 +821,14 @@ get_consumer_timeout() ->
     end.
 %%---------------------------------------------------------------------------
 
-reply(Reply, NewState) -> {reply, Reply, next_state(NewState), hibernate}.
+reply(Reply, NewState) -> {reply, Reply, next_state(NewState)}.
 
-noreply(NewState) -> {noreply, next_state(NewState), hibernate}.
+noreply(NewState) -> {noreply, next_state(NewState)}.
 
 next_state(State) -> ensure_stats_timer(send_confirms_and_nacks(State)).
 
 noreply_coalesce(#ch{confirmed = [], rejected = []} = State) ->
-    {noreply, ensure_stats_timer(State), hibernate};
+    {noreply, ensure_stats_timer(State)};
 noreply_coalesce(#ch{} = State) ->
     % Immediately process 'timeout' info message
     {noreply, ensure_stats_timer(State), 0}.
