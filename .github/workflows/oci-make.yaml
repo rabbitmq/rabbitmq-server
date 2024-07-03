@@ -55,7 +55,11 @@ jobs:
       matrix:
         platform:
           - linux/amd64
-          - linux/arm64
+          # These are built on x86 runners in CPU emulation mode, which is very slow
+          # (over an hour to build the image, instead of minutes). It'd be nice to have
+          # these back at some point but for now - they are blocking the publication of
+          # amd64 images
+          # - linux/arm64
     steps:
       - name: Prepare
         run: |
