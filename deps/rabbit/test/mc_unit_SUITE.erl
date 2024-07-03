@@ -245,6 +245,7 @@ amqpl_death_records(Env) ->
 amqpl_parse_x_death(_Config) ->
     Q = <<"my queue">>,
     DLQ = <<"my dead letter queue">>,
+    Ts = os:system_time(second),
 
     Content0 = #content{class_id = 60,
                         properties = #'P_basic'{headers = [],
@@ -273,7 +274,9 @@ amqpl_parse_x_death(_Config) ->
     ?assertMatch({_, longstr, <<"rejected">>}, header(<<"reason">>, T1)),
     ?assertMatch({_, longstr, Q}, header(<<"queue">>, T1)),
     ?assertMatch({_, longstr, <<"exch">>}, header(<<"exchange">>, T1)),
-    ?assertMatch({_, timestamp, _}, header(<<"time">>, T1)),
+    {_, timestamp, Ts1} = header(<<"time">>, T1),
+    ?assert(Ts1 > Ts - 10),
+    ?assert(Ts1 < Ts + 10),
     ?assertMatch({_, array, [{longstr, <<"apple">>}]}, header(<<"routing-keys">>, T1)),
     ?assertMatch({_, longstr, <<"9999">>}, header(<<"original-expiration">>, T1)),
 

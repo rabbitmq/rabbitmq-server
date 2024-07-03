@@ -1598,6 +1598,7 @@ x_death_header_from_amqpl_client(Config) ->
     DLXQName = ?config(queue_name_dlx, Config),
     declare_dead_letter_queues(Ch, Config, QName, DLXQName, [{<<"x-message-ttl">>, long, 0}]),
 
+    Ts = os:system_time(second),
     Payload = <<"my payload">>,
     ok = amqp_channel:call(Ch,
                            #'basic.publish'{routing_key = QName},
@@ -1610,6 +1611,10 @@ x_death_header_from_amqpl_client(Config) ->
                                            no_ack = true}),
     {array, [{table, Death1}]} = rabbit_misc:table_lookup(Headers1, <<"x-death">>),
     ?assertEqual({long, 1}, rabbit_misc:table_lookup(Death1, <<"count">>)),
+    %% AMQP 0.9.1 timestamp should be seconds since epoch.
+    {timestamp, Ts1} = rabbit_misc:table_lookup(Death1, <<"time">>),
+    ?assert(Ts1 > Ts - 10),
+    ?assert(Ts1 < Ts + 10),
 
     ok = amqp_channel:call(Ch,
                            #'basic.publish'{routing_key = QName},
@@ -1623,7 +1628,10 @@ x_death_header_from_amqpl_client(Config) ->
     } = amqp_channel:call(Ch, #'basic.get'{queue = DLXQName,
                                            no_ack = true}),
     {array, [{table, Death2}]} = rabbit_misc:table_lookup(Headers2, <<"x-death">>),
-    ?assertEqual({long, 2}, rabbit_misc:table_lookup(Death2, <<"count">>)).
+    ?assertEqual({long, 2}, rabbit_misc:table_lookup(Death2, <<"count">>)),
+    %% Timestamp should be exactly the same as the 1st timestamp because it denotes
+    %% when this message was dead lettered the **first** time from this queue for this reason.
+    ?assertEqual({timestamp, Ts1}, rabbit_misc:table_lookup(Death2, <<"time">>)).
 
 set_queue_options(QName, Options) ->
     rabbit_amqqueue:update(rabbit_misc:r(<<"/">>, queue, QName),
