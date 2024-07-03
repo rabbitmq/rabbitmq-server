@@ -473,7 +473,7 @@ cancel_checkout(Config) ->
                                               #{}, F1),
     {_, _, F3} = process_ra_events(receive_ra_events(1, 1), ClusterName, F2,
                                    [], [], fun (_, S) -> S end),
-    {ok, F4} = rabbit_fifo_client:cancel_checkout(<<"tag">>, F3),
+    {ok, F4} = rabbit_fifo_client:cancel_checkout(<<"tag">>, cancel, F3),
     {F5, _} = rabbit_fifo_client:return(<<"tag">>, [0], F4),
     {ok, _, {_, _, _, _, m1}, F5} =
         rabbit_fifo_client:dequeue(ClusterName, <<"d1">>, settled, F5),

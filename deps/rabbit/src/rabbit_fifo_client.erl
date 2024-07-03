@@ -15,7 +15,6 @@
          init/1,
          init/2,
          checkout/4,
-         cancel_checkout/2,
          cancel_checkout/3,
          enqueue/3,
          enqueue/4,
@@ -444,10 +443,7 @@ credit(ConsumerTag, DeliveryCount, Credit, Drain, State) ->
     Cmd = rabbit_fifo:make_credit(ConsumerKey, Credit, DeliveryCount, Drain),
     {send_command(ServerId, undefined, Cmd, normal, State), []}.
 
-cancel_checkout(ConsumerTag, State) ->
-    cancel_checkout(ConsumerTag, cancel, State).
-
-%% @doc Cancels a checkout with the rabbit_fifo queue  for the consumer tag
+%% @doc Cancels a checkout with the rabbit_fifo queue for the consumer tag
 %%
 %% This is a synchronous call. I.e. the call will block until the command
 %% has been accepted by the ra process or it times out.
@@ -456,7 +452,7 @@ cancel_checkout(ConsumerTag, State) ->
 %% @param State The {@module} state.
 %%
 %% @returns `{ok, State}' or `{error | timeout, term()}'
--spec cancel_checkout(rabbit_types:ctag(), Reason :: cancel | remove, state()) ->
+-spec cancel_checkout(rabbit_types:ctag(), rabbit_queue_type:cancel_reason(), state()) ->
     {ok, state()} | {error | timeout, term()}.
 cancel_checkout(ConsumerTag, Reason,
                 #state{consumers = Consumers,

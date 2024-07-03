@@ -938,7 +938,8 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
 
 cancel(_Q, #{consumer_tag := ConsumerTag} = Spec, State) ->
     maybe_send_reply(self(), maps:get(ok_msg, Spec, undefined)),
-    rabbit_fifo_client:cancel_checkout(quorum_ctag(ConsumerTag), State).
+    Reason = maps:get(reason, Spec, cancel),
+    rabbit_fifo_client:cancel_checkout(quorum_ctag(ConsumerTag), Reason, State).
 
 emit_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName, PrefetchCount, Args, Ref, ActingUser) ->
     rabbit_event:notify(consumer_created,

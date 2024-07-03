@@ -2500,7 +2500,7 @@ make_checkout({_, _} = ConsumerId, Spec0, Meta) ->
     Spec = case is_v4() of
                false when Spec0 == remove ->
                    %% if v4 is not active, fall back to cancel spec
-                   make_checkout(ConsumerId, cancel, Meta);
+                   cancel;
                _ ->
                    Spec0
            end,

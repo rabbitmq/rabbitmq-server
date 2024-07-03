@@ -232,13 +232,10 @@ init_per_testcase(T, Config)
             {skip, "Feature flag credit_api_v2 is disabled"}
     end;
 init_per_testcase(T, Config)
-  when  T =:= detach_requeues_one_session_classic_queue orelse
-        T =:= detach_requeues_one_session_quorum_queue orelse
-        T =:= detach_requeues_drop_head_classic_queue orelse
-        T =:= detach_requeues_two_connections_classic_queue orelse
-        T =:= detach_requeues_two_connections_quorum_queue orelse
-        T =:= single_active_consumer_classic_queue orelse
-        T =:= single_active_consumer_quorum_queue ->
+  when T =:= detach_requeues_one_session_classic_queue orelse
+       T =:= detach_requeues_drop_head_classic_queue orelse
+       T =:= detach_requeues_two_connections_classic_queue orelse
+       T =:= single_active_consumer_classic_queue ->
     %% Cancel API v2 reuses feature flag credit_api_v2.
     %% In 3.13, with cancel API v1, when a receiver detaches with unacked messages, these messages
     %% will remain unacked and unacked message state will be left behind in the server session
@@ -251,6 +248,16 @@ init_per_testcase(T, Config)
             rabbit_ct_helpers:testcase_started(Config, T);
         false ->
             {skip, "Cancel API v2 is disabled due to feature flag credit_api_v2 being disabled."}
+    end;
+init_per_testcase(T, Config)
+  when T =:= detach_requeues_one_session_quorum_queue orelse
+       T =:= single_active_consumer_quorum_queue orelse
+       T =:= detach_requeues_two_connections_quorum_queue ->
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queues_v4) of
+        ok ->
+            rabbit_ct_helpers:testcase_started(Config, T);
+        {skip, _} ->
+            {skip, "Feature flag quorum_queues_v4 enables the consumer removal API"}
     end;
 init_per_testcase(T = immutable_bare_message, Config) ->
     case rpc(Config, rabbit_feature_flags, is_enabled, [message_containers_store_amqp_v1]) of
@@ -1950,9 +1957,8 @@ consumer_priority(QType, Config) ->
 single_active_consumer_classic_queue(Config) ->
     single_active_consumer(<<"classic">>, Config).
 
-single_active_consumer_quorum_queue(_Config) ->
-    % single_active_consumer(<<"quorum">>, Config).
-    {skip, "TODO: unskip when qq-v4 branch is merged"}.
+single_active_consumer_quorum_queue(Config) ->
+    single_active_consumer(<<"quorum">>, Config).
 
 single_active_consumer(QType, Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
@@ -2085,9 +2091,8 @@ single_active_consumer(QType, Config) ->
 detach_requeues_one_session_classic_queue(Config) ->
     detach_requeue_one_session(<<"classic">>, Config).
 
-detach_requeues_one_session_quorum_queue(_Config) ->
-    % detach_requeue_one_session(<<"quorum">>, Config).
-    {skip, "TODO: unskip when qq-v4 branch is merged"}.
+detach_requeues_one_session_quorum_queue(Config) ->
+    detach_requeue_one_session(<<"quorum">>, Config).
 
 detach_requeue_one_session(QType, Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
@@ -2236,9 +2241,8 @@ detach_requeues_drop_head_classic_queue(Config) ->
 detach_requeues_two_connections_classic_queue(Config) ->
     detach_requeues_two_connections(<<"classic">>, Config).
 
-detach_requeues_two_connections_quorum_queue(_Config) ->
-    % detach_requeues_two_connections(<<"quorum">>, Config).
-    {skip, "TODO: unskip when qq-v4 branch is merged"}.
+detach_requeues_two_connections_quorum_queue(Config) ->
+    detach_requeues_two_connections(<<"quorum">>, Config).
 
 detach_requeues_two_connections(QType, Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
@@ -2261,16 +2265,18 @@ detach_requeues_two_connections(QType, Config) ->
     %% Attach 1 sender and 2 receivers.
     {ok, Sender} = amqp10_client:attach_sender_link(Session0, <<"sender">>, Address, settled),
     ok = wait_for_credit(Sender),
+
     {ok, Receiver0} = amqp10_client:attach_receiver_link(Session0, <<"receiver 0">>, Address, unsettled),
     receive {amqp10_event, {link, Receiver0, attached}} -> ok
     after 5000 -> ct:fail({missing_event, ?LINE})
     end,
+    ok = gen_statem:cast(Session0, {flow_session, #'v1_0.flow'{incoming_window = {uint, 1}}}),
+    ok = amqp10_client:flow_link_credit(Receiver0, 50, never),
+
     {ok, Receiver1} = amqp10_client:attach_receiver_link(Session1, <<"receiver 1">>, Address, unsettled),
     receive {amqp10_event, {link, Receiver1, attached}} -> ok
     after 5000 -> ct:fail({missing_event, ?LINE})
     end,
-    ok = gen_statem:cast(Session0, {flow_session, #'v1_0.flow'{incoming_window = {uint, 1}}}),
-    ok = amqp10_client:flow_link_credit(Receiver0, 50, never),
     ok = amqp10_client:flow_link_credit(Receiver1, 50, never),
     flush(attached),
 
