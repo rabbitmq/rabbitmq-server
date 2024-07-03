@@ -723,6 +723,7 @@ rabbit:
 - rabbit_tracking
 - rabbit_tracking_store
 - rabbit_upgrade_preparation
+- rabbit_uri
 - rabbit_variable_queue
 - rabbit_version
 - rabbit_vhost
@@ -807,6 +808,7 @@ rabbit_common:
 - worker_pool_sup
 - worker_pool_worker
 rabbitmq_amqp_client:
+- rabbitmq_amqp_address
 - rabbitmq_amqp_client
 rabbitmq_amqp1_0:
 - rabbitmq_amqp1_0_noop

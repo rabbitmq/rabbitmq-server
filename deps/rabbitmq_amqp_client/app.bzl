@@ -8,7 +8,7 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = ["src/rabbitmq_amqp_client.erl"],
+        srcs = ["src/rabbitmq_amqp_address.erl", "src/rabbitmq_amqp_client.erl"],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_amqp_client",
         dest = "ebin",
@@ -19,7 +19,7 @@ def all_beam_files(name = "all_beam_files"):
 def all_srcs(name = "all_srcs"):
     filegroup(
         name = "srcs",
-        srcs = ["src/rabbitmq_amqp_client.erl"],
+        srcs = ["src/rabbitmq_amqp_address.erl", "src/rabbitmq_amqp_client.erl"],
     )
     filegroup(name = "private_hdrs")
     filegroup(
@@ -47,7 +47,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = ["src/rabbitmq_amqp_client.erl"],
+        srcs = ["src/rabbitmq_amqp_address.erl", "src/rabbitmq_amqp_client.erl"],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_amqp_client",
         dest = "test",
