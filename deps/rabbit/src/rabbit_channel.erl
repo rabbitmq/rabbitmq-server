@@ -42,7 +42,7 @@
 
 -include("amqqueue.hrl").
 
--behaviour(gen_server2).
+-behaviour(gen_server).
 
 -export([start_link/11, start_link/12, do/2, do/3, do_flow/3, flush/1, shutdown/1]).
 -export([send_command/2]).
@@ -254,7 +254,7 @@ start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User,
 
 start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User,
            VHost, Capabilities, CollectorPid, Limiter, AmqpParams) ->
-    gen_server2:start_link(
+    gen_server:start_link(
       ?MODULE, [Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol,
                 User, VHost, Capabilities, CollectorPid, Limiter, AmqpParams], []).
 
@@ -282,17 +282,17 @@ do_flow(Pid, Method, Content) ->
 -spec flush(pid()) -> 'ok'.
 
 flush(Pid) ->
-    gen_server2:call(Pid, flush, infinity).
+    gen_server:call(Pid, flush, infinity).
 
 -spec shutdown(pid()) -> 'ok'.
 
 shutdown(Pid) ->
-    gen_server2:cast(Pid, terminate).
+    gen_server:cast(Pid, terminate).
 
 -spec send_command(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
 
 send_command(Pid, Msg) ->
-    gen_server2:cast(Pid,  {command, Msg}).
+    gen_server:cast(Pid,  {command, Msg}).
 
 
 -spec deliver_reply(binary(), mc:state()) -> 'ok'.
@@ -324,7 +324,7 @@ deliver_reply_v1(EncodedBin, Message) ->
 
 deliver_reply_local(Pid, Key, Message) ->
     case pg_local:in_group(rabbit_channels, Pid) of
-        true  -> gen_server2:cast(Pid, {deliver_reply, Key, Message});
+        true  -> gen_server:cast(Pid, {deliver_reply, Key, Message});
         false -> ok
     end.
 
@@ -338,7 +338,7 @@ declare_fast_reply_to(<<"amq.rabbitmq.reply-to.", EncodedBin/binary>>) ->
             Msg = {declare_fast_reply_to, Key},
             rabbit_misc:with_exit_handler(
               rabbit_misc:const(not_found),
-              fun() -> gen_server2:call(Pid, Msg, infinity) end)
+              fun() -> gen_server:call(Pid, Msg, infinity) end)
     end;
 declare_fast_reply_to(_) ->
     not_found.
@@ -350,7 +350,7 @@ declare_fast_reply_to_v1(EncodedBin) ->
             Msg = {declare_fast_reply_to, V1Key},
             rabbit_misc:with_exit_handler(
               rabbit_misc:const(not_found),
-              fun() -> gen_server2:call(V1Pid, Msg, infinity) end);
+              fun() -> gen_server:call(V1Pid, Msg, infinity) end);
         {error, _} ->
             not_found
     end.
@@ -375,7 +375,7 @@ info_keys() -> ?INFO_KEYS.
 info(Pid) ->
     {Timeout, Deadline} = get_operation_timeout_and_deadline(),
     try
-        case gen_server2:call(Pid, {info, Deadline}, Timeout) of
+        case gen_server:call(Pid, {info, Deadline}, Timeout) of
             {ok, Res}      -> Res;
             {error, Error} -> throw(Error)
         end
@@ -390,7 +390,7 @@ info(Pid) ->
 info(Pid, Items) ->
     {Timeout, Deadline} = get_operation_timeout_and_deadline(),
     try
-        case gen_server2:call(Pid, {{info, Items}, Deadline}, Timeout) of
+        case gen_server:call(Pid, {{info, Items}, Deadline}, Timeout) of
             {ok, Res}      -> Res;
             {error, Error} -> throw(Error)
         end
@@ -430,7 +430,7 @@ refresh_config_local() ->
     _ = rabbit_misc:upmap(
       fun (C) ->
         try
-          gen_server2:call(C, refresh_config, infinity)
+          gen_server:call(C, refresh_config, infinity)
         catch _:Reason ->
           rabbit_log:error("Failed to refresh channel config "
                            "for channel ~tp. Reason ~tp",
@@ -444,7 +444,7 @@ refresh_interceptors() ->
     _ = rabbit_misc:upmap(
       fun (C) ->
         try
-          gen_server2:call(C, refresh_interceptors, ?REFRESH_TIMEOUT)
+          gen_server:call(C, refresh_interceptors, ?REFRESH_TIMEOUT)
         catch _:Reason ->
           rabbit_log:error("Failed to refresh channel interceptors "
                            "for channel ~tp. Reason ~tp",
@@ -465,11 +465,11 @@ ready_for_close(Pid) ->
 % This event is necessary for the stats timer to be initialized with
 % the correct values once the management agent has started
 force_event_refresh(Ref) ->
-    [gen_server2:cast(C, {force_event_refresh, Ref}) || C <- list()],
+    [gen_server:cast(C, {force_event_refresh, Ref}) || C <- list()],
     ok.
 
 list_queue_states(Pid) ->
-    gen_server2:call(Pid, list_queue_states).
+    gen_server:call(Pid, list_queue_states).
 
 -spec update_user_state(pid(), rabbit_types:auth_user()) -> 'ok' | {error, channel_terminated}.
 
@@ -485,6 +485,7 @@ update_user_state(Pid, UserState) when is_pid(Pid) ->
 init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
       Capabilities, CollectorPid, LimiterPid, AmqpParams]) ->
     process_flag(trap_exit, true),
+    process_flag(message_queue_data, off_heap),
     ?LG_PROCESS_TYPE(channel),
     ?store_proc_name({ConnName, Channel}),
     ok = pg_local:join(rabbit_channels, self()),
@@ -549,8 +550,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                             fun() -> emit_stats(State2) end),
     put_operation_timeout(),
     State3 = init_tick_timer(State2),
-    {ok, State3, hibernate,
-     {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+    {ok, State3, hibernate}.
 
 prioritise_call(Msg, _From, _Len, _State) ->
     case Msg of
