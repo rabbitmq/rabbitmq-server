@@ -723,6 +723,7 @@ rabbit:
 - rabbit_tracking
 - rabbit_tracking_store
 - rabbit_upgrade_preparation
+- rabbit_uri
 - rabbit_variable_queue
 - rabbit_version
 - rabbit_vhost

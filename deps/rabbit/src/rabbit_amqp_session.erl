@@ -2430,10 +2430,14 @@ ensure_source(#'v1_0.source'{address = Address,
         {utf8, <<"/q/", QNameBinQuoted/binary>>} ->
             %% The only possible v2 source address format is:
             %%  /q/:queue
-            QNameBin = unquote(QNameBinQuoted),
-            QName = queue_resource(Vhost, QNameBin),
-            ok = exit_if_absent(QName),
-            {ok, QName, PermCache, TopicPermCache};
+            try rabbit_uri:urldecode(QNameBinQuoted) of
+                QNameBin ->
+                    QName = queue_resource(Vhost, QNameBin),
+                    ok = exit_if_absent(QName),
+                    {ok, QName, PermCache, TopicPermCache}
+            catch error:_ ->
+                      {error, {bad_address, Address}}
+            end;
         {utf8, SourceAddr} ->
             case address_v1_permitted() of
                 true ->
@@ -2576,7 +2580,13 @@ ensure_target_v2(undefined, _) ->
     %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
     {ok, to, to, undefined}.
 
-parse_target_v2_string(<<"/e/", Rest/binary>>) ->
+parse_target_v2_string(String) ->
+    try parse_target_v2_string0(String)
+    catch error:_ ->
+              {error, bad_address}
+    end.
+
+parse_target_v2_string0(<<"/e/", Rest/binary>>) ->
     Key = cp_slash,
     Pattern = try persistent_term:get(Key)
               catch error:badarg ->
@@ -2590,22 +2600,22 @@ parse_target_v2_string(<<"/e/", Rest/binary>>) ->
         [<<"amq.default">> | _] ->
             {error, bad_address};
         [XNameBinQuoted] ->
-            XNameBin = unquote(XNameBinQuoted),
+            XNameBin = rabbit_uri:urldecode(XNameBinQuoted),
             {ok, XNameBin, <<>>, undefined};
         [XNameBinQuoted, RKeyQuoted] ->
-            XNameBin = unquote(XNameBinQuoted),
-            RKey = unquote(RKeyQuoted),
+            XNameBin = rabbit_uri:urldecode(XNameBinQuoted),
+            RKey = rabbit_uri:urldecode(RKeyQuoted),
             {ok, XNameBin, RKey, undefined};
         _ ->
             {error, bad_address}
     end;
-parse_target_v2_string(<<"/q/">>) ->
+parse_target_v2_string0(<<"/q/">>) ->
     %% empty queue name is invalid
     {error, bad_address};
-parse_target_v2_string(<<"/q/", QNameBinQuoted/binary>>) ->
-    QNameBin = unquote(QNameBinQuoted),
+parse_target_v2_string0(<<"/q/", QNameBinQuoted/binary>>) ->
+    QNameBin = rabbit_uri:urldecode(QNameBinQuoted),
     {ok, ?DEFAULT_EXCHANGE_NAME, QNameBin, QNameBin};
-parse_target_v2_string(_) ->
+parse_target_v2_string0(_) ->
     {error, bad_address}.
 
 ensure_target_v1({utf8, Address}, Vhost, User, Durable, PermCache0) ->
@@ -2626,24 +2636,6 @@ ensure_target_v1({utf8, Address}, Vhost, User, Durable, PermCache0) ->
     end;
 ensure_target_v1(Address, _, _, _, _) ->
     {error, {bad_address, Address}}.
-
-%% uri_string:unquote/1 is implemented inefficiently because it always creates
-%% a new binary. We optimise for the common case: When no character is percent
-%% encoded, we avoid a new binary being created.
-unquote(Bin) ->
-    case is_quoted(Bin) of
-        true ->
-            uri_string:unquote(Bin);
-        false ->
-            Bin
-    end.
-
-is_quoted(<<>>) ->
-    false;
-is_quoted(<<$%, _/binary>>) ->
-    true;
-is_quoted(<<_, Rest/binary>>) ->
-    is_quoted(Rest).
 
 handle_outgoing_mgmt_link_flow_control(
   #management_link{delivery_count = DeliveryCountSnd} = Link0,

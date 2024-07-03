@@ -436,7 +436,15 @@ bad_v2_addresses() ->
      <<"/exchange//key/">>,
      <<"/exchange//key/mykey">>,
      <<"/exchange/amq.default/key/">>,
-     <<"/exchange/amq.default/key/mykey">>
+     <<"/exchange/amq.default/key/mykey">>,
+     %% The following addresses should be percent encoded, but aren't.
+     <<"/q/missing%encoding">>,
+     <<"/q/missing/encoding">>,
+     <<"/q/✋"/utf8>>,
+     <<"/e/missing%encoding">>,
+     <<"/e/missing/encoding/routingkey">>,
+     <<"/e/exchange/missing%encoding">>,
+     <<"/e/✋"/utf8>>
     ].
 
 %% Test v2 target address 'null' with an invalid 'to' addresses.
