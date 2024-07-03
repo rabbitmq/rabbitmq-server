@@ -58,10 +58,10 @@ defmodule RabbitMQ.CLI.Queues.Commands.LeaderHealthCheckCommand do
     ]
   end
 
-  def description(), do: "Checks availability and health of quorum queue leader"
+  def description(), do: "Checks availability and health status of quorum queue leaders"
 
   def banner([name], %{vhost: vhost}),
-    do: "Checking availability and health status of queue(s) matching #{name} in vhost #{vhost} ..."
+    do: "Checking availability and health status of leaders for quorum queues matching #{name} in vhost #{vhost} ..."
 
   def queue_lines(qs) do
     for q <- qs, do: "Leader for #{q["readable_name"]} is unhealthy and unavailable"
