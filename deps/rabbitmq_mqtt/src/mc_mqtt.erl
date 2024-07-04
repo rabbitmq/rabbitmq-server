@@ -87,7 +87,10 @@ convert_from(mc_amqp, Sections, Env) ->
                  #'v1_0.properties'{reply_to = {utf8, Address}} ->
                      MqttX = maps:get(mqtt_x, Env, ?DEFAULT_MQTT_EXCHANGE),
                      case Address of
-                         <<"/e/", MqttX:(byte_size(MqttX))/binary, "/", RoutingKeyQuoted/binary>> ->
+                         <<"/exchanges/",
+                           MqttX:(byte_size(MqttX))/binary,
+                           "/",
+                           RoutingKeyQuoted/binary>> ->
                              try rabbit_uri:urldecode(RoutingKeyQuoted) of
                                  RoutingKey ->
                                      MqttTopic = rabbit_mqtt_util:amqp_to_mqtt(RoutingKey),
@@ -263,7 +266,7 @@ convert_to(mc_amqp, #mqtt_msg{qos = Qos,
                       %% We assume here that Exchange doesn't contain characters
                       %% that need to be quoted. This is a reasonable assumption
                       %% given that amq.topic is the default MQTT topic exchange.
-                      Address = <<"/e/", Exchange/binary, "/", TopicQuoted/binary>>,
+                      Address = <<"/exchanges/", Exchange/binary, "/", TopicQuoted/binary>>,
                       {utf8, Address};
                   _ ->
                       undefined
