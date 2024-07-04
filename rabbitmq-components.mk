@@ -133,74 +133,78 @@ dep_seshat = git https://github.com/rabbitmq/seshat v0.6.1
 dep_stdout_formatter = hex 0.2.4
 dep_sysmon_handler = hex 1.3.0
 
-RABBITMQ_COMPONENTS = amqp_client \
-		      amqp10_common \
-		      amqp10_client \
-					oauth2_client \
-		      rabbit \
-		      rabbit_common \
-		      rabbitmq_amqp1_0 \
-		      rabbitmq_auth_backend_amqp \
-		      rabbitmq_auth_backend_cache \
-		      rabbitmq_auth_backend_http \
-		      rabbitmq_auth_backend_ldap \
-		      rabbitmq_auth_backend_oauth2 \
-		      rabbitmq_auth_mechanism_ssl \
-		      rabbitmq_aws \
-		      rabbitmq_boot_steps_visualiser \
-		      rabbitmq_cli \
-		      rabbitmq_codegen \
-		      rabbitmq_consistent_hash_exchange \
-		      rabbitmq_ct_client_helpers \
-		      rabbitmq_ct_helpers \
-		      rabbitmq_delayed_message_exchange \
-		      rabbitmq_dotnet_client \
-		      rabbitmq_event_exchange \
-		      rabbitmq_federation \
-		      rabbitmq_federation_management \
-		      rabbitmq_federation_prometheus \
-		      rabbitmq_java_client \
-		      rabbitmq_jms_client \
-		      rabbitmq_jms_cts \
-		      rabbitmq_jms_topic_exchange \
-		      rabbitmq_lvc_exchange \
-		      rabbitmq_management \
-		      rabbitmq_management_agent \
-		      rabbitmq_management_exchange \
-		      rabbitmq_management_themes \
-		      rabbitmq_message_timestamp \
-		      rabbitmq_metronome \
-		      rabbitmq_mqtt \
-		      rabbitmq_objc_client \
-		      rabbitmq_peer_discovery_aws \
-		      rabbitmq_peer_discovery_common \
-		      rabbitmq_peer_discovery_consul \
-		      rabbitmq_peer_discovery_etcd \
-		      rabbitmq_peer_discovery_k8s \
-		      rabbitmq_prometheus \
-		      rabbitmq_random_exchange \
-		      rabbitmq_recent_history_exchange \
-		      rabbitmq_routing_node_stamp \
-		      rabbitmq_rtopic_exchange \
-		      rabbitmq_server_release \
-		      rabbitmq_sharding \
-		      rabbitmq_shovel \
-		      rabbitmq_shovel_management \
-		      rabbitmq_shovel_prometheus \
-		      rabbitmq_stomp \
-		      rabbitmq_stream \
-		      rabbitmq_stream_common \
-		      rabbitmq_stream_management \
-		      rabbitmq_toke \
-		      rabbitmq_top \
-		      rabbitmq_tracing \
-		      rabbitmq_trust_store \
-		      rabbitmq_web_dispatch \
-		      rabbitmq_web_mqtt \
-		      rabbitmq_web_mqtt_examples \
-		      rabbitmq_web_stomp \
-		      rabbitmq_web_stomp_examples \
-		      rabbitmq_website
+# RabbitMQ applications found in the monorepo.
+#
+# Note that rabbitmq_server_release is not a real application
+# but is the name used in the top-level Makefile.
+
+RABBITMQ_BUILTIN = \
+	amqp10_client \
+	amqp10_common \
+	amqp_client \
+	oauth2_client \
+	rabbit \
+	rabbit_common \
+	rabbitmq_amqp1_0 \
+	rabbitmq_amqp_client \
+	rabbitmq_auth_backend_cache \
+	rabbitmq_auth_backend_http \
+	rabbitmq_auth_backend_ldap \
+	rabbitmq_auth_backend_oauth2 \
+	rabbitmq_auth_mechanism_ssl \
+	rabbitmq_aws \
+	rabbitmq_cli \
+	rabbitmq_codegen \
+	rabbitmq_consistent_hash_exchange \
+	rabbitmq_ct_client_helpers \
+	rabbitmq_ct_helpers \
+	rabbitmq_event_exchange \
+	rabbitmq_federation \
+	rabbitmq_federation_management \
+	rabbitmq_federation_prometheus \
+	rabbitmq_jms_topic_exchange \
+	rabbitmq_management \
+	rabbitmq_management_agent \
+	rabbitmq_mqtt \
+	rabbitmq_peer_discovery_aws \
+	rabbitmq_peer_discovery_common \
+	rabbitmq_peer_discovery_consul \
+	rabbitmq_peer_discovery_etcd \
+	rabbitmq_peer_discovery_k8s \
+	rabbitmq_prelaunch \
+	rabbitmq_prometheus \
+	rabbitmq_random_exchange \
+	rabbitmq_recent_history_exchange \
+    rabbitmq_server_release \
+	rabbitmq_sharding \
+	rabbitmq_shovel \
+	rabbitmq_shovel_management \
+	rabbitmq_stomp \
+	rabbitmq_stream \
+	rabbitmq_stream_common \
+	rabbitmq_stream_management \
+	rabbitmq_top \
+	rabbitmq_tracing \
+	rabbitmq_trust_store \
+	rabbitmq_web_dispatch \
+	rabbitmq_web_mqtt \
+	rabbitmq_web_mqtt_examples \
+	rabbitmq_web_stomp \
+	rabbitmq_web_stomp_examples \
+	trust_store_http
+
+# Applications outside of the monorepo maintained by Team RabbitMQ.
+RABBITMQ_COMMUNITY = \
+	rabbitmq_boot_steps_visualiser \
+	rabbitmq_delayed_message_exchange \
+	rabbitmq_lvc_exchange \
+	rabbitmq_management_exchange \
+	rabbitmq_management_themes \
+	rabbitmq_message_timestamp \
+	rabbitmq_routing_node_stamp \
+	rabbitmq_rtopic_exchange
+
+RABBITMQ_COMPONENTS = $(RABBITMQ_BUILTIN) $(RABBITMQ_COMMUNITY)
 
 # Erlang.mk does not rebuild dependencies by default, once they were
 # compiled once, except for those listed in the `$(FORCE_REBUILD)`
@@ -213,7 +217,8 @@ FORCE_REBUILD = $(RABBITMQ_COMPONENTS)
 
 # Several components have a custom erlang.mk/build.config, mainly
 # to disable eunit. Therefore, we can't use the top-level project's
-# erlang.mk copy.
+# erlang.mk copy. Note that this is not needed for components that
+# sit in the monorepo.
 NO_AUTOPATCH += $(RABBITMQ_COMPONENTS)
 
 ifeq ($(origin current_rmq_ref),undefined)
