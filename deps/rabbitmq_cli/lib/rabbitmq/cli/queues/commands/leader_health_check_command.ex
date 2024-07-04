@@ -28,11 +28,37 @@ defmodule RabbitMQ.CLI.Queues.Commands.LeaderHealthCheckCommand do
     end
   end
 
-  def output(:ok, %{formatter: "json"}) do
-    {:error, :check_passed}
+  def output(:ok, %{node: node_name, formatter: "json"}) do
+    {:ok,
+     %{
+       "result" => "ok",
+       "message" =>
+         "Node #{node_name} reported all quorum queue leaders as healthy"
+     }}
   end
 
-  def output({:error, unhealthy_queues}, %{vhost: _vhost, formatter: "json"}) when is_list(unhealthy_queues) do
+  def output(:ok, %{silent: true}) do
+    {:ok, :check_passed}
+  end
+
+  def output(:ok, %{node: node_name}) do
+    {:ok, "Node #{node_name} reported all quorum queue leaders as healthy"}
+  end
+
+  def output({:error, unhealthy_queues}, %{node: node_name, formatter: "json"}) when is_list(unhealthy_queues) do
+    {:error, :check_failed,
+     %{
+       "result" => "error",
+       "queues" => unhealthy_queues,
+       "message" => "Node #{node_name} reported unhealthy quorum queue leaders"
+     }}
+  end
+
+  def output({:error, unhealthy_queues}, %{silent: true}) when is_list(unhealthy_queues) do
+    {:error, :check_failed}
+  end
+
+  def output({:error, unhealthy_queues}, %{vhost: _vhost}) when is_list(unhealthy_queues) do
     lines = queue_lines(unhealthy_queues)
 
     {:error, :check_failed, Enum.join(lines, line_separator())}
