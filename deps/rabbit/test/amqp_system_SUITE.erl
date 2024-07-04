@@ -86,7 +86,6 @@ init_per_testcase(Testcase, Config) ->
                           message_containers_store_amqp_v1,
                           credit_api_v2,
                           quorum_queues_v4
-                          % amqp_address_v1
                          ]),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 

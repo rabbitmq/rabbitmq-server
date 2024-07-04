@@ -136,7 +136,7 @@ module Test =
         // tests that a message sent to an exchange that resolves no routes for the
         // binding key returns the Released outcome, rather than Accepted
         use ac = connect uri
-        let address = "/exchange/no_routes_is_released"
+        let address = "/exchanges/no_routes_is_released"
         let sender = SenderLink(ac.Session, "released-sender", address)
         let trySet (mre: AutoResetEvent) =
             try mre.Set() |> ignore with _ -> ()
@@ -161,7 +161,7 @@ module Test =
 
     let roundtrip uri =
         use c = connect uri
-        let sender, receiver = senderReceiver c "test" "/queue/roundtrip"
+        let sender, receiver = senderReceiver c "test" "/queues/roundtrip"
         for body in sampleTypes do
             let corr = "correlation"
             new Message(body,
@@ -177,7 +177,7 @@ module Test =
     let streams uri =
         use c = connect uri
         let name = "streams-test"
-        let address = "/queue/streams"
+        let address = "/queues/streams"
         let sender = SenderLink(c.Session, name + "-sender" , address)
         //for body in sampleTypes do
         let body = "hi"B :> obj
@@ -217,8 +217,8 @@ module Test =
 
     let roundtrip_to_amqp_091 uri =
         use c = connect uri
-        let q = "roundtrip_to_amqp_091 "
-        let target = "/queue/roundtrip_to_amqp_091 "
+        let q = "roundtrip_to_amqp_091"
+        let target = "/queues/roundtrip_to_amqp_091"
         let corr = "correlation"
         let sender = SenderLink(c.Session, q + "-sender" , target)
 
@@ -249,7 +249,7 @@ module Test =
              "amqp:rejected:list", null, Rejected() :> Outcome
              "amqp:released:list", null, Released() :> Outcome] do
 
-            let source = new Source(Address = "/queue/default_outcome",
+            let source = new Source(Address = "/queues/default_outcome",
                                     DefaultOutcome = defObj)
             let attach = new Attach (Source = source,
                                      Target = Target())
@@ -264,7 +264,7 @@ module Test =
              "amqp:modified:list", null
              "amqp:madeup:list", "amqp:not-implemented"] do
 
-            let source = new Source(Address = "/queue/outcomes",
+            let source = new Source(Address = "/queues/outcomes",
                                     Outcomes = [| Symbol outcome |])
             let attach = new Attach (Source = source,
                                      Target = Target())
@@ -283,7 +283,7 @@ module Test =
                            HostName = addr.Host, ChannelMax = 256us,
                            MaxFrameSize = frameSize)
             use c = connectWithOpen uri opn
-            let sender, receiver = senderReceiver c "test" "/queue/framentation"
+            let sender, receiver = senderReceiver c "test" "/queues/fragmentation"
             let m = new Message(String.replicate size "a")
             sender.Send m
             let m' = receive receiver
@@ -291,7 +291,7 @@ module Test =
 
     let message_annotations uri =
         use c = connect uri
-        let sender, receiver = senderReceiver c "test" "/queue/message_annotations"
+        let sender, receiver = senderReceiver c "test" "/queues/message_annotations"
         let ann = MessageAnnotations()
         let k1 = Symbol "key1"
         let k2 = Symbol "key2"
@@ -310,7 +310,7 @@ module Test =
 
     let footer uri =
         use c = connect uri
-        let sender, receiver = senderReceiver c "test" "/queue/footer"
+        let sender, receiver = senderReceiver c "test" "/queues/footer"
         let footer = Footer()
         let k1 = Symbol "key1"
         let k2 = Symbol "key2"
@@ -328,7 +328,7 @@ module Test =
 
     let data_types uri =
         use c = connect uri
-        let sender, receiver = senderReceiver c "test" "/queue/data_types"
+        let sender, receiver = senderReceiver c "test" "/queues/data_types"
         let aSeq = amqpSequence sampleTypes
         (new Message(aSeq)) |> sender.Send
         let rtd = receive receiver
@@ -338,7 +338,7 @@ module Test =
 
     let reject uri =
         use c = connect uri
-        let sender, receiver = senderReceiver c "test" "/queue/reject"
+        let sender, receiver = senderReceiver c "test" "/queues/reject"
         new Message "testing reject" |> sender.Send
         let m = receiver.Receive()
         receiver.Reject(m)
@@ -346,14 +346,14 @@ module Test =
 
     let redelivery uri =
         use c = connect uri
-        let sender, receiver = senderReceiver c "test" "/queue/redelivery"
+        let sender, receiver = senderReceiver c "test" "/queues/redelivery"
         new Message "testing redelivery" |> sender.Send
         let m = receiver.Receive()
         assertTrue (m.Header.FirstAcquirer)
         c.Session.Close()
 
         let session = Session(c.Conn)
-        let receiver = ReceiverLink(session, "test-receiver", "/queue/redelivery")
+        let receiver = ReceiverLink(session, "test-receiver", "/queues/redelivery")
 
         let m' = receive receiver
         assertEqual (m.Body :?> string) (m'.Body :?> string)
@@ -364,7 +364,7 @@ module Test =
 
     let released uri =
         use c = connect uri
-        let sender, receiver = senderReceiver c "test" "/queue/released"
+        let sender, receiver = senderReceiver c "test" "/queues/released"
         new Message "testing released" |> sender.Send
         let m = receiver.Receive()
         assertTrue (m.Header.FirstAcquirer)
@@ -379,17 +379,17 @@ module Test =
         c.Session.Close()
 
     let routing uri =
-        for target, source, toProp, succeed in
+        for target, source, toProp in
             [
-             "/queue/test", "/queue/test", "", true
-             "/exchange/amq.fanout",  "/queue/fanout_q",  "",  true
-             "/exchange/amq.direct/key/direct_q",  "/queue/direct_q",  "",  true
-             null,  "/queue/direct_q",  "/exchange/amq.direct/key/direct_q",  true
-             "/queue/transient_q", "/queue/transient_q", "", true
-             "/queue/durable_q",   "/queue/durable_q",   "", true
-             "/queue/quorum_q",   "/queue/quorum_q",   "", true
-             "/queue/stream_q",   "/queue/stream_q",   "", true
-             "/queue/autodel_q",   "/queue/autodel_q",   "", true] do
+             "/queues/test", "/queues/test", ""
+             "/exchanges/amq.fanout",  "/queues/fanout_q",  ""
+             "/exchanges/amq.direct/direct_q",  "/queues/direct_q",  ""
+             null,  "/queues/direct_q",  "/exchanges/amq.direct/direct_q"
+             "/queues/transient_q", "/queues/transient_q", ""
+             "/queues/durable_q",   "/queues/durable_q",   ""
+             "/queues/quorum_q",   "/queues/quorum_q",   ""
+             "/queues/stream_q",   "/queues/stream_q",   ""
+             "/queues/autodel_q",   "/queues/autodel_q",   ""] do
 
             let rnd = Random()
             use c = connect uri
@@ -399,23 +399,17 @@ module Test =
             use m = new Message(rnd.Next(10000),
                 Properties = Properties(To = toProp))
             sender.Send m
-            (* printfn "%s %s %s %A" target source routingKey succeed *)
+            (* printfn "%s %s %s %A" target source routingKey *)
 
-            if succeed then
-                let m' = receiver.Receive(TimeSpan.FromMilliseconds 3000.)
-                receiver.Accept m'
-                assertTrue (m' <> null)
-                assertEqual (m.Body :?> int) (m'.Body :?> int)
-            else
-                use m' = receiver.Receive(TimeSpan.FromMilliseconds 100.)
-                assertEqual null m'
-
-
+            let m' = receiver.Receive(TimeSpan.FromMilliseconds 3000.)
+            receiver.Accept m'
+            assertTrue (m' <> null)
+            assertEqual (m.Body :?> int) (m'.Body :?> int)
 
     let invalidRoutes uri =
 
         for dest, cond in
-            ["/exchange/missing", "amqp:not-found"
+            ["/exchanges/missing", "amqp:not-found"
              "/fruit/orange", "amqp:invalid-field"] do
             use ac = connect uri
             let trySet (mre: AutoResetEvent) =
@@ -455,7 +449,7 @@ module Test =
             let u = Uri uri
             let uri = sprintf "amqp://access_failure:boo@%s:%i" u.Host u.Port
             use ac = connect uri
-            let dest = "/amq/queue/test"
+            let dest = "/queues/test"
             ac.Session.add_Closed (
                 new ClosedCallback (fun _ err -> printfn "session err %A" err.Condition
                 ))
@@ -472,7 +466,7 @@ module Test =
             let u = Uri uri
             let uri = sprintf "amqp://access_failure:boo@%s:%i" u.Host u.Port
             use ac = connect uri
-            let dest = "/amq/queue/test"
+            let dest = "/queues/test"
             let receiver = ReceiverLink(ac.Session, "test-receiver", dest)
             receiver.Close()
             failwith "expected exception not received"
@@ -486,7 +480,7 @@ module Test =
             let u = Uri uri
             let uri = sprintf "amqp://access_failure_not_allowed:boo@%s:%i" u.Host u.Port
             use ac = connect uri
-            let dest = "/amq/queue/test"
+            let dest = "/queues/test"
             let receiver = ReceiverLink(ac.Session, "test-receiver", dest)
             receiver.Close()
             failwith "expected exception not received"
