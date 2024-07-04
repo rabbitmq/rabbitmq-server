@@ -1084,18 +1084,16 @@ runtime_parameter_definition(Param) ->
         <<"value">> => maybe_map(pget(value, Param))
     }.
 
-maybe_map(Value) when is_list(Value) ->
+maybe_map(Value) ->
     %% Not all definitions are maps. `federation-upstream-set` is
     %% a list of maps, and it should be exported as it has been
     %% imported
     try
-        maps:from_list(Value)
+        rabbit_data_coercion:to_map(Value)
     catch
-        _:_ ->
+        error:badarg ->
             Value
-    end;
-maybe_map(Value) ->
-    Value.
+    end.
 
 list_global_runtime_parameters() ->
     [global_runtime_parameter_definition(P) || P <- rabbit_runtime_parameters:list_global(), not is_internal_parameter(P)].
