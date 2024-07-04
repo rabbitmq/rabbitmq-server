@@ -1,0 +1,52 @@
+{
+    "permissions": [
+        {
+            "configure": ".*",
+            "read": ".*",
+            "user": "guest",
+            "vhost": "/",
+            "write": ".*"
+        }
+    ],
+    "bindings": [],
+    "queues": [],
+    "parameters": [
+        {
+            "component": "federation-upstream-set",
+            "name": "location-1",
+            "value": [
+                {
+                    "upstream":"up-1"
+                },
+                {
+                    "upstream":"up-2"
+                }
+            ],
+            "vhost":"/"}],
+    "policies": [],
+    "rabbitmq_version": "3.13.0+376.g1bc0d89.dirty",
+    "users": [
+        {
+            "hashing_algorithm": "rabbit_password_hashing_sha256",
+            "limits": {},
+            "name": "guest",
+            "password_hash": "jTcCKuOmGJeeRQ/K1LG5sdZLcdnEnqv8wcrP2n68R7nMuqy2",
+            "tags": ["administrator"]
+        }
+    ],
+    "rabbit_version": "3.13.0+376.g1bc0d89.dirty",
+    "exchanges": [],
+    "topic_permissions": [],
+    "vhosts": [
+        {
+            "limits": [],
+            "metadata":
+            {
+                "description": "Default virtual host",
+                "tags": []
+            },
+            "name":"/"
+        }
+    ],
+    "global_parameters": []
+}

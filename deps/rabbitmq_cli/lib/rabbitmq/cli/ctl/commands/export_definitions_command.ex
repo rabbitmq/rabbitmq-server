@@ -149,17 +149,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand do
   #
 
   defp serialise(raw_map, "json") do
-    # make sure all runtime parameter values are maps, otherwise
-    # they will end up being a list of pairs (a keyword list/proplist)
-    # in the resulting JSON document
-    map =
-      Map.update!(raw_map, :parameters, fn params ->
-        Enum.map(params, fn param ->
-          Map.update!(param, "value", &:rabbit_data_coercion.to_map/1)
-        end)
-      end)
-
-    {:ok, json} = JSON.encode(map)
+    # rabbit_definitions already takes care of transforming all
+    # proplists into maps
+    {:ok, json} = JSON.encode(raw_map)
     json
   end
 
