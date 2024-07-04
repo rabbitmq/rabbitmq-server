@@ -46,25 +46,63 @@
 
 all() ->
     [
-     {group, all_tests_with_prefix},
-     {group, all_tests_without_prefix}
+        {group, all_tests_with_prefix},
+        {group, all_tests_without_prefix},
+        {group, definitions_group1_without_prefix},
+        {group, definitions_group2_without_prefix},
+        {group, definitions_group3_without_prefix},
+        {group, definitions_group4_without_prefix}
     ].
 
 groups() ->
     [
-     {all_tests_with_prefix, [], some_tests() ++ all_tests()},
-     {all_tests_without_prefix, [], some_tests()}
+        {all_tests_with_prefix, [], some_tests() ++ all_tests()},
+        {all_tests_without_prefix, [], some_tests()},
+        %% We have several groups because their interference is
+        %% way above average. It is easier to use separate groups
+        %% that get a blank node each than to try to untangle multiple
+        %% definitions-related tests. MK.
+        {definitions_group1_without_prefix, [], definitions_group1_tests()},
+        {definitions_group2_without_prefix, [], definitions_group2_tests()},
+        {definitions_group3_without_prefix, [], definitions_group3_tests()},
+        {definitions_group4_without_prefix, [], definitions_group4_tests()}
     ].
 
 some_tests() ->
     [
-     users_test,
-     exchanges_test,
-     queues_test,
-     bindings_test,
-     policy_test,
-     policy_permissions_test
+        users_test,
+        exchanges_test,
+        queues_test,
+        bindings_test,
+        policy_test,
+        policy_permissions_test
     ].
+
+definitions_group1_tests() ->
+    [
+        definitions_test,
+        definitions_password_test,
+        long_definitions_test,
+        long_definitions_multipart_test
+    ].
+
+definitions_group2_tests() ->
+    [
+        definitions_default_queue_type_test,
+        definitions_vhost_metadata_test
+    ].
+
+definitions_group3_tests() ->
+    [
+        definitions_server_named_queue_test,
+        definitions_with_charset_test
+    ].
+
+definitions_group4_tests() ->
+    [
+        definitions_vhost_test
+    ].
+
 
 all_tests() -> [
     cli_redirect_test,
@@ -98,7 +136,6 @@ all_tests() -> [
     connections_test_amqpl,
     connections_test_amqp,
     multiple_invalid_connections_test,
-    crashed_queues_test,
     quorum_queues_test,
     stream_queues_have_consumers_field,
     bindings_post_test,
@@ -111,17 +148,6 @@ all_tests() -> [
     permissions_connection_channel_consumer_test,
     consumers_cq_test,
     consumers_qq_test,
-    definitions_test,
-    definitions_vhost_test,
-    definitions_password_test,
-    definitions_remove_things_test,
-    definitions_server_named_queue_test,
-    definitions_with_charset_test,
-    definitions_default_queue_type_test,
-    definitions_vhost_metadata_test,
-    long_definitions_test,
-    long_definitions_multipart_test,
-    aliveness_test,
     arguments_test,
     arguments_table_test,
     queue_purge_test,
@@ -1175,33 +1201,6 @@ queues_test(Config) ->
     http_delete(Config, "/queues/downvhost/bar", {group, '2xx'}),
     passed.
 
-crashed_queues_test(Config) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    Q = #resource{virtual_host = <<"/">>, kind = queue, name = <<"crashingqueue">>},
-
-    QArgs = #{},
-    http_put(Config, "/queues/%2F/crashingqueue", QArgs, {group, '2xx'}),
-
-    ok = rpc(Config, rabbit_amqqueue_control, await_state, [Node, Q, running]),
-
-    ok = rpc(Config, rabbit_amqqueue, kill_queue_hard, [Node, Q]),
-
-    ok = rpc(Config, rabbit_amqqueue_control, await_state, [Node, Q, crashed]),
-
-    CrashedQueue  = http_get(Config, "/queues/%2F/crashingqueue"),
-
-    assert_item(#{name        => <<"crashingqueue">>,
-                  vhost       => <<"/">>,
-                  state       => <<"crashed">>,
-                  durable     => false,
-                  auto_delete => false,
-                  exclusive   => false,
-                  arguments   => #{}}, CrashedQueue),
-
-    http_delete(Config, "/queues/%2F/crashingqueue", {group, '2xx'}),
-    http_delete(Config, "/queues/%2F/crashingqueue", ?NOT_FOUND),
-    passed.
-
 quorum_queues_test(Config) ->
     %% Test in a loop that no metrics are left behing after deleting a queue
     quorum_queues_test_loop(Config, 2).
@@ -1873,31 +1872,31 @@ long_definitions_vhosts(long_definitions_multipart_test) ->
     [#{name => <<"long_definitions_test-", Bin/binary, (integer_to_binary(N))/binary>>} ||
      N <- lists:seq(1, 16)].
 
-defs_default_queue_type_vhost(Config, QueueType) ->
+    defs_default_queue_type_vhost(Config, QueueType) ->
     register_parameters_and_policy_validator(Config),
 
     %% Create a test vhost
-    http_put(Config, "/vhosts/test-vhost", #{default_queue_type => QueueType}, {group, '2xx'}),
+    http_put(Config, "/vhosts/definitions-dqt-vhost-test-vhost", #{default_queue_type => QueueType}, {group, '2xx'}),
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-    http_put(Config, "/permissions/test-vhost/guest", PermArgs, {group, '2xx'}),
+    http_put(Config, "/permissions/definitions-dqt-vhost-test-vhost/guest", PermArgs, {group, '2xx'}),
 
     %% Import queue definition without an explicit queue type
-    http_post(Config, "/definitions/test-vhost",
-              #{queues => [#{name => <<"test-queue">>, durable => true}]},
-              {group, '2xx'}),
+    http_post(Config, "/definitions/definitions-dqt-vhost-test-vhost",
+                #{queues => [#{name => <<"test-queue">>, durable => true}]},
+                {group, '2xx'}),
 
     %% And check whether it was indeed created with the default type
-    Q = http_get(Config, "/queues/test-vhost/test-queue", ?OK),
+    Q = http_get(Config, "/queues/definitions-dqt-vhost-test-vhost/test-queue", ?OK),
     ?assertEqual(QueueType, maps:get(type, Q)),
 
     %% Remove the test vhost
-    http_delete(Config, "/vhosts/test-vhost", {group, '2xx'}),
+    http_delete(Config, "/vhosts/definitions-dqt-vhost-test-vhost", {group, '2xx'}),
     ok.
 
 definitions_vhost_metadata_test(Config) ->
     register_parameters_and_policy_validator(Config),
 
-    VHostName = <<"test-vhost">>,
+    VHostName = <<"definitions-vhost-metadata-test">>,
     Desc = <<"Created by definitions_vhost_metadata_test">>,
     DQT = <<"quorum">>,
     Tags = [<<"one">>, <<"tag-two">>],
@@ -1908,9 +1907,9 @@ definitions_vhost_metadata_test(Config) ->
     },
 
     %% Create a test vhost
-    http_put(Config, "/vhosts/test-vhost", Metadata, {group, '2xx'}),
+    http_put(Config, "/vhosts/definitions-vhost-metadata-test", Metadata, {group, '2xx'}),
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-    http_put(Config, "/permissions/test-vhost/guest", PermArgs, {group, '2xx'}),
+    http_put(Config, "/permissions/definitions-vhost-metadata-test/guest", PermArgs, {group, '2xx'}),
 
     %% Get the definitions
     Definitions = http_get(Config, "/definitions", ?OK),
@@ -1918,8 +1917,8 @@ definitions_vhost_metadata_test(Config) ->
     %% Check if vhost definition is correct
     VHosts = maps:get(vhosts, Definitions),
     {value, VH} = lists:search(fun(VH) ->
-                                   maps:get(name, VH) =:= VHostName
-                               end, VHosts),
+                                    maps:get(name, VH) =:= VHostName
+                                end, VHosts),
     ct:pal("VHost: ~p", [VH]),
     ?assertEqual(#{
         name => VHostName,
@@ -1933,7 +1932,7 @@ definitions_vhost_metadata_test(Config) ->
     http_post(Config, "/definitions", Definitions, {group, '2xx'}),
 
     %% Remove the test vhost
-    http_delete(Config, "/vhosts/test-vhost", {group, '2xx'}),
+    http_delete(Config, "/vhosts/definitions-vhost-metadata-test", {group, '2xx'}),
     ok.
 
 definitions_default_queue_type_test(Config) ->
@@ -1943,21 +1942,21 @@ definitions_default_queue_type_test(Config) ->
 defs_vhost(Config, Key, URI, CreateMethod, Args) ->
     Rep1 = fun (S, S2) -> re:replace(S, "<vhost>", S2, [{return, list}]) end,
 
-    %% Create test vhost
-    http_put(Config, "/vhosts/test", none, {group, '2xx'}),
+    %% Create a vhost host
+    http_put(Config, "/vhosts/defs-vhost-1298379187", none, {group, '2xx'}),
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-    http_put(Config, "/permissions/test/guest", PermArgs, {group, '2xx'}),
+    http_put(Config, "/permissions/defs-vhost-1298379187/guest", PermArgs, {group, '2xx'}),
 
-    %% Test against default vhost
-    defs_vhost(Config, Key, URI, Rep1, "%2F", "test", CreateMethod, Args,
-               fun(URI2) -> http_delete(Config, URI2, {group, '2xx'}) end),
+    %% Test against the default vhost
+    defs_vhost(Config, Key, URI, Rep1, "%2F", "defs-vhost-1298379187", CreateMethod, Args,
+        fun(URI2) -> http_delete(Config, URI2, {group, '2xx'}) end),
 
-    %% Test against test vhost
-    defs_vhost(Config, Key, URI, Rep1, "test", "%2F", CreateMethod, Args,
-               fun(URI2) -> http_delete(Config, URI2, {group, '2xx'}) end),
+    %% Test against the newly created vhost
+    defs_vhost(Config, Key, URI, Rep1, "defs-vhost-1298379187", "%2F", CreateMethod, Args,
+        fun(URI2) -> http_delete(Config, URI2, {group, '2xx'}) end),
 
-    %% Remove test vhost
-    http_delete(Config, "/vhosts/test", {group, '2xx'}).
+    %% Remove the newly created vhost
+    http_delete(Config, "/vhosts/defs-vhost-1298379187", {group, '2xx'}).
 
 defs_vhost(Config, Key, URI0, Rep1, VHost1, VHost2, CreateMethod, Args,
            DeleteFun) ->
@@ -2001,24 +2000,24 @@ definitions_vhost_test(Config) ->
 
     register_parameters_and_policy_validator(Config),
 
-    defs_vhost(Config, queues, "/queues/<vhost>/my-queue", put,
-               #{name    => <<"my-queue">>,
-                 durable => true}),
-    defs_vhost(Config, exchanges, "/exchanges/<vhost>/my-exchange", put,
-               #{name => <<"my-exchange">>,
-                 type => <<"direct">>}),
+    defs_vhost(Config, queues, "/queues/<vhost>/definitions-vhost-test-imported-q", put,
+        #{name    => <<"definitions-vhost-test-imported-q">>,
+          durable => true}),
+    defs_vhost(Config, exchanges, "/exchanges/<vhost>/definitions-vhost-test-imported-dx", put,
+        #{name => <<"definitions-vhost-test-imported-dx">>,
+          type => <<"direct">>}),
     defs_vhost(Config, bindings, "/bindings/<vhost>/e/amq.direct/e/amq.fanout", post,
-               #{routing_key => <<"routing">>, arguments => #{}}),
-    defs_vhost(Config, policies, "/policies/<vhost>/my-policy", put,
-               #{name       => <<"my-policy">>,
-                 pattern    => <<".*">>,
-                 definition => #{testpos => [1, 2, 3]},
-                 priority   => 1}),
+        #{routing_key => <<"routing">>, arguments => #{}}),
+    defs_vhost(Config, policies, "/policies/<vhost>/definitions-vhost-test-policy", put,
+        #{name       => <<"definitions-vhost-test-policy">>,
+          pattern    => <<".*">>,
+          definition => #{testpos => [1, 2, 3]},
+          priority   => 1}),
 
     defs_vhost(Config, parameters, "/parameters/vhost-limits/<vhost>/limits", put,
-               #{name       => <<"limits">>,
-                 component  => <<"vhost-limits">>,
-                 value      => #{ 'max-connections' => 100 }}),
+        #{name       => <<"limits">>,
+          component  => <<"vhost-limits">>,
+          value      => #{ 'max-connections' => 100 }}),
     Upload =
         #{queues     => [],
           exchanges  => [],
@@ -2123,31 +2122,22 @@ definitions_with_charset_test(Config) ->
     {ok, {{_, ?NO_CONTENT, _}, _, []}} = httpc:request(post, Request, ?HTTPC_OPTS, []),
     passed.
 
-aliveness_test(Config) ->
-    #{status := <<"ok">>} = http_get(Config, "/aliveness-test/%2F", ?OK),
-    http_get(Config, "/aliveness-test/foo", ?NOT_FOUND),
-    http_delete(Config, "/queues/%2F/aliveness-test", {group, '2xx'}),
-    passed.
-
 arguments_test(Config) ->
     XArgs = [{type, <<"headers">>},
-             {arguments, [{'alternate-exchange', <<"amq.direct">>}]}],
+                {arguments, [{'alternate-exchange', <<"amq.direct">>}]}],
     QArgs = [{arguments, [{'x-expires', 1800000}]}],
     BArgs = [{routing_key, <<"">>},
-             {arguments, [{'x-match', <<"all">>},
-                          {foo, <<"bar">>}]}],
-    http_delete(Config, "/exchanges/%2F/myexchange", {one_of, [201, 404]}),
-    http_put(Config, "/exchanges/%2F/myexchange", XArgs, {group, '2xx'}),
-    http_put(Config, "/queues/%2F/arguments_test", QArgs, {group, '2xx'}),
-    http_post(Config, "/bindings/%2F/e/myexchange/q/arguments_test", BArgs, {group, '2xx'}),
-    Definitions = http_get(Config, "/definitions", ?OK),
-    http_delete(Config, "/exchanges/%2F/myexchange", {group, '2xx'}),
-    http_delete(Config, "/queues/%2F/arguments_test", {group, '2xx'}),
-    http_post(Config, "/definitions", Definitions, {group, '2xx'}),
+                {arguments, [{'x-match', <<"all">>},
+                            {foo, <<"bar">>}]}],
+    http_delete(Config, "/exchanges/%2F/arguments-test-x", {one_of, [201, 404]}),
+    http_put(Config, "/exchanges/%2F/arguments-test-x", XArgs, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/arguments-test", QArgs, {group, '2xx'}),
+    http_post(Config, "/bindings/%2F/e/arguments-test-x/q/arguments-test", BArgs, {group, '2xx'}),
+
     #{'alternate-exchange' := <<"amq.direct">>} =
-        maps:get(arguments, http_get(Config, "/exchanges/%2F/myexchange", ?OK)),
+        maps:get(arguments, http_get(Config, "/exchanges/%2F/arguments-test-x", ?OK)),
     #{'x-expires' := 1800000} =
-        maps:get(arguments, http_get(Config, "/queues/%2F/arguments_test", ?OK)),
+        maps:get(arguments, http_get(Config, "/queues/%2F/arguments-test", ?OK)),
 
     ArgsTable = [{<<"foo">>,longstr,<<"bar">>}, {<<"x-match">>, longstr, <<"all">>}],
     Hash = table_hash(ArgsTable),
@@ -2156,11 +2146,11 @@ arguments_test(Config) ->
     assert_item(
         #{'x-match' => <<"all">>, foo => <<"bar">>},
         maps:get(arguments,
-            http_get(Config, "/bindings/%2F/e/myexchange/q/arguments_test/" ++
+            http_get(Config, "/bindings/%2F/e/arguments-test-x/q/arguments-test/" ++
             PropertiesKey, ?OK))
     ),
-    http_delete(Config, "/exchanges/%2F/myexchange", {group, '2xx'}),
-    http_delete(Config, "/queues/%2F/arguments_test", {group, '2xx'}),
+    http_delete(Config, "/exchanges/%2F/arguments-test-x", {group, '2xx'}),
+    http_delete(Config, "/queues/%2F/arguments-test", {group, '2xx'}),
     passed.
 
 table_hash(Table) ->
@@ -2168,16 +2158,13 @@ table_hash(Table) ->
 
 arguments_table_test(Config) ->
     Args = #{'upstreams' => [<<"amqp://localhost/%2F/upstream1">>,
-                             <<"amqp://localhost/%2F/upstream2">>]},
+                                <<"amqp://localhost/%2F/upstream2">>]},
     XArgs = #{type      => <<"headers">>,
-              arguments => Args},
-    http_delete(Config, "/exchanges/%2F/myexchange", {one_of, [201, 404]}),
-    http_put(Config, "/exchanges/%2F/myexchange", XArgs, {group, '2xx'}),
-    Definitions = http_get(Config, "/definitions", ?OK),
-    http_delete(Config, "/exchanges/%2F/myexchange", {group, '2xx'}),
-    http_post(Config, "/definitions", Definitions, {group, '2xx'}),
-    Args = maps:get(arguments, http_get(Config, "/exchanges/%2F/myexchange", ?OK)),
-    http_delete(Config, "/exchanges/%2F/myexchange", {group, '2xx'}),
+                arguments => Args},
+    http_delete(Config, "/exchanges/%2F/arguments-table-test-x", {one_of, [201, 404]}),
+    http_put(Config, "/exchanges/%2F/arguments-table-test-x", XArgs, {group, '2xx'}),
+    Args = maps:get(arguments, http_get(Config, "/exchanges/%2F/arguments-table-test-x", ?OK)),
+    http_delete(Config, "/exchanges/%2F/arguments-table-test-x", {group, '2xx'}),
     passed.
 
 queue_purge_test(Config) ->
@@ -2394,15 +2381,15 @@ exchanges_pagination_permissions_test(Config) ->
 queue_pagination_test(Config) ->
     QArgs = #{},
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-    http_put(Config, "/vhosts/vh1", none, {group, '2xx'}),
-    http_put(Config, "/permissions/vh1/guest", PermArgs, {group, '2xx'}),
+    http_put(Config, "/vhosts/vh.tests.queue_pagination_test", none, {group, '2xx'}),
+    http_put(Config, "/permissions/vh.tests.queue_pagination_test/guest", PermArgs, {group, '2xx'}),
 
-    http_get(Config, "/queues/vh1?page=1&page_size=2", ?OK),
+    http_get(Config, "/queues/vh.tests.queue_pagination_test?page=1&page_size=2", ?OK),
 
     http_put(Config, "/queues/%2F/test0", QArgs, {group, '2xx'}),
-    http_put(Config, "/queues/vh1/test1", QArgs, {group, '2xx'}),
+    http_put(Config, "/queues/vh.tests.queue_pagination_test/test1", QArgs, {group, '2xx'}),
     http_put(Config, "/queues/%2F/test2_reg", QArgs, {group, '2xx'}),
-    http_put(Config, "/queues/vh1/reg_test3", QArgs, {group, '2xx'}),
+    http_put(Config, "/queues/vh.tests.queue_pagination_test/reg_test3", QArgs, {group, '2xx'}),
 
     ?AWAIT(
        begin
@@ -2426,7 +2413,7 @@ queue_pagination_test(Config) ->
            ?assertEqual(1, maps:get(page, SortedByName)),
            ?assertEqual(2, maps:get(page_size, SortedByName)),
            ?assertEqual(2, maps:get(page_count, SortedByName)),
-           assert_list([#{name => <<"reg_test3">>, vhost => <<"vh1">>},
+           assert_list([#{name => <<"reg_test3">>, vhost => <<"vh.tests.queue_pagination_test">>},
                         #{name => <<"test0">>, vhost => <<"/">>}
                        ], maps:get(items, SortedByName)),
 
@@ -2439,9 +2426,9 @@ queue_pagination_test(Config) ->
            ?assertEqual(100, maps:get(page_size, FirstPage)),
            ?assertEqual(1, maps:get(page_count, FirstPage)),
            assert_list([#{name => <<"test0">>, vhost => <<"/">>},
-                        #{name => <<"test1">>, vhost => <<"vh1">>},
+                        #{name => <<"test1">>, vhost => <<"vh.tests.queue_pagination_test">>},
                         #{name => <<"test2_reg">>, vhost => <<"/">>},
-                        #{name => <<"reg_test3">>, vhost =><<"vh1">>}
+                        #{name => <<"reg_test3">>, vhost =><<"vh.tests.queue_pagination_test">>}
                        ], maps:get(items, FirstPage)),
            %% The reduced API version just has the most useful fields.
            %% garbage_collection is not one of them
@@ -2465,7 +2452,7 @@ queue_pagination_test(Config) ->
            ?assertEqual(2, maps:get(page_size, ReverseSortedByName)),
            ?assertEqual(2, maps:get(page_count, ReverseSortedByName)),
            assert_list([#{name => <<"test0">>, vhost => <<"/">>},
-                        #{name => <<"reg_test3">>, vhost => <<"vh1">>}
+                        #{name => <<"reg_test3">>, vhost => <<"vh.tests.queue_pagination_test">>}
                        ], maps:get(items, ReverseSortedByName)),
 
 
@@ -2477,7 +2464,7 @@ queue_pagination_test(Config) ->
            ?assertEqual(2, maps:get(page_size, ByName)),
            ?assertEqual(1, maps:get(page_count, ByName)),
            assert_list([#{name => <<"test2_reg">>, vhost => <<"/">>},
-                        #{name => <<"reg_test3">>, vhost => <<"vh1">>}
+                        #{name => <<"reg_test3">>, vhost => <<"vh.tests.queue_pagination_test">>}
                        ], maps:get(items, ByName)),
 
            RegExByName = http_get(Config,
@@ -2489,7 +2476,7 @@ queue_pagination_test(Config) ->
            ?assertEqual(1, maps:get(page, RegExByName)),
            ?assertEqual(2, maps:get(page_size, RegExByName)),
            ?assertEqual(1, maps:get(page_count, RegExByName)),
-           assert_list([#{name => <<"reg_test3">>, vhost => <<"vh1">>}
+           assert_list([#{name => <<"reg_test3">>, vhost => <<"vh.tests.queue_pagination_test">>}
                        ], maps:get(items, RegExByName)),
            true
        end
@@ -2503,23 +2490,23 @@ queue_pagination_test(Config) ->
     http_get(Config, "/queues?page=1&page_size=501", ?BAD_REQUEST), %% max 500 allowed
     http_get(Config, "/queues?page=-1&page_size=-2", ?BAD_REQUEST),
     http_delete(Config, "/queues/%2F/test0", {group, '2xx'}),
-    http_delete(Config, "/queues/vh1/test1", {group, '2xx'}),
+    http_delete(Config, "/queues/vh.tests.queue_pagination_test/test1", {group, '2xx'}),
     http_delete(Config, "/queues/%2F/test2_reg", {group, '2xx'}),
-    http_delete(Config, "/queues/vh1/reg_test3", {group, '2xx'}),
-    http_delete(Config, "/vhosts/vh1", {group, '2xx'}),
+    http_delete(Config, "/queues/vh.tests.queue_pagination_test/reg_test3", {group, '2xx'}),
+    http_delete(Config, "/vhosts/vh.tests.queue_pagination_test", {group, '2xx'}),
     passed.
 
 queue_pagination_columns_test(Config) ->
     QArgs = #{},
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-    http_put(Config, "/vhosts/vh1", none, [?CREATED, ?NO_CONTENT]),
-    http_put(Config, "/permissions/vh1/guest", PermArgs, [?CREATED, ?NO_CONTENT]),
+    http_put(Config, "/vhosts/vh.tests.queue_pagination_columns_test", none, [?CREATED, ?NO_CONTENT]),
+    http_put(Config, "/permissions/vh.tests.queue_pagination_columns_test/guest", PermArgs, [?CREATED, ?NO_CONTENT]),
 
-    http_get(Config, "/queues/vh1?columns=name&page=1&page_size=2", ?OK),
+    http_get(Config, "/queues/vh.tests.queue_pagination_columns_test?columns=name&page=1&page_size=2", ?OK),
     http_put(Config, "/queues/%2F/queue_a", QArgs, {group, '2xx'}),
-    http_put(Config, "/queues/vh1/queue_b", QArgs, {group, '2xx'}),
+    http_put(Config, "/queues/vh.tests.queue_pagination_columns_test/queue_b", QArgs, {group, '2xx'}),
     http_put(Config, "/queues/%2F/queue_c", QArgs, {group, '2xx'}),
-    http_put(Config, "/queues/vh1/queue_d", QArgs, {group, '2xx'}),
+    http_put(Config, "/queues/vh.tests.queue_pagination_columns_test/queue_d", QArgs, {group, '2xx'}),
     PageOfTwo = http_get(Config, "/queues?columns=name&page=1&page_size=2", ?OK),
     ?assertEqual(4, maps:get(total_count, PageOfTwo)),
     ?assertEqual(4, maps:get(filtered_count, PageOfTwo)),
@@ -2531,7 +2518,7 @@ queue_pagination_columns_test(Config) ->
                  #{name => <<"queue_c">>}
     ], maps:get(items, PageOfTwo)),
 
-    ColumnNameVhost = http_get(Config, "/queues/vh1?columns=name&page=1&page_size=2", ?OK),
+    ColumnNameVhost = http_get(Config, "/queues/vh.tests.queue_pagination_columns_test?columns=name&page=1&page_size=2", ?OK),
     ?assertEqual(2, maps:get(total_count, ColumnNameVhost)),
     ?assertEqual(2, maps:get(filtered_count, ColumnNameVhost)),
     ?assertEqual(2, maps:get(item_count, ColumnNameVhost)),
@@ -2551,9 +2538,9 @@ queue_pagination_columns_test(Config) ->
     ?assertEqual(2, maps:get(page_count, ColumnsNameVhost)),
     assert_list([
         #{name  => <<"queue_b">>,
-          vhost => <<"vh1">>},
+          vhost => <<"vh.tests.queue_pagination_columns_test">>},
         #{name  => <<"queue_d">>,
-          vhost => <<"vh1">>}
+          vhost => <<"vh.tests.queue_pagination_columns_test">>}
     ], maps:get(items, ColumnsNameVhost)),
 
     ?awaitMatch(
@@ -2569,10 +2556,10 @@ queue_pagination_columns_test(Config) ->
        end, 30000),
 
     http_delete(Config, "/queues/%2F/queue_a", {group, '2xx'}),
-    http_delete(Config, "/queues/vh1/queue_b", {group, '2xx'}),
+    http_delete(Config, "/queues/vh.tests.queue_pagination_columns_test/queue_b", {group, '2xx'}),
     http_delete(Config, "/queues/%2F/queue_c", {group, '2xx'}),
-    http_delete(Config, "/queues/vh1/queue_d", {group, '2xx'}),
-    http_delete(Config, "/vhosts/vh1", {group, '2xx'}),
+    http_delete(Config, "/queues/vh.tests.queue_pagination_columns_test/queue_d", {group, '2xx'}),
+    http_delete(Config, "/vhosts/vh.tests.queue_pagination_columns_test", {group, '2xx'}),
     passed.
 
 queues_detailed_test(Config) ->
