@@ -90,6 +90,11 @@ eunit(
 broker_for_integration_suites()
 
 rabbitmq_integration_suite(
+    name = "definition_import_SUITE",
+    size = "small",
+)
+
+rabbitmq_integration_suite(
     name = "exchange_SUITE",
     size = "large",
     additional_beam = [
