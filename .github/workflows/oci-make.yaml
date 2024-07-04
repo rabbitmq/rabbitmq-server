@@ -55,11 +55,7 @@ jobs:
       matrix:
         platform:
           - linux/amd64
-          # These are built on x86 runners in CPU emulation mode, which is very slow
-          # (over an hour to build the image, instead of minutes). It'd be nice to have
-          # these back at some point but for now - they are blocking the publication of
-          # amd64 images
-          # - linux/arm64
+          - linux/arm64
     steps:
       - name: Prepare
         run: |
@@ -108,8 +104,8 @@ jobs:
           context: packaging/docker-image
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-to: type=registry,ref=ghcr.io/rabbitmq/rabbitmq:buildcache-${{ env.PLATFORM_PAIR }},mode=max
-          cache-from: type=registry,ref=ghcr.io/rabbitmq/rabbitmq:buildcache-${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha
+          cache-from: type=gha
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
       - name: Export digest
         run: |
