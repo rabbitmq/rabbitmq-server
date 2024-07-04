@@ -164,6 +164,8 @@ shutdown(Pid, Explanation) ->
     no_return().
 init(Parent, HelperSups, Ref) ->
     ?LG_PROCESS_TYPE(reader),
+    process_flag(min_heap_size, 233 * 10),
+    process_flag(min_bin_vheap_size, 46422 * 100),
     %% Note:
     %% This function could return an error if the handshake times out.
     %% It is less likely to happen here as compared to MQTT, so

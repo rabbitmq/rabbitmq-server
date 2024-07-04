@@ -185,6 +185,8 @@ initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats, GC
           #wstate.stats_timer).
 
 init([Identity, State]) ->
+    process_flag(min_heap_size, 233 * 10),
+    process_flag(min_bin_vheap_size, 46422 * 100),
     ?LG_PROCESS_TYPE(writer),
     ?store_proc_name(Identity),
     {ok, State}.
