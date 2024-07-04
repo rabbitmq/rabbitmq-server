@@ -725,13 +725,15 @@ recover_deaths([Map = #{<<"exchange">> := Exchange,
                         <<"routing-keys">> := RKeys,
                         <<"reason">> := ReasonBin,
                         <<"count">> := Count,
-                        <<"time">> := Ts} | Rem], Acc0) ->
+                        <<"time">> := TsSeconds} | Rem], Acc0)
+  when is_integer(TsSeconds) ->
     Reason = binary_to_existing_atom(ReasonBin),
-    DeathAnns0 = #{first_time => Ts,
+    TsMillis = TsSeconds * 1000,
+    DeathAnns0 = #{first_time => TsMillis,
                    %% Given that this timestamp is absent in the AMQP 0.9.1
                    %% x-death header, the last_time we set here is incorrect
                    %% if the message was dead lettered more than one time.
-                   last_time => Ts},
+                   last_time => TsMillis},
     DeathAnns = case Map of
                     #{<<"original-expiration">> := Exp} ->
                         DeathAnns0#{ttl => binary_to_integer(Exp)};
