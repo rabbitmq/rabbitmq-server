@@ -2427,9 +2427,9 @@ ensure_source(#'v1_0.source'{address = Address,
                              durable = Durable},
               Vhost, User, PermCache, TopicPermCache) ->
     case Address of
-        {utf8, <<"/q/", QNameBinQuoted/binary>>} ->
+        {utf8, <<"/queues/", QNameBinQuoted/binary>>} ->
             %% The only possible v2 source address format is:
-            %%  /q/:queue
+            %%  /queues/:queue
             try rabbit_uri:urldecode(QNameBinQuoted) of
                 QNameBin ->
                     QName = queue_resource(Vhost, QNameBin),
@@ -2549,9 +2549,9 @@ check_exchange(XNameBin, RKey, QNameBin, User, Vhost, PermCache0) ->
 address_v1_permitted() ->
     rabbit_deprecated_features:is_permitted(amqp_address_v1).
 
-target_address_version({utf8, <<"/e/", _/binary>>}) ->
+target_address_version({utf8, <<"/exchanges/", _/binary>>}) ->
     2;
-target_address_version({utf8, <<"/q/", _/binary>>}) ->
+target_address_version({utf8, <<"/queues/", _/binary>>}) ->
     2;
 target_address_version(undefined) ->
     %% anonymous terminus
@@ -2561,9 +2561,9 @@ target_address_version(_Address) ->
     1.
 
 %% The possible v2 target address formats are:
-%%  /e/:exchange/:routing-key
-%%  /e/:exchange
-%%  /q/:queue
+%%  /exchanges/:exchange/:routing-key
+%%  /exchanges/:exchange
+%%  /queues/:queue
 %%  <null>
 ensure_target_v2({utf8, String}, Vhost) ->
     case parse_target_v2_string(String) of
@@ -2586,7 +2586,7 @@ parse_target_v2_string(String) ->
               {error, bad_address}
     end.
 
-parse_target_v2_string0(<<"/e/", Rest/binary>>) ->
+parse_target_v2_string0(<<"/exchanges/", Rest/binary>>) ->
     Key = cp_slash,
     Pattern = try persistent_term:get(Key)
               catch error:badarg ->
@@ -2609,10 +2609,10 @@ parse_target_v2_string0(<<"/e/", Rest/binary>>) ->
         _ ->
             {error, bad_address}
     end;
-parse_target_v2_string0(<<"/q/">>) ->
+parse_target_v2_string0(<<"/queues/">>) ->
     %% empty queue name is invalid
     {error, bad_address};
-parse_target_v2_string0(<<"/q/", QNameBinQuoted/binary>>) ->
+parse_target_v2_string0(<<"/queues/", QNameBinQuoted/binary>>) ->
     QNameBin = rabbit_uri:urldecode(QNameBinQuoted),
     {ok, ?DEFAULT_EXCHANGE_NAME, QNameBin, QNameBin};
 parse_target_v2_string0(_) ->

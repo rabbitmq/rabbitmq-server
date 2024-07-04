@@ -97,14 +97,14 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% Test v2 target address
-%% /e/:exchange/:routing-key
+%% /exchanges/:exchange/:routing-key
 target_exchange_routing_key(Config) ->
     XName = <<"👉"/utf8>>,
     RKey = <<"🗝️"/utf8>>,
     target_exchange_routing_key0(XName, RKey, Config).
 
 %% Test v2 target address
-%% /e/:exchange/:routing-key
+%% /exchanges/:exchange/:routing-key
 %% where both :exchange and :routing-key contains a "/" character.
 target_exchange_routing_key_with_slash(Config) ->
     XName = <<"my/exchange">>,
@@ -141,7 +141,7 @@ target_exchange_routing_key0(XName, RKey, Config) ->
     ok = cleanup(Init).
 
 %% Test v2 target address
-%% /e/:exchange/
+%% /exchanges/:exchange/
 %% Routing key is empty.
 target_exchange_routing_key_empty(Config) ->
     XName = <<"amq.fanout">>,
@@ -167,7 +167,7 @@ target_exchange_routing_key_empty(Config) ->
     ok = cleanup(Init).
 
 %% Test v2 target address
-%% /e/:exchange
+%% /exchanges/:exchange
 %% Routing key is empty.
 target_exchange(Config) ->
     XName = <<"amq.fanout">>,
@@ -193,7 +193,7 @@ target_exchange(Config) ->
     ok = cleanup(Init).
 
 %% Test v2 target address
-%% /e/:exchange
+%% /exchanges/:exchange
 %% where the target exchange does not exist.
 target_exchange_absent(Config) ->
     XName = <<"🎈"/utf8>>,
@@ -220,13 +220,13 @@ target_exchange_absent(Config) ->
     ok = amqp10_client:close_connection(Connection).
 
 %% Test v2 target and source address
-%% /q/:queue
+%% /queues/:queue
 queue(Config) ->
     QName = <<"🎈"/utf8>>,
     queue0(QName, Config).
 
 %% Test v2 target and source address
-%% /q/:queue
+%% /queues/:queue
 %% where :queue contains a "/" character.
 queue_with_slash(Config) ->
     QName = <<"my/queue">>,
@@ -252,7 +252,7 @@ queue0(QName, Config) ->
     ok = cleanup(Init).
 
 %% Test v2 target address
-%% /q/:queue
+%% /queues/:queue
 %% where the target queue does not exist.
 target_queue_absent(Config) ->
     QName = <<"🎈"/utf8>>,
@@ -279,7 +279,7 @@ target_queue_absent(Config) ->
     ok = amqp10_client:close_connection(Connection).
 
 %% Test v2 target address 'null' and 'to'
-%% /e/:exchange/:routing-key
+%% /exchanges/:exchange/:routing-key
 %% with varying routing keys.
 target_per_message_exchange_routing_key(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
@@ -315,7 +315,7 @@ target_per_message_exchange_routing_key(Config) ->
     ok = cleanup(Init).
 
 %% Test v2 target address 'null' and 'to'
-%% /e/:exchange
+%% /exchanges/:exchange
 %% with varying exchanges.
 target_per_message_exchange(Config) ->
     XFanout = <<"amq.fanout">>,
@@ -349,7 +349,7 @@ target_per_message_exchange(Config) ->
     ok = cleanup(Init).
 
 %% Test v2 target address 'null' and 'to'
-%% /q/:queue
+%% /queues/:queue
 target_per_message_queue(Config) ->
     Q1 = <<"q1">>,
     Q2 = <<"q2">>,
@@ -418,17 +418,17 @@ bad_v2_addresses() ->
      <<0>>,
      <<"/">>,
      <<"//">>,
-     <<"/q">>,
-     <<"/q/">>,
+     <<"/queues">>,
+     <<"/queues/">>,
      <<"/queue/">>,
-     <<"/e">>,
+     <<"/exchanges">>,
      %% default exchange in v2 target address is disallowed
-     <<"/e/">>,
-     <<"/e//">>,
-     <<"/e//mykey">>,
-     <<"/e/amq.default">>,
-     <<"/e/amq.default/">>,
-     <<"/e/amq.default/mykey">>,
+     <<"/exchanges/">>,
+     <<"/exchanges//">>,
+     <<"/exchanges//mykey">>,
+     <<"/exchanges/amq.default">>,
+     <<"/exchanges/amq.default/">>,
+     <<"/exchanges/amq.default/mykey">>,
      <<"/ex/✋"/utf8>>,
      <<"/exchange">>,
      <<"/exchange/">>,
@@ -438,13 +438,13 @@ bad_v2_addresses() ->
      <<"/exchange/amq.default/key/">>,
      <<"/exchange/amq.default/key/mykey">>,
      %% The following addresses should be percent encoded, but aren't.
-     <<"/q/missing%encoding">>,
-     <<"/q/missing/encoding">>,
-     <<"/q/✋"/utf8>>,
-     <<"/e/missing%encoding">>,
-     <<"/e/missing/encoding/routingkey">>,
-     <<"/e/exchange/missing%encoding">>,
-     <<"/e/✋"/utf8>>
+     <<"/queues/missing%encoding">>,
+     <<"/queues/missing/encoding">>,
+     <<"/queues/✋"/utf8>>,
+     <<"/exchanges/missing%encoding">>,
+     <<"/exchanges/missing/encoding/routingkey">>,
+     <<"/exchanges/exchange/missing%encoding">>,
+     <<"/exchanges/✋"/utf8>>
     ].
 
 %% Test v2 target address 'null' with an invalid 'to' addresses.
@@ -535,7 +535,7 @@ target_bad_address0(TargetAddress, Config) ->
     ok = amqp10_client:close_connection(Connection).
 
 %% Test v2 source address
-%% /q/:queue
+%% /queues/:queue
 %% where the source queue does not exist.
 source_queue_absent(Config) ->
     QName = <<"🎈"/utf8>>,

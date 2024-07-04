@@ -14,17 +14,17 @@
     unicode:unicode_binary().
 exchange(ExchangeName) ->
     ExchangeNameQuoted = uri_string:quote(ExchangeName),
-    <<"/e/", ExchangeNameQuoted/binary>>.
+    <<"/exchanges/", ExchangeNameQuoted/binary>>.
 
 -spec exchange(unicode:unicode_binary(), unicode:unicode_binary()) ->
     unicode:unicode_binary().
 exchange(ExchangeName, RoutingKey) ->
     ExchangeNameQuoted = uri_string:quote(ExchangeName),
     RoutingKeyQuoted = uri_string:quote(RoutingKey),
-    <<"/e/", ExchangeNameQuoted/binary, "/", RoutingKeyQuoted/binary>>.
+    <<"/exchanges/", ExchangeNameQuoted/binary, "/", RoutingKeyQuoted/binary>>.
 
 -spec queue(unicode:unicode_binary()) ->
     unicode:unicode_binary().
 queue(QueueName) ->
     QueueNameQuoted = uri_string:quote(QueueName),
-    <<"/q/", QueueNameQuoted/binary>>.
+    <<"/queues/", QueueNameQuoted/binary>>.

@@ -237,12 +237,12 @@ amqp_to_mqtt_reply_to(_Config) ->
     Key = mqtt_x,
     Env = #{Key => <<"mqtt-topic-exchange">>},
 
-    AmqpProps1 = #'v1_0.properties'{reply_to = {utf8, <<"/e/mqtt-topic-exchange/my.routing.key">>}},
+    AmqpProps1 = #'v1_0.properties'{reply_to = {utf8, <<"/exchanges/mqtt-topic-exchange/my.routing.key">>}},
     #mqtt_msg{props = Props1} = amqp_to_mqtt([AmqpProps1, Val], Env),
     ?assertEqual({ok, <<"my/routing/key">>},
                  maps:find('Response-Topic', Props1)),
 
-    AmqpProps2 = #'v1_0.properties'{reply_to = {utf8, <<"/e/NON-mqtt-topic-exchange/my.routing.key">>}},
+    AmqpProps2 = #'v1_0.properties'{reply_to = {utf8, <<"/exchanges/NON-mqtt-topic-exchange/my.routing.key">>}},
     #mqtt_msg{props = Props2} = amqp_to_mqtt([AmqpProps2, Val]),
     ?assertEqual(error,
                  maps:find('Response-Topic', Props2)),
@@ -251,14 +251,14 @@ amqp_to_mqtt_reply_to(_Config) ->
     %% The AMQP client must percent encode the AMQP reply_to address URI. We expect the
     %% AMQP -> MQTT conversion to percent decode because an MQTT response topic is not percent encoded.
     RoutingKeyQuoted = uri_string:quote(RoutingKey),
-    AmqpProps3 = #'v1_0.properties'{reply_to = {utf8, <<"/e/mqtt-topic-exchange/", RoutingKeyQuoted/binary>>}},
+    AmqpProps3 = #'v1_0.properties'{reply_to = {utf8, <<"/exchanges/mqtt-topic-exchange/", RoutingKeyQuoted/binary>>}},
     #mqtt_msg{props = Props3} = amqp_to_mqtt([AmqpProps3, Val], Env),
     ?assertEqual({ok, <<"my/sp%$@cial/routing/key">>},
                  maps:find('Response-Topic', Props3)),
 
     %% If the AMQP client did not percent encode the AMQP reply_to address URI as required,
     %% then the reply_to should be ignored by the conversion.
-    AmqpProps4 = #'v1_0.properties'{reply_to = {utf8, <<"/e/mqtt-topic-exchange/", RoutingKey/binary>>}},
+    AmqpProps4 = #'v1_0.properties'{reply_to = {utf8, <<"/exchanges/mqtt-topic-exchange/", RoutingKey/binary>>}},
     #mqtt_msg{props = Props4} = amqp_to_mqtt([AmqpProps4, Val], Env),
     ?assertEqual(error,
                  maps:find('Response-Topic', Props4)).
