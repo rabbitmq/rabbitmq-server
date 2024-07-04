@@ -147,6 +147,15 @@ def all_srcs(name = "all_srcs"):
 
 def test_suite_beam_files(name = "test_suite_beam_files"):
     erlang_bytecode(
+        name = "definition_import_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/definition_import_SUITE.erl"],
+        outs = ["test/definition_import_SUITE.beam"],
+        app_name = "rabbitmq_federation",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/rabbitmq_ct_helpers:erlang_app"],
+    )
+    erlang_bytecode(
         name = "exchange_SUITE_beam_files",
         testonly = True,
         srcs = ["test/exchange_SUITE.erl"],
