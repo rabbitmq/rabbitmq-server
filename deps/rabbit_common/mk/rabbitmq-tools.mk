@@ -267,34 +267,3 @@ clean-ct-logs-archive::
 	$(gen_verbose) rm -f $(PROJECT)-ct-logs-*.tar.xz
 
 clean:: clean-ct-logs-archive
-
-# --------------------------------------------------------------------
-# Generate a file listing RabbitMQ component dependencies and their
-# Git commit hash.
-# --------------------------------------------------------------------
-
-.PHONY: rabbitmq-deps.mk clean-rabbitmq-deps.mk
-
-rabbitmq-deps.mk: $(PROJECT)-rabbitmq-deps.mk
-	@:
-
-closing_paren := )
-
-define rmq_deps_mk_line
-dep_$(1) := git $(dir $(RABBITMQ_UPSTREAM_FETCH_URL))$(call rmq_cmp_repo_name,$(1)).git $$(git -C "$(2)" rev-parse HEAD)
-endef
-
-$(PROJECT)-rabbitmq-deps.mk: $(ERLANG_MK_RECURSIVE_DEPS_LIST)
-	$(gen_verbose) echo "# In $(PROJECT) - commit $$(git rev-parse HEAD)" > $@
-	$(verbose) cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | \
-	while read -r dir; do \
-	  component=$$(basename "$$dir"); \
-	  case "$$component" in \
-	  $(foreach component,$(RABBITMQ_COMPONENTS),$(component)$(closing_paren) echo "$(call rmq_deps_mk_line,$(component),$$dir)" ;;) \
-	  esac; \
-	done >> $@
-
-clean:: clean-rabbitmq-deps.mk
-
-clean-rabbitmq-deps.mk:
-	$(gen_verbose) rm -f $(PROJECT)-rabbitmq-deps.mk
