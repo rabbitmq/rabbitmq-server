@@ -42,7 +42,6 @@ DEP_EARLY_PLUGINS = $(PROJECT)/mk/rabbitmq-early-test.mk
 DEP_PLUGINS = $(PROJECT)/mk/rabbitmq-build.mk \
 	      $(PROJECT)/mk/rabbitmq-hexpm.mk \
 	      $(PROJECT)/mk/rabbitmq-dist.mk \
-	      $(PROJECT)/mk/rabbitmq-test.mk \
 	      $(PROJECT)/mk/rabbitmq-tools.mk
 
 PLT_APPS += mnesia crypto ssl
@@ -56,7 +55,6 @@ HEX_TARBALL_FILES += rabbitmq-components.mk \
 		     mk/rabbitmq-dist.mk \
 		     mk/rabbitmq-early-test.mk \
 		     mk/rabbitmq-hexpm.mk \
-		     mk/rabbitmq-test.mk \
 		     mk/rabbitmq-tools.mk
 
 -include development.post.mk

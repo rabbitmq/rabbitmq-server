@@ -158,7 +158,6 @@ DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-run.mk \
-	      rabbit_common/mk/rabbitmq-test.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
 
 include ../../rabbitmq-components.mk
@@ -222,8 +221,11 @@ SLOW_CT_SUITES := backing_queue \
 		  vhost
 FAST_CT_SUITES := $(filter-out $(sort $(SLOW_CT_SUITES)),$(CT_SUITES))
 
-ct-fast: CT_SUITES = $(FAST_CT_SUITES)
-ct-slow: CT_SUITES = $(SLOW_CT_SUITES)
+ct-fast:
+	$(MAKE) ct CT_SUITES='$(FAST_CT_SUITES)'
+
+ct-slow:
+	$(MAKE) ct CT_SUITES='$(SLOW_CT_SUITES)'
 
 # --------------------------------------------------------------------
 # Compilation.
