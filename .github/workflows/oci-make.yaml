@@ -55,7 +55,10 @@ jobs:
       matrix:
         platform:
           - linux/amd64
-          - linux/arm64
+          # Unfortunately even with type=gha cache, OpenSSL and OTP
+          # are rebuilt often and it takes ~90 minutes to do that
+          # in the emulated ARM mode. Disabling until we have a better solution.
+          #- linux/arm64
     steps:
       - name: Prepare
         run: |
