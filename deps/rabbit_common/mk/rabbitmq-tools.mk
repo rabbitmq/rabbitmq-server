@@ -82,24 +82,6 @@ else
 	$(verbose) cd $* && git config user.email "$(RMQ_GIT_USER_EMAIL)"
 endif
 
-.PHONY: sync-gitignore-from-main
-sync-gitignore-from-main: $(READY_DEPS:%=$(DEPS_DIR)/%+sync-gitignore-from-main)
-
-%+sync-gitignore-from-main:
-	$(gen_verbose) cd $* && \
-	if test -d .git; then \
-		branch=$$(LANG=C git branch --list | awk '/^\* \(.*detached / {ref=$$0; sub(/.*detached [^ ]+ /, "", ref); sub(/\)$$/, "", ref); print ref; exit;} /^\* / {ref=$$0; sub(/^\* /, "", ref); print ref; exit}'); \
-		! test "$$branch" = 'main' || exit 0; \
-		git show origin/main:.gitignore > .gitignore; \
-	fi
-ifeq ($(DO_COMMIT),yes)
-	$(verbose) cd $* && \
-	if test -d .git; then \
-		git diff --quiet .gitignore \
-		|| git commit -m 'Git: Sync .gitignore from main' .gitignore; \
-	fi
-endif
-
 .PHONY: show-branch
 
 show-branch: $(READY_DEPS:%=$(DEPS_DIR)/%+show-branch)
