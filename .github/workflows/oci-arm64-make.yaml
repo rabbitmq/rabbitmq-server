@@ -1,0 +1,177 @@
+# This file should be identical to oci-make, except it should built the ARM64
+# image and only for the main branch. It's a separate workflow due to the performance
+# of building the ARM64 image. This way we only build it on main, where it should
+# take advantage of the cache.
+#
+# https://github.com/marketplace/actions/build-and-push-docker-images
+name: OCI ARM64 (make)
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '.github/workflows/secondary-umbrella.yaml'
+      - '.github/workflows/update-elixir-patches.yaml'
+      - '.github/workflows/update-otp-patches.yaml'
+  workflow_dispatch:
+env:
+  REGISTRY_IMAGE: pivotalrabbitmq/rabbitmq
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-package-generic-unix:
+    runs-on: ubuntu-latest
+    outputs:
+      authorized: ${{ steps.authorized.outputs.authorized }}
+    steps:
+      - name: CHECK IF IMAGE WILL PUSH
+        id: authorized
+        run: |
+          if [ -n "${{ secrets.DOCKERHUB_PASSWORD }}" ]; then
+            echo "authorized=true" | tee -a $GITHUB_OUTPUT
+          else
+            echo "authorized=false" | tee -a $GITHUB_OUTPUT
+          fi
+      - name: Checkout
+        if: steps.authorized.outputs.authorized == 'true'
+        uses: actions/checkout@v4
+      - name: Configure Erlang
+        if: steps.authorized.outputs.authorized == 'true'
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: 26.2
+          elixir-version: 1.15
+      - name: make package-generic-unix
+        if: steps.authorized.outputs.authorized == 'true'
+        run: |
+          make package-generic-unix PROJECT_VERSION=4.0.0
+      - name: Upload package-generic-unix
+        if: steps.authorized.outputs.authorized == 'true'
+        uses: actions/upload-artifact@v4.3.1
+        with:
+          name: package-generic-unix
+          path: PACKAGES/rabbitmq-server-*.tar.xz
+
+  build:
+    needs: build-package-generic-unix
+    runs-on: ubuntu-latest
+    if: ${{ needs.build-package-generic-unix.outputs.authorized }} == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/arm64
+    steps:
+      - name: Prepare
+        run: |
+          platform=${{ matrix.platform }}
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV          
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Download package-generic-unix
+        uses: actions/download-artifact@v4
+        with:
+          name: package-generic-unix
+          path: PACKAGES
+      - name: Rename package-generic-unix
+        run: |
+          cp \
+            PACKAGES/rabbitmq-server-generic-unix-*.tar.xz \
+            packaging/docker-image/package-generic-unix.tar.xz
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,format=long
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: packaging/docker-image
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-to: type=gha
+          cache-from: type=gha
+          outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"          
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    if: ${{ needs.build-package-generic-unix.outputs.authorized }} == 'true'
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,format=long
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)          
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }} 
+
+  summary-oci:
+    needs:
+    - build-package-generic-unix
+    - build
+    - merge
+    runs-on: ubuntu-latest
+    steps:
+    - name: SUMMARY
+      run: |
+        cat << 'EOF' | jq -e 'map(.result == "success") | all(.)'
+        ${{ toJson(needs) }}
+        EOF
