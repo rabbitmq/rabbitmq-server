@@ -1077,8 +1077,21 @@ runtime_parameter_definition(Param) ->
         <<"vhost">> => pget(vhost, Param),
         <<"component">> => pget(component, Param),
         <<"name">> => pget(name, Param),
-        <<"value">> => maps:from_list(pget(value, Param))
+        <<"value">> => maybe_map(pget(value, Param))
     }.
+
+maybe_map(Value) when is_list(Value) ->
+    %% Not all definitions are maps. `federation-upstream-set` is
+    %% a list of maps, and it should be exported as it has been
+    %% imported
+    try
+        maps:from_list(Value)
+    catch
+        _:_ ->
+            Value
+    end;
+maybe_map(Value) ->
+    Value.
 
 list_global_runtime_parameters() ->
     [global_runtime_parameter_definition(P) || P <- rabbit_runtime_parameters:list_global(), not is_internal_parameter(P)].
