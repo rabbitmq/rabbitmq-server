@@ -495,8 +495,7 @@ when_queue_master_locator_is_permitted_by_default(Config) ->
     ?assert(
        log_file_contains_message(
          Config, NodeA,
-         ["Deprecated features: `queue_master_locator`: queue-master-locator is deprecated. ",
-          "queue-leader-locator should be used instead."])).
+         ["Deprecated features: `queue_master_locator`: queue-master-locator is deprecated"])).
 
 when_queue_master_locator_is_not_permitted_from_conf(Config) ->
     [NodeA] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

@@ -11,6 +11,10 @@
 
 -compile([nowarn_export_all, export_all]).
 
+-import(rabbit_ct_broker_helpers,
+        [get_node_config/3,
+         rpc/4,
+         rpc/5]).
 
 all() ->
     [
@@ -56,38 +60,37 @@ end_per_group(_, Config) ->
                                 rabbit_ct_client_helpers:teardown_steps() ++
                                 rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_testcase(T, Config) ->
+    case rpc(Config, rabbit_feature_flags, is_enabled, [classic_queue_leader_locator]) of
+        true ->
+            rabbit_ct_helpers:testcase_started(Config, T);
+        false ->
+            {skip, "queue-leader-locator support was added to classic queues in 4.0;"
+             "previously only queue-master-locator was allowed"}
+    end.
+
 %% -------------------------------------------------------------------
 %% Testcases.
 %% -------------------------------------------------------------------
 
 leader_locator_client_local(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "x-queue-leader-locator is only supported by CQs in 4.0+"};
-        false ->
+    Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Q = <<"q1">>,
 
-            Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-            Q = <<"q1">>,
-
-            [begin
-                 Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
-                 ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                              declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"classic">>},
-                                              {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
-                 {ok, Leader0} = rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_amqqueue, lookup, [rabbit_misc:r(<<"/">>, queue, Q)]),
-                 Leader = amqqueue:qnode(Leader0),
-                 ?assertEqual(Server, Leader),
-                 ?assertMatch(#'queue.delete_ok'{},
-                              amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
-             end || Server <- Servers] end.
+    [begin
+         Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+         ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                      declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"classic">>},
+                                      {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
+         {ok, Leader0} = rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_amqqueue, lookup, [rabbit_misc:r(<<"/">>, queue, Q)]),
+         Leader = amqqueue:qnode(Leader0),
+         ?assertEqual(Server, Leader),
+         ?assertMatch(#'queue.delete_ok'{},
+                      amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
+     end || Server <- Servers].
 
 leader_locator_balanced(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "x-queue-leader-locator is only supported by CQs in 4.0+"};
-        false ->
-            test_leader_locator(Config, <<"x-queue-leader-locator">>, [<<"balanced">>])
-    end.
+    test_leader_locator(Config, <<"x-queue-leader-locator">>, [<<"balanced">>]).
 
 %% This test can be delted once we remove x-queue-master-locator support
 locator_deprecated(Config) ->

@@ -28,7 +28,7 @@
       messages =>
       #{when_permitted =>
         "queue-master-locator is deprecated. "
-        "queue-leader-locator should be used instead. Allowed values are 'client-local' and 'balanced'."}}
+        "queue-leader-locator should be used instead (allowed values are 'client-local' and 'balanced')"}}
    }).
 
 -define(QUEUE_LEADER_LOCATORS_DEPRECATED, [<<"random">>, <<"least-leaders">>, <<"min-masters">>]).
