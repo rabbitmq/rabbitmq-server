@@ -63,8 +63,8 @@ end_per_testcase(_TestCase, Config) ->
 credit_api_v2(Config) ->
     CQ = <<"classic queue">>,
     QQ = <<"quorum queue">>,
-    CQAddr = <<"/amq/queue/", CQ/binary>>,
-    QQAddr = <<"/amq/queue/", QQ/binary>>,
+    CQAddr = rabbitmq_amqp_address:queue(CQ),
+    QQAddr = rabbitmq_amqp_address:queue(QQ),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = CQ}),

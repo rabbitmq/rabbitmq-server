@@ -1231,7 +1231,7 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "amqp_credit_api_v2_SUITE",
     runtime_deps = [
-        "//deps/amqp10_client:erlang_app",
+        "//deps/rabbitmq_amqp_client:erlang_app",
     ],
 )
 
