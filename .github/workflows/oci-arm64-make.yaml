@@ -15,7 +15,7 @@ on:
       - '.github/workflows/update-otp-patches.yaml'
   workflow_dispatch:
 env:
-  REGISTRY_IMAGE: pivotalrabbitmq/rabbitmq
+  REGISTRY_IMAGE: pivotalrabbitmq/rabbitmq-arm64
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
