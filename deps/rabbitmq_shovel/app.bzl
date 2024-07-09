@@ -250,3 +250,11 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         app_name = "rabbitmq_shovel",
         erlc_opts = "//:test_erlc_opts",
     )
+    erlang_bytecode(
+        name = "amqp10_inter_cluster_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/amqp10_inter_cluster_SUITE.erl"],
+        outs = ["test/amqp10_inter_cluster_SUITE.beam"],
+        app_name = "rabbitmq_shovel",
+        erlc_opts = "//:test_erlc_opts",
+    )
