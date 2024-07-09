@@ -63,13 +63,11 @@ merge_app_env(Config) ->
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, {rmq_nodename_suffix, ?MODULE}),
-    Config2 = rabbit_ct_helpers:run_setup_steps(
-                Config1,
-                [fun merge_app_env/1] ++
-                rabbit_ct_broker_helpers:setup_steps() ++
-                rabbit_ct_client_helpers:setup_steps()),
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config2, mqtt_v5),
-    Config2.
+    rabbit_ct_helpers:run_setup_steps(
+      Config1,
+      [fun merge_app_env/1] ++
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
@@ -264,8 +262,6 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
       [{queue_type, QType}, {dead_letter_strategy, disabled}] :=
       #{messages_dead_lettered_maxlen_total := NumDeadLettered}
      } = rabbit_ct_broker_helpers:rpc(Config, rabbit_global_counters, overview, []),
-
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, QType),
 
     Topic = atom_to_binary(?FUNCTION_NAME),
     Msg = binary:copy(<<"x">>, 4000),

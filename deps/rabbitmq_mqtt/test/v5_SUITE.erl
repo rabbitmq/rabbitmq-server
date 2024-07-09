@@ -167,27 +167,13 @@ init_per_group(Group, Config0) ->
                 [{mqtt_version, v5},
                  {rmq_nodes_count, Nodes},
                  {rmq_nodename_suffix, Suffix}]),
-    Config2 = rabbit_ct_helpers:merge_app_env(
-                Config1,
-                {rabbit, [{quorum_tick_interval, 200}]}),
-    Config = rabbit_ct_helpers:run_steps(
-               Config2,
-               rabbit_ct_broker_helpers:setup_steps() ++
-               rabbit_ct_client_helpers:setup_steps()),
-    %% Mixed-version is skipped as `khepri_db`
-    %% is not supported
-    case Config of
-        {skip, _Reason} = Skip ->
-            Skip;
-        _ ->
-            case Group of
-                cluster_size_1 ->
-                    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, mqtt_v5),
-                    Config;
-                cluster_size_3 ->
-                    util:maybe_skip_v5(Config)
-            end
-    end.
+    Config = rabbit_ct_helpers:merge_app_env(
+               Config1,
+               {rabbit, [{quorum_tick_interval, 200}]}),
+    rabbit_ct_helpers:run_steps(
+      Config,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(G, Config)
   when G =:= cluster_size_1;

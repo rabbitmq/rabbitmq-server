@@ -79,11 +79,11 @@ init_per_testcase(Testcase, Config) ->
         {rmq_nodename_suffix, Testcase},
         {rmq_nodes_clustered, true}
       ]),
-    Config2 = rabbit_ct_helpers:run_setup_steps(Config1,
-      [ fun merge_app_env/1 ] ++
+    rabbit_ct_helpers:run_setup_steps(
+      Config1,
+      [fun merge_app_env/1] ++
       setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()),
-    util:maybe_skip_v5(Config2).
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:run_steps(Config,
@@ -139,7 +139,7 @@ connection_id_tracking_on_nodedown(Config) ->
     process_flag(trap_exit, true),
     ok = stop_node(Config, 0),
     await_exit(C),
-    ok = eventually(?_assertEqual([], util:all_connection_pids(1, Config)), 500, 4).
+    ok = eventually(?_assertEqual([], util:all_connection_pids(Config)), 500, 4).
 
 %%
 %% Helpers

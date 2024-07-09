@@ -168,10 +168,6 @@ websocket_info({'$gen_cast', QueueEvent = {queue_event, _, _}},
                        [State#state.conn_name, Reason]),
             stop(State#state{proc_state = PState})
     end;
-websocket_info({'$gen_cast', duplicate_id}, State) ->
-    %% Delete this backward compatibility clause when feature flag
-    %% delete_ra_cluster_mqtt_node becomes required.
-    websocket_info({'$gen_cast', {duplicate_id, true}}, State);
 websocket_info({'$gen_cast', {duplicate_id, SendWill}},
                State = #state{proc_state = ProcState,
                               conn_name = ConnName}) ->
@@ -221,10 +217,6 @@ websocket_info({keepalive, Req}, State = #state{proc_state = ProcState,
     end;
 websocket_info(emit_stats, State) ->
     {[], emit_stats(State), hibernate};
-websocket_info({ra_event, _From, Evt},
-               #state{proc_state = PState0} = State) ->
-    PState = rabbit_mqtt_processor:handle_ra_event(Evt, PState0),
-    {[], State#state{proc_state = PState}, hibernate};
 websocket_info({{'DOWN', _QName}, _MRef, process, _Pid, _Reason} = Evt,
                State = #state{proc_state = PState0}) ->
     case rabbit_mqtt_processor:handle_down(Evt, PState0) of

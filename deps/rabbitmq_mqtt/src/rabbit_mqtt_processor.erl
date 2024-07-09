@@ -10,7 +10,7 @@
 
 -export([info/2, init/4, process_packet/2,
          terminate/3, handle_pre_hibernate/0,
-         handle_ra_event/2, handle_down/2, handle_queue_event/2,
+         handle_down/2, handle_queue_event/2,
          proto_version_tuple/1, throttle/2, format_status/1,
          remove_duplicate_client_id_connections/2,
          remove_duplicate_client_id_connections/3,
@@ -100,7 +100,6 @@
          %% [v5 4.8.1]
          subscriptions = #{} :: subscriptions(),
          auth_state = #auth_state{},
-         ra_register_state :: option(registered | {pending, reference()}),
          %% quorum queues and streams whose soft limit has been exceeded
          queues_soft_limit_exceeded = sets:new([{version, 2}]) :: sets:set(),
          qos0_messages_dropped = 0 :: non_neg_integer(),
@@ -176,7 +175,6 @@ process_connect(
     end,
     Result0 =
     maybe
-        ok ?= check_protocol_version(ProtoVer),
         ok ?= check_extended_auth(ConnectProps),
         {ok, ClientId} ?= ensure_client_id(ClientId0, CleanStart, ProtoVer),
         {ok, {Username1, Password}} ?= check_credentials(Username0, Password0, SslLoginName, PeerIp),
@@ -192,7 +190,7 @@ process_connect(
         {ok, AuthzCtx} ?= check_vhost_access(VHost, User, ClientId, PeerIp),
         ok ?= check_user_loopback(Username, PeerIp),
         rabbit_core_metrics:auth_attempt_succeeded(PeerIp, Username, mqtt),
-        {ok, RaRegisterState} ?= register_client_id(VHost, ClientId, CleanStart, WillProps),
+        ok = register_client_id(VHost, ClientId, CleanStart, WillProps),
         {ok, WillMsg} ?= make_will_msg(Packet),
         {TraceState, ConnName} = init_trace(VHost, ConnName0),
         ok = rabbit_mqtt_keepalive:start(KeepaliveSecs, Socket),
@@ -221,8 +219,7 @@ process_connect(
                           topic_alias_maximum_outbound = TopicAliasMaxOutbound},
                auth_state = #auth_state{
                                user = User,
-                               authz_ctx = AuthzCtx},
-               ra_register_state = RaRegisterState},
+                               authz_ctx = AuthzCtx}},
         ok ?= clear_will_msg(S),
         {ok, S}
     end,
@@ -317,7 +314,6 @@ process_connect(State0) ->
         {ok, SessPresent, State}
     else
         {error, _} = Error ->
-            unregister_client(State0),
             Error
     end.
 
@@ -613,18 +609,6 @@ update_session_expiry_interval(QName, Expiry) ->
             ok = rabbit_queue_type:policy_changed(Q) % respects queue args
     end.
 
-check_protocol_version(V)
-  when V =:= 3 orelse V =:= 4 ->
-    ok;
-check_protocol_version(5) ->
-    case rabbit_feature_flags:is_enabled(mqtt_v5) of
-        true ->
-            ok;
-        false ->
-            ?LOG_ERROR("Rejecting MQTT 5.0 connection because feature flag mqtt_v5 is disabled"),
-            {error, ?RC_UNSUPPORTED_PROTOCOL_VERSION}
-    end.
-
 check_extended_auth(#{'Authentication-Method' := Method}) ->
     %% In future, we could support SASL via rabbit_auth_mechanism
     %% as done by rabbit_reader and rabbit_stream_reader.
@@ -665,47 +649,29 @@ ensure_client_id(ClientId, _, _)
   when is_binary(ClientId) ->
     {ok, ClientId}.
 
--spec register_client_id(rabbit_types:vhost(), client_id(), boolean(), properties()) ->
-    {ok, RaRegisterState :: undefined | {pending, reference()}} |
-    {error, ConnectErrorCode :: pos_integer()}.
+-spec register_client_id(rabbit_types:vhost(), client_id(), boolean(), properties()) -> ok.
 register_client_id(VHost, ClientId, CleanStart, WillProps)
   when is_binary(VHost), is_binary(ClientId) ->
-    %% Always register client ID in pg.
     PgGroup = {VHost, ClientId},
     ok = pg:join(persistent_term:get(?PG_SCOPE), PgGroup, self()),
+    %% "If a Network Connection uses a Client Identifier of an existing Network Connection to
+    %% the Server, the Will Message for the exiting connection is sent unless the new
+    %% connection specifies Clean Start of 0 and the Will Delay is greater than zero."
+    %% [v5 3.1.3.2.2]
+    SendWill = case {CleanStart, WillProps} of
+                   {false, #{'Will-Delay-Interval' := I}} when I > 0 ->
+                       false;
+                   _ ->
+                       true
+               end,
+    ok = erpc:multicast([node() | nodes()],
+                        ?MODULE,
+                        remove_duplicate_client_id_connections,
+                        [PgGroup, self(), SendWill]).
 
-    case rabbit_mqtt_ff:track_client_id_in_ra() of
-        true ->
-            case collector_register(ClientId) of
-                {ok, Corr} ->
-                    %% Ra node takes care of removing duplicate client ID connections.
-                    {ok, {pending, Corr}};
-                {error, _} = Err ->
-                    %% e.g. this node was removed from the MQTT cluster members
-                    ?LOG_ERROR("MQTT connection failed to register client ID ~s in vhost ~s in Ra: ~p",
-                               [ClientId, VHost, Err]),
-                    {error, ?RC_IMPLEMENTATION_SPECIFIC_ERROR}
-            end;
-        false ->
-            %% "If a Network Connection uses a Client Identifier of an existing Network Connection to
-            %% the Server, the Will Message for the exiting connection is sent unless the new
-            %% connection specifies Clean Start of 0 and the Will Delay is greater than zero."
-            %% [v5 3.1.3.2.2]
-            Args = case {CleanStart, WillProps} of
-                       {false, #{'Will-Delay-Interval' := I}} when I > 0 ->
-                           [PgGroup, self(), false];
-                       _ ->
-                           [PgGroup, self()]
-                   end,
-            ok = erpc:multicast([node() | nodes()],
-                                ?MODULE,
-                                remove_duplicate_client_id_connections,
-                                Args),
-            {ok, undefined}
-    end.
-
-%% Once feature flag mqtt_v5 becomes required, the caller should always pass SendWill to this
-%% function (remove_duplicate_client_id_connections/2) so that we can delete this function.
+%% remove_duplicate_client_id_connections/2 is only called from 3.13 nodes.
+%% Hence, this function can be deleted when mixed version clusters between
+%% this version and 3.13 are disallowed.
 -spec remove_duplicate_client_id_connections(
         {rabbit_types:vhost(), client_id()}, pid()) -> ok.
 remove_duplicate_client_id_connections(PgGroup, PidToKeep) ->
@@ -1403,13 +1369,8 @@ queue_ttl_args(SessionExpirySecs)
   when is_integer(SessionExpirySecs) andalso SessionExpirySecs > 0 ->
     [{?QUEUE_TTL_KEY, long, timer:seconds(SessionExpirySecs)}].
 
-queue_type(?QOS_0, 0, QArgs) ->
-    case rabbit_queue_type:is_enabled(?QUEUE_TYPE_QOS_0) of
-        true ->
-            ?QUEUE_TYPE_QOS_0;
-        false ->
-            rabbit_amqqueue:get_queue_type(QArgs)
-    end;
+queue_type(?QOS_0, 0, _QArgs) ->
+    ?QUEUE_TYPE_QOS_0;
 queue_type(_, _, QArgs) ->
     rabbit_amqqueue:get_queue_type(QArgs).
 
@@ -1703,7 +1664,6 @@ terminate(SendWill, Infos, State = #state{queue_states = QStates}) ->
     rabbit_core_metrics:connection_closed(self()),
     rabbit_event:notify(connection_closed, Infos),
     rabbit_networking:unregister_non_amqp_connection(self()),
-    unregister_client(State),
     maybe_decrement_consumer(State),
     maybe_decrement_publisher(State),
     _ = maybe_delete_mqtt_qos0_queue(State),
@@ -1799,15 +1759,6 @@ log_delayed_will_failure(Topic, ClientId, Reason) ->
     ?LOG_DEBUG("failed to schedule delayed Will Message to topic ~s for MQTT client ID ~s: ~p",
                [Topic, ClientId, Reason]).
 
-unregister_client(#state{cfg = #cfg{client_id = ClientIdBin}}) ->
-    case rabbit_mqtt_ff:track_client_id_in_ra() of
-        true ->
-            ClientId = rabbit_data_coercion:to_list(ClientIdBin),
-            rabbit_mqtt_collector:unregister(ClientId, self());
-        false ->
-            ok
-    end.
-
 maybe_delete_mqtt_qos0_queue(
   State = #state{cfg = #cfg{clean_start = true},
                  auth_state = #auth_state{user = #user{username = Username}}}) ->
@@ -1866,41 +1817,6 @@ handle_pre_hibernate() ->
     erase(permission_cache),
     erase(topic_permission_cache),
     ok.
-
--spec handle_ra_event(register_timeout
-| {applied, [{reference(), ok}]}
-| {not_leader, term(), reference()}, state()) -> state().
-handle_ra_event({applied, [{Corr, ok}]},
-                State = #state{ra_register_state = {pending, Corr}}) ->
-    %% success case - command was applied transition into registered state
-    State#state{ra_register_state = registered};
-handle_ra_event({not_leader, Leader, Corr},
-                State = #state{ra_register_state = {pending, Corr},
-                               cfg = #cfg{client_id = ClientIdBin}}) ->
-    case rabbit_mqtt_ff:track_client_id_in_ra() of
-        true ->
-            ClientId = rabbit_data_coercion:to_list(ClientIdBin),
-            %% retry command against actual leader
-            {ok, NewCorr} = rabbit_mqtt_collector:register(Leader, ClientId, self()),
-            State#state{ra_register_state = {pending, NewCorr}};
-        false ->
-            State
-    end;
-handle_ra_event(register_timeout,
-                State = #state{ra_register_state = {pending, _Corr},
-                               cfg = #cfg{client_id = ClientId}}) ->
-    case rabbit_mqtt_ff:track_client_id_in_ra() of
-        true ->
-            {ok, NewCorr} = collector_register(ClientId),
-            State#state{ra_register_state = {pending, NewCorr}};
-        false ->
-            State
-    end;
-handle_ra_event(register_timeout, State) ->
-    State;
-handle_ra_event(Evt, State) ->
-    ?LOG_DEBUG("unhandled ra_event: ~w ", [Evt]),
-    State.
 
 -spec handle_down(term(), state()) ->
     {ok, state()} | {error, Reason :: any()}.
@@ -2441,10 +2357,6 @@ message_redelivered(true, ProtoVer, QType) ->
 message_redelivered(_, _, _) ->
     ok.
 
-collector_register(ClientIdBin) ->
-    ClientId = rabbit_data_coercion:to_list(ClientIdBin),
-    rabbit_mqtt_collector:register(ClientId, self()).
-
 %% "Reason Codes less than 0x80 indicate successful completion of an operation.
 %% Reason Code values of 0x80 or greater indicate failure."
 -spec is_success(reason_code()) -> boolean().
@@ -2459,7 +2371,6 @@ format_status(
          packet_id = PackID,
          subscriptions = Subscriptions,
          auth_state = AuthState,
-         ra_register_state = RaRegisterState,
          queues_soft_limit_exceeded = QSLE,
          qos0_messages_dropped = Qos0MsgsDropped,
          cfg = #cfg{
@@ -2510,7 +2421,6 @@ format_status(
       packet_id => PackID,
       subscriptions => Subscriptions,
       auth_state => AuthState,
-      ra_register_state => RaRegisterState,
       queues_soft_limit_exceeded => QSLE,
       qos0_messages_dropped => Qos0MsgsDropped}.
 

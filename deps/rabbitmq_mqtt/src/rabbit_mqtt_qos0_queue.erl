@@ -145,7 +145,7 @@ deliver(Qs, Msg, Options) ->
     {[], Actions}.
 
 -spec is_enabled() -> boolean().
-is_enabled() -> rabbit_feature_flags:is_enabled(?MODULE).
+is_enabled() -> true.
 
 -spec is_compatible(boolean(), boolean(), boolean()) ->
     boolean().

@@ -71,7 +71,6 @@ init_per_group(Group, Config0) ->
                Config1,
                rabbit_ct_broker_helpers:setup_steps() ++
                rabbit_ct_client_helpers:setup_steps()),
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, mqtt_v5),
 
     Plugins = [rabbitmq_stomp,
                rabbitmq_stream],
@@ -367,7 +366,6 @@ amqp_mqtt_amqp(Config) ->
 %% consume via MQTT 5.0 with a QoS 0 subscription.
 amqp_mqtt_qos0(Config) ->
     %% We want to test that the old node can receive from an MQTT QoS 0 queue.
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, rabbit_mqtt_qos0_queue),
     amqp_mqtt(0, Config).
 
 %% Send messages with different AMQP body sections and

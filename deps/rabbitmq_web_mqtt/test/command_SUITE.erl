@@ -55,12 +55,8 @@ end_per_suite(Config) ->
 
 init_per_group(unit, Config) ->
     Config;
-init_per_group(v5 = V5, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, {mqtt_version, V5}),
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, mqtt_v5) of
-        ok -> Config;
-        {skip, _} = Skip -> Skip
-    end.
+init_per_group(v5 = V5, Config) ->
+    rabbit_ct_helpers:set_config(Config, {mqtt_version, V5}).
 
 end_per_group(_, Config) ->
     Config.

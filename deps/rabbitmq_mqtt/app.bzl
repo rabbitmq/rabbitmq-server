@@ -17,14 +17,9 @@ def all_beam_files(name = "all_beam_files"):
     erlang_bytecode(
         name = "other_beam",
         srcs = [
-            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.DecommissionMqttNodeCommand.erl",
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand.erl",
             "src/mc_mqtt.erl",
-            "src/mqtt_machine.erl",
-            "src/mqtt_machine_v0.erl",
-            "src/mqtt_node.erl",
             "src/rabbit_mqtt.erl",
-            "src/rabbit_mqtt_collector.erl",
             "src/rabbit_mqtt_confirms.erl",
             "src/rabbit_mqtt_ff.erl",
             "src/rabbit_mqtt_internal_event_handler.erl",
@@ -46,7 +41,7 @@ def all_beam_files(name = "all_beam_files"):
         beam = [":behaviours"],
         dest = "ebin",
         erlc_opts = "//:erlc_opts",
-        deps = ["//deps/amqp10_common:erlang_app", "//deps/rabbit:erlang_app", "//deps/rabbit_common:erlang_app", "//deps/rabbitmq_cli:erlang_app", "@ra//:erlang_app", "@ranch//:erlang_app"],
+        deps = ["//deps/amqp10_common:erlang_app", "//deps/rabbit:erlang_app", "//deps/rabbit_common:erlang_app", "//deps/rabbitmq_cli:erlang_app", "@ranch//:erlang_app"],
     )
 
 def all_test_beam_files(name = "all_test_beam_files"):
@@ -68,14 +63,9 @@ def all_test_beam_files(name = "all_test_beam_files"):
         name = "test_other_beam",
         testonly = True,
         srcs = [
-            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.DecommissionMqttNodeCommand.erl",
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand.erl",
             "src/mc_mqtt.erl",
-            "src/mqtt_machine.erl",
-            "src/mqtt_machine_v0.erl",
-            "src/mqtt_node.erl",
             "src/rabbit_mqtt.erl",
-            "src/rabbit_mqtt_collector.erl",
             "src/rabbit_mqtt_confirms.erl",
             "src/rabbit_mqtt_ff.erl",
             "src/rabbit_mqtt_internal_event_handler.erl",
@@ -102,7 +92,6 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "//deps/rabbit:erlang_app",
             "//deps/rabbit_common:erlang_app",
             "//deps/rabbitmq_cli:erlang_app",
-            "@ra//:erlang_app",
             "@ranch//:erlang_app",
         ],
     )
@@ -127,14 +116,9 @@ def all_srcs(name = "all_srcs"):
     filegroup(
         name = "srcs",
         srcs = [
-            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.DecommissionMqttNodeCommand.erl",
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand.erl",
             "src/mc_mqtt.erl",
-            "src/mqtt_machine.erl",
-            "src/mqtt_machine_v0.erl",
-            "src/mqtt_node.erl",
             "src/rabbit_mqtt.erl",
-            "src/rabbit_mqtt_collector.erl",
             "src/rabbit_mqtt_confirms.erl",
             "src/rabbit_mqtt_ff.erl",
             "src/rabbit_mqtt_internal_event_handler.erl",
@@ -156,8 +140,6 @@ def all_srcs(name = "all_srcs"):
     filegroup(
         name = "public_hdrs",
         srcs = [
-            "include/mqtt_machine.hrl",
-            "include/mqtt_machine_v0.hrl",
             "include/rabbit_mqtt.hrl",
             "include/rabbit_mqtt_packet.hrl",
         ],
@@ -213,15 +195,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
-    erlang_bytecode(
-        name = "mqtt_machine_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/mqtt_machine_SUITE.erl"],
-        outs = ["test/mqtt_machine_SUITE.beam"],
-        hdrs = ["include/mqtt_machine.hrl"],
-        app_name = "rabbitmq_mqtt",
-        erlc_opts = "//:test_erlc_opts",
-    )
+
     erlang_bytecode(
         name = "processor_SUITE_beam_files",
         testonly = True,
@@ -280,14 +254,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
-    erlang_bytecode(
-        name = "ff_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/ff_SUITE.erl"],
-        outs = ["test/ff_SUITE.beam"],
-        app_name = "rabbitmq_mqtt",
-        erlc_opts = "//:test_erlc_opts",
-    )
+
     erlang_bytecode(
         name = "shared_SUITE_beam_files",
         testonly = True,
