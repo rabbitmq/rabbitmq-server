@@ -1550,30 +1550,6 @@ upgrade_prop(Conf0, Commands) ->
          %% check we can run the post entries from the converted state
          run_log(V4, PostEntries, fun (_) -> true end, ToVersion)
      end || SplitPos <- lists:seq(1, length(Entries))],
-
-    {_, V3Effs} = run_log(InitState, Entries, fun (_) -> true end, FromVersion),
-    [begin
-         Res = rabbit_fifo:apply(meta(Idx + 1),
-                                 {machine_version, FromVersion, ToVersion}, RCS) ,
-         #rabbit_fifo{} = V4 = element(1, Res),
-         %% assert invariants
-         Fields = [num_ready_messages,
-                   smallest_raft_index,
-                   num_enqueuers,
-                   num_consumers,
-                   enqueue_message_bytes,
-                   checkout_message_bytes
-                  ],
-         V3Overview = maps:with(Fields, FromMod:overview(RCS)),
-         V4Overview = maps:with(Fields, ToMod:overview(V4)),
-         case V3Overview == V4Overview of
-             true -> ok;
-             false ->
-                 ct:pal("upgrade_prop failed expected~n~tp~nGot:~n~tp",
-                        [V3Overview, V4Overview]),
-                 ?assertEqual(V3Overview, V4Overview)
-         end
-     end || {release_cursor, Idx, RCS} <- V3Effs],
     true.
 
 %% single active consumer ordering invariant:
@@ -2044,24 +2020,13 @@ run_proper(Fun, Args, NumTests) ->
                       end}])).
 
 run_snapshot_test(Conf, Commands) ->
-    %% tests that release cursor indexes are definitely lower than
-    %% the smallest raft index referring to a message
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
     ct:pal("running snapshot test 2 with ~b commands using config ~tp",
            [length(Commands), Conf]),
-    Fun = fun (_E, S, Effs) ->
+    Fun = fun (_E, S, _Effs) ->
                   MsgTotFun = messages_total_invariant(),
-                  case lists:reverse(
-                         [C || {release_cursor, _, _} = C <- Effs]) of
-                      [] ->
-                          MsgTotFun(S);
-                      [{release_cursor, Idx, _} | _] ->
-                          %% ensure the current state has no active messages
-                          %% below or equal to the release cursor index
-                          rabbit_fifo:smallest_raft_index(S) > Idx andalso
-                          MsgTotFun(S)
-                  end
+                  MsgTotFun(S)
           end,
     _ = run_log(test_init(Conf), Entries, Fun),
     true.

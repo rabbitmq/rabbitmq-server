@@ -11,8 +11,8 @@
 %% We only hold Raft index and message header in memory.
 %% Raw message data is always stored on disk.
 -define(MSG(Index, Header), ?TUPLE(Index, Header)).
--define(C_MSG(At, Msg), {At, Msg}).
--define(C_MSG(At, Index, Header), {At, ?MSG(Index, Header)}).
+% -define(C_MSG(_At, Msg), Msg).
+% -define(C_MSG(_At, Index, Header), ?MSG(Index, Header)).
 
 -define(IS_HEADER(H),
         (is_integer(H) andalso H >= 0) orelse
@@ -101,8 +101,8 @@
 -type applied_mfa() :: {module(), atom(), list()}.
 % represents a partially applied module call
 
--define(RELEASE_CURSOR_EVERY, 2048).
--define(RELEASE_CURSOR_EVERY_MAX, 3_200_000).
+-define(RELEASE_CURSOR_EVERY, 2048 * 4).
+-define(RELEASE_CURSOR_EVERY_MAX, 1_000_000).
 -define(USE_AVG_HALF_LIFE, 10000.0).
 %% an average QQ without any message uses about 100KB so setting this limit
 %% to ~10 times that should be relatively safe.
@@ -130,7 +130,7 @@
         {cfg = #consumer_cfg{},
          status = up :: up | suspected_down | cancelled | fading,
          next_msg_id = 0 :: msg_id(),
-         checked_out = #{} :: #{msg_id() => {At :: milliseconds(), msg()}},
+         checked_out = #{} :: #{msg_id() => msg()},
          %% max number of messages that can be sent
          %% decremented for each delivery
          credit = 0 :: non_neg_integer(),

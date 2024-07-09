@@ -272,7 +272,7 @@ apply(Meta, #discard{consumer_key = ConsumerKey,
                                     case maps:get(Id, Checked, undefined) of
                                         undefined ->
                                             false;
-                                        ?C_MSG(_At, Msg) ->
+                                        Msg ->
                                             {true, Msg}
                                     end
                             end, MsgIds),
@@ -320,9 +320,7 @@ apply(#{index := Idx} = Meta,
                                                                Messages),
                                    enqueue_count = EnqCount + 1},
             State2 = update_or_remove_con(Meta, ConsumerKey, Con, State1),
-            {State3, Ret, Effs0} = checkout(Meta, State0, State2, []),
-            {State, Effs} = maybe_checkpoint(Idx, State3, Effs0),
-            update_smallest_raft_index(Idx, Ret, State, Effs);
+            checkout(Meta, State0, State2, []);
         _ ->
             {State00, ok, []}
     end;
@@ -452,7 +450,7 @@ apply(#{index := Index,
     Exists = find_consumer(ConsumerId, Consumers) /= undefined,
     case messages_ready(State0) of
         0 ->
-            update_smallest_raft_index(Index, {dequeue, empty}, State0, []);
+            {State0, {dequeue, empty}, []};
         _ when Exists ->
             %% a dequeue using the same consumer_id isn't possible at this point
             {State0, {dequeue, empty}};
@@ -462,7 +460,7 @@ apply(#{index := Index,
                                           State0),
             case checkout_one(Meta, false, State1, []) of
                 {success, _, MsgId,
-                 ?MSG(RaftIdx, Header), ExpiredMsg, State2, Effects0} ->
+                 ?MSG(RaftIdx, Header), _ExpiredMsg, State2, Effects0} ->
                     {State4, Effects1} =
                         case Settlement of
                             unsettled ->
@@ -478,15 +476,9 @@ apply(#{index := Index,
                     Effects2 = [reply_log_effect(RaftIdx, MsgId, Header,
                                                  messages_ready(State4), From)
                                 | Effects1],
-                    {State, DroppedMsg, Effects} =
+                    {State, _DroppedMsg, Effects} =
                         evaluate_limit(Index, false, State0, State4, Effects2),
-                    Reply = '$ra_no_reply',
-                    case {DroppedMsg, ExpiredMsg} of
-                        {false, false} ->
-                            {State, Reply, Effects};
-                        _ ->
-                            update_smallest_raft_index(Index, Reply, State, Effects)
-                    end;
+                    {State,  '$ra_no_reply', Effects};
                 {nochange, _ExpiredMsg = true, State2, Effects0} ->
                     %% All ready messages expired.
                     State3 = State2#?STATE{consumers =
@@ -494,11 +486,10 @@ apply(#{index := Index,
                                                        State2#?STATE.consumers)},
                     {State, _, Effects} = evaluate_limit(Index, false, State0,
                                                          State3, Effects0),
-                    update_smallest_raft_index(Index, {dequeue, empty},
-                                               State, Effects)
+                    {State, {dequeue, empty}, Effects}
             end
     end;
-apply(#{index := Idx} = Meta,
+apply(#{index := _Idx} = Meta,
       #checkout{spec = Spec,
                 consumer_id = ConsumerId}, State0)
   when Spec == cancel orelse
@@ -510,10 +501,9 @@ apply(#{index := Idx} = Meta,
                                                    Spec)),
             Reply = {ok, consumer_cancel_info(ConsumerKey, State1)},
             {State, _, Effects} = checkout(Meta, State0, State1, Effects1),
-            update_smallest_raft_index(Idx, Reply, State, Effects);
+            {State, Reply, Effects};
         error ->
-            update_smallest_raft_index(Idx, {error, consumer_not_found},
-                                       State0, [])
+            {State0, {error, consumer_not_found}, []}
     end;
 apply(#{index := Idx} = Meta,
       #checkout{spec = Spec0,
@@ -592,9 +582,9 @@ apply(#{index := Index}, #purge{},
     Reply = {purge, NumReady},
     {State, _, Effects} = evaluate_limit(Index, false, State0,
                                          State1, Effects0),
-    update_smallest_raft_index(Index, Reply, State, Effects);
-apply(#{index := Idx}, #garbage_collection{}, State) ->
-    update_smallest_raft_index(Idx, ok, State, [{aux, garbage_collection}]);
+    {State, Reply, Effects};
+apply(#{index := _Idx}, #garbage_collection{}, State) ->
+    {State, ok, [{aux, garbage_collection}]};
 apply(Meta, {timeout, expire_msgs}, State) ->
     checkout(Meta, State, State, []);
 apply(#{system_time := Ts} = Meta,
@@ -683,11 +673,10 @@ apply(#{system_time := Ts} = Meta,
     Effects = [{monitor, node, Node} | Effects1],
     checkout(Meta, State0, State#?STATE{enqueuers = Enqs,
                                         last_active = Ts}, Effects);
-apply(#{index := Idx} = Meta, {down, Pid, _Info}, State0) ->
+apply(#{index := _Idx} = Meta, {down, Pid, _Info}, State0) ->
     {State1, Effects1} = activate_next_consumer(
                            handle_down(Meta, Pid, State0)),
-    {State, Reply, Effects} = checkout(Meta, State0, State1, Effects1),
-    update_smallest_raft_index(Idx, Reply, State, Effects);
+    checkout(Meta, State0, State1, Effects1);
 apply(Meta, {nodeup, Node}, #?STATE{consumers = Cons0,
                                     enqueuers = Enqs0,
                                     service_queue = _SQ0} = State0) ->
@@ -723,12 +712,12 @@ apply(Meta, {nodeup, Node}, #?STATE{consumers = Cons0,
     checkout(Meta, State0, State, Effects);
 apply(_, {nodedown, _Node}, State) ->
     {State, ok};
-apply(#{index := Idx} = Meta, #purge_nodes{nodes = Nodes}, State0) ->
+apply(#{index := _Idx} = Meta, #purge_nodes{nodes = Nodes}, State0) ->
     {State, Effects} = lists:foldl(fun(Node, {S, E}) ->
                                            purge_node(Meta, Node, S, E)
                                    end, {State0, []}, Nodes),
-    update_smallest_raft_index(Idx, ok, State, Effects);
-apply(#{index := Idx} = Meta,
+    {State, ok, Effects};
+apply(#{index := _Idx} = Meta,
       #update_config{config = #{dead_letter_handler := NewDLH} = Conf},
       #?STATE{cfg = #cfg{dead_letter_handler = OldDLH,
                          resource = QRes},
@@ -736,36 +725,26 @@ apply(#{index := Idx} = Meta,
     {DlxState, Effects0} = rabbit_fifo_dlx:update_config(OldDLH, NewDLH, QRes,
                                                          DlxState0),
     State1 = update_config(Conf, State0#?STATE{dlx = DlxState}),
-    {State, Reply, Effects} = checkout(Meta, State0, State1, Effects0),
-    update_smallest_raft_index(Idx, Reply, State, Effects);
+    checkout(Meta, State0, State1, Effects0);
 apply(Meta, {machine_version, FromVersion, ToVersion}, V0State) ->
     State = convert(Meta, FromVersion, ToVersion, V0State),
     {State, ok, [{aux, {dlx, setup}}]};
-apply(#{index := IncomingRaftIdx} = Meta, {dlx, _} = Cmd,
+apply(#{index := _IncomingRaftIdx} = Meta, {dlx, _} = Cmd,
       #?STATE{cfg = #cfg{dead_letter_handler = DLH},
                dlx = DlxState0} = State0) ->
     {DlxState, Effects0} = rabbit_fifo_dlx:apply(Meta, Cmd, DLH, DlxState0),
     State1 = State0#?STATE{dlx = DlxState},
-    {State, ok, Effects} = checkout(Meta, State0, State1, Effects0),
-    update_smallest_raft_index(IncomingRaftIdx, State, Effects);
+    checkout(Meta, State0, State1, Effects0);
 apply(_Meta, Cmd, State) ->
     %% handle unhandled commands gracefully
     rabbit_log:debug("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
     {State, ok, []}.
 
-convert_v3_to_v4(#{system_time := Ts},
+convert_v3_to_v4(#{system_time := _Ts},
                  StateV3) ->
     Messages0 = rabbit_fifo_v3:get_field(messages, StateV3),
-    Consumers0 = rabbit_fifo_v3:get_field(consumers, StateV3),
+    Consumers = rabbit_fifo_v3:get_field(consumers, StateV3),
     Messages = rabbit_fifo_q:from_lqueue(Messages0),
-    Consumers = maps:map(
-                  fun (_CKey, #consumer{checked_out = Ch0} = C) ->
-                          Ch = maps:map(
-                                 fun (_MsgId, ?MSG(_, _) = Msg) ->
-                                         ?C_MSG(Ts, Msg)
-                                 end, Ch0),
-                          C#consumer{checked_out = Ch}
-                  end, Consumers0),
     #?MODULE{cfg = rabbit_fifo_v3:get_field(cfg, StateV3),
              messages = Messages,
              messages_total = rabbit_fifo_v3:get_field(messages_total, StateV3),
@@ -978,7 +957,7 @@ get_checked_out(CKey, From, To, #?STATE{consumers = Consumers}) ->
     case find_consumer(CKey, Consumers) of
         {_CKey, #consumer{checked_out = Checked}} ->
             [begin
-                 ?C_MSG(_At, I, H) = maps:get(K, Checked),
+                 ?MSG(I, H) = maps:get(K, Checked),
                  {K, {I, H}}
              end || K <- lists:seq(From, To), maps:is_key(K, Checked)];
         _ ->
@@ -992,10 +971,15 @@ which_module(0) -> rabbit_fifo_v0;
 which_module(1) -> rabbit_fifo_v1;
 which_module(2) -> rabbit_fifo_v3;
 which_module(3) -> rabbit_fifo_v3;
-which_module(4) -> ?STATE.
+which_module(4) -> ?MODULE.
 
 -define(AUX, aux_v2).
 
+-record(checkpoint, {index :: ra:index(),
+                     timestamp :: milliseconds(),
+                     enqueue_count :: non_neg_integer(),
+                     last_smallest_index :: ra:index(),
+                     messages_total :: non_neg_integer()}).
 -record(aux_gc, {last_raft_idx = 0 :: ra:index()}).
 -record(aux, {name :: atom(),
               capacity :: term(),
@@ -1005,7 +989,9 @@ which_module(4) -> ?STATE.
                capacity :: term(),
                gc = #aux_gc{} :: #aux_gc{},
                tick_pid :: undefined | pid(),
-               cache = #{} :: map()}).
+               cache = #{} :: map(),
+               %% TODO: we need a state conversion for this
+               last_checkpoint :: #checkpoint{}}).
 
 init_aux(Name) when is_atom(Name) ->
     %% TODO: catch specific exception throw if table already exists
@@ -1014,15 +1000,18 @@ init_aux(Name) when is_atom(Name) ->
                                       {write_concurrency, true}]),
     Now = erlang:monotonic_time(micro_seconds),
     #?AUX{name = Name,
-          capacity = {inactive, Now, 1, 1.0}}.
+          capacity = {inactive, Now, 1, 1.0},
+          last_checkpoint = #checkpoint{index = 0,
+                                        timestamp = erlang:system_time(millisecond),
+                                        enqueue_count = 0}}.
 
 handle_aux(RaftState, Tag, Cmd, #aux{name = Name,
                                      capacity = Cap,
                                      gc = Gc}, RaAux) ->
     %% convert aux state to new version
-    Aux = #?AUX{name = Name,
-                capacity = Cap,
-                gc = Gc},
+    AuxV2 = init_aux(Name),
+    Aux = AuxV2#?AUX{capacity = Cap,
+                     gc = Gc},
     handle_aux(RaftState, Tag, Cmd, Aux, RaAux);
 handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
                                       consumer_key = Key} = Ret, Corr, Pid},
@@ -1034,7 +1023,7 @@ handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
                 {ConsumerKey, #consumer{checked_out = Checked}} ->
                     {RaAux, ToReturn} =
                     maps:fold(
-                      fun (MsgId, ?C_MSG(_, Idx, Header), {RA0, Acc}) ->
+                      fun (MsgId, ?MSG(Idx, Header), {RA0, Acc}) ->
                               %% it is possible this is not found if the consumer
                               %% crashed and the message got removed
                               case ra_aux:log_fetch(Idx, RA0) of
@@ -1069,8 +1058,15 @@ handle_aux(leader, _, {handle_tick, [QName, Overview0, Nodes]},
                 %% Active TICK pid, do nothing
                 Pid
         end,
+
+    Effs = case smallest_raft_index(ra_aux:machine_state(RaAux)) of
+               undefined ->
+                   [{release_cursor, ra_aux:last_applied(RaAux)}];
+               Smallest ->
+                   [{release_cursor, Smallest}]
+           end,
     %% TODO: check consumer timeouts
-    {no_reply, Aux#?AUX{tick_pid = NewPid}, RaAux};
+    {no_reply, Aux#?AUX{tick_pid = NewPid}, RaAux, Effs};
 handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds}, Aux0, RaAux0) ->
     #?STATE{cfg = #cfg{},
             consumers = Consumers} = ra_aux:machine_state(RaAux0),
@@ -1078,7 +1074,7 @@ handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds}, Aux0, RaAux0) ->
         #{ConsumerKey := #consumer{checked_out = Checked}} ->
             {RaState, IdMsgs} =
                 maps:fold(
-                  fun (MsgId, ?C_MSG(_, Idx, Header), {S0, Acc}) ->
+                  fun (MsgId, ?MSG(Idx, Header), {S0, Acc}) ->
                           %% it is possible this is not found if the consumer
                           %% crashed and the message got removed
                           case ra_aux:log_fetch(Idx, S0) of
@@ -1093,25 +1089,35 @@ handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds}, Aux0, RaAux0) ->
         _ ->
             {reply, {error, consumer_not_found}, Aux0, RaAux0}
     end;
-handle_aux(leader, cast, eval, #?AUX{last_decorators_state = LastDec} = Aux0,
+handle_aux(leader, cast, eval,
+           #?AUX{last_decorators_state = LastDec,
+                 last_checkpoint = Check0} = Aux0,
            RaAux) ->
     #?STATE{cfg = #cfg{resource = QName}} = MacState =
         ra_aux:machine_state(RaAux),
+
+    Ts = erlang:system_time(millisecond),
+    {Check, Effects0} = do_checkpoints(Ts, Check0, RaAux),
+
     %% this is called after each batch of commands have been applied
     %% set timer for message expire
     %% should really be the last applied index ts but this will have to do
-    Ts = erlang:system_time(millisecond),
-    Effects0 = timer_effect(Ts, MacState, []),
+    Effects1 = timer_effect(Ts, MacState, Effects0),
     case query_notify_decorators_info(MacState) of
         LastDec ->
-            {no_reply, Aux0, RaAux, Effects0};
+            {no_reply, Aux0#?AUX{last_checkpoint = Check}, RaAux, Effects1};
         {MaxActivePriority, IsEmpty} = NewLast ->
             Effects = [notify_decorators_effect(QName, MaxActivePriority, IsEmpty)
-                       | Effects0],
-            {no_reply, Aux0#?AUX{last_decorators_state = NewLast}, RaAux, Effects}
+                       | Effects1],
+            {no_reply, Aux0#?AUX{last_checkpoint = Check,
+                                 last_decorators_state = NewLast}, RaAux, Effects}
     end;
-handle_aux(_RaftState, cast, eval, Aux0, RaAux) ->
-    {no_reply, Aux0, RaAux};
+handle_aux(_RaftState, cast, eval,
+           #?AUX{last_checkpoint = Check0} = Aux0,
+           RaAux) ->
+    Ts = erlang:system_time(millisecond),
+    {Check, Effects} = do_checkpoints(Ts, Check0, RaAux),
+    {no_reply, Aux0#?AUX{last_checkpoint = Check}, RaAux, Effects};
 handle_aux(_RaState, cast, Cmd, #?AUX{capacity = Use0} = Aux0, RaAux)
   when Cmd == active orelse Cmd == inactive ->
     {no_reply, Aux0#?AUX{capacity = update_use(Use0, Cmd)}, RaAux};
@@ -1189,8 +1195,7 @@ eval_gc(RaAux, MacState,
             AuxState
     end.
 
-force_eval_gc(%Log,
-              RaAux,
+force_eval_gc(RaAux,
               #?AUX{gc = #aux_gc{last_raft_idx = LastGcIdx} = Gc} = AuxState) ->
     {Idx, _} = ra_aux:log_last_index_term(RaAux),
     #?STATE{cfg = #cfg{resource = QR}} = ra_aux:machine_state(RaAux),
@@ -1604,9 +1609,7 @@ apply_enqueue(#{index := RaftIdx,
               Seq, RawMsg, Size, State0) ->
     case maybe_enqueue(RaftIdx, Ts, From, Seq, RawMsg, Size, [], State0) of
         {ok, State1, Effects1} ->
-            {State2, ok, Effects2} = checkout(Meta, State0, State1, Effects1),
-            {State, Effects} = maybe_checkpoint(RaftIdx, State2, Effects2),
-            {State, ok, Effects};
+            checkout(Meta, State0, State1, Effects1);
         {out_of_sequence, State, Effects} ->
             {State, not_enqueued, Effects};
         {duplicate, State, Effects} ->
@@ -1654,29 +1657,6 @@ update_expiry_header(RaCmdTs, TTL, Header) ->
 
 update_expiry_header(ExpiryTs, Header) ->
     update_header(expiry, fun(Ts) -> Ts end, ExpiryTs, Header).
-
-maybe_checkpoint(RaftIdx,
-                 #?STATE{cfg = #cfg{release_cursor_interval = {Base, C}} = Cfg,
-                         enqueue_count = EC} = State0,
-                 Effects0)
-  when EC >= C ->
-    case messages_total(State0) of
-        0 ->
-            %% message must have been immediately dropped
-            {State0#?STATE{enqueue_count = 0}, Effects0};
-        Total ->
-            Interval = case Base of
-                           0 -> 0;
-                           _ ->
-                               min(max(Total, Base), ?RELEASE_CURSOR_EVERY_MAX)
-                       end,
-            State = State0#?STATE{cfg = Cfg#cfg{release_cursor_interval =
-                                                 {Base, Interval}}},
-            Effects = Effects0 ++ [{checkpoint, RaftIdx, State}],
-            {State#?STATE{enqueue_count = 0}, Effects}
-    end;
-maybe_checkpoint(_RaftIdx, State, Effects) ->
-    {State, Effects}.
 
 maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg,
               {_MetaSize, BodySize},
@@ -1739,14 +1719,14 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
             {duplicate, State0, Effects0}
     end.
 
-return(#{index := IncomingRaftIdx} = Meta,
+return(#{} = Meta,
        ConsumerKey, MsgIds, Checked, Effects0, State0) ->
     %% We requeue in the same order as messages got returned by the client.
     {State1, Effects1} =
         lists:foldl(
           fun(MsgId, Acc = {S0, E0}) ->
                   case Checked of
-                      #{MsgId := {_At, Msg0}} ->
+                      #{MsgId := Msg0} ->
                           Msg = update_msg_header(return_count, fun incr/1, 1,
                                                   Msg0),
                           return_one(Meta, MsgId, Msg,
@@ -1761,8 +1741,7 @@ return(#{index := IncomingRaftIdx} = Meta,
                  _ ->
                      State1
              end,
-    {State, ok, Effects} = checkout(Meta, State0, State2, Effects1),
-    update_smallest_raft_index(IncomingRaftIdx, State, Effects).
+    checkout(Meta, State0, State2, Effects1).
 
 % used to process messages that are finished
 complete(Meta, ConsumerKey, [MsgId],
@@ -1771,7 +1750,7 @@ complete(Meta, ConsumerKey, [MsgId],
                  msg_bytes_checkout = BytesCheckout,
                  messages_total = Tot} = State0) ->
     case maps:take(MsgId, Checked0) of
-        {?C_MSG(_, Idx, Hdr), Checked} ->
+        {?MSG(Idx, Hdr), Checked} ->
             SettledSize = get_header(size, Hdr),
             Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
             Con = Con0#consumer{checked_out = Checked,
@@ -1792,7 +1771,7 @@ complete(Meta, ConsumerKey, MsgIds,
         = lists:foldl(
             fun (MsgId, {S0, Ch0, Idxs}) ->
                     case maps:take(MsgId, Ch0) of
-                        {?C_MSG(_, Idx, Hdr), Ch} ->
+                        {?MSG(Idx, Hdr), Ch} ->
                             S = get_header(size, Hdr) + S0,
                             {S, Ch, rabbit_fifo_index:delete(Idx, Idxs)};
                         error ->
@@ -1829,47 +1808,19 @@ increase_credit(#consumer{cfg = #consumer_cfg{credit_mode =
 increase_credit(#consumer{credit = Current}, Credit) ->
     Current + Credit.
 
-complete_and_checkout(#{index := IncomingRaftIdx} = Meta, MsgIds, ConsumerKey,
+complete_and_checkout(#{} = Meta, MsgIds, ConsumerKey,
                       #consumer{} = Con0,
                       Effects0, State0) ->
     State1 = complete(Meta, ConsumerKey, MsgIds, Con0, State0),
     %% a completion could have removed the active/fading consumer
     {State2, Effects1} = activate_next_consumer(State1, Effects0),
-    {State, ok, Effects} = checkout(Meta, State0, State2, Effects1),
-    update_smallest_raft_index(IncomingRaftIdx, State, Effects).
+    checkout(Meta, State0, State2, Effects1).
 
 cancel_consumer_effects(ConsumerId,
                         #?STATE{cfg = #cfg{resource = QName}},
                         Effects) when is_tuple(ConsumerId) ->
     [{mod_call, rabbit_quorum_queue,
       cancel_consumer_handler, [QName, ConsumerId]} | Effects].
-
-update_smallest_raft_index(Idx, State, Effects) ->
-    update_smallest_raft_index(Idx, ok, State, Effects).
-
-update_smallest_raft_index(IncomingRaftIdx, Reply,
-                           #?STATE{cfg = Cfg} = State0,
-                           Effects0) ->
-    %% TODO: optimise
-    case smallest_raft_index(State0) of
-        undefined ->
-            % there are no messages on queue anymore and no pending enqueues
-            % we can forward release_cursor all the way until
-            % the last received command, hooray
-            %% reset the release cursor interval
-            #cfg{release_cursor_interval = {Base, _}} = Cfg,
-            RCI = {Base, Base},
-            State = State0#?STATE{cfg = Cfg#cfg{release_cursor_interval = RCI},
-                                  enqueue_count = 0},
-            Effects = Effects0 ++ [{release_cursor, IncomingRaftIdx, State}],
-            {State, Reply, Effects};
-        Smallest when is_integer(Smallest) ->
-            %% Promote a checkpoint smaller than `Smallest'. `Smallest' is the
-            %% oldest message that must remain in the log, so we can only
-            %% promote an existing checkpoint smaller than `Smallest'.
-            Effects = Effects0 ++ [{release_cursor, Smallest - 1}],
-            {State0, Reply, Effects}
-    end.
 
 update_msg_header(Key, Fun, Def, ?MSG(Idx, Header)) ->
     ?MSG(Idx, update_header(Key, Fun, Def, Header)).
@@ -1943,7 +1894,7 @@ return_one(Meta, MsgId, ?MSG(_, _) = Msg0,
 return_all(Meta, #?STATE{consumers = Cons} = State0, Effects0, ConsumerKey,
            #consumer{checked_out = Checked} = Con) ->
     State = State0#?STATE{consumers = Cons#{ConsumerKey => Con}},
-    lists:foldl(fun ({MsgId, ?C_MSG(_At, Msg)}, {S, E}) ->
+    lists:foldl(fun ({MsgId, Msg}, {S, E}) ->
                         return_one(Meta, MsgId, Msg, S, E, ConsumerKey)
                 end, {State, Effects0}, lists:sort(maps:to_list(Checked))).
 
@@ -1954,7 +1905,7 @@ checkout(#{index := Index} = Meta,
          #?STATE{} = OldState,
          State0, Effects0, Reply) ->
     {#?STATE{cfg = #cfg{dead_letter_handler = DLH},
-             dlx = DlxState0} = State1, ExpiredMsg, Effects1} =
+             dlx = DlxState0} = State1, _ExpiredMsg, Effects1} =
         checkout0(Meta, checkout_one(Meta, false, State0, Effects0), #{}),
     {DlxState, DlxDeliveryEffects} = rabbit_fifo_dlx:checkout(DLH, DlxState0),
     %% TODO: only update dlx state if it has changed?
@@ -1963,10 +1914,8 @@ checkout(#{index := Index} = Meta,
                            dlx = DlxState},
     Effects2 = DlxDeliveryEffects ++ Effects1,
     case evaluate_limit(Index, false, OldState, State2, Effects2) of
-        {State, false, Effects} when ExpiredMsg == false ->
-            {State, Reply, Effects};
         {State, _, Effects} ->
-            update_smallest_raft_index(Index, Reply, State, Effects)
+            {State, Reply, Effects}
     end.
 
 checkout0(Meta, {success, ConsumerKey, MsgId,
@@ -2156,7 +2105,7 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
                                   credit = Credit,
                                   delivery_count = DelCnt0,
                                   cfg = Cfg} = Con0 ->
-                            Checked = maps:put(Next, ?C_MSG(Ts, Msg), Checked0),
+                            Checked = maps:put(Next, Msg, Checked0),
                             DelCnt = case credit_api_v2(Cfg) of
                                          true -> add(DelCnt0, 1);
                                          false -> DelCnt0 + 1
@@ -2800,3 +2749,55 @@ priority_tag(Msg) ->
         false ->
             lo
     end.
+
+do_checkpoints(Ts,
+               #checkpoint{index = ChIdx,
+                           timestamp = ChTime,
+                           enqueue_count = ChEnqCnt,
+                           last_smallest_index = LastSmallest,
+                           messages_total = LastMsgsTot} = Check0, RaAux) ->
+    LastAppliedIdx = ra_aux:last_applied(RaAux),
+    #?STATE{enqueue_count = EnqCnt} = MacState = ra_aux:machine_state(RaAux),
+    MsgsTot = messages_total(MacState),
+    Mult = case MsgsTot > 200_000 of
+               true ->
+                   min(4, MsgsTot div 100_000);
+               false ->
+                   1
+           end,
+    Since = Ts - ChTime,
+    NewSmallest  = case smallest_raft_index(MacState) of
+                       undefined ->
+                           LastAppliedIdx;
+                       Smallest ->
+                           Smallest
+                   end,
+    {Check, Effects} = case (EnqCnt - ChEnqCnt > 4096 andalso
+                             Since > (500 * Mult)) orelse
+                            (LastAppliedIdx - ChIdx > 65456 andalso
+                             Since > (5000 * Mult)) orelse
+                            (LastMsgsTot > 0 andalso MsgsTot == 0) of
+                           true ->
+                               %% take a checkpoint;
+                               {#checkpoint{index = LastAppliedIdx,
+                                            timestamp = Ts,
+                                            enqueue_count = EnqCnt,
+                                            last_smallest_index = NewSmallest,
+                                            messages_total = MsgsTot},
+                                [{checkpoint, LastAppliedIdx, MacState} |
+                                 release_cursor(LastSmallest, NewSmallest)]};
+                           false ->
+                               {Check0#checkpoint{last_smallest_index = NewSmallest},
+                                release_cursor(LastSmallest, NewSmallest)}
+                       end,
+
+    {Check, Effects}.
+
+release_cursor(LastSmallest, Smallest)
+  when is_integer(LastSmallest) andalso
+       is_integer(Smallest) andalso
+       Smallest > LastSmallest ->
+    [{release_cursor, Smallest}];
+release_cursor(_, _) ->
+    [].
+

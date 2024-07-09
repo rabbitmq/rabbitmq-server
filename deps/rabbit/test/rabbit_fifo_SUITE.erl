@@ -417,22 +417,6 @@ enq_expire_deq_enq_enq_deq_deq_test(Config) ->
         apply(meta(Config, 6), make_checkout({c3, self()}, {dequeue, unsettled}, #{}), S5),
     ok.
 
-release_cursor_test(Config) ->
-    Cid = {?FUNCTION_NAME_B, self()},
-    {State1, _} = enq(Config, 1, 1, first,  test_init(test)),
-    {State2, _} = enq(Config, 2, 2, second, State1),
-    {State3, #{key := CKey}, _} = checkout(Config, ?LINE, Cid,
-                                           {auto, {simple_prefetch, 10}},
-                                           State2),
-    % no release cursor effect at this point
-    {State4, _} = settle(Config, CKey, ?LINE, 1, State3),
-    Settle0Idx = ?LINE,
-    {_Final, Effects1} = settle(Config, CKey, Settle0Idx, 0, State4),
-    ct:pal("Effects1 ~p", [Effects1]),
-    % empty queue forwards release cursor all the way
-    ?ASSERT_EFF({release_cursor, _, __}, Effects1),
-    ok.
-
 checkout_enq_settle_test(Config) ->
     Cid = {?FUNCTION_NAME_B, self()},
     {State1, #{key := CKey,
@@ -441,10 +425,7 @@ checkout_enq_settle_test(Config) ->
     {State2, Effects0} = enq(Config, 2, 1,  first, State1),
     ?ASSERT_EFF({send_msg, _, {delivery, _, [{0, {_, first}}]}, _}, Effects0),
     {State3, _} = enq(Config, 3, 2, second, State2),
-    {_, Effects} = settle(Config, CKey, 4, NextMsgId, State3),
-    % the release cursor is the smallest raft index that does not
-    % contribute to the state of the application
-    ?ASSERT_EFF({release_cursor, 2}, Effects),
+    {_, _Effects} = settle(Config, CKey, 4, NextMsgId, State3),
     ok.
 
 duplicate_enqueue_test(Config) ->
@@ -620,11 +601,10 @@ cancelled_checkout_empty_queue_test(Config) ->
         checkout(Config, ?LINE, Cid, 1, test_init(test)),%% prefetch of 1
     % cancelled checkout should clear out service_queue also, else we'd get a
     % build up of these
-    {State2, _, Effects} = apply(meta(Config, 3),
-                                 make_checkout(Cid, cancel, #{}), State1),
+    {State2, _, _Effects} = apply(meta(Config, 3),
+                                  make_checkout(Cid, cancel, #{}), State1),
     ?assertEqual(0, map_size(State2#rabbit_fifo.consumers)),
     ?assertEqual(0, priority_queue:len(State2#rabbit_fifo.service_queue)),
-    ?ASSERT_EFF({release_cursor, _, _}, Effects),
     ok.
 
 cancelled_checkout_out_test(Config) ->
@@ -2523,33 +2503,6 @@ checkout_priority_test(Config) ->
     ?ASSERT_EFF({send_msg, P, {delivery, _, _}, _}, P == self(), E4),
     {_S5, E5} = enq(Config, ?LINE, 3, third, S4),
     ?ASSERT_EFF({send_msg, P, {delivery, _, _}, _}, P == Pid, E5),
-    ok.
-
-empty_dequeue_should_emit_release_cursor_test(Config) ->
-    State0 = test_init(?FUNCTION_NAME),
-    Cid = {<<"basic.get1">>, self()},
-    {_State, {dequeue, empty}, Effects} =
-        apply(meta(Config, ?LINE, 1234),
-              make_checkout(Cid, {dequeue, unsettled}, #{}),
-              State0),
-
-    ?ASSERT_EFF({release_cursor, _, _}, Effects),
-    ok.
-
-expire_message_should_emit_release_cursor_test(Config) ->
-    Conf = #{name => ?FUNCTION_NAME,
-             queue_resource => rabbit_misc:r(<<"/">>, queue, ?FUNCTION_NAME_B),
-             release_cursor_interval => 0,
-             msg_ttl => 1},
-    S0 = rabbit_fifo:init(Conf),
-    Msg = #basic_message{content = #content{properties = #'P_basic'{},
-                                            payload_fragments_rev = []}},
-    {S1, ok, _} = apply(meta(Config, ?LINE, 100, {notify, 1, self()}),
-                        rabbit_fifo:make_enqueue(self(), 1, Msg), S0),
-    {_S, ok, Effs} = apply(meta(Config, ?LINE, 101, {notify, 2, self()}),
-                           rabbit_fifo:make_enqueue(self(), 2, Msg),
-                           S1),
-    ?ASSERT_EFF({release_cursor, _}, Effs),
     ok.
 
 header_test(_) ->
