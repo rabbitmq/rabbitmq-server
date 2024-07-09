@@ -15,7 +15,7 @@
          is_running/2, is_process_running/2,
          cluster_name/0, set_cluster_name/1, set_cluster_name/2, ensure_epmd/0,
          all_running/0,
-         is_member/1, list_members/0,
+         is_member/1, list_members/0, list_consistent_members/0,
          filter_members/1,
          is_reachable/1, list_reachable/0, list_unreachable/0,
          filter_reachable/1, filter_unreachable/1,
@@ -181,6 +181,14 @@ is_member(Node) when is_atom(Node) ->
 
 list_members() ->
     rabbit_db_cluster:members().
+
+-spec list_consistent_members() -> Nodes when
+      Nodes :: [node()].
+%% @doc Returns the list of nodes in the cluster as reported by the leader.
+%%
+
+list_consistent_members() ->
+    rabbit_db_cluster:consistent_members().
 
 -spec filter_members(Nodes) -> Nodes when
       Nodes :: [node()].

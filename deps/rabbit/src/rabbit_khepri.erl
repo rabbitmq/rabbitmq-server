@@ -425,7 +425,13 @@ post_add_member(JoiningNode, JoinedNode, Error) ->
 %% @private
 
 leave_cluster(Node) ->
-    retry_khepri_op(fun() -> remove_member(Node) end, 60).
+    case retry_khepri_op(fun() -> remove_member(Node) end, 60) of
+        ok ->
+            rabbit_event:notify(node_deleted, [{node, Node}]),
+            ok;
+        Any ->
+            Any
+    end.
 
 %% @private
 
