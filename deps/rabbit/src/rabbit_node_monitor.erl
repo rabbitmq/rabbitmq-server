@@ -172,7 +172,7 @@ notify_node_up() ->
 
 notify_joined_cluster() ->
     NewMember = node(),
-    Nodes = alive_rabbit_nodes() -- [NewMember],
+    Nodes = alive_rabbit_nodes(rabbit_nodes:list_consistent_members()) -- [NewMember],
     gen_server:abcast(Nodes, ?SERVER,
                       {joined_cluster, node(), rabbit_db_cluster:node_type()}),
 

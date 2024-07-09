@@ -17,6 +17,7 @@
 -export([change_node_type/1]).
 -export([is_clustered/0,
          members/0,
+         consistent_members/0,
          disc_members/0,
          node_type/0,
          check_compatibility/1,
@@ -305,6 +306,19 @@ members_using_khepri() ->
     %% For khepri however it is a lot more likely to encounter an error
     %% so we need to allow callers to be more defensive in this case.
     rabbit_khepri:locally_known_nodes().
+
+-spec consistent_members() -> Members when
+      Members :: [node()].
+%% @doc Returns the list of cluster members.
+
+consistent_members() ->
+    case rabbit_khepri:get_feature_state() of
+        enabled -> consistent_members_using_khepri();
+        _       -> members_using_mnesia()
+    end.
+
+consistent_members_using_khepri() ->
+    rabbit_khepri:nodes().
 
 -spec disc_members() -> Members when
       Members :: [node()].
