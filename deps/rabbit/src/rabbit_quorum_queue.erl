@@ -498,9 +498,9 @@ handle_tick(QName,
                           ok
                   end
               catch
-                  _:Err ->
-                      rabbit_log:debug("~ts: handle tick failed with ~p",
-                                       [rabbit_misc:rs(QName), Err]),
+                  Class:Error:Stacktrace ->
+                      rabbit_log:debug("~ts: handle tick failed with ~tp:~tp:~tp",
+                                       [rabbit_misc:rs(QName), Class, Error, Stacktrace]),
                       ok
               end
       end).
