@@ -129,18 +129,16 @@ init_per_group(authz, Config0) ->
                                  ,{vhost, VHost}
                                  ,{exchange, <<"amq.topic">>}
                                  ]},
-    Config1 = rabbit_ct_helpers:run_setup_steps(rabbit_ct_helpers:merge_app_env(Config0, MqttConfig),
-                                                rabbit_ct_broker_helpers:setup_steps() ++
-                                                    rabbit_ct_client_helpers:setup_steps()),
-    rabbit_ct_broker_helpers:add_user(Config1, User, Password),
-    rabbit_ct_broker_helpers:add_vhost(Config1, VHost),
-    [Log|_] = rpc(Config1, 0, rabbit, log_locations, []),
-    Config2 = [{mqtt_user, User},
-               {mqtt_vhost, VHost},
-               {mqtt_password, Password},
-               {log_location, Log} | Config1],
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config2, mqtt_v5),
-    Config2;
+    Config = rabbit_ct_helpers:run_setup_steps(rabbit_ct_helpers:merge_app_env(Config0, MqttConfig),
+                                               rabbit_ct_broker_helpers:setup_steps() ++
+                                               rabbit_ct_client_helpers:setup_steps()),
+    rabbit_ct_broker_helpers:add_user(Config, User, Password),
+    rabbit_ct_broker_helpers:add_vhost(Config, VHost),
+    [Log|_] = rpc(Config, 0, rabbit, log_locations, []),
+    [{mqtt_user, User},
+     {mqtt_vhost, VHost},
+     {mqtt_password, Password},
+     {log_location, Log} | Config];
 init_per_group(Group, Config) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
@@ -149,22 +147,20 @@ init_per_group(Group, Config) ->
     ]),
     MqttConfig = mqtt_config(Group),
     AuthConfig = auth_config(Group),
-    Config2 = rabbit_ct_helpers:run_setup_steps(
-                Config1,
-                [fun(Conf) -> case MqttConfig of
-                                  undefined  -> Conf;
-                                  _          -> merge_app_env(MqttConfig, Conf)
-                              end
-                 end] ++
-                [fun(Conf) -> case AuthConfig of
-                                  undefined -> Conf;
-                                  _         -> merge_app_env(AuthConfig, Conf)
-                              end
-                 end] ++
-                rabbit_ct_broker_helpers:setup_steps() ++
-                rabbit_ct_client_helpers:setup_steps()),
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config2, mqtt_v5),
-    Config2.
+    rabbit_ct_helpers:run_setup_steps(
+      Config1,
+      [fun(Conf) -> case MqttConfig of
+                        undefined  -> Conf;
+                        _          -> merge_app_env(MqttConfig, Conf)
+                    end
+       end] ++
+      [fun(Conf) -> case AuthConfig of
+                        undefined -> Conf;
+                        _         -> merge_app_env(AuthConfig, Conf)
+                    end
+       end] ++
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(G, Config)
   when G =:= v4;

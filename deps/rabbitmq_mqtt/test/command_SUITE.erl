@@ -56,9 +56,7 @@ end_per_suite(Config) ->
 init_per_group(unit, Config) ->
     Config;
 init_per_group(Group, Config) ->
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, delete_ra_cluster_mqtt_node),
-    Config1 = rabbit_ct_helpers:set_config(Config, {mqtt_version, Group}),
-    util:maybe_skip_v5(Config1).
+    rabbit_ct_helpers:set_config(Config, {mqtt_version, Group}).
 
 end_per_group(_, Config) ->
     Config.

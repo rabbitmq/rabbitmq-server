@@ -6,7 +6,6 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -export([all_connection_pids/1,
-         all_connection_pids/2,
          publish_qos1_timeout/4,
          sync_publish_result/3,
          get_global_counters/1,
@@ -25,23 +24,13 @@
          assert_message_expiry_interval/2,
          await_exit/1,
          await_exit/2,
-         maybe_skip_v5/1,
          non_clean_sess_opts/0
         ]).
 
 all_connection_pids(Config) ->
-    all_connection_pids(0, Config).
-
-all_connection_pids(Node, Config) ->
-    case rabbit_ct_broker_helpers:rpc(
-           Config, Node, rabbit_feature_flags, is_enabled, [delete_ra_cluster_mqtt_node]) of
-        true ->
-            Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-            Result = erpc:multicall(Nodes, rabbit_mqtt, local_connection_pids, [], 5000),
-            lists:append([Pids || {ok, Pids} <- Result]);
-        false ->
-            rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_mqtt_collector, list_pids, [])
-    end.
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Result = erpc:multicall(Nodes, rabbit_mqtt, local_connection_pids, [], 5000),
+    lists:append([Pids || {ok, Pids} <- Result]).
 
 publish_qos1_timeout(Client, Topic, Payload, Timeout) ->
     Mref = erlang:monitor(process, Client),
@@ -139,21 +128,6 @@ await_exit(Pid, Reason) ->
         {'EXIT', Pid, Reason} -> ok
     after
         20_000 -> ct:fail({missing_exit, Pid})
-    end.
-
-maybe_skip_v5({skip, _Reason} = Skip) ->
-    %% Mixed-version can be skipped as `khepri_db`
-    %% is not supported
-    Skip;
-maybe_skip_v5(Config) ->
-    case ?config(mqtt_version, Config) of
-        v5 ->
-            case rabbit_ct_broker_helpers:enable_feature_flag(Config, mqtt_v5) of
-                ok -> Config;
-                {skip, _} = Skip -> Skip
-            end;
-        _ ->
-            Config
     end.
 
 %% "CleanStart=0 and SessionExpiry=0xFFFFFFFF (UINT_MAX) for

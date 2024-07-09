@@ -1018,14 +1018,9 @@ rabbitmq_management_agent:
 - rabbit_mgmt_metrics_gc
 - rabbit_mgmt_storage
 rabbitmq_mqtt:
-- Elixir.RabbitMQ.CLI.Ctl.Commands.DecommissionMqttNodeCommand
 - Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand
 - mc_mqtt
-- mqtt_machine
-- mqtt_machine_v0
-- mqtt_node
 - rabbit_mqtt
-- rabbit_mqtt_collector
 - rabbit_mqtt_confirms
 - rabbit_mqtt_ff
 - rabbit_mqtt_internal_event_handler

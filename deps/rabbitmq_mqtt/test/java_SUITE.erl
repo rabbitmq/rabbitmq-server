@@ -54,18 +54,17 @@ end_per_suite(Config) ->
 
 init_per_group(Group, Config0) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config0, "", "-"),
-    Config1 = rabbit_ct_helpers:set_config(Config0, [
-        {rmq_nodename_suffix, Suffix},
-        {rmq_certspwd, "bunnychow"},
-        {rmq_nodes_clustered, true},
-        {rmq_nodes_count, 3},
-        {mqtt_version, Group}
-      ]),
-    Config = rabbit_ct_helpers:run_setup_steps(Config1,
-      [ fun merge_app_env/1 ] ++
+    Config = rabbit_ct_helpers:set_config(
+               Config0, [{rmq_nodename_suffix, Suffix},
+                         {rmq_certspwd, "bunnychow"},
+                         {rmq_nodes_clustered, true},
+                         {rmq_nodes_count, 3},
+                         {mqtt_version, Group}]),
+    rabbit_ct_helpers:run_setup_steps(
+      Config,
+      [fun merge_app_env/1] ++
       rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()),
-    util:maybe_skip_v5(Config).
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,

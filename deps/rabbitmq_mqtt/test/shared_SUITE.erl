@@ -27,8 +27,7 @@
          rpc_all/4,
          get_node_config/3,
          drain_node/2,
-         revive_node/2,
-         is_feature_flag_enabled/2
+         revive_node/2
         ]).
 -import(rabbit_ct_helpers,
         [eventually/3,
@@ -174,12 +173,11 @@ init_per_group(mqtt, Config) ->
 init_per_group(web_mqtt, Config) ->
     rabbit_ct_helpers:set_config(Config, {websocket, true});
 
-init_per_group(Group, Config0)
+init_per_group(Group, Config)
   when Group =:= v3;
        Group =:= v4;
        Group =:= v5 ->
-    Config = rabbit_ct_helpers:set_config(Config0, {mqtt_version, Group}),
-    util:maybe_skip_v5(Config);
+    rabbit_ct_helpers:set_config(Config, {mqtt_version, Group});
 
 init_per_group(Group, Config0) ->
     Nodes = case Group of
@@ -209,7 +207,7 @@ end_per_group(_, Config) ->
 init_per_testcase(T, Config)
   when T =:= management_plugin_connection;
        T =:= management_plugin_enable ->
-    ok = inets:start(),
+    inets:start(),
     init_per_testcase0(T, Config);
 init_per_testcase(Testcase, Config) ->
     init_per_testcase0(Testcase, Config).
@@ -578,27 +576,13 @@ events(Config) ->
 
     QueueNameBin = <<"mqtt-subscription-", ClientId/binary, "qos0">>,
     QueueName = {resource, <<"/">>, queue, QueueNameBin},
-    [E2, E3 | E4] = get_events(Server),
-    QueueType = case is_feature_flag_enabled(Config, rabbit_mqtt_qos0_queue) of
-                    true ->
-                        ?assertEqual([], E4),
-                        rabbit_mqtt_qos0_queue;
-                    false ->
-                        [ConsumerCreated] = E4,
-                        assert_event_type(consumer_created, ConsumerCreated),
-                        assert_event_prop([{queue, QueueName},
-                                           {ack_required, false},
-                                           {exclusive, false},
-                                           {arguments, []}],
-                                          ConsumerCreated),
-                        rabbit_classic_queue
-                end,
+    [E2, E3] = get_events(Server),
     assert_event_type(queue_created, E2),
     assert_event_prop([{name, QueueName},
                        {durable, true},
                        {auto_delete, false},
                        {exclusive, true},
-                       {type, QueueType},
+                       {type, rabbit_mqtt_qos0_queue},
                        {arguments, []}],
                       E2),
     assert_event_type(binding_created, E3),
@@ -617,28 +601,18 @@ events(Config) ->
 
     {ok, _, _} = emqtt:unsubscribe(C, MqttTopic),
 
-    [E5] = get_events(Server),
-    assert_event_type(binding_deleted, E5),
+    [E4] = get_events(Server),
+    assert_event_type(binding_deleted, E4),
 
     ok = emqtt:disconnect(C),
 
-    [E6, E7 | E8] = get_events(Server),
-    assert_event_type(connection_closed, E6),
-    ?assertEqual(E1#event.props, E6#event.props,
+    [E5, E6] = get_events(Server),
+    assert_event_type(connection_closed, E5),
+    ?assertEqual(E1#event.props, E5#event.props,
                  "connection_closed event props should match connection_created event props. "
                  "See https://github.com/rabbitmq/rabbitmq-server/discussions/6331"),
-
-    case is_feature_flag_enabled(Config, rabbit_mqtt_qos0_queue) of
-        true ->
-            assert_event_type(queue_deleted, E7),
-            assert_event_prop({name, QueueName}, E7);
-        false ->
-            assert_event_type(consumer_deleted, E7),
-            assert_event_prop({queue, QueueName}, E7),
-            [QueueDeleted] = E8,
-            assert_event_type(queue_deleted, QueueDeleted),
-            assert_event_prop({name, QueueName}, QueueDeleted)
-    end,
+    assert_event_type(queue_deleted, E6),
+    assert_event_prop({name, QueueName}, E6),
 
     ok = gen_event:delete_handler({rabbit_event, Server}, event_recorder, []).
 
@@ -681,38 +655,24 @@ global_counters(Config) ->
                    messages_unroutable_dropped_total => 1,
                    messages_unroutable_returned_total => 1},
                  get_global_counters(Config, ProtoVer)),
-
-    case is_feature_flag_enabled(Config, rabbit_mqtt_qos0_queue) of
-        true ->
-            ?assertEqual(#{messages_delivered_total => 2,
-                           messages_acknowledged_total => 1,
-                           messages_delivered_consume_auto_ack_total => 1,
-                           messages_delivered_consume_manual_ack_total => 1,
-                           messages_delivered_get_auto_ack_total => 0,
-                           messages_delivered_get_manual_ack_total => 0,
-                           messages_get_empty_total => 0,
-                           messages_redelivered_total => 0},
-                         get_global_counters(Config, ProtoVer, 0, [{queue_type, rabbit_classic_queue}])),
-            ?assertEqual(#{messages_delivered_total => 1,
-                           messages_acknowledged_total => 0,
-                           messages_delivered_consume_auto_ack_total => 1,
-                           messages_delivered_consume_manual_ack_total => 0,
-                           messages_delivered_get_auto_ack_total => 0,
-                           messages_delivered_get_manual_ack_total => 0,
-                           messages_get_empty_total => 0,
-                           messages_redelivered_total => 0},
-                         get_global_counters(Config, ProtoVer, 0, [{queue_type, rabbit_mqtt_qos0_queue}]));
-        false ->
-            ?assertEqual(#{messages_delivered_total => 3,
-                           messages_acknowledged_total => 1,
-                           messages_delivered_consume_auto_ack_total => 2,
-                           messages_delivered_consume_manual_ack_total => 1,
-                           messages_delivered_get_auto_ack_total => 0,
-                           messages_delivered_get_manual_ack_total => 0,
-                           messages_get_empty_total => 0,
-                           messages_redelivered_total => 0},
-                         get_global_counters(Config, ProtoVer, 0, [{queue_type, rabbit_classic_queue}]))
-    end,
+    ?assertEqual(#{messages_delivered_total => 2,
+                   messages_acknowledged_total => 1,
+                   messages_delivered_consume_auto_ack_total => 1,
+                   messages_delivered_consume_manual_ack_total => 1,
+                   messages_delivered_get_auto_ack_total => 0,
+                   messages_delivered_get_manual_ack_total => 0,
+                   messages_get_empty_total => 0,
+                   messages_redelivered_total => 0},
+                 get_global_counters(Config, ProtoVer, 0, [{queue_type, rabbit_classic_queue}])),
+    ?assertEqual(#{messages_delivered_total => 1,
+                   messages_acknowledged_total => 0,
+                   messages_delivered_consume_auto_ack_total => 1,
+                   messages_delivered_consume_manual_ack_total => 0,
+                   messages_delivered_get_auto_ack_total => 0,
+                   messages_delivered_get_manual_ack_total => 0,
+                   messages_get_empty_total => 0,
+                   messages_redelivered_total => 0},
+                 get_global_counters(Config, ProtoVer, 0, [{queue_type, rabbit_mqtt_qos0_queue}])),
 
     {ok, _, _} = emqtt:unsubscribe(C, Topic1),
     ?assertEqual(1, maps:get(consumers, get_global_counters(Config, ProtoVer))),
@@ -1255,13 +1215,7 @@ cli_list_queues(Config) ->
             "type", "name", "state", "durable", "auto_delete",
             "arguments", "pid", "owner_pid", "messages", "exclusive_consumer_tag"
            ]),
-    ExpectedQueueType = case is_feature_flag_enabled(Config, rabbit_mqtt_qos0_queue) of
-                            true ->
-                                <<"MQTT QoS 0">>;
-                            false ->
-                                <<"classic">>
-                        end,
-    ?assertMatch([[ExpectedQueueType, <<"mqtt-subscription-cli_list_queuesqos0">>,
+    ?assertMatch([[<<"MQTT QoS 0">>, <<"mqtt-subscription-cli_list_queuesqos0">>,
                    <<"running">>, <<"true">>, <<"false">>,  <<"[]">>, _, _, <<"0">>, <<"">>]],
                  Qs),
 
@@ -1273,11 +1227,6 @@ cli_list_queues(Config) ->
     ok = emqtt:disconnect(C).
 
 maintenance(Config) ->
-    %% When either file rabbit_mqtt_collector changes or different OTP versions
-    %% are used for compilation, the rabbit_mqtt_collector module version will
-    %% change and cause a bad fun error when executing ra:leader_query/2 remotely.
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, delete_ra_cluster_mqtt_node),
-
     C0 = connect(<<"client-0">>, Config, 0, []),
     C1a = connect(<<"client-1a">>, Config, 1, []),
     C1b = connect(<<"client-1b">>, Config, 1, []),
@@ -1367,11 +1316,6 @@ keepalive_turned_off(Config) ->
     ok = emqtt:disconnect(C).
 
 duplicate_client_id(Config) ->
-    %% When either file rabbit_mqtt_collector changes or different OTP versions
-    %% are used for compilation, the rabbit_mqtt_collector module version will
-    %% change and cause a bad fun error when executing ra:leader_query/2 remotely.
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, delete_ra_cluster_mqtt_node),
-
     [Server1, Server2, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     %% Test session takeover by both new and old node in mixed version clusters.
     ClientId1 = <<"c1">>,
@@ -1509,14 +1453,8 @@ clean_session_disconnect_client(Config) ->
     {ok, _, _} = emqtt:subscribe(C, <<"topic1">>, qos1),
     QsQos0 = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
     QsClassic = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_classic_queue]),
-    case is_feature_flag_enabled(Config, rabbit_mqtt_qos0_queue) of
-        true ->
-            ?assertEqual(1, length(QsQos0)),
-            ?assertEqual(1, length(QsClassic));
-        false ->
-            ?assertEqual(0, length(QsQos0)),
-            ?assertEqual(2, length(QsClassic))
-    end,
+    ?assertEqual(1, length(QsQos0)),
+    ?assertEqual(1, length(QsClassic)),
 
     ok = emqtt:disconnect(C),
     %% After terminating a clean session, we expect any session state to be cleaned up on the server.
@@ -1536,14 +1474,8 @@ clean_session_node_down(NodeDown, Config) ->
     {ok, _, _} = emqtt:subscribe(C, <<"topic1">>, qos1),
     QsQos0 = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
     QsClassic = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_classic_queue]),
-    case is_feature_flag_enabled(Config, rabbit_mqtt_qos0_queue) of
-        true ->
-            ?assertEqual(1, length(QsQos0)),
-            ?assertEqual(1, length(QsClassic));
-        false ->
-            ?assertEqual(0, length(QsQos0)),
-            ?assertEqual(2, length(QsClassic))
-    end,
+    ?assertEqual(1, length(QsQos0)),
+    ?assertEqual(1, length(QsClassic)),
     ?assertEqual(2, rpc(Config, rabbit_amqqueue, count, [])),
 
     unlink(C),

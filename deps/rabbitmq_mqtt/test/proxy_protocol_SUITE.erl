@@ -57,9 +57,10 @@ end_per_suite(Config) ->
         rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(Group, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, {mqtt_version, Group}),
-    util:maybe_skip_v5(Config1).
-end_per_group(_, Config) -> Config.
+    rabbit_ct_helpers:set_config(Config, {mqtt_version, Group}).
+
+end_per_group(_Group, Config) ->
+    Config.
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).

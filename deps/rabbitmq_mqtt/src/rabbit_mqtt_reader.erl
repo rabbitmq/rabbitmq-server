@@ -112,11 +112,6 @@ handle_call({info, InfoItems}, _From, State) ->
 handle_call(Msg, From, State) ->
     {stop, {mqtt_unexpected_call, Msg, From}, State}.
 
-%% Delete this backward compatibility clause when feature flag
-%% delete_ra_cluster_mqtt_node becomes required.
-handle_cast(duplicate_id, State) ->
-    handle_cast({duplicate_id, true}, State);
-
 handle_cast({duplicate_id, SendWill},
             State = #state{proc_state = PState,
                            conn_name = ConnName}) ->
@@ -234,13 +229,6 @@ handle_info(login_timeout, State) ->
 
 handle_info(emit_stats, State) ->
     {noreply, emit_stats(State), ?HIBERNATE_AFTER};
-
-handle_info({ra_event, _From, Evt},
-            #state{proc_state = PState0} = State) ->
-    %% handle applied event to ensure registration command actually got applied
-    %% handle not_leader notification in case we send the command to a non-leader
-    PState = rabbit_mqtt_processor:handle_ra_event(Evt, PState0),
-    {noreply, pstate(State, PState), ?HIBERNATE_AFTER};
 
 handle_info({{'DOWN', _QName}, _MRef, process, _Pid, _Reason} = Evt,
             #state{proc_state = PState0} = State) ->
