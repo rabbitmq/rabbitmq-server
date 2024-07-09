@@ -573,10 +573,11 @@ ok.
 
 ### Routing on a Message Property
 
-In addition to a value in the header property, you can also route on the
+Instead of a value in the header property, you can route on the
 ``message_id``, ``correlation_id``, or ``timestamp`` message properties. To do so,
 declare the exchange with a string argument called ``"hash-property"`` naming the
 property to be used.
+The `"hash-header"` and `"hash-property"` are mutually exclusive.
 
 When a `"hash-property"` is specified, the chosen property **must be provided**.
 If published messages do not contain the property, they will all get
