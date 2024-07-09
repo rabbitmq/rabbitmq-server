@@ -101,6 +101,7 @@ rabbitmq_home(
     name = "broker-for-tests-home",
     plugins = [
         "//deps/rabbit:erlang_app",
+        "//deps/rabbitmq_amqp1_0:erlang_app",
         ":erlang_app",
     ],
 )
@@ -116,6 +117,13 @@ rabbitmq_integration_suite(
         "test/shovel_test_utils.beam",
     ],
     flaky = True,
+)
+
+rabbitmq_integration_suite(
+    name = "amqp10_inter_cluster_SUITE",
+    additional_beam = [
+        "test/shovel_test_utils.beam",
+    ],
 )
 
 rabbitmq_suite(

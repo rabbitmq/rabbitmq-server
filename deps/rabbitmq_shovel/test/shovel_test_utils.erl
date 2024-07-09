@@ -11,7 +11,7 @@
 -export([set_param/3, set_param/4, set_param/5, set_param_nowait/3,
          await_shovel/2, await_shovel/3, await_shovel1/2,
          shovels_from_status/0, get_shovel_status/2, get_shovel_status/3,
-         await/1, await/2, clear_param/2, clear_param/3]).
+         await/1, await/2, clear_param/2, clear_param/3, make_uri/2]).
 
 make_uri(Config, Node) ->
     Hostname = ?config(rmq_hostname, Config),
