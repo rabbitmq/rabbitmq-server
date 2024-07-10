@@ -111,10 +111,15 @@ get_all_in_mnesia() ->
       end).
 
 get_all_in_khepri() ->
-    list_with_possible_retry_in_khepri(
-      fun() ->
-              ets:tab2list(?KHEPRI_PROJECTION)
-      end).
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            [];
+        Table ->
+            list_with_possible_retry_in_khepri(
+              fun() ->
+                      ets:tab2list(Table)
+              end)
+    end.
 
 -spec get_all(VHostName) -> [Queue] when
       VHostName :: vhost:name(),
@@ -140,11 +145,16 @@ get_all_in_mnesia(VHostName) ->
       end).
 
 get_all_in_khepri(VHostName) ->
-    list_with_possible_retry_in_khepri(
-      fun() ->
-              Pattern = amqqueue:pattern_match_on_name(rabbit_misc:r(VHostName, queue)),
-              ets:match_object(?KHEPRI_PROJECTION, Pattern)
-      end).
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            [];
+        Table ->
+            list_with_possible_retry_in_khepri(
+              fun() ->
+                      Pattern = amqqueue:pattern_match_on_name(rabbit_misc:r(VHostName, queue)),
+                      ets:match_object(Table, Pattern)
+              end)
+    end.
 
 %% -------------------------------------------------------------------
 %% get_all_durable().
@@ -172,11 +182,16 @@ get_all_durable_in_mnesia() ->
       end).
 
 get_all_durable_in_khepri() ->
-    list_with_possible_retry_in_khepri(
-      fun() ->
-              Pattern = amqqueue:pattern_match_on_durable(true),
-              ets:match_object(?KHEPRI_PROJECTION, Pattern)
-      end).
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            [];
+        Table ->
+            list_with_possible_retry_in_khepri(
+              fun() ->
+                      Pattern = amqqueue:pattern_match_on_durable(true),
+                      ets:match_object(Table, Pattern)
+              end)
+    end.
 
 -spec get_all_durable_by_type(Type) -> [Queue] when
       Type :: atom(),
@@ -199,8 +214,13 @@ get_all_durable_by_type_in_mnesia(Type) ->
     rabbit_db:list_in_mnesia(?MNESIA_DURABLE_TABLE, Pattern).
 
 get_all_durable_by_type_in_khepri(Type) ->
-    Pattern = amqqueue:pattern_match_on_type_and_durable(Type, true),
-    ets:match_object(?KHEPRI_PROJECTION, Pattern).
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            [];
+        Table ->
+            Pattern = amqqueue:pattern_match_on_type_and_durable(Type, true),
+            ets:match_object(Table, Pattern)
+    end.
 
 %% -------------------------------------------------------------------
 %% filter_all_durable().
@@ -231,14 +251,19 @@ filter_all_durable_in_mnesia(FilterFun) ->
       end).
 
 filter_all_durable_in_khepri(FilterFun) ->
-    ets:foldl(
-      fun(Q, Acc0) ->
-              case amqqueue:is_durable(Q) andalso FilterFun(Q) of
-                  true -> [Q | Acc0];
-                  false -> Acc0
-              end
-      end,
-      [], ?KHEPRI_PROJECTION).
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            [];
+        Table ->
+            ets:foldl(
+              fun(Q, Acc0) ->
+                      case amqqueue:is_durable(Q) andalso FilterFun(Q) of
+                          true -> [Q | Acc0];
+                          false -> Acc0
+                      end
+              end,
+              [], Table)
+    end.
 
 %% -------------------------------------------------------------------
 %% list().
@@ -263,8 +288,13 @@ list_in_mnesia() ->
     mnesia:dirty_all_keys(?MNESIA_TABLE).
 
 list_in_khepri() ->
-    Pattern = amqqueue:pattern_match_on_name('$1'),
-    ets:select(?KHEPRI_PROJECTION, [{Pattern, [], ['$1']}]).
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            [];
+        Table ->
+            Pattern = amqqueue:pattern_match_on_name('$1'),
+            ets:select(Table, [{Pattern, [], ['$1']}])
+    end.
 
 %% -------------------------------------------------------------------
 %% count().
@@ -289,7 +319,12 @@ count_in_mnesia() ->
     mnesia:table_info(?MNESIA_TABLE, size).
 
 count_in_khepri() ->
-    ets:info(?KHEPRI_PROJECTION, size).
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            0;
+        Table ->
+            ets:info(Table, size)
+    end.
 
 -spec count(VHostName) -> Count when
       VHostName :: vhost:name(),
@@ -330,8 +365,13 @@ list_for_count_in_mnesia(VHostName) ->
       end).
 
 list_for_count_in_khepri(VHostName) ->
-    Pattern = amqqueue:pattern_match_on_name(rabbit_misc:r(VHostName, queue)),
-    ets:select_count(?KHEPRI_PROJECTION, [{Pattern, [], [true]}]).
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            0;
+        Table ->
+            Pattern = amqqueue:pattern_match_on_name(rabbit_misc:r(VHostName, queue)),
+            ets:select_count(Table, [{Pattern, [], [true]}])
+    end.
 
 %% -------------------------------------------------------------------
 %% delete().
@@ -426,8 +466,16 @@ internal_delete_in_mnesia(QueueName, OnlyDurable, Reason) ->
 get_many(Names) when is_list(Names) ->
     rabbit_khepri:handle_fallback(
       #{mnesia => fun() -> get_many_in_ets(?MNESIA_TABLE, Names) end,
-        khepri => fun() -> get_many_in_ets(?KHEPRI_PROJECTION, Names) end
+        khepri => fun() -> get_many_in_khepri(Names) end
        }).
+
+get_many_in_khepri(Names) ->
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            [];
+        Table ->
+            get_many_in_ets(Table, Names)
+    end.
 
 get_many_in_ets(Table, [{Name, RouteInfos}])
   when is_map(RouteInfos) ->
@@ -468,9 +516,14 @@ get_in_mnesia(Name) ->
     rabbit_mnesia:dirty_read({?MNESIA_TABLE, Name}).
 
 get_in_khepri(Name) ->
-    case ets:lookup(?KHEPRI_PROJECTION, Name) of
-        [Q] -> {ok, Q};
-        []  -> {error, not_found}
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            {error, not_found};
+        Table ->
+            case ets:lookup(Table, Name) of
+                [Q] -> {ok, Q};
+                []  -> {error, not_found}
+            end
     end.
 
 %% -------------------------------------------------------------------
@@ -519,8 +572,13 @@ get_many_durable_in_mnesia(Names) ->
     get_many_in_ets(?MNESIA_DURABLE_TABLE, Names).
 
 get_many_durable_in_khepri(Names) ->
-    Queues = get_many_in_ets(?KHEPRI_PROJECTION, Names),
-    [Q || Q <- Queues, amqqueue:is_durable(Q)].
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            [];
+        Table ->
+            Queues = get_many_in_ets(Table, Names),
+            [Q || Q <- Queues, amqqueue:is_durable(Q)]
+    end.
 
 %% -------------------------------------------------------------------
 %% update().
@@ -730,7 +788,12 @@ exists_in_mnesia(QName) ->
     ets:member(?MNESIA_TABLE, QName).
 
 exists_in_khepri(QName) ->
-    ets:member(?KHEPRI_PROJECTION, QName).
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            false;
+        Table ->
+            ets:member(Table, QName)
+    end.
 
 %% -------------------------------------------------------------------
 %% exists().
