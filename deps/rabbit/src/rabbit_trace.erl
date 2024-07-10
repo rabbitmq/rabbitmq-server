@@ -61,6 +61,8 @@ tap_in(Msg, QNames, ConnName, ChannelNum, Username, TraceX) ->
     RoutedQs = lists:map(fun(#resource{kind = queue, name = Name}) ->
                                  {longstr, Name};
                             ({#resource{kind = queue, name = Name}, _}) ->
+                                 {longstr, Name};
+                            ({virtual_reply_queue, Name}) ->
                                  {longstr, Name}
                          end, QNames),
     trace(TraceX, Msg, <<"publish">>, XName,
