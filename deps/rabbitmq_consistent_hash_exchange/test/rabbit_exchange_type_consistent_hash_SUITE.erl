@@ -20,23 +20,17 @@
 
 all() ->
     [
-      {group, mnesia_store},
-      {group, khepri_store},
+      {group, routing_tests},
+      {group, hash_ring_management_tests},
+      {group, clustered},
       {group, khepri_migration}
     ].
 
 groups() ->
     [
-     {mnesia_store, [], [
-                         {routing_tests, [], routing_tests()},
-                         {hash_ring_management_tests, [], hash_ring_management_tests()},
-                         {clustered, [], [node_restart]}
-                        ]},
-     {khepri_store, [], [
-                         {routing_tests, [], routing_tests()},
-                         {hash_ring_management_tests, [], hash_ring_management_tests()},
-                         {clustered, [], [node_restart]}
-                        ]},
+     {routing_tests, [], routing_tests()},
+     {hash_ring_management_tests, [], hash_ring_management_tests()},
+     {clustered, [], [node_restart]},
      {khepri_migration, [], [
                              from_mnesia_to_khepri
                             ]}
@@ -80,14 +74,13 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(mnesia_store, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{metadata_store, mnesia}]);
-init_per_group(khepri_store, Config) ->
-    FFs = [khepri_db],
-    rabbit_ct_helpers:set_config(Config, [{metadata_store, {khepri, FFs}}]);
-init_per_group(khepri_migration = Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
-    init_per_group(Group, Config, 1);
+init_per_group(khepri_migration = Group, Config) ->
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            init_per_group(Group, Config, 1);
+        _ ->
+            {skip, "This group only targets mnesia"}
+    end;
 init_per_group(clustered = Group, Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
         false ->
@@ -111,12 +104,6 @@ init_per_group(Group, Config, NodesCount) ->
                                 rabbit_ct_broker_helpers:setup_steps() ++
                                 rabbit_ct_client_helpers:setup_steps()).
 
-end_per_group(mnesia_store, Config) ->
-    Config;
-end_per_group(khepri_store, Config) ->
-    Config;
-end_per_group(khepri_migration, Config) ->
-    Config;
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
                                          rabbit_ct_client_helpers:teardown_steps() ++
