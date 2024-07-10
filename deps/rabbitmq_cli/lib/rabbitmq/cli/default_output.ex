@@ -68,7 +68,13 @@ defmodule RabbitMQ.CLI.DefaultOutput do
   defp normalize_output({unknown, _} = input, _opts) when is_atom(unknown), do: {:error, input}
   defp normalize_output(result, _opts) when not is_atom(result), do: {:ok, result}
 
+  defp format_khepri_output({:error, :timeout}, %{node: node_name}) do
+    # Khepri >= 0.14.0
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_tempfail(), khepri_timeout_error(node_name)}
+  end
+
   defp format_khepri_output({:error, {:timeout, {:rabbitmq_metadata, _}}}, %{node: node_name}) do
+    # Khepri < 0.14.0
     {:error, RabbitMQ.CLI.Core.ExitCodes.exit_tempfail(), khepri_timeout_error(node_name)}
   end
 
