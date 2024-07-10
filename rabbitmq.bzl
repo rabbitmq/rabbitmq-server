@@ -281,7 +281,7 @@ def rabbitmq_integration_suite(
             # required starting from 3.12.0 in rabbitmq_management_agent:
             # empty_basic_get_metric, drop_unroutable_metric
             # required starting from 4.0 in rabbit:
-            "message_containers",
+            "message_containers,stream_update_config_command,stream_filtering,stream_sac_coordinator_unblock_group,restart_streams",
             "RABBITMQ_RUN": "$(location :rabbitmq-for-tests-run)",
             "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmqctl".format(package),
             "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-plugins".format(package),

@@ -37,8 +37,7 @@ all() ->
 
 groups() ->
     [{single_node, [],
-      [filtering_ff, %% must stay at the top, feature flag disabled for this one
-       test_stream,
+      [test_stream,
        test_stream_tls,
        test_publish_v2,
        test_super_stream_creation_deletion,
@@ -185,13 +184,6 @@ end_per_testcase(cannot_update_username_after_authenticated = TestCase, Config) 
     ok = rabbit_ct_broker_helpers:delete_user(Config, <<"other">>),
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 
-end_per_testcase(filtering_ff = TestCase, Config) ->
-    _ = rabbit_ct_broker_helpers:rpc(Config,
-                                     0,
-                                     rabbit_feature_flags,
-                                     enable,
-                                     [stream_filtering]),
-    rabbit_ct_helpers:testcase_finished(Config, TestCase);
 end_per_testcase(close_connection_on_consumer_update_timeout = TestCase, Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config,
                                       0,
@@ -211,32 +203,6 @@ end_per_testcase(store_offset_requires_read_access = TestCase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 end_per_testcase(TestCase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, TestCase).
-
-filtering_ff(Config) ->
-    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
-    Transport = gen_tcp,
-    Port = get_stream_port(Config),
-    Opts = [{active, false}, {mode, binary}],
-    {ok, S} = Transport:connect("localhost", Port, Opts),
-    C0 = rabbit_stream_core:init(0),
-    C1 = test_peer_properties(Transport, S, C0),
-    C2 = test_authenticate(Transport, S, C1),
-    C3 = test_create_stream(Transport, S, Stream, C2),
-    PublisherId = 42,
-    C4 = test_declare_publisher(Transport, S, PublisherId, Stream, C3),
-    Body = <<"hello">>,
-    C5 = test_publish_confirm(Transport, S, publish_v2, PublisherId, Body,
-                               publish_error, C4),
-    SubscriptionId = 42,
-    C6 = test_subscribe(Transport, S, SubscriptionId, Stream,
-                        #{<<"filter.0">> => <<"foo">>},
-                        ?RESPONSE_CODE_PRECONDITION_FAILED,
-                        C5),
-
-    C7 = test_delete_stream(Transport, S, Stream, C6),
-    _C8 = test_close(Transport, S, C7),
-    closed = wait_for_socket_close(Transport, S, 10),
-    ok.
 
 test_global_counters(Config) ->
     Stream = atom_to_binary(?FUNCTION_NAME, utf8),

@@ -629,32 +629,12 @@ handle_consumer_removal(Group0, Consumer, Stream, ConsumerName) ->
             end
     end.
 
-message_type() ->
-    case has_unblock_group_support() of
-        true ->
-            map;
-        false ->
-            tuple
-    end.
-
 notify_consumer_effect(Pid, SubId, Stream, Name, Active) ->
     notify_consumer_effect(Pid, SubId, Stream, Name, Active, false).
 
 notify_consumer_effect(Pid, SubId, Stream, Name, Active, SteppingDown) ->
-    notify_consumer_effect(Pid, SubId, Stream, Name, Active, SteppingDown, message_type()).
+    notify_consumer_effect(Pid, SubId, Stream, Name, Active, SteppingDown, map).
 
-notify_consumer_effect(Pid, SubId, _Stream, _Name, Active, false = _SteppingDown, tuple) ->
-    mod_call_effect(Pid,
-                    {sac,
-                     {{subscription_id, SubId},
-                      {active, Active},
-                      {extra, []}}});
-notify_consumer_effect(Pid, SubId, _Stream, _Name, Active, true = _SteppingDown, tuple) ->
-    mod_call_effect(Pid,
-                    {sac,
-                     {{subscription_id, SubId},
-                      {active, Active},
-                      {extra, [{stepping_down, true}]}}});
 notify_consumer_effect(Pid, SubId, Stream, Name, Active, false = _SteppingDown, map) ->
     mod_call_effect(Pid,
                     {sac, #{subscription_id => SubId,
@@ -776,6 +756,3 @@ mod_call_effect(Pid, Msg) ->
 send_message(ConnectionPid, Msg) ->
     ConnectionPid ! Msg,
     ok.
-
-has_unblock_group_support() ->
-    rabbit_feature_flags:is_enabled(stream_sac_coordinator_unblock_group).
