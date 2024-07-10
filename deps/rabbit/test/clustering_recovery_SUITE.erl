@@ -72,9 +72,19 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(khepri_store, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{metadata_store, khepri}]);
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            {skip, "These tests target Khepri"};
+        _ ->
+            Config
+    end;
 init_per_group(mnesia_store, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{metadata_store, mnesia}]);
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        {khepri, _} ->
+            {skip, "These tests target mnesia"};
+        _ ->
+            Config
+    end;
 init_per_group(clustered_3_nodes, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]);
 init_per_group(clustered_5_nodes, Config) ->
