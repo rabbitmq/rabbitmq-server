@@ -76,8 +76,8 @@ trace(Config) ->
     {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["trace_on"]),
 
     Node = atom_to_binary(rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename)),
-    TraceQueue = <<"my trace queue">>,
-    RequestQueue = <<"my request queue">>,
+    TraceQueue = <<"tests.amqpl_direct_reply_to.trace.tracing">>,
+    RequestQueue = <<"tests.amqpl_direct_reply_to.trace.requests">>,
     %% This is the pseudo queue that is specially interpreted by RabbitMQ.
     ReplyQueue = <<"amq.rabbitmq.reply-to">>,
     RequestPayload = <<"my request">>,
@@ -186,7 +186,7 @@ rpc_old_to_new_node(Config) ->
     rpc(1, 0, Config).
 
 rpc(RequesterNode, ResponderNode, Config) ->
-    RequestQueue = <<"my request queue">>,
+    RequestQueue = <<"tests.amqpl_direct_reply_to.rpc.requests">>,
     %% This is the pseudo queue that is specially interpreted by RabbitMQ.
     ReplyQueue = <<"amq.rabbitmq.reply-to">>,
     RequestPayload = <<"my request">>,
