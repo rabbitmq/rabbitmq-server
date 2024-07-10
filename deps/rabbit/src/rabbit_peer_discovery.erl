@@ -387,7 +387,12 @@ query_node_props(Nodes) when Nodes =/= [] ->
                     var_origins := #{erlang_cookie := environment}} ->
                       ["-setcookie", atom_to_list(ErlangCookie) | VMArgs1];
                   _ ->
-                      VMArgs1
+                      case init:get_argument(setcookie) of
+                          {ok, [[SetCookieArg]]} ->
+                              ["-setcookie", SetCookieArg | VMArgs1];
+                          _ ->
+                              VMArgs1
+                      end
               end,
     VMArgs3 = maybe_add_proto_dist_arguments(VMArgs2),
     VMArgs4 = maybe_add_inetrc_arguments(VMArgs3),
