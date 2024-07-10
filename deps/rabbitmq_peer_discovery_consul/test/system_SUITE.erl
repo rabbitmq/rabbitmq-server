@@ -2,20 +2,14 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% The Initial Developer of the Original Code is AWeber Communications.
-%% Copyright (c) 2015-2016 AWeber Communications
-%% Copyright (c) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved. All rights reserved.
+%% Copyright (c) 2024 Broadcom. The term “Broadcom” refers to Broadcom Inc.
+%% and/or its subsidiaries. All rights reserved. All rights reserved.
 %%
 
 -module(system_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
-
--include("rabbit_peer_discovery_etcd.hrl").
-
--define(ETCD_GIT_REPO, "https://github.com/etcd-io/etcd.git").
--define(ETCD_GIT_REF, "v3.5.13").
 
 -export([all/0,
          groups/0,
@@ -26,25 +20,19 @@
          init_per_testcase/2,
          end_per_testcase/2,
 
-         etcd_connection_sanity_check_test/1,
-         init_opens_a_connection_test/1,
-         registration_with_locking_test/1,
          start_one_member_at_a_time/1,
          start_members_concurrently/1]).
 
+-define(CONSUL_GIT_REPO, "https://github.com/hashicorp/consul.git").
+-define(CONSUL_GIT_REF, "v1.18.1").
+
 all() ->
     [
-     {group, v3_client},
      {group, clustering}
     ].
 
 groups() ->
     [
-     {v3_client, [], [
-                    etcd_connection_sanity_check_test,
-                    init_opens_a_connection_test,
-                    registration_with_locking_test
-                ]},
      {clustering, [], [start_one_member_at_a_time,
                        start_members_concurrently]}
     ].
@@ -53,12 +41,13 @@ init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:run_setup_steps(
       Config,
-      [fun clone_etcd/1,
-       fun compile_etcd/1,
-       fun start_etcd/1]).
+      [fun clone_consul/1,
+       fun compile_consul/1,
+       fun config_consul/1,
+       fun start_consul/1]).
 
 end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config, [fun stop_etcd/1]).
+    rabbit_ct_helpers:run_teardown_steps(Config, [fun stop_consul/1]).
 
 init_per_group(clustering, Config) ->
     rabbit_ct_helpers:set_config(
@@ -125,98 +114,104 @@ end_per_testcase(Testcase, Config)
 end_per_testcase(_Testcase, Config) ->
     Config.
 
-clone_etcd(Config) ->
+clone_consul(Config) ->
     DataDir = ?config(data_dir, Config),
-    EtcdSrcdir = filename:join(DataDir, "etcd"),
-    Cmd = case filelib:is_dir(EtcdSrcdir) of
+    ConsulSrcdir = filename:join(DataDir, "consul"),
+    Cmd = case filelib:is_dir(ConsulSrcdir) of
               true ->
                   ct:pal(
-                    "Checking out etcd Git reference, ref = ~s",
-                    [?ETCD_GIT_REF]),
-                  ["git", "-C", EtcdSrcdir,
-                   "checkout", ?ETCD_GIT_REF];
+                    "Checking out Consul Git reference, ref = ~s",
+                    [?CONSUL_GIT_REF]),
+                  ["git", "-C", ConsulSrcdir,
+                   "checkout", ?CONSUL_GIT_REF];
               false ->
                   ct:pal(
-                    "Cloning etcd Git repository, ref = ~s",
-                    [?ETCD_GIT_REF]),
+                    "Cloning Consul Git repository, ref = ~s",
+                    [?CONSUL_GIT_REF]),
                   ["git", "clone",
-                   "--branch", ?ETCD_GIT_REF,
-                   ?ETCD_GIT_REPO, EtcdSrcdir]
+                   "--branch", ?CONSUL_GIT_REF,
+                   ?CONSUL_GIT_REPO, ConsulSrcdir]
           end,
     case rabbit_ct_helpers:exec(Cmd) of
         {ok, _} ->
-            rabbit_ct_helpers:set_config(Config, {etcd_srcdir, EtcdSrcdir});
+            rabbit_ct_helpers:set_config(
+              Config, {consul_srcdir, ConsulSrcdir});
         {error, _} ->
-            {skip, "Failed to clone etcd"}
+            {skip, "Failed to clone Consul"}
     end.
 
-compile_etcd(Config) ->
-    EtcdSrcdir = ?config(etcd_srcdir, Config),
-    ct:pal("Compiling etcd in ~ts", [EtcdSrcdir]),
-    Script0 = case os:type() of
-                  {win32, _} -> "build.bat";
-                  _          -> "build.sh"
-              end,
-    Script1 = filename:join(EtcdSrcdir, Script0),
-    Cmd = [Script1],
-    GOPATH = filename:join(EtcdSrcdir, "go"),
+compile_consul(Config) ->
+    ConsulSrcdir = ?config(consul_srcdir, Config),
+    ct:pal("Compiling Consul in ~ts", [ConsulSrcdir]),
+    Cmd = ["go", "install"],
+    GOPATH = filename:join(ConsulSrcdir, "go"),
     GOFLAGS = "-modcacherw",
-    Options = [{cd, EtcdSrcdir},
+    Options = [{cd, ConsulSrcdir},
                {env, [{"BINDIR", false},
                       {"GOPATH", GOPATH},
                       {"GOFLAGS", GOFLAGS}]}],
     case rabbit_ct_helpers:exec(Cmd, Options) of
         {ok, _} ->
-            EtcdExe = case os:type() of
-                          {win32, _} -> "etcd.exe";
-                          _          -> "etcd"
-                      end,
-            EtcdBin = filename:join([EtcdSrcdir, "bin", EtcdExe]),
-            ?assert(filelib:is_regular(EtcdBin)),
-            rabbit_ct_helpers:set_config(Config, {etcd_bin, EtcdBin});
+            ConsulExe = case os:type() of
+                            {win32, _} -> "consul.exe";
+                            _          -> "consul"
+                        end,
+            ConsulBin = filename:join([GOPATH, "bin", ConsulExe]),
+            ?assert(filelib:is_regular(ConsulBin)),
+            rabbit_ct_helpers:set_config(Config, {consul_bin, ConsulBin});
         {error, _} ->
-            {skip, "Failed to compile etcd"}
+            {skip, "Failed to compile Consul"}
     end.
 
-start_etcd(Config) ->
-    ct:pal("Starting etcd daemon"),
-    EtcdBin = ?config(etcd_bin, Config),
+config_consul(Config) ->
+    DataDir = ?config(data_dir, Config),
     PrivDir = ?config(priv_dir, Config),
-    EtcdDataDir = filename:join(PrivDir, "data.etcd"),
-    EtcdName = ?MODULE_STRING,
-    EtcdHost = "localhost",
-    EtcdClientPort = 2379,
-    EtcdClientUrl = rabbit_misc:format(
-                      "http://~s:~b", [EtcdHost, EtcdClientPort]),
-    EtcdAdvPort = 2380,
-    EtcdAdvUrl = rabbit_misc:format(
-                   "http://~s:~b", [EtcdHost, EtcdAdvPort]),
-    Cmd = [EtcdBin,
-           "--data-dir", EtcdDataDir,
-           "--name", EtcdName,
-           "--initial-advertise-peer-urls", EtcdAdvUrl,
-           "--listen-peer-urls", EtcdAdvUrl,
-           "--advertise-client-urls", EtcdClientUrl,
-           "--listen-client-urls", EtcdClientUrl,
-           "--initial-cluster", EtcdName ++ "=" ++ EtcdAdvUrl,
-           "--initial-cluster-state", "new",
-           "--initial-cluster-token", "test-token",
-           "--log-level", "debug", "--log-outputs", "stdout"],
-    EtcdPid = spawn(fun() -> rabbit_ct_helpers:exec(Cmd) end),
+    ConsulConfDir = filename:join(PrivDir, "conf.consul"),
+    ConsulDataDir = filename:join(PrivDir, "data.consul"),
+    ConsulHost = "localhost",
+    ConsulTcpPort = 8500,
 
-    EtcdEndpoint = rabbit_misc:format("~s:~b", [EtcdHost, EtcdClientPort]),
+    ConsulConfTpl = filename:join(DataDir, "consul.hcl"),
+    {ok, ConsulConf0} = file:read_file(ConsulConfTpl),
+    ConsulConf1 = io_lib:format(
+                    "~ts~n"
+                    "node_name = \"~ts\"~n"
+                    "domain  = \"~ts\"~n"
+                    "data_dir = \"~ts\"~n"
+                    "ports {~n"
+                    "  http        = ~b~n"
+                    "  grpc        = -1~n"
+                    "}~n",
+                    [ConsulConf0, ConsulHost, ConsulHost, ConsulDataDir,
+                     ConsulTcpPort]),
+    ConsulConfFile = filename:join(ConsulConfDir, "consul.hcl"),
+    ok = file:make_dir(ConsulConfDir),
+    ok = file:write_file(ConsulConfFile, ConsulConf1),
     rabbit_ct_helpers:set_config(
       Config,
-      [{etcd_pid, EtcdPid},
-       {etcd_endpoints, [EtcdEndpoint]}]).
+      [{consul_conf_dir, ConsulConfDir},
+       {consul_host, ConsulHost},
+       {consul_tcp_port, ConsulTcpPort}]).
 
-stop_etcd(Config) ->
-    case rabbit_ct_helpers:get_config(Config, etcd_pid) of
-        EtcdPid when is_pid(EtcdPid) ->
+start_consul(Config) ->
+    ct:pal("Starting Consul daemon"),
+    ConsulBin = ?config(consul_bin, Config),
+    ConsulConfDir = ?config(consul_conf_dir, Config),
+    Cmd = [ConsulBin, "agent", "-config-dir", ConsulConfDir],
+    ConsulPid = spawn(fun() -> rabbit_ct_helpers:exec(Cmd) end),
+    rabbit_ct_helpers:set_config(Config, {consul_pid, ConsulPid}).
+
+stop_consul(Config) ->
+    case rabbit_ct_helpers:get_config(Config, consul_pid) of
+        ConsulPid when is_pid(ConsulPid) ->
             ct:pal(
-              "Stopping etcd daemon by killing control process ~p",
-              [EtcdPid]),
-            erlang:exit(EtcdPid, kill);
+              "Stopping Consul daemon by killing control process ~p",
+              [ConsulPid]),
+            erlang:exit(ConsulPid, kill),
+            _ = case os:type() of
+                    {win32, _} -> ok;
+                    _          -> rabbit_ct_helpers:exec(["pkill", "consul"])
+                end;
         undefined ->
             ok
     end,
@@ -225,64 +220,6 @@ stop_etcd(Config) ->
 %%
 %% Test cases
 %%
-
-etcd_connection_sanity_check_test(Config) ->
-    application:ensure_all_started(eetcd),
-    Endpoints = ?config(etcd_endpoints, Config),
-    ?assertMatch({ok, _Pid}, eetcd:open(test, Endpoints)),
-
-    Condition1 = fun() ->
-                    1 =:= length(eetcd_conn_sup:info())
-                end,
-    try
-        rabbit_ct_helpers:await_condition(Condition1, 60000)
-    after
-        eetcd:close(test)
-    end,
-    Condition2 = fun() ->
-                    0 =:= length(eetcd_conn_sup:info())
-                end,
-    rabbit_ct_helpers:await_condition(Condition2, 60000).
-
-init_opens_a_connection_test(Config) ->
-    Endpoints = ?config(etcd_endpoints, Config),
-    {ok, Pid} = start_client(Endpoints),
-    Condition = fun() ->
-                    1 =:= length(eetcd_conn_sup:info())
-                end,
-    try
-        rabbit_ct_helpers:await_condition(Condition, 90000)
-    after
-        gen_statem:stop(Pid)
-    end,
-    ?assertEqual(0, length(eetcd_conn_sup:info())).
-
-
-registration_with_locking_test(Config) ->
-    Endpoints = ?config(etcd_endpoints, Config),
-    {ok, Pid} = start_client(Endpoints),
-    Condition1 = fun() ->
-                    1 =:= length(eetcd_conn_sup:info())
-                 end,
-    rabbit_ct_helpers:await_condition(Condition1, 90000),
-
-    {ok, LockOwnerKey} = rabbitmq_peer_discovery_etcd_v3_client:lock(Pid, node()),
-    rabbitmq_peer_discovery_etcd_v3_client:register(Pid),
-    ?assertEqual(ok, rabbitmq_peer_discovery_etcd_v3_client:unlock(Pid, LockOwnerKey)),
-
-    Condition2 = fun() ->
-                    case rabbitmq_peer_discovery_etcd_v3_client:list_nodes(Pid) of
-                        [{_, N}] when N =:= node() ->
-                            true;
-                        _ ->
-                            false
-                    end
-                 end,
-    try
-        rabbit_ct_helpers:await_condition(Condition2, 45000)
-    after
-        gen_statem:stop(Pid)
-    end.
 
 start_one_member_at_a_time(Config) ->
     Config1 = configure_peer_discovery(Config),
@@ -345,25 +282,28 @@ configure_peer_discovery(Config) ->
                  rabbit_ct_broker_helpers:stop_node(Config, Node))
       end, Nodes),
 
-    Endpoints = ?config(etcd_endpoints, Config),
-    Config1 = rabbit_ct_helpers:merge_app_env(
-                Config,
-                {rabbit,
-                 [{cluster_formation,
-                   [{peer_discovery_backend, rabbit_peer_discovery_etcd},
-                    {peer_discovery_etcd,
-                     [{endpoints, Endpoints},
-                      {etcd_prefix, "rabbitmq"},
-                      {cluster_name, atom_to_list(?FUNCTION_NAME)}]}]}]}),
+    ConsulHost = ?config(consul_host, Config),
+    ConsulTcpPort = ?config(consul_tcp_port, Config),
     lists:foreach(
       fun(Node) ->
+              Config1 = rabbit_ct_helpers:merge_app_env(
+                          Config,
+                          {rabbit,
+                           [{cluster_formation,
+                             [{peer_discovery_backend,
+                               rabbit_peer_discovery_consul},
+                              {peer_discovery_consul,
+                               [{consul_svc_id, atom_to_list(Node)},
+                                {consul_host, ConsulHost},
+                                {consul_port, ConsulTcpPort},
+                                {consul_scheme, "http"}]}]}]}),
               ?assertEqual(
                  ok,
                  rabbit_ct_broker_helpers:rewrite_node_config_file(
                    Config1, Node))
       end, Nodes),
 
-    Config1.
+    Config.
 
 assert_full_cluster(Config) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -375,15 +315,3 @@ assert_full_cluster(Config) ->
                             Config, Node)),
               ?assertEqual(ExpectedMembers, Members)
       end, Nodes).
-
-%%
-%% Helpers
-%%
-
-start_client(Endpoints) ->
-    case rabbitmq_peer_discovery_etcd_v3_client:start(#{endpoints => Endpoints}) of
-        {ok, Pid} ->
-            {ok, Pid};
-        {error, {already_started, Pid}} ->
-            {ok, Pid}
-    end.

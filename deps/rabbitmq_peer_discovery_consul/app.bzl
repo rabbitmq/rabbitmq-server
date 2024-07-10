@@ -100,6 +100,15 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
+        name = "system_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/system_SUITE.erl"],
+        outs = ["test/system_SUITE.beam"],
+        hdrs = [],
+        app_name = "rabbitmq_peer_discovery_consul",
+        erlc_opts = "//:test_erlc_opts",
+    )
+    erlang_bytecode(
         name = "rabbitmq_peer_discovery_consul_SUITE_beam_files",
         testonly = True,
         srcs = ["test/rabbitmq_peer_discovery_consul_SUITE.erl"],

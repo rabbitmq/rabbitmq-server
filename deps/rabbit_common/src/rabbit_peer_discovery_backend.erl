@@ -41,7 +41,7 @@
 
 -callback init() -> ok | {error, Reason :: string()}.
 
--callback list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} |
+-callback list_nodes() -> {ok, {Nodes :: [node()] | node(), NodeType :: rabbit_types:node_type()}} |
                           {error, Reason :: string()}.
 
 -callback supports_registration() -> boolean().
@@ -57,3 +57,8 @@
 -callback unlock(Data :: term()) -> ok.
 
 -optional_callbacks([init/0]).
+
+-export([api_version/0]).
+
+api_version() ->
+    2.
