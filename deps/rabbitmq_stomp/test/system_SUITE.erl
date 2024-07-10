@@ -103,13 +103,6 @@ init_per_testcase0(publish_unauthorized_error, Config) ->
     StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     {ok, ClientFoo} = rabbit_stomp_client:connect(Version, "user", "pass", StompPort),
     rabbit_ct_helpers:set_config(Config, [{client_foo, ClientFoo}]);
-init_per_testcase0(stream_filtering, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "mixed version clusters are not supported for stream filtering"};
-        _ ->
-            Config
-    end;
 init_per_testcase0(_, Config) ->
     Config.
 

@@ -182,8 +182,7 @@ init([KeepaliveSup,
                                    correlation_id_sequence = 0,
                                    outstanding_requests = #{},
                                    request_timeout = RequestTimeout,
-                                   deliver_version = DeliverVersion,
-                                   filtering_supported = rabbit_stream_utils:filtering_supported()},
+                                   deliver_version = DeliverVersion},
             State =
                 #stream_connection_state{consumers = #{},
                                          blocked = false,
@@ -549,9 +548,6 @@ increase_messages_confirmed(Counters, Count) ->
     rabbit_global_counters:messages_confirmed(stream, Count),
     atomics:add(Counters, 2, Count).
 
-increase_messages_errored(Counters, Count) ->
-    atomics:add(Counters, 3, Count).
-
 messages_consumed(Counters) ->
     atomics:get(Counters, 1).
 
@@ -714,19 +710,6 @@ open(info, {OK, S, Data},
              StatemData#statem_data{connection = Connection1,
                                     connection_state = State2}}
     end;
-open(info,
-     {sac, {{subscription_id, SubId},
-            {active, Active}, {extra, Extra}}},
-     State) ->
-    Msg0 = #{subscription_id => SubId,
-             active => Active},
-    Msg1 = case Extra of
-               [{stepping_down, true}] ->
-                   Msg0#{stepping_down => true};
-               _ ->
-                   Msg0
-           end,
-    open(info, {sac, Msg1}, State);
 open(info,
      {sac, #{subscription_id := SubId,
              active := Active} = Msg},
@@ -1784,31 +1767,6 @@ handle_frame_post_auth(Transport,
     handle_frame_post_auth(Transport, Connection, State,
                            {publish, ?VERSION_1, PublisherId, MessageCount, Messages});
 handle_frame_post_auth(Transport,
-                       #stream_connection{filtering_supported = false,
-                                          publishers = Publishers,
-                                          socket = S} = Connection,
-                       State,
-                       {publish_v2, PublisherId, MessageCount, Messages}) ->
-    case Publishers of
-        #{PublisherId := #publisher{message_counters = Counters}} ->
-            increase_messages_received(Counters, MessageCount),
-            increase_messages_errored(Counters, MessageCount),
-            ok;
-        _ ->
-            ok
-    end,
-    rabbit_global_counters:increase_protocol_counter(stream,
-                                                     ?PRECONDITION_FAILED,
-                                                     1),
-    PublishingIds = publishing_ids_from_messages(?VERSION_2, Messages),
-    Command = {publish_error,
-               PublisherId,
-               ?RESPONSE_CODE_PRECONDITION_FAILED,
-               PublishingIds},
-    Frame = rabbit_stream_core:frame(Command),
-    send(Transport, S, Frame),
-    {Connection, State};
-handle_frame_post_auth(Transport,
                        Connection,
                        State,
                        {publish_v2, PublisherId, MessageCount, Messages}) ->
@@ -1931,29 +1889,6 @@ handle_frame_post_auth(Transport,
                                                              ?PUBLISHER_DOES_NOT_EXIST,
                                                              1),
             {Connection0, State}
-    end;
-handle_frame_post_auth(Transport,
-                       #stream_connection{filtering_supported = false} = Connection,
-                       State,
-                       {request, CorrelationId,
-                        {subscribe,
-                         SubscriptionId, _, _, _, Properties}} = Request) ->
-    case rabbit_stream_utils:filter_defined(Properties) of
-        true ->
-            rabbit_log:warning("Cannot create subcription ~tp, it defines a filter "
-                               "and filtering is not active",
-                               [SubscriptionId]),
-            response(Transport,
-                     Connection,
-                     subscribe,
-                     CorrelationId,
-                     ?RESPONSE_CODE_PRECONDITION_FAILED),
-            rabbit_global_counters:increase_protocol_counter(stream,
-                                                             ?PRECONDITION_FAILED,
-                                                             1),
-            {Connection, State};
-        false ->
-            handle_frame_post_auth(Transport, {ok, Connection}, State, Request)
     end;
 handle_frame_post_auth(Transport, #stream_connection{} = Connection, State,
                        {request, _,

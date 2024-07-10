@@ -174,19 +174,14 @@ restart_stream(QRes, Options)
 restart_stream(Q, Options)
   when ?is_amqqueue(Q) andalso
        ?amqqueue_is_stream(Q) ->
-    case rabbit_feature_flags:is_enabled(restart_streams) of
-        true ->
-            rabbit_log:info("restarting stream ~s in vhost ~s with options ~p",
-                            [maps:get(name, amqqueue:get_type_state(Q)), amqqueue:get_vhost(Q), Options]),
-            #{name := StreamId} = amqqueue:get_type_state(Q),
-            case process_command({restart_stream, StreamId, Options}) of
-                {ok, {ok, LeaderPid}, _} ->
-                    {ok, node(LeaderPid)};
-                Err ->
-                    Err
-            end;
-        false ->
-            {error, {feature_flag_not_enabled, restart_stream}}
+    rabbit_log:info("restarting stream ~s in vhost ~s with options ~p",
+                    [maps:get(name, amqqueue:get_type_state(Q)), amqqueue:get_vhost(Q), Options]),
+    #{name := StreamId} = amqqueue:get_type_state(Q),
+    case process_command({restart_stream, StreamId, Options}) of
+        {ok, {ok, LeaderPid}, _} ->
+            {ok, node(LeaderPid)};
+        Err ->
+            Err
     end.
 
 delete_stream(Q, ActingUser)
@@ -254,22 +249,17 @@ policy_changed(Q) when ?is_amqqueue(Q) ->
     {ok, ok, ra:server_id()} | {error, not_supported | term()}.
 update_config(Q, Config)
   when ?is_amqqueue(Q) andalso is_map(Config) ->
-    case rabbit_feature_flags:is_enabled(stream_update_config_command) of
-        true ->
-            %% there are the only a few configuration keys that are safe to
-            %% update
-            StreamId = maps:get(name, amqqueue:get_type_state(Q)),
-            case maps:with([filter_size,
-                            retention,
-                            writer_mod,
-                            replica_mod], Config) of
-                Conf when map_size(Conf) > 0 ->
-                    process_command({update_config, StreamId, Conf});
-                _ ->
-                    {error, no_updatable_keys}
-            end;
-        false ->
-            {error, feature_not_enabled}
+    %% there are the only a few configuration keys that are safe to
+    %% update
+    StreamId = maps:get(name, amqqueue:get_type_state(Q)),
+    case maps:with([filter_size,
+                    retention,
+                    writer_mod,
+                    replica_mod], Config) of
+        Conf when map_size(Conf) > 0 ->
+            process_command({update_config, StreamId, Conf});
+        _ ->
+            {error, no_updatable_keys}
     end.
 
 sac_state(#?MODULE{single_active_consumer = SacState}) ->

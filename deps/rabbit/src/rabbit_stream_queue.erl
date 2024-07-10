@@ -96,8 +96,7 @@
                         soft_limit :: non_neg_integer(),
                         slow = false :: boolean(),
                         readers = #{} :: #{rabbit_types:ctag() => #stream{}},
-                        writer_id :: binary(),
-                        filtering_supported :: boolean()
+                        writer_id :: binary()
                        }).
 
 -import(rabbit_queue_type_util, [args_policy_lookup/3]).
@@ -286,8 +285,7 @@ consume(Q, #{no_ack := true,
 consume(Q, #{limiter_active := true}, _State)
   when ?amqqueue_is_stream(Q) ->
     {error, global_qos_not_supported_for_queue_type};
-consume(Q, Spec,
-        #stream_client{filtering_supported = FilteringSupported} = QState0)
+consume(Q, Spec, #stream_client{} = QState0)
   when ?amqqueue_is_stream(Q) ->
     %% Messages should include the offset as a custom header.
     case get_local_pid(QState0) of
@@ -307,26 +305,19 @@ consume(Q, Spec,
                 {error, _} = Err ->
                     Err;
                 {ok, OffsetSpec} ->
-                    FilterSpec = filter_spec(Args),
-                    case {FilterSpec, FilteringSupported} of
-                        {#{filter_spec := _}, false} ->
-                            {protocol_error, precondition_failed,
-                             "Filtering is not supported", []};
-                        _ ->
-                            ConsumerPrefetchCount = case Mode of
-                                                        {simple_prefetch, C} -> C;
-                                                        _ -> 0
-                                                    end,
-                            AckRequired = not NoAck,
-                            rabbit_core_metrics:consumer_created(
-                              ChPid, ConsumerTag, ExclusiveConsume, AckRequired,
-                              QName, ConsumerPrefetchCount, false, up, Args),
-                            %% reply needs to be sent before the stream
-                            %% begins sending
-                            maybe_send_reply(ChPid, OkMsg),
-                            _ = rabbit_stream_coordinator:register_local_member_listener(Q),
-                            begin_stream(QState, ConsumerTag, OffsetSpec, Mode, AckRequired, FilterSpec)
-                    end
+                    ConsumerPrefetchCount = case Mode of
+                                                {simple_prefetch, C} -> C;
+                                                _ -> 0
+                                            end,
+                    AckRequired = not NoAck,
+                    rabbit_core_metrics:consumer_created(
+                      ChPid, ConsumerTag, ExclusiveConsume, AckRequired,
+                      QName, ConsumerPrefetchCount, false, up, Args),
+                    %% reply needs to be sent before the stream
+                    %% begins sending
+                    maybe_send_reply(ChPid, OkMsg),
+                    _ = rabbit_stream_coordinator:register_local_member_listener(Q),
+                    begin_stream(QState, ConsumerTag, OffsetSpec, Mode, AckRequired, filter_spec(Args))
             end;
         {undefined, _} ->
             {protocol_error, precondition_failed,
@@ -510,8 +501,7 @@ deliver(QSs, Msg, Options) ->
     lists:foldl(
       fun({Q, stateless}, {Qs, Actions}) ->
               LeaderPid = amqqueue:get_pid(Q),
-              ok = osiris:write(LeaderPid,
-                                stream_message(Msg, filtering_supported())),
+              ok = osiris:write(LeaderPid, stream_message(Msg)),
               {Qs, Actions};
          ({Q, S0}, {Qs, Actions0}) ->
               {S, Actions} = deliver0(maps:get(correlation, Options, undefined),
@@ -526,11 +516,9 @@ deliver0(MsgId, Msg,
                         next_seq = Seq,
                         correlation = Correlation0,
                         soft_limit = SftLmt,
-                        slow = Slow0,
-                        filtering_supported = FilteringSupported} = State,
+                        slow = Slow0} = State,
          Actions0) ->
-    ok = osiris:write(LeaderPid, WriterId, Seq,
-                      stream_message(Msg, FilteringSupported)),
+    ok = osiris:write(LeaderPid, WriterId, Seq, stream_message(Msg)),
     Correlation = case MsgId of
                       undefined ->
                           Correlation0;
@@ -547,19 +535,14 @@ deliver0(MsgId, Msg,
                          correlation = Correlation,
                          slow = Slow}, Actions}.
 
-stream_message(Msg, FilteringSupported) ->
+stream_message(Msg) ->
     McAmqp = mc:convert(mc_amqp, Msg),
     MsgData = mc:protocol_state(McAmqp),
-    case FilteringSupported of
-        true ->
-            case mc:x_header(<<"x-stream-filter-value">>, McAmqp) of
-                undefined ->
-                    MsgData;
-                {utf8, Value} ->
-                    {Value, MsgData}
-            end;
-        false ->
-            MsgData
+    case mc:x_header(<<"x-stream-filter-value">>, McAmqp) of
+        undefined ->
+            MsgData;
+        {utf8, Value} ->
+            {Value, MsgData}
     end.
 
 -spec dequeue(_, _, _, _, client()) -> no_return().
@@ -936,8 +919,7 @@ init(Q) when ?is_amqqueue(Q) ->
                                 name = amqqueue:get_name(Q),
                                 leader = Leader,
                                 writer_id = WriterId,
-                                soft_limit = SoftLimit,
-                                filtering_supported = filtering_supported()}};
+                                soft_limit = SoftLimit}};
         {ok, stream_not_found, _} ->
             {error, stream_not_found};
         {error, coordinator_unavailable} = E ->
@@ -1294,8 +1276,7 @@ notify_decorators(Q) when ?is_amqqueue(Q) ->
 
 resend_all(#stream_client{leader = LeaderPid,
                           writer_id = WriterId,
-                          correlation = Corrs,
-                          filtering_supported = FilteringSupported} = State) ->
+                          correlation = Corrs} = State) ->
     Msgs = lists:sort(maps:values(Corrs)),
     case Msgs of
         [] -> ok;
@@ -1304,8 +1285,7 @@ resend_all(#stream_client{leader = LeaderPid,
                              [Seq, maps:size(Corrs)])
     end,
     [begin
-         ok = osiris:write(LeaderPid, WriterId, Seq,
-                           stream_message(Msg, FilteringSupported))
+         ok = osiris:write(LeaderPid, WriterId, Seq, stream_message(Msg))
      end || {Seq, Msg} <- Msgs],
     State.
 
@@ -1339,9 +1319,6 @@ list_with_minimum_quorum() ->
                  end, rabbit_amqqueue:list_local_stream_queues()).
 
 is_stateful() -> true.
-
-filtering_supported() ->
-    rabbit_feature_flags:is_enabled(stream_filtering).
 
 get_nodes(Q) when ?is_amqqueue(Q) ->
     #{nodes := Nodes} = amqqueue:get_type_state(Q),

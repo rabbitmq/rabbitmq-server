@@ -3138,7 +3138,6 @@ global_counters(Config) ->
     ok = amqp10_client:close_connection(Connection).
 
 stream_filtering(Config) ->
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FUNCTION_NAME),
     Stream = atom_to_binary(?FUNCTION_NAME),
     Address = rabbitmq_amqp_address:queue(Stream),
     Ch = rabbit_ct_client_helpers:open_channel(Config),

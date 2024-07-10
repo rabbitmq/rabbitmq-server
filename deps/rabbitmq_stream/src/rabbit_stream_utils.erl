@@ -34,7 +34,6 @@
          filter_defined/1,
          filter_spec/1,
          command_versions/0,
-         filtering_supported/0,
          check_super_stream_management_permitted/4,
          offset_lag/4,
          consumer_offset/3]).
@@ -298,14 +297,8 @@ filter_spec(Properties) ->
     end.
 
 command_versions() ->
-    PublishMaxVersion = case filtering_supported() of
-                            false ->
-                                ?VERSION_1;
-                            true ->
-                                ?VERSION_2
-                        end,
     [{declare_publisher, ?VERSION_1, ?VERSION_1},
-     {publish, ?VERSION_1, PublishMaxVersion},
+     {publish, ?VERSION_1, ?VERSION_2},
      {query_publisher_sequence, ?VERSION_1, ?VERSION_1},
      {delete_publisher, ?VERSION_1, ?VERSION_1},
      {subscribe, ?VERSION_1, ?VERSION_1},
@@ -323,9 +316,6 @@ command_versions() ->
      {stream_stats, ?VERSION_1, ?VERSION_1},
      {create_super_stream, ?VERSION_1, ?VERSION_1},
      {delete_super_stream, ?VERSION_1, ?VERSION_1}].
-
-filtering_supported() ->
-    rabbit_feature_flags:is_enabled(stream_filtering).
 
 q(VirtualHost, Name) ->
     rabbit_misc:r(VirtualHost, queue, Name).

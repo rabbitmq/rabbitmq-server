@@ -93,7 +93,6 @@
          deliver_version :: rabbit_stream_core:command_version(),
          request_timeout :: pos_integer(),
          outstanding_requests_timer :: undefined | erlang:reference(),
-         filtering_supported :: boolean(),
          %% internal sequence used for publishers
          internal_sequence = 0 :: integer(),
          token_expiry_timer = undefined :: undefined | erlang:reference()}).
