@@ -36,7 +36,7 @@ The RabbitMQ core team will always investigate the following issues, even if the
 
 Unless overwhelming evidence of a systemic problem in RabbitMQ is demonstrated, the following issues will get minimum or no attention at all from the core team:
 
-* Questions related to [OAuth2 configuration](https://www.rabbitmq.com/docs/oauth2) and troubleshooting
+* Questions related to [OAuth2 configuration](https://www.rabbitmq.com/docs/oauth2), [OAuth 2 configuration examples](https://www.rabbitmq.com/docs/oauth2-examples) and [troubleshooting of OAuth 2](https://www.rabbitmq.com/docs/troubleshooting-oauth2)
 * Questions related to [TLS configuration](https://www.rabbitmq.com/docs/ssl) and [troubleshooting of TLS connections](https://www.rabbitmq.com/docs/troubleshooting-ssl)
 * Questions related to [troubleshooting of network connectivity](https://www.rabbitmq.com/docs/troubleshooting-networking) 
 * Questions related to [LDAP configuration](https://www.rabbitmq.com/docs/ldap) and [troubleshooting](https://www.rabbitmq.com/docs/ldap#troubleshooting)
