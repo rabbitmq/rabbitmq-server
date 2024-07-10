@@ -54,13 +54,20 @@ suite() ->
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
-init_per_suite(Config0) ->
+init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, khepri}]),
-    rabbit_ct_helpers:run_setup_steps(Config,
-                                      [
-                                       fun rabbit_ct_broker_helpers:configure_dist_proxy/1
-                                      ]).
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            %% This SUITE is meant to test how Khepri behaves in a minority,
+            %% so mnesia should be skipped.
+            {skip, "Minority testing not supported by mnesia"};
+        _ ->
+            rabbit_ct_helpers:run_setup_steps(
+              Config,
+              [
+               fun rabbit_ct_broker_helpers:configure_dist_proxy/1
+              ])
+    end.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
