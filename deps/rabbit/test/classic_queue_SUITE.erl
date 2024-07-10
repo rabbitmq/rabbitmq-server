@@ -61,12 +61,11 @@ end_per_group(_, Config) ->
                                 rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(T, Config) ->
-    case rpc(Config, rabbit_feature_flags, is_enabled, [classic_queue_leader_locator]) of
-        true ->
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, classic_queue_leader_locator) of
+        ok ->
             rabbit_ct_helpers:testcase_started(Config, T);
-        false ->
-            {skip, "queue-leader-locator support was added to classic queues in 4.0;"
-             "previously only queue-master-locator was allowed"}
+        Skip ->
+            Skip
     end.
 
 %% -------------------------------------------------------------------
