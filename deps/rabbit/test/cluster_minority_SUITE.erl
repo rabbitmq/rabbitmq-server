@@ -188,11 +188,11 @@ consume_from_queue(Config) ->
                  amqp_channel:call(Ch, #'basic.consume'{queue = <<"test-queue">>})).
 
 add_vhost(Config) ->
-    ?assertMatch({error, {timeout, _}},
+    ?assertMatch({error, timeout},
                  rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost1">>)).
 
 update_vhost(Config) ->
-    ?assertThrow({error, {timeout, _}},
+    ?assertThrow({error, timeout},
                  rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, update_tags,
                                               [<<"/">>, [carrots], <<"user">>])).
 
@@ -200,15 +200,15 @@ delete_vhost(Config) ->
     ?assertMatch({'EXIT', _}, rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>)).
 
 add_user(Config) ->
-    ?assertMatch({error, {timeout, _}},
+    ?assertMatch({error, timeout},
                  rabbit_ct_broker_helpers:add_user(Config, <<"user1">>)).
 
 update_user(Config) ->
-    ?assertMatch({error, {timeout, _}},
+    ?assertMatch({error, timeout},
                  rabbit_ct_broker_helpers:set_user_tags(Config, 0, <<"user1">>, [<<"admin">>])).
 
 delete_user(Config) ->
-    ?assertMatch({error, {timeout, _}},
+    ?assertMatch({error, timeout},
                  rabbit_ct_broker_helpers:delete_user(Config, <<"user1">>)).
 
 set_policy(Config) ->
