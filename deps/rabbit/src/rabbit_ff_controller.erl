@@ -1380,32 +1380,9 @@ this_node_first(Nodes) ->
       Ret :: term() | {error, term()}.
 
 rpc_call(Node, Module, Function, Args, Timeout) ->
-    SleepBetweenRetries = 5000,
-    T0 = erlang:monotonic_time(),
     try
         erpc:call(Node, Module, Function, Args, Timeout)
     catch
-        %% In case of `noconnection' with `Timeout'=infinity, we don't retry
-        %% at all. This is because the infinity "timeout" is used to run
-        %% callbacks on remote node and they can last an indefinite amount of
-        %% time, for instance, if there is a lot of data to migrate.
-        error:{erpc, noconnection} = Reason
-          when is_integer(Timeout) andalso Timeout > SleepBetweenRetries ->
-            ?LOG_WARNING(
-               "Feature flags: no connection to node `~ts`; "
-               "retrying in ~b milliseconds",
-               [Node, SleepBetweenRetries],
-               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            timer:sleep(SleepBetweenRetries),
-            T1 = erlang:monotonic_time(),
-            TDiff = erlang:convert_time_unit(T1 - T0, native, millisecond),
-            Remaining = Timeout - TDiff,
-            Timeout1 = erlang:max(Remaining, 0),
-            case Timeout1 of
-                0 -> {error, Reason};
-                _ -> rpc_call(Node, Module, Function, Args, Timeout1)
-            end;
-
         Class:Reason:Stacktrace ->
             Message0 = erl_error:format_exception(Class, Reason, Stacktrace),
             Message1 = lists:flatten(Message0),
