@@ -89,21 +89,27 @@ init_per_testcase(Testcase, Config)
                 Config2,
                 rabbit_ct_broker_helpers:setup_steps() ++
                 rabbit_ct_client_helpers:setup_steps()),
-    try
-        _ = rabbit_ct_broker_helpers:rpc_all(
-              Config3, rabbit_peer_discovery_backend, api_version, []),
-        Config3
-    catch
-        error:{exception, undef,
-               [{rabbit_peer_discovery_backend, api_version, _, _} | _]} ->
-            Config4 = rabbit_ct_helpers:run_steps(
-                        Config3,
-                        rabbit_ct_client_helpers:teardown_steps() ++
-                        rabbit_ct_broker_helpers:teardown_steps()),
-            rabbit_ct_helpers:testcase_finished(Config4, Testcase),
-            {skip,
-             "Some nodes use the old discover->register order; "
-             "the testcase would likely fail"}
+    case Config3 of
+        _ when is_list(Config3) ->
+            try
+                _ = rabbit_ct_broker_helpers:rpc_all(
+                      Config3, rabbit_peer_discovery_backend, api_version, []),
+                Config3
+            catch
+                error:{exception, undef,
+                       [{rabbit_peer_discovery_backend, api_version, _, _}
+                        | _]} ->
+                    Config4 = rabbit_ct_helpers:run_steps(
+                                Config3,
+                                rabbit_ct_client_helpers:teardown_steps() ++
+                                rabbit_ct_broker_helpers:teardown_steps()),
+                    rabbit_ct_helpers:testcase_finished(Config4, Testcase),
+                    {skip,
+                     "Some nodes use the old discover->register order; "
+                     "the testcase would likely fail"}
+            end;
+        {skip, _} ->
+            Config3
     end;
 init_per_testcase(_Testcase, Config) ->
     Config.
