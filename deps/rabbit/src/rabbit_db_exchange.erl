@@ -57,6 +57,7 @@
 -define(MNESIA_TABLE, rabbit_exchange).
 -define(MNESIA_DURABLE_TABLE, rabbit_durable_exchange).
 -define(MNESIA_SERIAL_TABLE, rabbit_exchange_serial).
+-define(KHEPRI_PROJECTION, rabbit_khepri_exchange).
 
 %% -------------------------------------------------------------------
 %% get_all().
@@ -182,9 +183,14 @@ get_in_mnesia(Name) ->
     rabbit_mnesia:dirty_read({?MNESIA_TABLE, Name}).
 
 get_in_khepri(Name) ->
-    case ets:lookup(rabbit_khepri_exchange, Name) of
-        [X] -> {ok, X};
-        []  -> {error, not_found}
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            {error, not_found};
+        Table ->
+            case ets:lookup(Table, Name) of
+                [X] -> {ok, X};
+                []  -> {error, not_found}
+            end
     end.
 
 %% -------------------------------------------------------------------
@@ -227,7 +233,12 @@ get_many_in_mnesia(Table, Names) when is_list(Names) ->
     lists:append([ets:lookup(Table, Name) || Name <- Names]).
 
 get_many_in_khepri(Names) when is_list(Names) ->
-    lists:append([ets:lookup(rabbit_khepri_exchange, Name) || Name <- Names]).
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            [];
+        Table ->
+            lists:append([ets:lookup(Table, Name) || Name <- Names])
+    end.
 
 %% -------------------------------------------------------------------
 %% count().
