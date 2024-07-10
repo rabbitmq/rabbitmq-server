@@ -82,7 +82,6 @@ broker_for_integration_suites()
 
 rabbitmq_integration_suite(
     name = "rabbit_exchange_type_consistent_hash_SUITE",
-    shard_count = 7,
 )
 
 assert_suites()
