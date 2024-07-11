@@ -120,7 +120,7 @@ exists_in_khepri(#binding{source = SrcName,
                        Errs ->
                            Errs
                    end
-           end) of
+           end, ro) of
         {ok, not_found} -> false;
         {ok, Set} -> sets:is_element(Binding, Set);
         Errs -> not_found_errs_in_khepri(not_found(Errs, SrcName, DstName))
