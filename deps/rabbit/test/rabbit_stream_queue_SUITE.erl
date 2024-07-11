@@ -1256,7 +1256,7 @@ recover_after_leader_and_coordinator_kill(Config) ->
 
 
     ct:pal("sys state ~p", [CState]),
-
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]),
     ok.
 
 keep_consuming_on_leader_restart(Config) ->
@@ -1437,7 +1437,9 @@ tracking_status(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, Server, ?MODULE, delete_testcase_queue, [Q]).
 
 restart_stream(Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, restart_stream) of
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, restart_streams) of
+        {skip, _} = Skip ->
+            Skip;
         ok ->
             [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -1459,10 +1461,6 @@ restart_stream(Config) ->
 
             publish_confirm(Ch, Q, [<<"msg2">>]),
             rabbit_ct_broker_helpers:rpc(Config, Server, ?MODULE, delete_testcase_queue, [Q]),
-            ok;
-        _ ->
-            ct:pal("skipping test ~s as feature flag `restart_stream` not supported",
-                   [?FUNCTION_NAME]),
             ok
     end.
 
@@ -2208,6 +2206,7 @@ leader_locator_balanced_maintenance(Config) ->
       end, 60000),
 
     true = rabbit_ct_broker_helpers:unmark_as_being_drained(Config, Server3),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, [[Q1, Q]]),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 select_nodes_with_least_replicas(Config) ->
@@ -2807,13 +2806,11 @@ ensure_retention_applied(Config, Server) ->
     rabbit_ct_broker_helpers:rpc(Config, Server, gen_server, call, [osiris_retention, test]).
 
 rebalance(Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, restart_stream) of
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, restart_streams) of
         ok ->
             rebalance0(Config);
-        _ ->
-            ct:pal("skipping test ~s as feature flag `restart_stream` not supported",
-                   [?FUNCTION_NAME]),
-            ok
+        {skip, _} = Skip ->
+            Skip
     end.
 
 rebalance0(Config) ->
@@ -2828,20 +2825,20 @@ rebalance0(Config) ->
     Q5 = <<"st5">>,
 
     ?assertEqual({'queue.declare_ok', Q1, 0, 0},
-                 declare(Ch, Q1, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-initial-cluster-size">>, long, 3}])),
+                 declare(Config, Server0, Q1, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                               {<<"x-initial-cluster-size">>, long, 3}])),
     ?assertEqual({'queue.declare_ok', Q2, 0, 0},
-                 declare(Ch, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-initial-cluster-size">>, long, 3}])),
+                 declare(Config, Server0, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                               {<<"x-initial-cluster-size">>, long, 3}])),
     ?assertEqual({'queue.declare_ok', Q3, 0, 0},
-                 declare(Ch, Q3, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-initial-cluster-size">>, long, 3}])),
+                 declare(Config, Server0, Q3, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                               {<<"x-initial-cluster-size">>, long, 3}])),
     ?assertEqual({'queue.declare_ok', Q4, 0, 0},
-                 declare(Ch, Q4, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-initial-cluster-size">>, long, 3}])),
+                 declare(Config, Server0, Q4, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                               {<<"x-initial-cluster-size">>, long, 3}])),
     ?assertEqual({'queue.declare_ok', Q5, 0, 0},
-                 declare(Ch, Q5, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-initial-cluster-size">>, long, 3}])),
+                 declare(Config, Server0, Q5, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                               {<<"x-initial-cluster-size">>, long, 3}])),
 
     NumMsgs = 100,
     Data = crypto:strong_rand_bytes(100),
