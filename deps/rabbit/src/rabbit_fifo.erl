@@ -399,9 +399,6 @@ apply(Meta, #credit{credit = LinkCreditRcv,
             end;
         _ when Waiting0 /= [] ->
             %% TODO next time when we bump the machine version:
-            %% 1. Do not put consumer at head of waiting_consumers if
-            %%    NewCredit == 0
-            %%    to reduce likelihood of activating a 0 credit consumer.
             %% 2. Support Drain == true, i.e. advance delivery-count,
             %%    consuming all link-credit since there
             %%    are no messages available for an inactive consumer and
@@ -973,12 +970,12 @@ which_module(2) -> rabbit_fifo_v3;
 which_module(3) -> rabbit_fifo_v3;
 which_module(4) -> ?MODULE.
 
--define(AUX, aux_v2).
+-define(AUX, aux_v3).
 
 -record(checkpoint, {index :: ra:index(),
                      timestamp :: milliseconds(),
                      enqueue_count :: non_neg_integer(),
-                     last_smallest_index :: ra:index(),
+                     smallest_index :: undefined | ra:index(),
                      messages_total :: non_neg_integer()}).
 -record(aux_gc, {last_raft_idx = 0 :: ra:index()}).
 -record(aux, {name :: atom(),
@@ -1003,7 +1000,8 @@ init_aux(Name) when is_atom(Name) ->
           capacity = {inactive, Now, 1, 1.0},
           last_checkpoint = #checkpoint{index = 0,
                                         timestamp = erlang:system_time(millisecond),
-                                        enqueue_count = 0}}.
+                                        enqueue_count = 0,
+                                        messages_total = 0}}.
 
 handle_aux(RaftState, Tag, Cmd, #aux{name = Name,
                                      capacity = Cap,
@@ -1013,6 +1011,11 @@ handle_aux(RaftState, Tag, Cmd, #aux{name = Name,
     Aux = AuxV2#?AUX{capacity = Cap,
                      gc = Gc},
     handle_aux(RaftState, Tag, Cmd, Aux, RaAux);
+handle_aux(RaftState, Tag, Cmd, AuxV2, RaAux)
+  when element(1, AuxV2) == aux_v2 ->
+    Name = element(2, AuxV2),
+    AuxV3 = init_aux(Name),
+    handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux);
 handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
                                       consumer_key = Key} = Ret, Corr, Pid},
            Aux0, RaAux0) ->
@@ -2558,7 +2561,6 @@ is_expired(Ts, #?STATE{cfg = #cfg{expires = Expires},
 is_expired(_Ts, _State) ->
     false.
 
-%%TODO: provide first class means of configuring
 get_priority(#{priority := Priority}) ->
     Priority;
 get_priority(#{args := Args}) ->
@@ -2749,12 +2751,16 @@ priority_tag(Msg) ->
         false ->
             lo
     end.
+-define(CHECK_ENQ_MIN_INTERVAL_MS, 500).
+-define(CHECK_ENQ_MIN_INDEXES, 4096).
+-define(CHECK_MIN_INTERVAL_MS, 5000).
+-define(CHECK_MIN_INDEXES, 65456).
 
 do_checkpoints(Ts,
                #checkpoint{index = ChIdx,
                            timestamp = ChTime,
                            enqueue_count = ChEnqCnt,
-                           last_smallest_index = LastSmallest,
+                           smallest_index = LastSmallest,
                            messages_total = LastMsgsTot} = Check0, RaAux) ->
     LastAppliedIdx = ra_aux:last_applied(RaAux),
     #?STATE{enqueue_count = EnqCnt} = MacState = ra_aux:machine_state(RaAux),
@@ -2772,22 +2778,22 @@ do_checkpoints(Ts,
                        Smallest ->
                            Smallest
                    end,
-    {Check, Effects} = case (EnqCnt - ChEnqCnt > 4096 andalso
-                             Since > (500 * Mult)) orelse
-                            (LastAppliedIdx - ChIdx > 65456 andalso
-                             Since > (5000 * Mult)) orelse
+    {Check, Effects} = case (EnqCnt - ChEnqCnt > ?CHECK_ENQ_MIN_INDEXES andalso
+                             Since > (?CHECK_ENQ_MIN_INTERVAL_MS * Mult)) orelse
+                            (LastAppliedIdx - ChIdx > ?CHECK_MIN_INDEXES andalso
+                             Since > (?CHECK_MIN_INTERVAL_MS * Mult)) orelse
                             (LastMsgsTot > 0 andalso MsgsTot == 0) of
                            true ->
                                %% take a checkpoint;
                                {#checkpoint{index = LastAppliedIdx,
                                             timestamp = Ts,
                                             enqueue_count = EnqCnt,
-                                            last_smallest_index = NewSmallest,
+                                            smallest_index = NewSmallest,
                                             messages_total = MsgsTot},
                                 [{checkpoint, LastAppliedIdx, MacState} |
                                  release_cursor(LastSmallest, NewSmallest)]};
                            false ->
-                               {Check0#checkpoint{last_smallest_index = NewSmallest},
+                               {Check0#checkpoint{smallest_index = NewSmallest},
                                 release_cursor(LastSmallest, NewSmallest)}
                        end,
 
