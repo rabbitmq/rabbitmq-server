@@ -52,6 +52,7 @@
 -endif.
 
 -define(MNESIA_TABLE, rabbit_vhost).
+-define(KHEPRI_PROJECTION, rabbit_khepri_vhost).
 
 %% -------------------------------------------------------------------
 %% create_or_get().
@@ -241,7 +242,12 @@ exists_in_mnesia(VHostName) ->
     mnesia:dirty_read({?MNESIA_TABLE, VHostName}) /= [].
 
 exists_in_khepri(VHostName) ->
-    ets:member(rabbit_khepri_vhost, VHostName).
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            false;
+        Table ->
+            ets:member(Table, VHostName)
+    end.
 
 %% -------------------------------------------------------------------
 %% get().
@@ -269,9 +275,14 @@ get_in_mnesia(VHostName) ->
     end.
 
 get_in_khepri(VHostName) ->
-    case ets:lookup(rabbit_khepri_vhost, VHostName) of
-        [Record] -> Record;
-        _        -> undefined
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            undefined;
+        Table ->
+            case ets:lookup(Table, VHostName) of
+                [Record] -> Record;
+                _        -> undefined
+            end
     end.
 
 %% -------------------------------------------------------------------
@@ -295,7 +306,12 @@ get_all_in_mnesia() ->
     mnesia:dirty_match_object(?MNESIA_TABLE, vhost:pattern_match_all()).
 
 get_all_in_khepri() ->
-    ets:tab2list(rabbit_khepri_vhost).
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            [];
+        Table ->
+            ets:tab2list(Table)
+    end.
 
 %% -------------------------------------------------------------------
 %% list().
@@ -318,7 +334,12 @@ list_in_mnesia() ->
     mnesia:dirty_all_keys(?MNESIA_TABLE).
 
 list_in_khepri() ->
-    ets:select(rabbit_khepri_vhost, [{vhost:pattern_match_names(), [], ['$1']}]).
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            [];
+        Table ->
+            ets:select(Table, [{vhost:pattern_match_names(), [], ['$1']}])
+    end.
 
 %% -------------------------------------------------------------------
 %% update_in_*tx().
