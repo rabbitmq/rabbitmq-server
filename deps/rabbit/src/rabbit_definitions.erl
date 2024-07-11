@@ -883,12 +883,17 @@ add_binding(VHost, Binding, ActingUser) ->
                     rv(VHost, DestType, destination, Binding), ActingUser).
 
 add_binding_int(Binding, Source, Destination, ActingUser) ->
-    rabbit_binding:add(
-      #binding{source       = Source,
-               destination  = Destination,
-               key          = maps:get(routing_key, Binding, undefined),
-               args         = args(maps:get(arguments, Binding, undefined))},
-      ActingUser).
+    case rabbit_binding:add(
+           #binding{source       = Source,
+                    destination  = Destination,
+                    key          = maps:get(routing_key, Binding, undefined),
+                    args         = args(maps:get(arguments, Binding, undefined))},
+           ActingUser) of
+        ok ->
+            ok;
+        {error, _} = Err ->
+            throw(Err)
+    end.
 
 dest_type(Binding) ->
     rabbit_data_coercion:to_atom(maps:get(destination_type, Binding, undefined)).

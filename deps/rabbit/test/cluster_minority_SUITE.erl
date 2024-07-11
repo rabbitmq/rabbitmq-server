@@ -25,6 +25,7 @@ groups() ->
                               open_channel,
                               declare_exchange,
                               declare_binding,
+                              delete_binding,
                               declare_queue,
                               publish_to_exchange,
                               publish_and_consume_to_local_classic_queue,
@@ -85,7 +86,7 @@ init_per_group(Group, Config0) when Group == client_operations;
         {skip, _} ->
             Config1;
         _ ->
-            %% Before partitioning the cluster, create a policy and queue that can be used in
+            %% Before partitioning the cluster, create resources that can be used in
             %% the test cases. They're needed for delete and consume operations, which can list
             %% them but fail to operate anything else.
             %%
@@ -95,6 +96,10 @@ init_per_group(Group, Config0) when Group == client_operations;
             %% To be used in consume_from_queue
             #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = <<"test-queue">>,
                                                                            arguments = [{<<"x-queue-type">>, longstr, <<"classic">>}]}),
+            %% To be used in delete_binding
+            #'exchange.bind_ok'{} = amqp_channel:call(Ch, #'exchange.bind'{destination = <<"amq.fanout">>,
+                                                                           source = <<"amq.direct">>,
+                                                                           routing_key = <<"binding-to-be-deleted">>}),
 
             %% Lower the default Khepri command timeout. By default this is set
             %% to 30s in `rabbit_khepri:setup/1' which makes the cases in this
@@ -159,6 +164,14 @@ declare_binding(Config) ->
                 amqp_channel:call(Ch, #'exchange.bind'{destination = <<"amq.fanout">>,
                                                        source = <<"amq.direct">>,
                                                        routing_key = <<"key">>})).
+
+delete_binding(Config) ->
+    [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, A),
+    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 541, _}}}, _},
+                amqp_channel:call(Ch, #'exchange.unbind'{destination = <<"amq.fanout">>,
+                                                         source = <<"amq.direct">>,
+                                                         routing_key = <<"binding-to-be-deleted">>})).
 
 declare_queue(Config) ->
     [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
