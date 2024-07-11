@@ -632,22 +632,19 @@ handle_consumer_removal(Group0, Consumer, Stream, ConsumerName) ->
 notify_consumer_effect(Pid, SubId, Stream, Name, Active) ->
     notify_consumer_effect(Pid, SubId, Stream, Name, Active, false).
 
-notify_consumer_effect(Pid, SubId, Stream, Name, Active, SteppingDown) ->
-    notify_consumer_effect(Pid, SubId, Stream, Name, Active, SteppingDown, map).
-
-notify_consumer_effect(Pid, SubId, Stream, Name, Active, false = _SteppingDown, map) ->
+notify_consumer_effect(Pid, SubId, Stream, Name, Active, false = _SteppingDown) ->
     mod_call_effect(Pid,
                     {sac, #{subscription_id => SubId,
                             stream => Stream,
                             consumer_name => Name,
                             active => Active}});
-notify_consumer_effect(Pid, SubId, Stream, Name, Active, true = _SteppingDown, map) ->
+notify_consumer_effect(Pid, SubId, Stream, Name, Active, true = SteppingDown) ->
     mod_call_effect(Pid,
                     {sac, #{subscription_id => SubId,
                             stream => Stream,
                             consumer_name => Name,
                             active => Active,
-                            stepping_down => true}}).
+                            stepping_down => SteppingDown}}).
 
 maybe_create_group(VirtualHost,
                    Stream,
