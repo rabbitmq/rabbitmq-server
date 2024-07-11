@@ -151,9 +151,14 @@ get_in_mnesia(Key) ->
     end.
 
 get_in_khepri(Key) ->
-    case ets:lookup(?KHEPRI_PROJECTION, Key) of
-        []       -> undefined;
-        [Record] -> Record
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            undefined;
+        Table ->
+            case ets:lookup(Table, Key) of
+                []       -> undefined;
+                [Record] -> Record
+            end
     end.
 
 %% -------------------------------------------------------------------
@@ -177,7 +182,12 @@ get_all_in_mnesia() ->
     rabbit_mnesia:dirty_read_all(?MNESIA_TABLE).
 
 get_all_in_khepri() ->
-    ets:tab2list(?KHEPRI_PROJECTION).
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            [];
+        Table ->
+            ets:tab2list(Table)
+    end.
 
 -spec get_all(VHostName, Comp) -> Ret when
       VHostName :: vhost:name() | '_',
@@ -214,9 +224,14 @@ get_all_in_khepri(VHostName, Comp) ->
         '_' -> ok;
         _   -> rabbit_vhost:assert(VHostName)
     end,
-    Match = #runtime_parameters{key = {VHostName, Comp, '_'},
-                                _   = '_'},
-    ets:match_object(?KHEPRI_PROJECTION, Match).
+    case ets:whereis(?KHEPRI_PROJECTION) of
+        undefined ->
+            [];
+        Table ->
+            Match = #runtime_parameters{key = {VHostName, Comp, '_'},
+                                        _   = '_'},
+            ets:match_object(Table, Match)
+    end.
 
 %% -------------------------------------------------------------------
 %% delete().
