@@ -398,31 +398,45 @@ apply(Meta, #credit{credit = LinkCreditRcv,
                     end
             end;
         _ when Waiting0 /= [] ->
-            %% TODO next time when we bump the machine version:
-            %% 2. Support Drain == true, i.e. advance delivery-count,
-            %%    consuming all link-credit since there
-            %%    are no messages available for an inactive consumer and
-            %%    send credit_reply with Drain=true.
             case lists:keytake(ConsumerKey, 1, Waiting0) of
                 {value, {_, Con0 = #consumer{delivery_count = DeliveryCountSnd,
-                                             cfg = Cfg}}, Waiting} ->
-                    LinkCreditSnd = link_credit_snd(DeliveryCountRcv, LinkCreditRcv,
-                                                    DeliveryCountSnd, Cfg),
-                    %% grant the credit
-                    Con = Con0#consumer{credit = LinkCreditSnd},
-                    State = State0#?STATE{waiting_consumers =
-                                          add_waiting({ConsumerKey, Con}, Waiting)},
+                                             cfg = Cfg}}, Waiting1} ->
                     %% No messages are available for inactive consumers.
                     Available = 0,
+                    LinkCreditSnd = link_credit_snd(DeliveryCountRcv,
+                                                    LinkCreditRcv,
+                                                    DeliveryCountSnd,
+                                                    Cfg),
                     case credit_api_v2(Cfg) of
                         true ->
+                            {Credit, DeliveryCount} =
+                            case Drain of
+                                true ->
+                                    %% By issuing drain=true, the client says "either send a transfer or a flow frame".
+                                    %% Since there are no messages to send to an inactive consumer, we advance the
+                                    %% delivery-count consuming all link-credit and send a credit_reply with drain=true
+                                    %% to the session which causes the session to send a flow frame to the client.
+                                    AdvancedDeliveryCount = add(DeliveryCountSnd, LinkCreditSnd),
+                                    {0, AdvancedDeliveryCount};
+                                false ->
+                                    {LinkCreditSnd, DeliveryCountSnd}
+                            end,
+                            %% Grant the credit.
+                            Con = Con0#consumer{credit = Credit,
+                                                delivery_count = DeliveryCount},
+                            Waiting = add_waiting({ConsumerKey, Con}, Waiting1),
+                            State = State0#?STATE{waiting_consumers = Waiting},
                             {State, ok,
                              {send_msg, Cfg#consumer_cfg.pid,
                               {credit_reply, Cfg#consumer_cfg.tag,
-                               DeliveryCountSnd, LinkCreditSnd,
-                               Available, false},
+                               DeliveryCount, Credit, Available, Drain},
                               ?DELIVERY_SEND_MSG_OPTS}};
                         false ->
+                            %% Credit API v1 doesn't support draining an inactive consumer.
+                            %% Grant the credit.
+                            Con = Con0#consumer{credit = LinkCreditSnd},
+                            Waiting = add_waiting({ConsumerKey, Con}, Waiting1),
+                            State = State0#?STATE{waiting_consumers = Waiting},
                             {State, {send_credit_reply, Available}}
                     end;
                 false ->

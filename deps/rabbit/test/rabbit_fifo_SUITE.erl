@@ -285,6 +285,58 @@ credit_and_drain_v2_test(Config) ->
     ?ASSERT_NO_EFF({log, _, _, _}, EnqEffs),
     ok.
 
+credit_and_drain_single_active_consumer_v2_test(Config) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r(
+                                        "/", queue, atom_to_binary(?FUNCTION_NAME)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
+    Self = self(),
+
+    % Send 1 message.
+    {State1, _} = enq(Config, 1, 1, first, State0),
+
+    % Add 2 consumers.
+    Ctag1 = <<"ctag1">>,
+    Ctag2 = <<"ctag2">>,
+    C1 = {Ctag1, Self},
+    C2 = {Ctag2, Self},
+    CK1 = ?LINE,
+    CK2 = ?LINE,
+    Entries = [
+               {CK1, make_checkout(C1, {auto, {credited, 16#ff_ff_ff_ff}}, #{})},
+               {CK2, make_checkout(C2, {auto, {credited, 16#ff_ff_ff_ff}}, #{})}
+              ],
+    {State2, _} = run_log(Config, State1, Entries),
+
+    % The 1st registered consumer is the active one, the 2nd consumer is waiting.
+    ?assertMatch(#{single_active_consumer_id := C1,
+                   single_active_num_waiting_consumers := 1},
+                 rabbit_fifo:overview(State2)),
+
+    % Drain the inactive consumer.
+    {State3, Effects0} = credit(Config, CK2, ?LINE, 5000, 16#ff_ff_ff_ff, true, State2),
+    % The inactive consumer should not receive any message.
+    % Hence, no log effect should be returned.
+    % Since we sent drain=true, we expect the sending queue to consume all link credit
+    % advancing the delivery-count.
+    ?assertEqual({send_msg, Self,
+                  {credit_reply, Ctag2, _DeliveryCount = 4999, _Credit = 0,
+                   _Available = 0, _Drain = true},
+                  ?DELIVERY_SEND_MSG_OPTS},
+                 Effects0),
+
+    % Drain the active consumer.
+    {_State4, Effects1} = credit(Config, CK1, ?LINE, 1000, 16#ff_ff_ff_ff, true, State3),
+    ?assertMatch([
+                  {log, [1], _Fun, _Local},
+                  {send_msg, Self,
+                   {credit_reply, Ctag1, _DeliveryCount = 999, _Credit = 0,
+                    _Available = 0, _Drain = true},
+                   ?DELIVERY_SEND_MSG_OPTS}
+                 ],
+                 Effects1).
+
 enq_enq_deq_test(C) ->
     Cid = {?FUNCTION_NAME_B, self()},
     {State1, _} = enq(C, 1, 1, first, test_init(test)),

@@ -85,6 +85,8 @@ groups() ->
        consumer_priority_quorum_queue,
        single_active_consumer_classic_queue,
        single_active_consumer_quorum_queue,
+       single_active_consumer_drain_classic_queue,
+       single_active_consumer_drain_quorum_queue,
        detach_requeues_one_session_classic_queue,
        detach_requeues_one_session_quorum_queue,
        detach_requeues_drop_head_classic_queue,
@@ -215,6 +217,14 @@ init_per_testcase(T, Config)
         false ->
             {skip, "Receiving with drain from quorum queues in credit API v1 have a known "
              "bug that they reply with send_drained before delivering the message."}
+    end;
+init_per_testcase(single_active_consumer_drain_quorum_queue = T, Config) ->
+    case rpc(Config, rabbit_feature_flags, is_enabled, [credit_api_v2]) of
+        true ->
+            rabbit_ct_helpers:testcase_started(Config, T);
+        false ->
+            {skip, "Draining a SAC inactive quorum queue consumer with credit API v1 "
+             "is known to be unsupported."}
     end;
 init_per_testcase(T, Config)
   when T =:= incoming_window_closed_close_link orelse
@@ -2061,6 +2071,123 @@ single_active_consumer(QType, Config) ->
 
     ok = amqp10_client:detach_link(Receiver2),
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+single_active_consumer_drain_classic_queue(Config) ->
+    single_active_consumer_drain(<<"classic">>, Config).
+
+single_active_consumer_drain_quorum_queue(Config) ->
+    single_active_consumer_drain(<<"quorum">>, Config).
+
+single_active_consumer_drain(QType, Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {Connection, Session, LinkPair} = init(Config),
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType},
+                              <<"x-single-active-consumer">> => true}},
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+
+    %% Attach 1 sender and 2 receivers to the queue.
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"test-sender">>, Address),
+    ok = wait_for_credit(Sender),
+
+    %% The 1st consumer will become active.
+    {ok, Receiver1} = amqp10_client:attach_receiver_link(
+                        Session,
+                        <<"test-receiver-1">>,
+                        Address,
+                        unsettled),
+    receive {amqp10_event, {link, Receiver1, attached}} -> ok
+    after 5000 -> ct:fail("missing attached")
+    end,
+    %% The 2nd consumer will become inactive.
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+                        Session,
+                        <<"test-receiver-2">>,
+                        Address,
+                        unsettled),
+    receive {amqp10_event, {link, Receiver2, attached}} -> ok
+    after 5000 -> ct:fail("missing attached")
+    end,
+    flush(attached),
+
+    %% Drain both active and inactive consumer for the 1st time.
+    ok = amqp10_client:flow_link_credit(Receiver1, 100, never, true),
+    ok = amqp10_client:flow_link_credit(Receiver2, 100, never, true),
+    receive {amqp10_event, {link, Receiver1, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    receive {amqp10_event, {link, Receiver2, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% Send 2 messages.
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"dtag1">>, <<"m1">>)),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"dtag2">>, <<"m2">>)),
+    ok = wait_for_accepts(2),
+
+    %% No consumer should receive a message since both should have 0 credits.
+    receive Unexpected0 -> ct:fail("received unexpected ~p", [Unexpected0])
+    after 10 -> ok
+    end,
+
+    %% Drain both active and inactive consumer for the 2nd time.
+    ok = amqp10_client:flow_link_credit(Receiver1, 200, never, true),
+    ok = amqp10_client:flow_link_credit(Receiver2, 200, never, true),
+
+    %% Only the active consumer should receive messages.
+    receive {amqp10_msg, Receiver1, Msg1} ->
+                ?assertEqual([<<"m1">>], amqp10_msg:body(Msg1)),
+                ok = amqp10_client:accept_msg(Receiver1, Msg1)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, Receiver1, Msg2} ->
+                ?assertEqual([<<"m2">>], amqp10_msg:body(Msg2)),
+                ok = amqp10_client:accept_msg(Receiver1, Msg2)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, Receiver1, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    receive {amqp10_event, {link, Receiver2, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% Cancelling the active consumer should cause the inactive to become active.
+    ok = amqp10_client:detach_link(Receiver1),
+    receive {amqp10_event, {link, Receiver1, {detached, normal}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% Send 1 more message.
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"dtag3">>, <<"m3">>)),
+    ok = wait_for_accepted(<<"dtag3">>),
+
+    %% Our 2nd (now active) consumer should have 0 credits.
+    receive Unexpected1 -> ct:fail("received unexpected ~p", [Unexpected1])
+    after 10 -> ok
+    end,
+
+    %% Drain for the 3rd time.
+    ok = amqp10_client:flow_link_credit(Receiver2, 300, never, true),
+
+    receive {amqp10_msg, Receiver2, Msg3} ->
+                ?assertEqual([<<"m3">>], amqp10_msg:body(Msg3)),
+                ok = amqp10_client:accept_msg(Receiver2, Msg3)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, Receiver2, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:detach_link(Receiver2),
+    receive {amqp10_event, {link, Receiver2, {detached, normal}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ?assertMatch({ok, #{message_count := 0}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = end_session_sync(Session),
     ok = amqp10_client:close_connection(Connection).
