@@ -879,6 +879,8 @@ add_super_stream_binding(VirtualHost,
             {error, {binding_invalid, rabbit_misc:format(Fmt, Args)}};
         {error, #amqp_error{} = Error} ->
             {error, {internal_error, rabbit_misc:format("~tp", [Error])}};
+        {error, timeout} ->
+            {error, {internal_error, "failed to add binding due to a timeout"}};
         ok ->
             ok
     end.
