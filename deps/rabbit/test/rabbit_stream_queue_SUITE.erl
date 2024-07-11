@@ -1437,7 +1437,9 @@ tracking_status(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, Server, ?MODULE, delete_testcase_queue, [Q]).
 
 restart_stream(Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, restart_stream) of
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, restart_streams) of
+        {skip, _} = Skip ->
+            Skip;
         ok ->
             [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -1459,10 +1461,6 @@ restart_stream(Config) ->
 
             publish_confirm(Ch, Q, [<<"msg2">>]),
             rabbit_ct_broker_helpers:rpc(Config, Server, ?MODULE, delete_testcase_queue, [Q]),
-            ok;
-        _ ->
-            ct:pal("skipping test ~s as feature flag `restart_stream` not supported",
-                   [?FUNCTION_NAME]),
             ok
     end.
 
@@ -2807,13 +2805,11 @@ ensure_retention_applied(Config, Server) ->
     rabbit_ct_broker_helpers:rpc(Config, Server, gen_server, call, [osiris_retention, test]).
 
 rebalance(Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, restart_stream) of
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, restart_streams) of
         ok ->
             rebalance0(Config);
-        _ ->
-            ct:pal("skipping test ~s as feature flag `restart_stream` not supported",
-                   [?FUNCTION_NAME]),
-            ok
+        {skip, _} = Skip ->
+            Skip
     end.
 
 rebalance0(Config) ->
