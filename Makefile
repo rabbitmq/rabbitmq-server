@@ -47,7 +47,7 @@ XREF_IGNORE = [ \
     {'Elixir.RabbitMQ.CLI.Core.DataCoercion',impl_for,1}]
 
 # Include Elixir libraries in the Xref checks.
-xref: ERL_LIBS := $(ERL_LIBS):$(CURDIR)/apps:$(CURDIR)/deps:$(dir $(shell elixir --eval ":io.format '~s~n', [:code.lib_dir :elixir ]"))
+xref: ERL_LIBS := $(ERL_LIBS):$(CURDIR)/apps:$(CURDIR)/deps:$(dir $(shell elixir --eval ':io.format "~s~n", [:code.lib_dir :elixir ]'))
 endif
 
 ifneq ($(wildcard deps/.hex/cache.erl),)
