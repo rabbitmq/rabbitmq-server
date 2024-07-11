@@ -150,8 +150,9 @@ not_found({[], []}, SrcName, DstName) ->
       Binding :: rabbit_types:binding(),
       Src :: rabbit_types:binding_source(),
       Dst :: rabbit_types:binding_destination(),
-      ChecksFun :: fun((Src, Dst) -> ok | {error, Reason :: any()}),
-      Ret :: ok | {error, Reason :: any()}.
+      ChecksFun :: fun((Src, Dst) -> ok | {error, ChecksErrReason}),
+      ChecksErrReason :: any(),
+      Ret :: ok | {error, ChecksErrReason} | rabbit_khepri:timeout_error().
 %% @doc Writes a binding if it doesn't exist already and passes the validation in
 %% `ChecksFun' i.e. exclusive access
 %%
@@ -255,8 +256,12 @@ serial_in_khepri(true, X) ->
       Binding :: rabbit_types:binding(),
       Src :: rabbit_types:binding_source(),
       Dst :: rabbit_types:binding_destination(),
-      ChecksFun :: fun((Src, Dst) -> ok | {error, Reason :: any()}),
-      Ret :: ok | {ok, rabbit_binding:deletions()} | {error, Reason :: any()}.
+      ChecksFun :: fun((Src, Dst) -> ok | {error, ChecksErrReason}),
+      ChecksErrReason :: any(),
+      Ret :: ok |
+             {ok, rabbit_binding:deletions()} |
+             {error, ChecksErrReason} |
+             rabbit_khepri:timeout_error().
 %% @doc Deletes a binding record from the database if it passes the validation in
 %% `ChecksFun'. It also triggers the deletion of auto-delete exchanges if needed.
 %%

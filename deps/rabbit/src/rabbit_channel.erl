@@ -1912,6 +1912,9 @@ binding_action(Fun, SourceNameBin0, DestinationType, DestinationNameBin0,
             rabbit_misc:protocol_error(precondition_failed, Fmt, Args);
         {error, #amqp_error{} = Error} ->
             rabbit_misc:protocol_error(Error);
+        {error, timeout} ->
+            rabbit_misc:protocol_error(
+              internal_error, "Could not ~s binding due to timeout", [Action]);
         ok ->
             ok
     end.
