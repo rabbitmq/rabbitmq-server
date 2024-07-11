@@ -46,7 +46,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.LeaderHealthCheckCommandTest do
             {:error, {:badrpc, :nodedown}},
              @command.run(
                ["quorum.queue.*"],
-               %{node: :jake@thedog, vhost: "/", timeout: 200}
+               %{node: :jake@thedog, vhost: "/", global: false, timeout: 200}
              )
            )
   end

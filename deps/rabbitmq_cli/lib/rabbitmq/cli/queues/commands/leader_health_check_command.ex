@@ -11,20 +11,27 @@ defmodule RabbitMQ.CLI.Queues.Commands.LeaderHealthCheckCommand do
 
   import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
 
+  def switches(), do: [global: :boolean]
+
   def scopes(), do: [:queues]
+
+  def merge_defaults(args, opts) do
+    {args, Map.merge(%{global: false, vhost: "/"}, opts)}
+  end
 
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
   use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
-  use RabbitMQ.CLI.Core.MergesDefaultVirtualHost
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([pattern] = _args, %{node: node_name, vhost: vhost}) do
+  def run([pattern] = _args, %{node: node_name, vhost: vhost, global: global_opt}) do
+    vhost = if global_opt, do: :global, else: vhost
+
     case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :leader_health_check, [pattern, vhost]) do
       [] ->
         :ok
 
-      unhealthy_queues ->
-        {:error, unhealthy_queues}
+      unhealthy_queues_or_error ->
+        {:error, unhealthy_queues_or_error}
     end
   end
 
@@ -67,12 +74,13 @@ defmodule RabbitMQ.CLI.Queues.Commands.LeaderHealthCheckCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.PrettyTable
 
   def usage() do
-    "leader_health_check [--vhost <vhost>] <pattern>"
+    "leader_health_check [--vhost <vhost>] [--global] <pattern>"
   end
 
   def usage_additional do
     [
-      ["<pattern>", "regular expression pattern used to match quorum queues"]
+      ["<pattern>", "regular expression pattern used to match quorum queues"],
+      ["--global", "run leader health check for all queues in all virtual hosts on the node"]
     ]
   end
 
