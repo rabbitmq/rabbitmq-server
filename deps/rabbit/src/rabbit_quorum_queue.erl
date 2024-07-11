@@ -2154,12 +2154,22 @@ leader_health_check(QueueNameOrRegEx, VHost) ->
     %% we cannot spawn any new processes for executing QQ leader health checks.
     ProcessLimitThreshold = round(0.4 * erlang:system_info(process_limit)),
 
+    leader_health_check(QueueNameOrRegEx, VHost, ProcessLimitThreshold).
+
+leader_health_check(QueueNameOrRegEx, VHost, ProcessLimitThreshold) ->
+    Qs =
+        case VHost of
+            global ->
+                rabbit_amqqueue:list();
+            VHost when is_binary(VHost) ->
+                rabbit_amqqueue:list(VHost)
+        end,
     ParentPID = self(),
     HealthCheckRef = make_ref(),
     HealthCheckPids =
         lists:flatten(
             [begin
-                {resource, VHost, queue, QueueName} = QResource = amqqueue:get_name(Q),
+                {resource, _VHostN, queue, QueueName} = QResource = amqqueue:get_name(Q),
                 case check_process_limit_safety(ProcessLimitThreshold) of
                     true ->
                         case re:run(QueueName, QueueNameOrRegEx, [{capture, none}]) of
@@ -2173,7 +2183,7 @@ leader_health_check(QueueNameOrRegEx, VHost) ->
                         rabbit_log:warning("Leader health check failed from exceeded process limit threshold"),
                         throw({error, leader_health_check_process_limit_exceeded})
                 end
-            end || Q <- rabbit_amqqueue:list(VHost), amqqueue:get_type(Q) == ?MODULE]),
+            end || Q <- Qs, amqqueue:get_type(Q) == ?MODULE]),
     wait_for_leader_health_checks(HealthCheckRef, length(HealthCheckPids), []).
 
 run_leader_health_check(ClusterName, QResource, HealthCheckRef, From) ->
