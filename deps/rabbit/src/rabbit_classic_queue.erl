@@ -1,5 +1,6 @@
 -module(rabbit_classic_queue).
 -behaviour(rabbit_queue_type).
+-behaviour(rabbit_policy_validator).
 
 -include("amqqueue.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -63,6 +64,37 @@
          send_drained_credit_api_v1/4,
          send_credit_reply/7]).
 
+-export([validate_policy/1]).
+
+-rabbit_boot_step(
+   {?MODULE,
+    [{description, "Deprecated queue-master-locator support."
+      "Use queue-leader-locator instead."},
+     {mfa, {rabbit_registry, register,
+            [policy_validator, <<"queue-master-locator">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [operator_policy_validator, <<"queue-master-locator">>, ?MODULE]}},
+     {requires, rabbit_registry},
+     {enables, recovery}]}).
+
+validate_policy(Args) ->
+    %% queue-master-locator was deprecated in 4.0
+    Locator = proplists:get_value(<<"queue-master-locator">>, Args, unknown),
+    case Locator of
+        unknown ->
+            ok;
+        _ ->
+            case rabbit_queue_location:master_locator_permitted() of
+                true ->
+                    case lists:member(Locator, rabbit_queue_location:queue_leader_locators()) of
+                        true -> ok;
+                        false -> {error, "~tp is not a valid master locator", [Locator]}
+                    end;
+                false ->
+                    {error, "use of deprecated queue-master-locator argument is not permitted", []}
+                end
+    end.
+
 -spec is_enabled() -> boolean().
 is_enabled() -> true.
 
@@ -70,7 +102,28 @@ is_enabled() -> true.
 is_compatible(_, _, _) ->
     true.
 
+validate_arguments(Args) ->
+    case lists:keymember(<<"x-queue-master-locator">>, 1, Args) of
+        false ->
+            ok;
+        true ->
+            case rabbit_queue_location:master_locator_permitted() of
+                true ->
+                    ok;
+                false ->
+                    Warning = rabbit_deprecated_features:get_warning(
+                                queue_master_locator),
+                    {protocol_error, internal_error, "~ts", [Warning]}
+            end
+    end.
+
 declare(Q, Node) when ?amqqueue_is_classic(Q) ->
+    case validate_arguments(amqqueue:get_arguments(Q)) of
+        ok -> do_declare(Q, Node);
+        Error -> Error
+    end.
+
+do_declare(Q, Node) when ?amqqueue_is_classic(Q) ->
     QName = amqqueue:get_name(Q),
     VHost = amqqueue:get_vhost(Q),
     Node1 = case {Node, rabbit_amqqueue:is_exclusive(Q)} of
@@ -79,10 +132,8 @@ declare(Q, Node) when ?amqqueue_is_classic(Q) ->
                 {_, true} ->
                     Node;
                 _ ->
-                    case rabbit_queue_master_location_misc:get_location(Q) of
-                        {ok, Node0}  -> Node0;
-                        _   -> Node
-                    end
+                    {Node0, _} = rabbit_queue_location:select_leader_and_followers(Q, 1),
+                    Node0
             end,
     case rabbit_vhost_sup_sup:get_vhost_sup(VHost, Node1) of
         {ok, _} ->
@@ -509,15 +560,18 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
 capabilities() ->
     #{unsupported_policies => [%% Stream policies
                                <<"max-age">>, <<"stream-max-segment-size-bytes">>,
-                               <<"queue-leader-locator">>, <<"initial-cluster-size">>,
+                               <<"initial-cluster-size">>,
                                %% Quorum policies
                                <<"delivery-limit">>, <<"dead-letter-strategy">>, <<"max-in-memory-length">>, <<"max-in-memory-bytes">>, <<"target-group-size">>],
       queue_arguments => [<<"x-expires">>, <<"x-message-ttl">>, <<"x-dead-letter-exchange">>,
                           <<"x-dead-letter-routing-key">>, <<"x-max-length">>,
                           <<"x-max-length-bytes">>, <<"x-max-priority">>,
                           <<"x-overflow">>, <<"x-queue-mode">>, <<"x-queue-version">>,
-                          <<"x-single-active-consumer">>, <<"x-queue-type">>,
-                          <<"x-queue-master-locator">>],
+                          <<"x-single-active-consumer">>, <<"x-queue-type">>, <<"x-queue-master-locator">>]
+                          ++ case rabbit_feature_flags:is_enabled(classic_queue_leader_locator) of
+                                 true -> [<<"x-queue-leader-locator">>];
+                                 false -> []
+                             end,
       consumer_arguments => [<<"x-priority">>, <<"x-credit">>],
       server_named => true}.
 
