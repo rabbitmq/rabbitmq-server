@@ -572,7 +572,7 @@ capabilities() ->
                                  true -> [<<"x-queue-leader-locator">>];
                                  false -> []
                              end,
-      consumer_arguments => [<<"x-priority">>, <<"x-credit">>],
+      consumer_arguments => [<<"x-priority">>],
       server_named => true}.
 
 notify_decorators(Q) when ?is_amqqueue(Q) ->
