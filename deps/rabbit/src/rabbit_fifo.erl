@@ -1062,14 +1062,8 @@ handle_aux(leader, _, {handle_tick, [QName, Overview0, Nodes]},
                 Pid
         end,
 
-    Effs = case smallest_raft_index(ra_aux:machine_state(RaAux)) of
-               undefined ->
-                   [{release_cursor, ra_aux:last_applied(RaAux)}];
-               Smallest ->
-                   [{release_cursor, Smallest}]
-           end,
     %% TODO: check consumer timeouts
-    {no_reply, Aux#?AUX{tick_pid = NewPid}, RaAux, Effs};
+    {no_reply, Aux#?AUX{tick_pid = NewPid}, RaAux, []};
 handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds}, Aux0, RaAux0) ->
     #?STATE{cfg = #cfg{},
             consumers = Consumers} = ra_aux:machine_state(RaAux0),
@@ -1130,7 +1124,13 @@ handle_aux(_RaState, cast, tick, #?AUX{name = Name,
     true = ets:insert(rabbit_fifo_usage,
                       {Name, capacity(Use0)}),
     Aux = eval_gc(RaAux, ra_aux:machine_state(RaAux), State0),
-    {no_reply, Aux, RaAux};
+    Effs = case smallest_raft_index(ra_aux:machine_state(RaAux)) of
+               undefined ->
+                   [{release_cursor, ra_aux:last_applied(RaAux)}];
+               Smallest ->
+                   [{release_cursor, Smallest}]
+           end,
+    {no_reply, Aux, RaAux, Effs};
 handle_aux(_RaState, cast, eol, #?AUX{name = Name} = Aux, RaAux) ->
     ets:delete(rabbit_fifo_usage, Name),
     {no_reply, Aux, RaAux};
