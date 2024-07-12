@@ -160,15 +160,7 @@
         {2, undefined, queue_disk_writes_total, counter, "Total number of times queue wrote messages to disk", disk_writes},
         {2, undefined, stream_segments, counter, "Total number of stream segment files", segments}
     ]},
-    {queue_counter_metrics, [
-        {2, undefined, queue_get_ack_total, counter, "Total number of messages fetched with basic.get in manual acknowledgement mode"},
-        {3, undefined, queue_get_total, counter, "Total number of messages fetched with basic.get in automatic acknowledgement mode"},
-        {4, undefined, queue_messages_delivered_ack_total, counter, "Total number of messages delivered to consumers in manual acknowledgement mode"},
-        {5, undefined, queue_messages_delivered_total, counter, "Total number of messages delivered to consumers in automatic acknowledgement mode"},
-        {6, undefined, queue_messages_redelivered_total, counter, "Total number of messages redelivered to consumers"},
-        {7, undefined, queue_messages_acked_total, counter, "Total number of messages acknowledged by consumers"},
-        {8, undefined, queue_get_empty_total, counter, "Total number of times basic.get operations fetched no message"}
-    ]},
+
 %%% Metrics that contain reference to a channel. Some of them also have
 %%% a queue name, but in this case filtering on it doesn't make any
 %%% sense, as the queue is not an object of interest here.
@@ -180,13 +172,6 @@
         {2, undefined, channel_acks_uncommitted, gauge, "Message acknowledgements in a transaction not yet committed", acks_uncommitted},
         {2, undefined, consumer_prefetch, gauge, "Limit of unacknowledged messages for each consumer", prefetch_count},
         {2, undefined, channel_prefetch, gauge, "Total limit of unacknowledged messages for all consumers on a channel", global_prefetch_count}
-    ]},
-
-    {exchange_metrics, [
-        {2, undefined, exchange_messages_published_total, counter, "Total number of messages published into an exchange on a channel"},
-        {3, undefined, exchange_messages_confirmed_total, counter, "Total number of messages published into an exchange and confirmed on the channel"},
-        {4, undefined, exchange_messages_unroutable_returned_total, counter, "Total number of messages published as mandatory into an exchange and returned to the publisher as unroutable"},
-        {5, undefined, exchange_messages_unroutable_dropped_total, counter, "Total number of messages published as non-mandatory into an exchange and dropped as unroutable"}
     ]},
 
     {channel_exchange_metrics, [
@@ -221,10 +206,6 @@
         {2, undefined, connection_outgoing_packets_total, counter, "Total number of packets sent on a connection", send_cnt},
         {2, undefined, connection_pending_packets, gauge, "Number of packets waiting to be sent on a connection", send_pend},
         {2, undefined, connection_channels, gauge, "Channels on a connection", channels}
-    ]},
-
-    {queue_exchange_metrics, [
-        {2, undefined, queue_exchange_messages_published_total, counter, "Total number of messages published to queues"}
     ]},
 
     {channel_queue_exchange_metrics, [
@@ -561,19 +542,14 @@ get_data(queue_metrics = Table, false, VHostsFilter) ->
                {disk_reads, A15}, {disk_writes, A16}, {segments, A17}]}];
 get_data(Table, false, VHostsFilter) when Table == channel_exchange_metrics;
                            Table == queue_coarse_metrics;
-                           Table == queue_counter_metrics;
                            Table == channel_queue_metrics;
                            Table == connection_coarse_metrics;
-                           Table == exchange_metrics;
-                           Table == queue_exchange_metrics;
                            Table == channel_queue_exchange_metrics;
                            Table == ra_metrics;
                            Table == channel_process_metrics ->
     Result = ets:foldl(fun
                   %% For queue_coarse_metrics
                   ({#resource{kind = queue, virtual_host = VHost}, _, _, _, _}, Acc) when is_map(VHostsFilter), map_get(VHost, VHostsFilter) == false ->
-                               Acc;
-                  ({#resource{kind = queue, virtual_host = VHost}, _, _, _, _, _, _, _, _}, Acc) when is_map(VHostsFilter), map_get(VHost, VHostsFilter) == false ->
                                Acc;
                   ({_, V1}, {T, A1}) ->
                        {T, V1 + A1};
@@ -601,42 +577,6 @@ get_data(Table, false, VHostsFilter) when Table == channel_exchange_metrics;
         _ ->
             [Result]
     end;
-get_data(exchange_metrics = Table, true, VHostsFilter) when is_map(VHostsFilter)->
-    ets:foldl(fun
-        ({#resource{kind = exchange, virtual_host = VHost}, _, _, _, _, _} = Row, Acc) when
-            map_get(VHost, VHostsFilter)
-        ->
-            [Row | Acc];
-        (_Row, Acc) ->
-            Acc
-    end, [], Table);
-get_data(exchange_metrics, true, _VhostsFilter) ->
-    [];
-get_data(queue_counter_metrics = Table, true, VHostsFilter) when is_map(VHostsFilter)->
-    ets:foldl(fun
-        ({#resource{kind = queue, virtual_host = VHost}, _, _, _, _, _, _, _, _} = Row, Acc) when
-            map_get(VHost, VHostsFilter)
-        ->
-            [Row | Acc];
-        (_Row, Acc) ->
-            Acc
-    end, [], Table);
-get_data(queue_counter_metrics, true, _VHostsFilter) ->
-    [];
-get_data(queue_exchange_metrics = Table, true, VHostsFilter) ->
-    ets:foldl(fun
-        ({{
-            #resource{kind = queue, virtual_host = VHost},
-            #resource{kind = exchange, virtual_host = VHost}
-         }, _, _} = Row, Acc) when
-            map_get(VHost, VHostsFilter)
-        ->
-            [Row | Acc];
-        (_Row, Acc) ->
-            Acc
-    end, [], Table);
-get_data(queue_exchange_metrics, true, _VHostsFilter) ->
-    [];
 get_data(queue_coarse_metrics = Table, true, VHostsFilter) when is_map(VHostsFilter) ->
     ets:foldl(fun
                   ({#resource{kind = queue, virtual_host = VHost}, _, _, _, _} = Row, Acc) when map_get(VHost, VHostsFilter) ->
@@ -729,15 +669,15 @@ division(A, B) ->
 accumulate_count_and_sum(Value, {Count, Sum}) ->
     {Count + 1, Sum + Value}.
 
-empty(T) when T == channel_queue_exchange_metrics; T == queue_exchange_metrics; T == channel_process_metrics; T == queue_consumer_count ->
+empty(T) when T == channel_queue_exchange_metrics; T == channel_process_metrics; T == queue_consumer_count ->
     {T, 0};
 empty(T) when T == connection_coarse_metrics; T == auth_attempt_metrics; T == auth_attempt_detailed_metrics ->
     {T, 0, 0, 0};
-empty(T) when T == channel_exchange_metrics; T == exchange_metrics; T == queue_coarse_metrics; T == connection_metrics ->
+empty(T) when T == channel_exchange_metrics; T == queue_coarse_metrics; T == connection_metrics ->
     {T, 0, 0, 0, 0};
 empty(T) when T == ra_metrics ->
     {T, 0, 0, 0, 0, 0, {0, 0}};
-empty(T) when T == channel_queue_metrics; T == queue_counter_metrics; T == channel_metrics ->
+empty(T) when T == channel_queue_metrics; T == channel_metrics ->
     {T, 0, 0, 0, 0, 0, 0, 0};
 empty(queue_metrics = T) ->
     {T, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}.
