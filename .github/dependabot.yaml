@@ -10,7 +10,12 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
-    target-branch: "v3.11.x"
+    target-branch: "v4.0.x"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    target-branch: "v3.13.x"
   # Maintain dependencies for Java test projects
   - package-ecosystem: "maven"
     directory: "/deps/rabbitmq_mqtt/test/java_SUITE_data"
