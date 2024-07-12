@@ -46,12 +46,8 @@ XREF_IGNORE = [ \
     {'Elixir.RabbitMQ.CLI.Core.DataCoercion',impl_for,1}]
 
 # Include Elixir libraries in the Xref checks.
-<<<<<<< HEAD
-xref: ERL_LIBS := $(ERL_LIBS):$(CURDIR)/apps:$(CURDIR)/deps:$(dir $(shell elixir --eval ":io.format '~s~n', [:code.lib_dir :elixir ]"))
-=======
 xref: ERL_LIBS := $(ERL_LIBS):$(CURDIR)/apps:$(CURDIR)/deps:$(dir $(shell elixir --eval ':io.format "~s~n", [:code.lib_dir :elixir ]'))
 endif
->>>>>>> 5799f486a8 (Fix elixir warning on build)
 
 ifneq ($(wildcard deps/.hex/cache.erl),)
 deps:: restore-hex-cache-ets-file
