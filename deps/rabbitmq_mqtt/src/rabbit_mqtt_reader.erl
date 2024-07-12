@@ -140,13 +140,11 @@ handle_cast({close_connection, Reason},
 
 handle_cast(QueueEvent = {queue_event, _, _},
             State = #state{proc_state = PState0}) ->
-    try
-        case rabbit_mqtt_processor:handle_queue_event(QueueEvent, PState0) of
-            {ok, PState} ->
-                maybe_process_deferred_recv(control_throttle(pstate(State, PState)));
-            {error, Reason0, PState} ->
-                {stop, Reason0, pstate(State, PState)}
-        end
+    try rabbit_mqtt_processor:handle_queue_event(QueueEvent, PState0) of
+        {ok, PState} ->
+            maybe_process_deferred_recv(control_throttle(pstate(State, PState)));
+        {error, Reason0, PState} ->
+            {stop, Reason0, pstate(State, PState)}
     catch throw:{send_failed, Reason1} ->
               network_error(Reason1, State)
     end;
