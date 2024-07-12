@@ -12,9 +12,9 @@ jobs:
       matrix:
         target_branch:
         - main
+        - v4.0.x
+        - v3.13.x
         - v3.12.x
-        - v3.11.x
-        - v3.10.x
     timeout-minutes: 10
     steps:
     - name: CHECKOUT REPOSITORY
