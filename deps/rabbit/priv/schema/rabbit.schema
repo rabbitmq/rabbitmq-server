@@ -1464,6 +1464,10 @@ end}.
 
 %% Queue master locator (classic queues)
 %%
+%% For backwards compatibility only as of 4.0.
+%% We still allow values of min-masters, random and client-local
+%% but the behaviour is only local or balanced.
+%% Use queue_leader_locator instead.
 
 {mapping, "queue_master_locator", "rabbit.queue_master_locator",
     [{datatype, string}]}.

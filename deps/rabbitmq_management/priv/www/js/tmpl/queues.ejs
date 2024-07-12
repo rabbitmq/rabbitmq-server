@@ -326,7 +326,6 @@
                 <% if (queue_type == "classic") { %>
                 <span class="argument-link" field="arguments" key="x-max-priority" type="number">Maximum priority</span> <span class="help" id="queue-max-priority"></span>
                 | <span class="argument-link" field="arguments" key="x-queue-version" type="number">Version</span> <span class="help" id="queue-version"></span>
-                | <span class="argument-link" field="arguments" key="x-queue-master-locator" type="string" value="">Master locator</span> <span class="help" id="queue-master-locator"></span>
                 <% } %>
                 <% if (queue_type == "quorum") { %>
                   <span class="argument-link" field="arguments" key="x-delivery-limit" type="number">Delivery limit</span><span class="help" id="delivery-limit"></span>
@@ -340,9 +339,7 @@
                   | <span class="argument-link" field="arguments" key="x-stream-filter-size-bytes" type="number">Filter size (per chunk) in bytes</span><span class="help" id="queue-stream-filter-size-bytes"></span>
                   | <span class="argument-link" field="arguments" key="x-initial-cluster-size" type="number">Initial cluster size</span><span class="help" id="queue-initial-cluster-size"></span>
                 <% } %>
-                <% if (queue_type != "classic") { %>
-                  | <span class="argument-link" field="arguments" key="x-queue-leader-locator" type="string">Leader locator</span><span class="help" id="queue-leader-locator"></span>
-                <% } %>
+                  <span class="argument-link" field="arguments" key="x-queue-leader-locator" type="string">Leader locator</span><span class="help" id="queue-leader-locator"></span>
                 </td>
               </tr>
             </table>

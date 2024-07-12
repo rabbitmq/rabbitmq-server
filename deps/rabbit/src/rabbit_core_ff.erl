@@ -185,3 +185,10 @@
       stability     => stable,
       depends_on    => [message_containers]
      }}).
+
+-rabbit_feature_flag(
+   {classic_queue_leader_locator,
+    #{desc          => "queue-leader-locator support in classic queues",
+      doc_url       => "https://www.rabbitmq.com/docs/clustering#replica-placement",
+      stability     => stable
+     }}).
