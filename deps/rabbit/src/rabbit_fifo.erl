@@ -901,7 +901,7 @@ init_aux(Name) when is_atom(Name) ->
     ok = ra_machine_ets:create_table(rabbit_fifo_usage,
                                      [named_table, set, public,
                                       {write_concurrency, true}]),
-    Now = erlang:monotonic_time(micro_seconds),
+    Now = erlang:monotonic_time(microsecond),
     #?AUX{name = Name,
           capacity = {inactive, Now, 1, 1.0},
           last_checkpoint = #checkpoint{index = 0,
@@ -1303,18 +1303,18 @@ update_use({inactive, _, _, _} = CUInfo, inactive) ->
 update_use({active, _, _} = CUInfo, active) ->
     CUInfo;
 update_use({active, Since, Avg}, inactive) ->
-    Now = erlang:monotonic_time(micro_seconds),
+    Now = erlang:monotonic_time(microsecond),
     {inactive, Now, Now - Since, Avg};
 update_use({inactive, Since, Active, Avg},   active) ->
-    Now = erlang:monotonic_time(micro_seconds),
+    Now = erlang:monotonic_time(microsecond),
     {active, Now, use_avg(Active, Now - Since, Avg)}.
 
 capacity({active, Since, Avg}) ->
-    use_avg(erlang:monotonic_time(micro_seconds) - Since, 0, Avg);
+    use_avg(erlang:monotonic_time(microsecond) - Since, 0, Avg);
 capacity({inactive, _, 1, 1.0}) ->
     1.0;
 capacity({inactive, Since, Active, Avg}) ->
-    use_avg(Active, erlang:monotonic_time(micro_seconds) - Since, Avg).
+    use_avg(Active, erlang:monotonic_time(microsecond) - Since, Avg).
 
 use_avg(0, 0, Avg) ->
     Avg;
