@@ -242,11 +242,11 @@ exists_in_mnesia(VHostName) ->
     mnesia:dirty_read({?MNESIA_TABLE, VHostName}) /= [].
 
 exists_in_khepri(VHostName) ->
-    case ets:whereis(?KHEPRI_PROJECTION) of
-        undefined ->
-            false;
-        Table ->
-            ets:member(Table, VHostName)
+    try
+        ets:member(?KHEPRI_PROJECTION, VHostName)
+    catch
+        error:badarg ->
+            false
     end.
 
 %% -------------------------------------------------------------------
@@ -275,14 +275,12 @@ get_in_mnesia(VHostName) ->
     end.
 
 get_in_khepri(VHostName) ->
-    case ets:whereis(?KHEPRI_PROJECTION) of
-        undefined ->
-            undefined;
-        Table ->
-            case ets:lookup(Table, VHostName) of
-                [Record] -> Record;
-                _        -> undefined
-            end
+    try ets:lookup(?KHEPRI_PROJECTION, VHostName) of
+        [Record] -> Record;
+        _        -> undefined
+    catch
+        error:badarg ->
+            undefined
     end.
 
 %% -------------------------------------------------------------------
@@ -306,11 +304,11 @@ get_all_in_mnesia() ->
     mnesia:dirty_match_object(?MNESIA_TABLE, vhost:pattern_match_all()).
 
 get_all_in_khepri() ->
-    case ets:whereis(?KHEPRI_PROJECTION) of
-        undefined ->
-            [];
-        Table ->
-            ets:tab2list(Table)
+    try
+        ets:tab2list(?KHEPRI_PROJECTION)
+    catch
+        error:badarg ->
+            []
     end.
 
 %% -------------------------------------------------------------------
@@ -334,11 +332,12 @@ list_in_mnesia() ->
     mnesia:dirty_all_keys(?MNESIA_TABLE).
 
 list_in_khepri() ->
-    case ets:whereis(?KHEPRI_PROJECTION) of
-        undefined ->
-            [];
-        Table ->
-            ets:select(Table, [{vhost:pattern_match_names(), [], ['$1']}])
+    try
+        ets:select(
+          ?KHEPRI_PROJECTION, [{vhost:pattern_match_names(), [], ['$1']}])
+    catch
+        error:badarg ->
+            []
     end.
 
 %% -------------------------------------------------------------------
