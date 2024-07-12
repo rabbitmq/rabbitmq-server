@@ -324,127 +324,19 @@ apply(#{index := Idx} = Meta,
         _ ->
             {State00, ok, []}
     end;
-apply(Meta, #credit{credit = LinkCreditRcv,
-                    delivery_count = DeliveryCountRcv,
-                    drain = Drain,
-                    consumer_key = ConsumerKey},
-      #?STATE{consumers = Cons0,
-              service_queue = ServiceQueue0,
-              waiting_consumers = Waiting0} = State0) ->
-    case Cons0 of
-        #{ConsumerKey := #consumer{delivery_count = DeliveryCountSnd,
-                                   cfg = Cfg} = Con0} ->
-            LinkCreditSnd = link_credit_snd(DeliveryCountRcv, LinkCreditRcv,
-                                            DeliveryCountSnd, Cfg),
-            %% grant the credit
-            Con1 = Con0#consumer{credit = LinkCreditSnd},
-            ServiceQueue = maybe_queue_consumer(ConsumerKey, Con1, ServiceQueue0),
-            State1 = State0#?STATE{service_queue = ServiceQueue,
-                                   consumers = maps:update(ConsumerKey, Con1, Cons0)},
-            {State2, ok, Effects} = checkout(Meta, State0, State1, []),
-
-            #?STATE{consumers = Cons1 = #{ConsumerKey := Con2}} = State2,
-            #consumer{cfg = #consumer_cfg{pid = CPid,
-                                          tag = CTag},
-                      credit = PostCred,
-                      delivery_count = PostDeliveryCount} = Con2,
-            Available = messages_ready(State2),
-            case credit_api_v2(Cfg) of
-                true ->
-                    {Credit, DeliveryCount, State} =
-                        case Drain andalso PostCred > 0 of
-                            true ->
-                                AdvancedDeliveryCount = add(PostDeliveryCount, PostCred),
-                                ZeroCredit = 0,
-                                Con = Con2#consumer{delivery_count = AdvancedDeliveryCount,
-                                                    credit = ZeroCredit},
-                                Cons = maps:update(ConsumerKey, Con, Cons1),
-                                State3 = State2#?STATE{consumers = Cons},
-                                {ZeroCredit, AdvancedDeliveryCount, State3};
-                            false ->
-                                {PostCred, PostDeliveryCount, State2}
-                        end,
-                    %% We must send the delivery effects to the queue client
-                    %% before credit_reply such that session process can send to
-                    %% AMQP 1.0 client TRANSFERs before FLOW.
-                    {State, ok, Effects ++ [{send_msg, CPid,
-                                             {credit_reply, CTag, DeliveryCount,
-                                              Credit, Available, Drain},
-                                             ?DELIVERY_SEND_MSG_OPTS}]};
-                false ->
-                    %% We must always send a send_credit_reply because basic.credit
-                    %% is synchronous.
-                    %% Additionally, we keep the bug of credit API v1 that we
-                    %% send to queue client the
-                    %% send_drained reply before the delivery effects (resulting
-                    %% in the wrong behaviour that the session process sends to
-                    %% AMQP 1.0 client the FLOW before the TRANSFERs).
-                    %% We have to keep this bug because old rabbit_fifo_client
-                    %% implementations expect a send_drained Ra reply
-                    %% (they can't handle such a Ra effect).
-                    CreditReply = {send_credit_reply, Available},
-                    case Drain of
-                        true ->
-                            AdvancedDeliveryCount = PostDeliveryCount + PostCred,
-                            Con = Con2#consumer{delivery_count = AdvancedDeliveryCount,
-                                                credit = 0},
-                            Cons = maps:update(ConsumerKey, Con, Cons1),
-                            State = State2#?STATE{consumers = Cons},
-                            Reply = {multi, [CreditReply,
-                                             {send_drained, {CTag, PostCred}}]},
-                            {State, Reply, Effects};
-                        false ->
-                            {State2, CreditReply, Effects}
-                    end
-            end;
-        _ when Waiting0 /= [] ->
-            case lists:keytake(ConsumerKey, 1, Waiting0) of
-                {value, {_, Con0 = #consumer{delivery_count = DeliveryCountSnd,
-                                             cfg = Cfg}}, Waiting1} ->
-                    %% No messages are available for inactive consumers.
-                    Available = 0,
-                    LinkCreditSnd = link_credit_snd(DeliveryCountRcv,
-                                                    LinkCreditRcv,
-                                                    DeliveryCountSnd,
-                                                    Cfg),
-                    case credit_api_v2(Cfg) of
-                        true ->
-                            {Credit, DeliveryCount} =
-                            case Drain of
-                                true ->
-                                    %% By issuing drain=true, the client says "either send a transfer or a flow frame".
-                                    %% Since there are no messages to send to an inactive consumer, we advance the
-                                    %% delivery-count consuming all link-credit and send a credit_reply with drain=true
-                                    %% to the session which causes the session to send a flow frame to the client.
-                                    AdvancedDeliveryCount = add(DeliveryCountSnd, LinkCreditSnd),
-                                    {0, AdvancedDeliveryCount};
-                                false ->
-                                    {LinkCreditSnd, DeliveryCountSnd}
-                            end,
-                            %% Grant the credit.
-                            Con = Con0#consumer{credit = Credit,
-                                                delivery_count = DeliveryCount},
-                            Waiting = add_waiting({ConsumerKey, Con}, Waiting1),
-                            State = State0#?STATE{waiting_consumers = Waiting},
-                            {State, ok,
-                             {send_msg, Cfg#consumer_cfg.pid,
-                              {credit_reply, Cfg#consumer_cfg.tag,
-                               DeliveryCount, Credit, Available, Drain},
-                              ?DELIVERY_SEND_MSG_OPTS}};
-                        false ->
-                            %% Credit API v1 doesn't support draining an inactive consumer.
-                            %% Grant the credit.
-                            Con = Con0#consumer{credit = LinkCreditSnd},
-                            Waiting = add_waiting({ConsumerKey, Con}, Waiting1),
-                            State = State0#?STATE{waiting_consumers = Waiting},
-                            {State, {send_credit_reply, Available}}
-                    end;
-                false ->
-                    {State0, ok}
-            end;
+apply(Meta, #credit{consumer_key = ConsumerKey} = Credit,
+      #?STATE{consumers = Cons} = State) ->
+    case Cons of
+        #{ConsumerKey := Con} ->
+            credit_active_consumer(Credit, Con, Meta, State);
         _ ->
-            %% credit for unknown consumer - just ignore
-            {State0, ok}
+            case lists:keytake(ConsumerKey, 1, State#?STATE.waiting_consumers) of
+                {value, {_, Con}, Waiting} ->
+                    credit_inactive_consumer(Credit, Con, Waiting, State);
+                false ->
+                    %% credit for unknown consumer - just ignore
+                    {State, ok}
+            end
     end;
 apply(_, #checkout{spec = {dequeue, _}},
       #?STATE{cfg = #cfg{consumer_strategy = single_active}} = State0) ->
@@ -2365,12 +2257,133 @@ included_credit({credited, _}) ->
 included_credit(credited) ->
     0.
 
+credit_active_consumer(
+  #credit{credit = LinkCreditRcv,
+          delivery_count = DeliveryCountRcv,
+          drain = Drain,
+          consumer_key = ConsumerKey},
+  #consumer{delivery_count = DeliveryCountSnd,
+            cfg = Cfg} = Con0,
+  Meta,
+  #?STATE{consumers = Cons0,
+          service_queue = ServiceQueue0} = State0) ->
+    LinkCreditSnd = link_credit_snd(DeliveryCountRcv, LinkCreditRcv,
+                                    DeliveryCountSnd, Cfg),
+    %% grant the credit
+    Con1 = Con0#consumer{credit = LinkCreditSnd},
+    ServiceQueue = maybe_queue_consumer(ConsumerKey, Con1, ServiceQueue0),
+    State1 = State0#?STATE{service_queue = ServiceQueue,
+                           consumers = maps:update(ConsumerKey, Con1, Cons0)},
+    {State2, ok, Effects} = checkout(Meta, State0, State1, []),
+
+    #?STATE{consumers = Cons1 = #{ConsumerKey := Con2}} = State2,
+    #consumer{cfg = #consumer_cfg{pid = CPid,
+                                  tag = CTag},
+              credit = PostCred,
+              delivery_count = PostDeliveryCount} = Con2,
+    Available = messages_ready(State2),
+    case credit_api_v2(Cfg) of
+        true ->
+            {Credit, DeliveryCount, State} =
+            case Drain andalso PostCred > 0 of
+                true ->
+                    AdvancedDeliveryCount = add(PostDeliveryCount, PostCred),
+                    ZeroCredit = 0,
+                    Con = Con2#consumer{delivery_count = AdvancedDeliveryCount,
+                                        credit = ZeroCredit},
+                    Cons = maps:update(ConsumerKey, Con, Cons1),
+                    State3 = State2#?STATE{consumers = Cons},
+                    {ZeroCredit, AdvancedDeliveryCount, State3};
+                false ->
+                    {PostCred, PostDeliveryCount, State2}
+            end,
+            %% We must send the delivery effects to the queue client
+            %% before credit_reply such that session process can send to
+            %% AMQP 1.0 client TRANSFERs before FLOW.
+            {State, ok, Effects ++ [{send_msg, CPid,
+                                     {credit_reply, CTag, DeliveryCount,
+                                      Credit, Available, Drain},
+                                     ?DELIVERY_SEND_MSG_OPTS}]};
+        false ->
+            %% We must always send a send_credit_reply because basic.credit
+            %% is synchronous.
+            %% Additionally, we keep the bug of credit API v1 that we
+            %% send to queue client the
+            %% send_drained reply before the delivery effects (resulting
+            %% in the wrong behaviour that the session process sends to
+            %% AMQP 1.0 client the FLOW before the TRANSFERs).
+            %% We have to keep this bug because old rabbit_fifo_client
+            %% implementations expect a send_drained Ra reply
+            %% (they can't handle such a Ra effect).
+            CreditReply = {send_credit_reply, Available},
+            case Drain of
+                true ->
+                    AdvancedDeliveryCount = PostDeliveryCount + PostCred,
+                    Con = Con2#consumer{delivery_count = AdvancedDeliveryCount,
+                                        credit = 0},
+                    Cons = maps:update(ConsumerKey, Con, Cons1),
+                    State = State2#?STATE{consumers = Cons},
+                    Reply = {multi, [CreditReply,
+                                     {send_drained, {CTag, PostCred}}]},
+                    {State, Reply, Effects};
+                false ->
+                    {State2, CreditReply, Effects}
+            end
+    end.
+
+credit_inactive_consumer(
+  #credit{credit = LinkCreditRcv,
+          delivery_count = DeliveryCountRcv,
+          drain = Drain,
+          consumer_key = ConsumerKey},
+  #consumer{cfg = #consumer_cfg{pid = CPid,
+                                tag = CTag} = Cfg,
+            delivery_count = DeliveryCountSnd} = Con0,
+  Waiting0, State0) ->
+    %% No messages are available for inactive consumers.
+    Available = 0,
+    LinkCreditSnd = link_credit_snd(DeliveryCountRcv,
+                                    LinkCreditRcv,
+                                    DeliveryCountSnd,
+                                    Cfg),
+    case credit_api_v2(Cfg) of
+        true ->
+            {Credit, DeliveryCount} =
+            case Drain of
+                true ->
+                    %% By issuing drain=true, the client says "either send a transfer or a flow frame".
+                    %% Since there are no messages to send to an inactive consumer, we advance the
+                    %% delivery-count consuming all link-credit and send a credit_reply with drain=true
+                    %% to the session which causes the session to send a flow frame to the client.
+                    AdvancedDeliveryCount = add(DeliveryCountSnd, LinkCreditSnd),
+                    {0, AdvancedDeliveryCount};
+                false ->
+                    {LinkCreditSnd, DeliveryCountSnd}
+            end,
+            %% Grant the credit.
+            Con = Con0#consumer{credit = Credit,
+                                delivery_count = DeliveryCount},
+            Waiting = add_waiting({ConsumerKey, Con}, Waiting0),
+            State = State0#?STATE{waiting_consumers = Waiting},
+            {State, ok,
+             {send_msg, CPid,
+              {credit_reply, CTag, DeliveryCount, Credit, Available, Drain},
+              ?DELIVERY_SEND_MSG_OPTS}};
+        false ->
+            %% Credit API v1 doesn't support draining an inactive consumer.
+            %% Grant the credit.
+            Con = Con0#consumer{credit = LinkCreditSnd},
+            Waiting = add_waiting({ConsumerKey, Con}, Waiting0),
+            State = State0#?STATE{waiting_consumers = Waiting},
+            {State, {send_credit_reply, Available}}
+    end.
+
 %% make the state suitable for equality comparison
 normalize(#?STATE{ra_indexes = _Indexes,
-                   returns = Returns,
-                   messages = Messages,
-                   release_cursors = Cursors,
-                   dlx = DlxState} = State) ->
+                  returns = Returns,
+                  messages = Messages,
+                  release_cursors = Cursors,
+                  dlx = DlxState} = State) ->
     State#?STATE{returns = lqueue:from_list(lqueue:to_list(Returns)),
                  messages = rabbit_fifo_q:normalize(Messages,
                                                     rabbit_fifo_q:new()),
