@@ -187,14 +187,12 @@ get_in_mnesia(Username) ->
     end.
 
 get_in_khepri(Username) ->
-    case ets:whereis(?KHEPRI_USERS_PROJECTION) of
-        undefined ->
-            undefined;
-        Table ->
-            case ets:lookup(Table, Username) of
-                [User] -> User;
-                _      -> undefined
-            end
+    try ets:lookup(?KHEPRI_USERS_PROJECTION, Username) of
+        [User] -> User;
+        _      -> undefined
+    catch
+        error:badarg ->
+            undefined
     end.
 
 %% -------------------------------------------------------------------
@@ -297,18 +295,16 @@ get_user_permissions_in_mnesia(Username, VHostName) ->
     end.
 
 get_user_permissions_in_khepri(Username, VHostName) ->
-    case ets:whereis(?KHEPRI_PERMISSIONS_PROJECTION) of
-        undefined ->
-            undefined;
-        Table ->
-            UserVHost = #user_vhost{username     = Username,
-                                    virtual_host = VHostName},
-            case ets:lookup(Table, UserVHost) of
-                [UserPermission] ->
-                    UserPermission;
-                _ ->
-                    undefined
-            end
+    UserVHost = #user_vhost{username     = Username,
+                            virtual_host = VHostName},
+    try ets:lookup(?KHEPRI_PERMISSIONS_PROJECTION, UserVHost) of
+        [UserPermission] ->
+            UserPermission;
+        _ ->
+            undefined
+    catch
+        error:badarg ->
+            undefined
     end.
 
 %% -------------------------------------------------------------------
