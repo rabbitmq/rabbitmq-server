@@ -413,11 +413,11 @@ get_all_in_mnesia() ->
       end).
 
 get_all_in_khepri() ->
-    case ets:whereis(?KHEPRI_BINDINGS_PROJECTION) of
-        undefined ->
-            [];
-        Table ->
-            [B || #route{binding = B} <- ets:tab2list(Table)]
+    try
+        [B || #route{binding = B} <- ets:tab2list(?KHEPRI_BINDINGS_PROJECTION)]
+    catch
+        error:badarg ->
+            []
     end.
 
 -spec get_all(VHostName) -> [Binding] when
@@ -444,15 +444,16 @@ get_all_in_mnesia(VHost) ->
     [B || #route{binding = B} <- rabbit_db:list_in_mnesia(?MNESIA_TABLE, Match)].
 
 get_all_in_khepri(VHost) ->
-    case ets:whereis(?KHEPRI_BINDINGS_PROJECTION) of
-        undefined ->
-            [];
-        Table ->
-            VHostResource = rabbit_misc:r(VHost, '_'),
-            Match = #route{binding = #binding{source      = VHostResource,
-                                              destination = VHostResource,
-                                              _           = '_'}},
-            [B || #route{binding = B} <- ets:match_object(Table, Match)]
+    try
+        VHostResource = rabbit_misc:r(VHost, '_'),
+        Match = #route{binding = #binding{source      = VHostResource,
+                                          destination = VHostResource,
+                                          _           = '_'}},
+        [B || #route{binding = B} <- ets:match_object(
+                                       ?KHEPRI_BINDINGS_PROJECTION, Match)]
+    catch
+        error:badarg ->
+            []
     end.
 
 -spec get_all(Src, Dst, Reverse) -> [Binding] when
@@ -481,14 +482,15 @@ get_all_in_mnesia(SrcName, DstName, Reverse) ->
     mnesia:async_dirty(Fun).
 
 get_all_in_khepri(SrcName, DstName) ->
-    case ets:whereis(?KHEPRI_BINDINGS_PROJECTION) of
-        undefined ->
-            [];
-        Table ->
-            MatchHead = #route{binding = #binding{source      = SrcName,
-                                                  destination = DstName,
-                                                  _           = '_'}},
-            [B || #route{binding = B} <- ets:match_object(Table, MatchHead)]
+    try
+        MatchHead = #route{binding = #binding{source      = SrcName,
+                                              destination = DstName,
+                                              _           = '_'}},
+        [B || #route{binding = B} <- ets:match_object(
+                                       ?KHEPRI_BINDINGS_PROJECTION, MatchHead)]
+    catch
+        error:badarg ->
+            []
     end.
 
 %% -------------------------------------------------------------------
@@ -528,12 +530,13 @@ list_for_route(Route, true) ->
     end.
 
 get_all_for_source_in_khepri(Resource) ->
-    case ets:whereis(?KHEPRI_BINDINGS_PROJECTION) of
-        undefined ->
-            [];
-        Table ->
-            Route = #route{binding = #binding{source = Resource, _ = '_'}},
-            [B || #route{binding = B} <- ets:match_object(Table, Route)]
+    try
+        Route = #route{binding = #binding{source = Resource, _ = '_'}},
+        [B || #route{binding = B} <- ets:match_object(
+                                       ?KHEPRI_BINDINGS_PROJECTION, Route)]
+    catch
+        error:badarg ->
+            []
     end.
 
 %% -------------------------------------------------------------------
@@ -563,13 +566,14 @@ get_all_for_destination_in_mnesia(Dst) ->
     mnesia:async_dirty(Fun).
 
 get_all_for_destination_in_khepri(Destination) ->
-    case ets:whereis(?KHEPRI_BINDINGS_PROJECTION) of
-        undefined ->
-            [];
-        Table ->
-            Match = #route{binding = #binding{destination = Destination,
-                                              _           = '_'}},
-            [B || #route{binding = B} <- ets:match_object(Table, Match)]
+    try
+        Match = #route{binding = #binding{destination = Destination,
+                                          _           = '_'}},
+        [B || #route{binding = B} <- ets:match_object(
+                                       ?KHEPRI_BINDINGS_PROJECTION, Match)]
+    catch
+        error:badarg ->
+            []
     end.
 
 %% -------------------------------------------------------------------
@@ -644,15 +648,16 @@ match_in_mnesia(SrcName, Match) ->
                  Routes, Match(Binding)].
 
 match_in_khepri(SrcName, Match) ->
-    case ets:whereis(?KHEPRI_BINDINGS_PROJECTION) of
-        undefined ->
-            [];
-        Table ->
-            MatchHead = #route{binding = #binding{source      = SrcName,
-                                                  _           = '_'}},
-            Routes = ets:select(Table, [{MatchHead, [], [['$_']]}]),
-            [Dest || [#route{binding = Binding = #binding{destination = Dest}}] <-
-                         Routes, Match(Binding)]
+    try
+        MatchHead = #route{binding = #binding{source      = SrcName,
+                                              _           = '_'}},
+        Routes = ets:select(
+                   ?KHEPRI_BINDINGS_PROJECTION, [{MatchHead, [], [['$_']]}]),
+        [Dest || [#route{binding = Binding = #binding{destination = Dest}}] <-
+                     Routes, Match(Binding)]
+    catch
+        error:badarg ->
+            []
     end.
 
 %% Routing - HOT CODE PATH
@@ -686,26 +691,22 @@ match_routing_key_in_mnesia(SrcName, RoutingKeys, UseIndex) ->
             route_in_mnesia_v1(SrcName, RoutingKeys)
     end.
 
+match_routing_key_in_khepri(Src, ['_']) ->
+    try
+        MatchHead = #index_route{source_key  = {Src, '_'},
+                                 destination = '$1',
+                                 _           = '_'},
+        ets:select(?KHEPRI_INDEX_ROUTE_PROJECTION, [{MatchHead, [], ['$1']}])
+    catch
+        error:badarg ->
+            []
+    end;
 match_routing_key_in_khepri(Src, RoutingKeys) ->
-    case ets:whereis(?KHEPRI_INDEX_ROUTE_PROJECTION) of
-        undefined ->
-            [];
-        Table ->
-            do_match_routing_key_in_khepri(Table, Src, RoutingKeys)
-    end.
-
-do_match_routing_key_in_khepri(Table, Src, ['_']) ->
-    MatchHead = #index_route{source_key  = {Src, '_'},
-                             destination = '$1',
-                             _           = '_'},
-    ets:select(Table, [{MatchHead, [], ['$1']}]);
-
-do_match_routing_key_in_khepri(Table, Src, RoutingKeys) ->
     lists:foldl(
       fun(RK, Acc) ->
               try
                   Dst = ets:lookup_element(
-                          Table,
+                          ?KHEPRI_INDEX_ROUTE_PROJECTION,
                           {Src, RK},
                           #index_route.destination),
                   Dst ++ Acc

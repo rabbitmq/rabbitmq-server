@@ -492,54 +492,57 @@ ensure_topic_deletion_ets() ->
 %% Khepri topic graph
 
 trie_match_in_khepri(X, Words, BKeys) ->
-    case ets:whereis(?KHEPRI_PROJECTION) of
-        undefined ->
-            [];
-        Table ->
-            trie_match_in_khepri(Table, X, root, Words, BKeys, [])
+    try
+        trie_match_in_khepri(X, root, Words, BKeys, [])
+    catch
+        error:badarg ->
+            []
     end.
 
-trie_match_in_khepri(Table, X, Node, [], BKeys, ResAcc0) ->
-    Destinations = trie_bindings_in_khepri(Table, X, Node, BKeys),
+trie_match_in_khepri(X, Node, [], BKeys, ResAcc0) ->
+    Destinations = trie_bindings_in_khepri(X, Node, BKeys),
     ResAcc = add_matched(Destinations, BKeys, ResAcc0),
     trie_match_part_in_khepri(
-      Table, X, Node, <<"#">>,
-      fun trie_match_skip_any_in_khepri/6, [], BKeys, ResAcc);
-trie_match_in_khepri(Table, X, Node, [W | RestW] = Words, BKeys, ResAcc) ->
+      X, Node, <<"#">>,
+      fun trie_match_skip_any_in_khepri/5, [], BKeys, ResAcc);
+trie_match_in_khepri(X, Node, [W | RestW] = Words, BKeys, ResAcc) ->
     lists:foldl(fun ({WArg, MatchFun, RestWArg}, Acc) ->
                         trie_match_part_in_khepri(
-                          Table, X, Node, WArg, MatchFun, RestWArg, BKeys, Acc)
-                end, ResAcc, [{W, fun trie_match_in_khepri/6, RestW},
-                              {<<"*">>, fun trie_match_in_khepri/6, RestW},
+                          X, Node, WArg, MatchFun, RestWArg, BKeys, Acc)
+                end, ResAcc, [{W, fun trie_match_in_khepri/5, RestW},
+                              {<<"*">>, fun trie_match_in_khepri/5, RestW},
                               {<<"#">>,
-                               fun trie_match_skip_any_in_khepri/6, Words}]).
+                               fun trie_match_skip_any_in_khepri/5, Words}]).
 
-trie_match_part_in_khepri(
-  Table, X, Node, Search, MatchFun, RestW, BKeys, ResAcc) ->
-    case trie_child_in_khepri(Table, X, Node, Search) of
-        {ok, NextNode} -> MatchFun(Table, X, NextNode, RestW, BKeys, ResAcc);
+trie_match_part_in_khepri(X, Node, Search, MatchFun, RestW, BKeys, ResAcc) ->
+    case trie_child_in_khepri(X, Node, Search) of
+        {ok, NextNode} -> MatchFun(X, NextNode, RestW, BKeys, ResAcc);
         error          -> ResAcc
     end.
 
-trie_match_skip_any_in_khepri(Table, X, Node, [], BKeys, ResAcc) ->
-    trie_match_in_khepri(Table, X, Node, [], BKeys, ResAcc);
-trie_match_skip_any_in_khepri(Table, X, Node, [_ | RestW] = Words, BKeys, ResAcc) ->
+trie_match_skip_any_in_khepri(X, Node, [], BKeys, ResAcc) ->
+    trie_match_in_khepri(X, Node, [], BKeys, ResAcc);
+trie_match_skip_any_in_khepri(X, Node, [_ | RestW] = Words, BKeys, ResAcc) ->
     trie_match_skip_any_in_khepri(
-      Table, X, Node, RestW, BKeys,
-      trie_match_in_khepri(Table, X, Node, Words, BKeys, ResAcc)).
+      X, Node, RestW, BKeys,
+      trie_match_in_khepri(X, Node, Words, BKeys, ResAcc)).
 
-trie_child_in_khepri(Table, X, Node, Word) ->
-    case ets:lookup(Table, #trie_edge{exchange_name = X,
-                                      node_id       = Node,
-                                      word          = Word}) of
+trie_child_in_khepri(X, Node, Word) ->
+    case ets:lookup(
+           ?KHEPRI_PROJECTION,
+           #trie_edge{exchange_name = X,
+                      node_id       = Node,
+                      word          = Word}) of
         [#topic_trie_edge{node_id = NextNode}] -> {ok, NextNode};
         []                                     -> error
     end.
 
-trie_bindings_in_khepri(Table,X, Node, BKeys) ->
-    case ets:lookup(Table, #trie_edge{exchange_name = X,
-                                      node_id       = Node,
-                                      word          = bindings}) of
+trie_bindings_in_khepri(X, Node, BKeys) ->
+    case ets:lookup(
+           ?KHEPRI_PROJECTION,
+           #trie_edge{exchange_name = X,
+                      node_id       = Node,
+                      word          = bindings}) of
         [#topic_trie_edge{node_id = {bindings, Bindings}}] ->
             [case BKeys of
                  true ->
