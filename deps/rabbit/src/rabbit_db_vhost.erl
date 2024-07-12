@@ -349,7 +349,7 @@ list_in_khepri() ->
 -spec update(VHostName, UpdateFun) -> VHost when
       VHostName :: vhost:name(),
       UpdateFun :: fun((VHost) -> VHost),
-      VHost :: vhost:vhost().
+      VHost :: vhost:vhost() | no_return().
 %% @doc Updates an existing virtual host record using the result of
 %% `UpdateFun'.
 %%
