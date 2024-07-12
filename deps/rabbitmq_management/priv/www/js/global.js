@@ -24,6 +24,7 @@ var KNOWN_ARGS = {'alternate-exchange':        {'short': 'AE',  'type': 'string'
                   'x-dead-letter-exchange':    {'short': 'DLX', 'type': 'string'},
                   'x-dead-letter-routing-key': {'short': 'DLK', 'type': 'string'},
                   'x-queue-master-locator':    {'short': 'ML', 'type': 'string'},
+                  'x-queue-leader-locator':    {'short': 'LL', 'type': 'string'},
                   'x-max-priority':            {'short': 'Pri', 'type': 'int'},
                   'x-single-active-consumer':  {'short': 'SAC', 'type': 'boolean'}};
 
@@ -238,7 +239,7 @@ var HELP = {
       'Sets the <a target="_blank" href="https://www.rabbitmq.com/maxlength.html#overflow-behaviour">queue overflow behaviour</a>. This determines what happens to messages when the maximum length of a queue is reached. Valid values are <code>drop-head</code>, <code>reject-publish</code> or <code>reject-publish-dlx</code>. The quorum queue type only supports <code>drop-head</code> and <code>reject-publish</code>.',
 
     'queue-master-locator':
-       'Set the queue into master location mode, determining the rule by which the queue master is located when declared on a cluster of nodes.<br/>(Sets the "<a target="_blank" href="https://www.rabbitmq.com/ha.html">x-queue-master-locator</a>" argument.)',
+       'Deprecated: please use `queue-leader-locator` instead. <a target="_blank" href="https://www.rabbitmq.com/docs/clustering#replica-placement">Controls which node the queue will be running on.</a>',
 
     'queue-leader-locator':
        'Set the rule by which the queue leader is located when declared on a cluster of nodes. Valid values are <code>client-local</code> (default) and <code>balanced</code>.',
