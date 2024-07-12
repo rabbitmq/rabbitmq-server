@@ -117,7 +117,9 @@ create_or_get_in_khepri(VHostName, VHost) ->
 -spec merge_metadata(VHostName, Metadata) -> Ret when
       VHostName :: vhost:name(),
       Metadata :: vhost:metadata(),
-      Ret :: {ok, VHost} | {error, {no_such_vhost, VHostName}},
+      Ret :: {ok, VHost} |
+             {error, {no_such_vhost, VHostName}} |
+             rabbit_khepri:timeout_error(),
       VHost :: vhost:vhost().
 %% @doc Updates the metadata of an existing virtual host record.
 %%
