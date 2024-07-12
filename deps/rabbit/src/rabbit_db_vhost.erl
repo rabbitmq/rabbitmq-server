@@ -190,7 +190,7 @@ merge_metadata_in_khepri(VHostName, Metadata) ->
 -spec set_tags(VHostName, Tags) -> VHost when
       VHostName :: vhost:name(),
       Tags :: [vhost:tag() | binary() | string()],
-      VHost :: vhost:vhost().
+      VHost :: vhost:vhost() | no_return().
 %% @doc Sets the tags of an existing virtual host record.
 %%
 %% @returns the updated virtual host record if the record existed and the
