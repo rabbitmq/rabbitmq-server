@@ -110,7 +110,7 @@
          %% command: `{consumer_credit, ReceiverDeliveryCount, Credit}'
          credit_mode :: credit_mode(), % part of snapshot data
          lifetime = once :: once | auto,
-         priority = 0 :: non_neg_integer()}).
+         priority = 0 :: integer()}).
 
 -record(consumer,
         {cfg = #consumer_cfg{},
