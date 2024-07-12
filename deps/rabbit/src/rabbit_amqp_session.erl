@@ -1086,7 +1086,7 @@ handle_control(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                     mode => Mode,
                                     consumer_tag => handle_to_ctag(HandleInt),
                                     exclusive_consume => false,
-                                    args => source_filters_to_consumer_args(Source),
+                                    args => consumer_arguments(Attach),
                                     ok_msg => undefined,
                                     acting_user => Username},
                            case rabbit_queue_type:consume(Q, Spec, QStates0) of
@@ -2852,19 +2852,36 @@ encode_frames(T, Msg, MaxPayloadSize, Transfers) ->
             lists:reverse([[T, Msg] | Transfers])
     end.
 
-source_filters_to_consumer_args(#'v1_0.source'{filter = {map, KVList}}) ->
-    source_filters_to_consumer_args(
+consumer_arguments(#'v1_0.attach'{
+                      source = #'v1_0.source'{filter = Filter},
+                      properties = Properties}) ->
+    properties_to_consumer_args(Properties) ++
+    filter_to_consumer_args(Filter).
+
+properties_to_consumer_args({map, KVList}) ->
+    Key = {symbol, <<"rabbitmq:priority">>},
+    case proplists:lookup(Key, KVList) of
+        {Key, Val = {int, _Prio}} ->
+            [mc_amqpl:to_091(<<"x-priority">>, Val)];
+        _ ->
+            []
+    end;
+properties_to_consumer_args(_) ->
+    [].
+
+filter_to_consumer_args({map, KVList}) ->
+    filter_to_consumer_args(
       [<<"rabbitmq:stream-offset-spec">>,
        <<"rabbitmq:stream-filter">>,
        <<"rabbitmq:stream-match-unfiltered">>],
       KVList,
       []);
-source_filters_to_consumer_args(_Source) ->
+filter_to_consumer_args(_) ->
     [].
 
-source_filters_to_consumer_args([], _KVList, Acc) ->
+filter_to_consumer_args([], _KVList, Acc) ->
     Acc;
-source_filters_to_consumer_args([<<"rabbitmq:stream-offset-spec">> = H | T], KVList, Acc) ->
+filter_to_consumer_args([<<"rabbitmq:stream-offset-spec">> = H | T], KVList, Acc) ->
     Key = {symbol, H},
     Arg = case keyfind_unpack_described(Key, KVList) of
               {_, {timestamp, Ts}} ->
@@ -2876,8 +2893,8 @@ source_filters_to_consumer_args([<<"rabbitmq:stream-offset-spec">> = H | T], KVL
               _ ->
                   []
           end,
-    source_filters_to_consumer_args(T, KVList, Arg ++ Acc);
-source_filters_to_consumer_args([<<"rabbitmq:stream-filter">> = H | T], KVList, Acc) ->
+    filter_to_consumer_args(T, KVList, Arg ++ Acc);
+filter_to_consumer_args([<<"rabbitmq:stream-filter">> = H | T], KVList, Acc) ->
     Key = {symbol, H},
     Arg = case keyfind_unpack_described(Key, KVList) of
               {_, {list, Filters0}} when is_list(Filters0) ->
@@ -2892,8 +2909,8 @@ source_filters_to_consumer_args([<<"rabbitmq:stream-filter">> = H | T], KVList, 
               _ ->
                   []
           end,
-    source_filters_to_consumer_args(T, KVList, Arg ++ Acc);
-source_filters_to_consumer_args([<<"rabbitmq:stream-match-unfiltered">> = H | T], KVList, Acc) ->
+    filter_to_consumer_args(T, KVList, Arg ++ Acc);
+filter_to_consumer_args([<<"rabbitmq:stream-match-unfiltered">> = H | T], KVList, Acc) ->
     Key = {symbol, H},
     Arg = case keyfind_unpack_described(Key, KVList) of
               {_, MU} when is_boolean(MU) ->
@@ -2901,9 +2918,9 @@ source_filters_to_consumer_args([<<"rabbitmq:stream-match-unfiltered">> = H | T]
               _ ->
                   []
           end,
-    source_filters_to_consumer_args(T, KVList, Arg ++ Acc);
-source_filters_to_consumer_args([_ | T], KVList, Acc) ->
-    source_filters_to_consumer_args(T, KVList, Acc).
+    filter_to_consumer_args(T, KVList, Arg ++ Acc);
+filter_to_consumer_args([_ | T], KVList, Acc) ->
+    filter_to_consumer_args(T, KVList, Acc).
 
 keyfind_unpack_described(Key, KvList) ->
     %% filterset values _should_ be described values

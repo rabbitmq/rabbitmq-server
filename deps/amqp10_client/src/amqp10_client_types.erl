@@ -82,8 +82,7 @@ utf8(B) when is_binary(B) -> {utf8, B}.
 uint(N) -> {uint, N}.
 
 make_properties(#{properties := Props})
-  when is_map(Props) andalso
-       map_size(Props) > 0 ->
+  when map_size(Props) > 0 ->
     {map, maps:fold(fun(K, V, L) ->
                             [{{symbol, K}, V} | L]
                     end, [], Props)};
