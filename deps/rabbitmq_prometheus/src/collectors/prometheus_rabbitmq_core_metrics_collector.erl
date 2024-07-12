@@ -575,8 +575,6 @@ get_data(Table, false, VHostsFilter) when Table == channel_exchange_metrics;
                                Acc;
                   ({#resource{kind = queue, virtual_host = VHost}, _, _, _, _, _, _, _, _}, Acc) when is_map(VHostsFilter), map_get(VHost, VHostsFilter) == false ->
                                Acc;
-                  ({{#resource{kind = queue, virtual_host = VHost}, #resource{kind = exchange}}, _, _}, Acc) when is_map(VHostsFilter), map_get(VHost, VHostsFilter) == false ->
-                               Acc;
                   ({_, V1}, {T, A1}) ->
                        {T, V1 + A1};
                   ({_, V1, _}, {T, A1}) ->
@@ -612,7 +610,9 @@ get_data(exchange_metrics = Table, true, VHostsFilter) when is_map(VHostsFilter)
         (_Row, Acc) ->
             Acc
     end, [], Table);
-get_data(queue_counter_metrics = Table, true, VHostsFilter) when is_map(VHostsFilter) ->
+get_data(exchange_metrics, true, _VhostsFilter) ->
+    [];
+get_data(queue_counter_metrics = Table, true, VHostsFilter) when is_map(VHostsFilter)->
     ets:foldl(fun
         ({#resource{kind = queue, virtual_host = VHost}, _, _, _, _, _, _, _, _} = Row, Acc) when
             map_get(VHost, VHostsFilter)
@@ -621,7 +621,9 @@ get_data(queue_counter_metrics = Table, true, VHostsFilter) when is_map(VHostsFi
         (_Row, Acc) ->
             Acc
     end, [], Table);
-get_data(queue_exchange_metrics = Table, true, VHostsFilter) when is_map(VHostsFilter) ->
+get_data(queue_counter_metrics, true, _VHostsFilter) ->
+    [];
+get_data(queue_exchange_metrics = Table, true, VHostsFilter) ->
     ets:foldl(fun
         ({{
             #resource{kind = queue, virtual_host = VHost},
@@ -633,6 +635,8 @@ get_data(queue_exchange_metrics = Table, true, VHostsFilter) when is_map(VHostsF
         (_Row, Acc) ->
             Acc
     end, [], Table);
+get_data(queue_exchange_metrics, true, _VHostsFilter) ->
+    [];
 get_data(queue_coarse_metrics = Table, true, VHostsFilter) when is_map(VHostsFilter) ->
     ets:foldl(fun
                   ({#resource{kind = queue, virtual_host = VHost}, _, _, _, _} = Row, Acc) when map_get(VHost, VHostsFilter) ->
