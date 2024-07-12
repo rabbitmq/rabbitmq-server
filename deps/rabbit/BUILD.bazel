@@ -725,8 +725,8 @@ rabbitmq_suite(
     ],
     deps = [
         "//deps/rabbit_common:erlang_app",
-        "@proper//:erlang_app",
         "@meck//:erlang_app",
+        "@proper//:erlang_app",
         "@ra//:erlang_app",
     ],
 )
@@ -743,8 +743,8 @@ rabbitmq_suite(
     name = "rabbit_fifo_q_SUITE",
     size = "small",
     deps = [
-        "@proper//:erlang_app",
         "//deps/rabbit_common:erlang_app",
+        "@proper//:erlang_app",
     ],
 )
 

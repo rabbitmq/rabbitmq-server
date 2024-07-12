@@ -1298,7 +1298,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         hdrs = ["src/rabbit_fifo.hrl"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app", "@proper//:erlang_app"],
+        deps = ["//deps/rabbit_common:erlang_app"],
     )
     erlang_bytecode(
         name = "rabbit_fifo_dlx_SUITE_beam_files",
@@ -1326,7 +1326,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/rabbit_fifo_int_SUITE.beam"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbitmq_ct_helpers:erlang_app"],
+        deps = ["//deps/rabbit_common:erlang_app"],
     )
     erlang_bytecode(
         name = "rabbit_fifo_prop_SUITE_beam_files",
@@ -2150,6 +2150,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         deps = ["//deps/amqp_client:erlang_app"],
     )
     erlang_bytecode(
+        name = "rabbit_fifo_q_SUITE_beam_files",
         testonly = True,
         srcs = ["test/rabbit_fifo_q_SUITE.erl"],
         outs = ["test/rabbit_fifo_q_SUITE.beam"],
