@@ -111,7 +111,8 @@ groups() ->
        handshake_timeout,
        credential_expires,
        attach_to_exclusive_queue,
-       classic_priority_queue,
+       priority_classic_queue,
+       priority_quorum_queue,
        dead_letter_headers_exchange,
        dead_letter_reject,
        dead_letter_reject_message_order_classic_queue,
@@ -4066,31 +4067,43 @@ attach_to_exclusive_queue(Config) ->
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     ok = rabbit_ct_client_helpers:close_channel(Ch).
 
-classic_priority_queue(Config) ->
+priority_classic_queue(Config) ->
+    QArgs = #{<<"x-queue-type">> => {utf8, <<"classic">>},
+              <<"x-max-priority">> => {ulong, 10}},
+    priority(QArgs, Config).
+
+priority_quorum_queue(Config) ->
+    QArgs = #{<<"x-queue-type">> => {utf8, <<"quorum">>}},
+    priority(QArgs, Config).
+
+priority(QArgs, Config) ->
+    {Connection, Session, LinkPair} = init(Config),
     QName = atom_to_binary(?FUNCTION_NAME),
     Address = rabbitmq_amqp_address:queue(QName),
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
-    #'queue.declare_ok'{} = amqp_channel:call(
-                              Ch, #'queue.declare'{
-                                     queue = QName,
-                                     durable = true,
-                                     arguments = [{<<"x-max-priority">>, long, 10}]}),
-    OpnConf = connection_config(Config),
-    {ok, Connection} = amqp10_client:open_connection(OpnConf),
-    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{arguments => QArgs}),
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"test-sender">>, Address),
     wait_for_credit(Sender),
 
-    Out1 = amqp10_msg:set_headers(#{priority => 3,
-                                    durable => true}, amqp10_msg:new(<<"t1">>, <<"low prio">>, false)),
-    Out2 = amqp10_msg:set_headers(#{priority => 5,
-                                    durable => true}, amqp10_msg:new(<<"t2">>, <<"high prio">>, false)),
-    ok = amqp10_client:send_msg(Sender, Out1),
-    ok = amqp10_client:send_msg(Sender, Out2),
+    %% We don't set a priority on Msg1.
+    %% According to the AMQP spec, the default priority is 4.
+    Msg1 = amqp10_msg:set_headers(
+             #{durable => true},
+             amqp10_msg:new(<<"t1">>, <<"low prio">>)),
+    %% Quorum queues implement 2 distinct priority levels.
+    %% "if 2 distinct priorities are implemented, then levels 0 to 4 are equivalent,
+    %% and levels 5 to 9 are equivalent and levels 4 and 5 are distinct." [§3.2.1]
+    %% Therefore, when we set a priority of 5 on Msg2, Msg2 will have a higher priority
+    %% than the default priority 4 of Msg1.
+    Msg2 = amqp10_msg:set_headers(
+             #{priority => 5,
+               durable => true},
+             amqp10_msg:new(<<"t2">>, <<"high prio">>)),
+    ok = amqp10_client:send_msg(Sender, Msg1),
+    ok = amqp10_client:send_msg(Sender, Msg2),
     ok = wait_for_accepts(2),
     flush(accepted),
 
-    %% The high prio message should be delivered first.
+    %% The high prio Msg2 should overtake the low prio Msg1 and therefore be delivered first.
     {ok, Receiver1} = amqp10_client:attach_receiver_link(Session, <<"receiver 1">>, Address, unsettled),
     {ok, In1} = amqp10_client:get_msg(Receiver1),
     ?assertEqual([<<"high prio">>], amqp10_msg:body(In1)),
@@ -4101,13 +4114,13 @@ classic_priority_queue(Config) ->
     {ok, Receiver2} = amqp10_client:attach_receiver_link(Session, <<"receiver 2">>, Address, settled),
     {ok, In2} = amqp10_client:get_msg(Receiver2),
     ?assertEqual([<<"low prio">>], amqp10_msg:body(In2)),
-    ?assertEqual(3, amqp10_msg:header(priority, In2)),
     ?assert(amqp10_msg:header(durable, In2)),
 
     ok = amqp10_client:detach_link(Receiver1),
     ok = amqp10_client:detach_link(Receiver2),
     ok = amqp10_client:detach_link(Sender),
-    ok = delete_queue(Session, QName),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = end_session_sync(Session),
     ok = amqp10_client:close_connection(Connection).
 

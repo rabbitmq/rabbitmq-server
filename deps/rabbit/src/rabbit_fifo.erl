@@ -2770,7 +2770,8 @@ priority_tag(Msg) ->
     case mc:is(Msg) of
         true ->
             case mc:priority(Msg) of
-                P when P > 4 ->
+                P when is_integer(P) andalso
+                       P > 4 ->
                     hi;
                 _ ->
                     lo
@@ -2778,6 +2779,7 @@ priority_tag(Msg) ->
         false ->
             lo
     end.
+
 -define(CHECK_ENQ_MIN_INTERVAL_MS, 500).
 -define(CHECK_ENQ_MIN_INDEXES, 4096).
 -define(CHECK_MIN_INTERVAL_MS, 5000).
