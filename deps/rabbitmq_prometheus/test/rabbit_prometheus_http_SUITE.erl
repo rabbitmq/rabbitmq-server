@@ -305,6 +305,16 @@ end_per_group_(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config, rabbit_ct_client_helpers:teardown_steps()
                                          ++ rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_testcase(Testcase, Config)
+    when Testcase =:= queue_counter_metrics_per_object_test;
+         Testcase =:= queue_exchange_metrics_per_object_test ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false ->
+            rabbit_ct_helpers:testcase_started(Config, Testcase);
+        true ->
+            %% skip the test in mixed version mode
+            {skip, "Should not run in mixed version environments"}
+    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
