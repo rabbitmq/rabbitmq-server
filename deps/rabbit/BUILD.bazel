@@ -678,6 +678,14 @@ rabbitmq_integration_suite(
     shard_count = 6,
 )
 
+rabbitmq_integration_suite(
+    name = "quorum_queue_prop_SUITE",
+    size = "large",
+    deps = [
+        "@proper//:erlang_app",
+    ],
+)
+
 rabbitmq_suite(
     name = "rabbit_confirms_SUITE",
     size = "small",
