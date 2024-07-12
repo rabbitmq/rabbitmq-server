@@ -773,7 +773,7 @@ add_policy(VHost, Param, Username) ->
                              exit(rabbit_data_coercion:to_binary(rabbit_misc:escape_html_tags(E ++ S)))
     end.
 
--spec add_vhost(map(), rabbit_types:username()) -> ok.
+-spec add_vhost(map(), rabbit_types:username()) -> ok | no_return().
 
 add_vhost(VHost, ActingUser) ->
     Name             = maps:get(name, VHost, undefined),
@@ -783,7 +783,12 @@ add_vhost(VHost, ActingUser) ->
     Tags             = maps:get(tags, VHost, maps:get(tags, Metadata, [])),
     DefaultQueueType = maps:get(default_queue_type, Metadata, undefined),
 
-    rabbit_vhost:put_vhost(Name, Description, Tags, DefaultQueueType, IsTracingEnabled, ActingUser).
+    case rabbit_vhost:put_vhost(Name, Description, Tags, DefaultQueueType, IsTracingEnabled, ActingUser) of
+        ok ->
+            ok;
+        {error, _} = Err ->
+            throw(Err)
+    end.
 
 add_permission(Permission, ActingUser) ->
     rabbit_auth_backend_internal:set_permissions(maps:get(user,      Permission, undefined),
