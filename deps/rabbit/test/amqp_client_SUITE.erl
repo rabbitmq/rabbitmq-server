@@ -81,6 +81,8 @@ groups() ->
        stop_classic_queue,
        stop_quorum_queue,
        stop_stream,
+       consumer_priority_classic_queue,
+       consumer_priority_quorum_queue,
        single_active_consumer_classic_queue,
        single_active_consumer_quorum_queue,
        detach_requeues_one_session_classic_queue,
@@ -1840,6 +1842,95 @@ stop(QType, Config) ->
     ok = amqp10_client:close_connection(Connection),
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     ok = rabbit_ct_client_helpers:close_channel(Ch).
+
+consumer_priority_classic_queue(Config) ->
+    consumer_priority(<<"classic">>, Config).
+
+consumer_priority_quorum_queue(Config) ->
+    consumer_priority(<<"quorum">>, Config).
+
+consumer_priority(QType, Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {Connection, Session, LinkPair} = init(Config),
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType}}},
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+
+    %% We test what our RabbitMQ docs state:
+    %% "Consumers which do not specify a value have priority 0.
+    %% Larger numbers indicate higher priority, and both positive and negative numbers can be used."
+    {ok, ReceiverDefaultPrio} = amqp10_client:attach_receiver_link(
+                                  Session,
+                                  <<"default prio consumer">>,
+                                  Address,
+                                  unsettled),
+    {ok, ReceiverHighPrio} = amqp10_client:attach_receiver_link(
+                               Session,
+                               <<"high prio consumer">>,
+                               Address,
+                               unsettled,
+                               none,
+                               #{},
+                               #{<<"rabbitmq:priority">> => {int, 2_000_000_000}}),
+    {ok, ReceiverLowPrio} = amqp10_client:attach_receiver_link(
+                              Session,
+                              <<"low prio consumer">>,
+                              Address,
+                              unsettled,
+                              none,
+                              #{},
+                              #{<<"rabbitmq:priority">> => {int, -2_000_000_000}}),
+    ok = amqp10_client:flow_link_credit(ReceiverDefaultPrio, 1, never),
+    ok = amqp10_client:flow_link_credit(ReceiverHighPrio, 2, never),
+    ok = amqp10_client:flow_link_credit(ReceiverLowPrio, 1, never),
+
+    NumMsgs = 5,
+    [begin
+         Bin = integer_to_binary(N),
+         ok = amqp10_client:send_msg(Sender, amqp10_msg:new(Bin, Bin))
+     end || N <- lists:seq(1, NumMsgs)],
+    ok = wait_for_accepts(NumMsgs),
+
+    receive {amqp10_msg, Rec1, Msg1} ->
+                ?assertEqual(<<"1">>, amqp10_msg:body_bin(Msg1)),
+                ?assertEqual(ReceiverHighPrio, Rec1),
+                ok = amqp10_client:accept_msg(Rec1, Msg1)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, Rec2, Msg2} ->
+                ?assertEqual(<<"2">>, amqp10_msg:body_bin(Msg2)),
+                ?assertEqual(ReceiverHighPrio, Rec2),
+                ok = amqp10_client:accept_msg(Rec2, Msg2)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, Rec3, Msg3} ->
+                ?assertEqual(<<"3">>, amqp10_msg:body_bin(Msg3)),
+                ?assertEqual(ReceiverDefaultPrio, Rec3),
+                ok = amqp10_client:accept_msg(Rec3, Msg3)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, Rec4, Msg4} ->
+                ?assertEqual(<<"4">>, amqp10_msg:body_bin(Msg4)),
+                ?assertEqual(ReceiverLowPrio, Rec4),
+                ok = amqp10_client:accept_msg(Rec4, Msg4)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, _, _} = Unexpected ->
+                ct:fail({unexpected_msg, Unexpected, ?LINE})
+    after 5 -> ok
+    end,
+
+    ok = amqp10_client:detach_link(Sender),
+    ok = amqp10_client:detach_link(ReceiverDefaultPrio),
+    ok = amqp10_client:detach_link(ReceiverHighPrio),
+    ok = amqp10_client:detach_link(ReceiverLowPrio),
+    {ok, #{message_count := 1}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
 
 single_active_consumer_classic_queue(Config) ->
     single_active_consumer(<<"classic">>, Config).
@@ -4898,7 +4989,6 @@ tcp_back_pressure_rabbitmq_internal_flow(QType, Config) ->
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = end_session_sync(Session),
     ok = amqp10_client:close_connection(Connection).
-
 
 %% internal
 %%
