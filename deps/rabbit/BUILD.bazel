@@ -1024,7 +1024,7 @@ rabbitmq_suite(
     size = "small",
     deps = [
         "@meck//:erlang_app",
-    ]
+    ],
 )
 
 rabbitmq_integration_suite(
