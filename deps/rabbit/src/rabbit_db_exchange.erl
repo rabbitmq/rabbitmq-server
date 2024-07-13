@@ -183,14 +183,12 @@ get_in_mnesia(Name) ->
     rabbit_mnesia:dirty_read({?MNESIA_TABLE, Name}).
 
 get_in_khepri(Name) ->
-    case ets:whereis(?KHEPRI_PROJECTION) of
-        undefined ->
-            {error, not_found};
-        Table ->
-            case ets:lookup(Table, Name) of
-                [X] -> {ok, X};
-                []  -> {error, not_found}
-            end
+    try ets:lookup(?KHEPRI_PROJECTION, Name) of
+        [X] -> {ok, X};
+        []  -> {error, not_found}
+    catch
+        error:badarg ->
+            {error, not_found}
     end.
 
 %% -------------------------------------------------------------------
@@ -233,11 +231,11 @@ get_many_in_mnesia(Table, Names) when is_list(Names) ->
     lists:append([ets:lookup(Table, Name) || Name <- Names]).
 
 get_many_in_khepri(Names) when is_list(Names) ->
-    case ets:whereis(?KHEPRI_PROJECTION) of
-        undefined ->
-            [];
-        Table ->
-            lists:append([ets:lookup(Table, Name) || Name <- Names])
+    try
+        lists:append([ets:lookup(?KHEPRI_PROJECTION, Name) || Name <- Names])
+    catch
+        error:badarg ->
+            []
     end.
 
 %% -------------------------------------------------------------------
