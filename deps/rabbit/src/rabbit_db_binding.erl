@@ -32,12 +32,12 @@
          delete_transient_for_destination_in_mnesia/1,
          has_for_source_in_mnesia/1,
          has_for_source_in_khepri/1,
-         match_source_and_destination_in_khepri_tx/2
+         match_source_and_destination_in_khepri_tx/2,
+         clear_in_khepri/0
         ]).
 
 -export([
-         khepri_route_path/1,
-         khepri_routes_path/0,
+         khepri_route_path/1, khepri_route_path/5,
          khepri_route_exchange_path/1
         ]).
 
@@ -610,9 +610,12 @@ fold_in_mnesia(Fun, Acc) ->
               end, Acc, ?MNESIA_TABLE).
 
 fold_in_khepri(Fun, Acc) ->
-    Path = khepri_routes_path() ++ [_VHost = ?KHEPRI_WILDCARD_STAR,
-                                    _SrcName = ?KHEPRI_WILDCARD_STAR,
-                                    rabbit_khepri:if_has_data_wildcard()],
+    Path = khepri_route_path(
+             _VHost = ?KHEPRI_WILDCARD_STAR,
+             _SrcName = ?KHEPRI_WILDCARD_STAR,
+             _Kind = ?KHEPRI_WILDCARD_STAR,
+             _DstName = ?KHEPRI_WILDCARD_STAR,
+             _RoutingKey = #if_has_data{}),
     {ok, Res} = rabbit_khepri:fold(
                   Path,
                   fun(_, #{data := SetOfBindings}, Acc0) ->
@@ -828,9 +831,14 @@ delete_all_for_exchange_in_khepri(X = #exchange{name = XName}, OnlyDurable, Remo
     {deleted, X, Bindings, delete_for_destination_in_khepri(XName, OnlyDurable)}.
 
 delete_for_source_in_khepri(#resource{virtual_host = VHost, name = Name}) ->
-    Path = khepri_routes_path() ++ [VHost, Name],
-    {ok, Bindings} = khepri_tx:get_many(Path ++ [rabbit_khepri:if_has_data_wildcard()]),
-    ok = khepri_tx:delete(Path),
+    Path = khepri_route_path(
+             VHost,
+             Name,
+             _Kind = ?KHEPRI_WILDCARD_STAR,
+             _DstName = ?KHEPRI_WILDCARD_STAR,
+             _RoutingKey = #if_has_data{}),
+    {ok, Bindings} = khepri_tx:get_many(Path),
+    ok = khepri_tx:delete_many(Path),
     maps:fold(fun(_P, Set, Acc) ->
                       sets:to_list(Set) ++ Acc
               end, [], Bindings).
@@ -885,7 +893,12 @@ delete_for_destination_in_khepri(DstName, OnlyDurable) ->
                                        lists:keysort(#binding.source, Bindings), OnlyDurable).
 
 match_destination_in_khepri(#resource{virtual_host = VHost, kind = Kind, name = Name}) ->
-    Path = khepri_routes_path() ++ [VHost, ?KHEPRI_WILDCARD_STAR, Kind, Name, ?KHEPRI_WILDCARD_STAR_STAR],
+    Path = khepri_route_path(
+             VHost,
+             _SrcName = ?KHEPRI_WILDCARD_STAR,
+             Kind,
+             Name,
+             _RoutingKey = ?KHEPRI_WILDCARD_STAR),
     {ok, Map} = khepri_tx:get_many(Path),
     Map.
 
@@ -926,7 +939,12 @@ has_for_source_in_mnesia(SrcName) ->
 -spec has_for_source_in_khepri(rabbit_types:binding_source()) -> boolean().
 
 has_for_source_in_khepri(#resource{virtual_host = VHost, name = Name}) ->
-    Path = khepri_routes_path() ++ [VHost, Name, rabbit_khepri:if_has_data_wildcard()],
+    Path = khepri_route_path(
+             VHost,
+             Name,
+             _Kind = ?KHEPRI_WILDCARD_STAR,
+             _DstName = ?KHEPRI_WILDCARD_STAR,
+             _RoutingKey = #if_has_data{}),
     case khepri_tx:get_many(Path) of
         {ok, Map} ->
             maps:size(Map) > 0;
@@ -945,7 +963,8 @@ has_for_source_in_khepri(#resource{virtual_host = VHost, name = Name}) ->
 
 match_source_and_destination_in_khepri_tx(#resource{virtual_host = VHost, name = Name},
                                           #resource{kind = Kind, name = DstName}) ->
-    Path = khepri_routes_path() ++ [VHost, Name, Kind, DstName, rabbit_khepri:if_has_data_wildcard()],
+    Path = khepri_route_path(
+             VHost, Name, Kind, DstName, _RoutingKey = #if_has_data{}),
     case khepri_tx:get_many(Path) of
         {ok, Map} -> maps:values(Map);
         _         -> []
@@ -974,7 +993,12 @@ clear_in_mnesia() ->
     ok.
 
 clear_in_khepri() ->
-    Path = khepri_routes_path(),
+    Path = khepri_route_path(
+             _VHost = ?KHEPRI_WILDCARD_STAR,
+             _SrcName = ?KHEPRI_WILDCARD_STAR,
+             _Kind = ?KHEPRI_WILDCARD_STAR,
+             _DstName = ?KHEPRI_WILDCARD_STAR,
+             _RoutingKey = ?KHEPRI_WILDCARD_STAR),
     case rabbit_khepri:delete(Path) of
         ok -> ok;
         Error -> throw(Error)
@@ -983,13 +1007,20 @@ clear_in_khepri() ->
 %% --------------------------------------------------------------
 %% Paths
 %% --------------------------------------------------------------
-khepri_route_path(#binding{source = #resource{virtual_host = VHost, name = SrcName},
-                           destination = #resource{kind = Kind, name = DstName},
-                           key = RoutingKey}) ->
-    [?MODULE, routes, VHost, SrcName, Kind, DstName, RoutingKey].
 
-khepri_routes_path() ->
-    [?MODULE, routes].
+khepri_route_path(
+  #binding{source = #resource{virtual_host = VHost, name = SrcName},
+           destination = #resource{kind = Kind, name = DstName},
+           key = RoutingKey}) ->
+    khepri_route_path(VHost, SrcName, Kind, DstName, RoutingKey).
+
+khepri_route_path(VHost, SrcName, Kind, DstName, RoutingKey)
+  when ?IS_KHEPRI_PATH_CONDITION(VHost) andalso
+       ?IS_KHEPRI_PATH_CONDITION(SrcName) andalso
+       ?IS_KHEPRI_PATH_CONDITION(Kind) andalso
+       ?IS_KHEPRI_PATH_CONDITION(DstName) andalso
+       ?IS_KHEPRI_PATH_CONDITION(RoutingKey) ->
+    [?MODULE, routes, VHost, SrcName, Kind, DstName, RoutingKey].
 
 khepri_route_exchange_path(#resource{virtual_host = VHost, name = SrcName}) ->
     [?MODULE, routes, VHost, SrcName].

@@ -17,15 +17,13 @@
          find_mirror/2,
          update_all/2,
          delete/2,
-         delete_all/1
+         delete_all/1,
+         clear_in_khepri/0
         ]).
 
 -export([clear/0]).
 
--export([
-         khepri_mirrored_supervisor_path/2,
-         khepri_mirrored_supervisor_path/0
-        ]).
+-export([khepri_mirrored_supervisor_path/2]).
 
 -define(TABLE, mirrored_sup_childspec).
 -define(TABLE_DEF,
@@ -251,7 +249,9 @@ update_all_in_khepri(Overall, OldOverall) ->
     Pattern = #mirrored_sup_childspec{mirroring_pid = OldOverall,
                                       _             = '_'},
     Conditions = [?KHEPRI_WILDCARD_STAR_STAR, #if_data_matches{pattern = Pattern}],
-    PathPattern = khepri_mirrored_supervisor_path() ++ [#if_all{conditions = Conditions}],
+    PathPattern = khepri_mirrored_supervisor_path(
+                    ?KHEPRI_WILDCARD_STAR,
+                    #if_all{conditions = Conditions}),
     rabbit_khepri:transaction(
       fun() ->
               case khepri_tx:get_many(PathPattern) of
@@ -291,8 +291,9 @@ delete_all_in_khepri(Group) ->
     Pattern = #mirrored_sup_childspec{key = {Group, '_'},
                                       _   = '_'},
     Conditions = [?KHEPRI_WILDCARD_STAR_STAR, #if_data_matches{pattern = Pattern}],
-    rabbit_khepri:delete(khepri_mirrored_supervisor_path() ++
-                             [#if_all{conditions = Conditions}]).
+    rabbit_khepri:delete(khepri_mirrored_supervisor_path(
+                           ?KHEPRI_WILDCARD_STAR,
+                           #if_all{conditions = Conditions})).
 
 %% -------------------------------------------------------------------
 %% clear().
@@ -311,7 +312,8 @@ clear_in_mnesia() ->
     ok.
 
 clear_in_khepri() ->
-    Path = khepri_mirrored_supervisor_path(),
+    Path = khepri_mirrored_supervisor_path(
+             ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR_STAR),
     case rabbit_khepri:delete(Path) of
         ok -> ok;
         Error -> throw(Error)
@@ -321,12 +323,11 @@ clear_in_khepri() ->
 %% Khepri paths
 %% -------------------------------------------------------------------
 
-khepri_mirrored_supervisor_path() ->
-    [?MODULE, mirrored_supervisor_childspec].
-
 khepri_mirrored_supervisor_path(Group, Id)
-  when is_atom(Id) orelse is_binary(Id) ->
+  when ?IS_KHEPRI_PATH_CONDITION(Group) andalso
+       ?IS_KHEPRI_PATH_CONDITION(Id) ->
     [?MODULE, mirrored_supervisor_childspec, Group, Id];
-khepri_mirrored_supervisor_path(Group, Id) ->
+khepri_mirrored_supervisor_path(Group, Id)
+  when is_atom(Group) ->
     IdPath = Group:id_to_khepri_path(Id),
     [?MODULE, mirrored_supervisor_childspec, Group] ++ IdPath.

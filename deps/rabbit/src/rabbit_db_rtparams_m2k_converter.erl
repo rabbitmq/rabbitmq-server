@@ -10,6 +10,7 @@
 -behaviour(mnesia_to_khepri_converter).
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("khepri/include/khepri.hrl").
 -include_lib("khepri_mnesia_migration/src/kmm_logging.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -99,8 +100,16 @@ rtparams_path(Key) ->
       Table :: atom().
 
 clear_data_in_khepri(rabbit_runtime_parameters) ->
-    Path = rabbit_db_rtparams:khepri_rp_path(),
-    case rabbit_khepri:delete(Path) of
+    Path1 = rabbit_db_rtparams:khepri_global_rp_path(?KHEPRI_WILDCARD_STAR),
+    case rabbit_khepri:delete(Path1) of
         ok -> ok;
-        Error -> throw(Error)
+        Error1 -> throw(Error1)
+    end,
+    Path2 = rabbit_db_rtparams:khepri_vhost_rp_path(
+              ?KHEPRI_WILDCARD_STAR,
+              ?KHEPRI_WILDCARD_STAR,
+              ?KHEPRI_WILDCARD_STAR),
+    case rabbit_khepri:delete(Path2) of
+        ok -> ok;
+        Error2 -> throw(Error2)
     end.

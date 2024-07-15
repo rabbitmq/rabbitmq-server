@@ -118,6 +118,7 @@
 
          get/1,
          get/2,
+         count/1, count/2,
          get_many/1,
          adv_get/1,
          adv_get_many/1,
@@ -164,10 +165,6 @@
          force_reset/0]).
 -export([cluster_status_from_khepri/0,
          cli_cluster_status/0]).
-
-%% Path functions
--export([if_has_data/1,
-         if_has_data_wildcard/0]).
 
 -export([force_shrink_member_to_current_member/0]).
 
@@ -908,6 +905,13 @@ get(Path) ->
 get(Path, Options) ->
     khepri:get(?STORE_ID, Path, Options).
 
+count(PathPattern) ->
+    khepri:count(?STORE_ID, PathPattern, #{favor => low_latency}).
+
+count(Path, Options) ->
+    Options1 = Options#{favor => low_latency},
+    khepri:count(?STORE_ID, Path, Options1).
+
 get_many(PathPattern) ->
     khepri:get_many(?STORE_ID, PathPattern).
 
@@ -1054,27 +1058,6 @@ collect_payloads(Props, Acc0) when is_map(Props) andalso is_list(Acc0) ->
           (_Path, _NoPayload, Acc) ->
               Acc
       end, Acc0, Props).
-
-%% -------------------------------------------------------------------
-%% if_has_data_wildcard().
-%% -------------------------------------------------------------------
-
--spec if_has_data_wildcard() -> Condition when
-      Condition :: khepri_condition:condition().
-
-if_has_data_wildcard() ->
-    if_has_data([?KHEPRI_WILDCARD_STAR_STAR]).
-
-%% -------------------------------------------------------------------
-%% if_has_data().
-%% -------------------------------------------------------------------
-
--spec if_has_data(Conditions) -> Condition when
-      Conditions :: [Condition],
-      Condition :: khepri_condition:condition().
-
-if_has_data(Conditions) ->
-    #if_all{conditions = Conditions ++ [#if_has_data{has_data = true}]}.
 
 register_projections() ->
     RegisterFuns = [fun register_rabbit_exchange_projection/0,

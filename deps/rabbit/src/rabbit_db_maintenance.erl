@@ -7,6 +7,7 @@
 
 -module(rabbit_db_maintenance).
 
+-include_lib("khepri/include/khepri.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([
@@ -17,8 +18,7 @@
         ]).
 
 -export([
-         khepri_maintenance_path/1,
-         khepri_maintenance_path/0
+         khepri_maintenance_path/1
         ]).
 
 -define(TABLE, rabbit_node_maintenance_states).
@@ -167,8 +167,5 @@ get_consistent_in_khepri(Node) ->
 %% Khepri paths
 %% -------------------------------------------------------------------
 
-khepri_maintenance_path() ->
-    [?MODULE, maintenance].
-
-khepri_maintenance_path(Node) ->
+khepri_maintenance_path(Node) when ?IS_KHEPRI_PATH_CONDITION(Node) ->
     [?MODULE, maintenance, Node].

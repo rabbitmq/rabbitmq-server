@@ -17,8 +17,7 @@
          delete_vhost/1]).
 
 -export([khepri_vhost_rp_path/3,
-         khepri_global_rp_path/1,
-         khepri_rp_path/0
+         khepri_global_rp_path/1
         ]).
 
 -define(MNESIA_TABLE, rabbit_runtime_parameters).
@@ -347,17 +346,16 @@ delete_vhost_in_khepri(VHostName) ->
 
 %% -------------------------------------------------------------------
 
-khepri_rp_path() ->
-    [?MODULE].
-
 khepri_rp_path({VHost, Component, Name}) ->
     khepri_vhost_rp_path(VHost, Component, Name);
 khepri_rp_path(Key) ->
     khepri_global_rp_path(Key).
 
-khepri_global_rp_path(Key) ->
+khepri_global_rp_path(Key) when ?IS_KHEPRI_PATH_CONDITION(Key) ->
     [?MODULE, global, Key].
 
-khepri_vhost_rp_path(VHost, Component, Name) ->
+khepri_vhost_rp_path(VHost, Component, Name)
+  when ?IS_KHEPRI_PATH_CONDITION(VHost) andalso
+       ?IS_KHEPRI_PATH_CONDITION(Component) andalso
+       ?IS_KHEPRI_PATH_CONDITION(Name) ->
     [?MODULE, per_vhost, VHost, Component, Name].
-

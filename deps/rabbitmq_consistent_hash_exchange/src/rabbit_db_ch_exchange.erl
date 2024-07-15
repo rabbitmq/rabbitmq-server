@@ -20,8 +20,8 @@
         ]).
 
 -export([
-         khepri_consistent_hash_path/0,
-         khepri_consistent_hash_path/1
+         khepri_consistent_hash_path/1,
+         khepri_consistent_hash_path/2
         ]).
 
 -define(HASH_RING_STATE_TABLE, rabbit_exchange_type_consistent_hash_ring_state).
@@ -222,7 +222,9 @@ delete_binding_in_khepri(#binding{source = S, destination = D}, DeleteFun) ->
 khepri_consistent_hash_path(#exchange{name = Name}) ->
     khepri_consistent_hash_path(Name);
 khepri_consistent_hash_path(#resource{virtual_host = VHost, name = Name}) ->
-    [?MODULE, exchange_type_consistent_hash_ring_state, VHost, Name].
+    khepri_consistent_hash_path(VHost, Name).
 
-khepri_consistent_hash_path() ->
-    [?MODULE, exchange_type_consistent_hash_ring_state].
+khepri_consistent_hash_path(VHost, Name)
+  when ?IS_KHEPRI_PATH_CONDITION(VHost) andalso
+       ?IS_KHEPRI_PATH_CONDITION(Name) ->
+    [?MODULE, exchange_type_consistent_hash_ring_state, VHost, Name].

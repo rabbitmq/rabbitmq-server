@@ -10,6 +10,7 @@
 -behaviour(mnesia_to_khepri_converter).
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("khepri/include/khepri.hrl").
 -include_lib("khepri_mnesia_migration/src/kmm_logging.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -111,8 +112,4 @@ delete_from_khepri(rabbit_route = Table, Key, State) ->
       Table :: atom().
 
 clear_data_in_khepri(rabbit_route) ->
-    Path = rabbit_db_binding:khepri_routes_path(),
-    case rabbit_khepri:delete(Path) of
-        ok -> ok;
-        Error -> throw(Error)
-    end.
+    rabbit_db_binding:clear_in_khepri().
