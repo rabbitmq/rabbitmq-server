@@ -42,6 +42,7 @@
 -define(AMQP10_FOOTER, <<"x-amqp-1.0-footer">>).
 -define(PROTOMOD, rabbit_framing_amqp_0_9_1).
 -define(CLASS_ID, 60).
+-define(LONGSTR_UTF8_LIMIT, 4096).
 
 -opaque state() :: #content{}.
 
@@ -663,16 +664,19 @@ wrap(_Type, undefined) ->
 wrap(Type, Val) ->
     {Type, Val}.
 
-from_091(longstr, V) ->
-    case mc_util:is_valid_shortstr(V) of
+from_091(longstr, V)
+  when is_binary(V) andalso
+       byte_size(V) =< ?LONGSTR_UTF8_LIMIT ->
+    %% if a longstr is longer than 4096 bytes we just assume it is binary
+    %% it _may_ still be valid utf8 but checking this for every longstr header
+    %% value is going to be excessively slow
+    case mc_util:is_utf8_no_null(V) of
         true ->
             {utf8, V};
         false ->
-            %%  if a string is longer than 255 bytes we just assume it is binary
-            %%  it _may_ still be valid utf8 but checking this is going to be
-            %%  excessively slow
             {binary, V}
     end;
+from_091(longstr, V) -> {binary, V};
 from_091(long, V) -> {long, V};
 from_091(unsignedbyte, V) -> {ubyte, V};
 from_091(short, V) -> {short, V};
@@ -743,7 +747,7 @@ to_091(Key, {int, V}) -> {Key, signedint, V};
 to_091(Key, {double, V}) -> {Key, double, V};
 to_091(Key, {float, V}) -> {Key, float, V};
 to_091(Key, {timestamp, V}) -> {Key, timestamp, V div 1000};
-to_091(Key, {binary, V}) -> {Key, binary, V};
+to_091(Key, {binary, V}) -> {Key, longstr, V};
 to_091(Key, {boolean, V}) -> {Key, bool, V};
 to_091(Key, true) -> {Key, bool, true};
 to_091(Key, false) -> {Key, bool, false};
@@ -766,7 +770,7 @@ to_091({int, V}) -> {signedint, V};
 to_091({double, V}) -> {double, V};
 to_091({float, V}) -> {float, V};
 to_091({timestamp, V}) -> {timestamp, V div 1000};
-to_091({binary, V}) -> {binary, V};
+to_091({binary, V}) -> {longstr, V};
 to_091({boolean, V}) -> {bool, V};
 to_091(true) -> {bool, true};
 to_091(false) -> {bool, false};
