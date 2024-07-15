@@ -20,7 +20,6 @@
          count/0,
          update/2,
          create_or_get/1,
-         set/1,
          peek_serial/1,
          next_serial/1,
          delete/2,
@@ -403,43 +402,6 @@ create_or_get_in_khepri(#exchange{name = XName} = X) ->
     end.
 
 %% -------------------------------------------------------------------
-%% set().
-%% -------------------------------------------------------------------
-
--spec set([Exchange]) -> ok when
-      Exchange :: rabbit_types:exchange().
-%% @doc Writes the exchange records.
-%%
-%% @returns ok.
-%%
-%% @private
-
-set(Xs) ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> set_in_mnesia(Xs) end,
-        khepri => fun() -> set_in_khepri(Xs) end
-       }).
-
-set_in_mnesia(Xs) when is_list(Xs) ->
-    rabbit_mnesia:execute_mnesia_transaction(
-      fun () ->
-              [mnesia:write(rabbit_durable_exchange, X, write) || X <- Xs]
-      end),
-    ok.
-
-set_in_khepri(Xs) when is_list(Xs) ->
-    rabbit_khepri:transaction(
-      fun() ->
-              [set_in_khepri_tx(X) || X <- Xs]
-      end, rw),
-    ok.
-
-set_in_khepri_tx(X) ->
-    Path = khepri_exchange_path(X#exchange.name),
-    ok = khepri_tx:put(Path, X),
-    X.
-
-%% -------------------------------------------------------------------
 %% peek_serial().
 %% -------------------------------------------------------------------
 
@@ -717,7 +679,10 @@ recover_in_khepri(VHost) ->
 
     rabbit_khepri:transaction(
       fun() ->
-              [_ = set_in_khepri_tx(X) || X <- Exchanges]
+              [begin
+                   Path = khepri_exchange_path(X#exchange.name),
+                   ok = khepri_tx:put(Path, X)
+               end || X <- Exchanges]
       end, rw, #{timeout => infinity}),
     %% TODO once mnesia is gone, this callback should go back to `rabbit_exchange`
     [begin

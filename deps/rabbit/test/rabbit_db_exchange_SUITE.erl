@@ -207,16 +207,6 @@ update1(_Config) ->
     ?assertEqual(topic, Exchange0#exchange.type),
     passed.
 
-set(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, set1, [Config]).
-
-set1(_Config) ->
-    XName = rabbit_misc:r(?VHOST, exchange, <<"test-exchange">>),
-    Exchange = #exchange{name = XName, durable = true},
-    ?assertEqual(ok, rabbit_db_exchange:set([Exchange])),
-    ?assertEqual([Exchange], rabbit_db_exchange:get_all_durable()),
-    passed.
-
 peek_serial(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, peek_serial1, [Config]).
 
