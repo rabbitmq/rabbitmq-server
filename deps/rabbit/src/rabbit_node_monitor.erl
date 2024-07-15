@@ -620,6 +620,7 @@ handle_cast({left_cluster, Node}, State) ->
               {del_node(Node, AllNodes), del_node(Node, DiscNodes),
                del_node(Node, RunningNodes)})
     end,
+    rabbit_event:notify(node_deleted, [{node, Node}]),
     {noreply, State};
 
 handle_cast({subscribe, Pid}, State = #state{subscribers = Subscribers}) ->

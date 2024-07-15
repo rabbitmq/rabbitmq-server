@@ -151,6 +151,8 @@ join(RemoteNode, NodeType)
                 false -> ok = rabbit_mnesia:reset_gracefully()
             end,
 
+            ok = rabbit_node_monitor:notify_left_cluster(node()),
+
             %% Now that the files are all gone after the reset above, restart
             %% the Ra systems. They will recreate their folder in the process.
             case RestartRabbit of
@@ -225,6 +227,14 @@ join_using_khepri(_ClusterNodes, ram = NodeType) ->
 %% @doc Removes `Node' from the cluster.
 
 forget_member(Node, RemoveWhenOffline) ->
+    case forget_member0(Node, RemoveWhenOffline) of
+        ok ->
+            rabbit_node_monitor:notify_left_cluster(Node);
+        Error ->
+            Error
+    end.
+
+forget_member0(Node, RemoveWhenOffline) ->
     case rabbit:is_running(Node) of
         false ->
             ?LOG_DEBUG(
