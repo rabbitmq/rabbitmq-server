@@ -26,7 +26,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsMirrorSyncCriticalCommand do
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([], %{node: node_name, timeout: timeout}) do
+  def run([], _opts) do
     :ok
   end
 
@@ -34,7 +34,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsMirrorSyncCriticalCommand do
     {:ok, %{"result" => "ok"}}
   end
 
-  def output(:ok, %{node: node_name}) do
+  def output(:ok, _opts) do
     {:ok, "ok"}
   end
 
