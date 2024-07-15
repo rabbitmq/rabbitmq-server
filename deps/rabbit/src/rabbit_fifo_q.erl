@@ -39,10 +39,9 @@ in(lo, Item, #?MODULE{lo = Lo, len = Len} = State) ->
                   len = Len + 1}.
 
 -spec out(state()) ->
-    {empty, state()} |
-    {hi | lo, msg(), state()}.
-out(#?MODULE{len = 0} = S) ->
-    {empty, S};
+    empty | {msg(), state()}.
+out(#?MODULE{len = 0}) ->
+    empty;
 out(#?MODULE{hi = Hi0,
              lo = Lo0,
              len = Len,
@@ -55,13 +54,13 @@ out(#?MODULE{hi = Hi0,
         end,
     case next(State) of
         {hi, Msg} ->
-            {hi, Msg, State#?MODULE{hi = drop(Hi0),
-                                    dequeue_counter = C,
-                                    len = Len - 1}};
+            {Msg, State#?MODULE{hi = drop(Hi0),
+                                dequeue_counter = C,
+                                len = Len - 1}};
         {lo, Msg} ->
-            {lo, Msg, State#?MODULE{lo = drop(Lo0),
-                                    dequeue_counter = C,
-                                    len = Len - 1}}
+            {Msg, State#?MODULE{lo = drop(Lo0),
+                                dequeue_counter = C,
+                                len = Len - 1}}
     end.
 
 -spec get(state()) -> empty | msg().

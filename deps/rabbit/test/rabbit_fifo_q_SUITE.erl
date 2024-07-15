@@ -59,10 +59,10 @@ hi(_Config) ->
            fun ({P, I}, Q) ->
                    rabbit_fifo_q:in(P, I, Q)
           end, Q0, [
-                     {hi, ?MSG(?LINE)}
+                     {hi, ?MSG(1)}
                     ]),
-    {hi, _, Q2} = rabbit_fifo_q:out(Q1),
-    {empty, _Q3} = rabbit_fifo_q:out(Q2),
+    {?MSG(1), Q2} = rabbit_fifo_q:out(Q1),
+    empty = rabbit_fifo_q:out(Q2),
     ok.
 
 basics(_Config) ->
@@ -71,18 +71,18 @@ basics(_Config) ->
            fun ({P, I}, Q) ->
                    rabbit_fifo_q:in(P, I, Q)
            end, Q0, [
-                     {hi, ?MSG(?LINE)},
-                     {lo, ?MSG(?LINE)},
-                     {hi, ?MSG(?LINE)},
-                     {lo, ?MSG(?LINE)},
-                     {hi, ?MSG(?LINE)}
+                     {hi, ?MSG(1)},
+                     {lo, ?MSG(2)},
+                     {hi, ?MSG(3)},
+                     {lo, ?MSG(4)},
+                     {hi, ?MSG(5)}
                     ]),
-    {hi, _, Q2} = rabbit_fifo_q:out(Q1),
-    {hi, _, Q3} = rabbit_fifo_q:out(Q2),
-    {lo, _, Q4} = rabbit_fifo_q:out(Q3),
-    {hi, _, Q5} = rabbit_fifo_q:out(Q4),
-    {lo, _, Q6} = rabbit_fifo_q:out(Q5),
-    {empty, _} = rabbit_fifo_q:out(Q6),
+    {?MSG(1), Q2} = rabbit_fifo_q:out(Q1),
+    {?MSG(3), Q3} = rabbit_fifo_q:out(Q2),
+    {?MSG(2), Q4} = rabbit_fifo_q:out(Q3),
+    {?MSG(5), Q5} = rabbit_fifo_q:out(Q4),
+    {?MSG(4), Q6} = rabbit_fifo_q:out(Q5),
+    empty = rabbit_fifo_q:out(Q6),
     ok.
 
 hi_is_prioritised(_Config) ->
@@ -93,19 +93,18 @@ hi_is_prioritised(_Config) ->
            fun ({P, I}, Q) ->
                    rabbit_fifo_q:in(P, I, Q)
            end, Q0, [
-                     {hi, ?MSG(1, ?LINE)},
-                     {hi, ?MSG(2, ?LINE)},
-                     {hi, ?MSG(3, ?LINE)},
-                     {hi, ?MSG(4, ?LINE)},
-                     {lo, ?MSG(5, ?LINE)}
+                     {hi, ?MSG(1)},
+                     {hi, ?MSG(2)},
+                     {hi, ?MSG(3)},
+                     {hi, ?MSG(4)},
+                     {lo, ?MSG(5)}
                     ]),
-    {hi, _, Q2} = rabbit_fifo_q:out(Q1),
-    {hi, _, Q3} = rabbit_fifo_q:out(Q2),
-    {hi, _, Q4} = rabbit_fifo_q:out(Q3),
-    {hi, _, Q5} = rabbit_fifo_q:out(Q4),
-    {lo, _, Q6} = rabbit_fifo_q:out(Q5),
-    {empty, _} = rabbit_fifo_q:out(Q6),
-
+    {?MSG(1), Q2} = rabbit_fifo_q:out(Q1),
+    {?MSG(2), Q3} = rabbit_fifo_q:out(Q2),
+    {?MSG(3), Q4} = rabbit_fifo_q:out(Q3),
+    {?MSG(4), Q5} = rabbit_fifo_q:out(Q4),
+    {?MSG(5), Q6} = rabbit_fifo_q:out(Q5),
+    empty = rabbit_fifo_q:out(Q6),
     ok.
 
 get_lowest_index(_Config) ->
@@ -113,9 +112,9 @@ get_lowest_index(_Config) ->
     Q1 = rabbit_fifo_q:in(hi, ?MSG(1, ?LINE), Q0),
     Q2 = rabbit_fifo_q:in(lo, ?MSG(2, ?LINE), Q1),
     Q3 = rabbit_fifo_q:in(lo, ?MSG(3, ?LINE), Q2),
-    {hi, _, Q4} = rabbit_fifo_q:out(Q3),
-    {lo, _, Q5} = rabbit_fifo_q:out(Q4),
-    {lo, _, Q6} = rabbit_fifo_q:out(Q5),
+    {_, Q4} = rabbit_fifo_q:out(Q3),
+    {_, Q5} = rabbit_fifo_q:out(Q4),
+    {_, Q6} = rabbit_fifo_q:out(Q5),
 
     ?assertEqual(undefined, rabbit_fifo_q:get_lowest_index(Q0)),
     ?assertEqual(1, rabbit_fifo_q:get_lowest_index(Q1)),
@@ -151,14 +150,14 @@ queue_prop(P, Ops) ->
                                end;
                            (out, {Q0, S0}) ->
                                {V1, Q} = case queue:out(Q0) of
-                                             {{value, V_}, Q1} ->
-                                                 {V_, Q1};
+                                             {{value, V0}, Q1} ->
+                                                 {V0, Q1};
                                              Res0 ->
                                                  Res0
                                          end,
                                {V2, S} = case rabbit_fifo_q:out(S0) of
-                                             {_, V, S1} ->
-                                                 {V, S1};
+                                             empty ->
+                                                 {empty, S0};
                                              Res ->
                                                  Res
                                          end,

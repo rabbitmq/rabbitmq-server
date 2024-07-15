@@ -731,13 +731,11 @@ update_waiting_consumer_status(Node,
                                #?STATE{waiting_consumers = WaitingConsumers},
                                Status) ->
     sort_waiting(
-      [begin
-           case node(Pid) of
-               Node ->
-                   {ConsumerKey, Consumer#consumer{status = Status}};
-               _ ->
-                   {ConsumerKey, Consumer}
-           end
+      [case node(Pid) of
+           Node ->
+               {ConsumerKey, Consumer#consumer{status = Status}};
+           _ ->
+               {ConsumerKey, Consumer}
        end || {ConsumerKey, ?CONSUMER_PID(Pid) =  Consumer}
               <- WaitingConsumers, Consumer#consumer.status =/= cancelled]).
 
@@ -1931,9 +1929,9 @@ take_next_msg(#?STATE{returns = Returns0,
             {NextMsg, State#?STATE{returns = Returns}};
         {empty, _} ->
             case rabbit_fifo_q:out(Messages0) of
-                {empty, _} ->
+                empty ->
                     empty;
-                {_P, ?MSG(RaftIdx, _) = Msg, Messages} ->
+                {?MSG(RaftIdx, _) = Msg, Messages} ->
                     %% add index here
                     Indexes = rabbit_fifo_index:append(RaftIdx, Indexes0),
                     {Msg, State#?STATE{messages = Messages,
@@ -2235,7 +2233,6 @@ sort_waiting(Waiting) ->
                        %% not up
                        Status /= up
                end, Waiting).
-
 
 merge_consumer(_Meta, #consumer{cfg = CCfg, checked_out = Checked} = Consumer,
                ConsumerMeta, {Life, Mode}, Priority) ->
