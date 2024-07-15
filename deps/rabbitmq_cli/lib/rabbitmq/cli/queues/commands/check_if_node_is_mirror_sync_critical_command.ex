@@ -17,8 +17,6 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsMirrorSyncCriticalCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
-
   def scopes(), do: [:diagnostics, :queues]
 
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
@@ -48,7 +46,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsMirrorSyncCriticalCommand do
 
   def usage, do: "check_if_node_is_mirror_sync_critical"
 
-  def banner([], %{node: node_name}) do
+  def banner([], _) do
     "This command is DEPRECATED and is a no-op. It will be removed in a future version."
   end
 
