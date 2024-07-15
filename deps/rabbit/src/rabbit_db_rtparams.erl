@@ -17,12 +17,12 @@
          delete_vhost/1]).
 
 -export([khepri_vhost_rp_path/3,
-         khepri_global_rp_path/1,
-         khepri_rp_path/0
+         khepri_global_rp_path/1
         ]).
 
 -define(MNESIA_TABLE, rabbit_runtime_parameters).
--define(KHEPRI_PROJECTION, rabbit_khepri_runtime_parameters).
+-define(KHEPRI_GLOBAL_PROJECTION, rabbit_khepri_global_rtparams).
+-define(KHEPRI_VHOST_PROJECTION, rabbit_khepri_per_vhost_rtparams).
 -define(any(Value), case Value of
                         '_' -> ?KHEPRI_WILDCARD_STAR;
                         _ -> Value
@@ -150,8 +150,16 @@ get_in_mnesia(Key) ->
         [Record] -> Record
     end.
 
-get_in_khepri(Key) ->
-    try ets:lookup(?KHEPRI_PROJECTION, Key) of
+get_in_khepri(Key) when is_atom(Key) ->
+    try ets:lookup(?KHEPRI_GLOBAL_PROJECTION, Key) of
+        []       -> undefined;
+        [Record] -> Record
+    catch
+        error:badarg ->
+            undefined
+    end;
+get_in_khepri(Key) when is_tuple(Key) ->
+    try ets:lookup(?KHEPRI_VHOST_PROJECTION, Key) of
         []       -> undefined;
         [Record] -> Record
     catch
@@ -181,7 +189,8 @@ get_all_in_mnesia() ->
 
 get_all_in_khepri() ->
     try
-        ets:tab2list(?KHEPRI_PROJECTION)
+        ets:tab2list(?KHEPRI_GLOBAL_PROJECTION) ++
+        ets:tab2list(?KHEPRI_VHOST_PROJECTION)
     catch
         error:badarg ->
             []
@@ -225,7 +234,7 @@ get_all_in_khepri(VHostName, Comp) ->
     try
         Match = #runtime_parameters{key = {VHostName, Comp, '_'},
                                     _   = '_'},
-        ets:match_object(?KHEPRI_PROJECTION, Match)
+        ets:match_object(?KHEPRI_VHOST_PROJECTION, Match)
     catch
         error:badarg ->
             []
@@ -347,17 +356,16 @@ delete_vhost_in_khepri(VHostName) ->
 
 %% -------------------------------------------------------------------
 
-khepri_rp_path() ->
-    [?MODULE].
-
 khepri_rp_path({VHost, Component, Name}) ->
     khepri_vhost_rp_path(VHost, Component, Name);
 khepri_rp_path(Key) ->
     khepri_global_rp_path(Key).
 
-khepri_global_rp_path(Key) ->
+khepri_global_rp_path(Key) when ?IS_KHEPRI_PATH_CONDITION(Key) ->
     [?MODULE, global, Key].
 
-khepri_vhost_rp_path(VHost, Component, Name) ->
+khepri_vhost_rp_path(VHost, Component, Name)
+  when ?IS_KHEPRI_PATH_CONDITION(VHost) andalso
+       ?IS_KHEPRI_PATH_CONDITION(Component) andalso
+       ?IS_KHEPRI_PATH_CONDITION(Name) ->
     [?MODULE, per_vhost, VHost, Component, Name].
-
