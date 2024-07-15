@@ -14,6 +14,8 @@
 %% @end
 decode(Value) when is_list(Value) ->
   decode(list_to_binary(Value));
+decode(<<>>) ->
+  [];
 decode(Value) when is_binary(Value) ->
   Decoded0 = rabbit_json:decode(Value),
   Decoded  = maps:to_list(Decoded0),
