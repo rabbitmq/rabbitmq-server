@@ -50,7 +50,8 @@ groups() ->
      {single_node, [],
       [restart_single_node,
        recover,
-       format]},
+       format,
+       headers]},
      {single_node_parallel_1, [parallel], all_tests_1()},
      {single_node_parallel_2, [parallel], all_tests_2()},
      {single_node_parallel_3, [parallel], all_tests_3()},
@@ -1011,6 +1012,61 @@ consume(Config) ->
             ct:fail(timeout)
     end,
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+headers(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    BinData = crypto:strong_rand_bytes(100),
+    UTF8Str = binary:copy(<<"ab">>, 255),
+
+    Headers = rabbit_misc:sort_field_table([{<<"a-stream-offset">>, long, 99},
+                                            {<<"a-string">>, longstr, <<"a string">>},
+                                            {<<"a-bool">>, bool, false},
+                                            {<<"a-unsignedbyte">>, unsignedbyte, 1},
+                                            {<<"a-unsignedshort">>, unsignedshort, 1},
+                                            {<<"a-unsignedint">>, unsignedint, 1},
+                                            {<<"a-signedint">>, signedint, 1},
+                                            {<<"a-timestamp">>, timestamp, 1},
+                                            {<<"a-double">>, double, 1.0},
+                                            {<<"a-float">>, float, 1.0},
+                                            {<<"a-void">>, void, undefined},
+                                            {<<"a-binary">>, longstr, BinData},
+                                            {<<"a-utf8str">>, longstr, UTF8Str}
+                                           ]),
+
+
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = Q},
+                           #amqp_msg{props = #'P_basic'{delivery_mode = 2,
+                                                        headers = Headers},
+                                     payload = <<"msg">>}),
+    amqp_channel:wait_for_confirms(Ch, 5),
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    qos(Ch1, 10, false),
+    subscribe(Ch1, Q, false, 0),
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag},
+         #amqp_msg{props = #'P_basic'{delivery_mode = 2,
+                                      headers = HeadersOut0}}} ->
+            HeadersOut = lists:keydelete(<<"x-stream-offset">>, 1, HeadersOut0),
+            ?assertEqual(Headers, HeadersOut),
+            ok = amqp_channel:cast(Ch1, #'basic.ack'{delivery_tag = DeliveryTag,
+                                                     multiple = false}),
+            _ = amqp_channel:call(Ch1, #'basic.cancel'{consumer_tag = <<"ctag">>}),
+            ok = amqp_channel:close(Ch1)
+    after 5000 ->
+            ct:fail(timeout)
+    end,
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]),
+    ok.
 
 consume_offset(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

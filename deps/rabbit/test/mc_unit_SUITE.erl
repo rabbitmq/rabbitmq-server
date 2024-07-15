@@ -600,7 +600,7 @@ amqp_amqpl(_Config) ->
     ?assertMatch({_, long, 5}, header(<<"long">>, HL)),
     ?assertMatch({_, long, 5}, header(<<"ulong">>, HL)),
     ?assertMatch({_, longstr, <<"a-string">>}, header(<<"utf8">>, HL)),
-    ?assertMatch({_, binary, <<"data">>}, header(<<"binary">>, HL)),
+    ?assertMatch({_, longstr, <<"data">>}, header(<<"binary">>, HL)),
     ?assertMatch({_, longstr, <<"symbol">>}, header(<<"symbol">>, HL)),
     ?assertMatch({_, unsignedbyte, 255}, header(<<"ubyte">>, HL)),
     ?assertMatch({_, short, 2}, header(<<"short">>, HL)),
