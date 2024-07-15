@@ -119,6 +119,7 @@
 
          get/1,
          get/2,
+         count/1, count/2,
          get_many/1,
          adv_get/1,
          adv_get_many/1,
@@ -165,10 +166,6 @@
          force_reset/0]).
 -export([cluster_status_from_khepri/0,
          cli_cluster_status/0]).
-
-%% Path functions
--export([if_has_data/1,
-         if_has_data_wildcard/0]).
 
 -export([force_shrink_member_to_current_member/0]).
 
@@ -942,6 +939,13 @@ get(Path) ->
 get(Path, Options) ->
     khepri:get(?STORE_ID, Path, Options).
 
+count(PathPattern) ->
+    khepri:count(?STORE_ID, PathPattern, #{favor => low_latency}).
+
+count(Path, Options) ->
+    Options1 = Options#{favor => low_latency},
+    khepri:count(?STORE_ID, Path, Options1).
+
 get_many(PathPattern) ->
     khepri:get_many(?STORE_ID, PathPattern).
 
@@ -1089,37 +1093,17 @@ collect_payloads(Props, Acc0) when is_map(Props) andalso is_list(Acc0) ->
               Acc
       end, Acc0, Props).
 
-%% -------------------------------------------------------------------
-%% if_has_data_wildcard().
-%% -------------------------------------------------------------------
-
--spec if_has_data_wildcard() -> Condition when
-      Condition :: khepri_condition:condition().
-
-if_has_data_wildcard() ->
-    if_has_data([?KHEPRI_WILDCARD_STAR_STAR]).
-
-%% -------------------------------------------------------------------
-%% if_has_data().
-%% -------------------------------------------------------------------
-
--spec if_has_data(Conditions) -> Condition when
-      Conditions :: [Condition],
-      Condition :: khepri_condition:condition().
-
-if_has_data(Conditions) ->
-    #if_all{conditions = Conditions ++ [#if_has_data{has_data = true}]}.
-
 register_projections() ->
-    RegisterFuns = [fun register_rabbit_exchange_projection/0,
-                    fun register_rabbit_queue_projection/0,
-                    fun register_rabbit_vhost_projection/0,
-                    fun register_rabbit_users_projection/0,
-                    fun register_rabbit_runtime_parameters_projection/0,
-                    fun register_rabbit_user_permissions_projection/0,
-                    fun register_rabbit_bindings_projection/0,
-                    fun register_rabbit_index_route_projection/0,
-                    fun register_rabbit_topic_graph_projection/0],
+    RegFuns = [fun register_rabbit_exchange_projection/0,
+               fun register_rabbit_queue_projection/0,
+               fun register_rabbit_vhost_projection/0,
+               fun register_rabbit_users_projection/0,
+               fun register_rabbit_global_runtime_parameters_projection/0,
+               fun register_rabbit_per_vhost_runtime_parameters_projection/0,
+               fun register_rabbit_user_permissions_projection/0,
+               fun register_rabbit_bindings_projection/0,
+               fun register_rabbit_index_route_projection/0,
+               fun register_rabbit_topic_graph_projection/0],
     [case RegisterFun() of
          ok ->
              ok;
@@ -1132,55 +1116,60 @@ register_projections() ->
              ok;
          {error, Error} ->
              throw(Error)
-     end || RegisterFun <- RegisterFuns],
+     end || RegisterFun <- RegFuns],
     ok.
 
 register_rabbit_exchange_projection() ->
     Name = rabbit_khepri_exchange,
-    PathPattern = [rabbit_db_exchange,
-                   exchanges,
-                   _VHost = ?KHEPRI_WILDCARD_STAR,
-                   _Name = ?KHEPRI_WILDCARD_STAR],
+    PathPattern = rabbit_db_exchange:khepri_exchange_path(
+                    _VHost = ?KHEPRI_WILDCARD_STAR,
+                    _Name = ?KHEPRI_WILDCARD_STAR),
     KeyPos = #exchange.name,
     register_simple_projection(Name, PathPattern, KeyPos).
 
 register_rabbit_queue_projection() ->
     Name = rabbit_khepri_queue,
-    PathPattern = [rabbit_db_queue,
-                   queues,
-                   _VHost = ?KHEPRI_WILDCARD_STAR,
-                   _Name = ?KHEPRI_WILDCARD_STAR],
+    PathPattern = rabbit_db_queue:khepri_queue_path(
+                    _VHost = ?KHEPRI_WILDCARD_STAR,
+                    _Name = ?KHEPRI_WILDCARD_STAR),
     KeyPos = 2, %% #amqqueue.name
     register_simple_projection(Name, PathPattern, KeyPos).
 
 register_rabbit_vhost_projection() ->
     Name = rabbit_khepri_vhost,
-    PathPattern = [rabbit_db_vhost, _VHost = ?KHEPRI_WILDCARD_STAR],
+    PathPattern = rabbit_db_vhost:khepri_vhost_path(
+                    _VHost = ?KHEPRI_WILDCARD_STAR),
     KeyPos = 2, %% #vhost.virtual_host
     register_simple_projection(Name, PathPattern, KeyPos).
 
 register_rabbit_users_projection() ->
     Name = rabbit_khepri_users,
-    PathPattern = [rabbit_db_user,
-                   users,
-                   _UserName = ?KHEPRI_WILDCARD_STAR],
+    PathPattern = rabbit_db_user:khepri_user_path(
+                    _UserName = ?KHEPRI_WILDCARD_STAR),
     KeyPos = 2, %% #internal_user.username
     register_simple_projection(Name, PathPattern, KeyPos).
 
-register_rabbit_runtime_parameters_projection() ->
-    Name = rabbit_khepri_runtime_parameters,
-    PathPattern = [rabbit_db_rtparams,
-                   ?KHEPRI_WILDCARD_STAR_STAR],
+register_rabbit_global_runtime_parameters_projection() ->
+    Name = rabbit_khepri_global_rtparams,
+    PathPattern = rabbit_db_rtparams:khepri_global_rp_path(
+                    _Key = ?KHEPRI_WILDCARD_STAR_STAR),
+    KeyPos = #runtime_parameters.key,
+    register_simple_projection(Name, PathPattern, KeyPos).
+
+register_rabbit_per_vhost_runtime_parameters_projection() ->
+    Name = rabbit_khepri_per_vhost_rtparams,
+    PathPattern = rabbit_db_rtparams:khepri_vhost_rp_path(
+                    _VHost = ?KHEPRI_WILDCARD_STAR_STAR,
+                    _Component = ?KHEPRI_WILDCARD_STAR_STAR,
+                    _Name = ?KHEPRI_WILDCARD_STAR_STAR),
     KeyPos = #runtime_parameters.key,
     register_simple_projection(Name, PathPattern, KeyPos).
 
 register_rabbit_user_permissions_projection() ->
     Name = rabbit_khepri_user_permissions,
-    PathPattern = [rabbit_db_user,
-                   users,
-                   _UserName = ?KHEPRI_WILDCARD_STAR,
-                   user_permissions,
-                   _VHost = ?KHEPRI_WILDCARD_STAR],
+    PathPattern = rabbit_db_user:khepri_user_permission_path(
+                    _UserName = ?KHEPRI_WILDCARD_STAR,
+                    _VHost = ?KHEPRI_WILDCARD_STAR),
     KeyPos = #user_permission.user_vhost,
     register_simple_projection(Name, PathPattern, KeyPos).
 
@@ -1197,19 +1186,23 @@ register_rabbit_bindings_projection() ->
     Options = #{keypos => #route.binding},
     Projection = khepri_projection:new(
                    rabbit_khepri_bindings, ProjectionFun, Options),
-    PathPattern = [rabbit_db_binding,
-                   routes,
-                   _VHost = ?KHEPRI_WILDCARD_STAR,
-                   _ExchangeName = ?KHEPRI_WILDCARD_STAR,
-                   _Kind = ?KHEPRI_WILDCARD_STAR,
-                   _DstName = ?KHEPRI_WILDCARD_STAR,
-                   _RoutingKey = ?KHEPRI_WILDCARD_STAR],
+    PathPattern = rabbit_db_binding:khepri_route_path(
+                    _VHost = ?KHEPRI_WILDCARD_STAR,
+                    _ExchangeName = ?KHEPRI_WILDCARD_STAR,
+                    _Kind = ?KHEPRI_WILDCARD_STAR,
+                    _DstName = ?KHEPRI_WILDCARD_STAR,
+                    _RoutingKey = ?KHEPRI_WILDCARD_STAR),
     khepri:register_projection(?RA_CLUSTER_NAME, PathPattern, Projection).
 
 register_rabbit_index_route_projection() ->
     MapFun = fun(Path, _) ->
-                     [rabbit_db_binding, routes, VHost, ExchangeName, Kind,
-                      DstName, RoutingKey] = Path,
+                     {
+                      VHost,
+                      ExchangeName,
+                      Kind,
+                      DstName,
+                      RoutingKey
+                     } = rabbit_db_binding:khepri_route_path_to_args(Path),
                      Exchange = rabbit_misc:r(VHost, exchange, ExchangeName),
                      Destination = rabbit_misc:r(VHost, Kind, DstName),
                      SourceKey = {Exchange, RoutingKey},
@@ -1224,13 +1217,12 @@ register_rabbit_index_route_projection() ->
                                       conditions = [{'andalso',
                                                      {'=/=', '$1', headers},
                                                      {'=/=', '$1', topic}}]},
-    PathPattern = [rabbit_db_binding,
-                   routes,
-                   _VHost = ?KHEPRI_WILDCARD_STAR,
-                   _Exchange = DirectOrFanout,
-                   _Kind = ?KHEPRI_WILDCARD_STAR,
-                   _DstName = ?KHEPRI_WILDCARD_STAR,
-                   _RoutingKey = ?KHEPRI_WILDCARD_STAR],
+    PathPattern = rabbit_db_binding:khepri_route_path(
+                    _VHost = ?KHEPRI_WILDCARD_STAR,
+                    _Exchange = DirectOrFanout,
+                    _Kind = ?KHEPRI_WILDCARD_STAR,
+                    _DstName = ?KHEPRI_WILDCARD_STAR,
+                    _RoutingKey = ?KHEPRI_WILDCARD_STAR),
     khepri:register_projection(?RA_CLUSTER_NAME, PathPattern, Projection).
 
 %% Routing information is stored in the Khepri store as a `set'.
@@ -1288,8 +1280,13 @@ register_rabbit_topic_graph_projection() ->
                 #{should_process_function => ShouldProcessFun}},
     ProjectionFun =
     fun(Table, Path, OldProps, NewProps) ->
-        [rabbit_db_binding, routes,
-         VHost, ExchangeName, _Kind, _DstName, RoutingKey] = Path,
+        {
+         VHost,
+         ExchangeName,
+         _Kind,
+         _DstName,
+         RoutingKey
+        } = rabbit_db_binding:khepri_route_path_to_args(Path),
         Exchange = rabbit_misc:r(VHost, exchange, ExchangeName),
         Words = rabbit_db_topic_exchange:split_topic_key_binary(RoutingKey),
         case {OldProps, NewProps} of
@@ -1320,13 +1317,12 @@ register_rabbit_topic_graph_projection() ->
         end
     end,
     Projection = khepri_projection:new(Name, ProjectionFun, Options),
-    PathPattern = [rabbit_db_binding,
-                   routes,
-                   _VHost = ?KHEPRI_WILDCARD_STAR,
-                   _Exchange = #if_data_matches{pattern = #{type => topic}},
-                   _Kind = ?KHEPRI_WILDCARD_STAR,
-                   _DstName = ?KHEPRI_WILDCARD_STAR,
-                   _RoutingKey = ?KHEPRI_WILDCARD_STAR],
+    PathPattern = rabbit_db_binding:khepri_route_path(
+                    _VHost = ?KHEPRI_WILDCARD_STAR,
+                    _Exchange = #if_data_matches{pattern = #{type => topic}},
+                    _Kind = ?KHEPRI_WILDCARD_STAR,
+                    _DstName = ?KHEPRI_WILDCARD_STAR,
+                    _RoutingKey = ?KHEPRI_WILDCARD_STAR),
     khepri:register_projection(?RA_CLUSTER_NAME, PathPattern, Projection).
 
 -spec follow_down_update(Table, Exchange, Words, UpdateFn) -> Ret when
