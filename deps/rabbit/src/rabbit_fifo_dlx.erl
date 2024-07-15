@@ -23,7 +23,6 @@
          state_enter/4,
          handle_aux/6,
          dehydrate/1,
-         normalize/1,
          stat/1,
          update_config/4,
          smallest_raft_index/1
@@ -356,13 +355,6 @@ handle_aux(_, _, Aux, _, _, _) ->
     state().
 dehydrate(State) ->
     State#?MODULE{ra_indexes = rabbit_fifo_index:empty()}.
-
--spec normalize(state()) ->
-    state().
-normalize(#?MODULE{discards = Discards,
-                   ra_indexes = Indexes} = State) ->
-    State#?MODULE{discards = lqueue:from_list(lqueue:to_list(Discards)),
-                  ra_indexes = rabbit_fifo_index:normalize(Indexes)}.
 
 -spec smallest_raft_index(state()) ->
     option(non_neg_integer()).

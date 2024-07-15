@@ -8,7 +8,6 @@
          get/1,
          len/1,
          from_lqueue/1,
-         normalize/2,
          get_lowest_index/1
         ]).
 
@@ -81,15 +80,6 @@ from_lqueue(LQ) ->
     lqueue:fold(fun (Item, Acc) ->
                         in(lo, Item, Acc)
                 end, new(), LQ).
-
--spec normalize(state(), state()) -> state().
-normalize(Q0, Acc) ->
-    case out(Q0) of
-        {empty, _} ->
-            Acc;
-        {P, Msg, Q} ->
-            normalize(Q, in(P, Msg, Acc))
-    end.
 
 -spec get_lowest_index(state()) -> undefined | ra:index().
 get_lowest_index(#?MODULE{len = 0}) ->

@@ -71,7 +71,6 @@
          is_v4/0,
 
          %% misc
-         normalize/1,
          get_msg_header/1,
          get_header/2,
          get_msg/1,
@@ -2377,18 +2376,6 @@ credit_inactive_consumer(
             State = State0#?STATE{waiting_consumers = Waiting},
             {State, {send_credit_reply, Available}}
     end.
-
-%% make the state suitable for equality comparison
-normalize(#?STATE{ra_indexes = _Indexes,
-                  returns = Returns,
-                  messages = Messages,
-                  release_cursors = Cursors,
-                  dlx = DlxState} = State) ->
-    State#?STATE{returns = lqueue:from_list(lqueue:to_list(Returns)),
-                 messages = rabbit_fifo_q:normalize(Messages,
-                                                    rabbit_fifo_q:new()),
-                 release_cursors = lqueue:from_list(lqueue:to_list(Cursors)),
-                 dlx = rabbit_fifo_dlx:normalize(DlxState)}.
 
 is_over_limit(#?STATE{cfg = #cfg{max_length = undefined,
                                   max_bytes = undefined}}) ->

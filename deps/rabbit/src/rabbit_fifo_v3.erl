@@ -52,7 +52,6 @@
 
          %% misc
          dehydrate_state/1,
-         normalize/1,
          get_msg_header/1,
          get_header/2,
          get_msg/1,
@@ -2319,17 +2318,6 @@ dehydrate_state(#?STATE{cfg = #cfg{},
                   enqueue_count = 0,
                   msg_cache = undefined,
                   dlx = rabbit_fifo_dlx:dehydrate(DlxState)}.
-
-%% make the state suitable for equality comparison
-normalize(#?STATE{ra_indexes = _Indexes,
-                   returns = Returns,
-                   messages = Messages,
-                   release_cursors = Cursors,
-                   dlx = DlxState} = State) ->
-    State#?STATE{returns = lqueue:from_list(lqueue:to_list(Returns)),
-                  messages = lqueue:from_list(lqueue:to_list(Messages)),
-                  release_cursors = lqueue:from_list(lqueue:to_list(Cursors)),
-                  dlx = rabbit_fifo_dlx:normalize(DlxState)}.
 
 is_over_limit(#?STATE{cfg = #cfg{max_length = undefined,
                                   max_bytes = undefined}}) ->
