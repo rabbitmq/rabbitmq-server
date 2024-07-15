@@ -10,7 +10,7 @@
          from_lqueue/1,
          normalize/2,
          get_lowest_index/1
-         ]).
+        ]).
 
 -define(WEIGHT, 2).
 -define(NON_EMPTY, {_, [_|_]}).
@@ -111,7 +111,7 @@ get_lowest_index(#?MODULE{hi = Hi, lo = Lo}) ->
 %% internals
 
 next(#?MODULE{hi = ?NON_EMPTY = Hi,
-              lo = ?NON_EMPTY  = Lo,
+              lo = ?NON_EMPTY = Lo,
               dequeue_counter = ?WEIGHT}) ->
     ?MSG(HiIdx, _) = HiMsg = peek(Hi),
     ?MSG(LoIdx, _) = LoMsg = peek(Lo),
@@ -131,8 +131,6 @@ next(#?MODULE{lo = Lo}) ->
 %% invariant, if the queue is non empty so is the Out (right) list.
 in(X, ?EMPTY) ->
     {[], [X]};
-in(X, {[_] = In, []}) ->
-    {[X], In};
 in(X, {In, Out}) ->
     {[X | In], Out}.
 
@@ -141,8 +139,6 @@ peek(?EMPTY) ->
 peek({_, [H | _]}) ->
     H.
 
-drop(?EMPTY = Q) ->
-    Q;
 drop({In, [_]}) ->
     %% the last Out one
     {[], lists:reverse(In)};
