@@ -19,13 +19,14 @@ all_tests() ->
      hi,
      basics,
      hi_is_prioritised,
+     get_lowest_index,
      single_priority_behaves_like_queue
     ].
 
 
 groups() ->
     [
-     {tests, [], all_tests()}
+     {tests, [parallel], all_tests()}
     ].
 
 init_per_suite(Config) ->
@@ -106,6 +107,23 @@ hi_is_prioritised(_Config) ->
     {empty, _} = rabbit_fifo_q:out(Q6),
 
     ok.
+
+get_lowest_index(_Config) ->
+    Q0 = rabbit_fifo_q:new(),
+    Q1 = rabbit_fifo_q:in(hi, ?MSG(1, ?LINE), Q0),
+    Q2 = rabbit_fifo_q:in(lo, ?MSG(2, ?LINE), Q1),
+    Q3 = rabbit_fifo_q:in(lo, ?MSG(3, ?LINE), Q2),
+    {hi, _, Q4} = rabbit_fifo_q:out(Q3),
+    {lo, _, Q5} = rabbit_fifo_q:out(Q4),
+    {lo, _, Q6} = rabbit_fifo_q:out(Q5),
+
+    ?assertEqual(undefined, rabbit_fifo_q:get_lowest_index(Q0)),
+    ?assertEqual(1, rabbit_fifo_q:get_lowest_index(Q1)),
+    ?assertEqual(1, rabbit_fifo_q:get_lowest_index(Q2)),
+    ?assertEqual(1, rabbit_fifo_q:get_lowest_index(Q3)),
+    ?assertEqual(2, rabbit_fifo_q:get_lowest_index(Q4)),
+    ?assertEqual(3, rabbit_fifo_q:get_lowest_index(Q5)),
+    ?assertEqual(undefined, rabbit_fifo_q:get_lowest_index(Q6)).
 
 -type op() :: {in, integer()} | out.
 

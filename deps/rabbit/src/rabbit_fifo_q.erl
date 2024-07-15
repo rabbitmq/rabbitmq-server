@@ -102,7 +102,7 @@ get_lowest_index(#?MODULE{hi = Hi, lo = Lo}) ->
         ?MSG(HiIdx, _) ->
             case peek(Lo) of
                 ?MSG(LoIdx, _) ->
-                    max(HiIdx, LoIdx);
+                    min(HiIdx, LoIdx);
                 empty ->
                     HiIdx
             end
