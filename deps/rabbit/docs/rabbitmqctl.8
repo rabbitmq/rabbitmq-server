@@ -463,38 +463,6 @@ is part of, as a ram node:
 To learn more, see the
 .Lk https://www.rabbitmq.com/clustering.html "RabbitMQ Clustering guide".
 .\" ------------------------------------------------------------------
-.\" ## Classic Mirrored Queues
-.\" ------------------------------------------------------------------
-.Ss Replication
-.Bl -tag -width Ds
-.\" ------------------------------------------------------------------
-.It Cm sync_queue Oo Fl p Ar vhost Oc Ar queue
-.Bl -tag -width Ds
-.It Ar queue
-The name of the queue to synchronise.
-.El
-.Pp
-Instructs a mirrored queue with unsynchronised mirrors (follower replicas)
-to synchronise them.
-The queue will block while synchronisation takes place (all publishers
-and consumers using the queue will block or temporarily see no activity).
-This command can only be used with mirrored queues.
-To learn more, see the
-.Lk https://www.rabbitmq.com/ha.html "RabbitMQ Classic Queue Mirroring guide"
-.Pp
-Note that queues with unsynchronised replicas and active consumers
-will become synchronised eventually (assuming that consumers make progress).
-This command is primarily useful for queues that do not have active consumers.
-.\" ------------------------------------------------------------------
-.It Cm cancel_sync_queue Oo Fl p Ar vhost Oc Ar queue
-.Bl -tag -width Ds
-.It Ar queue
-The name of the queue to cancel synchronisation for.
-.El
-.Pp
-Instructs a synchronising mirrored queue to stop synchronising itself.
-.El
-.\" ------------------------------------------------------------------
 .\" ## User management
 .\" ------------------------------------------------------------------
 .Ss User Management
