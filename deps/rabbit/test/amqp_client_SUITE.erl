@@ -81,10 +81,13 @@ groups() ->
        stop_classic_queue,
        stop_quorum_queue,
        stop_stream,
+       priority_classic_queue,
+       priority_quorum_queue,
        consumer_priority_classic_queue,
        consumer_priority_quorum_queue,
        single_active_consumer_classic_queue,
        single_active_consumer_quorum_queue,
+       single_active_consumer_priority_quorum_queue,
        single_active_consumer_drain_classic_queue,
        single_active_consumer_drain_quorum_queue,
        detach_requeues_one_session_classic_queue,
@@ -111,8 +114,6 @@ groups() ->
        handshake_timeout,
        credential_expires,
        attach_to_exclusive_queue,
-       priority_classic_queue,
-       priority_quorum_queue,
        dead_letter_headers_exchange,
        dead_letter_reject,
        dead_letter_reject_message_order_classic_queue,
@@ -1963,6 +1964,142 @@ consumer_priority(QType, Config) ->
     {ok, #{message_count := 1}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+single_active_consumer_priority_quorum_queue(Config) ->
+    QType = <<"quorum">>,
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {Connection, Session1, LinkPair} = init(Config),
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType},
+                              <<"x-single-active-consumer">> => true}},
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+
+    %% Send 6 messages.
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session1, <<"test-sender">>, Address),
+    ok = wait_for_credit(Sender),
+    NumMsgs = 6,
+    [begin
+         Bin = integer_to_binary(N),
+         ok = amqp10_client:send_msg(Sender, amqp10_msg:new(Bin, Bin, true))
+     end || N <- lists:seq(1, NumMsgs)],
+    ok = amqp10_client:detach_link(Sender),
+
+    %% The 1st consumer (with default prio 0) will become active.
+    {ok, Recv1} = amqp10_client:attach_receiver_link(
+                    Session1, <<"receiver 1">>, Address, unsettled),
+    receive {amqp10_event, {link, Recv1, attached}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    {ok, Msg1} = amqp10_client:get_msg(Recv1),
+    ?assertEqual([<<"1">>], amqp10_msg:body(Msg1)),
+
+    %% The 2nd consumer should take over thanks to higher prio.
+    {ok, Recv2} = amqp10_client:attach_receiver_link(
+                    Session1, <<"receiver 2">>, Address, unsettled, none, #{},
+                    #{<<"rabbitmq:priority">> => {int, 1}}),
+    receive {amqp10_event, {link, Recv2, attached}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    flush("attched receiver 2"),
+
+    %% To ensure in-order processing and to avoid interrupting the 1st consumer during
+    %% its long running task processing, neither of the 2 consumers should receive more
+    %% messages until the 1st consumer settles all outstanding messages.
+    ?assertEqual({error, timeout}, amqp10_client:get_msg(Recv1, 5)),
+    ?assertEqual({error, timeout}, amqp10_client:get_msg(Recv2, 5)),
+    ok = amqp10_client:accept_msg(Recv1, Msg1),
+    receive {amqp10_msg, R1, Msg2} ->
+                ?assertEqual([<<"2">>], amqp10_msg:body(Msg2)),
+                ?assertEqual(Recv2, R1),
+                ok = amqp10_client:accept_msg(Recv2, Msg2)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+
+    %% Attaching with same prio should not take over.
+    {ok, Session2} = amqp10_client:begin_session_sync(Connection),
+    {ok, Recv3} = amqp10_client:attach_receiver_link(
+                    Session2, <<"receiver 3">>, Address, unsettled, none, #{},
+                    #{<<"rabbitmq:priority">> => {int, 1}}),
+    receive {amqp10_event, {link, Recv3, attached}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ?assertEqual({error, timeout}, amqp10_client:get_msg(Recv3, 5)),
+    ok = end_session_sync(Session2),
+
+    {ok, Recv4} = amqp10_client:attach_receiver_link(
+                    Session1, <<"receiver 4">>, Address, unsettled, none, #{},
+                    #{<<"rabbitmq:priority">> => {int, 1}}),
+    receive {amqp10_event, {link, Recv4, attached}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    {ok, Recv5} = amqp10_client:attach_receiver_link(
+                    Session1, <<"receiver 5">>, Address, unsettled, none, #{},
+                    #{<<"rabbitmq:priority">> => {int, 1}}),
+    receive {amqp10_event, {link, Recv5, attached}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    flush("attched receivers 4 and 5"),
+
+    ok = amqp10_client:flow_link_credit(Recv4, 1, never),
+    ok = amqp10_client:flow_link_credit(Recv5, 2, never),
+
+    %% Stop the active consumer.
+    ok = amqp10_client:detach_link(Recv2),
+    receive {amqp10_event, {link, Recv2, {detached, normal}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% The 5th consumer should become the active one because it is up,
+    %% has highest prio (1), and most credits (2).
+    receive {amqp10_msg, R2, Msg3} ->
+                ?assertEqual([<<"3">>], amqp10_msg:body(Msg3)),
+                ?assertEqual(Recv5, R2),
+                ok = amqp10_client:accept_msg(Recv5, Msg3)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, R3, Msg4} ->
+                ?assertEqual([<<"4">>], amqp10_msg:body(Msg4)),
+                ?assertEqual(Recv5, R3),
+                ok = amqp10_client:accept_msg(Recv5, Msg4)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+
+    %% Stop the active consumer.
+    ok = amqp10_client:detach_link(Recv5),
+    receive {amqp10_event, {link, Recv5, {detached, normal}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% The 4th consumer should become the active one because it is up,
+    %% has highest prio (1), and most credits (1).
+    receive {amqp10_msg, R4, Msg5} ->
+                ?assertEqual([<<"5">>], amqp10_msg:body(Msg5)),
+                ?assertEqual(Recv4, R4),
+                ok = amqp10_client:accept_msg(Recv4, Msg5)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+
+    %% Stop the active consumer.
+    ok = amqp10_client:detach_link(Recv4),
+    receive {amqp10_event, {link, Recv4, {detached, normal}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% The only up consumer left is the 1st one (prio 0) which still has 1 credit.
+    receive {amqp10_msg, R5, Msg6} ->
+                ?assertEqual([<<"6">>], amqp10_msg:body(Msg6)),
+                ?assertEqual(Recv1, R5),
+                ok = amqp10_client:accept_msg(Recv1, Msg6)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+
+    ok = amqp10_client:detach_link(Recv1),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session1),
     ok = amqp10_client:close_connection(Connection).
 
 single_active_consumer_classic_queue(Config) ->
