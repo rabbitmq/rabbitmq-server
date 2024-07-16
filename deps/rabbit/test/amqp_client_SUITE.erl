@@ -300,14 +300,9 @@ reliable_send_receive_with_outcomes_quorum_queue(Config) ->
     reliable_send_receive_with_outcomes(<<"quorum">>, Config).
 
 reliable_send_receive_with_outcomes(QType, Config) ->
-    Outcomes = [
-                accepted,
-                modified,
-                {modified, true, false, #{<<"fruit">> => <<"banana">>}},
-                {modified, false, true, #{}},
+    Outcomes = [accepted,
                 rejected,
-                released
-               ],
+                released],
     [ok = reliable_send_receive(QType, Outcome, Config) || Outcome <- Outcomes].
 
 reliable_send_receive(QType, Outcome, Config) ->
