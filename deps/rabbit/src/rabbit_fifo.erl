@@ -1400,10 +1400,10 @@ cancel_consumer0(Meta, ConsumerKey,
 activate_next_consumer({State, Effects}) ->
     activate_next_consumer(State, Effects).
 
-activate_next_consumer(#?STATE{cfg = #cfg{consumer_strategy = competing}} = State0,
-                       Effects0) ->
-    {State0, Effects0};
-activate_next_consumer(#?STATE{consumers = Cons,
+activate_next_consumer(#?STATE{cfg = #cfg{consumer_strategy = competing}} = State,
+                       Effects) ->
+    {State, Effects};
+activate_next_consumer(#?STATE{consumers = Cons0,
                                waiting_consumers = Waiting0} = State0,
                        Effects0) ->
     %% invariant, the waiting list always need to be sorted by consumers that are
@@ -1416,11 +1416,11 @@ activate_next_consumer(#?STATE{consumers = Cons,
                 undefined
         end,
 
-    case {active_consumer(Cons), NextConsumer} of
+    case {active_consumer(Cons0), NextConsumer} of
         {undefined, {NextCKey, #consumer{cfg = NextCCfg} = NextC}} ->
             Remaining = tl(Waiting0),
             %% TODO: can this happen?
-            Consumer = case maps:get(NextCKey, Cons, undefined) of
+            Consumer = case maps:get(NextCKey, Cons0, undefined) of
                            undefined ->
                                NextC;
                            Existing ->
@@ -1433,7 +1433,7 @@ activate_next_consumer(#?STATE{consumers = Cons,
             ServiceQueue1 = maybe_queue_consumer(NextCKey,
                                                  Consumer,
                                                  ServiceQueue),
-            State = State0#?STATE{consumers = Cons#{NextCKey => Consumer},
+            State = State0#?STATE{consumers = Cons0#{NextCKey => Consumer},
                                   service_queue = ServiceQueue1,
                                   waiting_consumers = Remaining},
             Effects = consumer_update_active_effects(State, Consumer,
@@ -1452,11 +1452,12 @@ activate_next_consumer(#?STATE{consumers = Cons,
             ServiceQueue1 = maybe_queue_consumer(NextCKey,
                                                  Consumer,
                                                  ServiceQueue),
-            State = State0#?STATE{consumers = maps:remove(ActiveCKey,
-                                                          Cons#{NextCKey => Consumer}),
+            Cons1 = Cons0#{NextCKey => Consumer},
+            Cons = maps:remove(ActiveCKey, Cons1),
+            Waiting = add_waiting({ActiveCKey, Active}, Remaining),
+            State = State0#?STATE{consumers = Cons,
                                   service_queue = ServiceQueue1,
-                                  waiting_consumers =
-                                      add_waiting({ActiveCKey, Active}, Remaining)},
+                                  waiting_consumers = Waiting},
             Effects = consumer_update_active_effects(State, Consumer,
                                                      true, single_active,
                                                      Effects0),
@@ -1466,9 +1467,10 @@ activate_next_consumer(#?STATE{consumers = Cons,
           when WaitingPriority > ActivePriority ->
             %% A higher priority consumer has attached but the current one has
             %% pending messages
-            {State0#?STATE{consumers =
-                           Cons#{ActiveCKey => Active#consumer{status = fading}}},
-             Effects0};
+            Cons = maps:update(ActiveCKey,
+                               Active#consumer{status = fading},
+                               Cons0),
+            {State0#?STATE{consumers = Cons}, Effects0};
         _ ->
             %% no activation
             {State0, Effects0}
@@ -1504,10 +1506,10 @@ maybe_return_all(#{system_time := Ts} = Meta, ConsumerKey,
                                  status = cancelled},
                S0), Effects0};
         _ ->
-            {S1, Effects1} = return_all(Meta, S0, Effects0, ConsumerKey, Consumer),
+            {S1, Effects} = return_all(Meta, S0, Effects0, ConsumerKey, Consumer),
             {S1#?STATE{consumers = maps:remove(ConsumerKey, S1#?STATE.consumers),
                        last_active = Ts},
-             Effects1}
+             Effects}
     end.
 
 apply_enqueue(#{index := RaftIdx,
@@ -1743,8 +1745,7 @@ update_header(Key, UpdateFun, Default, ?TUPLE(Size, Expiry))
     update_header(Key, UpdateFun, Default, #{size => Size,
                                              expiry => Expiry});
 update_header(Key, UpdateFun, Default, Header)
-  when is_map(Header) andalso
-       is_map_key(size, Header) ->
+  when is_map_key(size, Header) ->
     maps:update_with(Key, UpdateFun, Default, Header).
 
 get_msg_header(?MSG(_Idx, Header)) ->
@@ -2172,8 +2173,8 @@ update_consumer(Meta, ConsumerKey, {Tag, Pid}, ConsumerMeta,
                 {Life, Mode} = Spec, Priority,
                 #?STATE{cfg = #cfg{consumer_strategy = single_active},
                         consumers = Cons0,
-                        waiting_consumers = Waiting,
-                        service_queue = _ServiceQueue0} = State0) ->
+                        waiting_consumers = Waiting0,
+                        service_queue = _ServiceQueue0} = State) ->
     %% if it is the current active consumer, just update
     %% if it is a cancelled active consumer, add to waiting unless it is the only
     %% one, then merge
@@ -2181,7 +2182,7 @@ update_consumer(Meta, ConsumerKey, {Tag, Pid}, ConsumerMeta,
         {ConsumerKey, #consumer{status = up} = Consumer0} ->
             Consumer = merge_consumer(Meta, Consumer0, ConsumerMeta,
                                       Spec, Priority),
-            {Consumer, update_or_remove_con(Meta, ConsumerKey, Consumer, State0)};
+            {Consumer, update_or_remove_con(Meta, ConsumerKey, Consumer, State)};
         undefined when is_map_key(ConsumerKey, Cons0) ->
             %% there is no active consumer and the current consumer is in the
             %% consumers map and thus must be cancelled, in this case we can just
@@ -2189,7 +2190,7 @@ update_consumer(Meta, ConsumerKey, {Tag, Pid}, ConsumerMeta,
             Consumer0 = maps:get(ConsumerKey, Cons0),
             Consumer = merge_consumer(Meta, Consumer0, ConsumerMeta,
                                       Spec, Priority),
-            {Consumer, update_or_remove_con(Meta, ConsumerKey, Consumer, State0)};
+            {Consumer, update_or_remove_con(Meta, ConsumerKey, Consumer, State)};
         _ ->
             %% add as a new waiting consumer
             Credit = included_credit(Mode),
@@ -2202,9 +2203,8 @@ update_consumer(Meta, ConsumerKey, {Tag, Pid}, ConsumerMeta,
                                                      credit_mode = Mode},
                                  credit = Credit,
                                  delivery_count = DeliveryCount},
-            {Consumer,
-             State0#?STATE{waiting_consumers =
-                           add_waiting({ConsumerKey, Consumer}, Waiting)}}
+            Waiting = add_waiting({ConsumerKey, Consumer}, Waiting0),
+            {Consumer, State#?STATE{waiting_consumers = Waiting}}
     end.
 
 add_waiting({Key, _} = New, Waiting) ->
@@ -2496,9 +2496,7 @@ message_size(Msg) ->
         false ->
             %% probably only hit this for testing so ok to use erts_debug
             {0, erts_debug:size(Msg)}
-
     end.
-
 
 all_nodes(#?STATE{consumers = Cons0,
                   enqueuers = Enqs0,
@@ -2577,9 +2575,10 @@ get_priority(#{priority := Priority}) ->
 get_priority(#{args := Args}) ->
     %% fallback, v3 option
     case rabbit_misc:table_lookup(Args, <<"x-priority">>) of
-        {_Key, Value} ->
+        {_Type, Value} ->
             Value;
-        _ -> 0
+        _ ->
+            0
     end;
 get_priority(_) ->
     0.
@@ -2712,7 +2711,6 @@ consumer_key_from_id(ConsumerId, {_, _, I}) ->
     consumer_key_from_id(ConsumerId, maps:next(I));
 consumer_key_from_id(_ConsumerId, none) ->
     error.
-
 
 consumer_cancel_info(ConsumerKey, #?STATE{consumers = Consumers}) ->
     case Consumers of

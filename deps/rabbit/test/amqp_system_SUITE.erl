@@ -69,11 +69,16 @@ init_per_group(Group, Config) ->
         dotnet -> fun build_dotnet_test_project/1;
         java   -> fun build_maven_test_project/1
     end,
-    rabbit_ct_helpers:run_setup_steps(Config1, [
-        GroupSetupStep
-      ] ++
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    Config2 = rabbit_ct_helpers:run_setup_steps(
+                Config1,
+                [GroupSetupStep] ++
+                rabbit_ct_broker_helpers:setup_steps() ++
+                rabbit_ct_client_helpers:setup_steps()),
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(
+           Config2, message_containers_store_amqp_v1),
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(
+           Config2, quorum_queues_v4),
+    Config2.
 
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
@@ -81,12 +86,6 @@ end_per_group(_, Config) ->
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config) ->
-    enable_feature_flags(Config,
-                         [
-                          message_containers_store_amqp_v1,
-                          credit_api_v2,
-                          quorum_queues_v4
-                         ]),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
@@ -270,16 +269,6 @@ run_java_test(Config, Class) ->
       ],
       [{cd, TestProjectDir}]),
     {ok, _} = Ret.
-
-
-enable_feature_flags(Config, Flags) ->
-    [begin
-         case rabbit_ct_broker_helpers:enable_feature_flag(Config, Flag) of
-             ok -> ok;
-             _ ->
-                 throw({skip, "feature flag ~s could not be enabled"})
-         end
-     end || Flag <- Flags].
 
 declare_queue(Config, Name, Type) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config),

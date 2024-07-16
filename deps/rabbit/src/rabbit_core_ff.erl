@@ -195,7 +195,8 @@
 
 -rabbit_feature_flag(
    {quorum_queues_v4,
-    #{desc => "Unlocks QQ v4 goodies",
+    #{desc => "Unlocks quorum queue v4 features",
+      doc_url => "https://github.com/rabbitmq/rabbitmq-server/pull/10637",
       stability => stable,
       depends_on => [quorum_queue,
                      credit_api_v2]

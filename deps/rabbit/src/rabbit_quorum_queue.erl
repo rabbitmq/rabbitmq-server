@@ -886,11 +886,11 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                    _ ->
                        0
                end,
-
     Priority = case rabbit_misc:table_lookup(Args, <<"x-priority">>) of
                    {_Key, Value} ->
                        Value;
-                   _ -> 0
+                   _ ->
+                       0
                end,
     ConsumerMeta = #{ack => AckRequired,
                      prefetch => Prefetch,

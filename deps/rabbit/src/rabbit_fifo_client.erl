@@ -207,9 +207,9 @@ dequeue(QueueName, ConsumerTag, Settlement,
         {ok, {dequeue, empty}, Leader} ->
             {empty, State0#state{leader = Leader}};
         {ok, {dequeue, {MsgId, {MsgHeader, Msg0}}, MsgsReady}, Leader} ->
-            {Msg, IsDelivered} = add_delivery_count_header(Msg0, MsgHeader),
+            {Msg, Redelivered} = add_delivery_count_header(Msg0, MsgHeader),
             {ok, MsgsReady,
-             {QueueName, qref(Leader), MsgId, IsDelivered, Msg},
+             {QueueName, qref(Leader), MsgId, Redelivered, Msg},
              State0#state{leader = Leader}};
         {ok, {error, _} = Err, _Leader} ->
             Err;
@@ -217,22 +217,22 @@ dequeue(QueueName, ConsumerTag, Settlement,
             Err
     end.
 
-add_delivery_count_header(Msg, #{delivery_count := DelCount} = Header)
+add_delivery_count_header(Msg0, #{delivery_count := DelCount} = Header)
   when is_integer(DelCount) ->
-    {case mc:is(Msg) of
-        true ->
-             %% the "delivery-count" header in the AMQP spec does not include
-             %% returns (released outcomes)
-             AmqpDelCount = DelCount - maps:get(return_count, Header, 0),
-             mc:set_annotation(delivery_count, AmqpDelCount,
-                               mc:set_annotation(<<"x-delivery-count">>,
-                                                 DelCount, Msg));
-        _ ->
-            Msg
-    end, DelCount > 0};
+    Msg = case mc:is(Msg0) of
+              true ->
+                  Msg1 = mc:set_annotation(<<"x-delivery-count">>, DelCount, Msg0),
+                  %% the "delivery-count" header in the AMQP spec does not include
+                  %% returns (released outcomes)
+                  AmqpDelCount = DelCount - maps:get(return_count, Header, 0),
+                  mc:set_annotation(delivery_count, AmqpDelCount, Msg1);
+              false ->
+                  Msg0
+          end,
+    Redelivered = DelCount > 0,
+    {Msg, Redelivered};
 add_delivery_count_header(Msg, _Header) ->
     {Msg, false}.
-
 
 %% @doc Settle a message. Permanently removes message from the queue.
 %% @param ConsumerTag the tag uniquely identifying the consumer.
