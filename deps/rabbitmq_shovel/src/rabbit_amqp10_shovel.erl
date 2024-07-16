@@ -178,7 +178,8 @@ dest_endpoint(#{shovel_type := dynamic,
 handle_source({amqp10_msg, _LinkRef, Msg}, State) ->
     Tag = amqp10_msg:delivery_id(Msg),
     Payload = amqp10_msg:body_bin(Msg),
-    rabbit_shovel_behaviour:forward(Tag, #{}, Payload, State);
+    Props = props_to_map(Msg),
+    rabbit_shovel_behaviour:forward(Tag, Props, Payload, State);
 handle_source({amqp10_event, {connection, Conn, opened}},
               State = #{source := #{current := #{conn := Conn}}}) ->
     State;
@@ -382,7 +383,9 @@ add_forward_headers(_, Msg) -> Msg.
 set_message_properties(Props, Msg) ->
     %% this is effectively special handling properties from amqp 0.9.1
     maps:fold(
-      fun(content_type, Ct, M) ->
+      fun(_Key, undefined, M) ->
+              M;
+         (content_type, Ct, M) ->
               amqp10_msg:set_properties(
                 #{content_type => to_binary(Ct)}, M);
          (content_encoding, Ct, M) ->
@@ -402,8 +405,8 @@ set_message_properties(Props, Msg) ->
          (message_id, Ct, M) ->
               amqp10_msg:set_properties(#{message_id => to_binary(Ct)}, M);
          (timestamp, Ct, M) ->
-              amqp10_msg:set_properties(#{creation_time => Ct}, M);
-         (user_id, Ct, M) ->
+              amqp10_msg:set_properties(#{creation_time => timestamp_091_to_10(Ct)}, M);
+         (user_id, Ct, M) when Ct =/= undefined ->
               amqp10_msg:set_properties(#{user_id => Ct}, M);
          (headers, Headers0, M) when is_list(Headers0) ->
               %% AMPQ 0.9.1 are added as applicatin properties
@@ -445,3 +448,63 @@ is_amqp10_compat(T) ->
     %% TODO: not all lists are compatible
     is_list(T) orelse
     is_boolean(T).
+
+to_amqp091_compatible_value(Key, Value) when is_binary(Value) ->
+    {Key, longstr, Value};
+to_amqp091_compatible_value(Key, Value) when is_integer(Value) ->
+    {Key, long, Value};
+to_amqp091_compatible_value(Key, Value) when is_float(Value) ->
+    {Key, double, Value};
+to_amqp091_compatible_value(Key, true) ->
+    {Key, bool, true};
+to_amqp091_compatible_value(Key, false) ->
+    {Key, bool, false};
+to_amqp091_compatible_value(_Key, _Value) ->
+    undefined.
+
+delivery_mode(Headers) ->
+    case maps:get(durable, Headers, undefined) of
+        undefined -> undefined;
+        true -> 2;
+        false -> 1
+    end.
+
+timestamp_10_to_091(T) when is_integer(T) ->
+    trunc(T / 1000);
+timestamp_10_to_091(_) ->
+    undefined.
+
+timestamp_091_to_10(T) when is_integer(T) ->
+    T * 1000;
+timestamp_091_to_10(_Value) ->
+    undefined.
+
+ttl(T) when is_integer(T) ->
+    erlang:integer_to_binary(T);
+ttl(_T)  -> undefined.
+
+props_to_map(Msg) ->
+    AppProps = amqp10_msg:application_properties(Msg),
+    AppProps091Headers = lists:filtermap(fun({K, V}) ->
+                                        case to_amqp091_compatible_value(K, V) of
+                                            undefined ->
+                                                false;
+                                            Value ->
+                                                {true, Value}
+                                        end
+                                end, maps:to_list(AppProps)),
+    InProps = amqp10_msg:properties(Msg),
+    Headers = amqp10_msg:headers(Msg),
+    #{
+        headers => AppProps091Headers,
+        content_type => maps:get(content_type, InProps, undefined),
+        content_encoding => maps:get(content_encoding, InProps, undefined),
+        delivery_mode => delivery_mode(Headers),
+        priority => maps:get(priority, Headers, undefined),
+        correlation_id => maps:get(correlation_id, InProps, undefined),
+        reply_to => maps:get(reply_to, InProps, undefined),
+        expiration => ttl(maps:get(ttl, Headers, undefined)),
+        message_id => maps:get(message_id, InProps, undefined),
+        timestamp => timestamp_10_to_091(maps:get(creation_time, InProps, undefined)),
+        user_id => maps:get(user_id, InProps, undefined)
+    }.

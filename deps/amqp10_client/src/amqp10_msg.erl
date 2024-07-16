@@ -306,7 +306,7 @@ set_headers(Headers, #amqp10_msg{header = Current} = Msg) ->
     H = maps:fold(fun(durable, V, Acc) ->
                           Acc#'v1_0.header'{durable = V};
                      (priority, V, Acc) ->
-                          Acc#'v1_0.header'{priority = {uint, V}};
+                          Acc#'v1_0.header'{priority = {ubyte, V}};
                      (first_acquirer, V, Acc) ->
                           Acc#'v1_0.header'{first_acquirer = V};
                      (ttl, V, Acc) ->
@@ -325,8 +325,8 @@ set_properties(Props, #amqp10_msg{properties = Current} = Msg) ->
     P = maps:fold(fun(message_id, V, Acc) when is_binary(V) ->
                           % message_id can be any type but we restrict it here
                           Acc#'v1_0.properties'{message_id = utf8(V)};
-                     (user_id, V, Acc) ->
-                          Acc#'v1_0.properties'{user_id = utf8(V)};
+                     (user_id, V, Acc) when is_binary(V) orelse is_list(V) ->
+                          Acc#'v1_0.properties'{user_id = binary(V)};
                      (to, V, Acc) ->
                           Acc#'v1_0.properties'{to = utf8(V)};
                      (subject, V, Acc) ->
@@ -407,8 +407,12 @@ wrap_ap_value(true) ->
     {boolean, true};
 wrap_ap_value(false) ->
     {boolean, false};
-wrap_ap_value(V) when is_integer(V) ->
+wrap_ap_value(V) when is_integer(V) andalso V >= 0 ->
     {uint, V};
+wrap_ap_value(V) when is_integer(V) andalso V < 0 ->
+    {int, V};
+wrap_ap_value(F) when is_float(F) ->
+    {double, F};
 wrap_ap_value(V) when is_binary(V) ->
     utf8(V);
 wrap_ap_value(V) when is_list(V) ->
@@ -449,6 +453,8 @@ utf8(V) -> amqp10_client_types:utf8(V).
 sym(B) when is_list(B) -> {symbol, list_to_binary(B)};
 sym(B) when is_binary(B) -> {symbol, B}.
 uint(B) -> {uint, B}.
+binary(B) when is_binary(B) -> {binary, B};
+binary(B) when is_list(B) -> {binary, erlang:list_to_binary(B)}.
 
 has_value(undefined) -> false;
 has_value(_) -> true.
