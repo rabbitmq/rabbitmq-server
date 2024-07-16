@@ -886,6 +886,7 @@ remove_node_if_mnesia_running(Node) ->
             %% change being propagated to all nodes
             case mnesia:del_table_copy(schema, Node) of
                 {atomic, ok} ->
+                    rabbit_node_monitor:notify_left_cluster(Node),
                     rabbit_amqqueue:forget_all_durable(Node),
                     ok;
                 {aborted, Reason} ->
