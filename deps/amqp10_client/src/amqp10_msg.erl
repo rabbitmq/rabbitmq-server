@@ -340,8 +340,6 @@ set_properties(Props, #amqp10_msg{properties = Current} = Msg) ->
                      (message_id, V, Acc) when is_binary(V) ->
                           %% backward compat clause
                           Acc#'v1_0.properties'{message_id = utf8(V)};
-                     (user_id, V, Acc) when is_binary(V) ->
-                          Acc#'v1_0.properties'{user_id = {binary, V}};
                      (user_id, V, Acc) when is_binary(V) orelse is_list(V) ->
                           Acc#'v1_0.properties'{user_id = binary(V)};
                      (to, V, Acc) ->
