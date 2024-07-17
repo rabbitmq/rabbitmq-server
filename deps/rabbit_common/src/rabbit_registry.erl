@@ -114,7 +114,13 @@ internal_register(Class, TypeName, ModuleName)
     case sanity_check_module(ClassModule, ModuleName) of
         ok ->
             true = ets:insert(?ETS_NAME, RegArg),
-            ClassModule:added_to_rabbit_registry(Type, ModuleName);
+            case ClassModule:added_to_rabbit_registry(Type, ModuleName) of
+                ok ->
+                    ok;
+                {error, _} = Err ->
+                    true = ets:delete(?ETS_NAME, RegArg),
+                    Err
+            end;
         {error, _} = Err ->
             Err
     end.
@@ -122,9 +128,26 @@ internal_register(Class, TypeName, ModuleName)
 internal_unregister(Class, TypeName) ->
     ClassModule = class_module(Class),
     Type        = internal_binary_to_type(TypeName),
-    UnregArg    = {Class, Type},
-    true = ets:delete(?ETS_NAME, UnregArg),
-    ClassModule:removed_from_rabbit_registry(Type).
+    Entry = case ets:lookup(?ETS_NAME, {Class, Type}) of
+                [Record] ->
+                    true = ets:delete_object(?ETS_NAME, Record),
+                    Record;
+                [] ->
+                    undefined
+            end,
+    case ClassModule:removed_from_rabbit_registry(Type) of
+        ok ->
+            ok;
+        {error, _} = Err ->
+            case Entry of
+                undefined ->
+                    ok;
+                _ ->
+                    true = ets:insert(?ETS_NAME, Entry),
+                    ok
+            end,
+            Err
+    end.
 
 sanity_check_module(ClassModule, Module) ->
     case catch lists:member(ClassModule,
