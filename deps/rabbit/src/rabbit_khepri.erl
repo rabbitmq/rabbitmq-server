@@ -252,7 +252,7 @@ setup(_) ->
     case khepri:start(?RA_SYSTEM, RaServerConfig) of
         {ok, ?STORE_ID} ->
             wait_for_leader(),
-            register_projections(),
+            wait_for_register_projections(),
             ?LOG_DEBUG(
                "Khepri-based " ?RA_FRIENDLY_NAME " ready",
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
@@ -293,6 +293,21 @@ wait_for_leader(Timeout, Retries) ->
             wait_for_leader(Timeout, Retries -1);
         {error, Reason} ->
             throw(Reason)
+    end.
+
+wait_for_register_projections() ->
+    wait_for_register_projections(retry_timeout(), retry_limit()).
+
+wait_for_register_projections(_Timeout, 0) ->
+    exit(timeout_waiting_for_khepri_projections);
+wait_for_register_projections(Timeout, Retries) ->
+    rabbit_log:info("Waiting for Khepri projections for ~tp ms, ~tp retries left",
+                    [Timeout, Retries - 1]),
+    try
+        register_projections()
+    catch
+        throw : {timeout, _ServerId} ->
+            wait_for_register_projections(Timeout, Retries -1)
     end.
 
 %% @private
