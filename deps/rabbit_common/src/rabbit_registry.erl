@@ -15,6 +15,7 @@
          code_change/3]).
 
 -export([register/3, unregister/2,
+         register_many/2, unregister_many/1,
          binary_to_type/1, lookup_module/2, lookup_all/1]).
 
 -define(SERVER, ?MODULE).
@@ -29,15 +30,46 @@ start_link() ->
 
 %%---------------------------------------------------------------------------
 
--spec register(atom(), binary(), atom()) -> 'ok'.
+-spec register(Class, TypeName, ModuleName) -> Ret when
+      Class :: atom(),
+      TypeName :: binary(),
+      ModuleName :: module(),
+      Ret :: ok.
 
 register(Class, TypeName, ModuleName) ->
     gen_server:call(?SERVER, {register, Class, TypeName, ModuleName}, infinity).
 
--spec unregister(atom(), binary()) -> 'ok'.
+-spec register_many(Classes, ModuleName) -> Ret when
+      Classes :: [{atom(), binary()}],
+      ModuleName :: module(),
+      Ret :: ok.
+%% @doc A wrapper around `register/3' which short-circuits and returns an
+%% error if any class cannot be registered.
+
+register_many(Classes, ModuleName) ->
+    rabbit_misc:for_each_while_ok(
+      fun({Class, TypeName}) ->
+              register(Class, TypeName, ModuleName)
+      end, Classes).
+
+-spec unregister(Class, TypeName) -> Ret when
+      Class :: atom(),
+      TypeName :: binary(),
+      Ret :: ok.
 
 unregister(Class, TypeName) ->
     gen_server:call(?SERVER, {unregister, Class, TypeName}, infinity).
+
+-spec unregister_many(Classes) -> Ret
+    when
+      Classes :: [{atom(), binary()}],
+      Ret :: ok.
+%% @doc A wrapper around `unregister/2' which short-circuits and returns an
+%% error if any class cannot be unregistered.
+
+unregister_many(Classes) ->
+    rabbit_misc:for_each_while_ok(
+      fun({Class, TypeName}) -> unregister(Class, TypeName) end, Classes).
 
 -spec binary_to_type(binary()) -> atom() | rabbit_types:error('not_found').
 %% This is used with user-supplied arguments (e.g., on exchange
