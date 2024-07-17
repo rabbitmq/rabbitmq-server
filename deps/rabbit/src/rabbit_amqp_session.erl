@@ -1861,20 +1861,21 @@ settle_op_from_outcome(#'v1_0.rejected'{}) ->
     discard;
 settle_op_from_outcome(#'v1_0.released'{}) ->
     requeue;
-%% Keep the same Modified behaviour as in RabbitMQ 3.x
-settle_op_from_outcome(#'v1_0.modified'{delivery_failed = true,
-                                        undeliverable_here = UndelHere})
-  when UndelHere =/= true ->
-    requeue;
-settle_op_from_outcome(#'v1_0.modified'{}) ->
-    %% If delivery_failed is not true, we can't increment its delivery_count.
-    %% So, we will have to reject without requeue.
-    %%
-    %% If undeliverable_here is true, this is not quite correct because
-    %% undeliverable_here refers to the link, and not the message in general.
-    %% However, we cannot filter messages from being assigned to individual consumers.
-    %% That's why we will have to reject it without requeue.
+
+%% RabbitMQ does not support any of the modified outcome fields correctly.
+%% However, we still allow the client to settle with the modified outcome
+%% because some client libraries such as Apache QPid make use of it:
+%% https://github.com/apache/qpid-jms/blob/90eb60f59cb59b7b9ad8363ee8a843d6903b8e77/qpid-jms-client/src/main/java/org/apache/qpid/jms/JmsMessageConsumer.java#L464
+%% In such cases, it's better when RabbitMQ does not end the session.
+%% See https://github.com/rabbitmq/rabbitmq-server/issues/6121
+settle_op_from_outcome(#'v1_0.modified'{undeliverable_here = true}) ->
+    %% This is not quite correct because undeliverable_here refers to the link,
+    %% and not the message in general. However, RabbitMQ cannot filter messages from
+    %% being assigned to individual consumers. That's why we discard.
     discard;
+settle_op_from_outcome(#'v1_0.modified'{}) ->
+    requeue;
+
 settle_op_from_outcome(Outcome) ->
     protocol_error(
       ?V_1_0_AMQP_ERROR_INVALID_FIELD,

@@ -41,6 +41,7 @@ groups() ->
       [
        reliable_send_receive_with_outcomes_classic_queue,
        reliable_send_receive_with_outcomes_quorum_queue,
+       modified,
        sender_settle_mode_unsettled,
        sender_settle_mode_unsettled_fanout,
        sender_settle_mode_mixed,
@@ -401,6 +402,56 @@ reliable_send_receive(QType, Outcome, Config) ->
     ok = delete_queue(Session2, QName),
     ok = end_session_sync(Session2),
     ok = amqp10_client:close_connection(Connection2).
+
+%% This test case doesn't expect the correct AMQP spec behavivour.
+%% We know that RabbitMQ doesn't implement the modified outcome correctly.
+%% Here, we test RabbitMQ's workaround behaviour:
+%% RabbitMQ discards if undeliverable-here is true. Otherwise, RabbitMQ requeues.
+modified(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair, QName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+
+    Msg1 = amqp10_msg:new(<<"tag1">>, <<"m1">>, true),
+    Msg2 = amqp10_msg:new(<<"tag2">>, <<"m2">>, true),
+    ok = amqp10_client:send_msg(Sender, Msg1),
+    ok = amqp10_client:send_msg(Sender, Msg2),
+    ok = amqp10_client:detach_link(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, Address, unsettled),
+
+    {ok, M1} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(M1)),
+    ok = amqp10_client:settle_msg(Receiver, M1, {modified, false, _UndeliverableHere = true, #{}}),
+
+    {ok, M2a} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(M2a)),
+    ok = amqp10_client:settle_msg(Receiver, M2a, {modified, false, false, #{}}),
+
+    {ok, M2b} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(M2b)),
+    ok = amqp10_client:settle_msg(Receiver, M2b, {modified, true, false, #{}}),
+
+    {ok, M2c} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(M2c)),
+    ok = amqp10_client:settle_msg(Receiver, M2c, {modified, true, false, #{<<"key">> => <<"val">>}}),
+
+    {ok, M2d} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(M2d)),
+    ?assertEqual(0, amqp10_msg:header(delivery_count, M2d)),
+    ok = amqp10_client:settle_msg(Receiver, M2d, modified),
+
+    ok = amqp10_client:detach_link(Receiver),
+    ?assertMatch({ok, #{message_count := 1}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
 
 %% Tests that confirmations are returned correctly
 %% when sending many messages async to a quorum queue.
