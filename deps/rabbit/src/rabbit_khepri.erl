@@ -306,7 +306,7 @@ wait_for_register_projections(Timeout, Retries) ->
     try
         register_projections()
     catch
-        throw : {timeout, _ServerId} ->
+        throw : timeout ->
             wait_for_register_projections(Timeout, Retries -1)
     end.
 
