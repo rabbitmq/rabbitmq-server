@@ -89,6 +89,7 @@
          maps_put_falsy/3
         ]).
 -export([remote_sup_child/2]).
+-export([for_each_while_ok/2]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -1632,3 +1633,26 @@ remote_sup_child(Node, Sup) ->
         []                              -> {error, no_child};
         {badrpc, {'EXIT', {noproc, _}}} -> {error, no_sup}
     end.
+
+-spec for_each_while_ok(ForEachFun, List) -> Ret
+    when
+      ForEachFun :: fun((Element) -> ok | {error, ErrReason}),
+      ErrReason :: any(),
+      List :: list(Element),
+      Element :: any(),
+      Ret :: ok | {error, ErrReason}.
+%% @doc Calls `ForEachFun' on each element of the given `List',
+%% short-circuiting if `ForEachFun' errors.
+%%
+%% @returns the first `{error, Reason}' tuple returned by `ForEachFun' or `ok'
+%% if `ForEachFun' only returns `ok'.
+
+for_each_while_ok(Fun, [Elem | Rest]) ->
+    case Fun(Elem) of
+        ok ->
+            for_each_while_ok(Fun, Rest);
+        {error, _} = Error ->
+            Error
+    end;
+for_each_while_ok(_, []) ->
+    ok.
