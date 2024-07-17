@@ -9,6 +9,9 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
+
+-compile(nowarn_export_all).
 -compile(export_all).
 
 all() ->
@@ -305,29 +308,35 @@ message_prop_conversion_no_props(Config) ->
                 end,
                 amqp10_client:detach_link(Sender),
                 Channel = rabbit_ct_client_helpers:open_channel(Config),
-                {#'basic.get_ok'{}, #amqp_msg{payload = ReceivedPayload, props = #'P_basic'{
-                    content_type = undefined,
-                    content_encoding = undefined,
-                    headers = ReceivedHeaders,
-                    delivery_mode = ReceivedDeliveryMode,
-                    priority = ReceivedPriority,
-                    correlation_id = undefined,
-                    reply_to = undefined,
-                    expiration = undefined,
-                    message_id = undefined,
-                    timestamp = undefined,
-                    type = undefined,
-                    user_id = undefined,
-                    app_id = undefined,
-                    cluster_id = ReceivedClusterId
-                }}} = amqp_channel:call(Channel, #'basic.get'{queue = Dest, no_ack = true}),
+                {#'basic.get_ok'{},
+                 #amqp_msg{payload = ReceivedPayload,
+                           props = #'P_basic'{
+                                      content_type = undefined,
+                                      content_encoding = undefined,
+                                      headers = ReceivedHeaders,
+                                      delivery_mode = ReceivedDeliveryMode,
+                                      priority = ReceivedPriority,
+                                      correlation_id = undefined,
+                                      reply_to = undefined,
+                                      expiration = undefined,
+                                      message_id = undefined,
+                                      timestamp = undefined,
+                                      type = undefined,
+                                      user_id = undefined,
+                                      app_id = undefined,
+                                      cluster_id = ReceivedClusterId
+                }}} = amqp_channel:call(Channel, #'basic.get'{queue = Dest,
+                                                              no_ack = true}),
 
                 ?assertEqual(<<"payload">>, ReceivedPayload),
-                ?assertEqual(1, ReceivedDeliveryMode),
+                %% in 4.0 the default durability is durable=true for AMQP
+                %% messages
+                ?assertEqual(2, ReceivedDeliveryMode),
                 ?assertEqual(<<"x">>, ReceivedClusterId),
                 ?assertEqual(4, ReceivedPriority),
 
-                ?assertNotEqual(undefined, rabbit_misc:table_lookup(ReceivedHeaders, <<"x-shovelled">>)),
+                ?assertNotEqual(undefined, rabbit_misc:table_lookup(ReceivedHeaders,
+                                                                    <<"x-shovelled">>)),
 
                 ok
     end).
