@@ -20,31 +20,31 @@
 -define(SERVER, ?MODULE).
 -define(ETS_NAME, ?MODULE).
 
--spec start_link() -> rabbit_types:ok_pid_or_error().
--spec register(atom(), binary(), atom()) -> 'ok'.
--spec unregister(atom(), binary()) -> 'ok'.
--spec binary_to_type(binary()) -> atom() | rabbit_types:error('not_found').
--spec lookup_module(atom(), atom()) ->
-          rabbit_types:ok_or_error2(atom(), 'not_found').
--spec lookup_all(atom()) -> [{atom(), atom()}].
-
 %%---------------------------------------------------------------------------
+
+-spec start_link() -> rabbit_types:ok_pid_or_error().
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %%---------------------------------------------------------------------------
 
+-spec register(atom(), binary(), atom()) -> 'ok'.
+
 register(Class, TypeName, ModuleName) ->
     gen_server:call(?SERVER, {register, Class, TypeName, ModuleName}, infinity).
+
+-spec unregister(atom(), binary()) -> 'ok'.
 
 unregister(Class, TypeName) ->
     gen_server:call(?SERVER, {unregister, Class, TypeName}, infinity).
 
+-spec binary_to_type(binary()) -> atom() | rabbit_types:error('not_found').
 %% This is used with user-supplied arguments (e.g., on exchange
 %% declare), so we restrict it to existing atoms only.  This means it
 %% can throw a badarg, indicating that the type cannot have been
 %% registered.
+
 binary_to_type(TypeBin) when is_binary(TypeBin) ->
     case catch binary_to_existing_atom(TypeBin) of
         {'EXIT', {badarg, _}} ->
@@ -53,6 +53,9 @@ binary_to_type(TypeBin) when is_binary(TypeBin) ->
             TypeAtom
     end.
 
+-spec lookup_module(atom(), atom()) ->
+          rabbit_types:ok_or_error2(atom(), 'not_found').
+
 lookup_module(Class, T) when is_atom(T) ->
     case ets:lookup(?ETS_NAME, {Class, T}) of
         [{_, Module}] ->
@@ -60,6 +63,8 @@ lookup_module(Class, T) when is_atom(T) ->
         [] ->
             {error, not_found}
     end.
+
+-spec lookup_all(atom()) -> [{atom(), atom()}].
 
 lookup_all(Class) ->
     [{K, V} || [K, V] <- ets:match(?ETS_NAME, {{Class, '$1'}, '$2'})].
