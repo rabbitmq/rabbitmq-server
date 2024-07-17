@@ -1819,7 +1819,7 @@ expand(Ops, Config, EnqFun) ->
                      _ ->
                          InitConfig0
                  end,
-    IsV4 = rabbit_feature_flags:is_enabled(quorum_queues_v4),
+    IsV4 = rabbit_feature_flags:is_enabled('rabbitmq_4.0.0'),
     T = #t{state = rabbit_fifo:init(InitConfig),
            enq_body_fun = EnqFun,
            config = Config,

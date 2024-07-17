@@ -46,7 +46,7 @@
                    % status = up :: up | cancelled,
                    last_msg_id :: seq() | -1 | undefined,
                    ack = false :: boolean(),
-                   %% Remove this field when feature flag credit_api_v2 becomes required.
+                   %% Remove this field when feature flag rabbitmq_4.0.0 becomes required.
                    delivery_count :: {credit_api_v1, rabbit_queue_type:delivery_count()} |
                                      credit_api_v2
                   }).
@@ -734,7 +734,7 @@ maybe_add_action({multi, Actions}, Acc0, State0) ->
                 end, {Acc0, State0}, Actions);
 maybe_add_action({send_drained, {Tag, Credit}}, Acc, State0) ->
     %% This function clause should be deleted when
-    %% feature flag credit_api_v2 becomes required.
+    %% feature flag rabbitmq_4.0.0 becomes required.
     State = add_delivery_count(Credit, Tag, State0),
     Action = {credit_reply_v1, Tag, Credit, _Avail = 0, _Drain = true},
     {[Action | Acc], State};

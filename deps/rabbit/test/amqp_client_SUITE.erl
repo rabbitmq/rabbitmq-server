@@ -214,7 +214,7 @@ init_per_testcase(T, Config)
        T =:= drain_many_quorum_queue orelse
        T =:= timed_get_quorum_queue orelse
        T =:= available_messages_quorum_queue ->
-    case rpc(Config, rabbit_feature_flags, is_enabled, [credit_api_v2]) of
+    case rpc(Config, rabbit_feature_flags, is_enabled, ['rabbitmq_4.0.0']) of
         true ->
             rabbit_ct_helpers:testcase_started(Config, T);
         false ->
@@ -222,7 +222,7 @@ init_per_testcase(T, Config)
              "bug that they reply with send_drained before delivering the message."}
     end;
 init_per_testcase(single_active_consumer_drain_quorum_queue = T, Config) ->
-    case rpc(Config, rabbit_feature_flags, is_enabled, [credit_api_v2]) of
+    case rpc(Config, rabbit_feature_flags, is_enabled, ['rabbitmq_4.0.0']) of
         true ->
             rabbit_ct_helpers:testcase_started(Config, T);
         false ->
@@ -238,47 +238,47 @@ init_per_testcase(T, Config)
     %% The new RabbitMQ internal flow control
     %% writer proc <- session proc <- queue proc
     %% is only available with credit API v2.
-    case rpc(Config, rabbit_feature_flags, is_enabled, [credit_api_v2]) of
+    case rpc(Config, rabbit_feature_flags, is_enabled, ['rabbitmq_4.0.0']) of
         true ->
             rabbit_ct_helpers:testcase_started(Config, T);
         false ->
-            {skip, "Feature flag credit_api_v2 is disabled"}
+            {skip, "Feature flag rabbitmq_4.0.0 is disabled"}
     end;
 init_per_testcase(T, Config)
   when T =:= detach_requeues_one_session_classic_queue orelse
        T =:= detach_requeues_drop_head_classic_queue orelse
        T =:= detach_requeues_two_connections_classic_queue orelse
        T =:= single_active_consumer_classic_queue ->
-    %% Cancel API v2 reuses feature flag credit_api_v2.
+    %% Cancel API v2 reuses feature flag rabbitmq_4.0.0.
     %% In 3.13, with cancel API v1, when a receiver detaches with unacked messages, these messages
     %% will remain unacked and unacked message state will be left behind in the server session
     %% process state.
     %% In contrast, cancel API v2 in 4.x will requeue any unacked messages if the receiver detaches.
     %% We skip the single active consumer tests because these test cases assume that detaching a
     %% receiver link will requeue unacked messages.
-    case rpc(Config, rabbit_feature_flags, is_enabled, [credit_api_v2]) of
+    case rpc(Config, rabbit_feature_flags, is_enabled, ['rabbitmq_4.0.0']) of
         true ->
             rabbit_ct_helpers:testcase_started(Config, T);
         false ->
-            {skip, "Cancel API v2 is disabled due to feature flag credit_api_v2 being disabled."}
+            {skip, "Cancel API v2 is disabled due to feature flag rabbitmq_4.0.0 being disabled."}
     end;
 init_per_testcase(T, Config)
   when T =:= detach_requeues_one_session_quorum_queue orelse
        T =:= single_active_consumer_quorum_queue orelse
        T =:= detach_requeues_two_connections_quorum_queue ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queues_v4) of
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
         ok ->
             rabbit_ct_helpers:testcase_started(Config, T);
         {skip, _} ->
-            {skip, "Feature flag quorum_queues_v4 enables the consumer removal API"}
+            {skip, "Feature flag rabbitmq_4.0.0 enables the consumer removal API"}
     end;
 init_per_testcase(T = immutable_bare_message, Config) ->
-    case rpc(Config, rabbit_feature_flags, is_enabled, [message_containers_store_amqp_v1]) of
+    case rpc(Config, rabbit_feature_flags, is_enabled, ['rabbitmq_4.0.0']) of
         true ->
             rabbit_ct_helpers:testcase_started(Config, T);
         false ->
             {skip, "RabbitMQ is known to wrongfully modify the bare message with feature "
-             "flag message_containers_store_amqp_v1 disabled"}
+             "flag rabbitmq_4.0.0 disabled"}
     end;
 init_per_testcase(T = dead_letter_into_stream, Config) ->
     case rpc(Config, rabbit_feature_flags, is_enabled, [message_containers_deaths_v2]) of
@@ -3106,7 +3106,7 @@ async_notify_settled_stream(Config) ->
     async_notify(settled, <<"stream">>, Config).
 
 async_notify_unsettled_classic_queue(Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, credit_api_v2) of
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
         ok ->
             async_notify(unsettled, <<"classic">>, Config);
         {skip, _} ->
@@ -3345,7 +3345,7 @@ queue_and_client_different_nodes(QueueLeaderNode, ClientNode, QueueType, Config)
            true,
            accepted),
 
-    case rpc(Config, rabbit_feature_flags, is_enabled, [credit_api_v2]) of
+    case rpc(Config, rabbit_feature_flags, is_enabled, ['rabbitmq_4.0.0']) of
         true ->
             %% Send another message and drain.
             Tag = <<"tag">>,

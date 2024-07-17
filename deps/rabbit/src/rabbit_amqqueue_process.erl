@@ -1516,7 +1516,7 @@ handle_cast({credit, SessionPid, CTag, Credit, Drain},
                backing_queue = BQ,
                backing_queue_state = BQS0} = State) ->
     %% Credit API v1.
-    %% Delete this function clause when feature flag credit_api_v2 becomes required.
+    %% Delete this function clause when feature flag rabbitmq_4.0.0 becomes required.
     %% Behave like non-native AMQP 1.0: Send send_credit_reply before deliveries.
     rabbit_classic_queue:send_credit_reply_credit_api_v1(
       SessionPid, amqqueue:get_name(Q), BQ:len(BQS0)),

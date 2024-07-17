@@ -176,7 +176,7 @@ convert_from(mc_amqp, Sections, Env) ->
     {Headers2, CorrId091} = message_id(CorrId, <<"x-correlation-id">>, Headers1),
 
     Headers = case Env of
-                  #{message_containers_store_amqp_v1 := false} ->
+                  #{'rabbitmq_4.0.0' := false} ->
                       Headers3 = case AProp of
                                      undefined ->
                                          Headers2;

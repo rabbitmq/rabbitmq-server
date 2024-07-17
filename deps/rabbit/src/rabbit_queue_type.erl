@@ -114,7 +114,7 @@
 
 -opaque state() :: #?STATE{}.
 
-%% Delete atom 'credit_api_v1' when feature flag credit_api_v2 becomes required.
+%% Delete atom 'credit_api_v1' when feature flag rabbitmq_4.0.0 becomes required.
 -type consume_mode() :: {simple_prefetch, Prefetch :: non_neg_integer()} |
                         {credited, Initial :: delivery_count() | credit_api_v1}.
 -type consume_spec() :: #{no_ack := boolean(),
@@ -227,7 +227,7 @@
     {queue_state(), actions()} |
     {'protocol_error', Type :: atom(), Reason :: string(), Args :: term()}.
 
-%% Delete this callback when feature flag credit_api_v2 becomes required.
+%% Delete this callback when feature flag rabbitmq_4.0.0 becomes required.
 -callback credit_v1(queue_name(), rabbit_types:ctag(), credit(), Drain :: boolean(), queue_state()) ->
     {queue_state(), actions()}.
 
@@ -709,7 +709,7 @@ settle(#resource{kind = queue} = QRef, Op, CTag, MsgIds, Ctxs) ->
             end
     end.
 
-%% Delete this function when feature flag credit_api_v2 becomes required.
+%% Delete this function when feature flag rabbitmq_4.0.0 becomes required.
 -spec credit_v1(queue_name(), rabbit_types:ctag(), credit(), boolean(), state()) ->
     {ok, state(), actions()}.
 credit_v1(QName, CTag, LinkCreditSnd, Drain, Ctxs) ->

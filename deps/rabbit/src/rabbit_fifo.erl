@@ -1281,8 +1281,10 @@ usage(Name) when is_atom(Name) ->
         [{_, Use}] -> Use
     end.
 
+-spec is_v4() -> boolean().
 is_v4() ->
-    rabbit_feature_flags:is_enabled(quorum_queues_v4).
+    %% Quorum queue v4 is introduced in RabbitMQ 4.0.0
+    rabbit_feature_flags:is_enabled('rabbitmq_4.0.0').
 
 %%% Internal
 

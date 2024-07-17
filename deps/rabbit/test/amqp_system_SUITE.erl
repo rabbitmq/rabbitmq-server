@@ -74,10 +74,7 @@ init_per_group(Group, Config) ->
                 [GroupSetupStep] ++
                 rabbit_ct_broker_helpers:setup_steps() ++
                 rabbit_ct_client_helpers:setup_steps()),
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(
-           Config2, message_containers_store_amqp_v1),
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(
-           Config2, quorum_queues_v4),
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config2, 'rabbitmq_4.0.0'),
     Config2.
 
 end_per_group(_, Config) ->
