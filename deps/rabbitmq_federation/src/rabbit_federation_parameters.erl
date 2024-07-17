@@ -28,14 +28,10 @@
                     {enables, recovery}]}).
 
 register() ->
-    [rabbit_registry:register(Class, Name, ?MODULE) ||
-        {Class, Name} <- ?RUNTIME_PARAMETERS],
-    ok.
+    rabbit_registry:register_many(?RUNTIME_PARAMETERS, ?MODULE).
 
 unregister() ->
-    [rabbit_registry:unregister(Class, Name) ||
-        {Class, Name} <- ?RUNTIME_PARAMETERS],
-    ok.
+    rabbit_registry:unregister_many(?RUNTIME_PARAMETERS).
 
 validate(_VHost, <<"federation-upstream-set">>, Name, Term0, _User) ->
     Term = [rabbit_data_coercion:to_proplist(Upstream) || Upstream <- Term0],

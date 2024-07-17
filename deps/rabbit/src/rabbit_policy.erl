@@ -51,8 +51,10 @@
                     {enables, recovery}]}).
 
 register() ->
-    rabbit_registry:register(runtime_parameter, <<"policy">>, ?MODULE),
-    rabbit_registry:register(runtime_parameter, <<"operator_policy">>, ?MODULE).
+    rabbit_registry:register_many(
+      [{runtime_parameter, <<"policy">>},
+       {runtime_parameter, <<"operator_policy">>}
+      ], ?MODULE).
 
 name(Q) when ?is_amqqueue(Q) ->
     Policy = amqqueue:get_policy(Q),

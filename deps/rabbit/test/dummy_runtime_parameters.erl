@@ -40,16 +40,20 @@ notify_clear(_, _, _, _) -> ok.
 %----------------------------------------------------------------------------
 
 register_policy_validator() ->
-    rabbit_registry:register(operator_policy_validator, <<"testeven">>, ?MODULE),
-    rabbit_registry:register(operator_policy_validator, <<"testpos">>,  ?MODULE),
-    rabbit_registry:register(policy_validator, <<"testeven">>, ?MODULE),
-    rabbit_registry:register(policy_validator, <<"testpos">>,  ?MODULE).
+    rabbit_registry:register_many(
+      [{operator_policy_validator, <<"testeven">>},
+       {operator_policy_validator, <<"testpos">>},
+       {policy_validator, <<"testeven">>},
+       {policy_validator, <<"testpos">>}
+      ], ?MODULE).
 
 unregister_policy_validator() ->
-    rabbit_registry:unregister(operator_policy_validator, <<"testeven">>),
-    rabbit_registry:unregister(operator_policy_validator, <<"testpos">>),
-    rabbit_registry:unregister(policy_validator, <<"testeven">>),
-    rabbit_registry:unregister(policy_validator, <<"testpos">>).
+    rabbit_registry:unregister_many(
+      [{operator_policy_validator, <<"testeven">>},
+       {operator_policy_validator, <<"testpos">>},
+       {policy_validator, <<"testeven">>},
+       {policy_validator, <<"testpos">>}
+      ]).
 
 validate_policy([{<<"testeven">>, Terms}]) when is_list(Terms) ->
     case  length(Terms) rem 2 =:= 0 of

@@ -18,10 +18,11 @@
                     {enables, recovery}]}).
 
 register() ->
-    [rabbit_registry:register(Class, Name, ?MODULE) ||
-        {Class, Name} <- [{policy_validator,  <<"shards-per-node">>},
-                          {policy_validator,  <<"routing-key">>}]],
-    ok.
+    rabbit_registry:register_many(
+      [{policy_validator,  <<"shards-per-node">>},
+       {policy_validator,  <<"routing-key">>}
+      ],
+      ?MODULE).
 
 validate_policy(KeyList) ->
     SPN = proplists:get_value(<<"shards-per-node">>, KeyList, none),
