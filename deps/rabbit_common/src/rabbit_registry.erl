@@ -113,7 +113,6 @@ internal_register(Class, TypeName, ModuleName)
     RegArg      = {{Class, Type}, ModuleName},
     ok = sanity_check_module(ClassModule, ModuleName),
     true = ets:insert(?ETS_NAME, RegArg),
-    conditional_register(RegArg),
     ok = ClassModule:added_to_rabbit_registry(Type, ModuleName),
     ok.
 
@@ -121,28 +120,8 @@ internal_unregister(Class, TypeName) ->
     ClassModule = class_module(Class),
     Type        = internal_binary_to_type(TypeName),
     UnregArg    = {Class, Type},
-    conditional_unregister(UnregArg),
     true = ets:delete(?ETS_NAME, UnregArg),
     ok = ClassModule:removed_from_rabbit_registry(Type),
-    ok.
-
-%% register exchange decorator route callback only when implemented,
-%% in order to avoid unnecessary decorator calls on the fast
-%% publishing path
-conditional_register({{exchange_decorator, Type}, ModuleName}) ->
-    case erlang:function_exported(ModuleName, route, 2) of
-        true  -> true = ets:insert(?ETS_NAME,
-                                   {{exchange_decorator_route, Type},
-                                    ModuleName});
-        false -> ok
-    end;
-conditional_register(_) ->
-    ok.
-
-conditional_unregister({exchange_decorator, Type}) ->
-    true = ets:delete(?ETS_NAME, {exchange_decorator_route, Type}),
-    ok;
-conditional_unregister(_) ->
     ok.
 
 sanity_check_module(ClassModule, Module) ->
