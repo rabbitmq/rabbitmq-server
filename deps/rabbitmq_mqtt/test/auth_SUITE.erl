@@ -526,8 +526,8 @@ client_id_propagation(Config) ->
                   rpc(Config, 0, rabbit_auth_backend_mqtt_mock, setup, [Self])
           end),
     %% the setup process will notify us
-    receive
-        ok -> ok
+    SetupProcess = receive
+        {ok, SP} -> SP
     after
         3000 -> ct:fail("timeout waiting for rabbit_auth_backend_mqtt_mock:setup/1")
     end,
@@ -561,7 +561,11 @@ client_id_propagation(Config) ->
     VariableMap = maps:get(variable_map, TopicContext),
     ?assertEqual(ClientId, maps:get(<<"client_id">>, VariableMap)),
 
-    ok = emqtt:disconnect(C).
+    ok = emqtt:disconnect(C),
+
+    SetupProcess ! stop,
+
+    ok.
 
 %% These tests try to cover all operations that are listed in the
 %% table in https://www.rabbitmq.com/access-control.html#authorisation

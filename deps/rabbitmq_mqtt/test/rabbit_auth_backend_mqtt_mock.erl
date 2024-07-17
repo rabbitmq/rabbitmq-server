@@ -21,7 +21,7 @@
 
 setup(CallerPid) ->
     ets:new(?MODULE, [set, public, named_table]),
-    CallerPid ! ok,
+    CallerPid ! {ok, self()},
     receive
         stop -> ok
     end.
