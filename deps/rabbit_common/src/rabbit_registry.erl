@@ -34,7 +34,7 @@ start_link() ->
       Class :: atom(),
       TypeName :: binary(),
       ModuleName :: module(),
-      Ret :: ok.
+      Ret :: ok | {error, Reason :: any()}.
 
 register(Class, TypeName, ModuleName) ->
     gen_server:call(?SERVER, {register, Class, TypeName, ModuleName}, infinity).
@@ -42,7 +42,7 @@ register(Class, TypeName, ModuleName) ->
 -spec register_many(Classes, ModuleName) -> Ret when
       Classes :: [{atom(), binary()}],
       ModuleName :: module(),
-      Ret :: ok.
+      Ret :: ok | {error, Reason :: any()}.
 %% @doc A wrapper around `register/3' which short-circuits and returns an
 %% error if any class cannot be registered.
 
@@ -55,7 +55,7 @@ register_many(Classes, ModuleName) ->
 -spec unregister(Class, TypeName) -> Ret when
       Class :: atom(),
       TypeName :: binary(),
-      Ret :: ok.
+      Ret :: ok | {error, Reason :: any()}.
 
 unregister(Class, TypeName) ->
     gen_server:call(?SERVER, {unregister, Class, TypeName}, infinity).
@@ -63,7 +63,7 @@ unregister(Class, TypeName) ->
 -spec unregister_many(Classes) -> Ret
     when
       Classes :: [{atom(), binary()}],
-      Ret :: ok.
+      Ret :: ok | {error, Reason :: any()}.
 %% @doc A wrapper around `unregister/2' which short-circuits and returns an
 %% error if any class cannot be unregistered.
 
@@ -111,18 +111,20 @@ internal_register(Class, TypeName, ModuleName)
     ClassModule = class_module(Class),
     Type        = internal_binary_to_type(TypeName),
     RegArg      = {{Class, Type}, ModuleName},
-    ok = sanity_check_module(ClassModule, ModuleName),
-    true = ets:insert(?ETS_NAME, RegArg),
-    ok = ClassModule:added_to_rabbit_registry(Type, ModuleName),
-    ok.
+    case sanity_check_module(ClassModule, ModuleName) of
+        ok ->
+            true = ets:insert(?ETS_NAME, RegArg),
+            ClassModule:added_to_rabbit_registry(Type, ModuleName);
+        {error, _} = Err ->
+            Err
+    end.
 
 internal_unregister(Class, TypeName) ->
     ClassModule = class_module(Class),
     Type        = internal_binary_to_type(TypeName),
     UnregArg    = {Class, Type},
     true = ets:delete(?ETS_NAME, UnregArg),
-    ok = ClassModule:removed_from_rabbit_registry(Type),
-    ok.
+    ClassModule:removed_from_rabbit_registry(Type).
 
 sanity_check_module(ClassModule, Module) ->
     case catch lists:member(ClassModule,
@@ -160,12 +162,10 @@ init([]) ->
     {ok, none}.
 
 handle_call({register, Class, TypeName, ModuleName}, _From, State) ->
-    ok = internal_register(Class, TypeName, ModuleName),
-    {reply, ok, State};
+    {reply, internal_register(Class, TypeName, ModuleName), State};
 
 handle_call({unregister, Class, TypeName}, _From, State) ->
-    ok = internal_unregister(Class, TypeName),
-    {reply, ok, State};
+    {reply, internal_unregister(Class, TypeName), State};
 
 handle_call(Request, _From, State) ->
     {stop, {unhandled_call, Request}, State}.
