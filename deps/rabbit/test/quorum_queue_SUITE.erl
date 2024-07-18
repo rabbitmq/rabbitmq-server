@@ -4153,6 +4153,14 @@ leader_health_check(Config) ->
     set_up_vhost(Config, VHost1),
     set_up_vhost(Config, VHost2),
 
+    %% check empty vhost
+    ?assertEqual([],
+        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+            [<<".*">>, VHost1])),
+    ?assertEqual([],
+        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+            [<<".*">>, global])),
+
     Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VHost1),
     {ok, Ch1} = amqp_connection:open_channel(Conn1),
 
