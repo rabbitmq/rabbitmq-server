@@ -659,10 +659,7 @@ get_data(vhost_status, _, _, _) ->
             false -> 0
         end}
       || VHost <- rabbit_vhost:list()  ];
-<<<<<<< HEAD
-get_data(exchange_bindings, _, _, _) ->
-=======
-get_data(node_memory, _, _) ->
+get_data(node_memory, _, _, _) ->
     BreakdownPL = rabbit_vm:memory(),
     KeysOfInterest = [
         code,
@@ -694,8 +691,7 @@ get_data(node_memory, _, _) ->
     ],
     Data = maps:to_list(maps:with(KeysOfInterest, maps:from_list(BreakdownPL))),
     [{node_memory, Data}];
-get_data(exchange_bindings, _, _) ->
->>>>>>> d1a7167b37 (Prometheus: expose memory breakdown metrics)
+get_data(exchange_bindings, _, _, _) ->
     Exchanges = lists:foldl(fun
                                 (#exchange{internal = true}, Acc) ->
                                     Acc;
