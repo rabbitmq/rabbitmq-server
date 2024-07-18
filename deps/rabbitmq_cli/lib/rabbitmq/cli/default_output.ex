@@ -82,6 +82,10 @@ defmodule RabbitMQ.CLI.DefaultOutput do
     {:error, RabbitMQ.CLI.Core.ExitCodes.exit_tempfail(), khepri_timeout_error(node_name)}
   end
 
+  defp format_khepri_output({:error, :timeout_waiting_for_khepri_projections}, %{node: node_name}) do
+    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_tempfail(), khepri_timeout_error(node_name)}
+  end
+
   defp format_khepri_output(result, _opts) do
     result
   end
