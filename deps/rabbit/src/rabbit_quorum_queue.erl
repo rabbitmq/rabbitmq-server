@@ -2196,6 +2196,7 @@ run_leader_health_check(ClusterName, QResource, HealthCheckRef, From) ->
     end,
     ok.
 
+wait_for_leader_health_checks(_Ref, 0, UnhealthyAcc = []) -> UnhealthyAcc;
 wait_for_leader_health_checks(Ref, N, UnhealthyAcc) ->
     receive
         {ok, Ref, _QResource} when N == 1 ->
