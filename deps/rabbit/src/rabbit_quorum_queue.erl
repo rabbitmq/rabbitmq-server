@@ -146,8 +146,8 @@
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
 % -define(UNLIMITED_PREFETCH_COUNT, 2000). %% something large for ra
 -define(MIN_CHECKPOINT_INTERVAL, 8192). %% the ra default is 16384
--define(QQ_LEADER_HEALTH_CHECK_TIMEOUT, 1_000).
--define(QQ_GLOBAL_LEADER_HEALTH_CHECK_TIMEOUT, 60_000).
+-define(LEADER_HEALTH_CHECK_TIMEOUT, 1_000).
+-define(GLOBAL_LEADER_HEALTH_CHECK_TIMEOUT, 60_000).
 
 %%----------- QQ policies ---------------------------------------------------
 
@@ -2188,7 +2188,7 @@ leader_health_check(QueueNameOrRegEx, VHost, ProcessLimitThreshold) ->
 
 run_leader_health_check(ClusterName, QResource, HealthCheckRef, From) ->
     Leader = ra_leaderboard:lookup_leader(ClusterName),
-    case ra_server_proc:ping(Leader, ?QQ_LEADER_HEALTH_CHECK_TIMEOUT) of
+    case ra_server_proc:ping(Leader, ?LEADER_HEALTH_CHECK_TIMEOUT) of
         {pong,leader} ->
             From ! {ok, HealthCheckRef, QResource};
         _ ->
@@ -2208,7 +2208,7 @@ wait_for_leader_health_checks(Ref, N, UnhealthyAcc) ->
         {error, Ref, QResource} ->
             wait_for_leader_health_checks(Ref, N - 1, [amqqueue:to_printable(QResource, ?MODULE) | UnhealthyAcc])
     after
-        ?QQ_GLOBAL_LEADER_HEALTH_CHECK_TIMEOUT ->
+        ?GLOBAL_LEADER_HEALTH_CHECK_TIMEOUT ->
             UnhealthyAcc
     end.
 
