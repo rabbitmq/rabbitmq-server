@@ -208,8 +208,7 @@ open_close_connection(Config) ->
         {amqp10_event, {connection, Connection2, opened}} -> ct:log("connection opened"), ok
     after 5000 -> exit(connection_timeout)
     end,
-    ok = amqp10_client:close_connection(Connection2),
-    ct:log("Closed connection .").
+    ok = amqp10_client:close_connection(Connection2).
 
 open_connection_plain_sasl(Config) ->
     Hostname = ?config(rmq_hostname, Config),
@@ -425,7 +424,6 @@ roundtrip(OpenConf, Args, DoNotAssertMessageProperties) ->
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
 
-    % ct:pal(?LOW_IMPORTANCE, "roundtrip message Out: ~tp~nIn: ~tp~n", [OutMsg, Msg]),
     ActualProps = amqp10_msg:properties(OutMsg),
     [ ?assertEqual(V, maps:get(K, ActualProps)) || K := V <- Props, 
         not lists:member(K, DoNotAssertMessageProperties)],
