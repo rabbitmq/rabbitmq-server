@@ -57,7 +57,7 @@
 
 -define(METRICS_RAW, [
 
-%%% Those are global, i.e. they contain no reference to queue/vhost/channel
+    %% Global metrics, as in, they contain no references to queues, virtual hosts or channel
     {connection_churn_metrics, [
         {2, undefined, connections_opened_total, counter, "Total number of connections opened"},
         {3, undefined, connections_closed_total, counter, "Total number of connections closed or terminated"},
