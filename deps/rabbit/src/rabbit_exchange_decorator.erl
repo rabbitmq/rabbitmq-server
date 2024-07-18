@@ -69,11 +69,9 @@
 %%----------------------------------------------------------------------------
 
 added_to_rabbit_registry(_Type, _ModuleName) ->
-    [maybe_recover(X) || X <- rabbit_exchange:list()],
-    ok.
+    rabbit_misc:for_each_while_ok(fun maybe_recover/1, rabbit_exchange:list()).
 removed_from_rabbit_registry(_Type) ->
-    [maybe_recover(X) || X <- rabbit_exchange:list()],
-    ok.
+    rabbit_misc:for_each_while_ok(fun maybe_recover/1, rabbit_exchange:list()).
 
 %% select a subset of active decorators
 select(all,   {Route, NoRoute})  -> filter(Route ++ NoRoute);
