@@ -49,14 +49,22 @@ active(Q) when ?is_amqqueue(Q) ->
 list() -> [M || {_, M} <- rabbit_registry:lookup_all(queue_decorator)].
 
 register(TypeName, ModuleName) ->
-    rabbit_registry:register(queue_decorator, TypeName, ModuleName),
-    [maybe_recover(Q) || Q <- rabbit_amqqueue:list()],
-    ok.
+    case rabbit_registry:register(queue_decorator, TypeName, ModuleName) of
+        ok ->
+            rabbit_misc:for_each_while_ok(
+              fun maybe_recover/1, rabbit_amqqueue:list());
+        {error, _} = Err ->
+            Err
+    end.
 
 unregister(TypeName) ->
-    rabbit_registry:unregister(queue_decorator, TypeName),
-    [maybe_recover(Q) || Q <- rabbit_amqqueue:list()],
-    ok.
+    case rabbit_registry:unregister(queue_decorator, TypeName) of
+        ok ->
+            rabbit_misc:for_each_while_ok(
+              fun maybe_recover/1, rabbit_amqqueue:list());
+        {error, _} = Err ->
+            Err
+    end.
 
 maybe_recover(Q0) when ?is_amqqueue(Q0) ->
     Name = amqqueue:get_name(Q0),

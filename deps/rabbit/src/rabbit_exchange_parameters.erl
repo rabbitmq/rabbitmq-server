@@ -21,13 +21,18 @@
                     {enables, recovery}]}).
 
 register() ->
-    rabbit_registry:register(runtime_parameter,
-                             ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT, ?MODULE),
-    %% ensure there are no leftovers from before node restart/crash
-    _ = rabbit_runtime_parameters:clear_component(
-      ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
-      ?INTERNAL_USER),
-    ok.
+    case rabbit_registry:register(
+           runtime_parameter,
+           ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT, ?MODULE) of
+        ok ->
+            %% ensure there are no leftovers from before node restart/crash
+            _ = rabbit_runtime_parameters:clear_component(
+              ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
+              ?INTERNAL_USER),
+            ok;
+        {error, _} = Err ->
+            Err
+    end.
 
 validate(_VHost, ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT, _Name, _Term, _User) ->
     ok.
