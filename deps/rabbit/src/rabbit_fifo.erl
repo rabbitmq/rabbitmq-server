@@ -809,6 +809,8 @@ overview(#?STATE{consumers = Cons,
                  msg_bytes_checkout = CheckoutBytes,
                  cfg = Cfg,
                  dlx = DlxState,
+                 messages = Messages,
+                 returns = Returns,
                  waiting_consumers = WaitingConsumers} = State) ->
     Conf = #{name => Cfg#cfg.name,
              resource => Cfg#cfg.resource,
@@ -831,6 +833,11 @@ overview(#?STATE{consumers = Cons,
                       _ ->
                           #{}
                   end,
+    MsgsRet = lqueue:len(Returns),
+
+    #{len := _MsgsLen,
+      num_hi := MsgsHi,
+      num_lo := MsgsLo} = rabbit_fifo_q:overview(Messages),
     Overview = #{type => ?STATE,
                  config => Conf,
                  num_consumers => map_size(Cons),
@@ -838,14 +845,17 @@ overview(#?STATE{consumers = Cons,
                  num_checked_out => num_checked_out(State),
                  num_enqueuers => maps:size(Enqs),
                  num_ready_messages => messages_ready(State),
-                 num_in_memory_ready_messages => 0, %% backwards compat
+                 num_ready_messages_high => MsgsHi,
+                 num_ready_messages_low => MsgsLo,
+                 num_ready_messages_return => MsgsRet,
                  num_messages => messages_total(State),
                  num_release_cursors => lqueue:len(Cursors),
-                 release_cursors => [I || {_, I, _} <- lqueue:to_list(Cursors)],
-                 release_cursor_enqueue_counter => EnqCount,
                  enqueue_message_bytes => EnqueueBytes,
                  checkout_message_bytes => CheckoutBytes,
+                 release_cursors => [], %% backwards compat
                  in_memory_message_bytes => 0, %% backwards compat
+                 num_in_memory_ready_messages => 0, %% backwards compat
+                 release_cursor_enqueue_counter => EnqCount,
                  smallest_raft_index => smallest_raft_index(State)
                  },
     DlxOverview = rabbit_fifo_dlx:overview(DlxState),

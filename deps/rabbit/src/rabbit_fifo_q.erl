@@ -8,7 +8,8 @@
          get/1,
          len/1,
          from_lqueue/1,
-         get_lowest_index/1
+         get_lowest_index/1,
+         overview/1
         ]).
 
 -define(WEIGHT, 2).
@@ -96,6 +97,22 @@ get_lowest_index(#?MODULE{hi = Hi, lo = Lo}) ->
                     HiIdx
             end
     end.
+
+-spec overview(state()) ->
+    #{len := non_neg_integer(),
+      num_hi := non_neg_integer(),
+      num_lo := non_neg_integer(),
+      lowest_index := ra:index()}.
+overview(#?MODULE{len = Len,
+                  hi = {Hi1, Hi2},
+                  lo = _} = State) ->
+    %% TODO: this could be very slow with large backlogs,
+    %% consider keeping a separate counter for hi, lo messages
+    NumHi = length(Hi1) + length(Hi2),
+    #{len => Len,
+      num_hi => NumHi,
+      num_lo => Len - NumHi,
+      lowest_index => get_lowest_index(State)}.
 
 %% internals
 

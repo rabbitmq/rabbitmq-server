@@ -535,6 +535,7 @@ handle_tick(QName,
                              0 -> 0;
                              _ -> rabbit_fifo:usage(Name)
                          end,
+
                   Keys = ?STATISTICS_KEYS -- [leader,
                                               consumers,
                                               messages_dlx,
@@ -544,11 +545,24 @@ handle_tick(QName,
                                              ],
                   {SacTag, SacPid} = maps:get(single_active_consumer_id,
                                               Overview, {'', ''}),
+                  Infos0 = maps:fold(
+                             fun(num_ready_messages_high, V, Acc) ->
+                                     [{messages_ready_high, V} | Acc];
+                                (num_ready_messages_low, V, Acc) ->
+                                     [{messages_ready_low, V} | Acc];
+                                (num_ready_messages_return, V, Acc) ->
+                                     [{messages_ready_returned, V} | Acc];
+                                (_, _, Acc) ->
+                                     Acc
+                             end, info(Q, Keys), Overview),
                   MsgBytesDiscarded = DiscardBytes + DiscardCheckoutBytes,
                   MsgBytes = EnqueueBytes + CheckoutBytes + MsgBytesDiscarded,
                   Infos = [{consumers, NumConsumers},
                            {consumer_capacity, Util},
                            {consumer_utilisation, Util},
+                           {messages, NumMessages},
+                           {messages_ready, NumReadyMsgs},
+                           {messages_unacknowledged, NumCheckedOut},
                            {message_bytes_ready, EnqueueBytes},
                            {message_bytes_unacknowledged, CheckoutBytes},
                            {message_bytes, MsgBytes},
@@ -559,7 +573,7 @@ handle_tick(QName,
                            {single_active_consumer_tag, SacTag},
                            {single_active_consumer_pid, SacPid},
                            {leader, node()}
-                           | info(Q, Keys)],
+                           | Infos0],
                   rabbit_core_metrics:queue_stats(QName, Infos),
                   ok = repair_leader_record(Q, Self),
                   case repair_amqqueue_nodes(Q) of
