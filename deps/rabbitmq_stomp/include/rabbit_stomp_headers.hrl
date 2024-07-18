@@ -30,6 +30,7 @@
 -define(HEADER_X_STREAM_FILTER, "x-stream-filter").
 -define(HEADER_X_STREAM_MATCH_UNFILTERED, "x-stream-match-unfiltered").
 -define(HEADER_PRIORITY, "priority").
+-define(HEADER_X_PRIORITY, "x-priority").
 -define(HEADER_RECEIPT, "receipt").
 -define(HEADER_REDELIVERED, "redelivered").
 -define(HEADER_REPLY_TO, "reply-to").
