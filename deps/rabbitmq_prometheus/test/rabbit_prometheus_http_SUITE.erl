@@ -381,6 +381,10 @@ aggregated_metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_queue_consumers ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "TYPE rabbitmq_auth_attempts_total", [{capture, none}, multiline])),
     ?assertEqual(nomatch, re:run(Body, "TYPE rabbitmq_auth_attempts_detailed_total", [{capture, none}, multiline])),
+    %% Memory breakdown
+    ?assertEqual(match, re:run(Body, "^rabbitmq_memory_quorum_queue_erlang_process_bytes ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_memory_classic_queue_erlang_process_bytes ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_memory_binary_heap_bytes ", [{capture, none}, multiline])),
     %% Check the first metric value in each ETS table that requires converting
     ?assertEqual(match, re:run(Body, "^rabbitmq_erlang_uptime_seconds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_time_seconds_total ", [{capture, none}, multiline])),
