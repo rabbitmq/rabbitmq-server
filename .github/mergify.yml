@@ -25,6 +25,19 @@ pull_request_rules:
           - v4.0.x
         assignees:
           - "{{ author }}"
+  - name: Automatically backport to v4.0.x & v3.13.x based on label
+    conditions:
+      - base=main
+      - label=backport-v4.0.x
+      - label=backport-v3.13.x
+    actions:
+      backport:
+        branches:
+          - v4.0.x
+        labels:
+          - backport-v3.13.x
+        assignees:
+          - "{{ author }}"
   - name: Automatically backport to v3.13.x based on label
     conditions:
       - base=v4.0.x
