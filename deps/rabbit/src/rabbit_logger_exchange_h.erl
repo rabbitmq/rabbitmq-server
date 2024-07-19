@@ -171,16 +171,21 @@ setup_proc(
 declare_exchange(
   #{config := #{exchange := #resource{name = Name,
                                       virtual_host = VHost} = Exchange}}) ->
-    try
-        %% Durable.
-        #exchange{} = rabbit_exchange:declare(
-                        Exchange, topic, true, false, true, [],
-                        ?INTERNAL_USER),
-        ?LOG_DEBUG(
-           "Declared exchange '~ts' in vhost '~ts'",
-           [Name, VHost],
-           #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-        ok
+    try rabbit_exchange:declare(
+          Exchange, topic, true, false, true, [], ?INTERNAL_USER) of
+        {ok, #exchange{}} ->
+            ?LOG_DEBUG(
+               "Declared exchange '~ts' in vhost '~ts'",
+               [Name, VHost],
+               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+            ok;
+        {error, timeout} ->
+            ?LOG_DEBUG(
+               "Could not declare exchange '~ts' in vhost '~ts' because the "
+               "operation timed out",
+               [Name, VHost],
+               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+            error
     catch
         Class:Reason ->
             ?LOG_DEBUG(

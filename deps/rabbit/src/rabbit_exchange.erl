@@ -92,10 +92,16 @@ serial(X) ->
         true -> rabbit_db_exchange:next_serial(X#exchange.name)
     end.
 
--spec declare
-        (name(), type(), boolean(), boolean(), boolean(),
-         rabbit_framing:amqp_table(), rabbit_types:username())
-        -> rabbit_types:exchange().
+-spec declare(Name, Type, Durable, AutoDelete, Internal, Args, Username) ->
+    Ret when
+      Name :: name(),
+      Type :: type(),
+      Durable :: boolean(),
+      AutoDelete :: boolean(),
+      Internal :: boolean(),
+      Args :: rabbit_framing:amqp_table(),
+      Username :: rabbit_types:username(),
+      Ret :: {ok, rabbit_types:exchange()} | {error, timeout}.
 
 declare(XName, Type, Durable, AutoDelete, Internal, Args, Username) ->
     X = rabbit_exchange_decorator:set(
@@ -122,14 +128,16 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args, Username) ->
                     Serial = serial(Exchange),
                     ok = callback(X, create, Serial, [Exchange]),
                     rabbit_event:notify(exchange_created, info(Exchange)),
-                    Exchange;
+                    {ok, Exchange};
                 {existing, Exchange} ->
-                    Exchange
+                    {ok, Exchange};
+                {error, timeout} = Err ->
+                    Err
             end;
         _ ->
             rabbit_log:warning("ignoring exchange.declare for exchange ~tp,
                                 exchange.delete in progress~n.", [XName]),
-            X
+            {ok, X}
     end.
 
 %% Used with binaries sent over the wire; the type may not exist.

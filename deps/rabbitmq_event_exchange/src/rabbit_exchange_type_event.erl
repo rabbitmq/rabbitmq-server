@@ -38,9 +38,13 @@ info(_X) -> [].
 info(_X, _) -> [].
 
 register() ->
-    _ = rabbit_exchange:declare(exchange(), topic, true, false, true, [],
-                                ?INTERNAL_USER),
-    gen_event:add_handler(rabbit_event, ?MODULE, []).
+    case rabbit_exchange:declare(exchange(), topic, true, false, true, [],
+                                 ?INTERNAL_USER) of
+        {ok, _Exchange} ->
+            gen_event:add_handler(rabbit_event, ?MODULE, []);
+        {error, timeout} = Err ->
+            Err
+    end.
 
 unregister() ->
     case rabbit_exchange:ensure_deleted(exchange(), false, ?INTERNAL_USER) of
