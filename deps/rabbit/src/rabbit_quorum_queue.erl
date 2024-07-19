@@ -1043,7 +1043,7 @@ cleanup_data_dir() ->
     ok.
 
 maybe_delete_data_dir(UId) ->
-    ra_directory:unregister_name(?RA_SYSTEM, UId),
+    _ = ra_directory:unregister_name(?RA_SYSTEM, UId),
     Dir = ra_env:server_data_dir(?RA_SYSTEM, UId),
     {ok, Config} = ra_log:read_config(Dir),
     case maps:get(machine, Config) of
