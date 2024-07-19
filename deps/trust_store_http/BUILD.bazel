@@ -33,7 +33,7 @@ rabbitmq_app(
     app_description = "Trust store HTTP server",
     app_module = "trust_store_http_app",
     app_name = "trust_store_http",
-    app_version = "1.0.0",
+    app_version = "4.0.0",
     beam_files = [":beam_files"],
     extra_apps = ["ssl"],
     license_files = [":license_files"],
