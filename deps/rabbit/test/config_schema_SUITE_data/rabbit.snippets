@@ -1057,6 +1057,38 @@ credential_validator.regexp = ^abc\\d+",
       {incoming_message_interceptors, [{set_header_routing_node, false},
                                        {set_header_timestamp, false}]}
      ]}],
+   []},
+
+  %%
+  %% Stream replication port range
+  %%
+
+  {stream_replication_port_range,
+   "
+    stream.replication.port_range.min = 4000
+    stream.replication.port_range.max = 4600
+   ",
+   [{osiris, [
+      {port_range, {4000, 4600}}
+     ]}],
+   []},
+
+  {stream_replication_port_range,
+   "
+    stream.replication.port_range.min = 4000
+   ",
+   [{osiris, [
+      {port_range, {4000, 4500}}
+     ]}],
+   []},
+
+  {stream_replication_port_range,
+   "
+    stream.replication.port_range.max = 4600
+   ",
+   [{osiris, [
+      {port_range, {4100, 4600}}
+     ]}],
    []}
 
 ].
