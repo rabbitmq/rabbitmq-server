@@ -69,19 +69,23 @@ init_per_testcase(quorum_queue_leadership_transfer = Testcase, Config) ->
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps());
 init_per_testcase(metadata_store_leadership_transfer = Testcase, Config) ->
-    rabbit_ct_helpers:testcase_started(Config, Testcase),
-    ClusterSize = ?config(rmq_nodes_count, Config),
-    TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodes_clustered, true},
-        {rmq_nodename_suffix, Testcase},
-        {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}},
-        {metadata_store, khepri}
-      ]),
-    rabbit_ct_helpers:run_steps(
-      Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps());
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            {skip, "Leadership transfer does not apply to mnesia"};
+        _ ->
+            rabbit_ct_helpers:testcase_started(Config, Testcase),
+            ClusterSize = ?config(rmq_nodes_count, Config),
+            TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
+            Config1 = rabbit_ct_helpers:set_config(Config, [
+                {rmq_nodes_clustered, true},
+                {rmq_nodename_suffix, Testcase},
+                {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
+              ]),
+            rabbit_ct_helpers:run_steps(
+              Config1,
+              rabbit_ct_broker_helpers:setup_steps() ++
+              rabbit_ct_client_helpers:setup_steps())
+    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     ClusterSize = ?config(rmq_nodes_count, Config),
