@@ -25,7 +25,7 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 # Default to a PGP keyserver that pgp-happy-eyeballs recognizes, but allow for substitutions locally
 ARG PGP_KEYSERVER=keyserver.ubuntu.com
 # If you are building this image locally and are getting `gpg: keyserver receive failed: No data` errors,
-# run the build with a different PGP_KEYSERVER, e.g. docker build --tag rabbitmq:3.13 --build-arg PGP_KEYSERVER=pgpkeys.eu 3.13/ubuntu
+# run the build with a different PGP_KEYSERVER, e.g. docker build --tag rabbitmq:4.0 --build-arg PGP_KEYSERVER=pgpkeys.eu 4.0/ubuntu
 # For context, see https://github.com/docker-library/official-images/issues/4252
 
 ENV OPENSSL_VERSION 3.3.1
@@ -289,7 +289,7 @@ RUN set -eux; \
 # no stale cookies
 	rm "$RABBITMQ_DATA_DIR/.erlang.cookie"; \
 	\
-	echo '{"spdxVersion":"SPDX-2.3","SPDXID":"SPDXRef-DOCUMENT","name":"rabbitmq-sbom","packages":[{"name":"rabbitmq","versionInfo":"3.13.0","SPDXID":"SPDXRef-Package--rabbitmq","externalRefs":[{"referenceCategory":"PACKAGE-MANAGER","referenceType":"purl","referenceLocator":"pkg:generic/rabbitmq@3.13.0?os_name=ubuntu&os_version=22.04"}],"licenseDeclared":"MPL-2.0 AND Apache-2.0"}]}' > $RABBITMQ_HOME/rabbitmq.spdx.json
+	echo '{"spdxVersion":"SPDX-2.3","SPDXID":"SPDXRef-DOCUMENT","name":"rabbitmq-sbom","packages":[{"name":"rabbitmq","versionInfo":"4.0.0","SPDXID":"SPDXRef-Package--rabbitmq","externalRefs":[{"referenceCategory":"PACKAGE-MANAGER","referenceType":"purl","referenceLocator":"pkg:generic/rabbitmq@4.0.0?os_name=ubuntu&os_version=22.04"}],"licenseDeclared":"MPL-2.0 AND Apache-2.0"}]}' > $RABBITMQ_HOME/rabbitmq.spdx.json
 
 # Enable Prometheus-style metrics by default (https://github.com/docker-library/rabbitmq/issues/419)
 RUN gosu rabbitmq rabbitmq-plugins enable --offline rabbitmq_prometheus
