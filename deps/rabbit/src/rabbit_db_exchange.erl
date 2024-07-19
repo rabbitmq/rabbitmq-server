@@ -524,17 +524,15 @@ next_serial_in_khepri(XName) ->
             UpdatePath =
                 khepri_path:combine_with_conditions(
                   Path, [#if_payload_version{version = Vsn}]),
-            case rabbit_khepri:put(UpdatePath, Serial + 1) of
+            case rabbit_khepri:put(UpdatePath, Serial + 1, #{timeout => infinity}) of
                 ok ->
                     Serial;
                 {error, {khepri, mismatching_node, _}} ->
-                    next_serial_in_khepri(XName);
-                Err ->
-                    Err
+                    next_serial_in_khepri(XName)
             end;
         _ ->
             Serial = 1,
-            ok = rabbit_khepri:put(Path, Serial + 1),
+            ok = rabbit_khepri:put(Path, Serial + 1, #{timeout => infinity}),
             Serial
     end.
 
