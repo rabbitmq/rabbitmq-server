@@ -2569,13 +2569,22 @@ handle_method(#'exchange.declare'{exchange    = XNameBin,
                                  check_write_permitted(AName, User, AuthzContext),
                                  ok
                 end,
-                rabbit_exchange:declare(ExchangeName,
-                                        CheckedType,
-                                        Durable,
-                                        AutoDelete,
-                                        Internal,
-                                        Args,
-                                        Username)
+                case rabbit_exchange:declare(ExchangeName,
+                                             CheckedType,
+                                             Durable,
+                                             AutoDelete,
+                                             Internal,
+                                             Args,
+                                             Username) of
+                    {ok, DeclaredX} ->
+                        DeclaredX;
+                    {error, timeout} ->
+                        rabbit_misc:protocol_error(
+                          internal_error,
+                          "failed to declare exchange '~ts' in vhost '~ts' "
+                          "because the operation timed out",
+                          [XNameBinStripped, VHostPath])
+                end
         end,
     ok = rabbit_exchange:assert_equivalence(X, CheckedType, Durable,
                                             AutoDelete, Internal, Args);
