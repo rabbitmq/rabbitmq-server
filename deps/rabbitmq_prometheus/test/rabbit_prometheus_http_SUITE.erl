@@ -34,7 +34,7 @@ groups() ->
         {config_path, [], generic_tests()},
         {global_labels, [], generic_tests()},
         {aggregated_metrics, [], [
-                                  aggregated_metrics_test,
+            aggregated_metrics_test,
             specific_erlang_metrics_present_test,
             global_metrics_present_test,
             global_metrics_single_metric_family_test
@@ -57,6 +57,9 @@ groups() ->
                                      queue_consumer_count_single_vhost_per_object_test,
                                      queue_consumer_count_all_vhosts_per_object_test,
                                      queue_coarse_metrics_per_object_test,
+                                     queue_delivery_metrics_per_object_test,
+                                     exchange_metrics_per_object_test,
+                                     queue_exchange_metrics_per_object_test,
                                      queue_metrics_per_object_test,
                                      queue_consumer_count_and_queue_metrics_mutually_exclusive_test,
                                      vhost_status_metric,
@@ -367,12 +370,15 @@ aggregated_metrics_test(Config) ->
     %% Check the first metric value from each ETS table owned by rabbitmq_metrics
     ?assertEqual(match, re:run(Body, "^rabbitmq_channel_consumers ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_channel_messages_published_total ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_exchange_messages_published_total ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_channel_process_reductions_total ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_channel_get_ack_total ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_queue_get_ack_total ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_connections_opened_total ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_connection_incoming_bytes_total ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_connection_incoming_packets_total ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_queue_messages_published_total ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_queue_exchange_messages_published_total ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_process_open_fds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_process_max_fds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_ops_total ", [{capture, none}, multiline])),
@@ -407,12 +413,15 @@ per_object_metrics_test(Config, Path) ->
     %% Check the first metric value from each ETS table owned by rabbitmq_metrics
     ?assertEqual(match, re:run(Body, "^rabbitmq_channel_consumers{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_channel_messages_published_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_exchange_messages_published_total{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_channel_process_reductions_total{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_channel_get_ack_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_queue_get_ack_total{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_connections_opened_total ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_connection_incoming_bytes_total{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_connection_incoming_packets_total{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_queue_messages_published_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_queue_exchange_messages_published_total{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_process_open_fds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_process_max_fds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_ops_total ", [{capture, none}, multiline])),
@@ -525,6 +534,93 @@ queue_coarse_metrics_per_object_test(Config) ->
     {_, Body3} = http_get_with_pal(Config, "/metrics/detailed?vhost=vhost-1&vhost=vhost-2&family=queue_coarse_metrics", [], 200),
     ?assertEqual(lists:foldl(fun maps:merge/2, #{}, [Expected1, Expected2]),
                  map_get(rabbitmq_detailed_queue_messages, parse_response(Body3))),
+    ok.
+
+queue_delivery_metrics_per_object_test(Config) ->
+    Expected1 = #{#{queue => "vhost-1-queue-with-consumer", vhost => "vhost-1"} => [7]},
+
+    {_, Body1} = http_get_with_pal(Config,
+                                   "/metrics/detailed?vhost=vhost-1&family=queue_delivery_metrics",
+                                   [], 200),
+    ?assertEqual(
+        Expected1,
+        map_get(
+            rabbitmq_detailed_queue_messages_delivered_ack_total,
+            parse_response(Body1))),
+
+    {_, Body2} = http_get_with_pal(Config,
+                                   "/metrics/detailed?vhost=vhost-2&family=queue_delivery_metrics",
+                                   [], 200),
+    Expected2 = #{#{queue => "vhost-2-queue-with-consumer", vhost => "vhost-2"} => [11]},
+
+    ?assertEqual(
+        Expected2,
+        map_get(
+            rabbitmq_detailed_queue_messages_delivered_ack_total,
+            parse_response(Body2))),
+    ok.
+
+exchange_metrics_per_object_test(Config) ->
+    Expected1 = #{#{exchange => "", vhost => "vhost-1"} => [14]},
+
+    {_, Body} = http_get_with_pal(Config,
+                                   "/metrics/detailed?vhost=vhost-1&family=exchange_metrics",
+                                   [], 200),
+    ?assertEqual(
+        Expected1,
+        map_get(
+            rabbitmq_detailed_exchange_messages_published_total,
+            parse_response(Body))),
+    ok.
+
+queue_exchange_metrics_per_object_test(Config) ->
+    Expected1 = #{
+        #{
+            queue => "vhost-1-queue-with-messages",
+            vhost => "vhost-1",
+            exchange => ""
+        } => [7],
+        #{
+            exchange => "",
+            queue => "vhost-1-queue-with-consumer",
+            vhost => "vhost-1"
+        } => [7]
+    },
+
+    {_, Body1} = http_get_with_pal(Config,
+                                   "/metrics/detailed?vhost=vhost-1&family=queue_exchange_metrics",
+                                   [], 200),
+    ?assertEqual(
+        Expected1,
+        map_get(
+            rabbitmq_detailed_queue_exchange_messages_published_total,
+            parse_response(Body1))),
+
+
+    {_, Body2} = http_get_with_pal(Config,
+                                   "/metrics/detailed?vhost=vhost-2&family=queue_exchange_metrics",
+                                   [], 200),
+
+
+    Expected2 = #{
+        #{
+            queue => "vhost-2-queue-with-messages",
+            vhost => "vhost-2",
+            exchange => ""
+        } => [11],
+        #{
+            exchange => "",
+            queue => "vhost-2-queue-with-consumer",
+            vhost => "vhost-2"
+        } => [11]
+    },
+
+    ?assertEqual(
+        Expected2,
+        map_get(
+            rabbitmq_detailed_queue_exchange_messages_published_total,
+            parse_response(Body2))),
+
     ok.
 
 queue_metrics_per_object_test(Config) ->
