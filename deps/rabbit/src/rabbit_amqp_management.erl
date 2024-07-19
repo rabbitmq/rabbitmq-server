@@ -146,10 +146,8 @@ handle_http_req(HttpMethod = <<"PUT">>,
             Result;
         {error, not_found} ->
             PermCache2 = check_dead_letter_exchange(QName, QArgs, User, PermCache1),
-            try rabbit_amqqueue:declare(
+            try case rabbit_amqqueue:declare(
               QName, Durable, AutoDelete, QArgs, Owner, Username) of
-              ARGS ->
-                case ARGS of
                   {new, Q} ->
                     rabbit_core_metrics:queue_created(QName),
                     {Q, 0, 0, <<"201">>, PermCache2};
@@ -169,9 +167,7 @@ handle_http_req(HttpMethod = <<"PUT">>,
                       Reason,
                       ReasonArgs);
                   {protocol_error, _ErrorType, Reason, ReasonArgs} ->
-                    throw(<<"400">>, Reason, ReasonArgs);
-                  {precondition_failed, Reason, ReasonArgs} ->
-                    throw(<<"409">>, Reason, ReasonArgs)
+                    throw(<<"400">>, Reason, ReasonArgs)
                 end
             catch exit:#amqp_error{name = precondition_failed,
                 explanation = Expl} ->
