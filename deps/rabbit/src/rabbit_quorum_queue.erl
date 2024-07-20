@@ -1043,12 +1043,12 @@ cleanup_data_dir() ->
     ok.
 
 maybe_delete_data_dir(UId) ->
+    _ = ra_directory:unregister_name(?RA_SYSTEM, UId),
     Dir = ra_env:server_data_dir(?RA_SYSTEM, UId),
     {ok, Config} = ra_log:read_config(Dir),
     case maps:get(machine, Config) of
         {module, rabbit_fifo, _} ->
-            ra_lib:recursive_delete(Dir),
-            ra_directory:unregister_name(?RA_SYSTEM, UId);
+            ra_lib:recursive_delete(Dir);
         _ ->
             ok
     end.
