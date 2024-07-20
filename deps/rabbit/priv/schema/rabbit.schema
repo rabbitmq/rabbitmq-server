@@ -1571,6 +1571,32 @@ end}.
 {mapping, "proxy_protocol", "rabbit.proxy_protocol",
     [{datatype, {enum, [true, false]}}]}.
 
+{mapping, "stream.replication.port_range.min", "osiris.port_range", [
+    {datatype, [integer]},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+{mapping, "stream.replication.port_range.max", "osiris.port_range", [
+    {datatype, [integer]},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
+{translation, "osiris.port_range",
+fun(Conf) ->
+    Min = cuttlefish:conf_get("stream.replication.port_range.min", Conf, undefined),
+    Max = cuttlefish:conf_get("stream.replication.port_range.max", Conf, undefined),
+
+    case {Min, Max} of
+        {undefined, undefined} ->
+            cuttlefish:unset();
+        {Mn, undefined}  ->
+            {Mn, Mn + 500};
+        {undefined, Mx} ->
+            {Mx - 500, Mx};
+        _ ->
+            {Min, Max}
+    end
+end}.
+
 %% Whether to stop the rabbit application if a vhost has
 %% to terminate for any reason.
 
@@ -2635,62 +2661,6 @@ end}.
     end
 }.
 
-% ===============================
-<<<<<<< HEAD
-=======
-% AMQP 1.0
-% ===============================
-
-%% Connections that skip SASL layer or use SASL mechanism ANONYMOUS will connect as this account.
-%% Setting this to a username will allow clients to connect without authenticating.
-%% For production environments, set this value to 'none'.
-{mapping, "amqp1_0.default_user", "rabbit.amqp1_0_default_user",
-    [{datatype, [{enum, [none]}, string]}]}.
-
-{mapping, "amqp1_0.default_vhost", "rabbit.amqp1_0_default_vhost",
-    [{datatype, string}]}.
-
-{translation, "rabbit.amqp1_0_default_user",
-fun(Conf) ->
-        case cuttlefish:conf_get("amqp1_0.default_user", Conf) of
-            none -> none;
-            User -> list_to_binary(User)
-        end
-end}.
-
-{translation , "rabbit.amqp1_0_default_vhost",
-fun(Conf) ->
-    list_to_binary(cuttlefish:conf_get("amqp1_0.default_vhost", Conf))
-end}.
-
-{mapping, "stream.replication.port_range.min", "osiris.port_range", [
-    {datatype, [integer]},
-    {validators, ["non_zero_positive_integer"]}
-]}.
-{mapping, "stream.replication.port_range.max", "osiris.port_range", [
-    {datatype, [integer]},
-    {validators, ["non_zero_positive_integer"]}
-]}.
-
-{translation, "osiris.port_range",
-fun(Conf) ->
-    Min = cuttlefish:conf_get("stream.replication.port_range.min", Conf, undefined),
-    Max = cuttlefish:conf_get("stream.replication.port_range.max", Conf, undefined),
-
-    case {Min, Max} of
-        {undefined, undefined} ->
-            cuttlefish:unset();
-        {Mn, undefined}  ->
-            {Mn, Mn + 500};
-        {undefined, Mx} ->
-            {Mx - 500, Mx};
-        _ ->
-            {Min, Max}
-    end
-end}.
-
-% ===============================
->>>>>>> f7d6424d42 (Add stream replication port range in ini-style configuration)
 % Validators
 % ===============================
 
