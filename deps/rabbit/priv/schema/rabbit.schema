@@ -1571,32 +1571,6 @@ end}.
 {mapping, "proxy_protocol", "rabbit.proxy_protocol",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "stream.replication.port_range.min", "osiris.port_range", [
-    {datatype, [integer]},
-    {validators, ["non_zero_positive_integer"]}
-]}.
-{mapping, "stream.replication.port_range.max", "osiris.port_range", [
-    {datatype, [integer]},
-    {validators, ["non_zero_positive_integer"]}
-]}.
-
-{translation, "osiris.port_range",
-fun(Conf) ->
-    Min = cuttlefish:conf_get("stream.replication.port_range.min", Conf, undefined),
-    Max = cuttlefish:conf_get("stream.replication.port_range.max", Conf, undefined),
-
-    case {Min, Max} of
-        {undefined, undefined} ->
-            cuttlefish:unset();
-        {Mn, undefined}  ->
-            {Mn, Mn + 500};
-        {undefined, Mx} ->
-            {Mx - 500, Mx};
-        _ ->
-            {Min, Max}
-    end
-end}.
-
 %% Whether to stop the rabbit application if a vhost has
 %% to terminate for any reason.
 
@@ -2661,6 +2635,7 @@ end}.
     end
 }.
 
+% ===============================
 % Validators
 % ===============================
 
