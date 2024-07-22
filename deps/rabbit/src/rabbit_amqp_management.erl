@@ -126,6 +126,7 @@ handle_http_req(HttpMethod = <<"PUT">>,
     ok = prohibit_reserved_amq(QName),
     PermCache1 = check_resource_access(QName, configure, User, PermCache0),
     rabbit_core_metrics:queue_declared(QName),
+
     {Q1, NumMsgs, NumConsumers, StatusCode, PermCache} =
     case rabbit_amqqueue:with(
            QName,
@@ -146,36 +147,34 @@ handle_http_req(HttpMethod = <<"PUT">>,
             Result;
         {error, not_found} ->
             PermCache2 = check_dead_letter_exchange(QName, QArgs, User, PermCache1),
-            try case rabbit_amqqueue:declare(
-              QName, Durable, AutoDelete, QArgs, Owner, Username) of
-                  {new, Q} ->
+            try rabbit_amqqueue:declare(
+                  QName, Durable, AutoDelete, QArgs, Owner, Username) of
+                {new, Q} ->
                     rabbit_core_metrics:queue_created(QName),
                     {Q, 0, 0, <<"201">>, PermCache2};
-                  {owner_died, Q} ->
+                {owner_died, Q} ->
                     %% Presumably our own days are numbered since the
                     %% connection has died. Pretend the queue exists though,
                     %% just so nothing fails.
                     {Q, 0, 0, <<"201">>, PermCache2};
-                  {absent, Q, Reason} ->
+                {absent, Q, Reason} ->
                     absent(Q, Reason);
-                  {existing, _Q} ->
+                {existing, _Q} ->
                     %% Must have been created in the meantime. Loop around again.
                     handle_http_req(HttpMethod, PathSegments, Query, ReqPayload,
-                      Vhost, User, ConnPid, {PermCache2, TopicPermCache});
-                  {error, queue_limit_exceeded, Reason, ReasonArgs} ->
+                                    Vhost, User, ConnPid, {PermCache2, TopicPermCache});
+                {error, queue_limit_exceeded, Reason, ReasonArgs} ->
                     throw(<<"403">>,
-                      Reason,
-                      ReasonArgs);
-                  {protocol_error, _ErrorType, Reason, ReasonArgs} ->
+                          Reason,
+                          ReasonArgs);
+                {protocol_error, _ErrorType, Reason, ReasonArgs} ->
                     throw(<<"400">>, Reason, ReasonArgs)
-                end
             catch exit:#amqp_error{name = precondition_failed,
-                explanation = Expl} ->
-                throw(<<"409">>, Expl, []);
-              exit:#amqp_error{explanation = Expl} ->
-                throw(<<"400">>, Expl, [])
+                                   explanation = Expl} ->
+                      throw(<<"409">>, Expl, []);
+                  exit:#amqp_error{explanation = Expl} ->
+                      throw(<<"400">>, Expl, [])
             end;
-
         {error, {absent, Q, Reason}} ->
             absent(Q, Reason)
     end,
