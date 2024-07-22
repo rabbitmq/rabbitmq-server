@@ -9,8 +9,9 @@
 
 -include_lib("common_test/include/ct.hrl").
 -export([set_param/3, set_param/4, set_param/5, set_param_nowait/3,
-         await_shovel/2, await_shovel/3, await_shovel1/2,
-         shovels_from_status/0, get_shovel_status/2, get_shovel_status/3,
+         await_shovel/2, await_shovel/3, await_shovel/4, await_shovel1/3,
+         shovels_from_status/1, get_shovel_status/2, get_shovel_status/3,
+         restart_shovel/2,
          await/1, await/2, clear_param/2, clear_param/3, make_uri/2]).
 
 make_uri(Config, Node) ->
@@ -45,17 +46,22 @@ await_shovel(Config, Name) ->
     await_shovel(Config, 0, Name).
 
 await_shovel(Config, Node, Name) ->
+    await_shovel(Config, Node, Name, running).
+
+await_shovel(Config, Node, Name, ExpectedState) ->
     rabbit_ct_broker_helpers:rpc(Config, Node,
-      ?MODULE, await_shovel1, [Config, Name]).
+      ?MODULE, await_shovel1, [Config, Name, ExpectedState]).
 
-await_shovel1(_Config, Name) ->
-    await(fun() ->
-                  lists:member(Name, shovels_from_status())
+await_shovel1(_Config, Name, ExpectedState) ->
+    ct:log("await_shovel1 ~p", [Name]),
+    await(fun() -> 
+                  lists:member(Name, shovels_from_status(ExpectedState))
           end, 30_000).
-
-shovels_from_status() ->
+    
+shovels_from_status(ExpectedState) ->
     S = rabbit_shovel_status:status(),
-    [N || {{<<"/">>, N}, dynamic, {running, _}, _} <- S].
+    ct:log("Shovel status of state ~p: all status: ~p", [ExpectedState, S]),
+    [N || {{<<"/">>, N}, dynamic, {ExpectedState, _}, _} <- S].
 
 get_shovel_status(Config, Name) ->
     get_shovel_status(Config, 0, Name).
@@ -95,3 +101,10 @@ clear_param(Config, Name) ->
 clear_param(Config, Node, Name) ->
     rabbit_ct_broker_helpers:rpc(Config, Node,
       rabbit_runtime_parameters, clear, [<<"/">>, <<"shovel">>, Name, <<"acting-user">>]).
+
+restart_shovel(Config, Name) ->
+    restart_shovel(Config, 0, Name).
+
+restart_shovel(Config, Node, Name) ->
+    rabbit_ct_broker_helpers:rpc(Config,
+                        Node, rabbit_shovel_util, restart_shovel, [<<"/">>, Name]).
