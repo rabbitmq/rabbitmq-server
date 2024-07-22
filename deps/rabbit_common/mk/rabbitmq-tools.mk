@@ -1,15 +1,3 @@
-READY_DEPS = $(foreach DEP,\
-	       $(filter $(RABBITMQ_COMPONENTS),$(DEPS) $(BUILD_DEPS) $(TEST_DEPS)), \
-	       $(if $(wildcard $(DEPS_DIR)/$(DEP)),$(DEP),))
-
-RELEASED_RMQ_DEPS = $(filter $(RABBITMQ_COMPONENTS),$(DEPS) $(BUILD_DEPS))
-
-update-contributor-code-of-conduct:
-	$(verbose) for repo in $(READY_DEPS:%=$(DEPS_DIR)/%); do \
-		cp $(DEPS_DIR)/rabbit_common/CODE_OF_CONDUCT.md $$repo/CODE_OF_CONDUCT.md; \
-		cp $(DEPS_DIR)/rabbit_common/CONTRIBUTING.md $$repo/CONTRIBUTING.md; \
-	done
-
 # --------------------------------------------------------------------
 # erlang.mk query-deps* formatting.
 # --------------------------------------------------------------------
