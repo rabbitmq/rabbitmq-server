@@ -20,7 +20,7 @@
 %% from and can break with the next upgrade. It should not be used by
 %% another one that the one who created it or survive a node restart.
 %% Thus, function references have been replace by the following MFA.
--export([dest_decl/4, src_decl_exchange/4, src_decl_queue/4,
+-export([dest_decl/4, src_decl_exchange/4, src_decl_queue/4,src_check_queue/4,
          fields_fun/5, props_fun/9]).
 
 -import(rabbit_misc, [pget/2, pget/3, pset/3]).
@@ -146,7 +146,8 @@ amqp091_src_validation(_Def, User) ->
      %% a deprecated pre-3.7 setting
      {<<"delete-after">>, fun validate_delete_after/2, optional},
      %% currently used multi-protocol friend name, introduced in 3.7
-     {<<"src-delete-after">>, fun validate_delete_after/2, optional}
+     {<<"src-delete-after">>, fun validate_delete_after/2, optional},
+     {<<"src-predeclared">>,  fun rabbit_parameter_validation:boolean/2, optional}
     ].
 
 dest_validation(Def0, User) ->
@@ -178,7 +179,8 @@ amqp091_dest_validation(_Def, User) ->
      {<<"dest-add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
      {<<"dest-add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2,optional},
      {<<"publish-properties">>, fun validate_properties/2,  optional},
-     {<<"dest-publish-properties">>, fun validate_properties/2,  optional}
+     {<<"dest-publish-properties">>, fun validate_properties/2,  optional},
+     {<<"dest-predeclared">>,  fun rabbit_parameter_validation:boolean/2, optional}
     ].
 
 validate_uri_fun(User) ->
@@ -350,6 +352,7 @@ parse_amqp091_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
     AddTimestampHeaderLegacy = pget(<<"add-timestamp-header">>, Def, false),
     AddTimestampHeader = pget(<<"dest-add-timestamp-header">>, Def,
                               AddTimestampHeaderLegacy),
+    Predeclared = pget(<<"dest-predeclared">>, Def, false),
     %% Details are only used for status report in rabbitmqctl, as vhost is not
     %% available to query the runtime parameters.
     Details = maps:from_list([{K, V} || {K, V} <- [{dest_exchange, DestX},
@@ -362,7 +365,8 @@ parse_amqp091_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
                  fields_fun => {?MODULE, fields_fun, [X, Key]},
                  props_fun => {?MODULE, props_fun, [Table0, Table2, SetProps,
                                                     AddHeaders, SourceHeaders,
-                                                    AddTimestampHeader]}
+                                                    AddTimestampHeader]},
+                 predeclared => Predeclared                 
                 }, Details).
 
 fields_fun(X, Key, _SrcURI, _DestURI, P0) ->
@@ -409,20 +413,29 @@ parse_amqp10_source(Def) ->
        consumer_args => []}, Headers}.
 
 parse_amqp091_source(Def) ->
+    rabbit_log:debug("parse_amqp091_source: ~p", [Def]),
     SrcURIs  = deobfuscated_uris(<<"src-uri">>, Def),
     SrcX     = pget(<<"src-exchange">>,Def, none),
     SrcXKey  = pget(<<"src-exchange-key">>, Def, <<>>), %% [1]
     SrcQ     = pget(<<"src-queue">>, Def, none),
     SrcQArgs = pget(<<"src-queue-args">>,   Def, #{}),
     SrcCArgs = rabbit_misc:to_amqp_table(pget(<<"src-consumer-args">>, Def, [])),
+    Predeclared = pget(<<"src-predeclared">>, Def, false),
     {SrcDeclFun, Queue, DestHeaders} =
     case SrcQ of
         none -> {{?MODULE, src_decl_exchange, [SrcX, SrcXKey]}, <<>>,
                  [{<<"src-exchange">>,     SrcX},
                   {<<"src-exchange-key">>, SrcXKey}]};
-        _ -> {{?MODULE, src_decl_queue, [SrcQ, SrcQArgs]},
-              SrcQ, [{<<"src-queue">>, SrcQ}]}
+        _ -> case Predeclared of 
+                false -> 
+                    {{?MODULE, src_decl_queue, [SrcQ, SrcQArgs]},
+                        SrcQ, [{<<"src-queue">>, SrcQ}]};
+                true ->
+                    {{?MODULE, src_check_queue, [SrcQ, SrcQArgs]},
+                        SrcQ, [{<<"src-queue">>, SrcQ}]}
+            end
     end,
+    rabbit_log:debug("parse_amqp091_source: SrcQ: ~p", [SrcQ]),
     DeleteAfter = pget(<<"src-delete-after">>, Def,
                        pget(<<"delete-after">>, Def, <<"never">>)),
     PrefetchCount = pget(<<"src-prefetch-count">>, Def,
@@ -432,13 +445,14 @@ parse_amqp091_source(Def) ->
     Details = maps:from_list([{K, V} || {K, V} <- [{source_exchange, SrcX},
                                                    {source_exchange_key, SrcXKey}],
                                         V =/= none]),
+    
     {maps:merge(#{module => rabbit_amqp091_shovel,
                   uris => SrcURIs,
                   resource_decl => SrcDeclFun,
                   queue => Queue,
                   delete_after => opt_b2a(DeleteAfter),
                   prefetch_count => PrefetchCount,
-                  consumer_args => SrcCArgs
+                  consumer_args => SrcCArgs                  
                  }, Details), DestHeaders}.
 
 src_decl_exchange(SrcX, SrcXKey, _Conn, Ch) ->
@@ -449,6 +463,9 @@ src_decl_exchange(SrcX, SrcXKey, _Conn, Ch) ->
 
 src_decl_queue(SrcQ, SrcQArgs, Conn, _Ch) ->
     ensure_queue(Conn, SrcQ, rabbit_misc:to_amqp_table(SrcQArgs)).
+
+src_check_queue(SrcQ, SrcQArgs, Conn, _Ch) ->
+    check_queue(Conn, SrcQ, rabbit_misc:to_amqp_table(SrcQArgs)).
 
 get_uris(Key, Def) ->
     URIs = case pget(Key, Def) of
@@ -481,7 +498,16 @@ ensure_queue(Conn, Queue, XArgs) ->
     after
         catch amqp_channel:close(Ch)
     end.
-
+check_queue(Conn, Queue, XArgs) ->
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    try
+        rabbit_log:debug("Check if queue ~p exists", [Queue]),
+        amqp_channel:call(Ch, #'queue.declare'{queue   = Queue,
+                                               passive = true}),
+        rabbit_log:debug("Check if queue ~p does exist", [Queue])                                      
+    after
+        catch amqp_channel:close(Ch)
+    end.
 opt_b2a(B) when is_binary(B) -> list_to_atom(binary_to_list(B));
 opt_b2a(N)                   -> N.
 

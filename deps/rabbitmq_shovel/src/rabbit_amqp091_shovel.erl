@@ -45,6 +45,7 @@
 -define(MAX_CONNECTION_CLOSE_TIMEOUT, 10000).
 
 parse(_Name, {source, Source}) ->
+    rabbit_log:debug("shove-091-parse ~p", [Source]),
     Prefetch = parse_parameter(prefetch_count, fun parse_non_negative_integer/1,
                                proplists:get_value(prefetch_count, Source,
                                                    ?DEFAULT_PREFETCH)),
@@ -52,9 +53,14 @@ parse(_Name, {source, Source}) ->
                             proplists:get_value(queue, Source)),
     %% TODO parse
     CArgs = proplists:get_value(consumer_args, Source, []),
+    DeclFun = case proplists:get_value(predeclared, Source, false) of 
+        true -> check_fun(Source);
+        false -> decl_fun(Source)
+    end,
+    rabbit_log:debug("shovel-parse-source ~p", [Source]),
     #{module => ?MODULE,
       uris => proplists:get_value(uris, Source),
-      resource_decl => decl_fun(Source),
+      resource_decl => DeclFun,
       queue => Queue,
       delete_after => proplists:get_value(delete_after, Source, never),
       prefetch_count => Prefetch,
@@ -613,6 +619,12 @@ decl_fun(Decl, _Conn, Ch) ->
     [begin
          amqp_channel:call(Ch, M)
      end || M <- lists:reverse(Decl)].
+
+check_fun(_) ->
+    {?MODULE, check_fun, []}.
+
+check_fun() ->
+    ok.
 
 parse_parameter(Param, Fun, Value) ->
     try

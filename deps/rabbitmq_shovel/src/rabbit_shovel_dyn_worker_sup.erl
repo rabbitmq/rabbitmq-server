@@ -52,6 +52,7 @@ init([Name, Config0]) ->
         %% reconnect-delay = 0 means "do not reconnect"
         _                                  -> temporary
     end,
+    rabbit_log:debug("rabbit_shovel_dyn_worker_sup Delay:~p Restart:~p", [Delay, Restart]),
     {ok, {{one_for_one, 1, ?MAX_WAIT},
           [{Name,
             {rabbit_shovel_worker, start_link, [dynamic, Name, Config]},
