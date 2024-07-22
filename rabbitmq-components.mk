@@ -269,8 +269,6 @@ rmq_cmp_repo_name = $(word 2,$(dep_$(1)))
 
 # Upstream URL for the current project.
 RABBITMQ_COMPONENT_REPO_NAME := $(call rmq_cmp_repo_name,$(PROJECT))
-RABBITMQ_UPSTREAM_FETCH_URL ?= https://github.com/rabbitmq/$(RABBITMQ_COMPONENT_REPO_NAME).git
-RABBITMQ_UPSTREAM_PUSH_URL ?= git@github.com:rabbitmq/$(RABBITMQ_COMPONENT_REPO_NAME).git
 
 # Current URL for the current project. If this is not a Git clone,
 # default to the upstream Git repository.

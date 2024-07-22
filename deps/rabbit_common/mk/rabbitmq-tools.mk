@@ -14,21 +14,6 @@ READY_DEPS = $(foreach DEP,\
 
 RELEASED_RMQ_DEPS = $(filter $(RABBITMQ_COMPONENTS),$(DEPS) $(BUILD_DEPS))
 
-.PHONY: show-upstream-git-fetch-url show-upstream-git-push-url \
-	show-current-git-fetch-url show-current-git-push-url
-
-show-upstream-git-fetch-url:
-	@echo $(RABBITMQ_UPSTREAM_FETCH_URL)
-
-show-upstream-git-push-url:
-	@echo $(RABBITMQ_UPSTREAM_PUSH_URL)
-
-show-current-git-fetch-url:
-	@echo $(RABBITMQ_CURRENT_FETCH_URL)
-
-show-current-git-push-url:
-	@echo $(RABBITMQ_CURRENT_PUSH_URL)
-
 update-contributor-code-of-conduct:
 	$(verbose) for repo in $(READY_DEPS:%=$(DEPS_DIR)/%); do \
 		cp $(DEPS_DIR)/rabbit_common/CODE_OF_CONDUCT.md $$repo/CODE_OF_CONDUCT.md; \
