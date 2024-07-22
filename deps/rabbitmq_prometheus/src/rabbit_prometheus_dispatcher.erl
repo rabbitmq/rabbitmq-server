@@ -33,6 +33,9 @@ build_dispatcher() ->
     prometheus_registry:register_collectors('detailed', [
         prometheus_rabbitmq_core_metrics_collector
         ]),
+    prometheus_registry:register_collectors('memory-breakdown', [
+        prometheus_rabbitmq_core_metrics_collector
+        ]),
     rabbit_prometheus_handler:setup(),
     cowboy_router:compile([{'_', dispatcher()}]).
 

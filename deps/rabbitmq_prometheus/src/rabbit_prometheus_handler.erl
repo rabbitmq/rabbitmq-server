@@ -46,6 +46,7 @@ is_authorized(ReqData, Context) ->
 setup() ->
     setup_metrics(telemetry_registry()),
     setup_metrics('per-object'),
+    setup_metrics('memory-breakdown'),
     setup_metrics('detailed').
 
 setup_metrics(Registry) ->

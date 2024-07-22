@@ -25,7 +25,8 @@ all() ->
         {group, commercial},
         {group, detailed_metrics},
         {group, special_chars},
-        {group, authentication}
+        {group, authentication},
+        {group, memory_breakdown_endpoint_metrics}
     ].
 
 groups() ->
@@ -48,6 +49,9 @@ groups() ->
         {per_object_endpoint_metrics, [], [
             endpoint_per_object_metrics,
             specific_erlang_metrics_present_test
+        ]},
+        {memory_breakdown_endpoint_metrics, [], [
+            memory_breakdown_metrics_test
         ]},
         {commercial, [], [
             build_info_product_test
@@ -247,7 +251,9 @@ init_per_group(special_chars, Config0) ->
 init_per_group(authentication, Config) ->
     Config1 = rabbit_ct_helpers:merge_app_env(
                 Config, {rabbitmq_prometheus, [{authentication, [{enabled, true}]}]}),
-    init_per_group(authentication, Config1, []).
+    init_per_group(authentication, Config1, []);
+init_per_group(memory_breakdown_endpoint_metrics, Config) ->
+    init_per_group(memory_breakdown_endpoint_metrics, Config, []).
 
 
 
@@ -387,10 +393,6 @@ aggregated_metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_queue_consumers ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "TYPE rabbitmq_auth_attempts_total", [{capture, none}, multiline])),
     ?assertEqual(nomatch, re:run(Body, "TYPE rabbitmq_auth_attempts_detailed_total", [{capture, none}, multiline])),
-    %% Memory breakdown
-    ?assertEqual(match, re:run(Body, "^rabbitmq_memory_quorum_queue_erlang_process_bytes ", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_memory_classic_queue_erlang_process_bytes ", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_memory_binary_heap_bytes ", [{capture, none}, multiline])),
     %% Check the first metric value in each ETS table that requires converting
     ?assertEqual(match, re:run(Body, "^rabbitmq_erlang_uptime_seconds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_time_seconds_total ", [{capture, none}, multiline])),
@@ -436,6 +438,12 @@ per_object_metrics_test(Config, Path) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entry_commit_latency_seconds{", [{capture, none}, multiline])),
     %% Check the first TOTALS metric value
     ?assertEqual(match, re:run(Body, "^rabbitmq_connections ", [{capture, none}, multiline])).
+
+memory_breakdown_metrics_test(Config) ->
+    {_Headers, Body} = http_get_with_pal(Config, "/metrics/memory-breakdown", [], 200),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_memory_quorum_queue_erlang_process_bytes ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_memory_classic_queue_erlang_process_bytes ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_memory_binary_heap_bytes ", [{capture, none}, multiline])).
 
 build_info_test(Config) ->
     {_Headers, Body} = http_get_with_pal(Config, [], 200),
