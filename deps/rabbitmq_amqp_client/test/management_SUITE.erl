@@ -59,6 +59,7 @@ groups() ->
        declare_queue_inequivalent_fields,
        declare_queue_inequivalent_exclusive,
        declare_queue_invalid_field,
+       declare_queue_invalid_arg,
        declare_default_exchange,
        declare_exchange_amq_prefix,
        declare_exchange_line_feed,
@@ -525,6 +526,20 @@ declare_queue_invalid_field(Config) ->
     ?assertEqual(
        #'v1_0.amqp_value'{
           content = {utf8, <<"invalid property 'auto-delete' for queue '", QName/binary, "' in vhost '/'">>}},
+       amqp10_msg:body(Resp)),
+    ok = cleanup(Init).
+
+declare_queue_invalid_arg(Config) ->
+    Init = {_, LinkPair} = init(Config),
+    QName = <<"👌"/utf8>>,
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, <<"stream">>},
+                              <<"x-dead-letter-exchange">> => {utf8, <<"dlx is invalid for stream">>}}},
+    {error, Resp} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+    ?assertMatch(#{subject := <<"409">>}, amqp10_msg:properties(Resp)),
+    ?assertEqual(
+       #'v1_0.amqp_value'{
+          content = {utf8, <<"invalid arg 'x-dead-letter-exchange' for queue '", QName/binary,
+                             "' in vhost '/' of queue type rabbit_stream_queue">>}},
        amqp10_msg:body(Resp)),
     ok = cleanup(Init).
 
