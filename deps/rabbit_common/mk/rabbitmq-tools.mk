@@ -20,55 +20,6 @@ update-contributor-code-of-conduct:
 		cp $(DEPS_DIR)/rabbit_common/CONTRIBUTING.md $$repo/CONTRIBUTING.md; \
 	done
 
-ifneq ($(wildcard .git),)
-
-.PHONY: sync-gitremote sync-gituser
-
-sync-gitremote: $(READY_DEPS:%=$(DEPS_DIR)/%+sync-gitremote)
-	@:
-
-%+sync-gitremote:
-	$(exec_verbose) cd $* && \
-		git remote set-url origin \
-		'$(call dep_rmq_repo,$(RABBITMQ_CURRENT_FETCH_URL),$(notdir $*))'
-	$(verbose) cd $* && \
-		git remote set-url --push origin \
-		'$(call dep_rmq_repo,$(RABBITMQ_CURRENT_PUSH_URL),$(notdir $*))'
-
-ifeq ($(origin, RMQ_GIT_GLOBAL_USER_NAME),undefined)
-RMQ_GIT_GLOBAL_USER_NAME := $(shell git config --global user.name)
-export RMQ_GIT_GLOBAL_USER_NAME
-endif
-ifeq ($(origin RMQ_GIT_GLOBAL_USER_EMAIL),undefined)
-RMQ_GIT_GLOBAL_USER_EMAIL := $(shell git config --global user.email)
-export RMQ_GIT_GLOBAL_USER_EMAIL
-endif
-ifeq ($(origin RMQ_GIT_USER_NAME),undefined)
-RMQ_GIT_USER_NAME := $(shell git config user.name)
-export RMQ_GIT_USER_NAME
-endif
-ifeq ($(origin RMQ_GIT_USER_EMAIL),undefined)
-RMQ_GIT_USER_EMAIL := $(shell git config user.email)
-export RMQ_GIT_USER_EMAIL
-endif
-
-sync-gituser: $(READY_DEPS:%=$(DEPS_DIR)/%+sync-gituser)
-	@:
-
-%+sync-gituser:
-ifeq ($(RMQ_GIT_USER_NAME),$(RMQ_GIT_GLOBAL_USER_NAME))
-	$(exec_verbose) cd $* && git config --unset user.name || :
-else
-	$(exec_verbose) cd $* && git config user.name "$(RMQ_GIT_USER_NAME)"
-endif
-ifeq ($(RMQ_GIT_USER_EMAIL),$(RMQ_GIT_GLOBAL_USER_EMAIL))
-	$(verbose) cd $* && git config --unset user.email || :
-else
-	$(verbose) cd $* && git config user.email "$(RMQ_GIT_USER_EMAIL)"
-endif
-
-endif # ($(wildcard .git),)
-
 # --------------------------------------------------------------------
 # erlang.mk query-deps* formatting.
 # --------------------------------------------------------------------
