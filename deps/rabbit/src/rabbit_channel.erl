@@ -1876,7 +1876,7 @@ queue_down_consumer_action(CTag, CMap) ->
         _            -> {recover, ConsumeSpec}
     end.
 
-binding_action(Fun, SourceNameBin0, DestinationType, DestinationNameBin0,
+binding_action(Action, SourceNameBin0, DestinationType, DestinationNameBin0,
                RoutingKey, Arguments, VHostPath, ConnPid, AuthzContext,
                #user{username = Username} = User) ->
     ExchangeNameBin = strip_cr_lf(SourceNameBin0),
@@ -1892,10 +1892,10 @@ binding_action(Fun, SourceNameBin0, DestinationType, DestinationNameBin0,
         {ok, Exchange}     ->
             check_read_permitted_on_topic(Exchange, User, RoutingKey, AuthzContext)
     end,
-    case Fun(#binding{source      = ExchangeName,
-                      destination = DestinationName,
-                      key         = RoutingKey,
-                      args        = Arguments},
+    case rabbit_binding:Action(#binding{source      = ExchangeName,
+                                        destination = DestinationName,
+                                        key         = RoutingKey,
+                                        args        = Arguments},
              fun (_X, Q) when ?is_amqqueue(Q) ->
                      try rabbit_amqqueue:check_exclusive_access(Q, ConnPid)
                      catch exit:Reason -> {error, Reason}
@@ -1912,6 +1912,9 @@ binding_action(Fun, SourceNameBin0, DestinationType, DestinationNameBin0,
             rabbit_misc:protocol_error(precondition_failed, Fmt, Args);
         {error, #amqp_error{} = Error} ->
             rabbit_misc:protocol_error(Error);
+        {error, timeout} ->
+            rabbit_misc:protocol_error(
+              internal_error, "Could not ~s binding due to timeout", [Action]);
         ok ->
             ok
     end.
@@ -2381,7 +2384,7 @@ i(Item, _) ->
     throw({bad_argument, Item}).
 
 pending_raft_commands(QStates) ->
-    Fun = fun(_, V, Acc) ->
+    Action = fun(_, V, Acc) ->
                   case rabbit_queue_type:state_info(V) of
                       #{pending_raft_commands := P} ->
                           Acc + P;
@@ -2389,7 +2392,7 @@ pending_raft_commands(QStates) ->
                           Acc
                   end
           end,
-    rabbit_queue_type:fold_state(Fun, 0, QStates).
+    rabbit_queue_type:fold_state(Action, 0, QStates).
 
 name(#ch{cfg = #conf{conn_name = ConnName, channel = Channel}}) ->
     list_to_binary(rabbit_misc:format("~ts (~tp)", [ConnName, Channel])).
@@ -2441,7 +2444,7 @@ handle_method(#'exchange.bind'{destination = DestinationNameBin,
                                routing_key = RoutingKey,
                                arguments   = Arguments},
               ConnPid, AuthzContext, _CollectorId, VHostPath, User) ->
-    binding_action(fun rabbit_binding:add/3,
+    binding_action(add,
                    SourceNameBin, exchange, DestinationNameBin,
                    RoutingKey, Arguments, VHostPath, ConnPid, AuthzContext, User);
 handle_method(#'exchange.unbind'{destination = DestinationNameBin,
@@ -2449,15 +2452,15 @@ handle_method(#'exchange.unbind'{destination = DestinationNameBin,
                                  routing_key = RoutingKey,
                                  arguments   = Arguments},
               ConnPid, AuthzContext, _CollectorId, VHostPath, User) ->
-    binding_action(fun rabbit_binding:remove/3,
-                       SourceNameBin, exchange, DestinationNameBin,
-                       RoutingKey, Arguments, VHostPath, ConnPid, AuthzContext, User);
+    binding_action(remove,
+                   SourceNameBin, exchange, DestinationNameBin,
+                   RoutingKey, Arguments, VHostPath, ConnPid, AuthzContext, User);
 handle_method(#'queue.unbind'{queue       = QueueNameBin,
                               exchange    = ExchangeNameBin,
                               routing_key = RoutingKey,
                               arguments   = Arguments},
               ConnPid, AuthzContext, _CollectorId, VHostPath, User) ->
-    binding_action(fun rabbit_binding:remove/3,
+    binding_action(remove,
                    ExchangeNameBin, queue, QueueNameBin,
                    RoutingKey, Arguments, VHostPath, ConnPid, AuthzContext, User);
 handle_method(#'queue.bind'{queue       = QueueNameBin,
@@ -2465,7 +2468,7 @@ handle_method(#'queue.bind'{queue       = QueueNameBin,
                             routing_key = RoutingKey,
                             arguments   = Arguments},
               ConnPid, AuthzContext, _CollectorId, VHostPath, User) ->
-    binding_action(fun rabbit_binding:add/3,
+    binding_action(add,
                    ExchangeNameBin, queue, QueueNameBin,
                    RoutingKey, Arguments, VHostPath, ConnPid, AuthzContext, User);
 %% Note that all declares to these are effectively passive. If it
@@ -2580,12 +2583,12 @@ handle_method(#'queue.declare'{queue   = QueueNameBin,
               ConnPid, _AuthzContext, _CollectorPid, VHostPath, _User) ->
     StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
     QueueName = rabbit_misc:r(VHostPath, queue, StrippedQueueNameBin),
-    Fun = fun (Q0) ->
+    Action = fun (Q0) ->
               QStat = maybe_stat(NoWait, Q0),
               {QStat, Q0}
           end,
     %% Note: no need to check if Q is an #amqqueue, with_or_die does it
-    {{ok, MessageCount, ConsumerCount}, Q} = rabbit_amqqueue:with_or_die(QueueName, Fun),
+    {{ok, MessageCount, ConsumerCount}, Q} = rabbit_amqqueue:with_or_die(QueueName, Action),
     ok = rabbit_amqqueue:check_exclusive_access(Q, ConnPid),
     {ok, QueueName, MessageCount, ConsumerCount};
 handle_method(#'queue.delete'{queue     = QueueNameBin,
