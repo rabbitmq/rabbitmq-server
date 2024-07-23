@@ -8,6 +8,8 @@
 -module(rabbit_shovel_parameters).
 -behaviour(rabbit_runtime_parameter).
 
+-define(APP, rabbitmq_shovel).
+
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
 
@@ -331,7 +333,9 @@ parse_amqp091_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
     DestXKey  = pget(<<"dest-exchange-key">>, Def, none),
     DestQ     = pget(<<"dest-queue">>,        Def, none),
     DestQArgs = pget(<<"dest-queue-args">>,   Def, #{}),
-    Predeclared = pget(<<"dest-predeclared">>, Def, false),
+    GlobalPredeclared = proplists:get_value(predeclared, application:get_env(?APP, topology, []), false),
+    Predeclared = pget(<<"dest-predeclared">>, Def, GlobalPredeclared),
+    rabbit_log:debug("dest GlobalPredeclared: ~p Predeclared: ~p", [GlobalPredeclared, Predeclared]),
     DestDeclFun = case Predeclared of 
         true -> {?MODULE, dest_check, [DestQ, DestQArgs]};
         false -> {?MODULE, dest_decl, [DestQ, DestQArgs]}
@@ -429,7 +433,9 @@ parse_amqp091_source(Def) ->
     SrcQ     = pget(<<"src-queue">>, Def, none),
     SrcQArgs = pget(<<"src-queue-args">>,   Def, #{}),
     SrcCArgs = rabbit_misc:to_amqp_table(pget(<<"src-consumer-args">>, Def, [])),
-    Predeclared = pget(<<"src-predeclared">>, Def, false),
+    GlobalPredeclared = proplists:get_value(predeclared, application:get_env(?APP, topology, []), false),
+    Predeclared = pget(<<"src-predeclared">>, Def, GlobalPredeclared),
+    rabbit_log:debug("src GlobalPredeclared: ~p Predeclared: ~p", [GlobalPredeclared, Predeclared]),
     {SrcDeclFun, Queue, DestHeaders} =
     case SrcQ of
         none -> {{?MODULE, src_decl_exchange, [SrcX, SrcXKey]}, <<>>,

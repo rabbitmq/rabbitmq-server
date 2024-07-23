@@ -17,6 +17,7 @@
 all() ->
     [
       {group, core_tests},
+      {group, core_tests_with_preclared_topology},
       {group, quorum_queue_tests},
       {group, stream_queue_tests}
     ].
@@ -42,17 +43,21 @@ groups() ->
           dest_resource_alarm_on_confirm,
           dest_resource_alarm_on_publish,
           dest_resource_alarm_no_ack,
-          predeclared_missing_src_queue,
-          predeclared_missing_dest_queue
+          missing_src_queue_with_src_predeclared,
+          missing_dest_queue_with_dest_predeclared
         ]},
-
-        {quorum_queue_tests, [], [
+    {core_tests_with_preclared_topology, [], [
+          missing_src_queue_without_src_predeclared,
+          missing_dest_queue_without_dest_predeclared,
+          missing_src_and_dest_queue_with_false_src_and_dest_predeclared          
+    ]},
+    {quorum_queue_tests, [], [
           quorum_queues
-        ]},
+    ]},
 
-        {stream_queue_tests, [], [
+    {stream_queue_tests, [], [
           stream_queues
-        ]}
+    ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -85,9 +90,18 @@ init_per_group(stream_queue_tests, Config) ->
         false -> Config;
         _     -> {skip, "stream queue tests are skipped in mixed mode"}
     end;
+init_per_group(core_tests_with_preclared_topology, Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_shovel, topology, [{predeclared, true}]]),
+    Config;
+
 init_per_group(_, Config) ->
     Config.
 
+end_per_group(core_tests_with_preclared_topology, Config) ->
+     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+        [rabbitmq_shovel, topology]),
+    Config;
 end_per_group(_, Config) ->
     Config.
 
@@ -268,7 +282,7 @@ exchange(Config) ->
                              <<"queue">>, <<"hello">>)
       end).
 
-predeclared_missing_src_queue(Config) ->
+missing_src_queue_with_src_predeclared(Config) ->
     with_ch(Config,
         fun (Ch) ->
             amqp_channel:call(
@@ -307,7 +321,21 @@ predeclared_missing_src_queue(Config) ->
     end).
 
 
-predeclared_missing_dest_queue(Config) ->
+missing_src_and_dest_queue_with_false_src_and_dest_predeclared(Config) ->
+    with_ch(Config,
+        fun (Ch) ->
+
+            shovel_test_utils:set_param(
+                Config,
+                <<"test">>, [{<<"src-queue">>,  <<"src">>},
+                             {<<"src-predeclared">>, false},
+                             {<<"dest-predeclared">>, false},
+                             {<<"dest-queue">>, <<"dest">>}]),
+              publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
+
+    end).
+
+missing_dest_queue_with_dest_predeclared(Config) ->
     with_ch(Config,
         fun (Ch) ->
             amqp_channel:call(
@@ -321,6 +349,74 @@ predeclared_missing_dest_queue(Config) ->
             shovel_test_utils:set_param_nowait(Config,
                         <<"test">>, [{<<"src-queue">>, <<"src">>},
                                         {<<"dest-predeclared">>, true},
+                                        {<<"dest-queue">>, <<"dest">>},                                        
+                                        {<<"src-prefetch-count">>, 1}]),
+            shovel_test_utils:await_shovel(Config, 0, <<"test">>, terminated),
+            expect_missing_queue(Ch, <<"dest">>),
+            
+            with_newch(Config, 
+                fun(Ch2) ->
+                    amqp_channel:call(
+                        Ch2, #'queue.declare'{queue = <<"dest">>,
+                                            durable = true}),
+                    
+                    shovel_test_utils:await_shovel(Config, 0, <<"test">>, running),
+                
+                    publish_expect(Ch2, <<"amq.direct">>, <<"src-key">>, <<"dest">>, <<"hello!">>)
+                end)
+    end).
+
+missing_src_queue_without_src_predeclared(Config) ->
+    with_ch(Config,
+        fun (Ch) ->
+            amqp_channel:call(
+              Ch, #'queue.declare'{queue = <<"dest">>,
+                                   durable = true}),
+            amqp_channel:call(
+              Ch, #'exchange.declare'{exchange = <<"dest-ex">>}),
+            amqp_channel:call(
+              Ch, #'queue.bind'{queue = <<"dest">>,
+                                exchange = <<"dest-ex">>,
+                                routing_key = <<"dest-key">>}),
+                        
+            shovel_test_utils:set_param_nowait(Config,
+                        <<"test">>, [{<<"src-queue">>, <<"src">>},
+                                        {<<"dest-exchange">>, <<"dest-ex">>},
+                                        {<<"dest-exchange-key">>, <<"dest-key">>},
+                                        {<<"src-prefetch-count">>, 1}]),
+            shovel_test_utils:await_shovel(Config, 0, <<"test">>, terminated),
+            expect_missing_queue(Ch, <<"src">>),
+            
+            with_newch(Config, 
+                fun(Ch2) ->
+                    amqp_channel:call(
+                        Ch2, #'queue.declare'{queue = <<"src">>,
+                                        durable = true}),
+                    ct:log("Declare queue"),           
+                    amqp_channel:call(
+                        Ch2, #'queue.bind'{queue = <<"src">>,
+                                        exchange = <<"amq.direct">>,
+                                        routing_key = <<"src-key">>}),
+                    shovel_test_utils:await_shovel(Config, 0, <<"test">>, running),
+                    
+                    publish_expect(Ch2, <<"amq.direct">>, <<"src-key">>, <<"dest">>, <<"hello!">>)
+                end)
+    end).
+
+
+missing_dest_queue_without_dest_predeclared(Config) ->
+    with_ch(Config,
+        fun (Ch) ->
+            amqp_channel:call(
+                Ch, #'queue.declare'{queue = <<"src">>,
+                                 durable = true}),
+            amqp_channel:call(
+                Ch, #'queue.bind'{queue = <<"src">>,
+                                exchange = <<"amq.direct">>,
+                                routing_key = <<"src-key">>}),
+                                
+            shovel_test_utils:set_param_nowait(Config,
+                        <<"test">>, [{<<"src-queue">>, <<"src">>},
                                         {<<"dest-queue">>, <<"dest">>},                                        
                                         {<<"src-prefetch-count">>, 1}]),
             shovel_test_utils:await_shovel(Config, 0, <<"test">>, terminated),
