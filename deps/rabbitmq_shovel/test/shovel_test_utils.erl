@@ -10,7 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -export([set_param/3, set_param/4, set_param/5, set_param_nowait/3,
          await_shovel/2, await_shovel/3, await_shovel/4, await_shovel1/3,
-         shovels_from_status/1, get_shovel_status/2, get_shovel_status/3,
+         shovels_from_status/0, shovels_from_status/1, get_shovel_status/2, get_shovel_status/3,
          restart_shovel/2,
          await/1, await/2, clear_param/2, clear_param/3, make_uri/2]).
 
@@ -53,15 +53,22 @@ await_shovel(Config, Node, Name, ExpectedState) ->
       ?MODULE, await_shovel1, [Config, Name, ExpectedState]).
 
 await_shovel1(_Config, Name, ExpectedState) ->
-    ct:log("await_shovel1 ~p", [Name]),
-    await(fun() -> 
-                  lists:member(Name, shovels_from_status(ExpectedState))
-          end, 30_000).
-    
+    rabbit_log:debug("await_shovel1 ~p on state ~p", [Name, ExpectedState]),
+    Ret = await(fun() -> 
+                  Status = shovels_from_status(ExpectedState),
+                  rabbit_log:debug("status=> ~p (~p)", [Status, ExpectedState]),  
+                  lists:member(Name, Status)
+          end, 30_000), 
+    rabbit_log:debug("await_shovel1 ~p on state ~p terminated", [Name, ExpectedState]),    
+    Ret.
+
+shovels_from_status() ->    
+    shovels_from_status(running).
+
 shovels_from_status(ExpectedState) ->
     S = rabbit_shovel_status:status(),
-    ct:log("Shovel status of state ~p: all status: ~p", [ExpectedState, S]),
-    [N || {{<<"/">>, N}, dynamic, {ExpectedState, _}, _} <- S].
+    rabbit_log:debug("Shovel status of state ~p: all status: ~p", [ExpectedState, S]),
+    [N || {{<<"/">>, N}, dynamic, {State, _}, _} <- S, State == ExpectedState].
 
 get_shovel_status(Config, Name) ->
     get_shovel_status(Config, 0, Name).
@@ -87,6 +94,7 @@ await(Pred) ->
 await(_Pred, Timeout) when Timeout =< 0 ->
     error(await_timeout);
 await(Pred, Timeout) ->
+    rabbit_log:debug("await:Checking predicate . timeout=~p",[Timeout]),
     case Pred() of
         true  -> ok;
         Other when Timeout =< 100 ->
