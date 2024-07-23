@@ -86,35 +86,6 @@
         {2, ?MILLISECOND, erlang_uptime_seconds, gauge, "Node uptime", uptime}
     ]},
 
-    {node_memory, [
-        {2, undefined, memory_code_module_bytes, gauge, "Code module memory footprint", code},
-        {2, undefined, memory_client_connection_reader_bytes, gauge, "Client connection reader processes footprint in bytes", connection_readers},
-        {2, undefined, memory_client_connection_writer_bytes, gauge, "Client connection writer processes footprint in bytes", connection_writers},
-        {2, undefined, memory_client_connection_channel_bytes, gauge, "Client connection channel processes footprint in bytes", connection_channels},
-        {2, undefined, memory_client_connection_other_bytes, gauge, "Client connection other processes footprint in bytes", connection_other},
-        {2, undefined, memory_classic_queue_erlang_process_bytes, gauge, "Classic queue processes footprint in bytes", queue_procs},
-        {2, undefined, memory_quorum_queue_erlang_process_bytes, gauge, "Quorum queue processes footprint in bytes", quorum_queue_procs},
-        {2, undefined, memory_quorum_queue_dlx_erlang_process_bytes, gauge, "Quorum queue DLX worker processes footprint in bytes", quorum_queue_dlx_procs},
-        {2, undefined, memory_stream_erlang_process_bytes, gauge, "Stream processes footprint in bytes", stream_queue_procs},
-        {2, undefined, memory_stream_replica_reader_erlang_process_bytes, gauge, "Stream replica reader processes footprint in bytes", stream_queue_replica_reader_procs},
-        {2, undefined, memory_stream_coordinator_erlang_process_bytes, gauge, "Stream coordinator processes footprint in bytes", stream_queue_coordinator_procs},
-        {2, undefined, memory_plugin_bytes, gauge, "Total plugin footprint in bytes", plugins},
-        {2, undefined, memory_modern_metadata_store_bytes, gauge, "Modern metadata store footprint in bytes", metadata_store},
-        {2, undefined, memory_other_erlang_process_bytes, gauge, "Other processes footprint in bytes", other_proc},
-        {2, undefined, memory_metrics_bytes, gauge, "Metric table footprint in bytes", metrics},
-        {2, undefined, memory_management_stats_db_bytes, gauge, "Management stats database footprint in bytes", mgmt_db},
-        {2, undefined, memory_classic_metadata_store_bytes, gauge, "Classic metadata store footprint in bytes", mnesia},
-        {2, undefined, memory_quorum_queue_ets_table_bytes, gauge, "Quorum queue ETS tables footprint in bytes", quorum_ets},
-        {2, undefined, memory_modern_metadata_store_ets_table_bytes, gauge, "Modern metadata store ETS tables footprint in bytes", metadata_store_ets},
-        {2, undefined, memory_other_ets_table_bytes, gauge, "Other ETS tables footprint in bytes", other_ets},
-        {2, undefined, memory_binary_heap_bytes, gauge, "Binary heap size in bytes", binary},
-        {2, undefined, memory_message_index_bytes, gauge, "Message index footprint in bytes", msg_index},
-        {2, undefined, memory_atom_table_bytes, gauge, "Atom table size in bytes", atom},
-        {2, undefined, memory_other_system_bytes, gauge, "Other runtime footprint in bytes", other_system},
-        {2, undefined, memory_runtime_allocated_unused_bytes, gauge, "Runtime allocated but unused blocks size in bytes", allocated_unused},
-        {2, undefined, memory_runtime_reserved_unallocated_bytes, gauge, "Runtime reserved but unallocated blocks size in bytes", reserved_unallocated}
-    ]},
-
     {node_persister_metrics, [
         {2, undefined, io_read_ops_total, counter, "Total number of I/O read operations", io_read_count},
         {2, undefined, io_read_bytes_total, counter, "Total number of I/O bytes read", io_read_bytes},
@@ -277,6 +248,36 @@
     ]}
 ]).
 
+-define(METRICS_MEMORY_BREAKDOWN, [
+    {node_memory, [
+        {2, undefined, memory_code_module_bytes, gauge, "Code module memory footprint", code},
+        {2, undefined, memory_client_connection_reader_bytes, gauge, "Client connection reader processes footprint in bytes", connection_readers},
+        {2, undefined, memory_client_connection_writer_bytes, gauge, "Client connection writer processes footprint in bytes", connection_writers},
+        {2, undefined, memory_client_connection_channel_bytes, gauge, "Client connection channel processes footprint in bytes", connection_channels},
+        {2, undefined, memory_client_connection_other_bytes, gauge, "Client connection other processes footprint in bytes", connection_other},
+        {2, undefined, memory_classic_queue_erlang_process_bytes, gauge, "Classic queue processes footprint in bytes", queue_procs},
+        {2, undefined, memory_quorum_queue_erlang_process_bytes, gauge, "Quorum queue processes footprint in bytes", quorum_queue_procs},
+        {2, undefined, memory_quorum_queue_dlx_erlang_process_bytes, gauge, "Quorum queue DLX worker processes footprint in bytes", quorum_queue_dlx_procs},
+        {2, undefined, memory_stream_erlang_process_bytes, gauge, "Stream processes footprint in bytes", stream_queue_procs},
+        {2, undefined, memory_stream_replica_reader_erlang_process_bytes, gauge, "Stream replica reader processes footprint in bytes", stream_queue_replica_reader_procs},
+        {2, undefined, memory_stream_coordinator_erlang_process_bytes, gauge, "Stream coordinator processes footprint in bytes", stream_queue_coordinator_procs},
+        {2, undefined, memory_plugin_bytes, gauge, "Total plugin footprint in bytes", plugins},
+        {2, undefined, memory_modern_metadata_store_bytes, gauge, "Modern metadata store footprint in bytes", metadata_store},
+        {2, undefined, memory_other_erlang_process_bytes, gauge, "Other processes footprint in bytes", other_proc},
+        {2, undefined, memory_metrics_bytes, gauge, "Metric table footprint in bytes", metrics},
+        {2, undefined, memory_management_stats_db_bytes, gauge, "Management stats database footprint in bytes", mgmt_db},
+        {2, undefined, memory_classic_metadata_store_bytes, gauge, "Classic metadata store footprint in bytes", mnesia},
+        {2, undefined, memory_quorum_queue_ets_table_bytes, gauge, "Quorum queue ETS tables footprint in bytes", quorum_ets},
+        {2, undefined, memory_modern_metadata_store_ets_table_bytes, gauge, "Modern metadata store ETS tables footprint in bytes", metadata_store_ets},
+        {2, undefined, memory_other_ets_table_bytes, gauge, "Other ETS tables footprint in bytes", other_ets},
+        {2, undefined, memory_binary_heap_bytes, gauge, "Binary heap size in bytes", binary},
+        {2, undefined, memory_message_index_bytes, gauge, "Message index footprint in bytes", msg_index},
+        {2, undefined, memory_atom_table_bytes, gauge, "Atom table size in bytes", atom},
+        {2, undefined, memory_other_system_bytes, gauge, "Other runtime footprint in bytes", other_system},
+        {2, undefined, memory_runtime_allocated_unused_bytes, gauge, "Runtime allocated but unused blocks size in bytes", allocated_unused},
+        {2, undefined, memory_runtime_reserved_unallocated_bytes, gauge, "Runtime reserved but unallocated blocks size in bytes", reserved_unallocated}
+    ]}]).
+
 -define(TOTALS, [
     %% ordering differs from metrics above, refer to list comprehension
     {connection_created, connections, gauge, "Connections currently open"},
@@ -303,6 +304,10 @@ collect_mf('detailed', Callback) ->
 collect_mf('per-object', Callback) ->
     collect(true, ?METRIC_NAME_PREFIX, false, ?METRICS_RAW, Callback),
     totals(Callback),
+    emit_identity_info(Callback),
+    ok;
+collect_mf('memory-breakdown', Callback) ->
+    collect(false, ?METRIC_NAME_PREFIX, false, ?METRICS_MEMORY_BREAKDOWN, Callback),
     emit_identity_info(Callback),
     ok;
 collect_mf(_Registry, Callback) ->
