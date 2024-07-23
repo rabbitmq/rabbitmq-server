@@ -309,7 +309,6 @@ missing_src_queue_with_src_predeclared(Config) ->
                     amqp_channel:call(
                         Ch2, #'queue.declare'{queue = <<"src">>,
                                         durable = true}),
-                    ct:log("Declare queue"),           
                     amqp_channel:call(
                         Ch2, #'queue.bind'{queue = <<"src">>,
                                         exchange = <<"amq.direct">>,
@@ -392,7 +391,6 @@ missing_src_queue_without_src_predeclared(Config) ->
                     amqp_channel:call(
                         Ch2, #'queue.declare'{queue = <<"src">>,
                                         durable = true}),
-                    ct:log("Declare queue"),           
                     amqp_channel:call(
                         Ch2, #'queue.bind'{queue = <<"src">>,
                                         exchange = <<"amq.direct">>,
@@ -904,20 +902,16 @@ expect_missing_queue(Ch, Q) ->
     try
         amqp_channel:call(Ch, #'queue.declare'{queue   = Q,
                                                passive = true}),
-        ct:log("Queue ~p still exists", [Q]),
         ct:fail(queue_still_exists)                            
     catch exit:{{shutdown, {server_initiated_close, ?NOT_FOUND, _Text}}, _} ->
-        ct:log("Queue ~p does not exist", [Q]),
         ok   
     end.
 expect_missing_exchange(Ch, X) ->
     try
         amqp_channel:call(Ch, #'exchange.declare'{exchange   = X,
                                                  passive = true}),
-        ct:log("Exchange ~p still exists", [X]),
         ct:fail(exchange_still_exists)                            
     catch exit:{{shutdown, {server_initiated_close, ?NOT_FOUND, _Text}}, _} ->
-        ct:log("Exchange ~p does not exist", [X]),
         ok   
     end.
 

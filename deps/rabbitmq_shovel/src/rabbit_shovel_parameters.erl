@@ -335,7 +335,6 @@ parse_amqp091_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
     DestQArgs = pget(<<"dest-queue-args">>,   Def, #{}),
     GlobalPredeclared = proplists:get_value(predeclared, application:get_env(?APP, topology, []), false),
     Predeclared = pget(<<"dest-predeclared">>, Def, GlobalPredeclared),
-    rabbit_log:debug("dest GlobalPredeclared: ~p Predeclared: ~p", [GlobalPredeclared, Predeclared]),
     DestDeclFun = case Predeclared of 
         true -> {?MODULE, dest_check, [DestQ, DestQArgs]};
         false -> {?MODULE, dest_decl, [DestQ, DestQArgs]}
@@ -426,7 +425,6 @@ parse_amqp10_source(Def) ->
        consumer_args => []}, Headers}.
 
 parse_amqp091_source(Def) ->
-    rabbit_log:debug("parse_amqp091_source: ~p", [Def]),
     SrcURIs  = deobfuscated_uris(<<"src-uri">>, Def),
     SrcX     = pget(<<"src-exchange">>,Def, none),
     SrcXKey  = pget(<<"src-exchange-key">>, Def, <<>>), %% [1]
@@ -435,7 +433,6 @@ parse_amqp091_source(Def) ->
     SrcCArgs = rabbit_misc:to_amqp_table(pget(<<"src-consumer-args">>, Def, [])),
     GlobalPredeclared = proplists:get_value(predeclared, application:get_env(?APP, topology, []), false),
     Predeclared = pget(<<"src-predeclared">>, Def, GlobalPredeclared),
-    rabbit_log:debug("src GlobalPredeclared: ~p Predeclared: ~p", [GlobalPredeclared, Predeclared]),
     {SrcDeclFun, Queue, DestHeaders} =
     case SrcQ of
         none -> {{?MODULE, src_decl_exchange, [SrcX, SrcXKey]}, <<>>,
@@ -450,7 +447,6 @@ parse_amqp091_source(Def) ->
                         SrcQ, [{<<"src-queue">>, SrcQ}]}
             end
     end,
-    rabbit_log:debug("parse_amqp091_source: SrcQ: ~p", [SrcQ]),
     DeleteAfter = pget(<<"src-delete-after">>, Def,
                        pget(<<"delete-after">>, Def, <<"never">>)),
     PrefetchCount = pget(<<"src-prefetch-count">>, Def,
@@ -516,10 +512,8 @@ ensure_queue(Conn, Queue, XArgs) ->
 check_queue(Conn, Queue, _XArgs) ->
     {ok, Ch} = amqp_connection:open_channel(Conn),
     try
-        rabbit_log:debug("Check if queue ~p exists", [Queue]),
         amqp_channel:call(Ch, #'queue.declare'{queue   = Queue,
-                                               passive = true}),
-        rabbit_log:debug("Checked queue ~p does exist", [Queue])                                      
+                                               passive = true})
     after
         catch amqp_channel:close(Ch)
     end.
