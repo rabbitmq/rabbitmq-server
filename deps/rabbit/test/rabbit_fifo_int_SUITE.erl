@@ -320,21 +320,38 @@ returns(Config) ->
               flush(),
               exit(await_delivery_timeout)
     end,
+    {FC5, _} =
     receive
         {ra_event, Qname2,
-         {machine, {delivery, _, [{_MsgId, {_, _Msg1Out}}]}} = Evt2} ->
-            {ok, _FC4, Actions2} =
+         {machine, {delivery, _, [{MsgId1, {_, _Msg1Out}}]}} = Evt2} ->
+            {ok, FC4, Actions2} =
                 rabbit_fifo_client:handle_ra_event(Qname2, Qname2, Evt2, FC3),
-            % ct:pal("Actions2 ~p", [Actions2]),
             [{deliver, _tag, true,
               [{_, _, _, _, Msg1Out}]}] = Actions2,
             ?assert(mc:is(Msg1Out)),
             ?assertEqual(1, mc:get_annotation(<<"x-delivery-count">>, Msg1Out)),
-            ?assertEqual(0, mc:get_annotation(delivery_count, Msg1Out)),
-            ok
+            %% delivery_count should _not_ be incremented for a return
+            ?assertEqual(undefined, mc:get_annotation(delivery_count, Msg1Out)),
+            rabbit_fifo_client:modify(<<"tag">>, [MsgId1], true, false, #{}, FC4)
     after 5000 ->
               flush(),
-              exit(await_delivery_timeout)
+              exit(await_delivery_timeout_2)
+    end,
+    receive
+        {ra_event, Qname3,
+         {machine, {delivery, _, [{MsgId2, {_, _Msg2Out}}]}} = Evt3} ->
+            {ok, FC6, Actions3} =
+                rabbit_fifo_client:handle_ra_event(Qname3, Qname3, Evt3, FC5),
+            [{deliver, _, true,
+              [{_, _, _, _, Msg2Out}]}] = Actions3,
+            ?assert(mc:is(Msg2Out)),
+            ?assertEqual(2, mc:get_annotation(<<"x-delivery-count">>, Msg2Out)),
+            %% delivery_count should be incremented for a modify with delivery_failed = true
+            ?assertEqual(1, mc:get_annotation(delivery_count, Msg2Out)),
+            rabbit_fifo_client:settle(<<"tag">>, [MsgId2], FC6)
+    after 5000 ->
+              flush(),
+              exit(await_delivery_timeout_3)
     end,
     rabbit_quorum_queue:stop_server(ServerId),
     ok.

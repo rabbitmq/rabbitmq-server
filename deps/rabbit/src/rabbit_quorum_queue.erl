@@ -847,7 +847,10 @@ settle(_QName, complete, CTag, MsgIds, QState) ->
 settle(_QName, requeue, CTag, MsgIds, QState) ->
     rabbit_fifo_client:return(quorum_ctag(CTag), MsgIds, QState);
 settle(_QName, discard, CTag, MsgIds, QState) ->
-    rabbit_fifo_client:discard(quorum_ctag(CTag), MsgIds, QState).
+    rabbit_fifo_client:discard(quorum_ctag(CTag), MsgIds, QState);
+settle(_QName, {modify, DelFailed, Undel, Anns}, CTag, MsgIds, QState) ->
+    rabbit_fifo_client:modify(quorum_ctag(CTag), MsgIds, DelFailed, Undel,
+                              Anns, QState).
 
 credit_v1(_QName, CTag, Credit, Drain, QState) ->
     rabbit_fifo_client:credit_v1(quorum_ctag(CTag), Credit, Drain, QState).

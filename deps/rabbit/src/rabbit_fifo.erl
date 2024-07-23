@@ -73,6 +73,7 @@
          %% misc
          get_msg_header/1,
          get_header/2,
+         annotate_msg/2,
          get_msg/1,
 
          %% protocol helpers
@@ -84,7 +85,7 @@
          is_return/1,
          make_discard/2,
          make_credit/4,
-         make_defer/2,
+         make_modify/5,
          make_purge/0,
          make_purge_nodes/1,
          make_update_config/1,
@@ -128,8 +129,11 @@
                  credit :: non_neg_integer(),
                  delivery_count :: rabbit_queue_type:delivery_count(),
                  drain :: boolean()}).
--record(defer, {consumer_key :: consumer_key(),
-                msg_ids :: [msg_id()]}).
+-record(modify, {consumer_key :: consumer_key(),
+                 msg_ids :: [msg_id()],
+                 delivery_failed :: boolean(),
+                 undeliverable_here :: boolean(),
+                 annotations :: mc:annotations()}).
 -record(purge, {}).
 -record(purge_nodes, {nodes :: [node()]}).
 -record(update_config, {config :: config()}).
@@ -146,7 +150,7 @@
     #return{} |
     #discard{} |
     #credit{} |
-    #defer{} |
+    #modify{} |
     #purge{} |
     #purge_nodes{} |
     #update_config{} |
@@ -259,26 +263,10 @@ apply(Meta, #settle{msg_ids = MsgIds,
     end;
 apply(Meta, #discard{consumer_key = ConsumerKey,
                      msg_ids = MsgIds},
-      #?STATE{consumers = Consumers,
-              dlx = DlxState0,
-              cfg = #cfg{dead_letter_handler = DLH}} = State0) ->
+      #?STATE{consumers = Consumers } = State0) ->
     case find_consumer(ConsumerKey, Consumers) of
-        {ConsumerKey, #consumer{checked_out = Checked} = Con} ->
-            %% We publish to dead-letter exchange in the same order
-            %% as messages got rejected by the client.
-            DiscardMsgs = lists:filtermap(
-                            fun(Id) ->
-                                    case maps:get(Id, Checked, undefined) of
-                                        undefined ->
-                                            false;
-                                        Msg ->
-                                            {true, Msg}
-                                    end
-                            end, MsgIds),
-            {DlxState, Effects} = rabbit_fifo_dlx:discard(DiscardMsgs, rejected,
-                                                          DLH, DlxState0),
-            State = State0#?STATE{dlx = DlxState},
-            complete_and_checkout(Meta, MsgIds, ConsumerKey, Con, Effects, State);
+        {ConsumerKey, #consumer{} = Con} ->
+            discard(Meta, MsgIds, ConsumerKey, Con, true, #{}, State0);
         _ ->
             {State0, ok}
     end;
@@ -287,9 +275,27 @@ apply(Meta, #return{consumer_key = ConsumerKey,
       #?STATE{consumers = Cons0} = State) ->
     case find_consumer(ConsumerKey, Cons0) of
         {ActualConsumerKey, #consumer{checked_out = Checked}} ->
-            return(Meta, ActualConsumerKey, MsgIds, Checked, [], State);
+            return(Meta, ActualConsumerKey, MsgIds, false,
+                   #{}, Checked, [], State);
         _ ->
             {State, ok}
+    end;
+apply(Meta, #modify{consumer_key = ConsumerKey,
+                    delivery_failed = DelFailed,
+                    undeliverable_here = Undel,
+                    annotations = Anns,
+                    msg_ids = MsgIds},
+      #?STATE{consumers = Cons0} = State0) ->
+    case find_consumer(ConsumerKey, Cons0) of
+        {ConsumerKey, #consumer{checked_out = Checked}}
+          when Undel == false ->
+            return(Meta, ConsumerKey, MsgIds, DelFailed,
+                   Anns, Checked, [], State0);
+        {ConsumerKey, #consumer{} = Con}
+          when Undel == true ->
+            discard(Meta, MsgIds, ConsumerKey, Con, DelFailed, Anns, State0);
+        _ ->
+            {State0, ok}
     end;
 apply(#{index := Idx} = Meta,
       #requeue{consumer_key = ConsumerKey,
@@ -307,8 +313,7 @@ apply(#{index := Idx} = Meta,
           when is_map_key(MsgId, Checked0) ->
             %% construct a message with the current raft index
             %% and update delivery count before adding it to the message queue
-            Header1 = update_header(delivery_count, fun incr/1, 1, Header0),
-            Header = update_header(return_count, fun incr/1, 1, Header1),
+            Header = update_header(acquired_count, fun incr/1, 1, Header0),
             State0 = add_bytes_return(Header, State00),
             Con = Con0#consumer{checked_out = maps:remove(MsgId, Checked0),
                                 credit = increase_credit(Con0, 1)},
@@ -506,7 +511,7 @@ apply(#{system_time := Ts} = Meta,
                   %% and checked out messages should be returned
                   Effs = consumer_update_active_effects(
                            S0, C0, false, suspected_down, E0),
-                  {St, Effs1} = return_all(Meta, S0, Effs, CKey, C0),
+                  {St, Effs1} = return_all(Meta, S0, Effs, CKey, C0, true),
                   %% if the consumer was cancelled there is a chance it got
                   %% removed when returning hence we need to be defensive here
                   Waiting = case St#?STATE.consumers of
@@ -556,7 +561,7 @@ apply(#{system_time := Ts} = Meta,
                               status = up} = C0,
               {St0, Eff}) when node(P) =:= Node ->
                   C = C0#consumer{status = suspected_down},
-                  {St, Eff0} = return_all(Meta, St0, Eff, CKey, C),
+                  {St, Eff0} = return_all(Meta, St0, Eff, CKey, C, true),
                   Eff1 = consumer_update_active_effects(St, C, false,
                                                         suspected_down, Eff0),
                   {St, Eff1};
@@ -642,28 +647,47 @@ apply(_Meta, Cmd, State) ->
     rabbit_log:debug("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
     {State, ok, []}.
 
-convert_v3_to_v4(#{system_time := _Ts},
-                 StateV3) ->
+convert_v3_to_v4(#{} = _Meta, StateV3) ->
+    %% TODO: consider emitting release cursors as checkpoints
     Messages0 = rabbit_fifo_v3:get_field(messages, StateV3),
-    Consumers = rabbit_fifo_v3:get_field(consumers, StateV3),
+    Returns0 = lqueue:to_list(rabbit_fifo_v3:get_field(returns, StateV3)),
+    Consumers0 = rabbit_fifo_v3:get_field(consumers, StateV3),
+    Consumers = maps:map(
+                  fun (_, #consumer{checked_out = Ch0} = C) ->
+                          Ch = maps:map(
+                                 fun (_, ?MSG(I, #{delivery_count := DC} = H)) ->
+                                         ?MSG(I, H#{acquired_count => DC});
+                                     (_, Msg) ->
+                                         Msg
+                                 end, Ch0),
+                          C#consumer{checked_out = Ch};
+                      (_, Msg) ->
+                          Msg
+                  end, Consumers0),
+    Returns = lqueue:from_list(
+                lists:map(fun (?MSG(I, #{delivery_count := DC} = H)) ->
+                                  ?MSG(I, H#{acquired_count => DC});
+                              (Msg) ->
+                                  Msg
+                          end, Returns0)),
+
     Messages = rabbit_fifo_q:from_lqueue(Messages0),
-    #?MODULE{cfg = rabbit_fifo_v3:get_field(cfg, StateV3),
-             messages = Messages,
-             messages_total = rabbit_fifo_v3:get_field(messages_total, StateV3),
-             returns = rabbit_fifo_v3:get_field(returns, StateV3),
-             enqueue_count = rabbit_fifo_v3:get_field(enqueue_count, StateV3),
-             enqueuers = rabbit_fifo_v3:get_field(enqueuers, StateV3),
-             ra_indexes = rabbit_fifo_v3:get_field(ra_indexes, StateV3),
-             release_cursors = rabbit_fifo_v3:get_field(release_cursors, StateV3),
-             consumers = Consumers,
-             % consumers that require further service are queued here
-             service_queue = rabbit_fifo_v3:get_field(service_queue, StateV3),
-             dlx = rabbit_fifo_v3:get_field(dlx, StateV3),
-             msg_bytes_enqueue = rabbit_fifo_v3:get_field(msg_bytes_enqueue, StateV3),
-             msg_bytes_checkout = rabbit_fifo_v3:get_field(msg_bytes_checkout, StateV3),
-             waiting_consumers = rabbit_fifo_v3:get_field(waiting_consumers, StateV3),
-             last_active = rabbit_fifo_v3:get_field(last_active, StateV3),
-             msg_cache = rabbit_fifo_v3:get_field(msg_cache, StateV3)}.
+    #?STATE{cfg = rabbit_fifo_v3:get_field(cfg, StateV3),
+            messages = Messages,
+            messages_total = rabbit_fifo_v3:get_field(messages_total, StateV3),
+            returns = Returns,
+            enqueue_count = rabbit_fifo_v3:get_field(enqueue_count, StateV3),
+            enqueuers = rabbit_fifo_v3:get_field(enqueuers, StateV3),
+            ra_indexes = rabbit_fifo_v3:get_field(ra_indexes, StateV3),
+            consumers = Consumers,
+            service_queue = rabbit_fifo_v3:get_field(service_queue, StateV3),
+            dlx = rabbit_fifo_v3:get_field(dlx, StateV3),
+            msg_bytes_enqueue = rabbit_fifo_v3:get_field(msg_bytes_enqueue, StateV3),
+            msg_bytes_checkout = rabbit_fifo_v3:get_field(msg_bytes_checkout, StateV3),
+            waiting_consumers = rabbit_fifo_v3:get_field(waiting_consumers, StateV3),
+            last_active = rabbit_fifo_v3:get_field(last_active, StateV3),
+            msg_cache = rabbit_fifo_v3:get_field(msg_cache, StateV3),
+            unused_1 = []}.
 
 purge_node(Meta, Node, State, Effects) ->
     lists:foldl(fun(Pid, {S0, E0}) ->
@@ -803,7 +827,6 @@ tick(Ts, #?STATE{cfg = #cfg{name = _Name,
 -spec overview(state()) -> map().
 overview(#?STATE{consumers = Cons,
                  enqueuers = Enqs,
-                 release_cursors = Cursors,
                  enqueue_count = EnqCount,
                  msg_bytes_enqueue = EnqueueBytes,
                  msg_bytes_checkout = CheckoutBytes,
@@ -849,7 +872,7 @@ overview(#?STATE{consumers = Cons,
                  num_ready_messages_low => MsgsLo,
                  num_ready_messages_return => MsgsRet,
                  num_messages => messages_total(State),
-                 num_release_cursors => lqueue:len(Cursors),
+                 num_release_cursors => 0, %% backwards compat
                  enqueue_message_bytes => EnqueueBytes,
                  checkout_message_bytes => CheckoutBytes,
                  release_cursors => [], %% backwards compat
@@ -1518,7 +1541,8 @@ maybe_return_all(#{system_time := Ts} = Meta, ConsumerKey,
                                  status = cancelled},
                S0), Effects0};
         _ ->
-            {S1, Effects} = return_all(Meta, S0, Effects0, ConsumerKey, Consumer),
+            {S1, Effects} = return_all(Meta, S0, Effects0, ConsumerKey,
+                                       Consumer, Reason == down),
             {S1#?STATE{consumers = maps:remove(ConsumerKey, S1#?STATE.consumers),
                        last_active = Ts},
              Effects}
@@ -1563,6 +1587,20 @@ maybe_set_msg_ttl(Msg, RaCmdTs, Header,
             Header
     end.
 
+maybe_set_msg_delivery_count(Msg, Header) ->
+    case mc:is(Msg) of
+        true ->
+            case mc:get_annotation(delivery_count, Msg) of
+                undefined ->
+                    Header;
+                DelCnt ->
+                    update_header(delivery_count, fun (_) -> DelCnt end,
+                                  DelCnt, Header)
+            end;
+        false ->
+            Header
+    end.
+
 update_expiry_header(_, undefined, Header) ->
     Header;
 update_expiry_header(RaCmdTs, 0, Header) ->
@@ -1586,7 +1624,8 @@ maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg,
                                messages_total = Total} = State0) ->
     % direct enqueue without tracking
     Size = BodySize,
-    Header = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
+    Header0 = maybe_set_msg_ttl(RawMsg, Ts, BodySize, State0),
+    Header = maybe_set_msg_delivery_count(RawMsg, Header0),
     Msg = ?MSG(RaftIdx, Header),
     PTag = priority_tag(RawMsg),
     State = State0#?STATE{msg_bytes_enqueue = Enqueue + Size,
@@ -1612,7 +1651,8 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
             {Res, State, [{monitor, process, From} | Effects]};
         #enqueuer{next_seqno = MsgSeqNo} = Enq0 ->
             % it is the next expected seqno
-            Header = maybe_set_msg_ttl(RawMsg, Ts, BodySize, State0),
+            Header0 = maybe_set_msg_ttl(RawMsg, Ts, BodySize, State0),
+            Header = maybe_set_msg_delivery_count(RawMsg, Header0),
             Msg = ?MSG(RaftIdx, Header),
             Enq = Enq0#enqueuer{next_seqno = MsgSeqNo + 1},
             MsgCache = case can_immediately_deliver(State0) of
@@ -1639,17 +1679,16 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
             {duplicate, State0, Effects0}
     end.
 
-return(#{} = Meta,
-       ConsumerKey, MsgIds, Checked, Effects0, State0) ->
+return(#{} = Meta, ConsumerKey, MsgIds, IncrDelCount, Anns,
+       Checked, Effects0, State0)
+ when is_map(Anns) ->
     %% We requeue in the same order as messages got returned by the client.
     {State1, Effects1} =
         lists:foldl(
           fun(MsgId, Acc = {S0, E0}) ->
                   case Checked of
-                      #{MsgId := Msg0} ->
-                          Msg = update_msg_header(return_count, fun incr/1, 1,
-                                                  Msg0),
-                          return_one(Meta, MsgId, Msg,
+                      #{MsgId := Msg} ->
+                          return_one(Meta, MsgId, Msg, IncrDelCount, Anns,
                                      S0, E0, ConsumerKey);
                       #{} ->
                           Acc
@@ -1782,7 +1821,24 @@ get_header(Key, Header)
   when is_map(Header) andalso is_map_key(size, Header) ->
     maps:get(Key, Header, undefined).
 
-return_one(Meta, MsgId, ?MSG(_, _) = Msg0,
+annotate_msg(Header, Msg0) ->
+    case mc:is(Msg0) of
+        true when is_map(Header) ->
+            Msg = maps:fold(fun (K, V, Acc) ->
+                                    mc:set_annotation(K, V, Acc)
+                            end, Msg0, maps:get(anns, Header, #{})),
+            case is_map_key(delivery_count, Header) of
+                true ->
+                    mc:set_annotation(delivery_count,
+                                      maps:get(delivery_count, Header), Msg);
+                false ->
+                    Msg
+            end;
+        _ ->
+            Msg0
+    end.
+
+return_one(Meta, MsgId, ?MSG(_, _) = Msg0, DelivFailed, Anns,
            #?STATE{returns = Returns,
                    consumers = Consumers,
                    dlx = DlxState0,
@@ -1790,9 +1846,9 @@ return_one(Meta, MsgId, ?MSG(_, _) = Msg0,
                               dead_letter_handler = DLH}} = State0,
            Effects0, ConsumerKey) ->
     #consumer{checked_out = Checked0} = Con0 = maps:get(ConsumerKey, Consumers),
-    Msg = update_msg_header(delivery_count, fun incr/1, 1, Msg0),
+    Msg = incr_msg(Msg0, DelivFailed, Anns),
     Header = get_msg_header(Msg),
-    case get_header(delivery_count, Header) of
+    case get_header(acquired_count, Header) of
         DeliveryCount when DeliveryCount > DeliveryLimit ->
             {DlxState, DlxEffects} =
                 rabbit_fifo_dlx:discard([Msg], delivery_limit, DLH, DlxState0),
@@ -1811,10 +1867,11 @@ return_one(Meta, MsgId, ?MSG(_, _) = Msg0,
     end.
 
 return_all(Meta, #?STATE{consumers = Cons} = State0, Effects0, ConsumerKey,
-           #consumer{checked_out = Checked} = Con) ->
+           #consumer{checked_out = Checked} = Con, DelivFailed) ->
     State = State0#?STATE{consumers = Cons#{ConsumerKey => Con}},
     lists:foldl(fun ({MsgId, Msg}, {S, E}) ->
-                        return_one(Meta, MsgId, Msg, S, E, ConsumerKey)
+                        return_one(Meta, MsgId, Msg, DelivFailed, #{},
+                                   S, E, ConsumerKey)
                 end, {State, Effects0}, lists:sort(maps:to_list(Checked))).
 
 checkout(Meta, OldState, State0, Effects0) ->
@@ -2468,9 +2525,26 @@ make_credit(Key, Credit, DeliveryCount, Drain) ->
             delivery_count = DeliveryCount,
             drain = Drain}.
 
--spec make_defer(consumer_key(), [msg_id()]) -> protocol().
-make_defer(ConsumerKey, MsgIds) when is_list(MsgIds) ->
-    #defer{consumer_key = ConsumerKey, msg_ids = MsgIds}.
+-spec make_modify(consumer_key(), [msg_id()],
+                  boolean(), boolean(), mc:annotations()) -> protocol().
+make_modify(ConsumerKey, MsgIds, DeliveryFailed, UndeliverableHere, Anns)
+  when is_list(MsgIds) andalso
+       is_boolean(DeliveryFailed) andalso
+       is_boolean(UndeliverableHere) andalso
+       is_map(Anns) ->
+    case is_v4() of
+        true ->
+            #modify{consumer_key = ConsumerKey,
+                    msg_ids = MsgIds,
+                    delivery_failed = DeliveryFailed,
+                    undeliverable_here = UndeliverableHere,
+                    annotations = Anns};
+        false when UndeliverableHere ->
+            make_discard(ConsumerKey, MsgIds);
+        false ->
+            make_return(ConsumerKey, MsgIds)
+    end.
+
 
 -spec make_purge() -> protocol().
 make_purge() -> #purge{}.
@@ -2497,7 +2571,7 @@ add_bytes_return(Header,
                           msg_bytes_enqueue = Enqueue} = State) ->
     Size = get_header(size, Header),
     State#?STATE{msg_bytes_checkout = Checkout - Size,
-                  msg_bytes_enqueue = Enqueue + Size}.
+                 msg_bytes_enqueue = Enqueue + Size}.
 
 message_size(B) when is_binary(B) ->
     byte_size(B);
@@ -2830,3 +2904,41 @@ release_cursor(LastSmallest, Smallest)
 release_cursor(_, _) ->
     [].
 
+discard(Meta, MsgIds, ConsumerKey,
+        #consumer{checked_out = Checked} = Con,
+        DelFailed, Anns,
+        #?STATE{cfg = #cfg{dead_letter_handler = DLH},
+                dlx = DlxState0} = State0) ->
+    %% We publish to dead-letter exchange in the same order
+    %% as messages got rejected by the client.
+    DiscardMsgs = lists:filtermap(
+                    fun(Id) ->
+                            case maps:get(Id, Checked, undefined) of
+                                undefined ->
+                                    false;
+                                Msg0 ->
+                                    {true, incr_msg(Msg0, DelFailed, Anns)}
+                            end
+                    end, MsgIds),
+    {DlxState, Effects} = rabbit_fifo_dlx:discard(DiscardMsgs, rejected,
+                                                  DLH, DlxState0),
+    State = State0#?STATE{dlx = DlxState},
+    complete_and_checkout(Meta, MsgIds, ConsumerKey, Con, Effects, State).
+
+incr_msg(Msg0, DelFailed, Anns) ->
+    Msg1 = update_msg_header(acquired_count, fun incr/1, 1, Msg0),
+    Msg2 = case map_size(Anns) > 0 of
+               true ->
+                   update_msg_header(anns, fun(A) ->
+                                                   maps:merge(A, Anns)
+                                           end, Anns,
+                                     Msg1);
+               false ->
+                   Msg1
+           end,
+    case DelFailed of
+        true ->
+            update_msg_header(delivery_count, fun incr/1, 1, Msg2);
+        false ->
+            Msg2
+    end.

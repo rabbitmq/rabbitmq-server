@@ -11,8 +11,6 @@
 %% We only hold Raft index and message header in memory.
 %% Raw message data is always stored on disk.
 -define(MSG(Index, Header), ?TUPLE(Index, Header)).
-% -define(C_MSG(_At, Msg), Msg).
-% -define(C_MSG(_At, Index, Header), ?MSG(Index, Header)).
 
 -define(IS_HEADER(H),
         (is_integer(H) andalso H >= 0) orelse
@@ -199,11 +197,7 @@
          % index when there are large gaps but should be faster than gb_trees
          % for normal appending operations as it's backed by a map
          ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
-         %% A release cursor is essentially a snapshot for a past raft index.
-         %% Working assumption: Messages are consumed in a FIFO-ish order because
-         %% the log is truncated only until the oldest message.
-         release_cursors = lqueue:new() :: lqueue:lqueue({release_cursor,
-                                                          ra:index(), #rabbit_fifo{}}),
+         unused_1,
          % consumers need to reflect consumer state at time of snapshot
          consumers = #{} :: #{consumer_id() | ra:index() => consumer()},
          % consumers that require further service are queued here

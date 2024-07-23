@@ -1346,7 +1346,7 @@ test_dead_lettering(PolicySet, Config, Ch, Servers, RaName, Source, Destination)
     wait_for_messages_ready(Servers, RaName, 1),
     wait_for_messages_pending_ack(Servers, RaName, 0),
     wait_for_messages(Config, [[Destination, <<"0">>, <<"0">>, <<"0">>]]),
-    DeliveryTag = consume(Ch, Source, false),
+    DeliveryTag = basic_get_tag(Ch, Source, false),
     wait_for_messages_ready(Servers, RaName, 0),
     wait_for_messages_pending_ack(Servers, RaName, 1),
     wait_for_messages(Config, [[Destination, <<"0">>, <<"0">>, <<"0">>]]),
@@ -1358,7 +1358,7 @@ test_dead_lettering(PolicySet, Config, Ch, Servers, RaName, Source, Destination)
     case PolicySet of
         true ->
             wait_for_messages(Config, [[Destination, <<"1">>, <<"1">>, <<"0">>]]),
-            _ = consume(Ch, Destination, true);
+            _ = basic_get_tag(Ch, Destination, true);
         false ->
             wait_for_messages(Config, [[Destination, <<"0">>, <<"0">>, <<"0">>]])
     end.
@@ -1432,7 +1432,7 @@ dead_letter_to_quorum_queue(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 0),
     wait_for_messages_ready(Servers, RaName2, 0),
     wait_for_messages_pending_ack(Servers, RaName2, 0),
-    DeliveryTag = consume(Ch, QQ, false),
+    DeliveryTag = basic_get_tag(Ch, QQ, false),
     wait_for_messages_ready(Servers, RaName, 0),
     wait_for_messages_pending_ack(Servers, RaName, 1),
     wait_for_messages_ready(Servers, RaName2, 0),
@@ -1444,7 +1444,12 @@ dead_letter_to_quorum_queue(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 0),
     wait_for_messages_ready(Servers, RaName2, 1),
     wait_for_messages_pending_ack(Servers, RaName2, 0),
-    _ = consume(Ch, QQ2, false).
+
+    {#'basic.get_ok'{delivery_tag = _Tag},
+     #amqp_msg{} = Msg} = basic_get(Ch, QQ2, false, 1),
+    ct:pal("Msg ~p", [Msg]),
+    flush(1000),
+    ok.
 
 dead_letter_from_classic_to_quorum_queue(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1463,7 +1468,7 @@ dead_letter_from_classic_to_quorum_queue(Config) ->
     wait_for_messages_ready(Servers, RaName, 0),
     wait_for_messages_pending_ack(Servers, RaName, 0),
     wait_for_messages(Config, [[CQ, <<"1">>, <<"1">>, <<"0">>]]),
-    DeliveryTag = consume(Ch, CQ, false),
+    DeliveryTag = basic_get_tag(Ch, CQ, false),
     wait_for_messages_ready(Servers, RaName, 0),
     wait_for_messages_pending_ack(Servers, RaName, 0),
     wait_for_messages(Config, [[CQ, <<"1">>, <<"0">>, <<"1">>]]),
@@ -1473,7 +1478,7 @@ dead_letter_from_classic_to_quorum_queue(Config) ->
     wait_for_messages_ready(Servers, RaName, 1),
     wait_for_messages_pending_ack(Servers, RaName, 0),
     wait_for_messages(Config, [[CQ, <<"0">>, <<"0">>, <<"0">>]]),
-    _ = consume(Ch, QQ, false),
+    _ = basic_get_tag(Ch, QQ, false),
     rabbit_ct_client_helpers:close_channel(Ch).
 
 cleanup_queue_state_on_channel_after_publish(Config) ->
@@ -1872,8 +1877,8 @@ channel_handles_ra_event(Config) ->
     publish(Ch1, Q2),
     wait_for_messages(Config, [[Q1, <<"1">>, <<"1">>, <<"0">>]]),
     wait_for_messages(Config, [[Q2, <<"1">>, <<"1">>, <<"0">>]]),
-    ?assertEqual(1, consume(Ch1, Q1, false)),
-    ?assertEqual(2, consume(Ch1, Q2, false)).
+    ?assertEqual(1, basic_get_tag(Ch1, Q1, false)),
+    ?assertEqual(2, basic_get_tag(Ch1, Q2, false)).
 
 declare_during_node_down(Config) ->
     [Server, DownServer, _] = Servers = rabbit_ct_broker_helpers:get_node_configs(
@@ -3882,7 +3887,7 @@ publish(Ch, Queue, Msg) ->
                            #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
                                      payload = Msg}).
 
-consume(Ch, Queue, NoAck) ->
+basic_get_tag(Ch, Queue, NoAck) ->
     {GetOk, _} = Reply = amqp_channel:call(Ch, #'basic.get'{queue = Queue,
                                                             no_ack = NoAck}),
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg">>}}, Reply),

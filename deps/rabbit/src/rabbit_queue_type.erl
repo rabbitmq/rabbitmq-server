@@ -136,7 +136,13 @@
 -type delivery_options() :: #{correlation => correlation(),
                               atom() => term()}.
 
--type settle_op() :: 'complete' | 'requeue' | 'discard'.
+-type settle_op() :: complete |
+                     requeue |
+                     discard |
+                     {modify,
+                      DeliveryFailed :: boolean(),
+                      UndeliverableHere :: boolean(),
+                      Annotations :: mc:annotations()}.
 
 -export_type([state/0,
               consume_mode/0,

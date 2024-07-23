@@ -1868,14 +1868,23 @@ settle_op_from_outcome(#'v1_0.released'{}) ->
 %% https://github.com/apache/qpid-jms/blob/90eb60f59cb59b7b9ad8363ee8a843d6903b8e77/qpid-jms-client/src/main/java/org/apache/qpid/jms/JmsMessageConsumer.java#L464
 %% In such cases, it's better when RabbitMQ does not end the session.
 %% See https://github.com/rabbitmq/rabbitmq-server/issues/6121
-settle_op_from_outcome(#'v1_0.modified'{undeliverable_here = true}) ->
-    %% This is not quite correct because undeliverable_here refers to the link,
-    %% and not the message in general. However, RabbitMQ cannot filter messages from
-    %% being assigned to individual consumers. That's why we discard.
-    discard;
-settle_op_from_outcome(#'v1_0.modified'{}) ->
-    requeue;
-
+settle_op_from_outcome(#'v1_0.modified'{delivery_failed = DelFailed,
+                                        undeliverable_here = UndelHere,
+                                        message_annotations = Anns0
+                                        }) ->
+    Anns = case Anns0 of
+               #'v1_0.message_annotations'{content = C} ->
+                   C;
+               _ ->
+                   []
+           end,
+    {modify,
+     default(DelFailed, false),
+     default(UndelHere, false),
+     %% TODO: this must exist elsewhere
+     lists:foldl(fun ({{symbol, K}, V}, Acc) ->
+                        Acc#{K => unwrap(V)}
+                end, #{}, Anns)};
 settle_op_from_outcome(Outcome) ->
     protocol_error(
       ?V_1_0_AMQP_ERROR_INVALID_FIELD,
@@ -3499,3 +3508,8 @@ format_status(
               permission_cache => PermissionCache,
               topic_permission_cache => TopicPermissionCache},
     maps:update(state, State, Status).
+
+unwrap({_Tag, V}) ->
+    V;
+unwrap(V) ->
+    V.

@@ -14,6 +14,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit/src/rabbit_fifo.hrl").
+-include_lib("rabbit/src/rabbit_fifo_dlx.hrl").
 
 % -define(PROTOMOD, rabbit_framing_amqp_0_9_1).
 %%%===================================================================
@@ -89,9 +90,9 @@ end_per_testcase(_Group, _Config) ->
                               end, Effects))).
 
 -define(ASSERT(Guard, Fun),
-        {assert, fun (S) -> ?assertMatch(Guard, S), Fun end}).
+        {assert, fun (S) -> ?assertMatch(Guard, S), _ = Fun(S) end}).
 -define(ASSERT(Guard),
-        ?ASSERT(Guard, fun () -> ok end)).
+        ?ASSERT(Guard, fun (_) -> true end)).
 
 test_init(Name) ->
     init(#{name => Name,
@@ -609,8 +610,7 @@ return_auto_checked_out_test(Config) ->
     {State2, _, Effects} = apply(meta(Config, 3),
                                   rabbit_fifo:make_return(CKey, [MsgId]), State1),
     [{log, [1], Fun2, _} | _] = Effects,
-    [{send_msg, _, {delivery, _, [{_MsgId2, {#{delivery_count := 1,
-                                               return_count := 1}, first}}]}, _}]
+    [{send_msg, _, {delivery, _, [{_MsgId2, {#{acquired_count := 1}, first}}]}, _}]
     = Fun2([Msg1]),
 
     %% a down does not increment the return_count
@@ -620,8 +620,8 @@ return_auto_checked_out_test(Config) ->
                 next_msg_id := _},
      [_, {log, [1], Fun3, _} ]} = checkout(Config, ?LINE, Cid, 1, State3),
 
-    [{send_msg, _, {delivery, _, [{_, {#{delivery_count := 2,
-                                         return_count := 1}, first}}]}, _}]
+    [{send_msg, _, {delivery, _, [{_, {#{delivery_count := 1,
+                                         acquired_count := 2}, first}}]}, _}]
     = Fun3([Msg1]),
     ok.
 
@@ -641,8 +641,7 @@ requeue_test(Config) ->
     {_State2, _, Effects} = apply(meta(Config, 3), Requeue, State1),
     [{log, [_], Fun2, _} | _] = Effects,
     [{send_msg, _,
-      {delivery, _, [{_MsgId2, {#{delivery_count := 1,
-                                  return_count := 1}, first}}]}, _}]
+      {delivery, _, [{_MsgId2, {#{acquired_count := 1}, first}}]}, _}]
     = Fun2([Msg1]),
     ok.
 
@@ -785,8 +784,10 @@ discarded_message_with_dead_letter_handler_emits_log_effect_test(Config) ->
                      max_in_memory_length => 0,
                      dead_letter_handler =>
                      {at_most_once, {somemod, somefun, [somearg]}}}),
-    Msg1 = rabbit_fifo:make_enqueue(self(), 1, first),
-    {State0, _} = enq(Config, 1, 1, first, State00),
+
+    Mc = mk_mc(<<"first">>),
+    Msg1 = rabbit_fifo:make_enqueue(self(), 1, Mc),
+    {State0, _} = enq(Config, 1, 1, Mc, State00),
     {State1, #{key := CKey,
                next_msg_id := MsgId}, Effects1} =
         checkout(Config, ?LINE, Cid, 10, State0),
@@ -796,7 +797,22 @@ discarded_message_with_dead_letter_handler_emits_log_effect_test(Config) ->
     % assert mod call effect with appended reason and message
     {value, {log, [1], Fun}} = lists:search(fun (E) -> element(1, E) == log end,
                                             Effects2),
-    ?assertMatch([{mod_call,somemod,somefun,[somearg,rejected,[first]]}], Fun([Msg1])),
+    [{mod_call, somemod, somefun, [somearg, rejected, [McOut]]}] = Fun([Msg1]),
+
+    ?assertEqual(undefined, mc:get_annotation(acquired_count, McOut)),
+    ?assertEqual(1, mc:get_annotation(delivery_count, McOut)),
+
+    ok.
+
+enqueued_msg_with_delivery_count_test(Config) ->
+    State00 = init(#{name => test,
+                     queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>),
+                     max_in_memory_length => 0,
+                     dead_letter_handler =>
+                     {at_most_once, {somemod, somefun, [somearg]}}}),
+    Mc = mc:set_annotation(delivery_count, 2, mk_mc(<<"first">>)),
+    {#rabbit_fifo{messages = Msgs}, _} = enq(Config, 1, 1, Mc, State00),
+    ?assertMatch(?MSG(_, #{delivery_count := 2}), rabbit_fifo_q:get(Msgs)),
     ok.
 
 get_log_eff(Effs) ->
@@ -2389,35 +2405,49 @@ convert_v3_to_v4(Config) ->
     ConfigV3 = [{machine_version, 3} | Config],
     ConfigV4 = [{machine_version, 4} | Config],
 
-    Cid1 = {ctag1, self()},
+    EPid = test_util:fake_pid(node()),
+    Pid1 = test_util:fake_pid(node()),
+    Cid1 = {ctag1, Pid1},
     Cid2 = {ctag2, self()},
-    MaxCredits = 20,
-    Entries = [{1, make_checkout(Cid1, {auto, 10, credited}, #{})},
-               {2, make_checkout(Cid2, {auto, MaxCredits, simple_prefetch},
-                                 #{prefetch => MaxCredits})}],
+    MaxCredits = 2,
+    Entries = [
+               {1, rabbit_fifo_v3:make_enqueue(EPid, 1, banana)},
+               {2, rabbit_fifo_v3:make_enqueue(EPid, 2, apple)},
+               {3, rabbit_fifo_v3:make_enqueue(EPid, 3, orange)},
+               {4, make_checkout(Cid1, {auto, 10, credited}, #{})},
+               {5, make_checkout(Cid2, {auto, MaxCredits, simple_prefetch},
+                                 #{prefetch => MaxCredits})},
+               {6, {down, Pid1, error}}],
 
     %% run log in v3
     Name = ?FUNCTION_NAME,
     Init = rabbit_fifo_v3:init(
              #{name => Name,
-               max_in_memory_length => 0,
                queue_resource => rabbit_misc:r("/", queue, atom_to_binary(Name)),
                release_cursor_interval => 0}),
     {State, _} = run_log(rabbit_fifo_v3, ConfigV3, Init, Entries,
                          fun (_) -> true end),
 
     %% convert from v3 to v4
-    {#rabbit_fifo{consumers = Consumers}, ok, _} =
-        apply(meta(ConfigV4, 4), {machine_version, 3, 4}, State),
+    {#rabbit_fifo{consumers = Consumers,
+                  returns = Returns}, ok, _} =
+        apply(meta(ConfigV4, ?LINE), {machine_version, 3, 4}, State),
 
-    ?assertEqual(2, maps:size(Consumers)),
+    ?assertEqual(1, maps:size(Consumers)),
     ?assertMatch(#consumer{cfg = #consumer_cfg{credit_mode =
                                                {simple_prefetch, MaxCredits}}},
                  maps:get(Cid2, Consumers)),
-    #consumer{checked_out = Ch1} = maps:get(Cid1, Consumers),
-    maps:foreach(fun (_MsgId, Msg) -> ?assert(is_tuple(Msg)) end, Ch1),
+    ?assertNot(is_map_key(Cid1, Consumers)),
+    %% assert delivery_count is copied to acquired_count
     #consumer{checked_out = Ch2} = maps:get(Cid2, Consumers),
-    maps:foreach(fun (_MsgId, Msg) -> ?assert(is_tuple(Msg)) end, Ch2),
+    ?assertMatch(#{0 := ?MSG(_, #{delivery_count := 1,
+                                  acquired_count := 1}),
+                   1 := ?MSG(_, #{delivery_count := 1,
+                                  acquired_count := 1})}, Ch2),
+
+    ?assertMatch(?MSG(_, #{delivery_count := 1,
+                           acquired_count := 1}), lqueue:get(Returns)),
+
     ok.
 
 queue_ttl_test(C) ->
@@ -2641,6 +2671,72 @@ checkout_metadata_test(Config) ->
         checkout(Config, ?LINE, Cid, 1, State2),
     ok.
 
+modify_test(Config) ->
+    S0 = init(#{name => ?FUNCTION_NAME,
+                dead_letter_handler => at_least_once,
+                queue_resource =>
+                    rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)}),
+
+    Pid1 = test_util:fake_pid(node()),
+    % % adding some consumers
+    E1Idx = ?LINE,
+    {CK1, C1} = {?LINE, {?LINE_B, self()}},
+    Entries =
+    [
+     {E1Idx , rabbit_fifo:make_enqueue(Pid1, 1, msg1)},
+     %% add a consumer
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{next_msg_id = 1,
+                                                         checked_out = Ch}}}
+               when map_size(Ch) == 1),
+     %% delivery_failed = false, undeliverable_here = false|true
+     %% this is the same as a requeue,
+     %% this should not increment the delivery count
+     {?LINE, rabbit_fifo:make_modify(CK1, [0], false, false,
+                                     #{<<"x-opt-blah">> => <<"blah1">>})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{next_msg_id = 2,
+                                                         checked_out = Ch}}}
+               when map_size(Ch) == 1,
+               fun (#rabbit_fifo{consumers =
+                                 #{CK1 := #consumer{checked_out = Ch}}}) ->
+                       ?assertMatch(
+                          ?MSG(_, #{acquired_count := 1,
+                                    anns := #{<<"x-opt-blah">> := <<"blah1">>}} = H)
+                            when not is_map_key(delivery_count, H),
+                          maps:get(1, Ch))
+               end),
+     %% delivery_failed = true does increment delivery_count
+     {?LINE, rabbit_fifo:make_modify(CK1, [1], true, false,
+                                     #{<<"x-opt-blah">> => <<"blah2">>})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{next_msg_id = 3,
+                                                         checked_out = Ch}}}
+               when map_size(Ch) == 1,
+               fun (#rabbit_fifo{consumers =
+                                 #{CK1 := #consumer{checked_out = Ch}}}) ->
+                       ?assertMatch(
+                          ?MSG(_, #{delivery_count := 1,
+                                    acquired_count := 2,
+                                    anns := #{<<"x-opt-blah">> := <<"blah2">>}}),
+                          maps:get(2, Ch))
+               end),
+     %% delivery_failed = true and undeliverable_here = true is the same as discard
+     {?LINE, rabbit_fifo:make_modify(CK1, [2], true, true,
+                                     #{<<"x-opt-blah">> => <<"blah3">>})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{next_msg_id = 3,
+                                                         checked_out = Ch}}}
+               when map_size(Ch) == 0,
+               fun (#rabbit_fifo{dlx = #rabbit_fifo_dlx{discards = Discards}}) ->
+                       ?assertMatch([[_|
+                                      ?MSG(_, #{delivery_count := 2,
+                                                acquired_count := 3,
+                                                anns := #{<<"x-opt-blah">> := <<"blah3">>}})]],
+                                    lqueue:to_list(Discards))
+               end)
+    ],
+    {_S1, _} = run_log(Config, S0, Entries, fun single_active_invariant/1),
+
+    ok.
+
 %% Utility
 
 init(Conf) -> rabbit_fifo:init(Conf).
@@ -2658,3 +2754,11 @@ single_active_invariant( #rabbit_fifo{consumers = Cons}) ->
                                       S == up
                               end, Cons)).
 
+mk_mc(Body) ->
+    mc_amqpl:from_basic_message(
+      #basic_message{routing_keys = [<<"">>],
+                     exchange_name = #resource{name = <<"x">>,
+                                               kind = exchange,
+                                               virtual_host = <<"v">>},
+                     content = #content{properties = #'P_basic'{},
+                                        payload_fragments_rev = [Body]}}).

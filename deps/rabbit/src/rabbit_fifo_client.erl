@@ -22,6 +22,7 @@
          settle/3,
          return/3,
          discard/3,
+         modify/6,
          credit_v1/4,
          credit/5,
          handle_ra_event/4,
@@ -217,20 +218,23 @@ dequeue(QueueName, ConsumerTag, Settlement,
             Err
     end.
 
-add_delivery_count_header(Msg0, #{delivery_count := DelCount} = Header)
-  when is_integer(DelCount) ->
+add_delivery_count_header(Msg0, #{acquired_count := AcqCount} = Header)
+  when is_integer(AcqCount) ->
     Msg = case mc:is(Msg0) of
               true ->
-                  Msg1 = mc:set_annotation(<<"x-delivery-count">>, DelCount, Msg0),
+                  Msg1 = mc:set_annotation(<<"x-delivery-count">>, AcqCount, Msg0),
                   %% the "delivery-count" header in the AMQP spec does not include
                   %% returns (released outcomes)
-                  AmqpDelCount = DelCount - maps:get(return_count, Header, 0),
-                  mc:set_annotation(delivery_count, AmqpDelCount, Msg1);
+                  rabbit_fifo:annotate_msg(Header, Msg1);
               false ->
                   Msg0
           end,
-    Redelivered = DelCount > 0,
+    Redelivered = AcqCount > 0,
     {Msg, Redelivered};
+add_delivery_count_header(Msg, #{delivery_count := DC} = Header) ->
+    %% there was a delivery count but no acquired count, this means the message
+    %% was delivered from a quorum queue running v3 so we patch this up here
+    add_delivery_count_header(Msg, Header#{acquired_count => DC});
 add_delivery_count_header(Msg, _Header) ->
     {Msg, false}.
 
@@ -310,6 +314,20 @@ discard(ConsumerTag, [_|_] = MsgIds,
                                       {Settles, Returns, Discards ++ MsgIds}
                               end, {[], [], MsgIds}, Unsent0),
     {State0#state{unsent_commands = Unsent}, []}.
+
+-spec modify(rabbit_types:ctag(), [rabbit_fifo:msg_id()],
+             boolean(), boolean(), mc:annotations(), state()) ->
+    {state(), list()}.
+modify(ConsumerTag, [_|_] = MsgIds, DelFailed, Undel, Anns,
+       #state{} = State0) ->
+    ConsumerKey = consumer_key(ConsumerTag, State0),
+    %% we need to send any pending settles, discards or returns before we
+    %% send the modify as this cannot be batched
+    %% as it contains message specific annotations
+    State1 = send_pending(ConsumerKey, State0),
+    ServerId = pick_server(State1),
+    Cmd = rabbit_fifo:make_modify(ConsumerKey, MsgIds, DelFailed, Undel, Anns),
+    {send_command(ServerId, undefined, Cmd, normal, State1), []}.
 
 %% @doc Register with the rabbit_fifo queue to "checkout" messages as they
 %% become available.
@@ -455,29 +473,13 @@ credit(ConsumerTag, DeliveryCount, Credit, Drain, State) ->
 -spec cancel_checkout(rabbit_types:ctag(), rabbit_queue_type:cancel_reason(), state()) ->
     {ok, state()} | {error | timeout, term()}.
 cancel_checkout(ConsumerTag, Reason,
-                #state{consumers = Consumers,
-                       unsent_commands = Unsent} = State0)
+                #state{consumers = Consumers} = State0)
   when is_atom(Reason) ->
     case Consumers of
         #{ConsumerTag := #consumer{key = Cid}} ->
             Servers = sorted_servers(State0),
             ConsumerId = {ConsumerTag, self()},
-            %% send any pending commands for consumer before cancelling
-            Commands = case Unsent of
-                           #{Cid := {Settled, Returns, Discards}} ->
-                                 add_command(Cid, settle, Settled,
-                                             add_command(Cid, return, Returns,
-                                                         add_command(Cid, discard,
-                                                                     Discards, [])));
-                           _ ->
-                               []
-                       end,
-            ServerId = pick_server(State0),
-            %% send all the settlements, discards and returns
-            State1 = lists:foldl(fun (C, S0) ->
-                                        send_command(ServerId, undefined, C,
-                                                     normal, S0)
-                                end, State0, Commands),
+            State1 = send_pending(Cid, State0),
             Cmd = rabbit_fifo:make_checkout(ConsumerId, Reason, #{}),
             State = State1#state{consumers = maps:remove(ConsumerTag, Consumers)},
             case try_process_command(Servers, Cmd, State) of
@@ -984,3 +986,21 @@ qref(Ref) -> Ref.
     atom().
 cluster_name(#state{cfg = #cfg{servers = [{Name, _Node} | _]}}) ->
     Name.
+
+send_pending(Cid, #state{unsent_commands = Unsent} = State0) ->
+    Commands = case Unsent of
+                   #{Cid := {Settled, Returns, Discards}} ->
+                       add_command(Cid, settle, Settled,
+                                   add_command(Cid, return, Returns,
+                                               add_command(Cid, discard,
+                                                           Discards, [])));
+                   _ ->
+                       []
+               end,
+    ServerId = pick_server(State0),
+    %% send all the settlements, discards and returns
+    State1 = lists:foldl(fun (C, S0) ->
+                                 send_command(ServerId, undefined, C,
+                                              normal, S0)
+                         end, State0, Commands),
+    State1#state{unsent_commands = maps:remove(Cid, Unsent)}.

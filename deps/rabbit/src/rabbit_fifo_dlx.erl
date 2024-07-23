@@ -159,21 +159,20 @@ discard(Msgs0, Reason, {at_most_once, {Mod, Fun, Args}}, State) ->
                       Lookup = maps:from_list(lists:zip(Idxs, Log)),
                       Msgs = [begin
                                   Cmd = maps:get(Idx, Lookup),
-                                  rabbit_fifo:get_msg(Cmd)
-                              end || ?MSG(Idx, _) <- Msgs0],
+                                  %% ensure header delivery count
+                                  %% is copied to the message container
+                                  annotate_msg(H, rabbit_fifo:get_msg(Cmd))
+                              end || ?MSG(Idx, H) <- Msgs0],
                       [{mod_call, Mod, Fun, Args ++ [Reason, Msgs]}]
               end},
     {State, [Effect]};
 discard(Msgs, Reason, at_least_once, State0)
   when Reason =/= maxlen ->
-    State = lists:foldl(fun(?MSG(Idx, _) = Msg0,
+    State = lists:foldl(fun(?MSG(Idx, _) = Msg,
                             #?MODULE{discards = D0,
                                      msg_bytes = B0,
                                      ra_indexes = I0} = S0) ->
-                                MsgSize = size_in_bytes(Msg0),
-                                %% Condense header to an integer representing the message size.
-                                %% We need neither delivery_count nor expiry anymore.
-                                Msg = ?MSG(Idx, MsgSize),
+                                MsgSize = size_in_bytes(Msg),
                                 D = lqueue:in(?TUPLE(Reason, Msg), D0),
                                 B = B0 + MsgSize,
                                 I = rabbit_fifo_index:append(Idx, I0),
@@ -191,8 +190,8 @@ checkout(at_least_once, #?MODULE{consumer = #dlx_consumer{}} = State) ->
 checkout(_, State) ->
     {State, []}.
 
-checkout0({success, MsgId, ?TUPLE(Reason, ?MSG(Idx, _)), State}, SendAcc) ->
-    DelMsg = {Idx, {Reason, MsgId}},
+checkout0({success, MsgId, ?TUPLE(Reason, ?MSG(Idx, H)), State}, SendAcc) ->
+    DelMsg = {Idx, {Reason, H, MsgId}},
     checkout0(checkout_one(State), [DelMsg | SendAcc]);
 checkout0(#?MODULE{consumer = #dlx_consumer{pid = Pid}} = State, SendAcc) ->
     Effects = delivery_effects(Pid, SendAcc),
@@ -232,9 +231,11 @@ delivery_effects(CPid, Msgs0) ->
     {RaftIdxs, RsnIds} = lists:unzip(Msgs1),
     [{log, RaftIdxs,
       fun(Log) ->
-              Msgs = lists:zipwith(fun (Cmd, {Reason, MsgId}) ->
-                                           {MsgId, {Reason, rabbit_fifo:get_msg(Cmd)}}
-                                   end, Log, RsnIds),
+              Msgs = lists:zipwith(
+                       fun (Cmd, {Reason, H, MsgId}) ->
+                               {MsgId, {Reason,
+                                        annotate_msg(H, rabbit_fifo:get_msg(Cmd))}}
+                       end, Log, RsnIds),
               [{send_msg, CPid, {dlx_event, self(), {dlx_delivery, Msgs}}, [cast]}]
       end}].
 
@@ -360,3 +361,6 @@ dehydrate(State) ->
     option(non_neg_integer()).
 smallest_raft_index(#?MODULE{ra_indexes = Indexes}) ->
     rabbit_fifo_index:smallest(Indexes).
+
+annotate_msg(H, M0) ->
+    rabbit_fifo:annotate_msg(H, M0).
