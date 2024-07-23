@@ -42,7 +42,8 @@ groups() ->
           dest_resource_alarm_on_confirm,
           dest_resource_alarm_on_publish,
           dest_resource_alarm_no_ack,
-          predeclared_missing_src_queue
+          predeclared_missing_src_queue,
+          predeclared_missing_dest_queue
         ]},
 
         {quorum_queue_tests, [], [
@@ -291,18 +292,50 @@ predeclared_missing_src_queue(Config) ->
             
             with_newch(Config, 
                 fun(Ch2) ->
-                amqp_channel:call(
-                    Ch2, #'queue.declare'{queue = <<"src">>,
-                                    durable = true}),
-                ct:log("Declare queue"),           
-                amqp_channel:call(
-                    Ch2, #'queue.bind'{queue = <<"src">>,
-                                    exchange = <<"amq.direct">>,
-                                    routing_key = <<"src-key">>}),
-                shovel_test_utils:await_shovel(Config, 0, <<"test">>, running),
+                    amqp_channel:call(
+                        Ch2, #'queue.declare'{queue = <<"src">>,
+                                        durable = true}),
+                    ct:log("Declare queue"),           
+                    amqp_channel:call(
+                        Ch2, #'queue.bind'{queue = <<"src">>,
+                                        exchange = <<"amq.direct">>,
+                                        routing_key = <<"src-key">>}),
+                    shovel_test_utils:await_shovel(Config, 0, <<"test">>, running),
+                    
+                    publish_expect(Ch2, <<"amq.direct">>, <<"src-key">>, <<"dest">>, <<"hello!">>)
+                end)
+    end).
+
+
+predeclared_missing_dest_queue(Config) ->
+    with_ch(Config,
+        fun (Ch) ->
+            amqp_channel:call(
+                Ch, #'queue.declare'{queue = <<"src">>,
+                                 durable = true}),
+            amqp_channel:call(
+                Ch, #'queue.bind'{queue = <<"src">>,
+                                exchange = <<"amq.direct">>,
+                                routing_key = <<"src-key">>}),
+                                
+            shovel_test_utils:set_param_nowait(Config,
+                        <<"test">>, [{<<"src-queue">>, <<"src">>},
+                                        {<<"dest-predeclared">>, true},
+                                        {<<"dest-queue">>, <<"dest">>},                                        
+                                        {<<"src-prefetch-count">>, 1}]),
+            shovel_test_utils:await_shovel(Config, 0, <<"test">>, terminated),
+            expect_missing_queue(Ch, <<"dest">>),
+            
+            with_newch(Config, 
+                fun(Ch2) ->
+                    amqp_channel:call(
+                        Ch2, #'queue.declare'{queue = <<"dest">>,
+                                            durable = true}),
+                    
+                    shovel_test_utils:await_shovel(Config, 0, <<"test">>, running),
                 
-                publish_expect(Ch2, <<"amq.direct">>, <<"src-key">>, <<"dest">>, <<"hello!">>)
-            end)
+                    publish_expect(Ch2, <<"amq.direct">>, <<"src-key">>, <<"dest">>, <<"hello!">>)
+                end)
     end).
 
 missing_dest_exchange(Config) ->
@@ -779,6 +812,16 @@ expect_missing_queue(Ch, Q) ->
         ct:fail(queue_still_exists)                            
     catch exit:{{shutdown, {server_initiated_close, ?NOT_FOUND, _Text}}, _} ->
         ct:log("Queue ~p does not exist", [Q]),
+        ok   
+    end.
+expect_missing_exchange(Ch, X) ->
+    try
+        amqp_channel:call(Ch, #'exchange.declare'{exchange   = X,
+                                                 passive = true}),
+        ct:log("Exchange ~p still exists", [X]),
+        ct:fail(exchange_still_exists)                            
+    catch exit:{{shutdown, {server_initiated_close, ?NOT_FOUND, _Text}}, _} ->
+        ct:log("Exchange ~p does not exist", [X]),
         ok   
     end.
 
