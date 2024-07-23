@@ -42,7 +42,7 @@ groups() ->
           dest_resource_alarm_on_confirm,
           dest_resource_alarm_on_publish,
           dest_resource_alarm_no_ack,
-          missing_src_queue
+          predeclared_missing_src_queue
         ]},
 
         {quorum_queue_tests, [], [
@@ -267,7 +267,7 @@ exchange(Config) ->
                              <<"queue">>, <<"hello">>)
       end).
 
-missing_src_queue(Config) ->
+predeclared_missing_src_queue(Config) ->
     with_ch(Config,
         fun (Ch) ->
             amqp_channel:call(
@@ -286,7 +286,7 @@ missing_src_queue(Config) ->
                                         {<<"dest-exchange">>, <<"dest-ex">>},
                                         {<<"dest-exchange-key">>, <<"dest-key">>},
                                         {<<"src-prefetch-count">>, 1}]),
-            shovel_test_utils:await_shovel(Config, 0, <<"test">>, {terminated,"needed a restart"}),
+            shovel_test_utils:await_shovel(Config, 0, <<"test">>, terminated),
             expect_missing_queue(Ch, <<"src">>),
             
             with_newch(Config, 
@@ -299,9 +299,8 @@ missing_src_queue(Config) ->
                     Ch2, #'queue.bind'{queue = <<"src">>,
                                     exchange = <<"amq.direct">>,
                                     routing_key = <<"src-key">>}),
-                %shovel_test_utils:restart_shovel(Config, <<"test">>),
-                timer:sleep(5000),     
-                %shovel_test_utils:await_shovel(Config, 0, <<"test">>, {terminated,"needed a restart"}),
+                shovel_test_utils:await_shovel(Config, 0, <<"test">>, running),
+                
                 publish_expect(Ch2, <<"amq.direct">>, <<"src-key">>, <<"dest">>, <<"hello!">>)
             end)
     end).
