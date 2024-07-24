@@ -265,9 +265,10 @@ count_in_khepri() ->
 %% update().
 %% -------------------------------------------------------------------
 
--spec update(ExchangeName, UpdateFun) -> ok when
+-spec update(ExchangeName, UpdateFun) -> Ret when
       ExchangeName :: rabbit_exchange:name(),
-      UpdateFun :: fun((Exchange) -> Exchange).
+      UpdateFun :: fun((Exchange) -> Exchange),
+      Ret :: ok | rabbit_khepri:timeout_error().
 %% @doc Updates an existing exchange record using the result of
 %% `UpdateFun'.
 %%
@@ -367,7 +368,9 @@ update_in_khepri_tx(Name, Fun) ->
 
 -spec create_or_get(Exchange) -> Ret when
       Exchange :: rabbit_types:exchange(),
-      Ret :: {new, Exchange} | {existing, Exchange}.
+      Ret :: {new, Exchange} |
+             {existing, Exchange} |
+             rabbit_khepri:timeout_error().
 %% @doc Writes an exchange record if it doesn't exist already or returns
 %% the existing one.
 %%
@@ -399,7 +402,9 @@ create_or_get_in_khepri(#exchange{name = XName} = X) ->
         ok ->
             {new, X};
         {error, {khepri, mismatching_node, #{node_props := #{data := ExistingX}}}} ->
-            {existing, ExistingX}
+            {existing, ExistingX};
+        {error, timeout} = Err ->
+            Err
     end.
 
 %% -------------------------------------------------------------------
@@ -523,17 +528,15 @@ next_serial_in_khepri(XName) ->
             UpdatePath =
                 khepri_path:combine_with_conditions(
                   Path, [#if_payload_version{version = Vsn}]),
-            case rabbit_khepri:put(UpdatePath, Serial + 1) of
+            case rabbit_khepri:put(UpdatePath, Serial + 1, #{timeout => infinity}) of
                 ok ->
                     Serial;
                 {error, {khepri, mismatching_node, _}} ->
-                    next_serial_in_khepri(XName);
-                Err ->
-                    Err
+                    next_serial_in_khepri(XName)
             end;
         _ ->
             Serial = 1,
-            ok = rabbit_khepri:put(Path, Serial + 1),
+            ok = rabbit_khepri:put(Path, Serial + 1, #{timeout => infinity}),
             Serial
     end.
 
@@ -560,7 +563,10 @@ next_serial_in_khepri_tx(#exchange{name = XName}) ->
       Exchange :: rabbit_types:exchange(),
       Binding :: rabbit_types:binding(),
       Deletions :: dict:dict(),
-      Ret :: {error, not_found} | {error, in_use} | {deleted, Exchange, [Binding], Deletions}.
+      Ret :: {deleted, Exchange, [Binding], Deletions} |
+             {error, not_found} |
+             {error, in_use} |
+             rabbit_khepri:timeout_error().
 %% @doc Deletes an exchange record from the database. If `IfUnused' is set
 %% to `true', it is only deleted when there are no bindings present on the
 %% exchange.

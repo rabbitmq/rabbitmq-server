@@ -201,32 +201,56 @@ do_add(Name, Metadata, ActingUser) ->
             ok
     end,
     rabbit_db_vhost_defaults:apply(Name, ActingUser),
-    _ = [begin
-         Resource = rabbit_misc:r(Name, exchange, ExchangeName),
-         rabbit_log:debug("Will declare an exchange ~tp", [Resource]),
-         _ = rabbit_exchange:declare(Resource, Type, true, false, Internal, [], ActingUser)
-     end || {ExchangeName, Type, Internal} <-
-            [{<<"">>,                   direct,  false},
-             {<<"amq.direct">>,         direct,  false},
-             {<<"amq.topic">>,          topic,   false},
-             %% per 0-9-1 pdf
-             {<<"amq.match">>,          headers, false},
-             %% per 0-9-1 xml
-             {<<"amq.headers">>,        headers, false},
-             {<<"amq.fanout">>,         fanout,  false},
-             {<<"amq.rabbitmq.trace">>, topic,   true}]],
-    case rabbit_vhost_sup_sup:start_on_all_nodes(Name) of
+    case declare_default_exchanges(Name, ActingUser) of
         ok ->
-            rabbit_event:notify(vhost_created, info(VHost)
-                                ++ [{user_who_performed_action, ActingUser},
-                                    {description, Description},
-                                    {tags, Tags}]),
-            ok;
-        {error, Reason} ->
-            Msg = rabbit_misc:format("failed to set up vhost '~ts': ~tp",
-                                     [Name, Reason]),
+            case rabbit_vhost_sup_sup:start_on_all_nodes(Name) of
+                ok ->
+                    rabbit_event:notify(vhost_created, info(VHost)
+                                        ++ [{user_who_performed_action, ActingUser},
+                                            {description, Description},
+                                            {tags, Tags}]),
+                    ok;
+                {error, Reason} ->
+                    Msg = rabbit_misc:format("failed to set up vhost '~ts': ~tp",
+                                             [Name, Reason]),
+                    {error, Msg}
+            end;
+        {error, timeout} ->
+            Msg = rabbit_misc:format(
+                    "failed to set up vhost '~ts' because a timeout occurred "
+                    "while adding default exchanges",
+                    [Name]),
             {error, Msg}
     end.
+
+-spec declare_default_exchanges(VHostName, ActingUser) -> Ret when
+      VHostName :: vhost:name(),
+      ActingUser :: rabbit_types:username(),
+      Ret :: ok | {error, timeout}.
+
+declare_default_exchanges(VHostName, ActingUser) ->
+    DefaultExchanges = [{<<"">>,                   direct,  false},
+                        {<<"amq.direct">>,         direct,  false},
+                        {<<"amq.topic">>,          topic,   false},
+                        %% per 0-9-1 pdf
+                        {<<"amq.match">>,          headers, false},
+                        %% per 0-9-1 xml
+                        {<<"amq.headers">>,        headers, false},
+                        {<<"amq.fanout">>,         fanout,  false},
+                        {<<"amq.rabbitmq.trace">>, topic,   true}],
+    rabbit_misc:for_each_while_ok(
+      fun({ExchangeName, Type, Internal}) ->
+              Resource = rabbit_misc:r(VHostName, exchange, ExchangeName),
+              rabbit_log:debug("Will declare an exchange ~tp", [Resource]),
+              case rabbit_exchange:declare(
+                     Resource, Type, true, false, Internal, [],
+                     ActingUser) of
+                   {ok, _} ->
+                       ok;
+                   {error, timeout} = Err ->
+                       Err
+              end
+      end, DefaultExchanges).
 
 -spec update_metadata(vhost:name(), vhost:metadata(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 update_metadata(Name, Metadata0, ActingUser) ->
@@ -275,7 +299,7 @@ delete(VHost, ActingUser) ->
          assert_benign(rabbit_amqqueue:with(Name, QDelFun), ActingUser)
      end || Q <- rabbit_amqqueue:list(VHost)],
     rabbit_log:info("Deleting exchanges in vhost '~ts' because it's being deleted", [VHost]),
-    [assert_benign(rabbit_exchange:delete(Name, false, ActingUser), ActingUser) ||
+    [ok = rabbit_exchange:ensure_deleted(Name, false, ActingUser) ||
         #exchange{name = Name} <- rabbit_exchange:list(VHost)],
     rabbit_log:info("Clearing policies and runtime parameters in vhost '~ts' because it's being deleted", [VHost]),
     _ = rabbit_runtime_parameters:clear_vhost(VHost, ActingUser),

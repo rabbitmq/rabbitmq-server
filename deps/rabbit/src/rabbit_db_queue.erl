@@ -731,7 +731,7 @@ update_durable_in_khepri(UpdateFun, FilterFun) ->
                         end, [], Props),
             Res = rabbit_khepri:transaction(
                     fun() ->
-                            for_each_while_ok(
+                            rabbit_misc:for_each_while_ok(
                               fun({Path, Q}) -> khepri_tx:put(Path, Q) end,
                               Updates)
                     end),
@@ -748,16 +748,6 @@ update_durable_in_khepri(UpdateFun, FilterFun) ->
         {error, _} = Error ->
             Error
     end.
-
-for_each_while_ok(Fun, [Elem | Rest]) ->
-    case Fun(Elem) of
-        ok ->
-            for_each_while_ok(Fun, Rest);
-        {error, _} = Error ->
-            Error
-    end;
-for_each_while_ok(_, []) ->
-    ok.
 
 %% -------------------------------------------------------------------
 %% exists().

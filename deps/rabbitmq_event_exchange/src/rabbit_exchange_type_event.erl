@@ -38,13 +38,22 @@ info(_X) -> [].
 info(_X, _) -> [].
 
 register() ->
-    _ = rabbit_exchange:declare(exchange(), topic, true, false, true, [],
-                                ?INTERNAL_USER),
-    gen_event:add_handler(rabbit_event, ?MODULE, []).
+    case rabbit_exchange:declare(exchange(), topic, true, false, true, [],
+                                 ?INTERNAL_USER) of
+        {ok, _Exchange} ->
+            gen_event:add_handler(rabbit_event, ?MODULE, []);
+        {error, timeout} = Err ->
+            Err
+    end.
 
 unregister() ->
-    _ = rabbit_exchange:delete(exchange(), false, ?INTERNAL_USER),
-    gen_event:delete_handler(rabbit_event, ?MODULE, []).
+    case rabbit_exchange:ensure_deleted(exchange(), false, ?INTERNAL_USER) of
+        ok ->
+            gen_event:delete_handler(rabbit_event, ?MODULE, []),
+            ok;
+        {error, _} = Err ->
+            Err
+    end.
 
 exchange() ->
     exchange(get_vhost()).
