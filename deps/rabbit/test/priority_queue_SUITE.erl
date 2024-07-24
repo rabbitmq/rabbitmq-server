@@ -40,7 +40,8 @@ groups() ->
                          invoke,
                          gen_server2_stats,
                          negative_max_priorities,
-                         max_priorities_above_hard_limit
+                         max_priorities_above_hard_limit,
+                         update_rates
                         ]}
     ].
 
@@ -473,6 +474,24 @@ unknown_info_key(Config) ->
     rabbit_ct_client_helpers:close_connection(Conn),
     passed.
 
+update_rates(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Q = <<"update_rates-queue">>,
+    declare(Ch, Q, [{<<"x-max-priority">>, byte, 3}]),
+    QPid = queue_pid(Config, Node, rabbit_misc:r(<<"/">>, queue, Q)),
+    try
+        publish1(Ch, Q, 1),
+        QPid ! update_rates,
+        State = get_state(Config, Q),
+        ?assertEqual(live, State),
+        delete(Ch, Q)
+    after
+        rabbit_ct_client_helpers:close_channel(Ch),
+        rabbit_ct_client_helpers:close_connection(Conn),
+        passed
+    end.
+
 %%----------------------------------------------------------------------------
 
 declare(Ch, Q, Args) when is_list(Args) ->
@@ -590,4 +609,14 @@ info(Config, Q, InfoKeys) ->
              Config, Nodename,
              rabbit_classic_queue, info, [Amq, InfoKeys]),
     {ok, Info}.
+
+get_state(Config, Q) ->
+    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    {ok, Amq} = rabbit_ct_broker_helpers:rpc(
+                  Config, Nodename,
+                  rabbit_amqqueue, lookup, [rabbit_misc:r(<<"/">>, queue, Q)]),
+    rabbit_ct_broker_helpers:rpc(
+      Config, Nodename,
+      amqqueue, get_state, [Amq]).
+
 %%----------------------------------------------------------------------------
