@@ -616,12 +616,6 @@ decl_fun(Decl, _Conn, Ch) ->
          amqp_channel:call(Ch, M)
      end || M <- lists:reverse(Decl)].
 
-check_fun(_) ->
-    {?MODULE, check_fun, []}.
-
-check_fun() ->
-    ok.
-
 parse_parameter(Param, Fun, Value) ->
     try
         Fun(Value)
