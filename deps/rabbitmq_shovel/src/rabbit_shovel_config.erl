@@ -66,13 +66,11 @@ convert_from_legacy(Config) ->
      {reconnect_delay, RD}].
 
 parse(ShovelName, Config0) ->
-    rabbit_log:debug("rabbit_shovel_config:parse ~p ~p", [ShovelName, Config0]),
     try
         validate(Config0),
         case is_legacy(Config0) of
             true ->            
                 Config = convert_from_legacy(Config0),
-                rabbit_log:debug("rabbit_shovel_config:parse is_legacy -> ~p", [Config]),
                 parse_current(ShovelName, Config);
             false ->
                 parse_current(ShovelName, Config0)
@@ -126,7 +124,6 @@ validate_uris0([Uri | Uris]) ->
 validate_uris0([]) -> ok.
 
 parse_current(ShovelName, Config) ->
-    rabbit_log:debug("rabbit_shovel_config:parse_current ~p", [ShovelName]),
     {source, Source} = proplists:lookup(source, Config),
     validate(Source),    
     SrcMod = resolve_module(proplists:get_value(protocol, Source, amqp091)),

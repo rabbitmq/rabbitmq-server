@@ -12,7 +12,7 @@
 
 -compile(export_all).
 
--define(QUEUE,    <<"test_queue">>).
+-define(QUEUE,       <<"test_queue">>).
 -define(EXCHANGE,    <<"test_exchange">>).
 -define(TO_SHOVEL,   <<"to_the_shovel">>).
 -define(FROM_SHOVEL, <<"from_the_shovel">>).
@@ -307,7 +307,7 @@ setup_legacy_shovels(Config) ->
 setup_shovels(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, setup_shovels1, [Config]).
-    
+
 setup_legacy_shovels1(Config) ->
     _ = application:stop(rabbitmq_shovel),
     Hostname = ?config(rmq_hostname, Config),

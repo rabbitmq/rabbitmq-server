@@ -54,7 +54,6 @@ init([Type, Name, Config0]) ->
                                                                 Config0),
                     Conf
             end,
-    rabbit_log:debug("Shovel config : ~p", [Config]),
     rabbit_log_shovel:debug("Initialising a Shovel ~ts of type '~ts'", [human_readable_name(Name), Type]),
     gen_server2:cast(self(), init),
     {ok, #state{name = Name, type = Type, config = Config}}.
