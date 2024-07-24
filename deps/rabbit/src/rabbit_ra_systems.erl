@@ -130,7 +130,8 @@ get_config(quorum_queues = RaSystem) ->
                    wal_max_entries => WalMaxEntries,
                    segment_compute_checksums => SegmentChecksums,
                    compress_mem_tables => CompressMemTables,
-                   server_recovery_strategy => registered};
+                   server_recovery_strategy => {rabbit_quorum_queue,
+                                                system_recover, []}};
 get_config(coordination = RaSystem) ->
     DefaultConfig = get_default_config(),
     CoordDataDir = filename:join(
