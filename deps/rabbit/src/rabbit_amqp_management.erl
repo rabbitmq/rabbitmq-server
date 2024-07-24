@@ -217,7 +217,7 @@ handle_http_req(<<"PUT">>,
                         DeclaredX;
                     {error, timeout} ->
                         throw(
-                          <<"500">>,
+                          <<"503">>,
                           "Could not create exchange '~ts' in vhost '~ts' "
                           "because the operation timed out",
                           [XName, Vhost])
@@ -299,7 +299,7 @@ handle_http_req(<<"DELETE">>,
             {<<"204">>, null, {PermCache, TopicPermCache}};
         {error, timeout} ->
             throw(
-              <<"500">>,
+              <<"503">>,
               "failed to delete exchange '~ts' due to a timeout",
               [XNameBin])
     end;
