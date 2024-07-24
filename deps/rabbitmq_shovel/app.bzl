@@ -110,6 +110,7 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "priv",
+        srcs = ["priv/schema/rabbitmq_shovel.schema"],
     )
 
     filegroup(

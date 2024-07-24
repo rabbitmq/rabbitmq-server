@@ -12,6 +12,7 @@
 
 -compile(export_all).
 
+-define(QUEUE,       <<"test_queue">>).
 -define(EXCHANGE,    <<"test_exchange">>).
 -define(TO_SHOVEL,   <<"to_the_shovel">>).
 -define(FROM_SHOVEL, <<"from_the_shovel">>).
@@ -21,7 +22,8 @@
 
 all() ->
     [
-      {group, non_parallel_tests}
+      {group, non_parallel_tests},
+      {group, with_predefined_topology}
     ].
 
 groups() ->
@@ -31,7 +33,10 @@ groups() ->
           invalid_legacy_configuration,
           valid_legacy_configuration,
           valid_configuration
-        ]}
+        ]},
+      {with_predefined_topology, [], [
+          valid_configuration_with_predefined_resources
+      ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -41,7 +46,9 @@ groups() ->
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, ?MODULE}
+        {rmq_nodename_suffix, ?MODULE},
+         {ignored_crashes,
+                  ["server_initiated_close,404"]}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
@@ -53,8 +60,18 @@ end_per_suite(Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_group(with_predefined_topology, Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_shovel, topology, [{predeclared, true}]]),
+    Config;
+
 init_per_group(_, Config) ->
     Config.
+
+end_per_group(with_predefined_topology, Config) ->
+     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+        [rabbitmq_shovel, topology]),
+    Config;
 
 end_per_group(_, Config) ->
     Config.
@@ -209,6 +226,12 @@ valid_configuration(Config) ->
     ok = setup_shovels(Config),
     run_valid_test(Config).
 
+valid_configuration_with_predefined_resources(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, setup_shovels2, [Config]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,  await_terminated_shovel, [test_shovel]),    
+    declare_queue(Config),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,  await_running_shovel, [test_shovel]).
+
 run_valid_test(Config) ->
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
 
@@ -269,6 +292,12 @@ run_valid_test(Config) ->
     after ?TIMEOUT -> throw(timeout_waiting_for_deliver2)
     end,
 
+    rabbit_ct_client_helpers:close_channel(Chan).
+
+declare_queue(Config) ->
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+    amqp_channel:call(Chan, #'queue.declare'{queue   = ?QUEUE,
+                                             durable = true}),             
     rabbit_ct_client_helpers:close_channel(Chan).
 
 setup_legacy_shovels(Config) ->
@@ -349,6 +378,34 @@ setup_shovels1(Config) ->
     ok = application:start(rabbitmq_shovel),
     await_running_shovel(test_shovel).
 
+setup_shovels2(Config) ->
+    _ = application:stop(rabbitmq_shovel),
+    Hostname = ?config(rmq_hostname, Config),
+    TcpPort = rabbit_ct_broker_helpers:get_node_config(Config, 0,
+      tcp_port_amqp),
+    %% a working config
+    application:set_env(
+      rabbitmq_shovel,
+      shovels,
+      [{test_shovel,
+        [{source,
+          [{uris, [rabbit_misc:format("amqp://~ts:~b/%2f?heartbeat=5",
+                                      [Hostname, TcpPort])]},
+           {queue, ?QUEUE}]},
+         {destination,
+          [{uris, [rabbit_misc:format("amqp://~ts:~b/%2f",
+                                      [Hostname, TcpPort])]},
+           {publish_fields, [{exchange, ?EXCHANGE}, {routing_key, ?FROM_SHOVEL}]},
+           {publish_properties, [{delivery_mode, 2},
+                                 {cluster_id,    <<"my-cluster">>},
+                                 {content_type,  ?SHOVELLED}]},
+           {add_forward_headers, true},
+           {add_timestamp_header, true}]},
+         {ack_mode, on_confirm}]}],
+      infinity),
+
+    ok = application:start(rabbitmq_shovel).    
+
 await_running_shovel(Name) ->
     case [N || {N, _, {running, _}, _}
                       <- rabbit_shovel_status:status(),
@@ -356,4 +413,12 @@ await_running_shovel(Name) ->
         [_] -> ok;
         _   -> timer:sleep(100),
                await_running_shovel(Name)
+    end.
+await_terminated_shovel(Name) ->
+    case [N || {N, _, {terminated, _}, _}
+                      <- rabbit_shovel_status:status(),
+                         N =:= Name] of
+        [_] -> ok;
+        _   -> timer:sleep(100),
+               await_terminated_shovel(Name)
     end.
