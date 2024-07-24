@@ -858,6 +858,13 @@ credential_validator.regexp = ^abc\\d+",
      ]}],
    []},
 
+  {rabbit_classic_queue_consumer_unsent_message_limit,
+   "classic_queue_consumer_unsent_message_limit = 200",
+   [{rabbit, [
+      {classic_queue_consumer_unsent_message_limit, 200}
+     ]}],
+   []},
+
   {rabbit_msg_store_shutdown_timeout,
    "message_store_shutdown_timeout = 600000",
    [{rabbit, [

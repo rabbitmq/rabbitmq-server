@@ -22,7 +22,8 @@
 
 -define(QUEUE, lqueue).
 
--define(UNSENT_MESSAGE_LIMIT,          200).
+-define(UNSENT_MESSAGE_LIMIT,
+    application:get_env(rabbit, classic_queue_consumer_unsent_message_limit, 200)).
 
 %% Utilisation average calculations are all in μs.
 -define(USE_AVG_HALF_LIFE, 1000000.0).
