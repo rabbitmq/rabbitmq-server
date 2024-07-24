@@ -14,6 +14,8 @@
 -compile([nowarn_export_all,
           export_all]).
 
+-import(rabbit_ct_helpers, [eventually/1]).
+
 all() ->
     [
      {group, cluster_size_1},
@@ -218,6 +220,7 @@ rpc(RequesterNode, ResponderNode, Config) ->
     after 5000 -> ct:fail(confirm_timeout)
     end,
 
+    ok = wait_for_queue_declared(RequestQueue, ResponderNode, Config),
     %% Receive the request.
     {#'basic.get_ok'{},
      #amqp_msg{props = #'P_basic'{reply_to = ReplyTo,
@@ -238,3 +241,15 @@ rpc(RequesterNode, ResponderNode, Config) ->
                 ok
     after 5000 -> ct:fail(missing_reply)
     end.
+
+wait_for_queue_declared(Queue, Node, Config) ->
+    eventually(
+      ?_assert(
+         begin
+             Ch = rabbit_ct_client_helpers:open_channel(Config, Node),
+             #'queue.declare_ok'{} = amqp_channel:call(
+                                       Ch, #'queue.declare'{queue = Queue,
+                                                            passive = true}),
+             rabbit_ct_client_helpers:close_channel(Ch),
+             true
+         end)).
