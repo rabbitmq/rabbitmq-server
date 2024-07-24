@@ -24,8 +24,7 @@ ADDITIONAL_PLUGINS ?=
 DEPS = rabbit_common rabbit $(PLUGINS) $(ADDITIONAL_PLUGINS)
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
-	      rabbit_common/mk/rabbitmq-run.mk \
-	      rabbit_common/mk/rabbitmq-tools.mk
+	      rabbit_common/mk/rabbitmq-run.mk
 
 DISABLE_DISTCLEAN = 1
 

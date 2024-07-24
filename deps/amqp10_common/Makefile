@@ -41,8 +41,7 @@ TEST_DEPS = rabbitmq_ct_helpers proper
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-hexpm.mk \
-	      rabbit_common/mk/rabbitmq-dist.mk \
-	      rabbit_common/mk/rabbitmq-tools.mk
+	      rabbit_common/mk/rabbitmq-dist.mk
 
 PLT_APPS = eunit
 

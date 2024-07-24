@@ -41,8 +41,7 @@ DEPS = thoas ranch recon credentials_obfuscation
 DEP_EARLY_PLUGINS = $(PROJECT)/mk/rabbitmq-early-test.mk
 DEP_PLUGINS = $(PROJECT)/mk/rabbitmq-build.mk \
 	      $(PROJECT)/mk/rabbitmq-hexpm.mk \
-	      $(PROJECT)/mk/rabbitmq-dist.mk \
-	      $(PROJECT)/mk/rabbitmq-tools.mk
+	      $(PROJECT)/mk/rabbitmq-dist.mk
 
 PLT_APPS += mnesia crypto ssl
 
@@ -54,7 +53,6 @@ HEX_TARBALL_FILES += rabbitmq-components.mk \
 		     mk/rabbitmq-build.mk \
 		     mk/rabbitmq-dist.mk \
 		     mk/rabbitmq-early-test.mk \
-		     mk/rabbitmq-hexpm.mk \
-		     mk/rabbitmq-tools.mk
+		     mk/rabbitmq-hexpm.mk
 
 -include development.post.mk
