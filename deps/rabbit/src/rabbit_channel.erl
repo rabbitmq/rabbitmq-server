@@ -2520,7 +2520,7 @@ handle_method(#'exchange.delete'{exchange  = ExchangeNameBin,
         {error, timeout} ->
             rabbit_misc:protocol_error(
               internal_error,
-              "failed to delete exchange '~ts' due to a timeout",
+              "failed to delete ~ts due to a timeout",
               [rabbit_misc:rs(ExchangeName)])
     end;
 handle_method(#'queue.purge'{queue = QueueNameBin},
