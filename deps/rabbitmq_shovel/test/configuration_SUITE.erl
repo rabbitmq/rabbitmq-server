@@ -228,6 +228,7 @@ valid_configuration(Config) ->
 
 valid_configuration_with_predefined_resources(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, setup_shovels2, [Config]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,  await_terminated_shovel, [test_shovel]),    
     declare_queue(Config),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,  await_running_shovel, [test_shovel]).
 
@@ -412,4 +413,12 @@ await_running_shovel(Name) ->
         [_] -> ok;
         _   -> timer:sleep(100),
                await_running_shovel(Name)
+    end.
+await_terminated_shovel(Name) ->
+    case [N || {N, _, {terminated, _}, _}
+                      <- rabbit_shovel_status:status(),
+                         N =:= Name] of
+        [_] -> ok;
+        _   -> timer:sleep(100),
+               await_terminated_shovel(Name)
     end.
