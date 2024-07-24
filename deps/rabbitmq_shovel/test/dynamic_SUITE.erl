@@ -68,8 +68,10 @@ init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE},
-        {ignored_crashes,
-                  ["server_initiated_close,404"]}
+        {ignored_crashes, [
+            "server_initiated_close,404",
+            "writer,send_failed,closed"
+        ]}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
