@@ -69,7 +69,7 @@ parse(ShovelName, Config0) ->
     try
         validate(Config0),
         case is_legacy(Config0) of
-            true ->            
+            true ->
                 Config = convert_from_legacy(Config0),
                 parse_current(ShovelName, Config);
             false ->
@@ -125,7 +125,7 @@ validate_uris0([]) -> ok.
 
 parse_current(ShovelName, Config) ->
     {source, Source} = proplists:lookup(source, Config),
-    validate(Source),    
+    validate(Source),
     SrcMod = resolve_module(proplists:get_value(protocol, Source, amqp091)),
     {destination, Destination} = proplists:lookup(destination, Config),
     validate(Destination),
