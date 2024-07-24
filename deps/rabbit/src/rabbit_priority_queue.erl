@@ -329,7 +329,7 @@ depth(#passthrough{bq = BQ, bqs = BQS}) ->
     BQ:depth(BQS).
 
 update_rates(State = #state{bq = BQ}) ->
-    fold_min2(fun (_P, BQSN) -> BQ:update_rates(BQSN) end, State);
+    foreach1(fun (_P, BQSN) -> BQ:update_rates(BQSN) end, State);
 update_rates(State = #passthrough{bq = BQ, bqs = BQS}) ->
     ?passthrough1(update_rates(BQS)).
 
@@ -489,13 +489,6 @@ fold_add2(Fun, State) ->
                   {Res, BQSN1} = Fun(P, BQSN),
                   {add_maybe_infinity(Res, Acc), BQSN1}
           end, 0, State).
-
-%% Fold over results assuming results are numbers and we want the minimum
-fold_min2(Fun, State) ->
-    fold2(fun (P, BQSN, Acc) ->
-                  {Res, BQSN1} = Fun(P, BQSN),
-                  {erlang:min(Res, Acc), BQSN1}
-          end, infinity, State).
 
 %% Fold over results assuming results are lists and we want to append
 %% them, and also that we have some AckTags we want to pass in to each
