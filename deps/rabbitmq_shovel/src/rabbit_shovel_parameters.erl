@@ -22,7 +22,8 @@
 %% from and can break with the next upgrade. It should not be used by
 %% another one that the one who created it or survive a node restart.
 %% Thus, function references have been replace by the following MFA.
--export([dest_decl/4, dest_check/4, src_decl_exchange/4, src_decl_queue/4,src_check_queue/4,
+-export([dest_decl/4, dest_check/4,
+         src_decl_exchange/4, src_decl_queue/4, src_check_queue/4,
          fields_fun/5, props_fun/9]).
 
 -import(rabbit_misc, [pget/2, pget/3, pset/3]).
@@ -360,7 +361,6 @@ parse_amqp091_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
     AddTimestampHeaderLegacy = pget(<<"add-timestamp-header">>, Def, false),
     AddTimestampHeader = pget(<<"dest-add-timestamp-header">>, Def,
                               AddTimestampHeaderLegacy),
-    
     %% Details are only used for status report in rabbitmqctl, as vhost is not
     %% available to query the runtime parameters.
     Details = maps:from_list([{K, V} || {K, V} <- [{dest_exchange, DestX},
@@ -373,7 +373,7 @@ parse_amqp091_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
                  fields_fun => {?MODULE, fields_fun, [X, Key]},
                  props_fun => {?MODULE, props_fun, [Table0, Table2, SetProps,
                                                     AddHeaders, SourceHeaders,
-                                                    AddTimestampHeader]}                          
+                                                    AddTimestampHeader]}
                 }, Details).
 
 fields_fun(X, Key, _SrcURI, _DestURI, P0) ->
@@ -455,15 +455,14 @@ parse_amqp091_source(Def) ->
     %% available to query the runtime parameters.
     Details = maps:from_list([{K, V} || {K, V} <- [{source_exchange, SrcX},
                                                    {source_exchange_key, SrcXKey}],
-                                        V =/= none]),
-    
+                                        V =/= none]),    
     {maps:merge(#{module => rabbit_amqp091_shovel,
                   uris => SrcURIs,
                   resource_decl => SrcDeclFun,
                   queue => Queue,
                   delete_after => opt_b2a(DeleteAfter),
                   prefetch_count => PrefetchCount,
-                  consumer_args => SrcCArgs                  
+                  consumer_args => SrcCArgs
                  }, Details), DestHeaders}.
 
 src_decl_exchange(SrcX, SrcXKey, _Conn, Ch) ->

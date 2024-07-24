@@ -630,10 +630,8 @@ decl_fun(Decl, _Conn, Ch) ->
      end || M <- lists:reverse(Decl)].
 
 check_fun(Queue, _Conn, Ch) ->
-    rabbit_log:debug("Checking if queue ~p exits", [Queue]),
     amqp_channel:call(Ch, #'queue.declare'{queue   = Queue,
-                                            passive = true}),
-    rabbit_log:debug("Queue ~p exits", [Queue]).
+                                            passive = true}).
 
 parse_parameter(Param, Fun, Value) ->
     try
