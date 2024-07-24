@@ -22,7 +22,8 @@
 
 all() ->
     [
-      {group, non_parallel_tests}
+      {group, non_parallel_tests},
+      {group, with_predefined_topology}
     ].
 
 groups() ->
@@ -45,7 +46,9 @@ groups() ->
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, ?MODULE}
+        {rmq_nodename_suffix, ?MODULE},
+         {ignored_crashes,
+                  ["server_initiated_close,404"]}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
@@ -225,7 +228,7 @@ valid_configuration(Config) ->
 
 valid_configuration_with_predefined_resources(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, setup_shovels2, [Config]),
-    run_valid_test2(Config),
+    declare_queue(Config),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,  await_running_shovel, [test_shovel]).
 
 run_valid_test(Config) ->
@@ -290,7 +293,7 @@ run_valid_test(Config) ->
 
     rabbit_ct_client_helpers:close_channel(Chan).
 
-run_valid_test2(Config) ->
+declare_queue(Config) ->
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
     amqp_channel:call(Chan, #'queue.declare'{queue   = ?QUEUE,
                                              durable = true}),             

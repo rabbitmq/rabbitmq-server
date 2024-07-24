@@ -94,11 +94,13 @@ init_source(Conf = #{ack_mode := AckMode,
     NoAck = AckMode =:= no_ack,
     case NoAck of
         false ->
+            rabbit_log:debug("init_source. calling basic.qos ~p", [Prefetch]),
             #'basic.qos_ok'{} =
             amqp_channel:call(Chan, #'basic.qos'{prefetch_count = Prefetch}),
             ok;
         true  -> ok
     end,
+    rabbit_log:debug("init_source. calling remaining"),
     Remaining = remaining(Chan, Conf),
     case Remaining of
         0 ->
@@ -628,12 +630,10 @@ decl_fun(Decl, _Conn, Ch) ->
      end || M <- lists:reverse(Decl)].
 
 check_fun(Queue, _Conn, Ch) ->
-    try
-        amqp_channel:call(Ch, #'queue.declare'{queue   = Queue,
-                                               passive = true})
-    after
-        catch amqp_channel:close(Ch)
-    end.
+    rabbit_log:debug("Checking if queue ~p exits", [Queue]),
+    amqp_channel:call(Ch, #'queue.declare'{queue   = Queue,
+                                            passive = true}),
+    rabbit_log:debug("Queue ~p exits", [Queue]).
 
 parse_parameter(Param, Fun, Value) ->
     try
