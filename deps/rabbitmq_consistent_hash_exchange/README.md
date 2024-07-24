@@ -84,7 +84,7 @@ ring partitions, and thus queues according to their binding weights.
 #### One Binding Per Queue
 
 This exchange type **assumes a single binding between a queue and an exchange**.
-Starting with RabbitMQ `3.10.6` and `3.9.21` this will be enforced in the code:
+This will be enforced in the code:
 when multiple bindings are created, only the first one will actually update the ring.
 
 This limitation makes most semantic sense: the purpose is to achieve
@@ -376,7 +376,7 @@ exchange to route based on a named header instead. To do this, declare the
 exchange with a string argument called "hash-header" naming the header to
 be used.
 
-When a `"hash-header"` is specified, the chosen header **must be provided**.
+When a `"hash-header"` is specified, the chosen header should be provided.
 If published messages do not contain the header, they will all get
 routed to the same **arbitrarily chosen** queue.
 
@@ -579,7 +579,7 @@ declare the exchange with a string argument called ``"hash-property"`` naming th
 property to be used.
 The `"hash-header"` and `"hash-property"` are mutually exclusive.
 
-When a `"hash-property"` is specified, the chosen property **must be provided**.
+When a `"hash-property"` is specified, the chosen property should be provided.
 If published messages do not contain the property, they will all get
 routed to the same **arbitrarily chosen** queue.
 

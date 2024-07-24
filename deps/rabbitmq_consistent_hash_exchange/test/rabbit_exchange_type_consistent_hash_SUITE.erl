@@ -40,6 +40,7 @@ routing_tests() ->
     [
      routing_key_hashing_test,
      custom_header_hashing_test,
+     custom_header_undefined,
      message_id_hashing_test,
      correlation_id_hashing_test,
      timestamp_hashing_test,
@@ -121,7 +122,7 @@ end_per_testcase(Testcase, Config) ->
 
 %% N.B. lowering this value below 100K increases the probability
 %% of failing the Chi squared test in some environments
--define(DEFAULT_SAMPLE_COUNT, 150000).
+-define(DEFAULT_SAMPLE_COUNT, 150_000).
 
 routing_key_hashing_test(Config) ->
     ok = test_with_rk(Config, ?RoutingTestQs).
@@ -143,6 +144,43 @@ other_routing_test(Config) ->
     ok = test_binding_with_non_numeric_routing_key(Config),
     ok = test_non_supported_property(Config),
     ok = test_mutually_exclusive_arguments(Config),
+    ok.
+
+%% Test case for
+%% https://github.com/rabbitmq/rabbitmq-server/discussions/11671
+%% According to our docs, it's allowed (although not recommended)
+%% for the publishing client to omit the header:
+%% "If published messages do not contain the header,
+%% they will all get routed to the same arbitrarily chosen queue."
+custom_header_undefined(Config) ->
+    Exchange = <<"my exchange">>,
+    Queue = <<"my queue">>,
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    #'exchange.declare_ok'{} = amqp_channel:call(
+                                 Ch, #'exchange.declare' {
+                                        exchange = Exchange,
+                                        type = <<"x-consistent-hash">>,
+                                        arguments = [{<<"hash-header">>, longstr, <<"hashme">>}]
+                                       }),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Queue}),
+    #'queue.bind_ok'{} = amqp_channel:call(
+                           Ch, #'queue.bind'{queue = Queue,
+                                             exchange = Exchange,
+                                             routing_key = <<"1">>}),
+
+    amqp_channel:call(Ch,
+                      #'basic.publish'{exchange = Exchange},
+                      %% We leave the "hashme" header undefined.
+                      #amqp_msg{}),
+    amqp_channel:wait_for_confirms(Ch, 10),
+
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = Queue})),
+
+    rabbit_ct_client_helpers:close_channel(Ch),
+    clean_up_test_topology(Config, Exchange, [Queue]),
     ok.
 
 %% Test that messages originally published with AMQP to a quorum queue
@@ -280,45 +318,60 @@ wait_for_accepts(N) ->
 %% -------------------------------------------------------------------
 
 test_with_rk(Config, Qs) ->
-    test0(Config, fun (E) ->
+    test0(Config,
+          fun (E) ->
                   #'basic.publish'{exchange = E, routing_key = rnd()}
           end,
           fun() ->
                   #amqp_msg{props = #'P_basic'{}, payload = <<>>}
-          end, [], Qs).
+          end,
+          [],
+          Qs).
 
 test_with_header(Config, Qs) ->
-    test0(Config, fun (E) ->
+    test0(Config,
+          fun (E) ->
                   #'basic.publish'{exchange = E}
           end,
           fun() ->
                   H = [{<<"hashme">>, longstr, rnd()}],
                   #amqp_msg{props = #'P_basic'{headers = H}, payload = <<>>}
-          end, [{<<"hash-header">>, longstr, <<"hashme">>}], Qs).
+          end,
+          [{<<"hash-header">>, longstr, <<"hashme">>}],
+          Qs).
 
 test_with_correlation_id(Config, Qs) ->
-    test0(Config, fun(E) ->
+    test0(Config,
+          fun(E) ->
                   #'basic.publish'{exchange = E}
           end,
           fun() ->
                   #amqp_msg{props = #'P_basic'{correlation_id = rnd()}, payload = <<>>}
-          end, [{<<"hash-property">>, longstr, <<"correlation_id">>}], Qs).
+          end,
+          [{<<"hash-property">>, longstr, <<"correlation_id">>}],
+          Qs).
 
 test_with_message_id(Config, Qs) ->
-    test0(Config, fun(E) ->
+    test0(Config,
+          fun(E) ->
                   #'basic.publish'{exchange = E}
           end,
           fun() ->
                   #amqp_msg{props = #'P_basic'{message_id = rnd()}, payload = <<>>}
-          end, [{<<"hash-property">>, longstr, <<"message_id">>}], Qs).
+          end,
+          [{<<"hash-property">>, longstr, <<"message_id">>}],
+          Qs).
 
 test_with_timestamp(Config, Qs) ->
-    test0(Config, fun(E) ->
+    test0(Config,
+          fun(E) ->
                   #'basic.publish'{exchange = E}
           end,
           fun() ->
                   #amqp_msg{props = #'P_basic'{timestamp = rnd_int()}, payload = <<>>}
-          end, [{<<"hash-property">>, longstr, <<"timestamp">>}], Qs).
+          end,
+          [{<<"hash-property">>, longstr, <<"timestamp">>}],
+          Qs).
 
 test_mutually_exclusive_arguments(Config) ->
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
@@ -359,7 +412,7 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, Queues) ->
     test0(Config, MakeMethod, MakeMsg, DeclareArgs, Queues, ?DEFAULT_SAMPLE_COUNT).
 
 test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues, IterationCount) ->
-    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+    Chan = rabbit_ct_client_helpers:open_channel(Config),
     #'confirm.select_ok'{} = amqp_channel:call(Chan, #'confirm.select'{}),
 
     CHX = <<"e">>,
