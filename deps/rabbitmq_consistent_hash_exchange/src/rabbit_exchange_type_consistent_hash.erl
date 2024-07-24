@@ -261,8 +261,9 @@ jump_consistent_hash_value(_B0, J0, NumberOfBuckets, SeedState0) ->
 
 value_to_hash(undefined, Msg) ->
     mc:routing_keys(Msg);
-value_to_hash({header, Header}, Msg0) ->
-    maps:get(Header, mc:routing_headers(Msg0, [x_headers]));
+value_to_hash({header, Header}, Msg) ->
+    Headers = mc:routing_headers(Msg, [x_headers]),
+    maps:get(Header, Headers, undefined);
 value_to_hash({property, Property}, Msg) ->
     case Property of
         <<"correlation_id">> ->
