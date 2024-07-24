@@ -41,7 +41,7 @@
 %% from and can break with the next upgrade. It should not be used by
 %% another one that the one who created it or survive a node restart.
 %% Thus, function references have been replace by the following MFA.
--export([decl_fun/3, publish_fun/4, props_fun_timestamp_header/4,
+-export([decl_fun/3, check_fun/3, publish_fun/4, props_fun_timestamp_header/4,
          props_fun_forward_header/5]).
 
 -define(MAX_CONNECTION_CLOSE_TIMEOUT, 10000).
@@ -56,7 +56,7 @@ parse(_Name, {source, Source}) ->
     CArgs = proplists:get_value(consumer_args, Source, []),
     #{module => ?MODULE,
       uris => proplists:get_value(uris, Source),
-      resource_decl => decl_fun(Source),
+      resource_decl => decl_fun({source, Source}),
       queue => Queue,
       delete_after => proplists:get_value(delete_after, Source, never),
       prefetch_count => Prefetch,
@@ -72,7 +72,7 @@ parse(Name, {destination, Dest}) ->
     PropsFun2 = add_timestamp_header_fun(ATH, PropsFun1),
     #{module => ?MODULE,
       uris => proplists:get_value(uris, Dest),
-      resource_decl  => decl_fun(Dest),
+      resource_decl  => decl_fun({destination, Dest}),
       props_fun => PropsFun2,
       fields_fun => PubFieldsFun,
       add_forward_headers => AFH,
@@ -606,15 +606,34 @@ parse_declaration({[{Method, Props} | _Rest], _Acc}) ->
 parse_declaration({[Method | Rest], Acc}) ->
     parse_declaration({[{Method, []} | Rest], Acc}).
 
-decl_fun(Endpoint) ->
-    Decl = parse_declaration({proplists:get_value(declarations, Endpoint, []),
-                              []}),
+decl_fun({source, Endpoint}) ->
+    case parse_declaration({proplists:get_value(declarations, Endpoint, []), []}) of 
+        [] -> 
+            case proplists:get_value(predeclared, application:get_env(?APP, topology, []), false) of
+                true -> case proplists:get_value(queue, Endpoint) of 
+                            <<>> -> fail({invalid_parameter_value, declarations, {require_non_empty}});
+                            Queue -> {?MODULE, check_fun, [Queue]}
+                        end;
+                false -> {?MODULE, decl_fun, []}
+            end;
+        Decl -> {?MODULE, decl_fun, [Decl]}
+    end;
+decl_fun({destination, Endpoint}) ->
+    Decl = parse_declaration({proplists:get_value(declarations, Endpoint, []), []}),
     {?MODULE, decl_fun, [Decl]}.
-
+    
 decl_fun(Decl, _Conn, Ch) ->
     [begin
          amqp_channel:call(Ch, M)
      end || M <- lists:reverse(Decl)].
+
+check_fun(Queue, _Conn, Ch) ->
+    try
+        amqp_channel:call(Ch, #'queue.declare'{queue   = Queue,
+                                               passive = true})
+    after
+        catch amqp_channel:close(Ch)
+    end.
 
 parse_parameter(Param, Fun, Value) ->
     try
