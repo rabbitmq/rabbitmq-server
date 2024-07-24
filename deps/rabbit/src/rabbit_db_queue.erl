@@ -1371,5 +1371,15 @@ khepri_queue_path(VHost, Name)
        ?IS_KHEPRI_PATH_CONDITION(Name) ->
     [?MODULE, queues, VHost, Name].
 
-khepri_queue_path_to_name([?MODULE, queues, VHost, Name]) ->
+khepri_queue_path_to_name(Path) ->
+    Pattern = khepri_queue_path('$VHost', '$Name'),
+    khepri_queue_path_to_name(Pattern, Path, #{}).
+
+khepri_queue_path_to_name([Var | Pattern], [Value | Path], Result)
+  when Var =:= '$VHost' orelse Var =:= '$Name' ->
+    Result1 = Result#{Var => Value},
+    khepri_queue_path_to_name(Pattern, Path, Result1);
+khepri_queue_path_to_name([Comp | Pattern], [Comp | Path], Result) ->
+    khepri_queue_path_to_name(Pattern, Path, Result);
+khepri_queue_path_to_name([], _, #{'$VHost' := VHost, '$Name' := Name}) ->
     rabbit_misc:r(VHost, queue, Name).
