@@ -13,7 +13,8 @@
          lookup/1, lookup_many/1, lookup_or_die/1, list/0, list/1, lookup_scratch/2,
          update_scratch/3, update_decorators/2, immutable/1,
          info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4,
-         route/2, route/3, delete/3, validate_binding/2, count/0]).
+         route/2, route/3, delete/3, validate_binding/2, count/0,
+         ensure_deleted/3]).
 -export([list_names/0]).
 -export([serialise_events/1]).
 -export([serial/1, peek_serial/1]).
@@ -91,10 +92,16 @@ serial(X) ->
         true -> rabbit_db_exchange:next_serial(X#exchange.name)
     end.
 
--spec declare
-        (name(), type(), boolean(), boolean(), boolean(),
-         rabbit_framing:amqp_table(), rabbit_types:username())
-        -> rabbit_types:exchange().
+-spec declare(Name, Type, Durable, AutoDelete, Internal, Args, Username) ->
+    Ret when
+      Name :: name(),
+      Type :: type(),
+      Durable :: boolean(),
+      AutoDelete :: boolean(),
+      Internal :: boolean(),
+      Args :: rabbit_framing:amqp_table(),
+      Username :: rabbit_types:username(),
+      Ret :: {ok, rabbit_types:exchange()} | {error, timeout}.
 
 declare(XName, Type, Durable, AutoDelete, Internal, Args, Username) ->
     X = rabbit_exchange_decorator:set(
@@ -121,14 +128,16 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args, Username) ->
                     Serial = serial(Exchange),
                     ok = callback(X, create, Serial, [Exchange]),
                     rabbit_event:notify(exchange_created, info(Exchange)),
-                    Exchange;
+                    {ok, Exchange};
                 {existing, Exchange} ->
-                    Exchange
+                    {ok, Exchange};
+                {error, timeout} = Err ->
+                    Err
             end;
         _ ->
             rabbit_log:warning("ignoring exchange.declare for exchange ~tp,
                                 exchange.delete in progress~n.", [XName]),
-            X
+            {ok, X}
     end.
 
 %% Used with binaries sent over the wire; the type may not exist.
@@ -444,9 +453,13 @@ cons_if_present(XName, L) ->
 
 -spec delete
         (name(),  'true', rabbit_types:username()) ->
-                    'ok'| rabbit_types:error('not_found' | 'in_use');
+                    'ok' |
+                    rabbit_types:error('not_found' | 'in_use') |
+                    rabbit_khepri:timeout_error();
         (name(), 'false', rabbit_types:username()) ->
-                    'ok' | rabbit_types:error('not_found').
+                    'ok' |
+                    rabbit_types:error('not_found') |
+                    rabbit_khepri:timeout_error().
 
 delete(XName, IfUnused, Username) ->
     try
@@ -477,6 +490,26 @@ process_deletions({deleted, #exchange{name = XName} = X, Bs, Deletions}) ->
     rabbit_binding:process_deletions(
       rabbit_binding:add_deletion(
         XName, {X, deleted, Bs}, Deletions)).
+
+-spec ensure_deleted(ExchangeName, IfUnused, Username) -> Ret when
+      ExchangeName :: name(),
+      IfUnused :: boolean(),
+      Username :: rabbit_types:username(),
+      Ret :: ok |
+             rabbit_types:error('in_use') |
+             rabbit_khepri:timeout_error().
+%% @doc A wrapper around `delete/3' which returns `ok' in the case that the
+%% exchange did not exist at time of deletion.
+
+ensure_deleted(XName, IfUnused, Username) ->
+    case delete(XName, IfUnused, Username) of
+        ok ->
+            ok;
+        {error, not_found} ->
+            ok;
+        {error, _} = Err ->
+            Err
+    end.
 
 -spec validate_binding
         (rabbit_types:exchange(), rabbit_types:binding())

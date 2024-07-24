@@ -200,10 +200,12 @@ upstream_validation(_Config) ->
     ok.
 
 with_exchanges(Fun) ->
-    rabbit_exchange:declare(r(?US_NAME), fanout, false, false, false, [],
-                            <<"acting-user">>),
-    X = rabbit_exchange:declare(r(?DS_NAME), fanout, false, false, false, [],
-                                <<"acting-user">>),
+    {ok, _} = rabbit_exchange:declare(
+                r(?US_NAME), fanout, false, false, false, [],
+                <<"acting-user">>),
+    {ok, X} = rabbit_exchange:declare(
+                r(?DS_NAME), fanout, false, false, false, [],
+                <<"acting-user">>),
     Fun(X),
     %% Delete downstream first or it will recreate the upstream
     rabbit_exchange:delete(r(?DS_NAME), false, <<"acting-user">>),

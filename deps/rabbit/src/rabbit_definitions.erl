@@ -863,13 +863,18 @@ add_exchange_int(Exchange, Name, ActingUser) ->
                            undefined -> false; %% =< 2.2.0
                            I         -> I
                        end,
-            rabbit_exchange:declare(Name,
-                                    rabbit_exchange:check_type(maps:get(type, Exchange, undefined)),
-                                    maps:get(durable,                         Exchange, undefined),
-                                    maps:get(auto_delete,                     Exchange, undefined),
-                                    Internal,
-                                    args(maps:get(arguments, Exchange, undefined)),
-                                    ActingUser)
+            case rabbit_exchange:declare(Name,
+                                         rabbit_exchange:check_type(maps:get(type, Exchange, undefined)),
+                                         maps:get(durable,                         Exchange, undefined),
+                                         maps:get(auto_delete,                     Exchange, undefined),
+                                         Internal,
+                                         args(maps:get(arguments, Exchange, undefined)),
+                                         ActingUser) of
+                {ok, _Exchange} ->
+                    ok;
+                {error, timeout} = Err ->
+                    throw(Err)
+            end
     end.
 
 add_binding(Binding, ActingUser) ->

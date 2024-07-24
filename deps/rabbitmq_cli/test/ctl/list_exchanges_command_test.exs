@@ -96,7 +96,7 @@ defmodule ListExchangesCommandTest do
 
   test "run: default options test", context do
     exchange_name = "test_exchange"
-    declare_exchange(exchange_name, @vhost)
+    {:ok, _} = declare_exchange(exchange_name, @vhost)
 
     assert MapSet.new(run_command_to_list(@command, [["name", "type"], context[:opts]])) ==
              MapSet.new(
@@ -106,8 +106,8 @@ defmodule ListExchangesCommandTest do
   end
 
   test "run: list multiple exchanges", context do
-    declare_exchange("test_exchange_1", @vhost, :direct)
-    declare_exchange("test_exchange_2", @vhost, :fanout)
+    {:ok, _} = declare_exchange("test_exchange_1", @vhost, :direct)
+    {:ok, _} = declare_exchange("test_exchange_2", @vhost, :fanout)
 
     non_default_exchanges =
       run_command_to_list(@command, [["name", "type"], context[:opts]])
@@ -124,8 +124,8 @@ defmodule ListExchangesCommandTest do
   end
 
   test "run: info keys filter single key", context do
-    declare_exchange("test_exchange_1", @vhost)
-    declare_exchange("test_exchange_2", @vhost)
+    {:ok, _} = declare_exchange("test_exchange_1", @vhost)
+    {:ok, _} = declare_exchange("test_exchange_2", @vhost)
 
     non_default_exchanges =
       run_command_to_list(@command, [["name"], context[:opts]])
@@ -138,8 +138,8 @@ defmodule ListExchangesCommandTest do
   end
 
   test "run: info keys add additional keys", context do
-    declare_exchange("durable_exchange", @vhost, :direct, true)
-    declare_exchange("auto_delete_exchange", @vhost, :fanout, false, true)
+    {:ok, _} = declare_exchange("durable_exchange", @vhost, :direct, true)
+    {:ok, _} = declare_exchange("auto_delete_exchange", @vhost, :fanout, false, true)
 
     non_default_exchanges =
       run_command_to_list(@command, [["name", "type", "durable", "auto_delete"], context[:opts]])
@@ -162,8 +162,8 @@ defmodule ListExchangesCommandTest do
       delete_vhost(other_vhost)
     end)
 
-    declare_exchange("test_exchange_1", @vhost)
-    declare_exchange("test_exchange_2", other_vhost)
+    {:ok, _} = declare_exchange("test_exchange_1", @vhost)
+    {:ok, _} = declare_exchange("test_exchange_2", other_vhost)
 
     non_default_exchanges1 =
       run_command_to_list(@command, [["name"], context[:opts]])
