@@ -148,18 +148,16 @@ wait_for_initial_pass(N) ->
     end.
 
 setup_proc(
-  #{config := #{exchange := #resource{name = Name,
-                                      virtual_host = VHost}}} = Config) ->
+  #{config := #{exchange := Exchange}} = Config) ->
     case declare_exchange(Config) of
         ok ->
             ?LOG_INFO(
-               "Logging to exchange '~ts' in vhost '~ts' ready", [Name, VHost],
+               "Logging to ~ts ready", [rabbit_misc:rs(Exchange)],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL});
         error ->
             ?LOG_DEBUG(
-               "Logging to exchange '~ts' in vhost '~ts' not ready, "
-               "trying again in ~b second(s)",
-               [Name, VHost, ?DECL_EXCHANGE_INTERVAL_SECS],
+               "Logging to ~ts not ready, trying again in ~b second(s)",
+               [rabbit_misc:rs(Exchange), ?DECL_EXCHANGE_INTERVAL_SECS],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
             receive
                 stop -> ok
@@ -168,37 +166,32 @@ setup_proc(
             end
     end.
 
-declare_exchange(
-  #{config := #{exchange := #resource{name = Name,
-                                      virtual_host = VHost} = Exchange}}) ->
+declare_exchange(#{config := #{exchange := Exchange}}) ->
     try rabbit_exchange:declare(
           Exchange, topic, true, false, true, [], ?INTERNAL_USER) of
         {ok, #exchange{}} ->
             ?LOG_DEBUG(
-               "Declared exchange '~ts' in vhost '~ts'",
-               [Name, VHost],
+               "Declared ~ts",
+               [rabbit_misc:rs(Exchange)],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
             ok;
         {error, timeout} ->
             ?LOG_DEBUG(
-               "Could not declare exchange '~ts' in vhost '~ts' because the "
-               "operation timed out",
-               [Name, VHost],
+               "Could not declare ~ts because the operation timed out",
+               [rabbit_misc:rs(Exchange)],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
             error
     catch
         Class:Reason ->
             ?LOG_DEBUG(
-               "Could not declare exchange '~ts' in vhost '~ts', "
-               "reason: ~0p:~0p",
-               [Name, VHost, Class, Reason],
+               "Could not declare ~ts, reason: ~0p:~0p",
+               [rabbit_misc:rs(Exchange), Class, Reason],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
            error
     end.
 
 unconfigure_exchange(
-  #{config := #{exchange := #resource{name = Name,
-                                      virtual_host = VHost} = Exchange,
+  #{config := #{exchange := Exchange,
                 setup_proc := Pid}}) ->
     Pid ! stop,
     case rabbit_exchange:ensure_deleted(Exchange, false, ?INTERNAL_USER) of
@@ -206,12 +199,12 @@ unconfigure_exchange(
             ok;
         {error, timeout} ->
             ?LOG_ERROR(
-              "Could not delete exchange '~ts' in vhost '~ts' due to a timeout",
-              [Name, VHost],
+              "Could not delete ~ts due to a timeout",
+              [rabbit_misc:rs(Exchange)],
               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
             ok
     end,
     ?LOG_INFO(
-       "Logging to exchange '~ts' in vhost '~ts' disabled",
-       [Name, VHost],
+       "Logging to ~ts disabled",
+       [rabbit_misc:rs(Exchange)],
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}).

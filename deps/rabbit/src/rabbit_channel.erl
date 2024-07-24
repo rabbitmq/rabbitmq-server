@@ -2581,9 +2581,9 @@ handle_method(#'exchange.declare'{exchange    = XNameBin,
                     {error, timeout} ->
                         rabbit_misc:protocol_error(
                           internal_error,
-                          "failed to declare exchange '~ts' in vhost '~ts' "
-                          "because the operation timed out",
-                          [XNameBinStripped, VHostPath])
+                          "failed to declare ~ts because the operation "
+                          "timed out",
+                          [rabbit_misc:rs(ExchangeName)])
                 end
         end,
     ok = rabbit_exchange:assert_equivalence(X, CheckedType, Durable,
