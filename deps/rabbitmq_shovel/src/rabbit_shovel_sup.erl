@@ -70,6 +70,7 @@ parse_configuration(_Defaults, [], Acc) ->
 parse_configuration(Defaults, [{ShovelName, ShovelConfig} | Env], Acc) when
     is_atom(ShovelName) andalso is_list(ShovelConfig)
 ->
+    rabbit_log:debug("rabbit_shovel:parse_configuration ~p ~p", [ShovelName, ShovelConfig]),
     case dict:is_key(ShovelName, Acc) of
         true ->
             {error, {duplicate_shovel_definition, ShovelName}};
