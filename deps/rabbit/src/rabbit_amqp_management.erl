@@ -218,9 +218,9 @@ handle_http_req(<<"PUT">>,
                     {error, timeout} ->
                         throw(
                           <<"503">>,
-                          "Could not create exchange '~ts' in vhost '~ts' "
-                          "because the operation timed out",
-                          [XName, Vhost])
+                          "Could not create ~ts because the operation "
+                          "timed out",
+                          [rabbit_misc:rs(XName)])
                 end
         end,
     try rabbit_exchange:assert_equivalence(
@@ -300,8 +300,8 @@ handle_http_req(<<"DELETE">>,
         {error, timeout} ->
             throw(
               <<"503">>,
-              "failed to delete exchange '~ts' due to a timeout",
-              [XNameBin])
+              "failed to delete ~ts due to a timeout",
+              [rabbit_misc:rs(XName)])
     end;
 
 handle_http_req(<<"POST">>,
