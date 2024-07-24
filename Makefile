@@ -60,6 +60,20 @@ include rabbitmq-components.mk
 # multiple times (including for release file names and whatnot).
 PROJECT_VERSION := $(PROJECT_VERSION)
 
+# Fetch/build community plugins.
+#
+# To include community plugins in commands, use
+# `make COMMUNITY_PLUGINS=1` or export the variable.
+# They are not included otherwise. Note that only
+# the top-level Makefile can do this.
+#
+# Note that the community plugins will be fetched using
+# SSH and therefore may be subject to GH authentication.
+
+ifdef COMMUNITY_PLUGINS
+DEPS += $(RABBITMQ_COMMUNITY)
+endif
+
 include erlang.mk
 include mk/github-actions.mk
 include mk/bazel.mk
