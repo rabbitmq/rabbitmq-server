@@ -94,13 +94,11 @@ init_source(Conf = #{ack_mode := AckMode,
     NoAck = AckMode =:= no_ack,
     case NoAck of
         false ->
-            rabbit_log:debug("init_source. calling basic.qos ~p", [Prefetch]),
             #'basic.qos_ok'{} =
             amqp_channel:call(Chan, #'basic.qos'{prefetch_count = Prefetch}),
             ok;
         true  -> ok
     end,
-    rabbit_log:debug("init_source. calling remaining"),
     Remaining = remaining(Chan, Conf),
     case Remaining of
         0 ->

@@ -455,7 +455,7 @@ parse_amqp091_source(Def) ->
     %% available to query the runtime parameters.
     Details = maps:from_list([{K, V} || {K, V} <- [{source_exchange, SrcX},
                                                    {source_exchange_key, SrcXKey}],
-                                        V =/= none]),    
+                                        V =/= none]),
     {maps:merge(#{module => rabbit_amqp091_shovel,
                   uris => SrcURIs,
                   resource_decl => SrcDeclFun,
