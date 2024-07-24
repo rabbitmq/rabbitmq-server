@@ -292,6 +292,9 @@ endif
 #   3. /foo/    -> /bar/
 subst_repo_name = $(patsubst %/$(1)/%,%/$(2)/%,$(patsubst %/$(1),%/$(2),$(patsubst %/$(1).git,%/$(2).git,$(3))))
 
+# We need to provide a repo mapping for deps resolved via git_rmq fetch method
+query_repo_git_rmq = https://github.com/rabbitmq/$(call rmq_cmp_repo_name,$(1))
+
 # Macro to replace both the project's name (eg. "rabbit_common") and
 # repository name (eg. "rabbitmq-common") by the target's equivalent.
 #
