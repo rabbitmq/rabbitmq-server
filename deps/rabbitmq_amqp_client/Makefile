@@ -8,10 +8,8 @@ BUILD_DEPS = rabbit_common
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 TEST_DEPS = rabbit rabbitmq_ct_helpers
 
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
-	      rabbit_common/mk/rabbitmq-hexpm.mk \
-	      rabbit_common/mk/rabbitmq-dist.mk \
-	      rabbit_common/mk/rabbitmq-run.mk
+# We do not depend on rabbit therefore can't run the broker.
+DEP_PLUGINS = $(PROJECT)/mk/rabbitmq-build.mk
 
 .DEFAULT_GOAL = all
 

@@ -10,7 +10,8 @@ LOCAL_DEPS = ssl
 DEPS = cowboy thoas
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+# We do not depend on rabbit therefore can't run the broker.
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
