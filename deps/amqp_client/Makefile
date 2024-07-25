@@ -43,7 +43,7 @@ LOCAL_DEPS = xmerl ssl public_key
 DEPS = rabbit_common credentials_obfuscation
 TEST_DEPS = rabbitmq_ct_helpers rabbit meck
 
-DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
+DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-hexpm.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
