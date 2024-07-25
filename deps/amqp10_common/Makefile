@@ -38,7 +38,7 @@ TEST_DEPS = rabbitmq_ct_helpers proper
 
 -include development.pre.mk
 
-DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
+DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-hexpm.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk

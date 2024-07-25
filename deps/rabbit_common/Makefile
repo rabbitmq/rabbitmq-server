@@ -38,7 +38,7 @@ DEPS = thoas ranch recon credentials_obfuscation
 
 -include development.pre.mk
 
-DEP_EARLY_PLUGINS = $(PROJECT)/mk/rabbitmq-early-test.mk
+DEP_EARLY_PLUGINS = $(PROJECT)/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = $(PROJECT)/mk/rabbitmq-build.mk \
 	      $(PROJECT)/mk/rabbitmq-hexpm.mk \
 	      $(PROJECT)/mk/rabbitmq-dist.mk
@@ -52,7 +52,7 @@ HEX_TARBALL_FILES += rabbitmq-components.mk \
 		     git-revisions.txt \
 		     mk/rabbitmq-build.mk \
 		     mk/rabbitmq-dist.mk \
-		     mk/rabbitmq-early-test.mk \
+		     mk/rabbitmq-early-plugin.mk \
 		     mk/rabbitmq-hexpm.mk
 
 -include development.post.mk

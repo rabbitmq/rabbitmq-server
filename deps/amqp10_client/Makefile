@@ -33,7 +33,7 @@ DEPS = amqp10_common credentials_obfuscation
 TEST_DEPS = rabbit rabbitmq_ct_helpers
 LOCAL_DEPS = ssl inets crypto public_key
 
-DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
+DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-hexpm.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
