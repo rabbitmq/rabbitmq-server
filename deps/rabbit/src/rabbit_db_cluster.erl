@@ -17,6 +17,7 @@
 -export([change_node_type/1]).
 -export([is_clustered/0,
          members/0,
+         consistent_members/0,
          disc_members/0,
          node_type/0,
          check_compatibility/1,
@@ -150,6 +151,8 @@ join(RemoteNode, NodeType)
                 false -> ok = rabbit_mnesia:reset_gracefully()
             end,
 
+            ok = rabbit_node_monitor:notify_left_cluster(node()),
+
             %% Now that the files are all gone after the reset above, restart
             %% the Ra systems. They will recreate their folder in the process.
             case RestartRabbit of
@@ -224,6 +227,14 @@ join_using_khepri(_ClusterNodes, ram = NodeType) ->
 %% @doc Removes `Node' from the cluster.
 
 forget_member(Node, RemoveWhenOffline) ->
+    case forget_member0(Node, RemoveWhenOffline) of
+        ok ->
+            rabbit_node_monitor:notify_left_cluster(Node);
+        Error ->
+            Error
+    end.
+
+forget_member0(Node, RemoveWhenOffline) ->
     case rabbit:is_running(Node) of
         false ->
             ?LOG_DEBUG(
@@ -305,6 +316,19 @@ members_using_khepri() ->
     %% For khepri however it is a lot more likely to encounter an error
     %% so we need to allow callers to be more defensive in this case.
     rabbit_khepri:locally_known_nodes().
+
+-spec consistent_members() -> Members when
+      Members :: [node()].
+%% @doc Returns the list of cluster members.
+
+consistent_members() ->
+    case rabbit_khepri:get_feature_state() of
+        enabled -> consistent_members_using_khepri();
+        _       -> members_using_mnesia()
+    end.
+
+consistent_members_using_khepri() ->
+    rabbit_khepri:nodes().
 
 -spec disc_members() -> Members when
       Members :: [node()].

@@ -293,9 +293,6 @@ change_cluster_node_type(Type) ->
 -spec forget_cluster_node(node(), boolean()) -> 'ok'.
 
 forget_cluster_node(Node, RemoveWhenOffline) ->
-    forget_cluster_node(Node, RemoveWhenOffline, true).
-
-forget_cluster_node(Node, RemoveWhenOffline, EmitNodeDeletedEvent) ->
     case lists:member(Node, cluster_nodes(all)) of
         true  -> ok;
         false -> e(not_a_cluster_node)
@@ -307,9 +304,6 @@ forget_cluster_node(Node, RemoveWhenOffline, EmitNodeDeletedEvent) ->
         {false,  true} -> rabbit_log:info(
                             "Removing node ~tp from cluster", [Node]),
                           case remove_node_if_mnesia_running(Node) of
-                              ok when EmitNodeDeletedEvent ->
-                                  rabbit_event:notify(node_deleted, [{node, Node}]),
-                                  ok;
                               ok               -> ok;
                               {error, _} = Err -> throw(Err)
                           end
@@ -333,7 +327,7 @@ remove_node_offline_node(Node) ->
                 %% We skip the 'node_deleted' event because the
                 %% application is stopped and thus, rabbit_event is not
                 %% enabled.
-                forget_cluster_node(Node, false, false),
+                forget_cluster_node(Node, false),
                 force_load_next_boot()
             after
                 stop_mnesia()
@@ -892,8 +886,8 @@ remove_node_if_mnesia_running(Node) ->
             %% change being propagated to all nodes
             case mnesia:del_table_copy(schema, Node) of
                 {atomic, ok} ->
-                    rabbit_amqqueue:forget_all_durable(Node),
                     rabbit_node_monitor:notify_left_cluster(Node),
+                    rabbit_amqqueue:forget_all_durable(Node),
                     ok;
                 {aborted, Reason} ->
                     {error, {failed_to_remove_node, Node, Reason}}
