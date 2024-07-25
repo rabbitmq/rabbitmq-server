@@ -39,9 +39,9 @@ DEPS = thoas ranch recon credentials_obfuscation
 -include development.pre.mk
 
 DEP_EARLY_PLUGINS = $(PROJECT)/mk/rabbitmq-early-plugin.mk
+# We do not depend on rabbit therefore can't run the broker.
 DEP_PLUGINS = $(PROJECT)/mk/rabbitmq-build.mk \
-	      $(PROJECT)/mk/rabbitmq-hexpm.mk \
-	      $(PROJECT)/mk/rabbitmq-dist.mk
+	      $(PROJECT)/mk/rabbitmq-hexpm.mk
 
 PLT_APPS += mnesia crypto ssl
 
