@@ -79,6 +79,7 @@
          peer_cert_subject,
          peer_cert_validity]).
 -define(UNKNOWN_FIELD, unknown_field).
+-define(SILENT_CLOSE_DELAY, 3_000).
 
 %% client API
 -export([start_link/4,
@@ -1325,6 +1326,7 @@ handle_frame_pre_auth(Transport,
                                                                     stream),
                             auth_fail(Username, Msg, Args, C1, State),
                             rabbit_log_connection:warning(Msg, Args),
+                            silent_close_delay(),
                             {C1#stream_connection{connection_step = failure},
                              {sasl_authenticate,
                               ?RESPONSE_AUTHENTICATION_FAILURE, <<>>}};
@@ -1490,6 +1492,7 @@ handle_frame_pre_auth(Transport,
             Conn
         catch exit:#amqp_error{explanation = Explanation} ->
                   rabbit_log:warning("Opening connection failed: ~ts", [Explanation]),
+                  silent_close_delay(),
                   F = rabbit_stream_core:frame({response, CorrelationId,
                                                 {open,
                                                  ?RESPONSE_VHOST_ACCESS_FAILURE,
@@ -4041,3 +4044,8 @@ stream_from_consumers(SubId, Consumers) ->
         _ ->
             undefined
     end.
+
+%% We don't trust the client at this point - force them to wait
+%% for a bit so they can't DOS us with repeated failed logins etc.
+silent_close_delay() ->
+    timer:sleep(?SILENT_CLOSE_DELAY).
