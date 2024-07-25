@@ -1596,7 +1596,7 @@ end}.
 %%
 %% {classic_queue_consumer_unsent_message_limit, 200},
 
-{mapping, "classic_queue_consumer_unsent_message_limit", "rabbit.classic_queue_consumer_unsent_message_limit", [
+{mapping, "classic_queue.consumer_unsent_message_limit", "rabbit.classic_queue_consumer_unsent_message_limit", [
     {datatype, integer},
     {validators, ["non_zero_positive_integer"]}
 ]}.
