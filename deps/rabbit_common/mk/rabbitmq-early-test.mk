@@ -7,16 +7,6 @@ DIALYZER_OPTS ?= -Werror_handling -Wunmatched_returns -Wunknown
 dialyze: ERL_LIBS = $(APPS_DIR):$(DEPS_DIR):$(DEPS_DIR)/rabbitmq_cli/_build/dev/lib:$(dir $(shell elixir --eval ":io.format '~s~n', [:code.lib_dir :elixir ]"))
 
 # --------------------------------------------------------------------
-# %-on-concourse dependencies.
-# --------------------------------------------------------------------
-
-ifneq ($(words $(filter %-on-concourse,$(MAKECMDGOALS))),0)
-TEST_DEPS += ci $(RMQ_CI_CT_HOOKS)
-NO_AUTOPATCH += ci $(RMQ_CI_CT_HOOKS)
-dep_ci = git git@github.com:rabbitmq/rabbitmq-ci.git main
-endif
-
-# --------------------------------------------------------------------
 # Common Test flags.
 # --------------------------------------------------------------------
 
@@ -38,11 +28,6 @@ CT_OPTS += -hidden
 # cth_styledout
 #   This hook will change the output of common_test to something more
 #   concise and colored.
-#
-# On Jenkins, in addition to those common_test hooks, enable JUnit-like
-# report. Jenkins parses those reports so the results can be browsed
-# from its UI. Furthermore, it displays a graph showing evolution of the
-# results over time.
 
 CT_HOOKS ?= cth_styledout
 TEST_DEPS += cth_styledout
