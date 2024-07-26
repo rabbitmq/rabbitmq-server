@@ -8,6 +8,7 @@
 -module(rabbit_amqp_reader).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("amqp10_common/include/amqp10_types.hrl").
 -include("rabbit_amqp.hrl").
 
 -export([init/2,
@@ -968,7 +969,11 @@ i(auth_mechanism, #v1{connection = #v1_connection{auth_mechanism = Val}}) ->
         _ -> Val
     end;
 i(frame_max, #v1{connection = #v1_connection{outgoing_max_frame_size = Val}}) ->
-    Val;
+    %% Some HTTP API clients expect an integer to be reported.
+    %% https://github.com/rabbitmq/rabbitmq-server/issues/11838
+    if Val =:= unlimited -> ?UINT_MAX;
+       is_integer(Val) -> Val
+    end;
 i(timeout, #v1{connection = #v1_connection{timeout = Millis}}) ->
     Millis div 1000;
 i(user,
