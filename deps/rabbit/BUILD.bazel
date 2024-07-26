@@ -330,10 +330,10 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     name = "clustering_events_SUITE",
+    size = "medium",
     additional_beam = [
         ":test_event_recorder_beam",
     ],
-    size = "medium",
 )
 
 rabbitmq_integration_suite(
