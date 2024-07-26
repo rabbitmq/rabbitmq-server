@@ -378,7 +378,7 @@ basic_roundtrip_with_several_capabilities_ibmmq(Config) ->
             {message_annotations, #{}}
         ], [creation_time]).
 
-basic_roundtrip_with_non_binary_capability_is_ignored(Config) ->
+basic_roundtrip_with_non_binary_capability_is_ignored(Config) ->    
     application:start(sasl),
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
