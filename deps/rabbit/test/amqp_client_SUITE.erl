@@ -154,6 +154,10 @@ groups() ->
        quorum_queue_on_old_node,
        quorum_queue_on_new_node,
        maintenance,
+       leader_transfer_quorum_queue_credit_single,
+       leader_transfer_quorum_queue_credit_batches,
+       leader_transfer_stream_credit_single,
+       leader_transfer_stream_credit_batches,
        list_connections,
        detach_requeues_two_connections_classic_queue,
        detach_requeues_two_connections_quorum_queue
@@ -271,6 +275,17 @@ init_per_testcase(T = dead_letter_reject, Config) ->
         false ->
             {skip, "This test is known to fail with feature flag message_containers_deaths_v2 disabled "
              "due bug https://github.com/rabbitmq/rabbitmq-server/issues/11159"}
+    end;
+init_per_testcase(T, Config)
+  when  T =:= leader_transfer_quorum_queue_credit_single orelse
+        T =:= leader_transfer_quorum_queue_credit_batches orelse
+        T =:= leader_transfer_stream_credit_single orelse
+        T =:= leader_transfer_stream_credit_batches ->
+    case rpc(Config, rabbit_feature_flags, is_supported, [credit_api_v2]) of
+        true ->
+            rabbit_ct_helpers:testcase_started(Config, T);
+        false ->
+            {skip, "This test requires the AMQP management extension of RabbitMQ 4.0"}
     end;
 init_per_testcase(T, Config)
   when T =:= classic_queue_on_new_node orelse
@@ -3049,6 +3064,69 @@ maintenance(Config) ->
     ok = revive_node(Config, 2),
 
     ok = close_connection_sync(C0).
+
+%% https://github.com/rabbitmq/rabbitmq-server/issues/11841
+leader_transfer_quorum_queue_credit_single(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    leader_transfer(QName, <<"quorum">>, 1, Config).
+
+leader_transfer_quorum_queue_credit_batches(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    leader_transfer(QName, <<"quorum">>, 3, Config).
+
+leader_transfer_stream_credit_single(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    leader_transfer(QName, <<"stream">>, 1, Config).
+
+leader_transfer_stream_credit_batches(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    leader_transfer(QName, <<"stream">>, 3, Config).
+
+leader_transfer(QName, QType, Credit, Config) ->
+    %% Create queue with leader on node 1.
+    {Connection1, Session1, LinkPair1} = init(1, Config),
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(
+                               LinkPair1,
+                               QName,
+                               #{arguments => #{<<"x-queue-type">> => {utf8, QType},
+                                                <<"x-queue-leader-locator">> => {utf8, <<"client-local">>}}}),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair1),
+    ok = end_session_sync(Session1),
+    ok = close_connection_sync(Connection1),
+
+    %% Consume from a follower.
+    OpnConf = connection_config(0, Config),
+    {ok, Connection0} = amqp10_client:open_connection(OpnConf),
+    {ok, Session0} = amqp10_client:begin_session_sync(Connection0),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(
+                     Session0, <<"test-sender">>, Address),
+    ok = wait_for_credit(Sender),
+
+    NumMsgs = 30,
+    ok = send_messages(Sender, NumMsgs, false),
+    ok = wait_for_accepts(NumMsgs),
+    ok = detach_link_sync(Sender),
+
+    Filter = consume_from_first(QType),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session0, <<"receiver">>, Address,
+                       settled, configuration, Filter),
+    flush(receiver_attached),
+    %% Top up credits very often during the leader change.
+    ok = amqp10_client:flow_link_credit(Receiver, Credit, Credit),
+
+    %% After receiving the 1st message, let's move the leader away from node 1.
+    receive_messages(Receiver, 1),
+    ok = drain_node(Config, 1),
+    %% We expect to receive all remaining messages.
+    receive_messages(Receiver, NumMsgs - 1),
+
+    ok = revive_node(Config, 1),
+    ok = amqp10_client:detach_link(Receiver),
+    ok = delete_queue(Session0, QName),
+    ok = end_session_sync(Session0),
+    ok = amqp10_client:close_connection(Connection0).
 
 %% rabbitmqctl list_connections
 %% should list both AMQP 1.0 and AMQP 0.9.1 connections.
