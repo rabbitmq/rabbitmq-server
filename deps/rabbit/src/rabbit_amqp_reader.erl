@@ -503,10 +503,9 @@ handle_connection_frame(#'v1_0.close'{}, State0) ->
     close(undefined, State).
 
 start_writer(#v1{helper_sup = SupPid,
-                 sock = Sock,
-                 connection = #v1_connection{outgoing_max_frame_size = MaxFrame}} = State) ->
+                 sock = Sock} = State) ->
     ChildSpec = #{id => writer,
-                  start => {rabbit_amqp_writer, start_link, [Sock, MaxFrame, self()]},
+                  start => {rabbit_amqp_writer, start_link, [Sock, self()]},
                   restart => transient,
                   significant => true,
                   shutdown => ?WORKER_WAIT,
