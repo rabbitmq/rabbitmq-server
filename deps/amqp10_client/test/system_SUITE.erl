@@ -35,7 +35,9 @@ groups() ->
      {activemq, [], shared()},
      {ibmmq, [], [
         open_close_connection,
-        basic_roundtrip_ibmmq
+        basic_roundtrip_ibmmq,
+        basic_roundtrip_with_several_capabilities_ibmmq,
+        basic_roundtrip_with_non_binary_capability_is_ignored
      ]},
      {rabbitmq_strict, [], [
                             basic_roundtrip_tls,
@@ -131,7 +133,7 @@ init_per_group(activemq, Config0) ->
     rabbit_ct_helpers:run_steps(Config,
                                 activemq_ct_helpers:setup_steps("activemq.xml"));
 
-init_per_group(ibmmq, Config) ->    
+init_per_group(ibmmq, Config) ->
     ct:log("Found arch: ~p", [erlang:system_info(system_architecture)]),
     case string:find(erlang:system_info(system_architecture), "x86_64") of
         nomatch  -> {skip, no_arm64_docker_image_for_ibmmq};
@@ -274,7 +276,7 @@ open_connection_plain_sasl_failure(Config) ->
     ok = amqp10_client:close_connection(Connection).
 
 basic_roundtrip(Config) ->
-    application:start(sasl),    
+    application:start(sasl),
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     OpenConf = #{address => Hostname, port => Port, sasl => ?config(sasl, Config)},
@@ -362,6 +364,33 @@ basic_roundtrip_ibmmq(Config) ->
             {message_annotations, #{}}
         ], [creation_time]).
 
+
+basic_roundtrip_with_several_capabilities_ibmmq(Config) ->
+    application:start(sasl),
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    OpenConf = #{address => Hostname, port => Port, sasl => ?config(sasl, Config)},
+    roundtrip(OpenConf, [
+            {body, <<"banana">>},
+            {destination, <<"DEV.QUEUE.3">>},
+            {sender_capabilities, [<<"queue">>, <<"tx-capabilities">>, dummy]},
+            {receiver_capabilities, <<"queue">>},
+            {message_annotations, #{}}
+        ], [creation_time]).
+
+basic_roundtrip_with_non_binary_capability_is_ignored(Config) ->
+    application:start(sasl),
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    OpenConf = #{address => Hostname, port => Port, sasl => ?config(sasl, Config)},
+    roundtrip(OpenConf, [
+            {body, <<"banana">>},
+            {destination, <<"DEV.QUEUE.3">>},
+            {sender_capabilities, [<<"queue">>, dummy]},
+            {receiver_capabilities, <<"queue">>},
+            {message_annotations, #{}}
+        ], [creation_time]).
+
 roundtrip(OpenConf) ->
     roundtrip(OpenConf, [], []).
 
@@ -425,9 +454,9 @@ roundtrip(OpenConf, Args, DoNotAssertMessageProperties) ->
     ok = amqp10_client:close_connection(Connection),
 
     ActualProps = amqp10_msg:properties(OutMsg),
-    [ ?assertEqual(V, maps:get(K, ActualProps)) || K := V <- Props, 
+    [ ?assertEqual(V, maps:get(K, ActualProps)) || K := V <- Props,
         not lists:member(K, DoNotAssertMessageProperties)],
-    
+
     ?assertEqual(#{<<"a_key">> => <<"a_value">>}, amqp10_msg:application_properties(OutMsg)),
     ActualMessageAnnotations = amqp10_msg:message_annotations(OutMsg),
     [ ?assertEqual(V, maps:get(K, ActualMessageAnnotations)) || K := V <- MessageAnnotations],
@@ -1169,6 +1198,7 @@ incoming_heartbeat(Config) ->
 %%%
 
 await_link(Who, What, Err) ->
+    ct:log("await_link ..."),
     receive
         {amqp10_event, {link, Who0, What0}}
           when Who0 =:= Who andalso
@@ -1176,8 +1206,10 @@ await_link(Who, What, Err) ->
             ok;
         {amqp10_event, {link, Who0, {detached, Why}}}
           when Who0 =:= Who ->
+            ct:log("await_link fail  ..."),
             ct:fail(Why)
     after 5000 ->
+            ct:log("await_link fail ~p", [Err]),
               flush(),
               ct:fail(Err)
     end.

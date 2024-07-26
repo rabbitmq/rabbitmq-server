@@ -772,13 +772,9 @@ filter_value_type({T, _} = V) when is_atom(T) ->
 translate_terminus_capabilities(Capabilities) when is_binary(Capabilities) ->
     {symbol, Capabilities};
 translate_terminus_capabilities(CapabilitiesList) when is_list(CapabilitiesList) ->
-    {array, symbol, [filter_capability(V) || V <- CapabilitiesList]}.
-
-filter_capability(V) when is_binary(V) ->
-    {symbol, V};
-filter_capability(_) ->
-    %% Any other type is ignored
-    {}.
+    {array, symbol, [{symbol, V} || V <- CapabilitiesList, is_binary(V)]};
+translate_terminus_capabilities(_) ->
+    [].
 
 % https://people.apache.org/~rgodfrey/amqp-1.0/apache-filters.html
 translate_legacy_amqp_headers_binding(LegacyHeaders) ->
