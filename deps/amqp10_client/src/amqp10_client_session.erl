@@ -710,7 +710,7 @@ make_source(#{role := {receiver, #{address := Address} = Source, _Pid}, filter :
     Durable = translate_terminus_durability(maps:get(durable, Source, none)),
     TranslatedFilter = translate_filters(Filter),
     Capabilities = translate_terminus_capabilities(maps:get(capabilities, Source, [])),
-    logger:debug("make_source capabilities : ~p", [Capabilities]),
+    logger:warning("make_source capabilities : ~p", [Capabilities]),
     #'v1_0.source'{address = {utf8, Address},
                    durable = {uint, Durable},
                    filter = TranslatedFilter,
@@ -721,7 +721,7 @@ make_target(#{role := {receiver, _Source, _Pid}}) ->
 make_target(#{role := {sender, #{address := Address} = Target}}) ->
     Durable = translate_terminus_durability(maps:get(durable, Target, none)),
     Capabilities = translate_terminus_capabilities(maps:get(capabilities, Target, [])),
-    logger:debug("make_target capabilities : ~p", [Capabilities]),
+    logger:warning("make_target capabilities : ~p", [Capabilities]),
     TargetAddr = case is_binary(Address) of
                      true -> {utf8, Address};
                      false -> Address
