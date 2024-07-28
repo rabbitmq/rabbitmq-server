@@ -666,7 +666,7 @@ seq_applied({Seq, Response},
           when Response /= not_enqueued ->
             {[Corr | Corrs], Actions, State#state{pending = Pending}};
         _ ->
-            {Corrs, Actions, State#state{}}
+            {Corrs, Actions, State}
     end;
 seq_applied(_Seq, Acc) ->
     Acc.
