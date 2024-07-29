@@ -249,6 +249,7 @@ init([FromPid, Channel, Reader, ConnConfig]) ->
     {ok, unmapped, State}.
 
 unmapped(cast, {socket_ready, Socket}, State) ->
+    logger:warning("unmapped socket_ready calling send_begin"),
     State1 = State#state{socket = Socket},
     ok = send_begin(State1),
     {next_state, begin_sent, State1};
@@ -591,8 +592,12 @@ send_begin(#state{socket = Socket,
     Begin = #'v1_0.begin'{next_outgoing_id = uint(NextOutId),
                           incoming_window = uint(InWin),
                           outgoing_window = ?UINT_OUTGOING_WINDOW},
+    logger:warning("send_begin encode_frame ..."), 
     Frame = encode_frame(Begin, State),
-    socket_send(Socket, Frame).
+    logger:warning("send_begin encoded frame  ~p", [Frame]), 
+    Ret = socket_send(Socket, Frame),
+    logger:warning("socket_send ~p", [Ret]), 
+    Ret.
 
 send_end(State) ->
     send_end(State, undefined).
