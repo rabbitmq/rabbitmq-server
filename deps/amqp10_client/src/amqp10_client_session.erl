@@ -309,6 +309,7 @@ mapped(cast, #'v1_0.end'{error = Err}, State) ->
     % TODO: send notifications for links?
     Reason = reason(Err),
     ok = notify_session_ended(State, Reason),
+    logger:warning("mapped v1_0.end notfy_session_end ~p", [Reason]),
     {stop, normal, State};
 mapped(cast, #'v1_0.attach'{name = {utf8, Name},
                             initial_delivery_count = IDC,
@@ -570,6 +571,7 @@ mapped(_EvtType, Msg, _State) ->
 
 end_sent(_EvtType, #'v1_0.end'{error = Err}, State) ->
     Reason = reason(Err),
+    logger:warning("mapped v1_0.end notfy_session_end ~p", [Reason]),
     ok = notify_session_ended(State, Reason),
     {stop, normal, State};
 end_sent(_EvtType, _Frame, _State) ->
@@ -1197,7 +1199,8 @@ amqp10_session_event(Evt) ->
 socket_send(Sock, Data) ->
     case socket_send0(Sock, Data) of
         ok -> ok;
-        {error, _Reason} ->
+        {error, Reason} ->
+            logger:warning("socket_send ~p", [Reason]),
             throw({stop, normal})
     end.
 
