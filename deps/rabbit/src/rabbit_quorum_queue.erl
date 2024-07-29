@@ -230,27 +230,48 @@ declare(Q, _Node) when ?amqqueue_is_quorum(Q) ->
 
 start_cluster(Q) ->
     QName = amqqueue:get_name(Q),
-    Durable = amqqueue:is_durable(Q),
-    AutoDelete = amqqueue:is_auto_delete(Q),
-    Arguments = amqqueue:get_arguments(Q),
     Opts = amqqueue:get_options(Q),
+    Arguments = amqqueue:get_arguments(Q),
     ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
     QuorumSize = get_default_quorum_initial_group_size(Arguments),
+    {LeaderNode, FollowerNodes} =
+        rabbit_queue_location:select_leader_and_followers(Q, QuorumSize),
     RaName = case qname_to_internal_name(QName) of
                  {ok, A} ->
                      A;
                  {error, {too_long, N}} ->
                      rabbit_data_coercion:to_atom(ra:new_uid(N))
              end,
-    {LeaderNode, FollowerNodes} =
-        rabbit_queue_location:select_leader_and_followers(Q, QuorumSize),
+    rabbit_log:debug("Will start up to ~w replicas for quorum ~ts with leader on node '~ts'",
+                     [QuorumSize, rabbit_misc:rs(QName), LeaderNode]),
+    case internal_declare(Q, RaName, LeaderNode, FollowerNodes) of
+        {error, cluster_not_formed, Queue} ->
+            _ = rabbit_amqqueue:internal_delete(Queue, ActingUser),
+            AlternativeRaName = rabbit_data_coercion:to_atom(ra:new_uid(rabbit_queue_type_util:name_concat(QName))),
+            rabbit_log:debug("Could not form cluster ~ts, trying alternative name ~ts",
+                     [RaName, AlternativeRaName]),
+            case internal_declare(Q, AlternativeRaName, LeaderNode, FollowerNodes) of
+                {ok, NewQ} -> 
+                    {new, NewQ};
+                {error, cluster_not_formed, NewQ} -> declare_queue_error(cluster_not_formed, NewQ, LeaderNode, ActingUser)
+            end;
+        {ok, NewQ} -> 
+            {new, NewQ}
+    end.
+
+internal_declare(Q, RaName, LeaderNode, FollowerNodes) ->
+    QName = amqqueue:get_name(Q),
+    Durable = amqqueue:is_durable(Q),
+    AutoDelete = amqqueue:is_auto_delete(Q),
+    Arguments = amqqueue:get_arguments(Q),
+    Opts = amqqueue:get_options(Q),
+    ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
+
     LeaderId = {RaName, LeaderNode},
     NewQ0 = amqqueue:set_pid(Q, LeaderId),
     NewQ1 = amqqueue:set_type_state(NewQ0,
                                     #{nodes => [LeaderNode | FollowerNodes]}),
 
-    rabbit_log:debug("Will start up to ~w replicas for quorum ~ts with leader on node '~ts'",
-                     [QuorumSize, rabbit_misc:rs(QName), LeaderNode]),
     case rabbit_amqqueue:internal_declare(NewQ1, false) of
         {created, NewQ} ->
             RaConfs = [make_ra_conf(NewQ, ServerId)
@@ -281,7 +302,9 @@ start_cluster(Q) ->
                                          {arguments, Arguments},
                                          {user_who_performed_action,
                                           ActingUser}]),
-                    {new, NewQ};
+                    {ok, NewQ};
+                {error, cluster_not_formed} -> 
+                    {error, cluster_not_formed, NewQ};
                 {error, Error} ->
                     declare_queue_error(Error, NewQ, LeaderNode, ActingUser)
             catch
@@ -291,7 +314,7 @@ start_cluster(Q) ->
         {existing, _} = Ex ->
             Ex
     end.
-
+ 
 declare_queue_error(Error, Queue, Leader, ActingUser) ->
     _ = rabbit_amqqueue:internal_delete(Queue, ActingUser),
     {protocol_error, internal_error,

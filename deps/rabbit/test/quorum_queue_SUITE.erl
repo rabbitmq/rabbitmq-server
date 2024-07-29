@@ -123,6 +123,7 @@ all_tests() ->
      consume_invalid_arg_2,
      start_queue,
      long_name,
+     conflicting_name,
      stop_queue,
      restart_queue,
      restart_all_types,
@@ -562,6 +563,38 @@ long_name(Config) ->
     ?assertEqual({'queue.declare_ok', LongName, 0, 0},
                  declare(Ch, LongName,
                          [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ok.
+
+conflicting_name(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    User = ?config(rmq_username, Config),
+    VHost1 = <<"foo">>,
+    VHost2 = <<"foo_bar">>,
+    QName1 = <<"bar_baz">>,
+    QName2 = <<"baz">>,
+    
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, Node, VHost1, User),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost1),
+
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, Node, VHost2, User),
+     ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost2),
+
+    Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Node,
+                                                              VHost1),
+    {ok, Ch1} = amqp_connection:open_channel(Conn1),
+
+    ?assertEqual({'queue.declare_ok', QName1, 0, 0},
+                 declare(Ch1, QName1,
+                         [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Node,
+                                                              VHost2),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+
+    ?assertEqual({'queue.declare_ok', QName2, 0, 0},
+                 declare(Ch2, QName2,
+                         [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
     ok.
 
 start_queue_concurrent(Config) ->
