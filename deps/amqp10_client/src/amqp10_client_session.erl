@@ -718,7 +718,7 @@ make_source(#{role := {receiver, #{address := Address} = Source, _Pid}, filter :
                    capabilities = Capabilities}
     catch         
         throw:Err -> 
-                    logger:warning("make_source failed : ~p", [Err]),
+                    logger:warning("make_source failed due to ~p", [Err]),
                     {error, Err}        
     end.
 
@@ -738,7 +738,7 @@ make_target(#{role := {sender, #{address := Address} = Target}}) ->
                         capabilities = Capabilities}
     catch 
         throw:Err -> 
-                    logger:warning("make_target failed : ~p", [Err]),
+                    logger:warning("make_target failed due to ~p", [Err]),
                     {error, Err}
     end.
 
