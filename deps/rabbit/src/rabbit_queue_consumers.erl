@@ -21,7 +21,8 @@
 
 -define(QUEUE, lqueue).
 
--define(UNSENT_MESSAGE_LIMIT,          200).
+-define(KEY_UNSENT_MESSAGE_LIMIT, classic_queue_consumer_unsent_message_limit).
+-define(DEFAULT_UNSENT_MESSAGE_LIMIT, 200).
 
 %% Utilisation average calculations are all in μs.
 -define(USE_AVG_HALF_LIFE, 1000000.0).
@@ -63,10 +64,15 @@
 
 -spec new() -> state().
 
-new() -> #state{consumers = priority_queue:new(),
-                use       = {active,
-                             erlang:monotonic_time(micro_seconds),
-                             1.0}}.
+new() ->
+    Val = application:get_env(rabbit,
+                              ?KEY_UNSENT_MESSAGE_LIMIT,
+                              ?DEFAULT_UNSENT_MESSAGE_LIMIT),
+    persistent_term:put(?KEY_UNSENT_MESSAGE_LIMIT, Val),
+    #state{consumers = priority_queue:new(),
+           use = {active,
+                  erlang:monotonic_time(microsecond),
+                  1.0}}.
 
 -spec max_active_priority(state()) -> integer() | 'infinity' | 'empty'.
 
@@ -246,6 +252,7 @@ deliver(FetchFun, QName, ConsumersChanged,
             end
     end.
 
+<<<<<<< HEAD
 deliver_to_consumer(FetchFun, E = {ChPid, Consumer}, QName) ->
     C = lookup_ch(ChPid),
     case is_ch_blocked(C) of
@@ -263,6 +270,52 @@ deliver_to_consumer(FetchFun, E = {ChPid, Consumer}, QName) ->
                                        FetchFun, Consumer,
                                        C#cr{limiter = Limiter}, QName)}
                  end
+=======
+deliver_to_consumer(FetchFun,
+                    E = {ChPid, Consumer = #consumer{tag = CTag}},
+                    QName) ->
+    C = #cr{link_states = LinkStates} = lookup_ch(ChPid),
+    case LinkStates of
+        #{CTag := #link_state{delivery_count = DeliveryCount0,
+                              credit = Credit} = LinkState0} ->
+            %% bypass credit flow for link credit consumers
+            %% as it is handled separately
+            case Credit > 0 of
+                true ->
+                    DeliveryCount = case DeliveryCount0 of
+                                        credit_api_v1 ->
+                                            DeliveryCount0;
+                                        _ ->
+                                            serial_number:add(DeliveryCount0, 1)
+                                    end,
+                    LinkState = LinkState0#link_state{delivery_count = DeliveryCount,
+                                                      credit = Credit - 1},
+                    C1 = C#cr{link_states = maps:update(CTag, LinkState, LinkStates)},
+                    {delivered, deliver_to_consumer(FetchFun, Consumer, C1, QName)};
+                false ->
+                    block_consumer(C, E),
+                    undelivered
+            end;
+        _ ->
+            %% not a link credit consumer, use credit flow
+            case is_ch_blocked(C) of
+                true ->
+                    block_consumer(C, E),
+                    undelivered;
+                false ->
+                    case rabbit_limiter:can_send(C#cr.limiter,
+                                                 Consumer#consumer.ack_required,
+                                                 CTag) of
+                        {suspend, Limiter} ->
+                            block_consumer(C#cr{limiter = Limiter}, E),
+                            undelivered;
+                        {continue, Limiter} ->
+                            {delivered, deliver_to_consumer(
+                                          FetchFun, Consumer,
+                                          C#cr{limiter = Limiter}, QName)}
+                    end
+            end
+>>>>>>> eee851bd90 (Make classic_queue_consumer_unsent_message_limit configurable)
     end.
 
 deliver_to_consumer(FetchFun,
@@ -522,7 +575,8 @@ block_consumer(C = #cr{blocked_consumers = Blocked}, QEntry) ->
     update_ch_record(C#cr{blocked_consumers = add_consumer(QEntry, Blocked)}).
 
 is_ch_blocked(#cr{unsent_message_count = Count, limiter = Limiter}) ->
-    Count >= ?UNSENT_MESSAGE_LIMIT orelse rabbit_limiter:is_suspended(Limiter).
+    UnsentMessageLimit = persistent_term:get(?KEY_UNSENT_MESSAGE_LIMIT),
+    Count >= UnsentMessageLimit orelse rabbit_limiter:is_suspended(Limiter).
 
 send_drained(QName, C = #cr{ch_pid = ChPid, limiter = Limiter}) ->
     case rabbit_limiter:drained(Limiter) of
