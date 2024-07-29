@@ -716,8 +716,10 @@ make_source(#{role := {receiver, #{address := Address} = Source, _Pid}, filter :
                    durable = {uint, Durable},
                    filter = TranslatedFilter,
                    capabilities = Capabilities}
-    catch 
-        throw:Err -> {error, Err}
+    catch         
+        throw:Err -> 
+                    logger:warning("make_source failed : ~p", [Err]),
+                    {error, Err}        
     end.
 
 make_target(#{role := {receiver, _Source, _Pid}}) ->
@@ -735,7 +737,9 @@ make_target(#{role := {sender, #{address := Address} = Target}}) ->
                         durable = {uint, Durable},
                         capabilities = Capabilities}
     catch 
-        throw:Err -> {error, Err}
+        throw:Err -> 
+                    logger:warning("make_target failed : ~p", [Err]),
+                    {error, Err}
     end.
 
 max_message_size(#{max_message_size := Size})
