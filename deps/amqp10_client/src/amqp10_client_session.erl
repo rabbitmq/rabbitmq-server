@@ -262,7 +262,7 @@ begin_sent(cast, #'v1_0.begin'{remote_channel = {ushort, RemoteChannel},
                                incoming_window = {uint, InWindow},
                                outgoing_window = {uint, OutWindow}} = Begin,
            #state{early_attach_requests = EARs} = State) ->
-    logger:warning("begin_sent send-attach  "),
+    logger:warning("begin_sent send-attach "),
     State1 = State#state{remote_channel = RemoteChannel},
     State2 = lists:foldr(fun({From, Attach}, S) ->
                                  logger:warning("begin_sent send-attach ~tp", [Attach]),
