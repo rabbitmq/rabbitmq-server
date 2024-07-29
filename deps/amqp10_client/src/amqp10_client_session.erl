@@ -262,7 +262,7 @@ begin_sent(cast, #'v1_0.begin'{remote_channel = {ushort, RemoteChannel},
                                incoming_window = {uint, InWindow},
                                outgoing_window = {uint, OutWindow}} = Begin,
            #state{early_attach_requests = EARs} = State) ->
-
+    logger:warning("begin_sent send-attach ~tp", [Attach]),
     State1 = State#state{remote_channel = RemoteChannel},
     State2 = lists:foldr(fun({From, Attach}, S) ->
                                  {S2, H} = send_attach(fun send/2, Attach, From, S),
@@ -543,10 +543,10 @@ mapped({call, From},
     {keep_state, State, {reply, From, Res}};
 
 mapped({call, From}, {attach, Attach}, State) ->
-    logger:warning("amqp10_session: call attach ~p",
+    logger:warning("amqp10_session: mapped send_attach ~p",
                    [Attach]),
     {State1, LinkRef} = send_attach(fun send/2, Attach, From, State),
-    logger:warning("amqp10_session: returned call attach ~p",
+    logger:warning("amqp10_session: mapped returned call attach ~p",
                    [Attach]),
     {keep_state, State1, {reply, From, {ok, LinkRef}}};
 
