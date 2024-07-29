@@ -305,9 +305,9 @@ opened(_EvtType, {close, Reason}, State = #state{config = Config}) ->
         {error, closed} -> {stop, normal, State};
         Error           -> {stop, Error, State}
     end;
-opened(_EvtType, #'v1_0.close'{error = Error}, State = #state{config = Config}) ->
+opened(EvtType, #'v1_0.close'{error = Error}, State = #state{config = Config}) ->
     %% We receive the first close frame, reply and terminate.
-    logger:warning("client_connection opened v1_0.close"),
+    logger:warning("client_connection opened(~p v1_0.close(error= ~p", [EvtType, Error]),
     ok = notify_closed(Config, translate_err(Error)),
     _ = send_close(State, none),
     {stop, normal, State};
