@@ -709,26 +709,34 @@ make_source(#{role := {sender, _}}) ->
 make_source(#{role := {receiver, #{address := Address} = Source, _Pid}, filter := Filter}) ->
     Durable = translate_terminus_durability(maps:get(durable, Source, none)),
     TranslatedFilter = translate_filters(Filter),
-    Capabilities = translate_terminus_capabilities(maps:get(capabilities, Source, [])),
-    logger:warning("make_source capabilities : ~p", [Capabilities]),
-    #'v1_0.source'{address = {utf8, Address},
+    try translate_terminus_capabilities(maps:get(capabilities, Source, [])) of 
+        Capabilities -> 
+            logger:warning("make_source capabilities : ~p", [Capabilities]),
+             #'v1_0.source'{address = {utf8, Address},
                    durable = {uint, Durable},
                    filter = TranslatedFilter,
-                   capabilities = Capabilities}.
+                   capabilities = Capabilities}
+    catch 
+        throw:Err -> {error, Err}
+    end.
 
 make_target(#{role := {receiver, _Source, _Pid}}) ->
     #'v1_0.target'{};
 make_target(#{role := {sender, #{address := Address} = Target}}) ->
     Durable = translate_terminus_durability(maps:get(durable, Target, none)),
-    Capabilities = translate_terminus_capabilities(maps:get(capabilities, Target, [])),
-    logger:warning("make_target capabilities : ~p", [Capabilities]),
-    TargetAddr = case is_binary(Address) of
-                     true -> {utf8, Address};
-                     false -> Address
-                 end,
-    #'v1_0.target'{address = TargetAddr,
-                   durable = {uint, Durable},
-                   capabilities = Capabilities}.
+    try translate_terminus_capabilities(maps:get(capabilities, Target, [])) of 
+        Capabilities ->
+            logger:warning("make_target capabilities : ~p", [Capabilities]),
+            TargetAddr = case is_binary(Address) of
+                            true -> {utf8, Address};
+                            false -> Address
+                        end,
+            #'v1_0.target'{address = TargetAddr,
+                        durable = {uint, Durable},
+                        capabilities = Capabilities}
+    catch 
+        throw:Err -> {error, Err}
+    end.
 
 max_message_size(#{max_message_size := Size})
   when is_integer(Size) andalso
