@@ -250,9 +250,12 @@ assert_code(CodeExp, CodeAct, Type, Path, Body) ->
     end.
 
 decode(?OK, _Headers,  ResBody) ->
-    JSON = rabbit_data_coercion:to_binary(ResBody),
-    atomize_map_keys(rabbit_json:decode(JSON));
+    decode_body(ResBody);
 decode(_,    Headers, _ResBody) -> Headers.
+
+decode_body(ResBody) ->
+    JSON = rabbit_data_coercion:to_binary(ResBody),
+    atomize_map_keys(rabbit_json:decode(JSON)).
 
 atomize_map_keys(L) when is_list(L) ->
     [atomize_map_keys(I) || I <- L];
