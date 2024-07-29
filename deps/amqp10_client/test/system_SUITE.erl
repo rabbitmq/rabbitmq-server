@@ -67,14 +67,11 @@ groups() ->
                 ]}
     ].
 
-test() ->
-    [
-        basic_roundtrip_ibmmq
-    ].
 shared() ->
     [
      open_close_connection,
      basic_roundtrip,
+     basic_roundtrip_ibmmq,
      early_transfer,
      split_transfer,
      transfer_unsettled,
