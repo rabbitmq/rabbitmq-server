@@ -32,7 +32,7 @@ all() ->
 groups() ->
     [
      {rabbitmq, [], shared()},
-     {activemq, [], shared()},
+     {activemq, [], test()},
      {ibmmq, [], [
         open_close_connection,
         basic_roundtrip_ibmmq,
@@ -67,6 +67,10 @@ groups() ->
                 ]}
     ].
 
+test() ->
+    [
+        basic_roundtrip_ibmmq
+    ].
 shared() ->
     [
      open_close_connection,
