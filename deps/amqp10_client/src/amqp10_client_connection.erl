@@ -241,7 +241,9 @@ sasl_init_sent({call, From}, begin_session,
 hdr_sent(_EvtType, {protocol_header_received, 0, 1, 0, 0}, State) ->
     case send_open(State) of
         ok    -> {next_state, open_sent, State};
-        Error -> {stop, Error, State}
+        Error ->
+                logger:warning("client_connection hdr_sent ~p", [Error]), 
+                {stop, Error, State}
     end;
 hdr_sent(_EvtType, {protocol_header_received, Protocol, Maj, Min,
                                 Rev}, State) ->
@@ -287,6 +289,7 @@ open_sent({call, From}, begin_session,
     {keep_state, State1};
 open_sent(info, {'DOWN', MRef, _, _, _},
           #state{reader_m_ref = MRef}) ->
+    logger:warning("client_connection open_sent info(Down  reader_down"),        
     {stop, {shutdown, reader_down}}.
 
 opened(_EvtType, heartbeat, State = #state{idle_time_out = T}) ->
@@ -313,6 +316,7 @@ opened({call, From}, begin_session, State) ->
 opened(info, {'DOWN', MRef, _, _, _Info},
             State = #state{reader_m_ref = MRef, config = Config}) ->
     %% reader has gone down and we are not already shutting down
+    logger:warning("client_connection opened(info DOWN"),
     ok = notify_closed(Config, shutdown),
     {stop, normal, State};
 opened(_EvtType, Frame, State) ->
@@ -328,11 +332,13 @@ close_sent(_EvtType, {'EXIT', _Pid, shutdown}, State) ->
 close_sent(_EvtType, {'DOWN', _Ref, process, ReaderPid, _},
            #state{reader = ReaderPid} = State) ->
     %% if the reader exits we probably wont receive a close frame
+    logger:warning("client_connection close_sent( DOWN"),
     {stop, normal, State};
 close_sent(_EvtType, #'v1_0.close'{} = Close, State = #state{config = Config}) ->
     ok = notify_closed(Config, Close),
     %% TODO: we should probably set up a timer before this to ensure
     %% we close down event if no reply is received
+    logger:warning("client_connection close_sent( v1_0.close"),
     {stop, normal, State}.
 
 set_other_procs0(OtherProcs, State) ->
@@ -450,6 +456,7 @@ send_close(#state{socket = Socket}, _Reason) ->
               ok;
         _  -> ok
     end,
+    logger:warning("client_connetion send_close Ret: ~p", [Ret]),
     Ret.
 
 send_sasl_init(State, anon) ->
