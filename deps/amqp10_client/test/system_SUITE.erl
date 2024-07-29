@@ -67,6 +67,10 @@ groups() ->
                 ]}
     ].
 
+test() ->
+    [
+        basic_roundtrip_ibmmq
+    ].
 shared() ->
     [
      open_close_connection,
