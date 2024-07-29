@@ -1218,7 +1218,8 @@ amqp10_session_event(Evt) ->
 socket_send(Sock, Data) ->
     case socket_send0(Sock, Data) of
         ok -> ok;
-        {error, _Reason} ->
+        {error, Reason} ->
+            logger:warning("socket_send ~p", [Reason]),
             throw({stop, normal})
     end.
 
