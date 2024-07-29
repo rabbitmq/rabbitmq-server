@@ -833,8 +833,11 @@ send_attach(Send, #{name := Name, role := RoleTuple} = Args, {FromPid, _},
             #state{next_link_handle = OutHandle0, links = Links,
              link_index = LinkIndex} = State) ->
 
+    logger:warning("make_source ..."),
     Source = make_source(Args),
+    logger:warning("make_target ..."),
     Target = make_target(Args),
+    logger:warning("make properties ..."),    
     Properties = amqp10_client_types:make_properties(Args),
 
     {LinkTarget, InitialDeliveryCount, MaxMessageSize} =
@@ -866,7 +869,9 @@ send_attach(Send, #{name := Name, role := RoleTuple} = Args, {FromPid, _},
                             target = Target,
                             max_message_size = MaxMessageSize},
 
+    logger:warning("sending ..."),
     ok = Send(Attach, State),
+    logger:warning("sent ..."),
 
     Ref = make_link_ref(Role, self(), OutHandle),
     Link = #link{name = Name,
