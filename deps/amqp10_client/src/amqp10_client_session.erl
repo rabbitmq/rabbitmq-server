@@ -191,7 +191,10 @@ begin_sync(Connection, Timeout) ->
 
 -spec attach(pid(), attach_args()) -> {ok, link_ref()}.
 attach(Session, Args) ->
-    gen_statem:call(Session, {attach, Args}, ?TIMEOUT).
+    logger:warning("amqp10_session: call_session attach ~p", [Args]),
+    Ret = gen_statem:call(Session, {attach, Args}, ?TIMEOUT),
+    logger:warning("amqp10_session: call_session attach returned ~p", [Ret]),
+    Ret.
 
 -spec detach(pid(), output_handle()) -> ok | {error, link_not_found | half_attached}.
 detach(Session, Handle) ->
@@ -540,7 +543,11 @@ mapped({call, From},
     {keep_state, State, {reply, From, Res}};
 
 mapped({call, From}, {attach, Attach}, State) ->
+    logger:warning("amqp10_session: call attach ~p",
+                   [Attach]),
     {State1, LinkRef} = send_attach(fun send/2, Attach, From, State),
+    logger:warning("amqp10_session: returned call attach ~p",
+                   [Attach]),
     {keep_state, State1, {reply, From, {ok, LinkRef}}};
 
 mapped({call, From}, Msg, State) ->
