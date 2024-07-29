@@ -267,6 +267,7 @@ begin_sent(cast, #'v1_0.begin'{remote_channel = {ushort, RemoteChannel},
     State2 = lists:foldr(fun({From, Attach}, S) ->
                                  logger:warning("begin_sent send-attach ~tp", [Attach]),
                                  {S2, H} = send_attach(fun send/2, Attach, From, S),
+                                 logger:warning("begin_sent send-attach ~tp returning ~p", [Attach, H]),
                                  gen_statem:reply(From, {ok, H}),
                                  S2
                          end, State1, EARs),
