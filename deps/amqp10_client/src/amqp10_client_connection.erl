@@ -239,6 +239,7 @@ sasl_init_sent({call, From}, begin_session,
     {keep_state, State1}.
 
 hdr_sent(_EvtType, {protocol_header_received, 0, 1, 0, 0}, State) ->
+    logger:warning("hdr_sent received {protocol_header_received"),
     case send_open(State) of
         ok    -> {next_state, open_sent, State};
         Error ->
@@ -252,6 +253,7 @@ hdr_sent(_EvtType, {protocol_header_received, Protocol, Maj, Min,
     {stop, normal, State};
 hdr_sent({call, From}, begin_session,
          #state{pending_session_reqs = PendingSessionReqs} = State) ->
+    logger:warning("hdr_sent received call begin_session"),        
     State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
     {keep_state, State1}.
 
@@ -259,6 +261,7 @@ open_sent(_EvtType, #'v1_0.open'{max_frame_size = MaybeMaxFrameSize,
                                  idle_time_out = Timeout} = Open,
           #state{pending_session_reqs = PendingSessionReqs,
                  config = Config} = State0) ->
+    logger:warning("open_sent received 'v1_0.open' with pending_session_reqs: ~p", [PendingSessionReqs]),                            
     State = case Timeout of
                 undefined -> State0;
                 {uint, T} when T > 0 ->
@@ -285,14 +288,16 @@ open_sent(_EvtType, #'v1_0.open'{max_frame_size = MaybeMaxFrameSize,
     {next_state, opened, State2#state{pending_session_reqs = []}};
 open_sent({call, From}, begin_session,
           #state{pending_session_reqs = PendingSessionReqs} = State) ->
+    logger:warning("open_sent received call begin_session with pending_session_reqs: ~p", [PendingSessionReqs]),                                    
     State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
     {keep_state, State1};
 open_sent(info, {'DOWN', MRef, _, _, _},
           #state{reader_m_ref = MRef}) ->
-    logger:warning("client_connection open_sent info(Down  reader_down"),        
+    logger:warning("open_sent received 'DOWN"),        
     {stop, {shutdown, reader_down}}.
 
 opened(_EvtType, heartbeat, State = #state{idle_time_out = T}) ->
+    logger:warning("opened received heartbeat"),        
     ok = send_heartbeat(State),
     {ok, Tmr} = start_heartbeat_timer(T),
     {keep_state, State#state{heartbeat_timer = Tmr}};
@@ -311,12 +316,14 @@ opened(_EvtType, #'v1_0.close'{} = Close, State = #state{config = Config}) ->
     _ = send_close(State, none),
     {stop, normal, State};
 opened({call, From}, begin_session, State) ->
+    logger:warning("opened received call being_session"),
     {Ret, State1} = handle_begin_session(From, State),
+    logger:warning("handle_begin_session ret: ~p", [Ret]),
     {keep_state, State1, [{reply, From, Ret}]};
 opened(info, {'DOWN', MRef, _, _, _Info},
             State = #state{reader_m_ref = MRef, config = Config}) ->
     %% reader has gone down and we are not already shutting down
-    logger:warning("client_connection opened(info DOWN"),
+    logger:warning("opened info received  'DOWN'"),
     ok = notify_closed(Config, shutdown),
     {stop, normal, State};
 opened(_EvtType, Frame, State) ->
