@@ -73,7 +73,8 @@ invoke_start(){
   docker exec ibmmq bash -c 'echo "START SERVICE(SYSTEM.AMQP.SERVICE)" | /opt/mqm/bin/runmqsc QM1'
   docker exec ibmmq bash -c 'echo "START CHANNEL(SYSTEM.DEF.AMQP)" | /opt/mqm/bin/runmqsc QM1'
   wait_for_message ibmmq "The Server 'SYSTEM.AMQP.SERVICE' has started"
-  sleep 5
+  sleep 10
+  print "Waited 10 seconds for container to start"
 }
 
 invoke_stop(){
