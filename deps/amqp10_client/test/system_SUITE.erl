@@ -35,8 +35,8 @@ groups() ->
      {activemq, [], shared()},
      {ibmmq, [], [
         open_close_connection,
-        basic_roundtrip_with_sender_and_receiver_capabilities
-      %  basic_roundtrip_with_non_binary_capability
+        basic_roundtrip_with_sender_and_receiver_capabilities,
+        basic_roundtrip_with_non_binary_capability
      ]},
      {rabbitmq_strict, [], [
                             basic_roundtrip_tls,
