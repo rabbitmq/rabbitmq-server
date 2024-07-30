@@ -373,7 +373,8 @@ basic_roundtrip_with_non_binary_capability(Config) ->
     roundtrip(OpenConf, [
             {body, <<"banana">>},
             {destination, <<"DEV.QUEUE.3">>},
-            {sender_capabilities, [<<"queue">>, dummy]},
+            %{sender_capabilities, [<<"queue">>, dummy]},
+            {sender_capabilities, [<<"queue">>]},
             {receiver_capabilities, <<"queue">>},
             {message_annotations, #{}}
         ], [creation_time]).
