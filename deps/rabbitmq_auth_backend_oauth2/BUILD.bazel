@@ -93,7 +93,7 @@ eunit(
 
 broker_for_integration_suites(
     extra_plugins = [
-        "//deps/rabbitmq_mqtt:erlang_app",
+        "//deps/rabbitmq_web_mqtt:erlang_app",
     ],
 )
 

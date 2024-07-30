@@ -176,8 +176,9 @@ websocket_info({'$gen_cast', {duplicate_id, SendWill}},
     rabbit_mqtt_processor:send_disconnect(?RC_SESSION_TAKEN_OVER, ProcState),
     defer_close(?CLOSE_NORMAL, SendWill),
     {[], State};
-websocket_info({'$gen_cast', {close_connection, Reason}}, State = #state{proc_state = ProcState,
-                                                                         conn_name = ConnName}) ->
+websocket_info({'$gen_cast', {close_connection, Reason}},
+               State = #state{proc_state = ProcState,
+                              conn_name = ConnName}) ->
     ?LOG_WARNING("Web MQTT disconnecting client with ID '~s' (~p), reason: ~s",
                  [rabbit_mqtt_processor:info(client_id, ProcState), ConnName, Reason]),
     case Reason of
@@ -215,6 +216,14 @@ websocket_info({keepalive, Req}, State = #state{proc_state = ProcState,
                        [ConnName, Reason]),
             stop(State)
     end;
+websocket_info(credential_expired,
+               State = #state{proc_state = ProcState,
+                              conn_name = ConnName}) ->
+    ?LOG_WARNING("Web MQTT disconnecting client with ID '~s' (~p) because credential expired",
+                 [rabbit_mqtt_processor:info(client_id, ProcState), ConnName]),
+    rabbit_mqtt_processor:send_disconnect(?RC_MAXIMUM_CONNECT_TIME, ProcState),
+    defer_close(?CLOSE_NORMAL),
+    {[], State};
 websocket_info(emit_stats, State) ->
     {[], emit_stats(State), hibernate};
 websocket_info({{'DOWN', _QName}, _MRef, process, _Pid, _Reason} = Evt,
