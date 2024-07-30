@@ -875,7 +875,10 @@ get_all_by_type_and_node_in_khepri(VHostName, Type, Node) ->
 
 -spec create_or_get(Queue) -> Ret when
       Queue :: amqqueue:amqqueue(),
-      Ret :: {created, Queue} | {existing, Queue} | {absent, Queue, nodedown}.
+      Ret :: {created, Queue} |
+             {existing, Queue} |
+             {absent, Queue, nodedown} |
+             rabbit_khepri:timeout_error().
 %% @doc Writes a queue record if it doesn't exist already or returns the existing one
 %%
 %% @returns the existing record if there is one in the database already, or the newly
