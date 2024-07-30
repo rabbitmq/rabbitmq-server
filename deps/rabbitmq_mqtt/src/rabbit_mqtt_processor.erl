@@ -196,6 +196,7 @@ process_connect(
         ok ?= check_user_connection_limit(Username),
         {ok, AuthzCtx} ?= check_vhost_access(VHost, User, ClientId, PeerIp),
         ok ?= check_user_loopback(Username, PeerIp),
+        ok ?= ensure_credential_expiry_timer(User, PeerIp),
         rabbit_core_metrics:auth_attempt_succeeded(PeerIp, Username, mqtt),
         {ok, RaRegisterState} ?= register_client_id(VHost, ClientId, CleanStart, WillProps),
         {ok, WillMsg} ?= make_will_msg(Packet),
@@ -1124,6 +1125,27 @@ check_user_loopback(Username, PeerIp) ->
             ?LOG_WARNING(
               "MQTT login failed: user '~s' can only connect via localhost", [Username]),
             {error, ?RC_NOT_AUTHORIZED}
+    end.
+
+
+ensure_credential_expiry_timer(User = #user{username = Username}, PeerIp) ->
+    case rabbit_access_control:expiry_timestamp(User) of
+        never ->
+            ok;
+        Ts when is_integer(Ts) ->
+            Time = (Ts - os:system_time(second)) * 1000,
+            ?LOG_DEBUG("Credential expires in ~b ms frow now "
+                       "(absolute timestamp = ~b seconds since epoch)",
+                       [Time, Ts]),
+            case Time > 0 of
+                true ->
+                    _TimerRef = erlang:send_after(Time, self(), credential_expired),
+                    ok;
+                false ->
+                    auth_attempt_failed(PeerIp, Username),
+                    ?LOG_WARNING("Credential expired ~b ms ago", [abs(Time)]),
+                    {error, ?RC_NOT_AUTHORIZED}
+            end
     end.
 
 get_vhost(UserBin, none, Port) ->
