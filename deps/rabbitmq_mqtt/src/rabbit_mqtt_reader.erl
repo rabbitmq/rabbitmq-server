@@ -120,14 +120,6 @@ handle_cast({duplicate_id, SendWill},
     rabbit_mqtt_processor:send_disconnect(?RC_SESSION_TAKEN_OVER, PState),
     {stop, {shutdown, duplicate_id}, {SendWill, State}};
 
-handle_cast(decommission_node,
-            State = #state{ proc_state = PState,
-                            conn_name  = ConnName }) ->
-    ?LOG_WARNING("MQTT disconnecting client ~tp with client ID '~ts' as its node is about"
-                 " to be decommissioned",
-                 [ConnName, rabbit_mqtt_processor:info(client_id, PState)]),
-    {stop, {shutdown, decommission_node}, State};
-
 handle_cast({close_connection, Reason},
             State = #state{conn_name = ConnName, proc_state = PState}) ->
     ?LOG_WARNING("MQTT disconnecting client ~tp with client ID '~ts', reason: ~ts",
