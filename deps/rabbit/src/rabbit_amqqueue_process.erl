@@ -219,6 +219,12 @@ init_it2(Recover, From, State = #q{q                   = Q,
                 false ->
                     {stop, normal, {existing, Q1}, State}
             end;
+        {error, timeout} ->
+            Reason = {protocol_error, internal_error,
+                      "Could not declare ~ts on node '~ts' because the "
+                      "metadata store operation timed out",
+                      [rabbit_misc:rs(amqqueue:get_name(Q)), node()]},
+            {stop, normal, Reason, State};
         Err ->
             {stop, normal, Err, State}
     end.

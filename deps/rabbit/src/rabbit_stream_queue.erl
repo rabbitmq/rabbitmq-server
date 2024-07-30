@@ -187,7 +187,12 @@ create_stream(Q0) ->
         {existing, Q} ->
             {existing, Q};
         {absent, Q, Reason} ->
-            {absent, Q, Reason}
+            {absent, Q, Reason};
+        {error, timeout} ->
+            {protocol_error, internal_error,
+             "Could not declare ~ts on node '~ts' because the metadata store "
+             "operation timed out",
+             [rabbit_misc:rs(QName), node()]}
     end.
 
 -spec delete(amqqueue:amqqueue(), boolean(),
