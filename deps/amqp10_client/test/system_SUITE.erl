@@ -395,7 +395,15 @@ roundtrip(OpenConf, Args, DoNotAssertMessageProperties) ->
                                                   <<"x_key">> => <<"x_value">>}),
 
     {ok, Connection} = amqp10_client:open_connection(OpenConf),
+    receive
+        {amqp10_event, {connection, Connection, opened}} -> ok
+    after 5000 -> exit(connection_timeout)
+    end,
     {ok, Session} = amqp10_client:begin_session(Connection),
+    receive
+        {amqp10_event, {session, Session, begun}} -> ok
+    after 5000 -> exit(connection_timeout)
+    end,
     SenderAttachArgs = #{name => <<"banana-sender">>,
                    role => {sender, #{address => Destination,
                                       durable => unsettled_state,
