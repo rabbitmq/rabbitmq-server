@@ -252,8 +252,12 @@ get_queue_type(Args, DefaultQueueType) ->
             rabbit_queue_type:discover(V)
     end.
 
--spec internal_declare(amqqueue:amqqueue(), boolean()) ->
-    {created | existing, amqqueue:amqqueue()} | queue_absent().
+-spec internal_declare(Queue, Recover) -> Ret when
+      Queue :: amqqueue:amqqueue(),
+      Recover :: boolean(),
+      Ret :: {created | existing, amqqueue:amqqueue()} |
+             queue_absent() |
+             rabbit_khepri:timeout_error().
 
 internal_declare(Q, Recover) ->
     do_internal_declare(Q, Recover).
