@@ -252,7 +252,6 @@ deliver(FetchFun, QName, ConsumersChanged,
             end
     end.
 
-<<<<<<< HEAD
 deliver_to_consumer(FetchFun, E = {ChPid, Consumer}, QName) ->
     C = lookup_ch(ChPid),
     case is_ch_blocked(C) of
@@ -270,52 +269,6 @@ deliver_to_consumer(FetchFun, E = {ChPid, Consumer}, QName) ->
                                        FetchFun, Consumer,
                                        C#cr{limiter = Limiter}, QName)}
                  end
-=======
-deliver_to_consumer(FetchFun,
-                    E = {ChPid, Consumer = #consumer{tag = CTag}},
-                    QName) ->
-    C = #cr{link_states = LinkStates} = lookup_ch(ChPid),
-    case LinkStates of
-        #{CTag := #link_state{delivery_count = DeliveryCount0,
-                              credit = Credit} = LinkState0} ->
-            %% bypass credit flow for link credit consumers
-            %% as it is handled separately
-            case Credit > 0 of
-                true ->
-                    DeliveryCount = case DeliveryCount0 of
-                                        credit_api_v1 ->
-                                            DeliveryCount0;
-                                        _ ->
-                                            serial_number:add(DeliveryCount0, 1)
-                                    end,
-                    LinkState = LinkState0#link_state{delivery_count = DeliveryCount,
-                                                      credit = Credit - 1},
-                    C1 = C#cr{link_states = maps:update(CTag, LinkState, LinkStates)},
-                    {delivered, deliver_to_consumer(FetchFun, Consumer, C1, QName)};
-                false ->
-                    block_consumer(C, E),
-                    undelivered
-            end;
-        _ ->
-            %% not a link credit consumer, use credit flow
-            case is_ch_blocked(C) of
-                true ->
-                    block_consumer(C, E),
-                    undelivered;
-                false ->
-                    case rabbit_limiter:can_send(C#cr.limiter,
-                                                 Consumer#consumer.ack_required,
-                                                 CTag) of
-                        {suspend, Limiter} ->
-                            block_consumer(C#cr{limiter = Limiter}, E),
-                            undelivered;
-                        {continue, Limiter} ->
-                            {delivered, deliver_to_consumer(
-                                          FetchFun, Consumer,
-                                          C#cr{limiter = Limiter}, QName)}
-                    end
-            end
->>>>>>> eee851bd90 (Make classic_queue_consumer_unsent_message_limit configurable)
     end.
 
 deliver_to_consumer(FetchFun,
