@@ -45,7 +45,8 @@ start_ibmmq_server(Config) ->
 wait_for_ibmmq_nodes(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Ports = rabbit_ct_broker_helpers:get_node_configs(Config, tcp_port_amqp),
-    wait_for_ibmmq_ports(Config, Hostname, Ports).
+    wait_for_ibmmq_ports(Config, Hostname, Ports),
+    timer:sleep(500).
 
 wait_for_ibmmq_ports(Config, Hostname, [Port | Rest]) ->
     ct:log("Waiting for IBM MQ on port ~b", [Port]),

@@ -255,6 +255,7 @@ unmapped(cast, {socket_ready, Socket}, State) ->
     {next_state, begin_sent, State1};
 unmapped({call, From}, {attach, Attach},
                       #state{early_attach_requests = EARs} = State) ->
+    logger:warning("on unmapped state, received call attach. Storing it in early_attach_requests"),
     {keep_state,
      State#state{early_attach_requests = [{From, Attach} | EARs]}}.
 
@@ -263,12 +264,13 @@ begin_sent(cast, #'v1_0.begin'{remote_channel = {ushort, RemoteChannel},
                                incoming_window = {uint, InWindow},
                                outgoing_window = {uint, OutWindow}} = Begin,
            #state{early_attach_requests = EARs} = State) ->
-    logger:warning("begin_sent send-attach "),
+    logger:warning("on state begin_sent, received v1_0.beging with remote channlel : ~p", [RemoteChannel]),
     State1 = State#state{remote_channel = RemoteChannel},
+    logger:warning("sending early attach requests ~p", [EARs]),
     State2 = lists:foldr(fun({From, Attach}, S) ->
-                                 logger:warning("begin_sent send-attach ~tp", [Attach]),
+                                 logger:warning("send early attach request ~tp", [Attach]),
                                  {S2, H} = send_attach(fun send/2, Attach, From, S),
-                                 logger:warning("begin_sent send-attach ~tp returning ~p", [Attach, H]),
+                                 logger:warning("sent attach request ~p with result ~p", [Attach, H]),
                                  gen_statem:reply(From, {ok, H}),
                                  S2
                          end, State1, EARs),
@@ -313,7 +315,7 @@ mapped(cast, #'v1_0.attach'{name = {utf8, Name},
                             max_message_size = MaybeMaxMessageSize} = Attach,
        #state{links = Links, link_index = LinkIndex,
               link_handle_index = LHI} = State0) ->
-
+    logger:warning("on mapped state, received v1_0.attach frame"),
     OurRoleBool = not PeerRoleBool,
     OurRole = boolean_to_role(OurRoleBool),
     LinkIndexKey = {OurRole, Name},
@@ -546,11 +548,8 @@ mapped({call, From},
     {keep_state, State, {reply, From, Res}};
 
 mapped({call, From}, {attach, Attach}, State) ->
-    logger:warning("amqp10_session: mapped send_attach ~p",
-                   [Attach]),
+    logger:warning("on mapped state, received call to attach ~p", [Attach]),
     {State1, LinkRef} = send_attach(fun send/2, Attach, From, State),
-    logger:warning("amqp10_session: mapped returned call attach ~p",
-                   [Attach]),
     {keep_state, State1, {reply, From, {ok, LinkRef}}};
 
 mapped({call, From}, Msg, State) ->
