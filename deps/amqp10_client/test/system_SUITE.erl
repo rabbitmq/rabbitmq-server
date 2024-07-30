@@ -35,9 +35,8 @@ groups() ->
      {activemq, [], shared()},
      {ibmmq, [], [
         open_close_connection,
-        basic_roundtrip_ibmmq,
-        basic_roundtrip_with_several_capabilities_ibmmq,
-        basic_roundtrip_with_non_binary_capability_is_ignored
+        basic_roundtrip_with_sender_and_receiver_capabilities,
+        basic_roundtrip_with_non_binary_capability
      ]},
      {rabbitmq_strict, [], [
                             basic_roundtrip_tls,
@@ -71,7 +70,8 @@ shared() ->
     [
      open_close_connection,
      basic_roundtrip,
-     basic_roundtrip_ibmmq,
+     basic_roundtrip_with_sender_and_receiver_capabilities,
+     basic_roundtrip_with_non_binary_capability,
      early_transfer,
      split_transfer,
      transfer_unsettled,
@@ -352,7 +352,7 @@ roundtrip_large_messages(Config) ->
     ok = roundtrip(OpenConf, [{body, Data8Mb}]),
     ok = roundtrip(OpenConf, [{body, Data64Mb}]).
 
-basic_roundtrip_ibmmq(Config) ->
+basic_roundtrip_with_sender_and_receiver_capabilities(Config) ->
     application:start(sasl),
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
@@ -365,21 +365,7 @@ basic_roundtrip_ibmmq(Config) ->
             {message_annotations, #{}}
         ], [creation_time]).
 
-
-basic_roundtrip_with_several_capabilities_ibmmq(Config) ->
-    application:start(sasl),
-    Hostname = ?config(rmq_hostname, Config),
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    OpenConf = #{address => Hostname, port => Port, sasl => ?config(sasl, Config)},
-    roundtrip(OpenConf, [
-            {body, <<"banana">>},
-            {destination, <<"DEV.QUEUE.3">>},
-            {sender_capabilities, [<<"queue">>, <<"tx-capabilities">>, dummy]},
-            {receiver_capabilities, <<"queue">>},
-            {message_annotations, #{}}
-        ], [creation_time]).
-
-basic_roundtrip_with_non_binary_capability_is_ignored(Config) ->    
+basic_roundtrip_with_non_binary_capability(Config) ->    
     application:start(sasl),
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
