@@ -3108,6 +3108,10 @@ leader_transfer(QName, QType, Credit, Config) ->
     ok = wait_for_accepts(NumMsgs),
     ok = detach_link_sync(Sender),
 
+    %% Wait a bit to avoid the following error when attaching:
+    %% "stream queue <name> does not have a running replica on the local node"
+    timer:sleep(50),
+
     Filter = consume_from_first(QType),
     {ok, Receiver} = amqp10_client:attach_receiver_link(
                        Session0, <<"receiver">>, Address,
