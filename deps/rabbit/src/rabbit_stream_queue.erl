@@ -189,7 +189,7 @@ create_stream(Q0) ->
                     {new, Q};
                 Error ->
                     _ = rabbit_amqqueue:internal_delete(Q, ActingUser),
-                    {protocol_error, internal_error, "Cannot declare a queue '~ts' on node '~ts': ~255p",
+                    {protocol_error, internal_error, "Cannot declare ~ts on node '~ts': ~255p",
                      [rabbit_misc:rs(QName), node(), Error]}
             end;
         {existing, Q} ->
