@@ -910,7 +910,7 @@ ensure_credential_expiry_timer(User) ->
                     ok;
                 false ->
                     protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
-                                   "Credential expired ~b ms ago", [Time])
+                                   "Credential expired ~b ms ago", [abs(Time)])
             end
     end.
 
