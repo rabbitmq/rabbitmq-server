@@ -129,7 +129,8 @@ handle_cast(decommission_node,
     {stop, {shutdown, decommission_node}, State};
 
 handle_cast({close_connection, Reason},
-            State = #state{conn_name = ConnName, proc_state = PState}) ->
+            State = #state{conn_name = ConnName,
+                           proc_state = PState}) ->
     ?LOG_WARNING("MQTT disconnecting client ~tp with client ID '~ts', reason: ~ts",
                  [ConnName, rabbit_mqtt_processor:info(client_id, PState), Reason]),
     case Reason of
@@ -218,6 +219,14 @@ handle_info({keepalive, Req}, State = #state{proc_state = PState,
         {error, Reason} ->
             {stop, Reason, State}
     end;
+
+handle_info(credential_expired,
+            State = #state{conn_name = ConnName,
+                           proc_state = PState}) ->
+    ?LOG_WARNING("MQTT disconnecting client ~tp with client ID '~ts' because credential expired",
+                 [ConnName, rabbit_mqtt_processor:info(client_id, PState)]),
+    rabbit_mqtt_processor:send_disconnect(?RC_MAXIMUM_CONNECT_TIME, PState),
+    {stop, {shutdown, {disconnect, server_initiated}}, State};
 
 handle_info(login_timeout, State = #state{proc_state = connect_packet_unprocessed,
                                           conn_name = ConnName}) ->
