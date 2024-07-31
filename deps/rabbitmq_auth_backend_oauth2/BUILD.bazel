@@ -151,6 +151,7 @@ rabbitmq_integration_suite(
     ],
     runtime_deps = [
         "//deps/oauth2_client:erlang_app",
+        "//deps/rabbitmq_amqp_client:erlang_app",
         "@emqtt//:erlang_app",
     ],
 )
