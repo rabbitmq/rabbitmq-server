@@ -978,6 +978,7 @@ rabbitmq_management:
 - rabbit_mgmt_wm_quorum_queue_replicas_delete_member
 - rabbit_mgmt_wm_quorum_queue_replicas_grow
 - rabbit_mgmt_wm_quorum_queue_replicas_shrink
+- rabbit_mgmt_wm_quorum_queue_status
 - rabbit_mgmt_wm_rebalance_queues
 - rabbit_mgmt_wm_redirect
 - rabbit_mgmt_wm_reset
