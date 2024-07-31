@@ -301,7 +301,7 @@ init_per_testcase(T, Config)
         T =:= leader_transfer_quorum_queue_credit_batches orelse
         T =:= leader_transfer_stream_credit_single orelse
         T =:= leader_transfer_stream_credit_batches ->
-    case rpc(Config, rabbit_feature_flags, is_supported, [credit_api_v2]) of
+    case rpc(Config, rabbit_feature_flags, is_supported, ['rabbitmq_4.0.0']) of
         true ->
             rabbit_ct_helpers:testcase_started(Config, T);
         false ->
