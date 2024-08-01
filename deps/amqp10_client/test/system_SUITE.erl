@@ -35,6 +35,7 @@ groups() ->
      {activemq, [], shared()},
      {ibmmq, [], [
         open_close_connection,
+        open_connection_plain_sasl_failure,
         basic_roundtrip_with_sender_and_receiver_capabilities,
         basic_roundtrip_with_non_binary_capability
      ]},
@@ -365,7 +366,7 @@ basic_roundtrip_with_sender_and_receiver_capabilities(Config) ->
             {message_annotations, #{}}
         ], [creation_time]).
 
-basic_roundtrip_with_non_binary_capability(Config) ->    
+basic_roundtrip_with_non_binary_capability(Config) ->
     application:start(sasl),
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),

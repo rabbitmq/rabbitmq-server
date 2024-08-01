@@ -228,13 +228,13 @@ sasl_hdr_rcvds({call, From}, begin_session,
 
 sasl_init_sent(_EvtType, #'v1_0.sasl_outcome'{code = {ubyte, 0}},
                #state{socket = Socket} = State) ->
-    logger:warning("sasl_init_sent "),
+    logger:warning("sasl_init_sent received v1_0.sasl_outcome"),
     ok = socket_send(Socket, ?AMQP_PROTOCOL_HEADER),
     logger:warning("sasl_init_sent socket_send AMQP_PROTOCOL_HEADER ok"),
     {next_state, hdr_sent, State};
 sasl_init_sent(_EvtType, #'v1_0.sasl_outcome'{code = {ubyte, C}},
                #state{} = State) when C==1;C==2;C==3;C==4 ->
-   logger:warning("sasl_init_sent sasl_auth_failure"),
+   logger:warning("sasl_init_sent received sasl_auth_failure"),
     {stop, sasl_auth_failure, State};
 sasl_init_sent({call, From}, begin_session,
                #state{pending_session_reqs = PendingSessionReqs} = State) ->
@@ -486,7 +486,7 @@ send_sasl_init(State, {plain, User, Pass}) ->
     Response = <<0:8, User/binary, 0:8, Pass/binary>>,
     Frame = #'v1_0.sasl_init'{mechanism = {symbol, <<"PLAIN">>},
                               initial_response = {binary, Response}},
-    logger:warning("send_sasl_init ~p ~p", [User, Pass]),
+    logger:warning("send_sasl_init send v1_0.sasl_init ~p ~p", [User, Pass]),
     Ret = send(Frame, 1, State),
     logger:warning("send_sasl_init ~p ~p Ret : ~p", [User, Pass, Ret]),
     Ret.
