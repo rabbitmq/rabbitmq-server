@@ -12,6 +12,7 @@
 -export([setup_steps/0,
          teardown_steps/0,
          init_config/1,
+         capture_logs/1,
          start_ibmmq_server/1,
          stop_ibmmq_server/1]).
 
@@ -30,7 +31,7 @@ init_config(Config) ->
     rabbit_ct_helpers:set_config(Config, [  {rmq_nodes, [NodeConfig]},
                                             {rmq_hostname, "localhost"},
                                             {tcp_hostname_amqp, "localhost"},
-                                            {sasl, {plain, <<"app">>, <<"passw0rd">>}} ]).
+                                            {sasl, {plain, <<"app">>, <<"passw10rd">>}} ]).
 
 start_ibmmq_server(Config) ->
     IBMmqCmd = filename:join([?config(data_dir, Config), "ibmmq_runner"]),
@@ -76,6 +77,16 @@ wait_for_ibmmq_port(Hostname, Port, Retries) ->
             wait_for_ibmmq_port(Hostname, Port, Retries - 1);
         Error ->
             Error
+    end.
+
+capture_logs(Config) ->
+    IBMmqCmd = filename:join([?config(data_dir, Config), "ibmmq_runner"]),
+    Cmd = [IBMmqCmd, "logs", "/tmp/ibmmq.log"],
+    ct:log("Running command ~p", [Cmd]),
+    case rabbit_ct_helpers:exec(Cmd, []) of
+        {ok, _} -> Config;
+        Error   -> ct:pal("Error: ~tp", [Error]),
+                   {skip, "Failed to stop IBM MQ"}
     end.
 
 stop_ibmmq_server(Config) ->

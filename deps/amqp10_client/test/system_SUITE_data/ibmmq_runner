@@ -76,7 +76,10 @@ invoke_start(){
   sleep 10
   print "Waited 10 seconds for container to start"
 }
-
+capture_logs() {
+    print "Capturing ibmmq logs to $1"
+    docker logs ibmmq > $1
+}
 invoke_stop(){
   kill_container_if_exist ibmmq
 }
@@ -87,6 +90,9 @@ case "$1" in
     ;;
   build)
     build_docker_image
+    ;;
+  logs)
+    capture_logs "$2"
     ;;
   start)
     invoke_start
