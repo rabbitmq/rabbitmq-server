@@ -1013,6 +1013,35 @@
 # log.exchange.level = info
 
 
+## File size-based log rotation
+
+## Note that `log.file.rotation.size` cannot be combined with `log.file.rotation.date`,
+## the two options are mutually exclusive.
+
+## rotate when the file reaches 10 MiB
+# log.file.rotation.size = 10485760
+
+## keep up to 5 archived log files in addition to the current one
+# log.file.rotation.count = 5
+
+## compress the archived logs
+# log.file.rotation.compress = true
+
+
+## Date-based log rotation
+
+## Note that `log.file.rotation.date` cannot be combined with `log.file.rotation.size`,
+## the two options are mutually exclusive.
+
+## rotate every night at midnight
+# log.file.rotation.date = $D0
+
+## keep up to 5 archived log files in addition to the current one
+# log.file.rotation.count = 5
+
+## compress the archived logs
+# log.file.rotation.compress = true
+
 
 ## ----------------------------------------------------------------------------
 ## RabbitMQ LDAP Plugin
