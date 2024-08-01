@@ -228,13 +228,17 @@ sasl_hdr_rcvds({call, From}, begin_session,
 
 sasl_init_sent(_EvtType, #'v1_0.sasl_outcome'{code = {ubyte, 0}},
                #state{socket = Socket} = State) ->
+    logger:warning("sasl_init_sent "),
     ok = socket_send(Socket, ?AMQP_PROTOCOL_HEADER),
+    logger:warning("sasl_init_sent socket_send AMQP_PROTOCOL_HEADER ok"),
     {next_state, hdr_sent, State};
 sasl_init_sent(_EvtType, #'v1_0.sasl_outcome'{code = {ubyte, C}},
                #state{} = State) when C==1;C==2;C==3;C==4 ->
+   logger:warning("sasl_init_sent sasl_auth_failure"),
     {stop, sasl_auth_failure, State};
 sasl_init_sent({call, From}, begin_session,
                #state{pending_session_reqs = PendingSessionReqs} = State) ->
+    logger:warning("sasl_init_sent call to begin_session"),
     State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
     {keep_state, State1}.
 
@@ -243,7 +247,7 @@ hdr_sent(_EvtType, {protocol_header_received, 0, 1, 0, 0}, State) ->
     case send_open(State) of
         ok    -> {next_state, open_sent, State};
         Error ->
-                logger:warning("client_connection hdr_sent ~p", [Error]), 
+                logger:warning("client_connection hdr_sent ~p", [Error]),
                 {stop, Error, State}
     end;
 hdr_sent(_EvtType, {protocol_header_received, Protocol, Maj, Min,
@@ -253,7 +257,7 @@ hdr_sent(_EvtType, {protocol_header_received, Protocol, Maj, Min,
     {stop, normal, State};
 hdr_sent({call, From}, begin_session,
          #state{pending_session_reqs = PendingSessionReqs} = State) ->
-    logger:warning("hdr_sent received call begin_session"),        
+    logger:warning("hdr_sent received call begin_session"),
     State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
     {keep_state, State1}.
 
@@ -261,7 +265,7 @@ open_sent(_EvtType, #'v1_0.open'{max_frame_size = MaybeMaxFrameSize,
                                  idle_time_out = Timeout} = Open,
           #state{pending_session_reqs = PendingSessionReqs,
                  config = Config} = State0) ->
-    logger:warning("open_sent received 'v1_0.open' with pending_session_reqs: ~p", [PendingSessionReqs]),                            
+    logger:warning("open_sent received 'v1_0.open' with pending_session_reqs: ~p", [PendingSessionReqs]),
     State = case Timeout of
                 undefined -> State0;
                 {uint, T} when T > 0 ->
@@ -288,16 +292,16 @@ open_sent(_EvtType, #'v1_0.open'{max_frame_size = MaybeMaxFrameSize,
     {next_state, opened, State2#state{pending_session_reqs = []}};
 open_sent({call, From}, begin_session,
           #state{pending_session_reqs = PendingSessionReqs} = State) ->
-    logger:warning("open_sent received call begin_session with pending_session_reqs: ~p", [PendingSessionReqs]),                                    
+    logger:warning("open_sent received call begin_session with pending_session_reqs: ~p", [PendingSessionReqs]),
     State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
     {keep_state, State1};
 open_sent(info, {'DOWN', MRef, _, _, _},
           #state{reader_m_ref = MRef}) ->
-    logger:warning("open_sent received 'DOWN"),        
+    logger:warning("open_sent received 'DOWN"),
     {stop, {shutdown, reader_down}}.
 
 opened(_EvtType, heartbeat, State = #state{idle_time_out = T}) ->
-    logger:warning("opened received heartbeat"),        
+    logger:warning("opened received heartbeat"),
     ok = send_heartbeat(State),
     {ok, Tmr} = start_heartbeat_timer(T),
     {keep_state, State#state{heartbeat_timer = Tmr}};
@@ -482,7 +486,10 @@ send_sasl_init(State, {plain, User, Pass}) ->
     Response = <<0:8, User/binary, 0:8, Pass/binary>>,
     Frame = #'v1_0.sasl_init'{mechanism = {symbol, <<"PLAIN">>},
                               initial_response = {binary, Response}},
-    send(Frame, 1, State).
+    logger:warning("send_sasl_init ~p ~p", [User, Pass]),
+    Ret = send(Frame, 1, State),
+    logger:warning("send_sasl_init ~p ~p Ret : ~p", [User, Pass, Ret]),
+    Ret.
 
 send(Record, FrameType, #state{socket = Socket}) ->
     Encoded = amqp10_framing:encode_bin(Record),
