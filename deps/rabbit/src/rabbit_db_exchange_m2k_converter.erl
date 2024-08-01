@@ -52,6 +52,7 @@ copy_to_khepri(
        [Table, Name],
        #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
     Path = rabbit_db_exchange:khepri_exchange_path(Name),
+    Map = rabbit_db_exchange:record_to_storable_map(Record),
     rabbit_db_m2k_converter:with_correlation_id(
       fun(CorrId) ->
               Extra = #{async => CorrId},
@@ -59,7 +60,7 @@ copy_to_khepri(
                  "Mnesia->Khepri data copy: [~0p] path: ~0p corr: ~0p",
                  [Table, Path, CorrId],
                  #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
-              rabbit_khepri:put(Path, Record, Extra)
+              rabbit_khepri:put(Path, Map, Extra)
       end, State);
 copy_to_khepri(rabbit_exchange_serial = Table,
                #exchange_serial{name = Resource, next = Serial},

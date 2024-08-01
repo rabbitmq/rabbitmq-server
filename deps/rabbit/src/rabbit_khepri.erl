@@ -1090,8 +1090,12 @@ register_rabbit_exchange_projection() ->
                    exchanges,
                    _VHost = ?KHEPRI_WILDCARD_STAR,
                    _Name = ?KHEPRI_WILDCARD_STAR],
-    KeyPos = #exchange.name,
-    register_simple_projection(Name, PathPattern, KeyPos).
+    ProjectionFun = fun(_Path, Map) ->
+                            rabbit_db_exchange:storable_map_to_record(Map)
+                    end,
+    Options = #{keypos => #exchange.name},
+    Projection = khepri_projection:new(Name, ProjectionFun, Options),
+    khepri:register_projection(?RA_CLUSTER_NAME, PathPattern, Projection).
 
 register_rabbit_queue_projection() ->
     Name = rabbit_khepri_queue,
