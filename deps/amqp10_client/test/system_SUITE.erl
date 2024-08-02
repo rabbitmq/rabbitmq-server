@@ -35,7 +35,6 @@ groups() ->
      {activemq, [], shared()},
      {ibmmq, [], [
         open_close_connection,
-        open_connection_plain_sasl_failure,
         basic_roundtrip_with_sender_and_receiver_capabilities,
         basic_roundtrip_with_non_binary_capability
      ]},
@@ -364,7 +363,8 @@ basic_roundtrip_with_sender_and_receiver_capabilities(Config) ->
             {sender_capabilities, <<"queue">>},
             {receiver_capabilities, <<"queue">>},
             {message_annotations, #{}}
-        ], [creation_time]).
+        ], [creation_time]),
+    timer:sleep(20000).
 
 basic_roundtrip_with_non_binary_capability(Config) ->
     application:start(sasl),

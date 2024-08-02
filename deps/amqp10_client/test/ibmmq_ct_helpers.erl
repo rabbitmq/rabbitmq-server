@@ -31,7 +31,7 @@ init_config(Config) ->
     rabbit_ct_helpers:set_config(Config, [  {rmq_nodes, [NodeConfig]},
                                             {rmq_hostname, "localhost"},
                                             {tcp_hostname_amqp, "localhost"},
-                                            {sasl, {plain, <<"app">>, <<"passw10rd">>}} ]).
+                                            {sasl, {plain, <<"app">>, <<"passw0rd">>}} ]).
 
 start_ibmmq_server(Config) ->
     IBMmqCmd = filename:join([?config(data_dir, Config), "ibmmq_runner"]),
