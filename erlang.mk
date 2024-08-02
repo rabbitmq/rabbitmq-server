@@ -6076,7 +6076,7 @@ endif
 define ct_suite_target
 ct-$1: test-build
 	$$(verbose) mkdir -p $$(CT_LOGS_DIR)
-	$$(gen_verbose_esc) $$(CT_RUN) -sname ct_$$(PROJECT) -suite $$(addsuffix _SUITE,$1) $$(CT_EXTRA) $$(CT_OPTS)
+	$$(gen_verbose_esc) $$(CT_RUN) -sname ct_$$(PROJECT)-$1 -suite $$(addsuffix _SUITE,$1) $$(CT_EXTRA) $$(CT_OPTS)
 endef
 
 $(foreach test,$(CT_SUITES),$(eval $(call ct_suite_target,$(test))))

@@ -95,8 +95,7 @@ init_per_group(Group, Config, NodesCount) ->
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [{rmq_nodes_count, NodesCount},
                                             {rmq_nodename_suffix, Group},
-                                            {tcp_ports_base},
-                                            {net_ticktime, 10}]),
+                                            {tcp_ports_base}]),
     Config2 =  rabbit_ct_helpers:run_steps(Config1,
                                            [fun merge_app_env/1 ] ++
                                            rabbit_ct_broker_helpers:setup_steps()),

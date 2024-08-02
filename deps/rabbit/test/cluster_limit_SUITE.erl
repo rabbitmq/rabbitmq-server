@@ -54,8 +54,7 @@ init_per_group(Group, Config) ->
                                                    [{rmq_nodes_count, ClusterSize},
                                                     {rmq_nodename_suffix, Group},
                                                     {tcp_ports_base}]),
-            Config1b = rabbit_ct_helpers:set_config(Config1, [{net_ticktime, 10}]),
-            rabbit_ct_helpers:run_steps(Config1b,
+            rabbit_ct_helpers:run_steps(Config1,
                                         [fun merge_app_env/1 ] ++
                                             rabbit_ct_broker_helpers:setup_steps())
     end.
