@@ -69,7 +69,6 @@
                    ?V_1_0_SYMBOL_MODIFIED]).
 -define(DEFAULT_EXCHANGE_NAME, <<>>).
 -define(PROTOCOL, amqp10).
--define(PROCESS_GROUP_NAME, amqp_sessions).
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 -define(HIBERNATE_AFTER, 6_000).
 -define(CREDIT_REPLY_TIMEOUT, 30_000).
@@ -373,8 +372,8 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ConnName,
                     handle_max = HandleMax0}}) ->
     process_flag(trap_exit, true),
     process_flag(message_queue_data, off_heap),
-    ok = pg:join(node(), ?PROCESS_GROUP_NAME, self()),
 
+    ok = pg:join(pg_scope(), self(), self()),
     Alarms0 = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
     Alarms = sets:from_list(Alarms0, [{version, 2}]),
 
@@ -439,7 +438,7 @@ terminate(_Reason, #state{incoming_links = IncomingLinks,
 
 -spec list_local() -> [pid()].
 list_local() ->
-    pg:get_local_members(node(), ?PROCESS_GROUP_NAME).
+    pg:which_groups(pg_scope()).
 
 -spec conserve_resources(pid(),
                          rabbit_alarm:resource_alarm_source(),
@@ -3431,6 +3430,9 @@ is_valid_max(Val) ->
     is_integer(Val) andalso
     Val > 0 andalso
     Val =< ?UINT_MAX.
+
+pg_scope() ->
+    rabbit:pg_local_scope(amqp_session).
 
 -spec cap_credit(rabbit_queue_type:credit()) ->
     rabbit_queue_type:credit().
