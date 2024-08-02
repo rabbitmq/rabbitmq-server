@@ -14,6 +14,7 @@
          report_blocked_status/2,
          remove/1,
          status/0,
+         status/1,
          lookup/1,
          cluster_status/0,
          cluster_status_with_nodes/0,
@@ -70,7 +71,9 @@ remove(Name) ->
 %% format without a feature flag.
 -spec status() -> [status_tuple()].
 status() ->
-    gen_server:call(?SERVER, status, infinity).
+    status(infinity).
+status(Timeout) ->
+    gen_server:call(?SERVER, status, Timeout).
 
 -spec cluster_status() -> [status_tuple()].
 cluster_status() ->
@@ -229,4 +232,3 @@ blocked_status_to_info(#entry{info = {running, Info},
     {running, Info ++ [{blocked_status, BlockedStatus}]};
 blocked_status_to_info(#entry{info = Info}) ->
     Info.
-
