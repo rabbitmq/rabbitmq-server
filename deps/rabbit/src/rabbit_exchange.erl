@@ -14,7 +14,7 @@
          update_scratch/3, update_decorators/2, immutable/1,
          info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4,
          route/2, route/3, delete/3, validate_binding/2, count/0,
-         ensure_deleted/3]).
+         ensure_deleted/3, when_parent_deleted/4]).
 -export([list_names/0]).
 -export([serialise_events/1]).
 -export([serial/1, peek_serial/1]).
@@ -510,6 +510,11 @@ ensure_deleted(XName, IfUnused, Username) ->
         {error, _} = Err ->
             Err
     end.
+
+when_parent_deleted(_Path, Map, ActingUser, _ParentResourcePath) ->
+    Record = rabbit_db_exchange:storable_map_to_record(Map),
+    #exchange{name = Name} = Record,
+    ok = ensure_deleted(Name, false, ActingUser).
 
 -spec validate_binding
         (rabbit_types:exchange(), rabbit_types:binding())

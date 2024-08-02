@@ -9,6 +9,7 @@
 
 -include_lib("kernel/include/logger.hrl").
 -include_lib("stdlib/include/assert.hrl").
+-include_lib("khepri/include/khepri.hrl").
 
 -include_lib("rabbit_common/include/logging.hrl").
 
@@ -22,7 +23,10 @@
          dir/0,
          ensure_dir_exists/0,
          is_init_finished/0,
-         clear_init_finished/0]).
+         clear_init_finished/0,
+         set_mfa_to_call_before_parent_deletion/2,
+         has_parent_deletion_call_condition/0,
+         delete_child_resources/3]).
 
 %% Exported to be used by various rabbit_db_* modules
 -export([
@@ -335,3 +339,44 @@ list_in_khepri(Path, Options) ->
         {ok, Map} -> maps:values(Map);
         _         -> []
     end.
+
+%% -------------------------------------------------------------------
+%% Child resources deletion.
+%% -------------------------------------------------------------------
+
+-define(PARENT_DELETION_CALL_KEY, '__call_when_parent_deleted').
+
+set_mfa_to_call_before_parent_deletion(Map, MFA) ->
+    Map#{?PARENT_DELETION_CALL_KEY => MFA}.
+
+has_parent_deletion_call_condition() ->
+    Pattern = #{?PARENT_DELETION_CALL_KEY => '_'},
+    Condition = #if_data_matches{pattern = Pattern},
+    Condition.
+
+delete_child_resources(ChildResourcePattern, ActingUser, ParentResourcePath) ->
+    %% For each tree node that matches the pattern and that has the parent
+    %% deletion call defined, we call that MFA.
+    %%
+    %% The parent resource still exists at that time, but the parent resource
+    %% was removed from the store (i.e., the tree node has no payload).
+    Fun = fun(ChildResourcePath, ChildResource) ->
+                  delete_child_resource(
+                    ChildResourcePath, ChildResource, ActingUser,
+                    ParentResourcePath)
+          end,
+    case rabbit_khepri:get_many(ChildResourcePattern) of
+        {ok, Result} ->
+            maps:foreach(Fun, Result);
+        Error ->
+            Error
+    end.
+
+delete_child_resource(
+  ChildResourcePath,
+  #{?PARENT_DELETION_CALL_KEY := {Mod, Fun, ExtraArgs}} = ChildResource,
+  ActingUser,
+  ParentResourcePath) ->
+    Args = [ChildResourcePath, ChildResource, ActingUser, ParentResourcePath],
+    _ = erlang:apply(Mod, Fun, Args ++ ExtraArgs),
+    ok.

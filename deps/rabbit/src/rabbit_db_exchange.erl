@@ -961,7 +961,8 @@ record_to_storable_map(#exchange{name = Name,
             operator_policy => OperatorPolicy,
             decorators => Decorators,
             options => Options},
-    Map.
+    rabbit_db:set_mfa_to_call_before_parent_deletion(
+      Map, {rabbit_exchange, when_parent_deleted, []}).
 
 storable_map_to_record(#{name := Name,
                          type := Type,

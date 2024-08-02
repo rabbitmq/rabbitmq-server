@@ -25,7 +25,8 @@
          with_fun_in_mnesia_tx/2,
          with_fun_in_khepri_tx/2,
          delete/1,
-         clear_in_khepri/0]).
+         clear_in_khepri/0,
+         delete_child_resources/2]).
 
 -export([khepri_vhost_path/1]).
 
@@ -526,6 +527,22 @@ clear_in_khepri() ->
         ok    -> ok;
         Error -> throw(Error)
     end.
+
+%% --------------------------------------------------------------
+%% Child resources deletion.
+%% --------------------------------------------------------------
+
+delete_child_resources(VHost, ActingUser) ->
+    ParentPath = khepri_vhost_path(VHost),
+    Pattern = khepri_child_resources_path_pattern(VHost),
+    rabbit_db:delete_child_resources(Pattern, ActingUser, ParentPath).
+
+khepri_child_resources_path_pattern(VHost) ->
+    Condition = rabbit_db:has_parent_deletion_call_condition(),
+    %% I create a path specifix to exchanges for this example because this
+    %% branch doesn't have the reorg. In the end, the path would be based on
+    %% the vhost path, nod individual resource types.
+    rabbit_db_exchange:khepri_exchange_path(VHost, Condition).
 
 %% --------------------------------------------------------------
 %% Paths
