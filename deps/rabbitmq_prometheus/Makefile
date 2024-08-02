@@ -11,7 +11,7 @@ PROJECT_DESCRIPTION = Prometheus metrics for RabbitMQ
 PROJECT_MOD := rabbit_prometheus_app
 DEPS = accept cowboy rabbit rabbitmq_management_agent prometheus rabbitmq_web_dispatch rabbitmq_federation
 BUILD_DEPS = amqp_client rabbit_common rabbitmq_management
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers eunit_formatters
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers eunit_formatters rabbitmq_shovel
 
 EUNIT_OPTS = no_tty, {report, {eunit_progress, [colored, profile]}}
 
