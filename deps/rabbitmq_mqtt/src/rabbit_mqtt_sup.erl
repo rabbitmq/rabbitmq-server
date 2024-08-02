@@ -29,7 +29,7 @@ init([{Listeners, SslListeners0}]) ->
           end,
     %% Use separate process group scope per RabbitMQ node. This achieves a local-only
     %% process group which requires less memory with millions of connections.
-    PgScope = list_to_atom(io_lib:format("~s_~s", [?PG_SCOPE, node()])),
+    PgScope = rabbit:pg_local_scope(?PG_SCOPE),
     persistent_term:put(?PG_SCOPE, PgScope),
     {ok,
      {#{strategy => one_for_all,
