@@ -167,7 +167,15 @@ start_slave_node(Parent, Config, Testcase, N) ->
     Name = list_to_atom(
              rabbit_misc:format("~ts-~b", [Testcase, N])),
     ct:pal("- Starting slave node `~ts@...`", [Name]),
-    {ok, Node} = slave:start(net_adm:localhost(), Name),
+    {ok, NodePid, Node} = peer:start(#{
+        name => Name,
+        connection => standard_io,
+        shutdown => close
+    }),
+    peer:call(NodePid, net_kernel, set_net_ticktime, [5]),
+
+    persistent_term:put({?MODULE, Node}, NodePid),
+
     ct:pal("- Slave node `~ts` started", [Node]),
 
     TestCodePath = filename:dirname(code:which(?MODULE)),
@@ -183,8 +191,16 @@ stop_slave_nodes(Config) ->
     rabbit_ct_helpers:delete_config(Config, nodes).
 
 stop_slave_node(Node) ->
-    ct:pal("- Stopping slave node `~ts`...", [Node]),
-    ok = slave:stop(Node).
+    case persistent_term:get({?MODULE, Node}, undefined) of
+        undefined ->
+            %% Node was already stopped (e.g. by the test case).
+            ok;
+        NodePid ->
+            persistent_term:erase({?MODULE, Node}),
+
+            ct:pal("- Stopping slave node `~ts`...", [Node]),
+            ok = peer:stop(NodePid)
+    end.
 
 connect_nodes([FirstNode | OtherNodes] = Nodes) ->
     lists:foreach(

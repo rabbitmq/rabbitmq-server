@@ -56,8 +56,7 @@ init_per_group(Group, Config) ->
                                             {tcp_ports_base, {skip_n_nodes, ClusterSize}}
                                             ]),
     Config1b = rabbit_ct_helpers:set_config(Config1,
-                                            [{queue_type, atom_to_binary(Group, utf8)},
-                                             {net_ticktime, 5}
+                                            [{queue_type, atom_to_binary(Group, utf8)}
                                             ]),
     Config2 = rabbit_ct_helpers:run_steps(Config1b,
                                           [fun merge_app_env/1 ] ++

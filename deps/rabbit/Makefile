@@ -226,6 +226,36 @@ ct-slow:
 
 CT_OPTS += -ct_hooks rabbit_ct_hook []
 
+define ct_master.erl
+	StartOpts = #{
+		host => "localhost",
+		connection => standard_io,
+		args => ["-hidden"]
+	},
+	{ok, Pid1, _} = peer:start(StartOpts#{name => "rabbit_shard1"}),
+	{ok, Pid2, _} = peer:start(StartOpts#{name => "rabbit_shard2"}),
+	{ok, Pid3, _} = peer:start(StartOpts#{name => "rabbit_shard3"}),
+	{ok, Pid4, _} = peer:start(StartOpts#{name => "rabbit_shard4"}),
+	peer:call(Pid1, net_kernel, set_net_ticktime, [5]),
+	peer:call(Pid2, net_kernel, set_net_ticktime, [5]),
+	peer:call(Pid3, net_kernel, set_net_ticktime, [5]),
+	peer:call(Pid4, net_kernel, set_net_ticktime, [5]),
+	peer:call(Pid1, persistent_term, put, [rabbit_ct_tcp_port_base, 23000]),
+	peer:call(Pid2, persistent_term, put, [rabbit_ct_tcp_port_base, 25000]),
+	peer:call(Pid3, persistent_term, put, [rabbit_ct_tcp_port_base, 27000]),
+	peer:call(Pid4, persistent_term, put, [rabbit_ct_tcp_port_base, 29000]),
+	ct_master:run("ct.test.spec"),
+	peer:stop(Pid4),
+	peer:stop(Pid3),
+	peer:stop(Pid2),
+	peer:stop(Pid1),
+	halt()
+endef
+
+ct-master: test-build
+	$(verbose) mkdir -p $(CT_LOGS_DIR)
+	$(call erlang,$(ct_master.erl),-sname rabbit_master@localhost -hidden -kernel net_ticktime 5)
+
 # --------------------------------------------------------------------
 # Compilation.
 # --------------------------------------------------------------------

@@ -19,6 +19,10 @@ dialyze: ERL_LIBS = $(APPS_DIR):$(DEPS_DIR):$(DEPS_DIR)/rabbitmq_cli/_build/dev/
 
 CT_OPTS += -hidden
 
+# We set a low tick time to deal with distribution failures quicker.
+
+CT_OPTS += -kernel net_ticktime 5
+
 # Enable the following common_test hooks on GH and Concourse:
 #
 # cth_fail_fast
