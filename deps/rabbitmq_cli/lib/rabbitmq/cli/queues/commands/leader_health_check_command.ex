@@ -94,6 +94,9 @@ defmodule RabbitMQ.CLI.Queues.Commands.LeaderHealthCheckCommand do
 
   def description(), do: "Checks availability and health status of quorum queue leaders"
 
+  def banner([name], %{global: true}),
+    do: "Checking availability and health status of leaders for quorum queues matching #{name} in all vhosts ..."
+
   def banner([name], %{vhost: vhost}),
     do: "Checking availability and health status of leaders for quorum queues matching #{name} in vhost #{vhost} ..."
 
