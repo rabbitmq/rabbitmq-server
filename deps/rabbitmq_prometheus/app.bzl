@@ -15,6 +15,7 @@ def all_beam_files(name = "all_beam_files"):
             "src/collectors/prometheus_rabbitmq_dynamic_collector.erl",
             "src/collectors/prometheus_rabbitmq_federation_collector.erl",
             "src/collectors/prometheus_rabbitmq_global_metrics_collector.erl",
+            "src/collectors/prometheus_rabbitmq_shovel_collector.erl",
             "src/rabbit_prometheus_app.erl",
             "src/rabbit_prometheus_dispatcher.erl",
             "src/rabbit_prometheus_handler.erl",
@@ -46,6 +47,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/collectors/prometheus_rabbitmq_dynamic_collector.erl",
             "src/collectors/prometheus_rabbitmq_federation_collector.erl",
             "src/collectors/prometheus_rabbitmq_global_metrics_collector.erl",
+            "src/collectors/prometheus_rabbitmq_shovel_collector.erl",
             "src/rabbit_prometheus_app.erl",
             "src/rabbit_prometheus_dispatcher.erl",
             "src/rabbit_prometheus_handler.erl",
@@ -88,6 +90,7 @@ def all_srcs(name = "all_srcs"):
             "src/collectors/prometheus_rabbitmq_dynamic_collector.erl",
             "src/collectors/prometheus_rabbitmq_federation_collector.erl",
             "src/collectors/prometheus_rabbitmq_global_metrics_collector.erl",
+            "src/collectors/prometheus_rabbitmq_shovel_collector.erl",
             "src/rabbit_prometheus_app.erl",
             "src/rabbit_prometheus_dispatcher.erl",
             "src/rabbit_prometheus_handler.erl",
@@ -141,4 +144,13 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/rabbitmq_prometheus_collector_test_proxy.beam"],
         app_name = "rabbitmq_prometheus",
         erlc_opts = "//:test_erlc_opts",
+    )
+    erlang_bytecode(
+        name = "prometheus_rabbitmq_shovel_collector_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/prometheus_rabbitmq_shovel_collector_SUITE.erl"],
+        outs = ["test/prometheus_rabbitmq_shovel_collector_SUITE.beam"],
+        app_name = "rabbitmq_prometheus",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/amqp_client:erlang_app", "@prometheus//:erlang_app"],
     )
