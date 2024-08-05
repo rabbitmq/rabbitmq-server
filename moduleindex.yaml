@@ -1128,6 +1128,7 @@ rabbitmq_prometheus:
 - prometheus_rabbitmq_dynamic_collector
 - prometheus_rabbitmq_federation_collector
 - prometheus_rabbitmq_global_metrics_collector
+- prometheus_rabbitmq_shovel_collector
 - rabbit_prometheus_app
 - rabbit_prometheus_dispatcher
 - rabbit_prometheus_handler

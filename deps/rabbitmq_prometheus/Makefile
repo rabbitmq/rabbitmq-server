@@ -9,7 +9,7 @@ endef
 PROJECT := rabbitmq_prometheus
 PROJECT_DESCRIPTION = Prometheus metrics for RabbitMQ
 PROJECT_MOD := rabbit_prometheus_app
-DEPS = accept cowboy rabbit rabbitmq_management_agent prometheus rabbitmq_web_dispatch rabbitmq_federation
+DEPS = accept cowboy rabbit rabbitmq_management_agent prometheus rabbitmq_web_dispatch rabbitmq_federation rabbitmq_shovel
 BUILD_DEPS = amqp_client rabbit_common rabbitmq_management
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers eunit_formatters
 
