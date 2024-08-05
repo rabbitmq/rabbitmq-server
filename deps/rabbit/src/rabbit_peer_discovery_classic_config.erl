@@ -21,8 +21,12 @@
 list_nodes() ->
     case application:get_env(rabbit, cluster_nodes, {[], disc}) of
         {Nodes, NodeType} ->
+            check_local_node(Nodes),
+            check_duplicates(Nodes),
             {ok, {add_this_node(Nodes), NodeType}};
         Nodes when is_list(Nodes) ->
+            check_local_node(Nodes),
+            check_duplicates(Nodes),
             {ok, {add_this_node(Nodes), disc}}
     end.
 
@@ -31,6 +35,26 @@ add_this_node(Nodes) ->
     case lists:member(ThisNode, Nodes) of
         true  -> Nodes;
         false -> [ThisNode | Nodes]
+    end.
+
+check_duplicates(Nodes) ->
+    case (length(lists:usort(Nodes)) == length(Nodes)) of
+        true ->
+            ok;
+        false ->
+            rabbit_log:warning("Classic peer discovery backend: list of "
+                               "nodes contains duplicates ~0tp",
+                               [Nodes])
+    end.
+
+check_local_node(Nodes) ->
+    case lists:member(node(), Nodes) of
+        true ->
+            ok;
+        false ->
+            rabbit_log:warning("Classic peer discovery backend: list of "
+                               "nodes does not contain the local node ~0tp",
+                               [Nodes])
     end.
 
 -spec lock(Nodes :: [node()]) ->
