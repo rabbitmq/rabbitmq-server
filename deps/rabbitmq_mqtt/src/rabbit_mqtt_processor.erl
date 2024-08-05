@@ -42,6 +42,12 @@
 -define(QUEUE_TTL_KEY, <<"x-expires">>).
 -define(DEFAULT_EXCHANGE_NAME, <<>>).
 
+-ifdef(TEST).
+-define(SILENT_CLOSE_DELAY, 10).
+-else.
+-define(SILENT_CLOSE_DELAY, 3_000).
+-endif.
+
 -type send_fun() :: fun((iodata()) -> ok).
 -type session_expiry_interval() :: non_neg_integer() | infinity.
 -type subscriptions() :: #{topic_filter() => #mqtt_subscription_opts{}}.
@@ -621,16 +627,16 @@ check_extended_auth(_) ->
 check_credentials(Username, Password, SslLoginName, PeerIp) ->
     case creds(Username, Password, SslLoginName) of
         nocreds ->
-            auth_attempt_failed(PeerIp, <<>>),
             ?LOG_ERROR("MQTT login failed: no credentials provided"),
+            auth_attempt_failed(PeerIp, <<>>),
             {error, ?RC_BAD_USER_NAME_OR_PASSWORD};
         {invalid_creds, {undefined, Pass}} when is_binary(Pass) ->
-            auth_attempt_failed(PeerIp, <<>>),
             ?LOG_ERROR("MQTT login failed: no username is provided"),
+            auth_attempt_failed(PeerIp, <<>>),
             {error, ?RC_BAD_USER_NAME_OR_PASSWORD};
         {invalid_creds, {User, _Pass}} when is_binary(User) ->
-            auth_attempt_failed(PeerIp, User),
             ?LOG_ERROR("MQTT login failed for user '~s': no password provided", [User]),
+            auth_attempt_failed(PeerIp, User),
             {error, ?RC_BAD_USER_NAME_OR_PASSWORD};
         {UserBin, PassBin} ->
             {ok, {UserBin, PassBin}}
@@ -998,8 +1004,8 @@ check_vhost_exists(VHost, Username, PeerIp) ->
         true  ->
             ok;
         false ->
-            auth_attempt_failed(PeerIp, Username),
             ?LOG_ERROR("MQTT connection failed: virtual host '~s' does not exist", [VHost]),
+            auth_attempt_failed(PeerIp, Username),
             {error, ?RC_BAD_USER_NAME_OR_PASSWORD}
     end.
 
@@ -1038,10 +1044,10 @@ check_user_login(VHost, Username, Password, ClientId, PeerIp, ConnName) ->
             notify_auth_result(user_authentication_success, Username1, ConnName),
             {ok, User};
         {refused, Username, Msg, Args} ->
-            auth_attempt_failed(PeerIp, Username),
             ?LOG_ERROR("MQTT connection failed: access refused for user '~s':" ++ Msg,
                        [Username | Args]),
             notify_auth_result(user_authentication_failure, Username, ConnName),
+            auth_attempt_failed(PeerIp, Username),
             {error, ?RC_BAD_USER_NAME_OR_PASSWORD}
     end.
 
@@ -1070,9 +1076,9 @@ check_vhost_access(VHost, User = #user{username = Username}, ClientId, PeerIp) -
         ok ->
             {ok, AuthzCtx}
     catch exit:#amqp_error{name = not_allowed} ->
-              auth_attempt_failed(PeerIp, Username),
               ?LOG_ERROR("MQTT connection failed: access refused for user '~s' to vhost '~s'",
                          [Username, VHost]),
+              auth_attempt_failed(PeerIp, Username),
               {error, ?RC_NOT_AUTHORIZED}
     end.
 
@@ -1081,9 +1087,9 @@ check_user_loopback(Username, PeerIp) ->
         ok ->
             ok;
         not_allowed ->
+            ?LOG_WARNING("MQTT login failed: user '~s' can only connect via localhost",
+                         [Username]),
             auth_attempt_failed(PeerIp, Username),
-            ?LOG_WARNING(
-              "MQTT login failed: user '~s' can only connect via localhost", [Username]),
             {error, ?RC_NOT_AUTHORIZED}
     end.
 
@@ -1102,8 +1108,8 @@ ensure_credential_expiry_timer(User = #user{username = Username}, PeerIp) ->
                     _TimerRef = erlang:send_after(Time, self(), credential_expired),
                     ok;
                 false ->
-                    auth_attempt_failed(PeerIp, Username),
                     ?LOG_WARNING("Credential expired ~b ms ago", [abs(Time)]),
+                    auth_attempt_failed(PeerIp, Username),
                     {error, ?RC_NOT_AUTHORIZED}
             end
     end.
@@ -1222,7 +1228,8 @@ creds(User, Pass, SSLLoginName) ->
 
 -spec auth_attempt_failed(inet:ip_address(), binary()) -> ok.
 auth_attempt_failed(PeerIp, Username) ->
-    rabbit_core_metrics:auth_attempt_failed(PeerIp, Username, mqtt).
+    rabbit_core_metrics:auth_attempt_failed(PeerIp, Username, mqtt),
+    timer:sleep(?SILENT_CLOSE_DELAY).
 
 maybe_downgrade_qos(?QOS_0) -> ?QOS_0;
 maybe_downgrade_qos(?QOS_1) -> ?QOS_1;
