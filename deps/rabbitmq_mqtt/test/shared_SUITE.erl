@@ -28,11 +28,8 @@
          get_node_config/3,
          drain_node/2,
          revive_node/2,
-<<<<<<< HEAD
-         is_feature_flag_enabled/2
-=======
+         is_feature_flag_enabled/2,
          await_metadata_store_consistent/2
->>>>>>> a364fbd2e1 (Reduce Khepri test flakes)
         ]).
 -import(rabbit_ct_helpers,
         [eventually/3,
