@@ -173,7 +173,8 @@
     test_writer/1,
     user/1,
 
-    configured_metadata_store/1
+    configured_metadata_store/1,
+    await_metadata_store_consistent/2
   ]).
 
 %% Internal functions exported to be used by rpc:call/4.
@@ -989,6 +990,30 @@ enable_khepri_metadata_store(Config, FFs0) ->
                                 Skip
                         end
                 end, Config, FFs).
+
+%% Waits until the metadata store replica on Node is up to date with the leader.
+await_metadata_store_consistent(Config, Node) ->
+    case configured_metadata_store(Config) of
+        mnesia ->
+            ok;
+        {khepri, _} ->
+            RaClusterName = rabbit_khepri:get_ra_cluster_name(),
+            Leader = rpc(Config, Node, ra_leaderboard, lookup_leader, [RaClusterName]),
+            LastAppliedLeader = ra_last_applied(Leader),
+
+            NodeName = get_node_config(Config, Node, nodename),
+            ServerId = {RaClusterName, NodeName},
+            rabbit_ct_helpers:eventually(
+              ?_assert(
+                 begin
+                     LastApplied = ra_last_applied(ServerId),
+                     is_integer(LastApplied) andalso LastApplied >= LastAppliedLeader
+                 end))
+    end.
+
+ra_last_applied(ServerId) ->
+    #{last_applied := LastApplied} = ra:key_metrics(ServerId),
+    LastApplied.
 
 rewrite_node_config_file(Config, Node) ->
     NodeConfig = get_node_config(Config, Node),

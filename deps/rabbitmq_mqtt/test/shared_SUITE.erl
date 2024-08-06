@@ -28,7 +28,8 @@
          get_node_config/3,
          drain_node/2,
          revive_node/2,
-         is_feature_flag_enabled/2
+         is_feature_flag_enabled/2,
+         await_metadata_store_consistent/2
         ]).
 -import(rabbit_ct_helpers,
         [eventually/3,
@@ -1245,6 +1246,7 @@ rabbit_mqtt_qos0_queue_kill_node(Config) ->
     SubscriberId = <<"subscriber">>,
     Sub0 = connect(SubscriberId, Config, 0, []),
     {ok, _, [0]} = emqtt:subscribe(Sub0, Topic1, qos0),
+    ok = await_metadata_store_consistent(Config, 2),
     ok = emqtt:publish(Pub, Topic1, <<"m0">>, qos0),
     ok = expect_publishes(Sub0, Topic1, [<<"m0">>]),
 
