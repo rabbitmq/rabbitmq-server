@@ -54,7 +54,6 @@ rabbitmq_app(
         "//deps/rabbit:erlang_app",
         "//deps/rabbitmq_federation:erlang_app",
         "//deps/rabbitmq_management_agent:erlang_app",
-        "//deps/rabbitmq_shovel:erlang_app",
         "//deps/rabbitmq_web_dispatch:erlang_app",
         "@accept//:erlang_app",
         "@cowboy//:erlang_app",
@@ -105,14 +104,6 @@ rabbitmq_integration_suite(
     size = "small",
     additional_beam = [
         "//deps/rabbitmq_federation:test/rabbit_federation_test_util.beam",  #keep
-        "test/rabbitmq_prometheus_collector_test_proxy.beam",  #keep
-    ],
-)
-
-rabbitmq_integration_suite(
-    name = "prometheus_rabbitmq_shovel_collector_SUITE",
-    size = "small",
-    additional_beam = [
         "test/rabbitmq_prometheus_collector_test_proxy.beam",  #keep
     ],
 )
