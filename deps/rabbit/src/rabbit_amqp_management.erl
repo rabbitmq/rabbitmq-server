@@ -433,12 +433,13 @@ encode_queue(Q, NumMsgs, NumConsumers) ->
                  Replicas =:= undefined ->
                      KVList0
               end,
-    KVList = if is_atom(Leader) ->
-                    [{{utf8, <<"leader">>},
-                      {utf8, atom_to_binary(Leader)}
-                     } | KVList1];
-                Leader =:= undefined ->
-                    KVList1
+    KVList = case Leader of
+                 undefined ->
+                     KVList1;
+                 _ ->
+                     [{{utf8, <<"leader">>},
+                       {utf8, atom_to_binary(Leader)}
+                      } | KVList1]
              end,
     {map, KVList}.
 
