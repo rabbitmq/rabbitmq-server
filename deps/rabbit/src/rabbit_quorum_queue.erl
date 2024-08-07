@@ -1349,6 +1349,23 @@ shrink_all(Node) ->
          case delete_member(Q, Node) of
              ok ->
                  {QName, {ok, Size-1}};
+             {error, cluster_change_not_permitted} ->
+                 %% this could be timing related and due to a new leader just being
+                 %% elected but it's noop command not been committed yet.
+                 %% lets sleep and retry once
+                 rabbit_log:info("~ts: failed to remove member (replica) on node ~w "
+                                 "as cluster change is not permitted. "
+                                 "retrying once in 500ms",
+                                 [rabbit_misc:rs(QName), Node]),
+                 timer:sleep(500),
+                 case delete_member(Q, Node) of
+                     ok ->
+                         {QName, {ok, Size-1}};
+                     {error, Err} ->
+                         rabbit_log:warning("~ts: failed to remove member (replica) on node ~w, error: ~w",
+                                            [rabbit_misc:rs(QName), Node, Err]),
+                         {QName, {error, Size, Err}}
+                 end;
              {error, Err} ->
                  rabbit_log:warning("~ts: failed to remove member (replica) on node ~w, error: ~w",
                                     [rabbit_misc:rs(QName), Node, Err]),
