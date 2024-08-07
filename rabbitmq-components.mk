@@ -62,6 +62,7 @@ dep_rabbitmq_dotnet_client            = git_rmq           rabbitmq-dotnet-client
 dep_rabbitmq_event_exchange           = git_rmq-subfolder rabbitmq-event-exchange $(current_rmq_ref) $(base_rmq_ref) main
 dep_rabbitmq_federation               = git_rmq-subfolder rabbitmq-federation $(current_rmq_ref) $(base_rmq_ref) main
 dep_rabbitmq_federation_management    = git_rmq-subfolder rabbitmq-federation-management $(current_rmq_ref) $(base_rmq_ref) main
+dep_rabbitmq_federation_prometheus    = git_rmq-subfolder rabbitmq-federation-prometheus $(current_rmq_ref) $(base_rmq_ref) main
 dep_rabbitmq_java_client              = git_rmq           rabbitmq-java-client $(current_rmq_ref) $(base_rmq_ref) main
 dep_rabbitmq_jms_client               = git_rmq           rabbitmq-jms-client $(current_rmq_ref) $(base_rmq_ref) main
 dep_rabbitmq_jms_cts                  = git_rmq           rabbitmq-jms-cts $(current_rmq_ref) $(base_rmq_ref) main
@@ -89,6 +90,7 @@ dep_rabbitmq_rtopic_exchange          = git_rmq           rabbitmq-rtopic-exchan
 dep_rabbitmq_sharding                 = git_rmq-subfolder rabbitmq-sharding $(current_rmq_ref) $(base_rmq_ref) main
 dep_rabbitmq_shovel                   = git_rmq-subfolder rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref) main
 dep_rabbitmq_shovel_management        = git_rmq-subfolder rabbitmq-shovel-management $(current_rmq_ref) $(base_rmq_ref) main
+dep_rabbitmq_shovel_prometheus        = git_rmq-subfolder rabbitmq-shovel-prometheus $(current_rmq_ref) $(base_rmq_ref) main
 dep_rabbitmq_stomp                    = git_rmq-subfolder rabbitmq-stomp $(current_rmq_ref) $(base_rmq_ref) main
 dep_rabbitmq_stream                   = git_rmq-subfolder rabbitmq-stream $(current_rmq_ref) $(base_rmq_ref) main
 dep_rabbitmq_stream_common            = git_rmq-subfolder rabbitmq-stream-common $(current_rmq_ref) $(base_rmq_ref) main
@@ -156,6 +158,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_event_exchange \
 		      rabbitmq_federation \
 		      rabbitmq_federation_management \
+		      rabbitmq_federation_prometheus \
 		      rabbitmq_java_client \
 		      rabbitmq_jms_client \
 		      rabbitmq_jms_cts \
@@ -183,6 +186,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_sharding \
 		      rabbitmq_shovel \
 		      rabbitmq_shovel_management \
+		      rabbitmq_shovel_prometheus \
 		      rabbitmq_stomp \
 		      rabbitmq_stream \
 		      rabbitmq_stream_common \
