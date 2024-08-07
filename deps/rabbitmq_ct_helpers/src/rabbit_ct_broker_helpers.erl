@@ -629,7 +629,14 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
         true  -> lists:nth(I + 1, WithPlugins0);
         false -> WithPlugins0
     end,
-    CanUseSecondary = (I + 1) rem 2 =:= 0,
+    ForceUseSecondary = rabbit_ct_helpers:get_config(
+                          Config, force_secondary_umbrella, undefined),
+    CanUseSecondary = case ForceUseSecondary of
+                          undefined ->
+                              (I + 1) rem 2 =:= 0;
+                          Override when is_boolean(Override) ->
+                              Override
+                      end,
     UseSecondaryUmbrella = case ?config(secondary_umbrella, Config) of
                                false -> false;
                                _     -> CanUseSecondary
