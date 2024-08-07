@@ -1723,7 +1723,7 @@ single_active_consumer_priority_test(Config) ->
      %% add en even higher consumer, but the current active has a message pending
      %% so can't be immedately replaced
      {CK3, make_checkout(C3, {auto, {simple_prefetch, 1}}, #{priority => 3})},
-     ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{status = fading}},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{status = quiescing}},
                           waiting_consumers = [_, _]}),
      %% settle the message, the higher priority should become the active,
      %% completing the replacement
@@ -1811,7 +1811,7 @@ single_active_consumer_update_priority_test(Config) ->
     {_S1, _} = run_log(Config, S0, Entries, fun single_active_invariant/1),
     ok.
 
-single_active_consumer_fading_resumes_after_cancel_test(Config) ->
+single_active_consumer_quiescing_resumes_after_cancel_test(Config) ->
     S0 = init(#{name => ?FUNCTION_NAME,
                 queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
                 single_active_consumer_on => true}),
@@ -1830,14 +1830,14 @@ single_active_consumer_fading_resumes_after_cancel_test(Config) ->
      %% enqueue a message
      {?LINE , rabbit_fifo:make_enqueue(Pid1, 1, msg1)},
 
-     %% add a consumer with a higher priority, current is fading
+     %% add a consumer with a higher priority, current is quiescing
      {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{priority => 2})},
-     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = fading}},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = quiescing}},
                           waiting_consumers = [{CK2, _}]}),
 
      %% C2 cancels
      {?LINE, make_checkout(C2, cancel, #{})},
-     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = fading,
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = quiescing,
                                                          checked_out = Ch}},
                          waiting_consumers = []}
                when map_size(Ch) == 1),
@@ -1874,14 +1874,14 @@ single_active_consumer_higher_waiting_disconnected_test(Config) ->
      %% enqueue a message
      {?LINE , rabbit_fifo:make_enqueue(Pid1, 1, msg1)},
 
-     %% add a consumer with a higher priority, current is fading
+     %% add a consumer with a higher priority, current is quiescing
      {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{priority => 2})},
-     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = fading}},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = quiescing}},
                           waiting_consumers = [{CK2, _}]}),
      %% C2 is disconnected,
      {?LINE, {down, C2Pid, noconnection}},
      ?ASSERT(
-        #rabbit_fifo{consumers = #{CK1 := #consumer{status = fading}},
+        #rabbit_fifo{consumers = #{CK1 := #consumer{status = quiescing}},
                      waiting_consumers = [{CK2, #consumer{status = suspected_down}}]}),
      %% settle
      {?LINE, rabbit_fifo:make_settle(CK1, [0])},
@@ -1899,7 +1899,7 @@ single_active_consumer_higher_waiting_disconnected_test(Config) ->
 
     ok.
 
-single_active_consumer_fading_disconnected_test(Config) ->
+single_active_consumer_quiescing_disconnected_test(Config) ->
     S0 = init(#{name => ?FUNCTION_NAME,
                 queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
                 single_active_consumer_on => true}),
@@ -1920,9 +1920,9 @@ single_active_consumer_fading_disconnected_test(Config) ->
      %% enqueue a message
      {?LINE , rabbit_fifo:make_enqueue(Pid1, 1, msg1)},
 
-     %% add a consumer with a higher priority, current is fading
+     %% add a consumer with a higher priority, current is quiescing
      {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{priority => 2})},
-     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = fading}},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = quiescing}},
                           waiting_consumers = [{CK2, _}]}),
      %% C1 is disconnected,
      {?LINE, {down, C1Pid, noconnection}},
@@ -1954,7 +1954,7 @@ single_active_consumer_fading_disconnected_test(Config) ->
 
     ok.
 
-single_active_consumer_fading_receives_no_further_messages_test(Config) ->
+single_active_consumer_quiescing_receives_no_further_messages_test(Config) ->
     S0 = init(#{name => ?FUNCTION_NAME,
                 queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
                 single_active_consumer_on => true}),
@@ -1975,17 +1975,17 @@ single_active_consumer_fading_receives_no_further_messages_test(Config) ->
      %% enqueue a message
      {?LINE, rabbit_fifo:make_enqueue(Pid1, 1, msg1)},
 
-     %% add a consumer with a higher priority, current is fading
+     %% add a consumer with a higher priority, current is quiescing
      {CK2, make_checkout(C2, {auto, {simple_prefetch, 10}}, #{priority => 2})},
-     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = fading,
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = quiescing,
                                                          checked_out = Ch}},
                           waiting_consumers = [{CK2, _}]}
                when map_size(Ch) == 1),
 
      %% enqueue another message
      {?LINE, rabbit_fifo:make_enqueue(Pid1, 2, msg2)},
-     %% message should not be assinged to fading consumer
-     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = fading,
+     %% message should not be assinged to quiescing consumer
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = quiescing,
                                                          checked_out = Ch}},
                           waiting_consumers = [{CK2, _}]}
                when map_size(Ch) == 1)

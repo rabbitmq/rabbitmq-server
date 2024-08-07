@@ -1503,7 +1503,7 @@ activate_next_consumer(#?STATE{consumers = Cons0,
             %% A higher priority consumer has attached but the current one has
             %% pending messages
             Cons = maps:update(ActiveCKey,
-                               Active#consumer{status = fading},
+                               Active#consumer{status = quiescing},
                                Cons0),
             {State0#?STATE{consumers = Cons}, Effects0};
         _ ->
@@ -1512,7 +1512,7 @@ activate_next_consumer(#?STATE{consumers = Cons0,
     end.
 
 active_consumer({CKey, #consumer{status = Status} = Consumer, _I})
-  when Status == up orelse Status == fading ->
+  when Status == up orelse Status == quiescing ->
     {CKey, Consumer};
 active_consumer({_CKey, #consumer{status = _}, I}) ->
     active_consumer(maps:next(I));
@@ -1771,7 +1771,7 @@ complete_and_checkout(#{} = Meta, MsgIds, ConsumerKey,
                       #consumer{} = Con0,
                       Effects0, State0) ->
     State1 = complete(Meta, ConsumerKey, MsgIds, Con0, State0),
-    %% a completion could have removed the active/fading consumer
+    %% a completion could have removed the active/quiescing consumer
     {State2, Effects1} = activate_next_consumer(State1, Effects0),
     checkout(Meta, State0, State2, Effects1).
 
@@ -2185,7 +2185,7 @@ update_or_remove_con(Meta, ConsumerKey,
             State#?STATE{consumers = maps:put(ConsumerKey, Con, Cons)}
     end;
 update_or_remove_con(_Meta, ConsumerKey,
-                     #consumer{status = fading,
+                     #consumer{status = quiescing,
                                checked_out = Checked} = Con0,
                      #?STATE{consumers = Cons,
                              waiting_consumers = Waiting} = State)

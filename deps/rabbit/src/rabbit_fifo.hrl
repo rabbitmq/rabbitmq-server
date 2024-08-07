@@ -39,8 +39,8 @@
 -type msg_header() :: msg_size() |
                       optimised_tuple(msg_size(), Expiry :: milliseconds()) |
                       #{size := msg_size(),
+                        acquired_count => non_neg_integer(),
                         delivery_count => non_neg_integer(),
-                        return_count => non_neg_integer(),
                         expiry => milliseconds()}.
 %% The message header:
 %% size: The size of the message payload in bytes.
@@ -55,7 +55,7 @@
 -type msg_size() :: non_neg_integer().
 %% the size in bytes of the msg payload
 
--type msg() :: optimised_tuple(option(ra:index()), msg_header()).
+-type msg() :: optimised_tuple(ra:index(), msg_header()).
 
 -type delivery_msg() :: {msg_id(), {msg_header(), raw_msg()}}.
 %% A tuple consisting of the message id, and the headered message.
@@ -91,8 +91,6 @@
                            prefetch => non_neg_integer(),
                            args => list(),
                            priority => non_neg_integer()
-                           % %% set if and only if credit API v2 is in use
-                           % initial_delivery_count => rabbit_queue_type:delivery_count()
                           }.
 %% static meta data associated with a consumer
 
@@ -126,7 +124,7 @@
 
 -record(consumer,
         {cfg = #consumer_cfg{},
-         status = up :: up | suspected_down | cancelled | fading,
+         status = up :: up | suspected_down | cancelled | quiescing,
          next_msg_id = 0 :: msg_id(),
          checked_out = #{} :: #{msg_id() => msg()},
          %% max number of messages that can be sent
@@ -174,10 +172,6 @@
          unused_2
         }).
 
--type prefix_msgs() :: {list(), list()} |
-                       {non_neg_integer(), list(),
-                        non_neg_integer(), list()}.
-
 -record(rabbit_fifo,
         {cfg :: #cfg{},
          % unassigned messages
@@ -199,7 +193,7 @@
          ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
          unused_1,
          % consumers need to reflect consumer state at time of snapshot
-         consumers = #{} :: #{consumer_id() | ra:index() => consumer()},
+         consumers = #{} :: #{consumer_key() => consumer()},
          % consumers that require further service are queued here
          service_queue = priority_queue:new() :: priority_queue:q(),
          %% state for at-least-once dead-lettering
@@ -208,7 +202,7 @@
          msg_bytes_checkout = 0 :: non_neg_integer(),
          %% one is picked if active consumer is cancelled or dies
          %% used only when single active consumer is on
-         waiting_consumers = [] :: [{consumer_id() | ra:index(), consumer()}],
+         waiting_consumers = [] :: [{consumer_key(), consumer()}],
          last_active :: option(non_neg_integer()),
          msg_cache :: option({ra:index(), raw_msg()}),
          unused_2
