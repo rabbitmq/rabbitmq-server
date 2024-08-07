@@ -180,7 +180,7 @@ is_compatible(_, _, _) ->
 init(Q) when ?is_amqqueue(Q) ->
     {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
     {Name, _} = MaybeLeader = amqqueue:get_pid(Q),
-    Leader = case ra_leaderboard:lookup_leader(Name) of
+    Leader = case find_leader(Q) of
                  undefined ->
                      %% leader from queue record will have to suffice
                      MaybeLeader;
@@ -1663,10 +1663,16 @@ open_files(Name) ->
     end.
 
 leader(Q) when ?is_amqqueue(Q) ->
-    {Name, Leader} = amqqueue:get_pid(Q),
-    case is_process_alive(Name, Leader) of
-        true -> Leader;
-        false -> ''
+    case find_leader(Q) of
+        undefined ->
+            '';
+        {Name, LeaderNode} ->
+            case is_process_alive(Name, LeaderNode) of
+                true ->
+                    LeaderNode;
+                false ->
+                    ''
+            end
     end.
 
 peek(Vhost, Queue, Pos) ->
@@ -1741,12 +1747,6 @@ format(Q, Ctx) when ?is_amqqueue(Q) ->
      {members, Nodes},
      {leader, LeaderNode},
      {online, Online}].
-
-is_process_alive(Name, Node) ->
-    %% don't attempt rpc if node is not already connected
-    %% as this function is used for metrics and stats and the additional
-    %% latency isn't warranted
-    erlang:is_pid(erpc_call(Node, erlang, whereis, [Name], ?RPC_TIMEOUT)).
 
 -spec quorum_messages(rabbit_amqqueue:name()) -> non_neg_integer().
 
@@ -1930,3 +1930,30 @@ wait_for_projections(Node, QName, N) ->
             timer:sleep(100),
             wait_for_projections(Node, QName, N - 1)
     end.
+
+find_leader(Q) when ?is_amqqueue(Q) ->
+    %% the get_pid field in the queue record is updated async after a leader
+    %% change, so is likely to be the more stale than the leaderboard
+    {Name, _Node} = MaybeLeader = amqqueue:get_pid(Q),
+    Leaders = case ra_leaderboard:lookup_leader(Name) of
+                 undefined ->
+                     %% leader from queue record will have to suffice
+                     [MaybeLeader];
+                 LikelyLeader ->
+                     [LikelyLeader, MaybeLeader]
+             end,
+    Nodes = [node() | nodes()],
+    case lists:search(fun ({_Nm, Nd}) ->
+                              lists:member(Nd, Nodes)
+                      end, Leaders) of
+        {value, Leader} ->
+            Leader;
+        false ->
+            undefined
+    end.
+
+is_process_alive(Name, Node) ->
+    %% don't attempt rpc if node is not already connected
+    %% as this function is used for metrics and stats and the additional
+    %% latency isn't warranted
+    erlang:is_pid(erpc_call(Node, erlang, whereis, [Name], ?RPC_TIMEOUT)).
