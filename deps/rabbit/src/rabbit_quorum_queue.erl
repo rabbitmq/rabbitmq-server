@@ -103,6 +103,8 @@
 -define(RA_SYSTEM, quorum_queues).
 -define(RA_WAL_NAME, ra_log_wal).
 
+-define(DEFAULT_DELIVERY_LIMIT, 20).
+
 -define(INFO(Str, Args),
         rabbit_log:info("[~s:~s/~b] " Str,
                         [?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY | Args])).
@@ -320,7 +322,14 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
     OverflowBin = args_policy_lookup(<<"overflow">>, fun policyHasPrecedence/2, Q),
     Overflow = overflow(OverflowBin, drop_head, QName),
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
-    DeliveryLimit = args_policy_lookup(<<"delivery-limit">>, fun min/2, Q),
+    DeliveryLimit = case args_policy_lookup(<<"delivery-limit">>, fun min/2, Q) of
+                        undefined ->
+                            rabbit_log:info("~ts: delivery_limit not set, defaulting to ~b",
+                                             [rabbit_misc:rs(QName), ?DEFAULT_DELIVERY_LIMIT]),
+                            ?DEFAULT_DELIVERY_LIMIT;
+                        DL ->
+                            DL
+                    end,
     Expires = args_policy_lookup(<<"expires">>, fun min/2, Q),
     MsgTTL = args_policy_lookup(<<"message-ttl">>, fun min/2, Q),
     #{name => Name,
