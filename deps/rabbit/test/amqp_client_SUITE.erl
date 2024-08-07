@@ -41,8 +41,6 @@ groups() ->
       [
        reliable_send_receive_with_outcomes_classic_queue,
        reliable_send_receive_with_outcomes_quorum_queue,
-       modified_classic_queue,
-       modified_quorum_queue,
        sender_settle_mode_unsettled,
        sender_settle_mode_unsettled_fanout,
        sender_settle_mode_mixed,
@@ -116,6 +114,9 @@ groups() ->
        handshake_timeout,
        credential_expires,
        attach_to_exclusive_queue,
+       modified_classic_queue,
+       modified_quorum_queue,
+       modified_dead_letter_headers_exchange,
        dead_letter_headers_exchange,
        dead_letter_reject,
        dead_letter_reject_message_order_classic_queue,
@@ -496,10 +497,10 @@ modified_quorum_queue(Config) ->
     ok = amqp10_client:settle_msg(Receiver, M2b, {modified, true, false, #{}}),
 
     {ok, M2c} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(M2c)),
     ?assertMatch(#{delivery_count := 1,
                    first_acquirer := false},
                  amqp10_msg:headers(M2c)),
-    ?assertEqual([<<"m2">>], amqp10_msg:body(M2c)),
     ok = amqp10_client:settle_msg(Receiver, M2c,
                                   {modified, true, false,
                                    #{<<"x-opt-key">> => <<"val 1">>}}),
@@ -527,6 +528,107 @@ modified_quorum_queue(Config) ->
     ok = amqp10_client:detach_link(Receiver),
     ?assertMatch({ok, #{message_count := 1}},
                  rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+%% Test that a message can be routed based on the message-annotations
+%% provided in the modified outcome.
+modified_dead_letter_headers_exchange(Config) ->
+    {Connection, Session, LinkPair} = init(Config),
+    SourceQName = <<"source quorum queue">>,
+    AppleQName = <<"dead letter classic queue receiving apples">>,
+    BananaQName = <<"dead letter quorum queue receiving bananas">>,
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair,
+                                      SourceQName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                                       <<"x-overflow">> => {utf8, <<"reject-publish">>},
+                                                       <<"x-dead-letter-strategy">> => {utf8, <<"at-least-once">>},
+                                                       <<"x-dead-letter-exchange">> => {utf8, <<"amq.headers">>}}}),
+    {ok, #{type := <<"classic">>}} = rabbitmq_amqp_client:declare_queue(
+                                       LinkPair,
+                                       AppleQName,
+                                       #{arguments => #{<<"x-queue-type">> => {utf8, <<"classic">>}}}),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair,
+                                      BananaQName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    ok = rabbitmq_amqp_client:bind_queue(
+           LinkPair, AppleQName, <<"amq.headers">>, <<>>,
+           #{<<"x-fruit">> => {utf8, <<"apple">>},
+             <<"x-match">> => {utf8, <<"any-with-x">>}}),
+    ok = rabbitmq_amqp_client:bind_queue(
+           LinkPair, BananaQName, <<"amq.headers">>, <<>>,
+           #{<<"x-fruit">> => {utf8, <<"banana">>},
+             <<"x-match">> => {utf8, <<"any-with-x">>}}),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(
+                     Session, <<"test-sender">>, rabbitmq_amqp_address:queue(SourceQName)),
+    wait_for_credit(Sender),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, rabbitmq_amqp_address:queue(SourceQName), unsettled),
+    {ok, ReceiverApple} = amqp10_client:attach_receiver_link(
+                            Session, <<"receiver apple">>, rabbitmq_amqp_address:queue(AppleQName), unsettled),
+    {ok, ReceiverBanana} = amqp10_client:attach_receiver_link(
+                             Session, <<"receiver banana">>, rabbitmq_amqp_address:queue(BananaQName), unsettled),
+
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>)),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t2">>, <<"m2">>)),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:set_message_annotations(
+                                          #{"x-fruit" => <<"apple">>},
+                                          amqp10_msg:new(<<"t3">>, <<"m3">>))),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:set_message_annotations(
+                                          #{"x-fruit" => <<"apple">>},
+                                          amqp10_msg:new(<<"t4">>, <<"m4">>))),
+    ok = wait_for_accepts(3),
+
+    {ok, Msg1} = amqp10_client:get_msg(Receiver),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := true},
+                 amqp10_msg:headers(Msg1)),
+    ok = amqp10_client:settle_msg(Receiver, Msg1, {modified, true, true, #{<<"x-fruit">> => <<"banana">>}}),
+    {ok, MsgBanana1} = amqp10_client:get_msg(ReceiverBanana),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(MsgBanana1)),
+    ?assertMatch(#{delivery_count := 1,
+                   first_acquirer := false},
+                 amqp10_msg:headers(MsgBanana1)),
+    ok = amqp10_client:accept_msg(ReceiverBanana, MsgBanana1),
+
+    {ok, Msg2} = amqp10_client:get_msg(Receiver),
+    ok = amqp10_client:settle_msg(Receiver, Msg2, {modified, true, true, #{<<"x-fruit">> => <<"apple">>}}),
+    {ok, MsgApple1} = amqp10_client:get_msg(ReceiverApple),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(MsgApple1)),
+    ?assertMatch(#{delivery_count := 1,
+                   first_acquirer := false},
+                 amqp10_msg:headers(MsgApple1)),
+    ok = amqp10_client:accept_msg(ReceiverApple, MsgApple1),
+
+    {ok, Msg3} = amqp10_client:get_msg(Receiver),
+    ok = amqp10_client:settle_msg(Receiver, Msg3, {modified, false, true, #{}}),
+    {ok, MsgApple2} = amqp10_client:get_msg(ReceiverApple),
+    ?assertEqual([<<"m3">>], amqp10_msg:body(MsgApple2)),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := false},
+                 amqp10_msg:headers(MsgApple2)),
+    ok = amqp10_client:accept_msg(ReceiverApple, MsgApple2),
+
+    {ok, Msg4} = amqp10_client:get_msg(Receiver),
+    ok = amqp10_client:settle_msg(Receiver, Msg4, {modified, false, true, #{<<"x-fruit">> => <<"banana">>}}),
+    {ok, MsgBanana2} = amqp10_client:get_msg(ReceiverBanana),
+    ?assertEqual([<<"m4">>], amqp10_msg:body(MsgBanana2)),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := false},
+                 amqp10_msg:headers(MsgBanana2)),
+    ok = amqp10_client:accept_msg(ReceiverBanana, MsgBanana2),
+
+    ok = detach_link_sync(Sender),
+    ok = detach_link_sync(Receiver),
+    ok = detach_link_sync(ReceiverApple),
+    ok = detach_link_sync(ReceiverBanana),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, SourceQName),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, AppleQName),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, BananaQName),
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = end_session_sync(Session),
     ok = amqp10_client:close_connection(Connection).
@@ -4529,8 +4631,7 @@ dead_letter_reject(Config) ->
     ok = wait_for_accepted(Tag),
 
     {ok, Msg1} = amqp10_client:get_msg(Receiver),
-    ?assertMatch(#{delivery_count := 0,
-                   first_acquirer := true}, amqp10_msg:headers(Msg1)),
+    ?assertMatch(#{delivery_count := 0}, amqp10_msg:headers(Msg1)),
     ok = amqp10_client:settle_msg(Receiver, Msg1, rejected),
 
     {ok, Msg2} = amqp10_client:get_msg(Receiver),

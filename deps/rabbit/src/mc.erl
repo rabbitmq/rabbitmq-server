@@ -383,6 +383,7 @@ record_death(Reason, SourceQueue,
                       routing_keys = RKeys,
                       count = 1,
                       anns = DeathAnns},
+    ReasonBin = atom_to_binary(Reason),
     Anns = case Anns0 of
                #{deaths := Deaths0} ->
                    Deaths = case Deaths0 of
@@ -406,7 +407,7 @@ record_death(Reason, SourceQueue,
                                             [{Key, NewDeath} | Deaths0]
                                     end
                             end,
-                   Anns0#{<<"x-last-death-reason">> := atom_to_binary(Reason),
+                   Anns0#{<<"x-last-death-reason">> := ReasonBin,
                           <<"x-last-death-queue">> := SourceQueue,
                           <<"x-last-death-exchange">> := Exchange,
                           deaths := Deaths};
@@ -419,7 +420,6 @@ record_death(Reason, SourceQueue,
                                 _ ->
                                     [{Key, NewDeath}]
                             end,
-                   ReasonBin = atom_to_binary(Reason),
                    Anns0#{<<"x-first-death-reason">> => ReasonBin,
                           <<"x-first-death-queue">> => SourceQueue,
                           <<"x-first-death-exchange">> => Exchange,

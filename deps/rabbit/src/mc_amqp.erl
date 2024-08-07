@@ -561,10 +561,19 @@ binary_part_bare_and_footer(Payload, Start) ->
 update_header_from_anns(undefined, Anns) ->
     update_header_from_anns(#'v1_0.header'{durable = true}, Anns);
 update_header_from_anns(Header, Anns) ->
-    FirstAcq = not maps:get(redelivered, Anns, false),
-    DeliveryCount = {uint, maps:get(delivery_count, Anns, 0)},
+    DeliveryCount = case Anns of
+                        #{delivery_count := C} -> C;
+                        _ -> 0
+                    end,
+    Redelivered = case Anns of
+                      #{redelivered := R} -> R;
+                      _ -> false
+                  end,
+    FirstAcq = not Redelivered andalso
+               DeliveryCount =:= 0 andalso
+               not is_map_key(deaths, Anns),
     Header#'v1_0.header'{first_acquirer = FirstAcq,
-                         delivery_count = DeliveryCount}.
+                         delivery_count = {uint, DeliveryCount}}.
 
 encode_deaths(Deaths) ->
     lists:map(
