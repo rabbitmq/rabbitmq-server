@@ -247,6 +247,16 @@ init_per_testcase(T, Config)
             {skip, "Feature flag rabbitmq_4.0.0 is disabled"}
     end;
 init_per_testcase(T, Config)
+  when T =:= modified_quorum_queue orelse
+       T =:= modified_dead_letter_headers_exchange ->
+    case rpc(Config, rabbit_feature_flags, is_enabled, ['rabbitmq_4.0.0']) of
+        true ->
+            rabbit_ct_helpers:testcase_started(Config, T);
+        false ->
+            {skip, "Feature flag rabbitmq_4.0.0 is disabled, but needed for "
+             "the new #modify{} command being sent to quorum queues."}
+    end;
+init_per_testcase(T, Config)
   when T =:= detach_requeues_one_session_classic_queue orelse
        T =:= detach_requeues_drop_head_classic_queue orelse
        T =:= detach_requeues_two_connections_classic_queue orelse
