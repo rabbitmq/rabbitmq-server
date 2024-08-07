@@ -14,28 +14,30 @@
 
 -compile(export_all).
 
--define(DYN_RUNNING_METRIC(Gauge), #'MetricFamily'{name = <<"rabbitmq_shovel_dynamic">>,
-                                                   help = "Current number of dynamic shovels.",type = 'GAUGE',
-                                                   metric = [#'Metric'{label = [#'LabelPair'{name = <<"status">>,
-                                                                                             value = <<"running">>}],
-                                                                       gauge = #'Gauge'{value = Gauge},
-                                                                       counter = undefined,summary = undefined,untyped = undefined,
-                                                                       histogram = undefined,timestamp_ms = undefined}]}).
+-define(DYN_RUNNING_METRIC(Gauge),
+        #'MetricFamily'{name = <<"rabbitmq_shovel_dynamic">>,
+                        help = "Current number of dynamic shovels",type = 'GAUGE',
+                        metric = [#'Metric'{label = [#'LabelPair'{name = <<"status">>,
+                                                                  value = <<"running">>}],
+                                            gauge = #'Gauge'{value = Gauge},
+                                            counter = undefined,summary = undefined,untyped = undefined,
+                                            histogram = undefined,timestamp_ms = undefined}]}).
 
--define(STAT_RUNNING_METRIC(Gauge), #'MetricFamily'{name = <<"rabbitmq_shovel_static">>,
-                                                    help = "Current number of static shovels.",type = 'GAUGE',
-                                                    metric = [#'Metric'{label = [#'LabelPair'{name = <<"status">>,
-                                                                                              value = <<"running">>}],
-                                                                        gauge = #'Gauge'{value = Gauge},
-                                                                        counter = undefined,summary = undefined,untyped = undefined,
-                                                                        histogram = undefined,timestamp_ms = undefined}]}).
+-define(STAT_RUNNING_METRIC(Gauge),
+        #'MetricFamily'{name = <<"rabbitmq_shovel_static">>,
+                        help = "Current number of static shovels",type = 'GAUGE',
+                        metric = [#'Metric'{label = [#'LabelPair'{name = <<"status">>,
+                                                                  value = <<"running">>}],
+                                            gauge = #'Gauge'{value = Gauge},
+                                            counter = undefined,summary = undefined,untyped = undefined,
+                                            histogram = undefined,timestamp_ms = undefined}]}).
 
 -define(EMPTY_DYN_METRIC, #'MetricFamily'{name = <<"rabbitmq_shovel_dynamic">>,
-                                           help = "Current number of dynamic shovels.",type = 'GAUGE',
+                                           help = "Current number of dynamic shovels",type = 'GAUGE',
                                            metric = []}).
 
 -define(EMPTY_STAT_METRIC, #'MetricFamily'{name = <<"rabbitmq_shovel_static">>,
-                                           help = "Current number of static shovels.",type = 'GAUGE',
+                                           help = "Current number of static shovels",type = 'GAUGE',
                                            metric = []}).
 
 
@@ -133,34 +135,50 @@ mix(Config) ->
 
 get_metrics(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
-                                 rabbitmq_prometheus_collector_test_proxy, collect_mf,
-                                 [default, prometheus_rabbitmq_shovel_collector]).
+                                 ?MODULE, collect_mf,
+                                 [default, rabbitmq_shovel_prometheus]).
 
 create_static_shovel(Config, Name) ->
-    SourceQueue =  <<"source-queue">>,
-    DestQueue =  <<"dest-queue">>,
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     Shovel = [{Name,
                [{source,
-                 [{protocol, amqp10},
-                  {uris, [rabbit_misc:format("amqp://~ts:~b",
+                 [{uris, [rabbit_misc:format("amqp://~ts:~b",
                                              [Hostname, Port])]},
-                  {source_address, SourceQueue}]
+
+                  {declarations, [ {'exchange.declare',
+                                    [ {exchange, <<"my_fanout">>},
+                                      {type, <<"fanout">>},
+                                      durable
+                                    ]},
+                                   {'queue.declare',
+                                    [{arguments,
+                                      [{<<"x-message-ttl">>, long, 60000}]}]},
+                                   {'queue.bind',
+                                    [ {exchange, <<"my_fanout">>},
+                                      {queue,    <<>>}
+                                    ]}
+                                 ]},
+                  {queue, <<>>}]
                 },
                 {destination,
-                 [{uris, [rabbit_misc:format("amqp://~ts:~b/%2f?heartbeat=5",
-                                             [Hostname, Port])]},
-                  {declarations,
-                   [{'queue.declare', [{queue, DestQueue}, auto_delete]}]},
-                  {publish_fields, [{exchange, <<>>},
-                                    {routing_key, DestQueue}]},
-                  {publish_properties, [{delivery_mode, 2},
-                                        {content_type,  <<"shovelled">>}]},
-                  {add_forward_headers, true},
-                  {add_timestamp_header, true}]},
-                {queue, <<>>},
-                {ack_mode, no_ack}
+                 [ {protocol, amqp091},
+                   {uris, ["amqp://"]},
+                   {declarations, [ {'exchange.declare',
+                                     [ {exchange, <<"my_direct">>},
+                                       {type, <<"direct">>},
+                                       durable
+                                     ]}
+                                  ]},
+                   {publish_properties, [ {delivery_mode, 2} ]},
+                   {add_forward_headers, true},
+                   {publish_fields, [ {exchange, <<"my_direct">>},
+                                      {routing_key, <<"from_shovel">>}
+                                    ]}
+                 ]},
+                {ack_mode, on_confirm},
+                {reconnect_delay, 5}
+
                ]}],
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, setup_shovel,
                                       [Shovel, Name]).
@@ -251,3 +269,11 @@ clear_param(Config, Name) ->
 clear_param(Config, Node, Name) ->
     rabbit_ct_broker_helpers:rpc(Config, Node,
       rabbit_runtime_parameters, clear, [<<"/">>, <<"shovel">>, Name, <<"acting-user">>]).
+
+-define(PD_KEY, metric_families).
+collect_mf(Registry, Collector) ->
+    put(?PD_KEY, []),
+    Collector:collect_mf(Registry, fun(MF) -> put(?PD_KEY, [MF | get(?PD_KEY)]) end),
+    MFs = lists:reverse(get(?PD_KEY)),
+    erase(?PD_KEY),
+    MFs.
