@@ -185,6 +185,9 @@ emqtt:
 - emqtt_ws
 enough:
 - enough
+eunit_formatters:
+- binomial_heap
+- eunit_progress
 gen_batch_server:
 - gen_batch_server
 getopt:
@@ -890,6 +893,8 @@ rabbitmq_federation:
 - rabbit_log_federation
 rabbitmq_federation_management:
 - rabbit_federation_mgmt
+rabbitmq_federation_prometheus:
+- rabbitmq_federation_prometheus
 rabbitmq_jms_topic_exchange:
 - rabbit_db_jms_exchange
 - rabbit_db_jms_exchange_m2k_converter
@@ -1084,9 +1089,7 @@ rabbitmq_prometheus:
 - prometheus_rabbitmq_alarm_metrics_collector
 - prometheus_rabbitmq_core_metrics_collector
 - prometheus_rabbitmq_dynamic_collector
-- prometheus_rabbitmq_federation_collector
 - prometheus_rabbitmq_global_metrics_collector
-- prometheus_rabbitmq_shovel_collector
 - rabbit_prometheus_app
 - rabbit_prometheus_dispatcher
 - rabbit_prometheus_handler
@@ -1125,6 +1128,8 @@ rabbitmq_shovel:
 rabbitmq_shovel_management:
 - rabbit_shovel_mgmt
 - rabbit_shovel_mgmt_util
+rabbitmq_shovel_prometheus:
+- rabbitmq_shovel_prometheus
 rabbitmq_stomp:
 - Elixir.RabbitMQ.CLI.Ctl.Commands.ListStompConnectionsCommand
 - rabbit_stomp

@@ -15,6 +15,7 @@ PLUGINS := rabbitmq_amqp1_0 \
 	   rabbitmq_event_exchange \
 	   rabbitmq_federation \
 	   rabbitmq_federation_management \
+	   rabbitmq_federation_prometheus \
 	   rabbitmq_jms_topic_exchange \
 	   rabbitmq_management \
 	   rabbitmq_management_agent \
@@ -30,6 +31,7 @@ PLUGINS := rabbitmq_amqp1_0 \
 	   rabbitmq_sharding \
 	   rabbitmq_shovel \
 	   rabbitmq_shovel_management \
+	   rabbitmq_shovel_prometheus \
 	   rabbitmq_stomp \
 	   rabbitmq_stream \
 	   rabbitmq_stream_management \

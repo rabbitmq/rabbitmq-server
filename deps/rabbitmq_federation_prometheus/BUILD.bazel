@@ -17,47 +17,53 @@ load(
     "test_suite_beam_files",
 )
 
-APP_NAME = "rabbitmq_prometheus"
-
-APP_MODULE = "rabbit_prometheus_app"
+# gazelle:erlang_always_generate_test_beam_files
 
 APP_ENV = """[
-	    {return_per_object_metrics, false},
-	    {tcp_config, [{port, 15692}]},
-	    {ssl_config, []}
 ]"""
+
+all_srcs(name = "all_srcs")
 
 all_beam_files(name = "all_beam_files")
 
 all_test_beam_files(name = "all_test_beam_files")
 
-all_srcs(name = "all_srcs")
-
 test_suite_beam_files(name = "test_suite_beam_files")
 
-# gazelle:erlang_app_dep rabbitmq_management_agent
-# gazelle:erlang_app_dep_exclude amqp_client
-# gazelle:erlang_app_dep_exclude rabbit_common
+# gazelle:erlang_app_extra_app crypto
+
+# gazelle:erlang_app_dep rabbit
+# gazelle:erlang_app_dep rabbitmq_prometheus
+
+# gazelle:erlang_app_dep_exclude prometheus
 
 rabbitmq_app(
     name = "erlang_app",
     srcs = [":all_srcs"],
     hdrs = [":public_hdrs"],
-    app_description = "Prometheus metrics for RabbitMQ",
+    app_description = "Exposes rabbitmq_federation metrics to Prometheus",
     app_env = APP_ENV,
-    app_module = APP_MODULE,
-    app_name = APP_NAME,
+    app_module = "rabbitmq_federation_prometheus",
+    app_name = "rabbitmq_federation_prometheus",
+    app_version = module_version(),
     beam_files = [":beam_files"],
+    extra_apps = [
+        "crypto",
+        "rabbit_common",
+    ],
     license_files = [":license_files"],
     priv = [":priv"],
     deps = [
         "//deps/rabbit:erlang_app",
-        "//deps/rabbitmq_management_agent:erlang_app",
-        "//deps/rabbitmq_web_dispatch:erlang_app",
-        "@accept//:erlang_app",
-        "@cowboy//:erlang_app",
-        "@prometheus//:erlang_app",
+        "//deps/rabbitmq_federation:erlang_app",
+        "//deps/rabbitmq_prometheus:erlang_app",
     ],
+)
+
+alias(
+    name = "rabbitmq_federation_prometheus",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )
 
 xref(
@@ -69,7 +75,9 @@ plt(
     name = "deps_plt",
     for_target = ":erlang_app",
     ignore_warnings = True,
+    libs = ["//deps/rabbitmq_cli:elixir"],  # keep
     plt = "//:base_plt",
+    deps = ["//deps/rabbitmq_cli:erlang_app"],  # keep
 )
 
 dialyze(
@@ -79,29 +87,18 @@ dialyze(
     target = ":erlang_app",
 )
 
-eunit(
-    name = "eunit",
-    compiled_suites = [":rabbitmq_prometheus_collector_test_proxy_beam_files"],  #keep
-    target = ":test_erlang_app",
-)
-
 broker_for_integration_suites()
 
 rabbitmq_integration_suite(
-    name = "config_schema_SUITE",
+    name = "prometheus_rabbitmq_federation_collector_SUITE",
     size = "small",
-)
-
-rabbitmq_integration_suite(
-    name = "rabbit_prometheus_http_SUITE",
-    size = "medium",
-    flaky = True,
+    additional_beam = [
+    ],
 )
 
 assert_suites()
 
-alias(
-    name = "rabbitmq_prometheus",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
+eunit(
+    name = "eunit",
+    target = ":test_erlang_app",
 )
