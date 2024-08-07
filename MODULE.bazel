@@ -147,8 +147,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "cuttlefish",
     build_file = "@rabbitmq-server//bazel:BUILD.cuttlefish",
-    sha256 = "ce49cf9793fe913c4f5f3841ad648d7b6a231451bd646c24438b02a68866c20e",
-    version = "3.3.0",
+    sha256 = "43cadd7f34b3dbbab52a7f4110d1df276a13cff5e11afe0f5a774f69f012b76b",
+    version = "3.4.0",
 )
 
 erlang_package.hex_package(
