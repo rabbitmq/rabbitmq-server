@@ -272,8 +272,8 @@ apply(Meta, #discard{consumer_key = ConsumerKey,
     end;
 apply(Meta, #return{consumer_key = ConsumerKey,
                     msg_ids = MsgIds},
-      #?STATE{consumers = Cons0} = State) ->
-    case find_consumer(ConsumerKey, Cons0) of
+      #?STATE{consumers = Cons} = State) ->
+    case find_consumer(ConsumerKey, Cons) of
         {ActualConsumerKey, #consumer{checked_out = Checked}} ->
             return(Meta, ActualConsumerKey, MsgIds, false,
                    #{}, Checked, [], State);
@@ -285,34 +285,34 @@ apply(Meta, #modify{consumer_key = ConsumerKey,
                     undeliverable_here = Undel,
                     annotations = Anns,
                     msg_ids = MsgIds},
-      #?STATE{consumers = Cons0} = State0) ->
-    case find_consumer(ConsumerKey, Cons0) of
+      #?STATE{consumers = Cons} = State) ->
+    case find_consumer(ConsumerKey, Cons) of
         {ConsumerKey, #consumer{checked_out = Checked}}
           when Undel == false ->
             return(Meta, ConsumerKey, MsgIds, DelFailed,
-                   Anns, Checked, [], State0);
+                   Anns, Checked, [], State);
         {ConsumerKey, #consumer{} = Con}
           when Undel == true ->
-            discard(Meta, MsgIds, ConsumerKey, Con, DelFailed, Anns, State0);
+            discard(Meta, MsgIds, ConsumerKey, Con, DelFailed, Anns, State);
         _ ->
-            {State0, ok}
+            {State, ok}
     end;
 apply(#{index := Idx} = Meta,
       #requeue{consumer_key = ConsumerKey,
                msg_id = MsgId,
                index = OldIdx,
                header = Header0},
-      #?STATE{consumers = Cons0,
+      #?STATE{consumers = Cons,
               messages = Messages,
               ra_indexes = Indexes0,
               enqueue_count = EnqCount} = State00) ->
     %% the actual consumer key was looked up in the aux handler so we
     %% dont need to use find_consumer/2 here
-    case Cons0 of
+    case Cons of
         #{ConsumerKey := #consumer{checked_out = Checked0} = Con0}
           when is_map_key(MsgId, Checked0) ->
             %% construct a message with the current raft index
-            %% and update delivery count before adding it to the message queue
+            %% and update acquired count before adding it to the message queue
             Header = update_header(acquired_count, fun incr/1, 1, Header0),
             State0 = add_bytes_return(Header, State00),
             Con = Con0#consumer{checked_out = maps:remove(MsgId, Checked0),
@@ -660,9 +660,7 @@ convert_v3_to_v4(#{} = _Meta, StateV3) ->
                                      (_, Msg) ->
                                          Msg
                                  end, Ch0),
-                          C#consumer{checked_out = Ch};
-                      (_, Msg) ->
-                          Msg
+                          C#consumer{checked_out = Ch}
                   end, Consumers0),
     Returns = lqueue:from_list(
                 lists:map(fun (?MSG(I, #{delivery_count := DC} = H)) ->
@@ -696,7 +694,7 @@ purge_node(Meta, Node, State, Effects) ->
                 end, {State, Effects},
                 all_pids_for(Node, State)).
 
-%% any downs that re not noconnection
+%% any downs that are not noconnection
 handle_down(Meta, Pid, #?STATE{consumers = Cons0,
                                enqueuers = Enqs0} = State0) ->
     % Remove any enqueuer for the down pid
@@ -1827,11 +1825,10 @@ annotate_msg(Header, Msg0) ->
             Msg = maps:fold(fun (K, V, Acc) ->
                                     mc:set_annotation(K, V, Acc)
                             end, Msg0, maps:get(anns, Header, #{})),
-            case is_map_key(delivery_count, Header) of
-                true ->
-                    mc:set_annotation(delivery_count,
-                                      maps:get(delivery_count, Header), Msg);
-                false ->
+            case Header of
+                #{delivery_count := DelCount} ->
+                    mc:set_annotation(delivery_count, DelCount, Msg);
+                _ ->
                     Msg
             end;
         _ ->
@@ -1849,7 +1846,7 @@ return_one(Meta, MsgId, ?MSG(_, _) = Msg0, DelivFailed, Anns,
     Msg = incr_msg(Msg0, DelivFailed, Anns),
     Header = get_msg_header(Msg),
     case get_header(acquired_count, Header) of
-        DeliveryCount when DeliveryCount > DeliveryLimit ->
+        AcquiredCount when AcquiredCount > DeliveryLimit ->
             {DlxState, DlxEffects} =
                 rabbit_fifo_dlx:discard([Msg], delivery_limit, DLH, DlxState0),
             State1 = State0#?STATE{dlx = DlxState},

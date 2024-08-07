@@ -1862,7 +1862,7 @@ settle_op_from_outcome(#'v1_0.rejected'{}) ->
 settle_op_from_outcome(#'v1_0.released'{}) ->
     requeue;
 
-%% RabbitMQ does not support any of the modified outcome fields correctly.
+%% Not all queue types support the modified outcome fields correctly.
 %% However, we still allow the client to settle with the modified outcome
 %% because some client libraries such as Apache QPid make use of it:
 %% https://github.com/apache/qpid-jms/blob/90eb60f59cb59b7b9ad8363ee8a843d6903b8e77/qpid-jms-client/src/main/java/org/apache/qpid/jms/JmsMessageConsumer.java#L464
@@ -1871,7 +1871,7 @@ settle_op_from_outcome(#'v1_0.released'{}) ->
 settle_op_from_outcome(#'v1_0.modified'{delivery_failed = DelFailed,
                                         undeliverable_here = UndelHere,
                                         message_annotations = Anns0
-                                        }) ->
+                                       }) ->
     Anns = case Anns0 of
                #'v1_0.message_annotations'{content = C} ->
                    C;

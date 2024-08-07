@@ -41,7 +41,8 @@ groups() ->
       [
        reliable_send_receive_with_outcomes_classic_queue,
        reliable_send_receive_with_outcomes_quorum_queue,
-       modified,
+       modified_classic_queue,
+       modified_quorum_queue,
        sender_settle_mode_unsettled,
        sender_settle_mode_unsettled_fanout,
        sender_settle_mode_mixed,
@@ -403,11 +404,59 @@ reliable_send_receive(QType, Outcome, Config) ->
     ok = end_session_sync(Session2),
     ok = amqp10_client:close_connection(Connection2).
 
-%% This test case doesn't expect the correct AMQP spec behavivour.
-%% We know that RabbitMQ doesn't implement the modified outcome correctly.
-%% Here, we test RabbitMQ's workaround behaviour:
-%% RabbitMQ discards if undeliverable-here is true. Otherwise, RabbitMQ requeues.
-modified(Config) ->
+%% We test the modified outcome with classic queues.
+%% We expect that classic queues implement field undeliverable-here incorrectly
+%% by discarding (if true) or requeueing (if false).
+%% Fields delivery-failed and message-annotations are not implemented.
+modified_classic_queue(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, #{type := <<"classic">>}} = rabbitmq_amqp_client:declare_queue(
+                                       LinkPair, QName,
+                                       #{arguments => #{<<"x-queue-type">> => {utf8, <<"classic">>}}}),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+
+    Msg1 = amqp10_msg:new(<<"tag1">>, <<"m1">>, true),
+    Msg2 = amqp10_msg:new(<<"tag2">>, <<"m2">>, true),
+    ok = amqp10_client:send_msg(Sender, Msg1),
+    ok = amqp10_client:send_msg(Sender, Msg2),
+    ok = amqp10_client:detach_link(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, Address, unsettled),
+
+    {ok, M1} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(M1)),
+    ok = amqp10_client:settle_msg(Receiver, M1, {modified, false, true, #{}}),
+
+    {ok, M2a} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(M2a)),
+    ok = amqp10_client:settle_msg(Receiver, M2a,
+                                  {modified, false, false, #{}}),
+
+    {ok, M2b} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(M2b)),
+    ok = amqp10_client:settle_msg(Receiver, M2b,
+                                  {modified, true, false, #{<<"x-opt-key">> => <<"val">>}}),
+
+    {ok, M2c} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(M2c)),
+    ok = amqp10_client:settle_msg(Receiver, M2c, modified),
+
+    ok = amqp10_client:detach_link(Receiver),
+    ?assertMatch({ok, #{message_count := 1}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+%% We test the modified outcome with quorum queues.
+%% We expect that quorum queues implement field
+%% * delivery-failed correctly
+%% * undeliverable-here incorrectly by discarding (if true) or requeueing (if false)
+%% * message-annotations correctly
+modified_quorum_queue(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     {Connection, Session, LinkPair} = init(Config),
     {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
@@ -427,34 +476,53 @@ modified(Config) ->
 
     {ok, M1} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m1">>], amqp10_msg:body(M1)),
-    ?assertEqual(0, amqp10_msg:header(delivery_count, M1)),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := true},
+                 amqp10_msg:headers(M1)),
+    ok = amqp10_client:settle_msg(Receiver, M1, {modified, false, true, #{}}),
 
-    ok = amqp10_client:settle_msg(Receiver, M1, {modified, false,
-                                                 _UndeliverableHere = true, #{}}),
     {ok, M2a} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m2">>], amqp10_msg:body(M2a)),
-    ?assertEqual(0, amqp10_msg:header(delivery_count, M2a)),
-
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := true},
+                 amqp10_msg:headers(M2a)),
     ok = amqp10_client:settle_msg(Receiver, M2a, {modified, false, false, #{}}),
+
     {ok, M2b} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m2">>], amqp10_msg:body(M2b)),
-    ?assertEqual(0, amqp10_msg:header(delivery_count, M2b)),
-
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := false},
+                 amqp10_msg:headers(M2b)),
     ok = amqp10_client:settle_msg(Receiver, M2b, {modified, true, false, #{}}),
+
     {ok, M2c} = amqp10_client:get_msg(Receiver),
-    ?assertEqual(1, amqp10_msg:header(delivery_count, M2c)),
+    ?assertMatch(#{delivery_count := 1,
+                   first_acquirer := false},
+                 amqp10_msg:headers(M2c)),
     ?assertEqual([<<"m2">>], amqp10_msg:body(M2c)),
-
-
     ok = amqp10_client:settle_msg(Receiver, M2c,
                                   {modified, true, false,
-                                   #{<<"x-opt-key">> => <<"val">>}}),
+                                   #{<<"x-opt-key">> => <<"val 1">>}}),
 
     {ok, M2d} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m2">>], amqp10_msg:body(M2d)),
-    ?assertEqual(2, amqp10_msg:header(delivery_count, M2d)),
-    ?assertMatch(#{<<"x-opt-key">> := <<"val">>}, amqp10_msg:message_annotations(M2d)),
-    ok = amqp10_client:settle_msg(Receiver, M2d, modified),
+    ?assertMatch(#{delivery_count := 2,
+                   first_acquirer := false},
+                 amqp10_msg:headers(M2d)),
+    ?assertMatch(#{<<"x-opt-key">> := <<"val 1">>}, amqp10_msg:message_annotations(M2d)),
+    ok = amqp10_client:settle_msg(Receiver, M2d,
+                                  {modified, false, false,
+                                   #{<<"x-opt-key">> => <<"val 2">>,
+                                     <<"x-other">> => 99}}),
+
+    {ok, M2e} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(M2e)),
+    ?assertMatch(#{delivery_count := 2,
+                   first_acquirer := false},
+                 amqp10_msg:headers(M2e)),
+    ?assertMatch(#{<<"x-opt-key">> := <<"val 2">>,
+                   <<"x-other">> := 99}, amqp10_msg:message_annotations(M2e)),
+    ok = amqp10_client:settle_msg(Receiver, M2e, modified),
 
     ok = amqp10_client:detach_link(Receiver),
     ?assertMatch({ok, #{message_count := 1}},
@@ -4429,6 +4497,7 @@ dead_letter_reject(Config) ->
                                       QName1,
                                       #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
                                                        <<"x-message-ttl">> => {ulong, 20},
+                                                       <<"x-overflow">> => {utf8, <<"reject-publish">>},
                                                        <<"x-dead-letter-strategy">> => {utf8, <<"at-least-once">>},
                                                        <<"x-dead-letter-exchange">> => {utf8, <<>>},
                                                        <<"x-dead-letter-routing-key">> => {utf8, QName2}
@@ -4463,22 +4532,22 @@ dead_letter_reject(Config) ->
     ?assertMatch(#{delivery_count := 0,
                    first_acquirer := true}, amqp10_msg:headers(Msg1)),
     ok = amqp10_client:settle_msg(Receiver, Msg1, rejected),
+
     {ok, Msg2} = amqp10_client:get_msg(Receiver),
     ?assertMatch(#{delivery_count := 1,
                    first_acquirer := false}, amqp10_msg:headers(Msg2)),
     ok = amqp10_client:settle_msg(Receiver, Msg2,
                                   {modified, true, true,
                                    #{<<"x-opt-thekey">> => <<"val">>}}),
+
     {ok, Msg3} = amqp10_client:get_msg(Receiver),
     ?assertMatch(#{delivery_count := 2,
                    first_acquirer := false}, amqp10_msg:headers(Msg3)),
-    ?assertMatch(#{<<"x-opt-thekey">> := <<"val">>},
-                 amqp10_msg:message_annotations(Msg3)),
-    ok = amqp10_client:settle_msg(Receiver, Msg3, accepted),
     ?assertEqual(Body, amqp10_msg:body_bin(Msg3)),
     Annotations = amqp10_msg:message_annotations(Msg3),
     ?assertMatch(
-       #{<<"x-first-death-queue">> := QName1,
+       #{<<"x-opt-thekey">> := <<"val">>,
+         <<"x-first-death-queue">> := QName1,
          <<"x-first-death-exchange">> := <<>>,
          <<"x-first-death-reason">> := <<"expired">>,
          <<"x-last-death-queue">> := QName1,
@@ -4516,6 +4585,7 @@ dead_letter_reject(Config) ->
           ]} = D3,
     ?assertEqual([Ts1, Ts3, Ts5, Ts4, Ts6, Ts2],
                  lists:sort([Ts1, Ts2, Ts3, Ts4, Ts5, Ts6])),
+    ok = amqp10_client:settle_msg(Receiver, Msg3, accepted),
 
     ok = amqp10_client:detach_link(Receiver),
     ok = amqp10_client:detach_link(Sender),

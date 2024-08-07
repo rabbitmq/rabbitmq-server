@@ -333,7 +333,7 @@ cancel(Q, Spec, State) ->
 -spec settle(rabbit_amqqueue:name(), rabbit_queue_type:settle_op(),
              rabbit_types:ctag(), [non_neg_integer()], state()) ->
     {state(), rabbit_queue_type:actions()}.
-settle(QName, {modify, _DelFailed, Undel, _}, CTag, MsgIds, State) ->
+settle(QName, {modify, _DelFailed, Undel, _Anns}, CTag, MsgIds, State) ->
     %% translate modify into other op
     Op = case Undel of
              true ->

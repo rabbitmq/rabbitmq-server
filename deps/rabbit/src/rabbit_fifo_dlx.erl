@@ -362,5 +362,5 @@ dehydrate(State) ->
 smallest_raft_index(#?MODULE{ra_indexes = Indexes}) ->
     rabbit_fifo_index:smallest(Indexes).
 
-annotate_msg(H, M0) ->
-    rabbit_fifo:annotate_msg(H, M0).
+annotate_msg(H, Msg) ->
+    rabbit_fifo:annotate_msg(H, Msg).
