@@ -402,8 +402,8 @@ handle_connection_frame(
     rabbit_core_metrics:auth_attempt_succeeded(<<>>, Username, amqp10),
     notify_auth(user_authentication_success, Username, State0),
     rabbit_log_connection:info(
-      "AMQP 1.0 connection: user '~ts' authenticated and granted access to vhost '~ts'",
-      [Username, Vhost]),
+      "AMQP 1.0 connection '~ts': user '~ts' authenticated and granted access to vhost '~ts'",
+      [ConnectionName, Username, Vhost]),
 
     OutgoingMaxFrameSize = case ClientMaxFrame of
                                undefined ->
