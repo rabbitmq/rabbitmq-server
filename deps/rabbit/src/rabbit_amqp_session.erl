@@ -50,7 +50,6 @@
 %% or by remote-incoming window (i.e. session flow control).
 -define(DEFAULT_MAX_QUEUE_CREDIT, 256).
 -define(DEFAULT_MAX_INCOMING_WINDOW, 400).
--define(MAX_LINK_CREDIT, persistent_term:get(max_link_credit)).
 -define(MAX_MANAGEMENT_LINK_CREDIT, 8).
 -define(MANAGEMENT_NODE_ADDRESS, <<"/management">>).
 -define(UINT_OUTGOING_WINDOW, {uint, ?UINT_MAX}).
@@ -253,7 +252,9 @@
           resource_alarms :: sets:set(rabbit_alarm:resource_alarm_source()),
           trace_state :: rabbit_trace:state(),
           conn_name :: binary(),
-          max_incoming_window :: pos_integer()
+          max_incoming_window :: pos_integer(),
+          max_link_credit :: pos_integer(),
+          max_queue_credit :: pos_integer()
          }).
 
 -record(state, {
@@ -386,8 +387,6 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ConnName,
     true = is_valid_max(MaxLinkCredit),
     true = is_valid_max(MaxQueueCredit),
     true = is_valid_max(MaxIncomingWindow),
-    ok = persistent_term:put(max_link_credit, MaxLinkCredit),
-    ok = persistent_term:put(max_queue_credit, MaxQueueCredit),
     IncomingWindow = case sets:is_empty(Alarms) of
                          true -> MaxIncomingWindow;
                          false -> 0
@@ -420,7 +419,9 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ConnName,
                            resource_alarms = Alarms,
                            trace_state = rabbit_trace:init(Vhost),
                            conn_name = ConnName,
-                           max_incoming_window = MaxIncomingWindow
+                           max_incoming_window = MaxIncomingWindow,
+                           max_link_credit = MaxLinkCredit,
+                           max_queue_credit = MaxQueueCredit
                           }}}.
 
 terminate(_Reason, #state{incoming_links = IncomingLinks,
@@ -582,7 +583,8 @@ send_delivery_state_changes(#state{stashed_rejected = [],
                                    stashed_eol = []} = State) ->
     State;
 send_delivery_state_changes(State0 = #state{cfg = #cfg{writer_pid = Writer,
-                                                       channel_num = ChannelNum}}) ->
+                                                       channel_num = ChannelNum,
+                                                       max_link_credit = MaxLinkCredit}}) ->
     %% Order is important:
     %% 1. Process queue rejections.
     {RejectedIds, GrantCredits0, State1} = handle_stashed_rejected(State0),
@@ -603,7 +605,7 @@ send_delivery_state_changes(State0 = #state{cfg = #cfg{writer_pid = Writer,
                           rabbit_amqp_writer:send_command(Writer, ChannelNum, Frame)
                   end, DetachFrames),
     maps:foreach(fun(HandleInt, DeliveryCount) ->
-                         F0 = flow(?UINT(HandleInt), DeliveryCount),
+                         F0 = flow(?UINT(HandleInt), DeliveryCount, MaxLinkCredit),
                          F = session_flow_fields(F0, State),
                          rabbit_amqp_writer:send_command(Writer, ChannelNum, F)
                  end, GrantCredits),
@@ -611,7 +613,8 @@ send_delivery_state_changes(State0 = #state{cfg = #cfg{writer_pid = Writer,
 
 handle_stashed_rejected(#state{stashed_rejected = []} = State) ->
     {[], #{}, State};
-handle_stashed_rejected(#state{stashed_rejected = Actions,
+handle_stashed_rejected(#state{cfg = #cfg{max_link_credit = MaxLinkCredit},
+                               stashed_rejected = Actions,
                                incoming_links = Links} = State0) ->
     {Ids, GrantCredits, Ls} =
     lists:foldl(
@@ -628,7 +631,8 @@ handle_stashed_rejected(#state{stashed_rejected = Actions,
                                                end,
                                         Link1 = Link0#incoming_link{incoming_unconfirmed_map = U},
                                         {Link, GrantCreds} = maybe_grant_link_credit(
-                                                               HandleInt, Link1, GrantCreds0),
+                                                               MaxLinkCredit, HandleInt,
+                                                               Link1, GrantCreds0),
                                         {Ids1, GrantCreds, maps:update(HandleInt, Link, Links0)};
                                     error ->
                                         Acc
@@ -645,7 +649,8 @@ handle_stashed_rejected(#state{stashed_rejected = Actions,
 
 handle_stashed_settled(GrantCredits, #state{stashed_settled = []} = State) ->
     {[], GrantCredits, State};
-handle_stashed_settled(GrantCredits0, #state{stashed_settled = Actions,
+handle_stashed_settled(GrantCredits0, #state{cfg = #cfg{max_link_credit = MaxLinkCredit},
+                                             stashed_settled = Actions,
                                              incoming_links = Links} = State0) ->
     {Ids, GrantCredits, Ls} =
     lists:foldl(
@@ -674,7 +679,8 @@ handle_stashed_settled(GrantCredits0, #state{stashed_settled = Actions,
                                         end,
                                         Link1 = Link0#incoming_link{incoming_unconfirmed_map = U},
                                         {Link, GrantCreds} = maybe_grant_link_credit(
-                                                               HandleInt, Link1, GrantCreds0),
+                                                               MaxLinkCredit, HandleInt,
+                                                               Link1, GrantCreds0),
                                         {Ids2, GrantCreds, maps:update(HandleInt, Link, Links0)};
                                     _ ->
                                         Acc
@@ -714,11 +720,14 @@ handle_stashed_down(#state{stashed_down = QNames,
 
 handle_stashed_eol(DetachFrames, GrantCredits, #state{stashed_eol = []} = State) ->
     {[], [], DetachFrames, GrantCredits, State};
-handle_stashed_eol(DetachFrames0, GrantCredits0, #state{stashed_eol = Eols} = State0) ->
+handle_stashed_eol(DetachFrames0, GrantCredits0, #state{cfg = #cfg{max_link_credit = MaxLinkCredit},
+                                                        stashed_eol = Eols} = State0) ->
     {ReleasedIs, AcceptedIds, DetachFrames, GrantCredits, State1} =
     lists:foldl(fun(QName, {RIds0, AIds0, DetachFrames1, GrantCreds0, S0 = #state{incoming_links = Links0,
                                                                                   queue_states = QStates0}}) ->
-                        {RIds, AIds, GrantCreds1, Links} = settle_eol(QName, {RIds0, AIds0, GrantCreds0, Links0}),
+                        {RIds, AIds, GrantCreds1, Links} = settle_eol(
+                                                             QName, MaxLinkCredit,
+                                                             {RIds0, AIds0, GrantCreds0, Links0}),
                         QStates = rabbit_queue_type:remove(QName, QStates0),
                         S1 = S0#state{incoming_links = Links,
                                       queue_states = QStates},
@@ -729,14 +738,14 @@ handle_stashed_eol(DetachFrames0, GrantCredits0, #state{stashed_eol = Eols} = St
     State = State1#state{stashed_eol = []},
     {ReleasedIs, AcceptedIds, DetachFrames, GrantCredits, State}.
 
-settle_eol(QName, {_ReleasedIds, _AcceptedIds, _GrantCredits, Links} = Acc) ->
+settle_eol(QName, MaxLinkCredit, {_ReleasedIds, _AcceptedIds, _GrantCredits, Links} = Acc) ->
     maps:fold(fun(HandleInt,
                   #incoming_link{incoming_unconfirmed_map = U0} = Link0,
                   {RelIds0, AcceptIds0, GrantCreds0, Links0}) ->
                       {RelIds, AcceptIds, U} = settle_eol0(QName, {RelIds0, AcceptIds0, U0}),
                       Link1 = Link0#incoming_link{incoming_unconfirmed_map = U},
                       {Link, GrantCreds} = maybe_grant_link_credit(
-                                             HandleInt, Link1, GrantCreds0),
+                                             MaxLinkCredit, HandleInt, Link1, GrantCreds0),
                       Links1 = maps:update(HandleInt,
                                            Link,
                                            Links0),
@@ -984,7 +993,8 @@ handle_control(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
                              } = Attach,
                State0 = #state{incoming_links = IncomingLinks0,
                                permission_cache = PermCache0,
-                               cfg = #cfg{vhost = Vhost,
+                               cfg = #cfg{max_link_credit = MaxLinkCredit,
+                                          vhost = Vhost,
                                           user = User}}) ->
     ok = validate_attach(Attach),
     case ensure_target(Target, Vhost, User, PermCache0) of
@@ -994,7 +1004,7 @@ handle_control(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
                               routing_key = RoutingKey,
                               queue_name_bin = QNameBin,
                               delivery_count = DeliveryCountInt,
-                              credit = ?MAX_LINK_CREDIT},
+                              credit = MaxLinkCredit},
             _Outcomes = outcomes(Source),
             Reply = #'v1_0.attach'{
                        name = LinkName,
@@ -1008,7 +1018,7 @@ handle_control(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
                        max_message_size = {ulong, persistent_term:get(max_message_size)}},
             Flow = #'v1_0.flow'{handle = Handle,
                                 delivery_count = DeliveryCount,
-                                link_credit = ?UINT(?MAX_LINK_CREDIT)},
+                                link_credit = ?UINT(MaxLinkCredit)},
             %%TODO check that handle is not in use for any other open links.
             %%"The handle MUST NOT be used for other open links. An attempt to attach
             %% using a handle which is already associated with a link MUST be responded to
@@ -1458,7 +1468,7 @@ handle_credit_reply0(
                   CCredit > 0 ->
             QName = Link0#outgoing_link.queue_name,
             %% Provide queue next batch of credits.
-            CappedCredit = cap_credit(CCredit),
+            CappedCredit = cap_credit(CCredit, S0#state.cfg#cfg.max_queue_credit),
             {ok, QStates, Actions} =
             rabbit_queue_type:credit(
               QName, Ctag, DeliveryCount, CappedCredit, false, QStates0),
@@ -1496,7 +1506,8 @@ handle_credit_reply0(
                                 } = QFC,
              stashed_credit_req = StashedCreditReq},
   S0 = #state{cfg = #cfg{writer_pid = Writer,
-                         channel_num = ChanNum},
+                         channel_num = ChanNum,
+                         max_queue_credit = MaxQueueCredit},
               outgoing_links = OutgoingLinks,
               queue_states = QStates0}) ->
     %% If the queue sent us a drain credit_reply,
@@ -1512,7 +1523,7 @@ handle_credit_reply0(
             %% the current drain credit top-up rounds over a stashed credit request because
             %% this is easier to reason about and the queue will reply promptly meaning
             %% the stashed request will be processed soon enough.
-            CappedCredit = cap_credit(CCredit),
+            CappedCredit = cap_credit(CCredit, MaxQueueCredit),
             {ok, QStates, Actions} = rabbit_queue_type:credit(
                                        QName, Ctag, DeliveryCount,
                                        CappedCredit, true, QStates0),
@@ -1578,11 +1589,12 @@ pop_credit_req(
                                      drain = Drain,
                                      echo = Echo
                                     }},
-  S0 = #state{outgoing_links = OutgoingLinks,
+  S0 = #state{cfg = #cfg{max_queue_credit = MaxQueueCredit},
+              outgoing_links = OutgoingLinks,
               queue_states = QStates0}) ->
     LinkCreditSnd = amqp10_util:link_credit_snd(
                       DeliveryCountRcv, LinkCreditRcv, CDeliveryCount),
-    CappedCredit = cap_credit(LinkCreditSnd),
+    CappedCredit = cap_credit(LinkCreditSnd, MaxQueueCredit),
     {ok, QStates, Actions} = rabbit_queue_type:credit(
                                QName, Ctag, QDeliveryCount,
                                CappedCredit, Drain, QStates0),
@@ -1753,7 +1765,8 @@ sent_pending_delivery(
                         %% assertion
                         none = Link0#outgoing_link.stashed_credit_req,
                         %% Provide queue next batch of credits.
-                        CappedCredit = cap_credit(CCredit),
+                        CappedCredit = cap_credit(CCredit,
+                                                  S0#state.cfg#cfg.max_queue_credit),
                         {ok, QStates1, Actions0} =
                         rabbit_queue_type:credit(
                           QName, Ctag, QDeliveryCount, CappedCredit,
@@ -1890,11 +1903,6 @@ settle_op_from_outcome(Outcome) ->
       ?V_1_0_AMQP_ERROR_INVALID_FIELD,
       "Unrecognised state: ~tp in DISPOSITION",
       [Outcome]).
-
--spec flow({uint, link_handle()}, sequence_no()) ->
-    #'v1_0.flow'{}.
-flow(Handle, DeliveryCount) ->
-    flow(Handle, DeliveryCount, ?MAX_LINK_CREDIT).
 
 -spec flow({uint, link_handle()}, sequence_no(), rabbit_queue_type:credit()) ->
     #'v1_0.flow'{}.
@@ -2281,7 +2289,8 @@ incoming_link_transfer(
                              vhost = Vhost,
                              trace_state = Trace,
                              conn_name = ConnName,
-                             channel_num = ChannelNum}}) ->
+                             channel_num = ChannelNum,
+                             max_link_credit = MaxLinkCredit}}) ->
 
     {PayloadBin, DeliveryId, Settled} =
     case MultiTransfer of
@@ -2326,7 +2335,8 @@ incoming_link_transfer(
                     DeliveryCount = add(DeliveryCount0, 1),
                     Credit1 = Credit0 - 1,
                     {Credit, Reply1} = maybe_grant_link_credit(
-                                         Credit1, DeliveryCount, map_size(U), Handle),
+                                         Credit1, MaxLinkCredit,
+                                         DeliveryCount, map_size(U), Handle),
                     Reply = Reply0 ++ Reply1,
                     Link = Link0#incoming_link{
                              delivery_count = DeliveryCount,
@@ -2420,30 +2430,30 @@ released(DeliveryId) ->
                         settled = true,
                         state = #'v1_0.released'{}}.
 
-maybe_grant_link_credit(Credit, DeliveryCount, NumUnconfirmed, Handle) ->
-    case grant_link_credit(Credit, NumUnconfirmed) of
+maybe_grant_link_credit(Credit, MaxLinkCredit, DeliveryCount, NumUnconfirmed, Handle) ->
+    case grant_link_credit(Credit, MaxLinkCredit, NumUnconfirmed) of
         true ->
-            {?MAX_LINK_CREDIT, [flow(Handle, DeliveryCount)]};
+            {MaxLinkCredit, [flow(Handle, DeliveryCount, MaxLinkCredit)]};
         false ->
             {Credit, []}
     end.
 
 maybe_grant_link_credit(
+  MaxLinkCredit,
   HandleInt,
   Link = #incoming_link{credit = Credit,
                         incoming_unconfirmed_map = U,
                         delivery_count = DeliveryCount},
   AccMap) ->
-    case grant_link_credit(Credit, map_size(U)) of
+    case grant_link_credit(Credit, MaxLinkCredit, map_size(U)) of
         true ->
-            {Link#incoming_link{credit = ?MAX_LINK_CREDIT},
+            {Link#incoming_link{credit = MaxLinkCredit},
              AccMap#{HandleInt => DeliveryCount}};
         false ->
             {Link, AccMap}
     end.
 
-grant_link_credit(Credit, NumUnconfirmed) ->
-    MaxLinkCredit = ?MAX_LINK_CREDIT,
+grant_link_credit(Credit, MaxLinkCredit, NumUnconfirmed) ->
     Credit =< MaxLinkCredit div 2 andalso
     NumUnconfirmed < MaxLinkCredit.
 
@@ -2739,7 +2749,8 @@ handle_outgoing_link_flow_control(
                                       DeliveryCountRcv,
                                       LinkCreditRcv,
                                       CFC#client_flow_ctl.delivery_count),
-                    CappedCredit = cap_credit(LinkCreditSnd),
+                    CappedCredit = cap_credit(LinkCreditSnd,
+                                              State0#state.cfg#cfg.max_queue_credit),
                     Link = Link0#outgoing_link{
                              client_flow_ctl = CFC#client_flow_ctl{
                                                  credit = LinkCreditSnd,
@@ -3444,10 +3455,9 @@ is_valid_max(Val) ->
 pg_scope() ->
     rabbit:pg_local_scope(amqp_session).
 
--spec cap_credit(rabbit_queue_type:credit()) ->
+-spec cap_credit(rabbit_queue_type:credit(), pos_integer()) ->
     rabbit_queue_type:credit().
-cap_credit(DesiredCredit) ->
-    MaxCredit = persistent_term:get(max_queue_credit),
+cap_credit(DesiredCredit, MaxCredit) ->
     min(DesiredCredit, MaxCredit).
 
 ensure_mc_cluster_compat(Mc) ->
