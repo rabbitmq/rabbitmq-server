@@ -8,7 +8,11 @@ def all_beam_files(name = "all_beam_files"):
     )
     erlang_bytecode(
         name = "other_beam",
-        srcs = ["src/rabbitmq_shovel_prometheus.erl"],
+        srcs = [
+            "src/rabbit_shovel_prometheus_app.erl",
+            "src/rabbit_shovel_prometheus_collector.erl",
+            "src/rabbit_shovel_prometheus_sup.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_shovel_prometheus",
         dest = "ebin",
@@ -32,7 +36,11 @@ def all_srcs(name = "all_srcs"):
 
     filegroup(
         name = "srcs",
-        srcs = ["src/rabbitmq_shovel_prometheus.erl"],
+        srcs = [
+            "src/rabbit_shovel_prometheus_app.erl",
+            "src/rabbit_shovel_prometheus_collector.erl",
+            "src/rabbit_shovel_prometheus_sup.erl",
+        ],
     )
     filegroup(
         name = "private_hdrs",
@@ -57,7 +65,11 @@ def all_test_beam_files(name = "all_test_beam_files"):
     erlang_bytecode(
         name = "test_other_beam",
         testonly = True,
-        srcs = ["src/rabbitmq_shovel_prometheus.erl"],
+        srcs = [
+            "src/rabbit_shovel_prometheus_app.erl",
+            "src/rabbit_shovel_prometheus_collector.erl",
+            "src/rabbit_shovel_prometheus_sup.erl",
+        ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_shovel_prometheus",
         dest = "test",

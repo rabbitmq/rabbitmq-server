@@ -16,7 +16,7 @@
 
 -define(DYN_RUNNING_METRIC(Gauge),
         #'MetricFamily'{name = <<"rabbitmq_shovel_dynamic">>,
-                        help = "Current number of dynamic shovels",type = 'GAUGE',
+                        help = "Number of dynamic shovels",type = 'GAUGE',
                         metric = [#'Metric'{label = [#'LabelPair'{name = <<"status">>,
                                                                   value = <<"running">>}],
                                             gauge = #'Gauge'{value = Gauge},
@@ -25,7 +25,7 @@
 
 -define(STAT_RUNNING_METRIC(Gauge),
         #'MetricFamily'{name = <<"rabbitmq_shovel_static">>,
-                        help = "Current number of static shovels",type = 'GAUGE',
+                        help = "Number of static shovels",type = 'GAUGE',
                         metric = [#'Metric'{label = [#'LabelPair'{name = <<"status">>,
                                                                   value = <<"running">>}],
                                             gauge = #'Gauge'{value = Gauge},
@@ -33,11 +33,11 @@
                                             histogram = undefined,timestamp_ms = undefined}]}).
 
 -define(EMPTY_DYN_METRIC, #'MetricFamily'{name = <<"rabbitmq_shovel_dynamic">>,
-                                           help = "Current number of dynamic shovels",type = 'GAUGE',
+                                           help = "Number of dynamic shovels",type = 'GAUGE',
                                            metric = []}).
 
 -define(EMPTY_STAT_METRIC, #'MetricFamily'{name = <<"rabbitmq_shovel_static">>,
-                                           help = "Current number of static shovels",type = 'GAUGE',
+                                           help = "Number of static shovels",type = 'GAUGE',
                                            metric = []}).
 
 
@@ -136,7 +136,7 @@ mix(Config) ->
 get_metrics(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
                                  ?MODULE, collect_mf,
-                                 [default, rabbitmq_shovel_prometheus]).
+                                 [default, rabbit_shovel_prometheus_collector]).
 
 create_static_shovel(Config, Name) ->
     Hostname = ?config(rmq_hostname, Config),

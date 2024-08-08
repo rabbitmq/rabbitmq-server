@@ -2,24 +2,21 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
--module(rabbitmq_federation_prometheus).
+-module(rabbit_federation_prometheus_collector).
+
+-behaviour(prometheus_collector).
+
+-export([start/0, stop/0]).
 -export([deregister_cleanup/1,
          collect_mf/2]).
 
 -import(prometheus_model_helpers, [create_mf/4]).
 
--behaviour(prometheus_collector).
-
--rabbit_boot_step({?MODULE, [
-  {description, "rabbitmq_federation prometheus collector plugin"},
-  {mfa,         {?MODULE, start, []}},
-  {cleanup,     {?MODULE, stop, []}}
-]}).
-
-%% API exports
--export([start/0, stop/0]).
+%%====================================================================
+%% Collector API
+%%====================================================================
 
 start() ->
     {ok, _} = application:ensure_all_started(prometheus),
@@ -41,7 +38,7 @@ collect_mf(_Registry, Callback) ->
                                        %% update with will take Init and put into Acc, wuthout calling fun
                                        maps:update_with(proplists:get_value(status, S), fun(C) -> C + 1 end, 1, Acc)
                                end, #{}, Status),
-    Metrics = [{rabbitmq_federation_links, gauge, "Current number of federation links",
+    Metrics = [{rabbitmq_federation_links, gauge, "Number of federation links",
                [{[{status, S}], C} || {S, C} <- maps:to_list(StatusGroups)]}],
     _ = [add_metric_family(Metric, Callback) || Metric <- Metrics],
     ok.

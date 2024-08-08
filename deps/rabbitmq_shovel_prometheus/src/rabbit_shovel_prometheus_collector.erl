@@ -2,31 +2,23 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
--module(rabbitmq_shovel_prometheus).
+-module(rabbit_shovel_prometheus_collector).
+
+-behaviour(prometheus_collector).
+
+-export([start/0, stop/0]).
 -export([deregister_cleanup/1,
          collect_mf/2]).
 
 -import(prometheus_model_helpers, [create_mf/4]).
-
--behaviour(prometheus_collector).
-
--rabbit_boot_step({?MODULE, [
-  {description, "rabbitmq_shovel prometheus"},
-  {mfa,         {?MODULE, start, []}},
-  {cleanup,     {?MODULE, stop, []}}
-]}).
-
-%% API exports
--export([start/0, stop/0]).
 
 %%====================================================================
 %% Collector API
 %%====================================================================
 
 start() ->
-    {ok, _} = application:ensure_all_started(prometheus),
     prometheus_registry:register_collector(?MODULE).
 
 stop() ->
@@ -42,9 +34,9 @@ collect_mf(_Registry, Callback) ->
                                                                     {SMap, maps:update_with(S, fun(C) -> C + 1 end, 1, DMap)}
                                                             end, {#{}, #{}}, Status),
 
-    Metrics = [{rabbitmq_shovel_dynamic, gauge, "Current number of dynamic shovels",
+    Metrics = [{rabbitmq_shovel_dynamic, gauge, "Number of dynamic shovels",
                 [{[{status, S}], C} || {S, C} <- maps:to_list(DynamicStatusGroups)]},
-               {rabbitmq_shovel_static, gauge, "Current number of static shovels",
+               {rabbitmq_shovel_static, gauge, "Number of static shovels",
                 [{[{status, S}], C} || {S, C} <- maps:to_list(StaticStatusGroups)]}
               ],
     _ = [add_metric_family(Metric, Callback) || Metric <- Metrics],
