@@ -23,11 +23,8 @@ on:
   push:
     branches:
       - main
-      - v3.12.x
-      - v3.11.x
-      - v3.10.x
-      - v3.9.x
-      - v3.8.x
+      - v4.0.x
+      - v3.13.x
       - bump-otp-*
       - bump-elixir-*
       - bump-rbe-*

@@ -48,6 +48,7 @@ elvis
 !/deps/rabbitmq_event_exchange/
 !/deps/rabbitmq_federation/
 !/deps/rabbitmq_federation_management/
+!/deps/rabbitmq_federation_prometheus/
 !/deps/rabbitmq_jms_topic_exchange/
 !/deps/rabbitmq_management/
 !/deps/rabbitmq_management_agent/
@@ -64,6 +65,7 @@ elvis
 !/deps/rabbitmq_sharding/
 !/deps/rabbitmq_shovel/
 !/deps/rabbitmq_shovel_management/
+!/deps/rabbitmq_shovel_prometheus/
 !/deps/rabbitmq_stomp/
 !/deps/rabbitmq_stream/
 !/deps/rabbitmq_stream_common/

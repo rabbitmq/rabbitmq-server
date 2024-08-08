@@ -3,11 +3,8 @@ on:
   push:
     branches:
     - main
-    - v3.12.x
-    - v3.11.x
-    - v3.10.x
-    - v3.9.x
-    - v3.8.x
+    - v4.0.x
+    - v3.13.x
     - bump-otp-*
     - bump-elixir-*
     - bump-rbe-*
@@ -617,6 +614,24 @@ jobs:
       repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
       plugin: rabbitmq_federation_management
     secrets: inherit
+  test-rabbitmq_federation_prometheus-mixed:
+    needs:
+    - check-workflow
+    - test-rabbit-0-mixed
+    - test-rabbit-1-mixed
+    - test-rabbit-2-mixed
+    - test-rabbit-3-mixed
+    - test-rabbit-4-mixed
+    - test-rabbit-5-mixed
+    - test-rabbit-6-mixed
+    - test-rabbit-7-mixed
+    - test-rabbit-8-mixed
+    - test-rabbit-9-mixed
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_federation_prometheus
+    secrets: inherit
   test-rabbitmq_jms_topic_exchange-mixed:
     needs:
     - check-workflow
@@ -905,6 +920,24 @@ jobs:
       repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
       plugin: rabbitmq_shovel_management
     secrets: inherit
+  test-rabbitmq_shovel_prometheus-mixed:
+    needs:
+    - check-workflow
+    - test-rabbit-0-mixed
+    - test-rabbit-1-mixed
+    - test-rabbit-2-mixed
+    - test-rabbit-3-mixed
+    - test-rabbit-4-mixed
+    - test-rabbit-5-mixed
+    - test-rabbit-6-mixed
+    - test-rabbit-7-mixed
+    - test-rabbit-8-mixed
+    - test-rabbit-9-mixed
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_shovel_prometheus
+    secrets: inherit
   test-rabbitmq_stomp-mixed:
     needs:
     - check-workflow
@@ -1126,6 +1159,7 @@ jobs:
     - test-rabbitmq_event_exchange-mixed
     - test-rabbitmq_federation-mixed
     - test-rabbitmq_federation_management-mixed
+    - test-rabbitmq_federation_prometheus-mixed
     - test-rabbitmq_jms_topic_exchange-mixed
     - test-rabbitmq_management-mixed
     - test-rabbitmq_management_agent-mixed
@@ -1142,6 +1176,7 @@ jobs:
     - test-rabbitmq_sharding-mixed
     - test-rabbitmq_shovel-mixed
     - test-rabbitmq_shovel_management-mixed
+    - test-rabbitmq_shovel_prometheus-mixed
     - test-rabbitmq_stomp-mixed
     - test-rabbitmq_stream-mixed
     - test-rabbitmq_stream_management-mixed
