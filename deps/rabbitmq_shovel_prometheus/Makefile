@@ -1,5 +1,6 @@
 PROJECT = rabbitmq_shovel_prometheus
 PROJECT_DESCRIPTION = Exposes rabbitmq_shovel metrics to Prometheus
+PROJECT_MOD = rabbit_shovel_prometheus_app
 
 define PROJECT_APP_EXTRA_KEYS
 	{broker_version_requirements, []}
