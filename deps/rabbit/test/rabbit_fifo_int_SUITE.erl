@@ -8,6 +8,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -define(RA_EVENT_TIMEOUT, 5000).
 -define(RA_SYSTEM, quorum_queues).
@@ -23,6 +24,7 @@ all_tests() ->
      return,
      rabbit_fifo_returns_correlation,
      resends_lost_command,
+     returns,
      returns_after_down,
      resends_after_lost_applied,
      handles_reject_notification,
@@ -31,6 +33,9 @@ all_tests() ->
      dequeue,
      discard,
      cancel_checkout,
+     cancel_checkout_with_remove,
+     cancel_checkout_with_pending_using_cancel_reason,
+     cancel_checkout_with_pending_using_remove_reason,
      lost_delivery,
      credit_api_v1,
      credit_api_v2,
@@ -64,6 +69,8 @@ init_per_testcase(TestCase, Config) ->
     meck:new(rabbit_quorum_queue, [passthrough]),
     meck:expect(rabbit_quorum_queue, handle_tick, fun (_, _, _) -> ok end),
     meck:expect(rabbit_quorum_queue, cancel_consumer_handler, fun (_, _) -> ok end),
+    meck:new(rabbit_feature_flags, []),
+    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> true end),
     ra_server_sup_sup:remove_all(?RA_SYSTEM),
     ServerName2 = list_to_atom(atom_to_list(TestCase) ++ "2"),
     ServerName3 = list_to_atom(atom_to_list(TestCase) ++ "3"),
@@ -89,19 +96,18 @@ basics(Config) ->
     ConsumerTag = UId,
     ok = start_cluster(ClusterName, [ServerId]),
     FState0 = rabbit_fifo_client:init([ServerId]),
-    {ok, FState1} = rabbit_fifo_client:checkout(ConsumerTag, 1, simple_prefetch,
-                                                #{}, FState0),
+    {ok, _, FState1} = rabbit_fifo_client:checkout(ConsumerTag, {simple_prefetch, 1},
+                                                   #{}, FState0),
 
     rabbit_quorum_queue:wal_force_roll_over(node()),
     % create segment the segment will trigger a snapshot
-    timer:sleep(1000),
+    ra_log_segment_writer:await(ra_log_segment_writer),
 
     {ok, FState2, []} = rabbit_fifo_client:enqueue(ClusterName, one, FState1),
 
     DeliverFun = fun DeliverFun(S0, F) ->
                          receive
                              {ra_event, From, Evt} ->
-                                 ct:pal("ra_event ~p", [Evt]),
                                  case rabbit_fifo_client:handle_ra_event(ClusterName, From, Evt, S0) of
                                      {ok, S1,
                                       [{deliver, C, true,
@@ -180,7 +186,7 @@ duplicate_delivery(Config) ->
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
     F0 = rabbit_fifo_client:init([ServerId]),
-    {ok, F1} = rabbit_fifo_client:checkout(<<"tag">>, 10, simple_prefetch, #{}, F0),
+    {ok, _, F1} = rabbit_fifo_client:checkout(<<"tag">>, {simple_prefetch, 10}, #{}, F0),
     {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, corr1, msg1, F1),
     Fun = fun Loop(S0) ->
             receive
@@ -215,7 +221,7 @@ usage(Config) ->
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
     F0 = rabbit_fifo_client:init([ServerId]),
-    {ok, F1} = rabbit_fifo_client:checkout(<<"tag">>, 10, simple_prefetch, #{}, F0),
+    {ok, _, F1} = rabbit_fifo_client:checkout(<<"tag">>, {simple_prefetch, 10}, #{}, F0),
     {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, corr1, msg1, F1),
     {ok, F3, []} = rabbit_fifo_client:enqueue(ClusterName, corr2, msg2, F2),
     {_, _, _} = process_ra_events(receive_ra_events(2, 2), ClusterName, F3),
@@ -268,7 +274,7 @@ detects_lost_delivery(Config) ->
     F000 = rabbit_fifo_client:init([ServerId]),
     {ok, F00, []} = rabbit_fifo_client:enqueue(ClusterName, msg1, F000),
     {_, _, F0} = process_ra_events(receive_ra_events(1, 0), ClusterName, F00),
-    {ok, F1} = rabbit_fifo_client:checkout(<<"tag">>, 10, simple_prefetch, #{}, F0),
+    {ok, _, F1} = rabbit_fifo_client:checkout(<<"tag">>, {simple_prefetch, 10}, #{}, F0),
     {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, msg2, F1),
     {ok, F3, []} = rabbit_fifo_client:enqueue(ClusterName, msg3, F2),
     % lose first delivery
@@ -284,28 +290,101 @@ detects_lost_delivery(Config) ->
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
+returns(Config) ->
+    ClusterName = ?config(cluster_name, Config),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterName, [ServerId]),
+
+    F0 = rabbit_fifo_client:init([ServerId]),
+    Msg1 = mk_msg(<<"msg1">>),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, Msg1, F0),
+    {_, _, _F2} = process_ra_events(receive_ra_events(1, 0), ClusterName, F1),
+
+    FC = rabbit_fifo_client:init([ServerId]),
+    {ok, _, FC1} = rabbit_fifo_client:checkout(<<"tag">>,
+                                             {simple_prefetch, 10},
+                                             #{}, FC),
+
+    {FC3, _} =
+    receive
+        {ra_event, Qname, {machine, {delivery, _, [{MsgId, {_, _}}]}} = Evt1} ->
+            {ok, FC2, Actions1} =
+                rabbit_fifo_client:handle_ra_event(Qname, Qname, Evt1, FC1),
+            [{deliver, _, true,
+              [{_, _, _, _, Msg1Out0}]}] = Actions1,
+            ?assert(mc:is(Msg1Out0)),
+            ?assertEqual(undefined, mc:get_annotation(<<"x-delivery-count">>, Msg1Out0)),
+            ?assertEqual(undefined, mc:get_annotation(delivery_count, Msg1Out0)),
+            rabbit_fifo_client:return(<<"tag">>, [MsgId], FC2)
+    after 5000 ->
+              flush(),
+              exit(await_delivery_timeout)
+    end,
+    {FC5, _} =
+    receive
+        {ra_event, Qname2,
+         {machine, {delivery, _, [{MsgId1, {_, _Msg1Out}}]}} = Evt2} ->
+            {ok, FC4, Actions2} =
+                rabbit_fifo_client:handle_ra_event(Qname2, Qname2, Evt2, FC3),
+            [{deliver, _tag, true,
+              [{_, _, _, _, Msg1Out}]}] = Actions2,
+            ?assert(mc:is(Msg1Out)),
+            ?assertEqual(1, mc:get_annotation(<<"x-delivery-count">>, Msg1Out)),
+            %% delivery_count should _not_ be incremented for a return
+            ?assertEqual(undefined, mc:get_annotation(delivery_count, Msg1Out)),
+            rabbit_fifo_client:modify(<<"tag">>, [MsgId1], true, false, #{}, FC4)
+    after 5000 ->
+              flush(),
+              exit(await_delivery_timeout_2)
+    end,
+    receive
+        {ra_event, Qname3,
+         {machine, {delivery, _, [{MsgId2, {_, _Msg2Out}}]}} = Evt3} ->
+            {ok, FC6, Actions3} =
+                rabbit_fifo_client:handle_ra_event(Qname3, Qname3, Evt3, FC5),
+            [{deliver, _, true,
+              [{_, _, _, _, Msg2Out}]}] = Actions3,
+            ?assert(mc:is(Msg2Out)),
+            ?assertEqual(2, mc:get_annotation(<<"x-delivery-count">>, Msg2Out)),
+            %% delivery_count should be incremented for a modify with delivery_failed = true
+            ?assertEqual(1, mc:get_annotation(delivery_count, Msg2Out)),
+            rabbit_fifo_client:settle(<<"tag">>, [MsgId2], FC6)
+    after 5000 ->
+              flush(),
+              exit(await_delivery_timeout_3)
+    end,
+    rabbit_quorum_queue:stop_server(ServerId),
+    ok.
+
 returns_after_down(Config) ->
     ClusterName = ?config(cluster_name, Config),
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
 
     F0 = rabbit_fifo_client:init([ServerId]),
-    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, msg1, F0),
+    Msg1 = mk_msg(<<"msg1">>),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, Msg1, F0),
     {_, _, F2} = process_ra_events(receive_ra_events(1, 0), ClusterName, F1),
     % start a consumer in a separate processes
     % that exits after checkout
-    Self = self(),
-    _Pid = spawn(fun () ->
-                         F = rabbit_fifo_client:init([ServerId]),
-                         {ok, _} = rabbit_fifo_client:checkout(<<"tag">>, 10,
-                                                               simple_prefetch,
-                                                               #{}, F),
-                         Self ! checkout_done
-                 end),
-    receive checkout_done -> ok after 1000 -> exit(checkout_done_timeout) end,
-    timer:sleep(1000),
+    {_, MonRef} = spawn_monitor(
+                    fun () ->
+                            F = rabbit_fifo_client:init([ServerId]),
+                            {ok, _, _} = rabbit_fifo_client:checkout(<<"tag">>,
+                                                                     {simple_prefetch, 10},
+                                                                     #{}, F)
+                    end),
+    receive
+        {'DOWN', MonRef, _, _, _} ->
+            ok
+    after 5000 ->
+              ct:fail("waiting for process exit timed out")
+    end,
     % message should be available for dequeue
-    {ok, _, {_, _, _, _, msg1}, _} = rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F2),
+    {ok, _, {_, _, _, _, Msg1Out}, _} =
+        rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F2),
+    ?assertEqual(1, mc:get_annotation(<<"x-delivery-count">>, Msg1Out)),
+    ?assertEqual(1, mc:get_annotation(delivery_count, Msg1Out)),
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
@@ -378,8 +457,8 @@ discard(Config) ->
     _ = ra:members(ServerId),
 
     F0 = rabbit_fifo_client:init([ServerId]),
-    {ok, F1} = rabbit_fifo_client:checkout(<<"tag">>, 10,
-                                           simple_prefetch, #{}, F0),
+    {ok, _, F1} = rabbit_fifo_client:checkout(<<"tag">>, {simple_prefetch, 10},
+                                           #{}, F0),
     {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, msg1, F1),
     F3 = discard_next_delivery(ClusterName, F2, 5000),
     {empty, _F4} = rabbit_fifo_client:dequeue(ClusterName, <<"tag1">>, settled, F3),
@@ -401,11 +480,70 @@ cancel_checkout(Config) ->
     ok = start_cluster(ClusterName, [ServerId]),
     F0 = rabbit_fifo_client:init([ServerId], 4),
     {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, m1, F0),
-    {ok, F2} = rabbit_fifo_client:checkout(<<"tag">>, 10, simple_prefetch, #{}, F1),
-    {_, _, F3} = process_ra_events(receive_ra_events(1, 1), ClusterName, F2, [], [], fun (_, S) -> S end),
-    {ok, F4} = rabbit_fifo_client:cancel_checkout(<<"tag">>, F3),
+    {ok, _, F2} = rabbit_fifo_client:checkout(<<"tag">>, {simple_prefetch, 10},
+                                              #{}, F1),
+    {_, _, F3} = process_ra_events(receive_ra_events(1, 1), ClusterName, F2,
+                                   [], [], fun (_, S) -> S end),
+    {ok, F4} = rabbit_fifo_client:cancel_checkout(<<"tag">>, cancel, F3),
     {F5, _} = rabbit_fifo_client:return(<<"tag">>, [0], F4),
-    {ok, _, {_, _, _, _, m1}, F5} = rabbit_fifo_client:dequeue(ClusterName, <<"d1">>, settled, F5),
+    {ok, _, {_, _, _, _, m1}, F5} =
+        rabbit_fifo_client:dequeue(ClusterName, <<"d1">>, settled, F5),
+    ok.
+
+cancel_checkout_with_remove(Config) ->
+    ClusterName = ?config(cluster_name, Config),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterName, [ServerId]),
+    F0 = rabbit_fifo_client:init([ServerId], 4),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, m1, F0),
+    {ok, _, F2} = rabbit_fifo_client:checkout(<<"tag">>, {simple_prefetch, 10},
+                                              #{}, F1),
+    {_, _, F3} = process_ra_events(receive_ra_events(1, 1), ClusterName, F2,
+                                   [], [], fun (_, S) -> S end),
+    {ok, F4} = rabbit_fifo_client:cancel_checkout(<<"tag">>, remove, F3),
+    %% settle here to prove that message is returned by "remove" cancellation
+    %% and not settled by late settlement
+    {F5, _} = rabbit_fifo_client:settle(<<"tag">>, [0], F4),
+    {ok, _, {_, _, _, _, m1}, F5} =
+        rabbit_fifo_client:dequeue(ClusterName, <<"d1">>, settled, F5),
+    ok.
+
+cancel_checkout_with_pending_using_cancel_reason(Config) ->
+    cancel_checkout_with_pending(Config, cancel).
+
+cancel_checkout_with_pending_using_remove_reason(Config) ->
+    cancel_checkout_with_pending(Config, remove).
+
+cancel_checkout_with_pending(Config, Reason) ->
+    ClusterName = ?config(cluster_name, Config),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterName, [ServerId]),
+    F0 = rabbit_fifo_client:init([ServerId], 4),
+    F1 = lists:foldl(
+           fun (Num, Acc0) ->
+                   {ok, Acc, _} = rabbit_fifo_client:enqueue(ClusterName, Num, Acc0),
+                   Acc
+           end, F0, lists:seq(1, 10)),
+    receive_ra_events(10, 0),
+    {ok, _, F2} = rabbit_fifo_client:checkout(<<"tag">>, {simple_prefetch, 10},
+                                              #{}, F1),
+    {Msgs, _, F3} = process_ra_events(receive_ra_events(0, 1), ClusterName, F2,
+                                      [], [], fun (_, S) -> S end),
+    %% settling each individually should cause the client to enter the "slow"
+    %% state where settled msg ids are buffered internally waiting for
+    %% applied events
+    F4 = lists:foldl(
+           fun({_Q, _, MsgId, _, _}, Acc0) ->
+                   {Acc, _} = rabbit_fifo_client:settle(<<"tag">>, [MsgId], Acc0),
+                   Acc
+           end, F3, Msgs),
+
+    {ok, _F4} = rabbit_fifo_client:cancel_checkout(<<"tag">>, Reason, F4),
+    timer:sleep(100),
+    {ok, Overview, _} = ra:member_overview(ServerId),
+    ?assertMatch(#{machine := #{num_messages := 0,
+                                num_consumers := 0}}, Overview),
+    flush(),
     ok.
 
 lost_delivery(Config) ->
@@ -415,8 +553,9 @@ lost_delivery(Config) ->
     F0 = rabbit_fifo_client:init([ServerId], 4),
     {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, m1, F0),
     {_, _, F2} = process_ra_events(
-                   receive_ra_events(1, 0), ClusterName, F1, [], [], fun (_, S) -> S end),
-    {ok, F3} = rabbit_fifo_client:checkout(<<"tag">>, 10, simple_prefetch, #{}, F2),
+                   receive_ra_events(1, 0), ClusterName, F1, [], [],
+                   fun (_, S) -> S end),
+    {ok, _, F3} = rabbit_fifo_client:checkout(<<"tag">>, {simple_prefetch, 10}, #{}, F2),
     %% drop a delivery, simulating e.g. a full distribution buffer
     receive
         {ra_event, _, Evt} ->
@@ -441,6 +580,7 @@ lost_delivery(Config) ->
     ok.
 
 credit_api_v1(Config) ->
+    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> false end),
     ClusterName = ?config(cluster_name, Config),
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
@@ -450,7 +590,7 @@ credit_api_v1(Config) ->
     {_, _, F3} = process_ra_events(receive_ra_events(2, 0), ClusterName, F2),
     %% checkout with 0 prefetch
     CTag = <<"my-tag">>,
-    {ok, F4} = rabbit_fifo_client:checkout(CTag, 0, credited, #{}, F3),
+    {ok, _, F4} = rabbit_fifo_client:checkout(CTag, {credited, 0}, #{}, F3),
     %% assert no deliveries
     {_, _, F5} = process_ra_events(receive_ra_events(), ClusterName, F4, [], [],
                                    fun
@@ -497,9 +637,9 @@ credit_api_v2(Config) ->
     CTag = <<"my-tag">>,
     DC0 = 16#ff_ff_ff_ff,
     DC1 = 0, %% = DC0 + 1 using 32 bit serial number arithmetic
-    {ok, F4} = rabbit_fifo_client:checkout(
+    {ok, _, F4} = rabbit_fifo_client:checkout(
                  %% initial_delivery_count in consumer meta means credit API v2.
-                 CTag, 0, credited, #{initial_delivery_count => DC0}, F3),
+                 CTag, {credited, DC0}, #{}, F3),
     %% assert no deliveries
     {_, _, F5} = process_ra_events(receive_ra_events(), ClusterName, F4, [], [],
                                    fun
@@ -598,7 +738,7 @@ test_queries(Config) ->
               exit(ready_timeout)
     end,
     F0 = rabbit_fifo_client:init([ServerId], 4),
-    {ok, _} = rabbit_fifo_client:checkout(<<"tag">>, 1, simple_prefetch, #{}, F0),
+    {ok, _, _} = rabbit_fifo_client:checkout(<<"tag">>, {simple_prefetch, 1}, #{}, F0),
     {ok, {_, Ready}, _} = ra:local_query(ServerId,
                                          fun rabbit_fifo:query_messages_ready/1),
     ?assertEqual(1, Ready),
@@ -626,8 +766,8 @@ dequeue(Config) ->
     {ok, F2_, []} = rabbit_fifo_client:enqueue(ClusterName, msg1, F1b),
     {_, _, F2} = process_ra_events(receive_ra_events(1, 0), ClusterName, F2_),
 
-    % {ok, {{0, {_, msg1}}, _}, F3} = rabbit_fifo_client:dequeue(ClusterName, Tag, settled, F2),
-    {ok, _, {_, _, 0, _, msg1}, F3} = rabbit_fifo_client:dequeue(ClusterName, Tag, settled, F2),
+    {ok, _, {_, _, 0, _, msg1}, F3} =
+        rabbit_fifo_client:dequeue(ClusterName, Tag, settled, F2),
     {ok, F4_, []} = rabbit_fifo_client:enqueue(ClusterName, msg2, F3),
     {_, _, F4} = process_ra_events(receive_ra_events(1, 0), ClusterName, F4_),
     {ok, _, {_, _, MsgId, _, msg2}, F5} = rabbit_fifo_client:dequeue(ClusterName, Tag, unsettled, F4),
@@ -687,7 +827,7 @@ receive_ra_events(Acc) ->
     end.
 
 process_ra_events(Events, ClusterName, State) ->
-    DeliveryFun = fun ({deliver, _, Tag, Msgs}, S) ->
+    DeliveryFun = fun ({deliver, Tag, _, Msgs}, S) ->
                           MsgIds = [element(1, M) || M <- Msgs],
                           {S0, _} = rabbit_fifo_client:settle(Tag, MsgIds, S),
                           S0
@@ -745,3 +885,12 @@ flush() ->
     after 10 ->
               ok
     end.
+
+mk_msg(Body) when is_binary(Body) ->
+    mc_amqpl:from_basic_message(
+             #basic_message{routing_keys = [<<"">>],
+                            exchange_name = #resource{name = <<"x">>,
+                                                      kind = exchange,
+                                                      virtual_host = <<"v">>},
+                            content = #content{properties = #'P_basic'{},
+                                               payload_fragments_rev = [Body]}}).

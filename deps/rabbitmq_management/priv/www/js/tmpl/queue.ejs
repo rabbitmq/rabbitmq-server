@@ -119,7 +119,9 @@
         <th class="horizontal">Ready</th>
         <th class="horizontal">Unacked</th>
         <% if (is_quorum(queue)) { %>
-        <th class="horizontal">In memory ready</th>
+        <th class="horizontal">High priority</th>
+        <th class="horizontal">Low priority</th>
+        <th class="horizontal">Returned</th>
         <th class="horizontal">Dead-lettered
         <span class="help" id="queue-dead-lettered"></span>
         </th>
@@ -146,7 +148,13 @@
         </td>
         <% if (is_quorum(queue)) { %>
         <td class="r">
-          <%= fmt_num_thousands(queue.messages_ram) %>
+          <%= fmt_num_thousands(queue.messages_ready_high) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_ready_low) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_ready_returned) %>
         </td>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_dlx) %>
@@ -184,6 +192,10 @@
         </td>
         <% } %>
         <% if (is_quorum(queue)) { %>
+        <td class="r">
+        </td>
+        <td class="r">
+        </td>
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_dlx) %>
         </td>
