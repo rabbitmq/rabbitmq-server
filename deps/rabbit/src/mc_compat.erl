@@ -54,7 +54,9 @@ get_annotation(?ANN_ROUTING_KEYS, #basic_message{routing_keys = RKeys}) ->
 get_annotation(?ANN_EXCHANGE, #basic_message{exchange_name = Ex}) ->
     Ex#resource.name;
 get_annotation(id, #basic_message{id = Id}) ->
-    Id.
+    Id;
+get_annotation(_Key, #basic_message{}) ->
+    undefined.
 
 set_annotation(id, Value, #basic_message{} = Msg) ->
     Msg#basic_message{id = Value};

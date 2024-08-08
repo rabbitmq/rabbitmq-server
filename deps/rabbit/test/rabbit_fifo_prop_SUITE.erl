@@ -11,9 +11,10 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit/src/rabbit_fifo.hrl").
 -include_lib("rabbit/src/rabbit_fifo_dlx.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--define(record_info(T,R),lists:zip(record_info(fields,T),tl(tuple_to_list(R)))).
+-define(MACHINE_VERSION, 4).
 
 %%%===================================================================
 %%% Common Test callbacks
@@ -62,10 +63,6 @@ all_tests() ->
      scenario31,
      scenario32,
      upgrade,
-     upgrade_snapshots,
-     upgrade_snapshots_scenario1,
-     upgrade_snapshots_scenario2,
-     upgrade_snapshots_v2_to_v3,
      messages_total,
      simple_prefetch,
      simple_prefetch_without_checkout_cancel,
@@ -88,8 +85,8 @@ all_tests() ->
      dlx_06,
      dlx_07,
      dlx_08,
-     dlx_09
-     % single_active_ordering_02
+     dlx_09,
+     single_active_ordering_02
     ].
 
 groups() ->
@@ -110,17 +107,17 @@ end_per_group(_Group, _Config) ->
     ok.
 
 init_per_testcase(_TestCase, Config) ->
+    ok = meck:new(rabbit_feature_flags, [passthrough]),
+    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> false end),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->
+    meck:unload(),
     ok.
 
 %%%===================================================================
 %%% Test cases
 %%%===================================================================
-
-% -type log_op() ::
-%     {enqueue, pid(), maybe(msg_seqno()), Msg :: raw_msg()}.
 
 scenario2(_Config) ->
     C1 = {<<>>, c:pid(0,346,1)},
@@ -693,45 +690,6 @@ scenario23(_Config) ->
                       Commands),
     ok.
 
-upgrade_snapshots_scenario1(_Config) ->
-    E = c:pid(0,327,1),
-    Commands = [make_enqueue(E,1,msg(<<"msg1">>)),
-                make_enqueue(E,2,msg(<<"msg2">>)),
-                make_enqueue(E,3,msg(<<"msg3">>))],
-    run_upgrade_snapshot_test(#{name => ?FUNCTION_NAME,
-                                delivery_limit => 100,
-                                max_length => 1,
-                                max_bytes => 100,
-                                max_in_memory_length => undefined,
-                                max_in_memory_bytes => undefined,
-                                overflow_strategy => drop_head,
-                                single_active_consumer_on => false,
-                                dead_letter_handler => {?MODULE, banana, []}
-                               },
-                              Commands),
-    ok.
-
-upgrade_snapshots_scenario2(_Config) ->
-    E = c:pid(0,240,0),
-    CPid = c:pid(0,242,0),
-    C = {<<>>, CPid},
-    Commands = [make_checkout(C, {auto,1,simple_prefetch}),
-                make_enqueue(E,1,msg(<<"msg1">>)),
-                make_enqueue(E,2,msg(<<"msg2">>)),
-                rabbit_fifo:make_settle(C, [0])],
-    run_upgrade_snapshot_test(#{name => ?FUNCTION_NAME,
-                                delivery_limit => undefined,
-                                max_length => undefined,
-                                max_bytes => undefined,
-                                max_in_memory_length => undefined,
-                                max_in_memory_bytes => undefined,
-                                overflow_strategy => drop_head,
-                                single_active_consumer_on => false,
-                                dead_letter_handler => {?MODULE, banana, []}
-                               },
-                              Commands),
-    ok.
-
 single_active_01(_Config) ->
     C1Pid = test_util:fake_pid(rabbit@fake_node1),
     C1 = {<<0>>, C1Pid},
@@ -765,15 +723,14 @@ single_active_02(_Config) ->
                 make_checkout(C2, cancel),
                 {down,E,noconnection}
                 ],
-    Conf = config(?FUNCTION_NAME, undefined, undefined, true, 1, undefined, undefined),
+    Conf = config(?FUNCTION_NAME, undefined, undefined, true, 1,
+                  undefined, undefined),
     ?assert(single_active_prop(Conf, Commands, false)),
     ok.
 
 single_active_03(_Config) ->
     C1Pid = test_util:fake_pid(node()),
     C1 = {<<0>>, C1Pid},
-    % C2Pid = test_util:fake_pid(rabbit@fake_node2),
-    % C2 = {<<>>, C2Pid},
     Pid = test_util:fake_pid(node()),
     E = test_util:fake_pid(rabbit@fake_node2),
     Commands = [
@@ -788,67 +745,53 @@ single_active_03(_Config) ->
     ok.
 
 single_active_04(_Config) ->
-    % C1Pid = test_util:fake_pid(node()),
-    % C1 = {<<0>>, C1Pid},
-    % C2Pid = test_util:fake_pid(rabbit@fake_node2),
-    % C2 = {<<>>, C2Pid},
-    % Pid = test_util:fake_pid(node()),
     E = test_util:fake_pid(rabbit@fake_node2),
     Commands = [
-
-                % make_checkout(C1, {auto,2,simple_prefetch}),
                 make_enqueue(E, 1, msg(<<>>)),
                 make_enqueue(E, 2, msg(<<>>)),
                 make_enqueue(E, 3, msg(<<>>)),
                 make_enqueue(E, 4, msg(<<>>))
-                % {down, Pid, noconnection},
-                % {nodeup, node()}
                 ],
-    Conf = config(?FUNCTION_NAME, 3, 587, true, 3, 7, undefined),
+    Conf = config(?FUNCTION_NAME, 3, 587, true, 3),
     ?assert(single_active_prop(Conf, Commands, true)),
     ok.
 
 test_run_log(_Config) ->
-    Fun = {-1, fun ({Prev, _}) -> {Prev + 1, Prev + 1} end},
+    meck:expect(rabbit_feature_flags, is_enabled,
+                fun (_) -> true end),
     run_proper(
       fun () ->
-              ?FORALL({Length, Bytes, SingleActiveConsumer, DeliveryLimit, InMemoryLength,
-                       InMemoryBytes},
-                      frequency([{10, {0, 0, false, 0, 0, 0}},
+              ?FORALL({Length, Bytes, SingleActiveConsumer, DeliveryLimit},
+                      frequency([{10, {0, 0, false, 0}},
                                  {5, {oneof([range(1, 10), undefined]),
                                       oneof([range(1, 1000), undefined]),
                                       boolean(),
-                                      oneof([range(1, 3), undefined]),
-                                      oneof([range(1, 10), undefined]),
-                                      oneof([range(1, 1000), undefined])
+                                      oneof([range(1, 3), undefined])
                                      }}]),
-                      ?FORALL(O, ?LET(Ops, log_gen(100), expand(Ops, Fun)),
+                      ?FORALL(O, ?LET(Ops, log_gen(100), expand(Ops, #{})),
                               collect({log_size, length(O)},
                                       dump_generated(
                                         config(?FUNCTION_NAME,
                                                Length,
                                                Bytes,
                                                SingleActiveConsumer,
-                                               DeliveryLimit,
-                                               InMemoryLength,
-                                               InMemoryBytes), O))))
+                                               DeliveryLimit), O))))
       end, [], 10).
 
 snapshots(_Config) ->
+    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> true end),
     run_proper(
       fun () ->
               ?FORALL({Length, Bytes, SingleActiveConsumer,
-                       DeliveryLimit, InMemoryLength, InMemoryBytes,
-                       Overflow, DeadLetterHandler},
-                      frequency([{10, {0, 0, false, 0, 0, 0, drop_head, undefined}},
+                       DeliveryLimit, Overflow, DeadLetterHandler},
+                      frequency([{10, {0, 0, false, 0, drop_head, undefined}},
                                  {5, {oneof([range(1, 10), undefined]),
                                       oneof([range(1, 1000), undefined]),
                                       boolean(),
                                       oneof([range(1, 3), undefined]),
-                                      oneof([range(1, 10), undefined]),
-                                      oneof([range(1, 1000), undefined]),
                                       oneof([drop_head, reject_publish]),
-                                      oneof([undefined, {at_most_once, {?MODULE, banana, []}}])
+                                      oneof([undefined,
+                                             {at_most_once, {?MODULE, banana, []}}])
                                      }}]),
                       begin
                           Config = config(?FUNCTION_NAME,
@@ -856,8 +799,6 @@ snapshots(_Config) ->
                                           Bytes,
                                           SingleActiveConsumer,
                                           DeliveryLimit,
-                                          InMemoryLength,
-                                          InMemoryBytes,
                                           Overflow,
                                           DeadLetterHandler),
                           ?FORALL(O, ?LET(Ops, log_gen(256), expand(Ops, Config)),
@@ -867,17 +808,15 @@ snapshots(_Config) ->
       end, [], 256).
 
 snapshots_dlx(_Config) ->
+    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> true end),
     Size = 256,
     run_proper(
       fun () ->
-              ?FORALL({Length, Bytes, SingleActiveConsumer,
-                       DeliveryLimit, InMemoryLength, InMemoryBytes},
-                      frequency([{10, {0, 0, false, 0, 0, 0}},
+              ?FORALL({Length, Bytes, SingleActiveConsumer, DeliveryLimit},
+                      frequency([{10, {0, 0, false, 0}},
                                  {5, {oneof([range(1, 10), undefined]),
                                       oneof([range(1, 1000), undefined]),
                                       boolean(),
-                                      oneof([range(1, 3), undefined]),
-                                      oneof([range(1, 10), undefined]),
                                       oneof([range(1, 1000), undefined])
                                      }}]),
                       begin
@@ -886,8 +825,6 @@ snapshots_dlx(_Config) ->
                                           Bytes,
                                           SingleActiveConsumer,
                                           DeliveryLimit,
-                                          InMemoryLength,
-                                          InMemoryBytes,
                                           reject_publish,
                                           at_least_once),
                           ?FORALL(O, ?LET(Ops, log_gen_dlx(Size), expand(Ops, Config)),
@@ -897,25 +834,24 @@ snapshots_dlx(_Config) ->
       end, [], Size).
 
 single_active(_Config) ->
-    Size = 300,
+    %% validates that there can only ever be a single active consumer at a time
+    %% as well as that message deliveries are done in order
+    Size = 1000,
+    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> true end),
     run_proper(
       fun () ->
-              ?FORALL({Length, Bytes, DeliveryLimit, InMemoryLength, InMemoryBytes},
-                      frequency([{10, {0, 0, 0, 0, 0}},
+              ?FORALL({Length, Bytes, DeliveryLimit},
+                      frequency([{10, {undefined, undefined, undefined}},
                                  {5, {oneof([range(1, 10), undefined]),
                                       oneof([range(1, 1000), undefined]),
-                                      oneof([range(1, 3), undefined]),
-                                      oneof([range(1, 10), undefined]),
-                                      oneof([range(1, 1000), undefined])
+                                      oneof([range(1, 3), undefined])
                                      }}]),
                       begin
                           Config  = config(?FUNCTION_NAME,
                                            Length,
                                            Bytes,
                                            true,
-                                           DeliveryLimit,
-                                           InMemoryLength,
-                                           InMemoryBytes),
+                                           DeliveryLimit),
                       ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops, Config)),
                               collect({log_size, length(O)},
                                       single_active_prop(Config, O, false)))
@@ -924,64 +860,8 @@ single_active(_Config) ->
 
 upgrade(_Config) ->
     Size = 256,
-    run_proper(
-      fun () ->
-              ?FORALL({Length, Bytes, DeliveryLimit, InMemoryLength, SingleActive},
-                      frequency([{5, {undefined, undefined, undefined, undefined, false}},
-                                 {5, {oneof([range(1, 10), undefined]),
-                                      oneof([range(1, 1000), undefined]),
-                                      oneof([range(1, 3), undefined]),
-                                      oneof([range(1, 10), 0, undefined]),
-                                      oneof([true, false])
-                                     }}]),
-                      begin
-                          Config  = config(?FUNCTION_NAME,
-                                           Length,
-                                           Bytes,
-                                           SingleActive,
-                                           DeliveryLimit,
-                                           InMemoryLength,
-                                           undefined,
-                                           drop_head,
-                                           {?MODULE, banana, []}
-                                          ),
-                      ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops, Config)),
-                              collect({log_size, length(O)},
-                                      upgrade_prop(Config, O)))
-                      end)
-      end, [], Size).
-
-upgrade_snapshots(_Config) ->
-    Size = 256,
-    run_proper(
-      fun () ->
-              ?FORALL({Length, Bytes, DeliveryLimit, InMemoryLength, SingleActive},
-                      frequency([{5, {undefined, undefined, undefined, undefined, false}},
-                                 {5, {oneof([range(1, 10), undefined]),
-                                      oneof([range(1, 1000), undefined]),
-                                      oneof([range(1, 3), undefined]),
-                                      oneof([range(1, 10), 0, undefined]),
-                                      oneof([true, false])
-                                     }}]),
-                      begin
-                          Config  = config(?FUNCTION_NAME,
-                                           Length,
-                                           Bytes,
-                                           SingleActive,
-                                           DeliveryLimit,
-                                           InMemoryLength,
-                                           undefined,
-                                           drop_head,
-                                           {?MODULE, banana, []}
-                                          ),
-                          ?FORALL(O, ?LET(Ops, log_gen_upgrade_snapshots(Size), expand(Ops, Config)),
-                                  collect({log_size, length(O)},
-                                          upgrade_snapshots_prop(Config, O)))
-                      end)
-      end, [], Size).
-
-upgrade_snapshots_v2_to_v3(_Config) ->
-    Size = 256,
+    %% upgrade is always done using _old_ command formats
+    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> false end),
     run_proper(
       fun () ->
               ?FORALL({Length, Bytes, DeliveryLimit, SingleActive},
@@ -997,25 +877,25 @@ upgrade_snapshots_v2_to_v3(_Config) ->
                                            Bytes,
                                            SingleActive,
                                            DeliveryLimit,
-                                           undefined,
+                                           drop_head,
                                            undefined
                                           ),
-                          ?FORALL(O, ?LET(Ops, log_gen_upgrade_snapshots_v2_to_v3(Size), expand(Ops, Config)),
-                                  collect({log_size, length(O)},
-                                          upgrade_snapshots_prop_v2_to_v3(Config, O)))
+                      ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops, Config)),
+                              collect({log_size, length(O)},
+                                      upgrade_prop(Config, O)))
                       end)
       end, [], Size).
 
 messages_total(_Config) ->
-    Size = 1000,
+    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> false end),
+    Size = 256,
     run_proper(
       fun () ->
-              ?FORALL({Length, Bytes, DeliveryLimit, InMemoryLength, SingleActive},
-                      frequency([{5, {undefined, undefined, undefined, undefined, false}},
+              ?FORALL({Length, Bytes, DeliveryLimit, SingleActive},
+                      frequency([{5, {undefined, undefined, undefined, false}},
                                  {5, {oneof([range(1, 10), undefined]),
                                       oneof([range(1, 1000), undefined]),
                                       oneof([range(1, 3), undefined]),
-                                      oneof([range(1, 10), 0, undefined]),
                                       oneof([true, false])
                                      }}]),
                       begin
@@ -1023,9 +903,7 @@ messages_total(_Config) ->
                                            Length,
                                            Bytes,
                                            SingleActive,
-                                           DeliveryLimit,
-                                           InMemoryLength,
-                                           undefined),
+                                           DeliveryLimit),
                       ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops, Config)),
                               collect({log_size, length(O)},
                                       messages_total_prop(Config, O)))
@@ -1034,6 +912,7 @@ messages_total(_Config) ->
 
 simple_prefetch(_Config) ->
     Size = 500,
+    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> true end),
     run_proper(
       fun () ->
               ?FORALL({Length, Bytes, DeliveryLimit, SingleActive},
@@ -1048,9 +927,7 @@ simple_prefetch(_Config) ->
                                            Length,
                                            Bytes,
                                            SingleActive,
-                                           DeliveryLimit,
-                                           undefined,
-                                           undefined),
+                                           DeliveryLimit),
                           ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops, Config)),
                                   collect({log_size, length(O)},
                                           simple_prefetch_prop(Config, O, true)))
@@ -1059,6 +936,7 @@ simple_prefetch(_Config) ->
 
 simple_prefetch_without_checkout_cancel(_Config) ->
     Size = 256,
+    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> true end),
     run_proper(
       fun () ->
               ?FORALL({Length, Bytes, DeliveryLimit, SingleActive},
@@ -1073,10 +951,9 @@ simple_prefetch_without_checkout_cancel(_Config) ->
                                            Length,
                                            Bytes,
                                            SingleActive,
-                                           DeliveryLimit,
-                                           undefined,
-                                           undefined),
-                          ?FORALL(O, ?LET(Ops, log_gen_without_checkout_cancel(Size), expand(Ops, Config)),
+                                           DeliveryLimit),
+                          ?FORALL(O, ?LET(Ops, log_gen_without_checkout_cancel(Size),
+                                          expand(Ops, Config)),
                                   collect({log_size, length(O)},
                                           simple_prefetch_prop(Config, O, false)))
                       end)
@@ -1105,19 +982,19 @@ simple_prefetch_01(_Config) ->
 
 single_active_ordering(_Config) ->
     Size = 500,
+    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> true end),
     Fun = {-1, fun ({Prev, _}) -> {Prev + 1, Prev + 1} end},
     run_proper(
       fun () ->
               ?FORALL(O, ?LET(Ops, log_gen_ordered(Size), expand(Ops, Fun)),
                       collect({log_size, length(O)},
-                              single_active_prop(config(?FUNCTION_NAME,
-                                                        undefined,
-                                                        undefined,
-                                                        true,
-                                                        undefined,
-                                                        undefined,
-                                                        undefined), O,
-                                                 true)))
+                              single_active_prop(
+                                config(?FUNCTION_NAME,
+                                       undefined,
+                                       undefined,
+                                       true,
+                                       undefined), O,
+                                true)))
       end, [], Size).
 
 single_active_ordering_01(_Config) ->
@@ -1132,7 +1009,7 @@ single_active_ordering_01(_Config) ->
                 make_enqueue(E2, 1, msg(<<"2">>)),
                 make_settle(C1, [0])
                 ],
-    Conf = config(?FUNCTION_NAME, 0, 0, true, 0, 0, 0),
+    Conf = config(?FUNCTION_NAME, 0, 0, true, 0),
     ?assert(single_active_prop(Conf, Commands, true)),
     ok.
 
@@ -1153,7 +1030,7 @@ single_active_ordering_02(_Config) ->
                 {down,E,noproc},
                 make_settle(C1, [0])
                 ],
-    Conf = config(?FUNCTION_NAME, 0, 0, true, 0, 0, 0),
+    Conf = config(?FUNCTION_NAME, 0, 0, true, 0),
     ?assert(single_active_prop(Conf, Commands, true)),
     ok.
 
@@ -1173,7 +1050,7 @@ single_active_ordering_03(_Config) ->
                 make_checkout(C1, cancel),
                 {down, C1Pid, noconnection}
                 ],
-    Conf0 = config(?FUNCTION_NAME, 0, 0, true, 0, 0, 0),
+    Conf0 = config(?FUNCTION_NAME, 0, 0, true, 0),
     Conf = Conf0#{release_cursor_interval => 100},
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
@@ -1198,21 +1075,17 @@ max_length(_Config) ->
     Size = 1000,
     run_proper(
       fun () ->
-              ?FORALL({Length, SingleActiveConsumer, DeliveryLimit,
-                       InMemoryLength},
+              ?FORALL({Length, SingleActiveConsumer, DeliveryLimit},
                       {oneof([range(1, 100), undefined]),
                        boolean(),
-                       range(1, 3),
-                       range(1, 10)
+                       range(1, 3)
                       },
                       begin
                           Config = config(?FUNCTION_NAME,
                                           Length,
                                           undefined,
                                           SingleActiveConsumer,
-                                          DeliveryLimit,
-                                          InMemoryLength,
-                                          undefined),
+                                          DeliveryLimit),
                           ?FORALL(O, ?LET(Ops, log_gen_config(Size),
                                           expand(Ops, Config)),
                                   collect({log_size, length(O)},
@@ -1235,7 +1108,8 @@ dlx_01(_Config) ->
                 rabbit_fifo:make_discard(C1, [1]),
                 rabbit_fifo_dlx:make_settle([1])
                ],
-    Config = config(?FUNCTION_NAME, 8, undefined, false, 2, 5, 100, reject_publish, at_least_once),
+    Config = config(?FUNCTION_NAME, 8, undefined, false, 2,
+                    reject_publish, at_least_once),
     ?assert(snapshots_prop(Config, Commands)),
     ok.
 
@@ -1257,7 +1131,8 @@ dlx_02(_Config) ->
                 rabbit_fifo_dlx:make_settle([0])
                 %% Release cursor A got emitted.
                ],
-    Config = config(?FUNCTION_NAME, 10, undefined, false, 5, 5, 100, reject_publish, at_least_once),
+    Config = config(?FUNCTION_NAME, 10, undefined, false, 5,
+                    reject_publish, at_least_once),
     ?assert(snapshots_prop(Config, Commands)),
     ok.
 
@@ -1278,7 +1153,8 @@ dlx_03(_Config) ->
                 rabbit_fifo_dlx:make_settle([0])
                 %% Release cursor A got emitted.
                ],
-    Config = config(?FUNCTION_NAME, 10, undefined, false, 5, 5, 100, reject_publish, at_least_once),
+    Config = config(?FUNCTION_NAME, 10, undefined, false, 5,
+                    reject_publish, at_least_once),
     ?assert(snapshots_prop(Config, Commands)),
     ok.
 
@@ -1298,7 +1174,8 @@ dlx_04(_Config) ->
                 rabbit_fifo:make_discard(C1, [0,1,2,3,4,5]),
                 rabbit_fifo_dlx:make_settle([0,1,2])
                ],
-    Config = config(?FUNCTION_NAME, undefined, undefined, true, 1, 5, 136, reject_publish, at_least_once),
+    Config = config(?FUNCTION_NAME, undefined, undefined, true, 1,
+                    reject_publish, at_least_once),
     ?assert(snapshots_prop(Config, Commands)),
     ok.
 
@@ -1324,7 +1201,8 @@ dlx_05(_Config) ->
                 rabbit_fifo_dlx:make_settle([0])
                 %% 2 in checkout
                ],
-    Config = config(?FUNCTION_NAME, 0, 0, false, 0, 0, 0, reject_publish, at_least_once),
+    Config = config(?FUNCTION_NAME, 0, 0, false, 0,
+                    reject_publish, at_least_once),
     ?assert(snapshots_prop(Config, Commands)),
     ok.
 
@@ -1352,7 +1230,8 @@ dlx_06(_Config) ->
                 rabbit_fifo_dlx:make_settle([0,1])
                 %% 3 in dlx_checkout
                ],
-    Config = config(?FUNCTION_NAME, undefined, 749, false, 1, 1, 131, reject_publish, at_least_once),
+    Config = config(?FUNCTION_NAME, undefined, 749, false, 1,
+                    reject_publish, at_least_once),
     ?assert(snapshots_prop(Config, Commands)),
     ok.
 
@@ -1385,7 +1264,7 @@ dlx_07(_Config) ->
                 rabbit_fifo_dlx:make_settle([0,1])
                 %% 3 in checkout
                ],
-    Config = config(?FUNCTION_NAME, undefined, undefined, false, undefined, undefined, undefined,
+    Config = config(?FUNCTION_NAME, undefined, undefined, false, undefined,
                     reject_publish, at_least_once),
     ?assert(snapshots_prop(Config, Commands)),
     ok.
@@ -1431,7 +1310,7 @@ dlx_08(_Config) ->
                 rabbit_fifo_dlx:make_settle([1]),
                 rabbit_fifo_dlx:make_settle([2])
                ],
-    Config = config(?FUNCTION_NAME, undefined, undefined, false, undefined, undefined, undefined,
+    Config = config(?FUNCTION_NAME, undefined, undefined, false, undefined,
                     reject_publish, at_least_once),
     ?assert(snapshots_prop(Config, Commands)),
     ok.
@@ -1453,25 +1332,25 @@ dlx_09(_Config) ->
                 rabbit_fifo:make_discard(C1, [2])
                 %% 1,2 in discards
                ],
-    Config = config(?FUNCTION_NAME, undefined, undefined, false, undefined, undefined, undefined,
+    Config = config(?FUNCTION_NAME, undefined, undefined, false, undefined,
                     reject_publish, at_least_once),
     ?assert(snapshots_prop(Config, Commands)),
     ok.
 
-config(Name, Length, Bytes, SingleActive, DeliveryLimit, InMemoryLength, InMemoryBytes) ->
-config(Name, Length, Bytes, SingleActive, DeliveryLimit, InMemoryLength, InMemoryBytes,
+config(Name, Length, MaxBytes, SingleActive, DeliveryLimit) ->
+    config(Name, Length, MaxBytes, SingleActive, DeliveryLimit,
        drop_head, {at_most_once, {?MODULE, banana, []}}).
 
-config(Name, Length, Bytes, SingleActive, DeliveryLimit,
-       InMemoryLength, InMemoryBytes, Overflow, DeadLetterHandler) ->
+config(Name, Length, MaxBytes, SingleActive, DeliveryLimit,
+       Overflow, DeadLetterHandler) ->
     #{name => Name,
       max_length => map_max(Length),
-      max_bytes => map_max(Bytes),
+      max_bytes => map_max(MaxBytes),
       dead_letter_handler => DeadLetterHandler,
       single_active_consumer_on => SingleActive,
       delivery_limit => map_max(DeliveryLimit),
-      max_in_memory_length => map_max(InMemoryLength),
-      max_in_memory_bytes => map_max(InMemoryBytes),
+      % max_in_memory_length => map_max(InMemoryLength),
+      % max_in_memory_bytes => map_max(InMemoryBytes),
       overflow_strategy => Overflow}.
 
 map_max(0) -> undefined;
@@ -1485,7 +1364,7 @@ max_length_prop(Conf0, Commands) ->
                         #{num_ready_messages := MsgReady} = rabbit_fifo:overview(S),
                         MsgReady =< MaxLen
                 end,
-    try run_log(test_init(Conf), Entries, Invariant, rabbit_fifo) of
+    try run_log(test_init(Conf), Entries, Invariant) of
         {_State, _Effects} ->
             true;
         _ ->
@@ -1531,7 +1410,7 @@ single_active_prop(Conf0, Commands, ValidateOrder) ->
                         map_size(Up) =< 1
                 end,
 
-    try run_log(test_init(Conf), Entries, Invariant, rabbit_fifo) of
+    try run_log(test_init(Conf), Entries, Invariant) of
         {_State, Effects} when ValidateOrder ->
             %% validate message ordering
             lists:foldl(fun ({send_msg, Pid, {delivery, Tag, Msgs}, ra_event},
@@ -1555,7 +1434,7 @@ messages_total_prop(Conf0, Commands) ->
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
     InitState = test_init(Conf),
-    run_log(InitState, Entries, messages_total_invariant(), rabbit_fifo),
+    run_log(InitState, Entries, messages_total_invariant()),
     true.
 
 messages_total_invariant() ->
@@ -1564,7 +1443,7 @@ messages_total_invariant() ->
                      returns = R,
                      dlx = #rabbit_fifo_dlx{discards = D,
                                             consumer = DlxCon}} = S) ->
-            Base = lqueue:len(M) + lqueue:len(R),
+            Base = rabbit_fifo_q:len(M) + lqueue:len(R),
             Tot0 = maps:fold(fun (_, #consumer{checked_out = Ch}, Acc) ->
                                      Acc + map_size(Ch)
                             end, Base, C),
@@ -1590,7 +1469,8 @@ simple_prefetch_prop(Conf0, Commands, WithCheckoutCancel) ->
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
     InitState = test_init(Conf),
-    run_log(InitState, Entries, simple_prefetch_invariant(WithCheckoutCancel), rabbit_fifo),
+    run_log(InitState, Entries,
+            simple_prefetch_invariant(WithCheckoutCancel)),
     true.
 
 simple_prefetch_invariant(WithCheckoutCancel) ->
@@ -1598,10 +1478,13 @@ simple_prefetch_invariant(WithCheckoutCancel) ->
             maps:fold(
               fun(_, _, false) ->
                       false;
-                 (Id, #consumer{cfg = #consumer_cfg{credit_mode = {simple_prefetch, MaxCredit}},
+                 (Id, #consumer{cfg = #consumer_cfg{credit_mode =
+                                                    {simple_prefetch, MaxCredit}},
                                 checked_out = CheckedOut,
                                 credit = Credit}, true) ->
-                      valid_simple_prefetch(MaxCredit, Credit, maps:size(CheckedOut), WithCheckoutCancel, Id)
+                      valid_simple_prefetch(MaxCredit, Credit,
+                                            maps:size(CheckedOut),
+                                            WithCheckoutCancel, Id)
               end, true, Consumers)
     end.
 
@@ -1628,24 +1511,26 @@ valid_simple_prefetch(_, _, _, _, _) ->
     true.
 
 upgrade_prop(Conf0, Commands) ->
+    FromVersion = 3,
+    ToVersion = 4,
+    FromMod = rabbit_fifo:which_module(FromVersion),
+    ToMod = rabbit_fifo:which_module(ToVersion),
     Conf = Conf0#{release_cursor_interval => 0},
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
-    InitState = test_init_v1(Conf),
+    InitState = test_init_v(Conf, FromVersion),
     [begin
          {PreEntries, PostEntries} = lists:split(SplitPos, Entries),
          %% run log v1
-         {V1, _V1Effs} = run_log(InitState, PreEntries, fun (_) -> true end,
-                                 rabbit_fifo_v1),
+         {V3, _V1Effs} = run_log(InitState, PreEntries,
+                                 fun (_) -> true end, FromVersion),
 
          %% perform conversion
-         #rabbit_fifo{} = V2 = element(1, rabbit_fifo:apply(meta(length(PreEntries) + 1),
-                                                            {machine_version, 1, 2}, V1)),
+         #rabbit_fifo{} = V4 = element(1, rabbit_fifo:apply(
+                                            meta(length(PreEntries) + 1),
+                                            {machine_version, FromVersion, ToVersion},
+                                            V3)),
          %% assert invariants
-         %%
-         %% Note that we cannot test for num_messages because rabbit_fifo_v1:messages_total/1
-         %% relies on ra_indexes not to be empty. However ra_indexes are empty in snapshots
-         %% in which case the number of messages checked out to consumers will not be included.
          Fields = [num_ready_messages,
                    smallest_raft_index,
                    num_enqueuers,
@@ -1653,42 +1538,18 @@ upgrade_prop(Conf0, Commands) ->
                    enqueue_message_bytes,
                    checkout_message_bytes
                   ],
-         V1Overview = maps:with(Fields, rabbit_fifo_v1:overview(V1)),
-         V2Overview = maps:with(Fields, rabbit_fifo:overview(V2)),
-         case V1Overview == V2Overview of
+         V3Overview = maps:with(Fields, FromMod:overview(V3)),
+         V4Overview = maps:with(Fields, ToMod:overview(V4)),
+         case V3Overview == V4Overview of
              true -> ok;
              false ->
                  ct:pal("upgrade_prop failed expected~n~tp~nGot:~n~tp",
-                        [V1Overview, V2Overview]),
-                 ?assertEqual(V1Overview, V2Overview)
+                        [V3Overview, V4Overview]),
+                 ?assertEqual(V3Overview, V4Overview)
          end,
          %% check we can run the post entries from the converted state
-         run_log(V2, PostEntries)
+         run_log(V4, PostEntries, fun (_) -> true end, ToVersion)
      end || SplitPos <- lists:seq(1, length(Entries))],
-
-    {_, V1Effs} = run_log(InitState, Entries, fun (_) -> true end,
-                          rabbit_fifo_v1),
-    [begin
-         Res = rabbit_fifo:apply(meta(Idx + 1), {machine_version, 1, 2}, RCS) ,
-         #rabbit_fifo{} = V2 = element(1, Res),
-         %% assert invariants
-         Fields = [num_ready_messages,
-                   smallest_raft_index,
-                   num_enqueuers,
-                   num_consumers,
-                   enqueue_message_bytes,
-                   checkout_message_bytes
-                  ],
-         V1Overview = maps:with(Fields, rabbit_fifo_v1:overview(RCS)),
-         V2Overview = maps:with(Fields, rabbit_fifo:overview(V2)),
-         case V1Overview == V2Overview of
-             true -> ok;
-             false ->
-                 ct:pal("upgrade_prop failed expected~n~tp~nGot:~n~tp",
-                        [V1Overview, V2Overview]),
-                 ?assertEqual(V1Overview, V2Overview)
-         end
-     end || {release_cursor, Idx, RCS} <- V1Effs],
     true.
 
 %% single active consumer ordering invariant:
@@ -1720,27 +1581,7 @@ dump_generated(Conf, Commands) ->
     true.
 
 snapshots_prop(Conf, Commands) ->
-    try run_snapshot_test(Conf, Commands, messages_total_invariant()) of
-        _ -> true
-    catch
-        Err ->
-            ct:pal("Commands: ~tp~nConf~tp~n", [Commands, Conf]),
-            ct:pal("Err: ~tp~n", [Err]),
-            false
-    end.
-
-upgrade_snapshots_prop(Conf, Commands) ->
-    try run_upgrade_snapshot_test(Conf, Commands) of
-        _ -> true
-    catch
-        Err ->
-            ct:pal("Commands: ~tp~nConf~tp~n", [Commands, Conf]),
-            ct:pal("Err: ~tp~n", [Err]),
-            false
-    end.
-
-upgrade_snapshots_prop_v2_to_v3(Conf, Commands) ->
-    try run_upgrade_snapshot_test_v2_to_v3(Conf, Commands) of
+    try run_snapshot_test(Conf, Commands) of
         _ -> true
     catch
         Err ->
@@ -1772,28 +1613,6 @@ log_gen(Size) ->
                           {1, purge}
                          ]))))).
 
-%% Does not use "return", "down", or "checkout cancel" Ra commands
-%% since these 3 commands change behaviour across v2 and v3 fixing
-%% a bug where to many credits are granted to the consumer.
-log_gen_upgrade_snapshots_v2_to_v3(Size) ->
-    Nodes = [node(),
-             fakenode@fake,
-             fakenode@fake2
-            ],
-    ?LET(EPids, vector(2, pid_gen(Nodes)),
-         ?LET(CPids, vector(2, pid_gen(Nodes)),
-              resize(Size,
-                     list(
-                       frequency(
-                         [{20, enqueue_gen(oneof(EPids))},
-                          {40, {input_event,
-                                frequency([{10, settle},
-                                           {2, discard},
-                                           {2, requeue}])}},
-                          {1, checkout_gen(oneof(CPids))},
-                          {1, purge}
-                         ]))))).
-
 log_gen_upgrade_snapshots(Size) ->
     Nodes = [node(),
              fakenode@fake,
@@ -1812,14 +1631,8 @@ log_gen_upgrade_snapshots(Size) ->
                                            {2, requeue}
                                           ])}},
                           {2, checkout_gen(oneof(CPids))},
-                          %% v2 fixes a bug that exists in v1 where a cancelled consumer is revived.
-                          %% Therefore, there is an expected behavioural difference between v1 and v2
-                          %% and below line must be commented out.
-                          % {1, checkout_cancel_gen(oneof(CPids))},
-                          %% Likewise there is a behavioural difference between v1 and v2
-                          %% when 'up' is followed by 'down' where v2 behaves correctly.
-                          %% Therefore, below line must be commented out.
-                          % {1, down_gen(oneof(EPids ++ CPids))},
+                          {1, checkout_cancel_gen(oneof(CPids))},
+                          {1, down_gen(oneof(EPids ++ CPids))},
                           {1, nodeup_gen(Nodes)},
                           {1, purge}
                          ]))))).
@@ -1946,16 +1759,21 @@ enqueue_gen(Pid) ->
 enqueue_gen(Pid, _Enq, _Del) ->
     ?LET(E, {enqueue, Pid, enqueue, msg_gen()}, E).
 
-%% It's fair to assume that every message enqueued is a #basic_message.
-%% That's what the channel expects and what rabbit_quorum_queue invokes rabbit_fifo_client with.
 msg_gen() ->
     ?LET(Bin, binary(),
-         #basic_message{content = #content{payload_fragments_rev = [Bin],
-                                           properties = none}}).
+         mc:prepare(
+           store, mc_amqpl:from_basic_message(
+                    #basic_message{exchange_name = #resource{name = <<"e">>,
+                                                             kind = exchange,
+                                                             virtual_host = <<"/">>},
+                                   routing_keys = [<<>>],
+                                   content =
+                                   #content{payload_fragments_rev = [Bin],
+                                            properties = #'P_basic'{}}}))).
 
 msg(Bin) when is_binary(Bin) ->
     #basic_message{content = #content{payload_fragments_rev = [Bin],
-                                      properties = none}}.
+                                      properties = #'P_basic'{}}}.
 
 checkout_cancel_gen(Pid) ->
     {checkout, Pid, cancel}.
@@ -1974,7 +1792,8 @@ checkout_gen(Pid) ->
             config :: map(),
             log = [] :: list(),
             down = #{} :: #{pid() => noproc | noconnection},
-            enq_cmds = #{} :: #{ra:index() => rabbit_fifo:enqueue()}
+            enq_cmds = #{} :: #{ra:index() => rabbit_fifo:enqueue()},
+            is_v4 = false :: boolean()
            }).
 
 expand(Ops, Config) ->
@@ -2000,9 +1819,11 @@ expand(Ops, Config, EnqFun) ->
                      _ ->
                          InitConfig0
                  end,
+    IsV4 = rabbit_feature_flags:is_enabled('rabbitmq_4.0.0'),
     T = #t{state = rabbit_fifo:init(InitConfig),
            enq_body_fun = EnqFun,
-           config = Config},
+           config = Config,
+           is_v4 = IsV4},
     #t{effects = Effs} = T1 = lists:foldl(fun handle_op/2, T, Ops),
     %% process the remaining effect
     #t{log = Log} = lists:foldl(fun do_apply/2,
@@ -2024,7 +1845,7 @@ handle_op({enqueue, Pid, When, Data},
             Enqs = maps:update_with(Pid, fun (Seq) -> Seq + 1 end, 1, Enqs0),
             MsgSeq = maps:get(Pid, Enqs),
             {EnqSt, Msg} = Fun({EnqSt0, Data}),
-            Cmd = rabbit_fifo:make_enqueue(Pid, MsgSeq, Msg),
+            Cmd = make_enqueue(Pid, MsgSeq, Msg),
             case When of
                 enqueue ->
                     do_apply(Cmd, T#t{enqueuers = Enqs,
@@ -2054,9 +1875,15 @@ handle_op({checkout, CId, Prefetch}, #t{consumers  = Cons0} = T) ->
             %% ignore if it already exists
             T;
         _ ->
-            Cons = maps:put(CId, ok,  Cons0),
-            Cmd = rabbit_fifo:make_checkout(CId,
-                                            {auto, Prefetch, simple_prefetch},
+            Spec = case T#t.is_v4 of
+                       true ->
+                           {auto, {simple_prefetch, Prefetch}};
+                       false ->
+                           {auto, Prefetch, simple_prefetch}
+                   end,
+
+            Cons = maps:put(CId, T#t.index,  Cons0),
+            Cmd = rabbit_fifo:make_checkout(CId, Spec,
                                             #{ack => true,
                                               prefetch => Prefetch,
                                               username => <<"user">>,
@@ -2084,13 +1911,24 @@ handle_op({input_event, requeue}, #t{effects = Effs} = T) ->
             T
     end;
 handle_op({input_event, Settlement}, #t{effects = Effs,
-                                        down = Down} = T) ->
+                                        consumers = Cons,
+                                        down = Down,
+                                        is_v4 = IsV4} = T) ->
     case queue:out(Effs) of
         {{value, {settle, CId, MsgIds}}, Q} ->
+            CKey = case maps:get(CId, Cons, undefined) of
+                       K when is_integer(K) andalso IsV4 ->
+                           K;
+                       _ ->
+                           CId
+                   end,
             Cmd = case Settlement of
-                      settle -> rabbit_fifo:make_settle(CId, MsgIds);
-                      return -> rabbit_fifo:make_return(CId, MsgIds);
-                      discard -> rabbit_fifo:make_discard(CId, MsgIds)
+                      settle ->
+                          rabbit_fifo:make_settle(CKey, MsgIds);
+                      return ->
+                          rabbit_fifo:make_return(CKey, MsgIds);
+                      discard ->
+                          rabbit_fifo:make_discard(CKey, MsgIds)
                   end,
             do_apply(Cmd, T#t{effects = Q});
         {{value, {enqueue, Pid, _, _} = Cmd}, Q} ->
@@ -2113,7 +1951,8 @@ handle_op(purge, T) ->
 handle_op({update_config, Changes}, #t{config = Conf} = T) ->
     Config = maps:merge(Conf, Changes),
     do_apply(rabbit_fifo:make_update_config(Config), T);
-handle_op({checkout_dlx, Prefetch}, #t{config = #{dead_letter_handler := at_least_once}} = T) ->
+handle_op({checkout_dlx, Prefetch},
+          #t{config = #{dead_letter_handler := at_least_once}} = T) ->
     Cmd = rabbit_fifo_dlx:make_checkout(ignore_pid, Prefetch),
     do_apply(Cmd, T).
 
@@ -2181,145 +2020,17 @@ run_proper(Fun, Args, NumTests) ->
                       end}])).
 
 run_snapshot_test(Conf, Commands) ->
-    run_snapshot_test(Conf, Commands, fun (_) -> true  end).
-
-run_snapshot_test(Conf, Commands, Invariant) ->
-    %% create every incremental permutation of the commands lists
-    %% and run the snapshot tests against that
-    ct:pal("running snapshot test with ~b commands using config ~tp",
-           [length(Commands), Conf]),
-    [begin
-         % ct:pal("~w running commands to ~w~n", [?FUNCTION_NAME, lists:last(C)]),
-         run_snapshot_test0(Conf, C, Invariant)
-     end || C <- prefixes(Commands, 1, [])].
-
-run_snapshot_test0(Conf, Commands) ->
-    run_snapshot_test0(Conf, Commands, fun (_) -> true end).
-
-run_snapshot_test0(Conf0, Commands, Invariant) ->
-    Conf = Conf0#{max_in_memory_length => 0},
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
-    {State0, Effects} = run_log(test_init(Conf), Entries, Invariant, rabbit_fifo),
-    State = rabbit_fifo:normalize(State0),
-    Cursors = [ C || {release_cursor, _, _} = C <- Effects],
-
-    [begin
-         %% drop all entries below and including the snapshot
-         Filtered = lists:dropwhile(fun({X, _}) when X =< SnapIdx -> true;
-                                       (_) -> false
-                                    end, Entries),
-         % ct:pal("release_cursor: ~b from ~w~n", [SnapIdx, element(1, hd_or(Filtered))]),
-         {S0, _} = run_log(SnapState, Filtered, Invariant, rabbit_fifo),
-         S = rabbit_fifo:normalize(S0),
-         % assert log can be restored from any release cursor index
-         case S of
-             State -> ok;
-             _ ->
-                 ct:pal("Snapshot tests failed run log:~n"
-                        "~tp~n from snapshot index ~b "
-                        "with snapshot state~n~tp~n Entries~n~tp~n"
-                        "Config: ~tp~n",
-                        [Filtered, SnapIdx, SnapState, Entries, Conf]),
-                 ct:pal("Expected~n~tp~nGot:~n~tp~n", [?record_info(rabbit_fifo, State),
-                                                     ?record_info(rabbit_fifo, S)]),
-                 ?assertEqual(State, S)
-         end
-     end || {release_cursor, SnapIdx, SnapState} <- Cursors],
-    ok.
-
-run_upgrade_snapshot_test(Conf, Commands) ->
-    ct:pal("running test with ~b commands using config ~tp",
+    ct:pal("running snapshot test 2 with ~b commands using config ~tp",
            [length(Commands), Conf]),
-    Indexes = lists:seq(1, length(Commands)),
-    Entries = lists:zip(Indexes, Commands),
-    Invariant = fun(_) -> true end,
-    %% Run the whole command log in v1 to emit release cursors.
-    {_, Effects} = run_log(test_init_v1(Conf), Entries, Invariant, rabbit_fifo_v1),
-    Cursors = [ C || {release_cursor, _, _} = C <- Effects],
-    [begin
-         %% Drop all entries below and including the snapshot.
-         FilteredV1 = lists:dropwhile(fun({X, _}) when X =< SnapIdx -> true;
-                                         (_) -> false
-                                      end, Entries),
-         %% For V2 we will apply the same commands to the snapshot state as for V1.
-         %% However, we need to increment all Raft indexes by 1 because V2
-         %% requires one additional Raft index for the conversion command from V1 to V2.
-         FilteredV2 = lists:keymap(fun(Idx) -> Idx + 1 end, 1, FilteredV1),
-         %% Recover in V1.
-         {StateV1, _} = run_log(SnapState, FilteredV1, Invariant, rabbit_fifo_v1),
-         %% Perform conversion and recover in V2.
-         Res = rabbit_fifo:apply(meta(SnapIdx + 1), {machine_version, 1, 2}, SnapState),
-         #rabbit_fifo{} = V2 = element(1, Res),
-         {StateV2, _} = run_log(V2, FilteredV2, Invariant, rabbit_fifo, 2),
-         %% Invariant: Recovering a V1 snapshot in V1 or V2 should end up in the same
-         %% number of messages.
-         Fields = [num_messages,
-                   num_ready_messages,
-                   num_enqueuers,
-                   num_consumers,
-                   enqueue_message_bytes,
-                   checkout_message_bytes
-                  ],
-         V1Overview = maps:with(Fields, rabbit_fifo_v1:overview(StateV1)),
-         V2Overview = maps:with(Fields, rabbit_fifo:overview(StateV2)),
-         case V1Overview == V2Overview of
-             true -> ok;
-             false ->
-                 ct:pal("property failed, expected:~n~tp~ngot:~n~tp~nstate v1:~n~tp~nstate v2:~n~tp~n"
-                        "snapshot index: ~tp",
-                        [V1Overview, V2Overview, StateV1, ?record_info(rabbit_fifo, StateV2), SnapIdx]),
-                 ?assertEqual(V1Overview, V2Overview)
-         end
-     end || {release_cursor, SnapIdx, SnapState} <- Cursors],
-    ok.
+    Fun = fun (_E, S, _Effs) ->
+                  MsgTotFun = messages_total_invariant(),
+                  MsgTotFun(S)
+          end,
+    _ = run_log(test_init(Conf), Entries, Fun),
+    true.
 
-run_upgrade_snapshot_test_v2_to_v3(Conf, Commands) ->
-    ct:pal("running test with ~b commands using config ~tp",
-           [length(Commands), Conf]),
-    Indexes = lists:seq(1, length(Commands)),
-    Entries = lists:zip(Indexes, Commands),
-    Invariant = fun(_) -> true end,
-    %% Run the whole command log in v2 to emit release cursors.
-    {_, Effects} = run_log(test_init(Conf), Entries, Invariant, rabbit_fifo, 2),
-    Cursors = [ C || {release_cursor, _, _} = C <- Effects],
-    [begin
-         %% Drop all entries below and including the snapshot.
-         FilteredV2 = lists:dropwhile(fun({X, _}) when X =< SnapIdx -> true;
-                                         (_) -> false
-                                      end, Entries),
-         %% For V3 we will apply the same commands to the snapshot state as for V2.
-         %% However, we need to increment all Raft indexes by 1 because V3
-         %% requires one additional Raft index for the conversion command from V2 to V3.
-         FilteredV3 = lists:keymap(fun(Idx) -> Idx + 1 end, 1, FilteredV2),
-         %% Recover in V2.
-         {StateV2, _} = run_log(SnapState, FilteredV2, Invariant, rabbit_fifo, 2),
-         %% Perform conversion and recover in V3.
-         Res = rabbit_fifo:apply(meta(SnapIdx + 1), {machine_version, 2, 3}, SnapState),
-         #rabbit_fifo{} = V3 = element(1, Res),
-         {StateV3, _} = run_log(V3, FilteredV3, Invariant, rabbit_fifo, 3),
-         %% Invariant: Recovering a V2 snapshot in V2 or V3 should end up in the same
-         %% number of messages given that no "return", "down", or "cancel consumer"
-         %% Ra commands are used.
-         Fields = [num_messages,
-                   num_ready_messages,
-                   num_enqueuers,
-                   num_consumers,
-                   enqueue_message_bytes,
-                   checkout_message_bytes
-                  ],
-         V2Overview = maps:with(Fields, rabbit_fifo:overview(StateV2)),
-         V3Overview = maps:with(Fields, rabbit_fifo:overview(StateV3)),
-         case V2Overview == V3Overview of
-             true -> ok;
-             false ->
-                 ct:pal("property failed, expected:~n~tp~ngot:~n~tp~nstate v2:~n~tp~nstate v3:~n~tp~n"
-                        "snapshot index: ~tp",
-                        [V2Overview, V3Overview, StateV2, ?record_info(rabbit_fifo, StateV3), SnapIdx]),
-                 ?assertEqual(V2Overview, V3Overview)
-         end
-     end || {release_cursor, SnapIdx, SnapState} <- Cursors],
-    ok.
 
 hd_or([H | _]) -> H;
 hd_or(_) -> {undefined}.
@@ -2332,45 +2043,64 @@ prefixes(Source, N, Acc) ->
     prefixes(Source, N+1, [X | Acc]).
 
 run_log(InitState, Entries) ->
-    run_log(InitState, Entries, fun(_) -> true end, rabbit_fifo).
+    run_log(InitState, Entries, fun(_) -> true end).
 
-run_log(InitState, Entries, InvariantFun, FifoMod) ->
-    run_log(InitState, Entries, InvariantFun, FifoMod, 3).
+run_log(InitState, Entries, InvariantFun) ->
+    run_log(InitState, Entries, InvariantFun, ?MACHINE_VERSION).
 
-run_log(InitState, Entries, InvariantFun, FifoMod, MachineVersion) ->
-    Invariant = fun(E, S) ->
-                       case InvariantFun(S) of
+run_log(InitState, Entries, InvariantFun0, MachineVersion)
+  when is_function(InvariantFun0, 1) ->
+    InvariantFun = fun (_E, S, _Effs) ->
+                           InvariantFun0(S)
+                   end,
+    run_log(InitState, Entries, InvariantFun, MachineVersion);
+run_log(InitState, Entries, InvariantFun, MachineVersion)
+  when is_integer(MachineVersion) ->
+    Invariant = fun(E, S, Effs) ->
+                       case InvariantFun(E, S, Effs) of
                            true -> ok;
                            false ->
                                throw({invariant, E, S})
                        end
                 end,
+    FifoMod = rabbit_fifo:which_module(MachineVersion),
 
-    lists:foldl(fun ({Idx, E}, {Acc0, Efx0}) ->
-                        case FifoMod:apply(meta(Idx, MachineVersion), E, Acc0) of
+    lists:foldl(fun ({Idx, E0}, {Acc0, Efx0}) ->
+                        {Meta, E} = case E0 of
+                                        {M1, E1} when is_map(M1) ->
+                                            M0 = meta(Idx, MachineVersion),
+                                            {maps:merge(M0, M1), E1};
+                                        _ ->
+                                            {meta(Idx, MachineVersion), E0}
+                                    end,
+
+                        case FifoMod:apply(Meta, E, Acc0) of
                             {Acc, _, Efx} when is_list(Efx) ->
-                                Invariant(E, Acc),
+                                Invariant(E, Acc, lists:flatten(Efx)),
                                 {Acc, Efx0 ++ Efx};
                             {Acc, _, Efx}  ->
-                                Invariant(E, Acc),
+                                Invariant(E, Acc, lists:flatten(Efx)),
                                 {Acc, Efx0 ++ [Efx]};
                             {Acc, _}  ->
-                                Invariant(E, Acc),
+                                Invariant(E, Acc, []),
                                 {Acc, Efx0}
                         end
                 end, {InitState, []}, Entries).
 
 test_init(Conf) ->
+    test_init(rabbit_fifo, Conf).
+
+test_init(Mod, Conf) ->
     Default = #{queue_resource => blah,
                 release_cursor_interval => 0,
                 metrics_handler => {?MODULE, metrics_handler, []}},
-    rabbit_fifo:init(maps:merge(Default, Conf)).
+    Mod:init(maps:merge(Default, Conf)).
 
 test_init_v1(Conf) ->
-    Default = #{queue_resource => blah,
-                release_cursor_interval => 0,
-                metrics_handler => {?MODULE, metrics_handler, []}},
-    rabbit_fifo_v1:init(maps:merge(Default, Conf)).
+    test_init(rabbit_fifo_v1, Conf).
+
+test_init_v(Conf, Version) ->
+    test_init(rabbit_fifo:which_module(Version), Conf).
 
 meta(Idx) ->
     meta(Idx, 3).

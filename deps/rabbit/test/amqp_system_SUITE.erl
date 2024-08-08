@@ -34,6 +34,7 @@ groups() ->
           %% TODO at_most_once,
           reject,
           redelivery,
+          released,
           routing,
           invalid_routes,
           auth_failure,
@@ -68,11 +69,13 @@ init_per_group(Group, Config) ->
         dotnet -> fun build_dotnet_test_project/1;
         java   -> fun build_maven_test_project/1
     end,
-    rabbit_ct_helpers:run_setup_steps(Config1, [
-        GroupSetupStep
-      ] ++
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    Config2 = rabbit_ct_helpers:run_setup_steps(
+                Config1,
+                [GroupSetupStep] ++
+                rabbit_ct_broker_helpers:setup_steps() ++
+                rabbit_ct_client_helpers:setup_steps()),
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config2, 'rabbitmq_4.0.0'),
+    Config2.
 
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
@@ -115,22 +118,20 @@ build_maven_test_project(Config) ->
 %% -------------------------------------------------------------------
 
 roundtrip(Config) ->
+    declare_queue(Config, ?FUNCTION_NAME, "quorum"),
     run(Config, [{dotnet, "roundtrip"},
                  {java, "RoundTripTest"}]).
 
 streams(Config) ->
-    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config,
-                                                     message_containers_store_amqp_v1),
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
-    amqp_channel:call(Ch, #'queue.declare'{queue = <<"stream_q2">>,
-                                           durable = true,
-                                           arguments = [{<<"x-queue-type">>, longstr, "stream"}]}),
+    declare_queue(Config, ?FUNCTION_NAME, "stream"),
     run(Config, [{dotnet, "streams"}]).
 
 roundtrip_to_amqp_091(Config) ->
+    declare_queue(Config, ?FUNCTION_NAME, "classic"),
     run(Config, [{dotnet, "roundtrip_to_amqp_091"}]).
 
 default_outcome(Config) ->
+    declare_queue(Config, ?FUNCTION_NAME, "classic"),
     run(Config, [{dotnet, "default_outcome"}]).
 
 no_routes_is_released(Config) ->
@@ -140,28 +141,41 @@ no_routes_is_released(Config) ->
     run(Config, [{dotnet, "no_routes_is_released"}]).
 
 outcomes(Config) ->
+    declare_queue(Config, ?FUNCTION_NAME, "classic"),
     run(Config, [{dotnet, "outcomes"}]).
 
 fragmentation(Config) ->
+    declare_queue(Config, ?FUNCTION_NAME, "classic"),
     run(Config, [{dotnet, "fragmentation"}]).
 
 message_annotations(Config) ->
+    declare_queue(Config, ?FUNCTION_NAME, "classic"),
     run(Config, [{dotnet, "message_annotations"}]).
 
 footer(Config) ->
+    declare_queue(Config, ?FUNCTION_NAME, "classic"),
     run(Config, [{dotnet, "footer"}]).
 
 data_types(Config) ->
+    declare_queue(Config, ?FUNCTION_NAME, "classic"),
     run(Config, [{dotnet, "data_types"}]).
 
 reject(Config) ->
+    declare_queue(Config, ?FUNCTION_NAME, "classic"),
     run(Config, [{dotnet, "reject"}]).
 
 redelivery(Config) ->
+    declare_queue(Config, ?FUNCTION_NAME, "quorum"),
     run(Config, [{dotnet, "redelivery"}]).
+
+released(Config) ->
+    declare_queue(Config, ?FUNCTION_NAME, "quorum"),
+    run(Config, [{dotnet, "released"}]).
 
 routing(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config),
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"test">>,
+                                           durable = true}),
     amqp_channel:call(Ch, #'queue.declare'{queue = <<"transient_q">>,
                                            durable = false}),
     amqp_channel:call(Ch, #'queue.declare'{queue = <<"durable_q">>,
@@ -174,6 +188,18 @@ routing(Config) ->
                                            arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}),
     amqp_channel:call(Ch, #'queue.declare'{queue = <<"autodel_q">>,
                                            auto_delete = true}),
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"fanout_q">>,
+                                           durable = false}),
+    amqp_channel:call(Ch, #'queue.bind'{queue = <<"fanout_q">>,
+                                        exchange = <<"amq.fanout">>
+                                       }),
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"direct_q">>,
+                                           durable = false}),
+    amqp_channel:call(Ch, #'queue.bind'{queue = <<"direct_q">>,
+                                        exchange = <<"amq.direct">>,
+                                        routing_key = <<"direct_q">>
+                                       }),
+
     run(Config, [
         {dotnet, "routing"}
       ]).
@@ -227,6 +253,7 @@ run_dotnet_test(Config, Method) ->
       [
         {cd, TestProjectDir}
       ]),
+    ct:pal("~s: result ~p", [?FUNCTION_NAME, Ret]),
     {ok, _} = Ret.
 
 run_java_test(Config, Class) ->
@@ -239,3 +266,13 @@ run_java_test(Config, Class) ->
       ],
       [{cd, TestProjectDir}]),
     {ok, _} = Ret.
+
+declare_queue(Config, Name, Type) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Ch, #'queue.declare'{queue = atom_to_binary(Name, utf8),
+                                               durable = true,
+                                               arguments = [{<<"x-queue-type">>,
+                                                             longstr, Type}]}),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    ok.

@@ -17,8 +17,6 @@
         is_list(H) orelse
         (is_map(H) andalso is_map_key(size, H))).
 
--define(DELIVERY_SEND_MSG_OPTS, [local, ra_event]).
-
 -type optimised_tuple(A, B) :: nonempty_improper_list(A, B).
 
 -type option(T) :: undefined | T.
@@ -39,14 +37,12 @@
 -type msg_header() :: msg_size() |
                       optimised_tuple(msg_size(), Expiry :: milliseconds()) |
                       #{size := msg_size(),
-                        acquired_count => non_neg_integer(),
                         delivery_count => non_neg_integer(),
                         expiry => milliseconds()}.
 %% The message header:
 %% size: The size of the message payload in bytes.
-%% delivery_count: The number of unsuccessful delivery attempts.
+%% delivery_count: the number of unsuccessful delivery attempts.
 %%                 A non-zero value indicates a previous attempt.
-%% return_count: The number of explicit returns.
 %% expiry: Epoch time in ms when a message expires. Set during enqueue.
 %%         Value is determined by per-queue or per-message message TTL.
 %% If it contains only the size it can be condensed to an integer.
@@ -55,50 +51,44 @@
 -type msg_size() :: non_neg_integer().
 %% the size in bytes of the msg payload
 
--type msg() :: optimised_tuple(ra:index(), msg_header()).
+-type msg() :: optimised_tuple(option(ra:index()), msg_header()).
 
 -type delivery_msg() :: {msg_id(), {msg_header(), raw_msg()}}.
 %% A tuple consisting of the message id, and the headered message.
 
--type delivery() :: {delivery, rabbit_types:ctag(), [delivery_msg()]}.
+-type consumer_tag() :: binary().
+%% An arbitrary binary tag used to distinguish between different consumers
+%% set up by the same process. See: {@link rabbit_fifo_client:checkout/3.}
+
+-type delivery() :: {delivery, consumer_tag(), [delivery_msg()]}.
 %% Represents the delivery of one or more rabbit_fifo messages.
 
--type consumer_id() :: {rabbit_types:ctag(), pid()}.
+-type consumer_id() :: {consumer_tag(), pid()}.
 %% The entity that receives messages. Uniquely identifies a consumer.
 
--type consumer_idx() :: ra:index().
-%% v4 can reference consumers by the raft index they were added at.
-%% The entity that receives messages. Uniquely identifies a consumer.
--type consumer_key() :: consumer_id() | consumer_idx().
-
--type credit_mode() ::
-    {credited, InitialDeliveryCount :: rabbit_queue_type:delivery_count()} |
-    %% machine_version 2
-    {simple_prefetch, MaxCredit :: non_neg_integer()}.
+-type credit_mode() :: credited |
+                        %% machine_version 2
+                        simple_prefetch |
+                        %% machine_version 3
+                        {simple_prefetch, MaxCredit :: non_neg_integer()}.
 %% determines how credit is replenished
 
--type checkout_spec() :: {once | auto,
-                          Num :: non_neg_integer(),
-                          credited | simple_prefetch} |
-
+-type checkout_spec() :: {once | auto, Num :: non_neg_integer(),
+                          credit_mode()} |
                          {dequeue, settled | unsettled} |
-                         cancel | remove |
-                         %% new v4 format
-                         {once | auto, credit_mode()}.
+                         cancel.
 
 -type consumer_meta() :: #{ack => boolean(),
                            username => binary(),
                            prefetch => non_neg_integer(),
-                           args => list(),
-                           priority => non_neg_integer()
-                          }.
+                           args => list()}.
 %% static meta data associated with a consumer
 
 -type applied_mfa() :: {module(), atom(), list()}.
 % represents a partially applied module call
 
--define(RELEASE_CURSOR_EVERY, 2048 * 4).
--define(RELEASE_CURSOR_EVERY_MAX, 1_000_000).
+-define(RELEASE_CURSOR_EVERY, 2048).
+-define(RELEASE_CURSOR_EVERY_MAX, 3_200_000).
 -define(USE_AVG_HALF_LIFE, 10000.0).
 %% an average QQ without any message uses about 100KB so setting this limit
 %% to ~10 times that should be relatively safe.
@@ -108,35 +98,37 @@
 -define(LOW_LIMIT, 0.8).
 -define(DELIVERY_CHUNK_LIMIT_B, 128_000).
 
--type milliseconds() :: non_neg_integer().
 -record(consumer_cfg,
         {meta = #{} :: consumer_meta(),
          pid :: pid(),
-         tag :: rabbit_types:ctag(),
+         tag :: consumer_tag(),
          %% the mode of how credit is incremented
          %% simple_prefetch: credit is re-filled as deliveries are settled
          %% or returned.
          %% credited: credit can only be changed by receiving a consumer_credit
-         %% command: `{credit, ReceiverDeliveryCount, Credit}'
-         credit_mode :: credited | credit_mode(),
+         %% command: `{consumer_credit, ReceiverDeliveryCount, Credit}'
+         credit_mode :: credit_mode(), % part of snapshot data
          lifetime = once :: once | auto,
-         priority = 0 :: integer()}).
+         priority = 0 :: non_neg_integer()}).
 
 -record(consumer,
         {cfg = #consumer_cfg{},
-         status = up :: up | suspected_down | cancelled | quiescing,
-         next_msg_id = 0 :: msg_id(),
+         status = up :: up | suspected_down | cancelled | waiting,
+         next_msg_id = 0 :: msg_id(), % part of snapshot data
          checked_out = #{} :: #{msg_id() => msg()},
          %% max number of messages that can be sent
          %% decremented for each delivery
-         credit = 0 :: non_neg_integer(),
-         %% AMQP 1.0 §2.6.7
-         delivery_count :: rabbit_queue_type:delivery_count()
+         credit = 0 : non_neg_integer(),
+         %% total number of checked out messages - ever
+         %% incremented for each delivery
+         delivery_count = 0 :: non_neg_integer()
         }).
 
 -type consumer() :: #consumer{}.
 
 -type consumer_strategy() :: competing | single_active.
+
+-type milliseconds() :: non_neg_integer().
 
 -type dead_letter_handler() :: option({at_most_once, applied_mfa()} | at_least_once).
 
@@ -172,10 +164,14 @@
          unused_2
         }).
 
+-type prefix_msgs() :: {list(), list()} |
+                       {non_neg_integer(), list(),
+                        non_neg_integer(), list()}.
+
 -record(rabbit_fifo,
         {cfg :: #cfg{},
          % unassigned messages
-         messages = rabbit_fifo_q:new() :: rabbit_fifo_q:state(),
+         messages = lqueue:new() :: lqueue:lqueue(msg()),
          messages_total = 0 :: non_neg_integer(),
          % queue of returned msg_in_ids - when checking out it picks from
          returns = lqueue:new() :: lqueue:lqueue(term()),
@@ -191,18 +187,22 @@
          % index when there are large gaps but should be faster than gb_trees
          % for normal appending operations as it's backed by a map
          ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
-         unused_1,
+         %% A release cursor is essentially a snapshot for a past raft index.
+         %% Working assumption: Messages are consumed in a FIFO-ish order because
+         %% the log is truncated only until the oldest message.
+         release_cursors = lqueue:new() :: lqueue:lqueue({release_cursor,
+                                                          ra:index(), #rabbit_fifo{}}),
          % consumers need to reflect consumer state at time of snapshot
-         consumers = #{} :: #{consumer_key() => consumer()},
+         consumers = #{} :: #{consumer_id() => consumer()},
          % consumers that require further service are queued here
          service_queue = priority_queue:new() :: priority_queue:q(),
          %% state for at-least-once dead-lettering
          dlx = rabbit_fifo_dlx:init() :: rabbit_fifo_dlx:state(),
          msg_bytes_enqueue = 0 :: non_neg_integer(),
          msg_bytes_checkout = 0 :: non_neg_integer(),
-         %% one is picked if active consumer is cancelled or dies
+         %% waiting consumers, one is picked active consumer is cancelled or dies
          %% used only when single active consumer is on
-         waiting_consumers = [] :: [{consumer_key(), consumer()}],
+         waiting_consumers = [] :: [{consumer_id(), consumer()}],
          last_active :: option(non_neg_integer()),
          msg_cache :: option({ra:index(), raw_msg()}),
          unused_2

@@ -297,9 +297,9 @@ consume(Q, Spec, State0) when ?amqqueue_is_classic(Q) ->
             Err
     end.
 
-%% Delete this function when feature flag credit_api_v2 becomes required.
+%% Delete this function when feature flag rabbitmq_4.0.0 becomes required.
 consume_backwards_compat({simple_prefetch, PrefetchCount} = Mode, Args) ->
-    case rabbit_feature_flags:is_enabled(credit_api_v2) of
+    case rabbit_feature_flags:is_enabled('rabbitmq_4.0.0') of
         true -> {Mode, Args};
         false -> {PrefetchCount, Args}
     end;
@@ -314,8 +314,8 @@ consume_backwards_compat({credited, credit_api_v1}, Args) ->
                                {<<"drain">>,  bool, false}]} | Args]}.
 
 cancel(Q, Spec, State) ->
-    %% Cancel API v2 reuses feature flag credit_api_v2.
-    Request = case rabbit_feature_flags:is_enabled(credit_api_v2) of
+    %% Cancel API v2 reuses feature flag rabbitmq_4.0.0.
+    Request = case rabbit_feature_flags:is_enabled('rabbitmq_4.0.0') of
                   true ->
                       {stop_consumer, Spec#{pid => self()}};
                   false ->
@@ -333,6 +333,15 @@ cancel(Q, Spec, State) ->
 -spec settle(rabbit_amqqueue:name(), rabbit_queue_type:settle_op(),
              rabbit_types:ctag(), [non_neg_integer()], state()) ->
     {state(), rabbit_queue_type:actions()}.
+settle(QName, {modify, _DelFailed, Undel, _Anns}, CTag, MsgIds, State) ->
+    %% translate modify into other op
+    Op = case Undel of
+             true ->
+                 discard;
+             false ->
+                 requeue
+         end,
+    settle(QName, Op, CTag, MsgIds, State);
 settle(_QName, Op, _CTag, MsgIds, State = #?STATE{pid = Pid}) ->
     Arg = case Op of
               complete ->
@@ -413,7 +422,7 @@ handle_event(_QName, Action, State)
     {ok, State, [Action]};
 handle_event(_QName, {send_drained, {Ctag, Credit}}, State) ->
     %% This function clause should be deleted when feature flag
-    %% credit_api_v2 becomes required.
+    %% rabbitmq_4.0.0 becomes required.
     Action = {credit_reply_v1, Ctag, Credit, _Available = 0, _Drain = true},
     {ok, State, [Action]}.
 
@@ -568,7 +577,7 @@ capabilities() ->
                           <<"x-max-length-bytes">>, <<"x-max-priority">>,
                           <<"x-overflow">>, <<"x-queue-mode">>, <<"x-queue-version">>,
                           <<"x-single-active-consumer">>, <<"x-queue-type">>, <<"x-queue-master-locator">>]
-                          ++ case rabbit_feature_flags:is_enabled(classic_queue_leader_locator) of
+                          ++ case rabbit_feature_flags:is_enabled('rabbitmq_4.0.0') of
                                  true -> [<<"x-queue-leader-locator">>];
                                  false -> []
                              end,
@@ -645,12 +654,12 @@ deliver_to_consumer(Pid, QName, CTag, AckRequired, Message) ->
     Evt = {deliver, CTag, AckRequired, [Message]},
     send_queue_event(Pid, QName, Evt).
 
-%% Delete this function when feature flag credit_api_v2 becomes required.
+%% Delete this function when feature flag rabbitmq_4.0.0 becomes required.
 send_credit_reply_credit_api_v1(Pid, QName, Available) ->
     Evt = {send_credit_reply, Available},
     send_queue_event(Pid, QName, Evt).
 
-%% Delete this function when feature flag credit_api_v2 becomes required.
+%% Delete this function when feature flag rabbitmq_4.0.0 becomes required.
 send_drained_credit_api_v1(Pid, QName, Ctag, Credit) ->
     Evt = {send_drained, {Ctag, Credit}},
     send_queue_event(Pid, QName, Evt).
