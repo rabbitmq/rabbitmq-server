@@ -14,21 +14,21 @@
 -compile(export_all).
 
 -define(ONE_RUNNING_METRIC, #'MetricFamily'{name = <<"rabbitmq_federation_links">>,
-                                            help = "Current number of federation links.",
+                                            help = "Number of federation links",
                                             type = 'GAUGE',
                                             metric = [#'Metric'{label = [#'LabelPair'{name = <<"status">>,
                                                                                       value = <<"running">>}],
                                                                 gauge = #'Gauge'{value = 1}}]}).
 
 -define(TWO_RUNNING_METRIC, #'MetricFamily'{name = <<"rabbitmq_federation_links">>,
-                                            help = "Current number of federation links.",
+                                            help = "Number of federation links",
                                             type = 'GAUGE',
                                             metric = [#'Metric'{label = [#'LabelPair'{name = <<"status">>,
                                                                                       value = <<"running">>}],
                                                                 gauge = #'Gauge'{value = 2}}]}).
 
 -define(ONE_RUNNING_ONE_STARTING_METRIC, #'MetricFamily'{name = <<"rabbitmq_federation_links">>,
-                                                         help = "Current number of federation links.",
+                                                         help = "Number of federation links",
                                                          type = 'GAUGE',
                                                          metric = [#'Metric'{label = [#'LabelPair'{name = <<"status">>,
                                                                                                    value = <<"running">>}],
@@ -37,12 +37,6 @@
                                                                                                    value = <<"starting">>}],
                                                                              gauge = #'Gauge'{value = 1}}]}).
 
--import(rabbit_federation_test_util,
-        [expect/3, expect_empty/2,
-         set_upstream/4, clear_upstream/3, set_upstream_set/4,
-         set_policy/5, clear_policy/3,
-         set_policy_upstream/5, set_policy_upstreams/4,
-         no_plugins/1, with_ch/3, q/2, maybe_declare_queue/3, delete_all/2]).
 
 all() ->
     [
@@ -71,7 +65,7 @@ init_per_suite(Config) ->
     rabbit_ct_helpers:run_setup_steps(Config1,
                                       rabbit_ct_broker_helpers:setup_steps() ++
                                           rabbit_ct_client_helpers:setup_steps() ++
-                                          [fun rabbit_federation_test_util:setup_federation/1]).
+                                          [fun setup_federation/1]).
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
                                          rabbit_ct_client_helpers:teardown_steps() ++
@@ -120,7 +114,7 @@ single_link_then_second_added(Config) ->
                                                                  get_metrics(Config)),
                                                    500,
                                                    5)
-                      
+
               end,
 
               delete_all(Ch, [q(<<"fed.downstream2">>, [{<<"x-queue-type">>, longstr, <<"classic">>}])])
@@ -147,5 +141,163 @@ upstream_downstream() ->
 
 get_metrics(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
-                                 rabbitmq_prometheus_collector_test_proxy, collect_mf,
-                                 [default, prometheus_rabbitmq_federation_collector]).
+                                 ?MODULE, collect_mf,
+                                 [default, rabbit_federation_prometheus_collector]).
+
+
+
+
+setup_federation(Config) ->
+    setup_federation_with_upstream_params(Config, []).
+
+setup_federation_with_upstream_params(Config, ExtraParams) ->
+    rabbit_ct_broker_helpers:set_parameter(Config, 0,
+      <<"federation-upstream">>, <<"localhost">>, [
+        {<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config, 0)},
+        {<<"consumer-tag">>, <<"fed.tag">>}
+        ] ++ ExtraParams),
+
+    rabbit_ct_broker_helpers:set_parameter(Config, 0,
+      <<"federation-upstream">>, <<"local5673">>, [
+        {<<"uri">>, <<"amqp://localhost:1">>}
+        ] ++ ExtraParams),
+
+    rabbit_ct_broker_helpers:set_parameter(Config, 0,
+      <<"federation-upstream-set">>, <<"upstream">>, [
+        [
+          {<<"upstream">>, <<"localhost">>},
+          {<<"exchange">>, <<"upstream">>},
+          {<<"queue">>, <<"upstream">>}
+        ]
+      ]),
+
+    rabbit_ct_broker_helpers:set_parameter(Config, 0,
+      <<"federation-upstream-set">>, <<"upstream2">>, [
+        [
+          {<<"upstream">>, <<"localhost">>},
+          {<<"exchange">>, <<"upstream2">>},
+          {<<"queue">>, <<"upstream2">>}
+        ]
+      ]),
+
+    rabbit_ct_broker_helpers:set_parameter(Config, 0,
+      <<"federation-upstream-set">>, <<"localhost">>, [
+        [{<<"upstream">>, <<"localhost">>}]
+      ]),
+
+    rabbit_ct_broker_helpers:set_parameter(Config, 0,
+      <<"federation-upstream-set">>, <<"upstream12">>, [
+        [
+          {<<"upstream">>, <<"localhost">>},
+          {<<"exchange">>, <<"upstream">>},
+          {<<"queue">>, <<"upstream">>}
+        ], [
+          {<<"upstream">>, <<"localhost">>},
+          {<<"exchange">>, <<"upstream2">>},
+          {<<"queue">>, <<"upstream2">>}
+        ]
+      ]),
+
+    rabbit_ct_broker_helpers:set_parameter(Config, 0,
+      <<"federation-upstream-set">>, <<"one">>, [
+        [
+          {<<"upstream">>, <<"localhost">>},
+          {<<"exchange">>, <<"one">>},
+          {<<"queue">>, <<"one">>}
+        ]
+      ]),
+
+    rabbit_ct_broker_helpers:set_parameter(Config, 0,
+      <<"federation-upstream-set">>, <<"two">>, [
+        [
+          {<<"upstream">>, <<"localhost">>},
+          {<<"exchange">>, <<"two">>},
+          {<<"queue">>, <<"two">>}
+        ]
+      ]),
+
+    rabbit_ct_broker_helpers:set_parameter(Config, 0,
+      <<"federation-upstream-set">>, <<"upstream5673">>, [
+        [
+          {<<"upstream">>, <<"local5673">>},
+          {<<"exchange">>, <<"upstream">>}
+        ]
+      ]),
+
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0, rabbit_policy, set,
+      [<<"/">>, <<"fed">>, <<"^fed\.">>, [{<<"federation-upstream-set">>, <<"upstream">>}],
+       0, <<"all">>, <<"acting-user">>]),
+
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0, rabbit_policy, set,
+      [<<"/">>, <<"fed12">>, <<"^fed12\.">>, [{<<"federation-upstream-set">>, <<"upstream12">>}],
+       2, <<"all">>, <<"acting-user">>]),
+
+    rabbit_ct_broker_helpers:set_policy(Config, 0,
+      <<"one">>, <<"^two$">>, <<"all">>, [
+        {<<"federation-upstream-set">>, <<"one">>}]),
+
+    rabbit_ct_broker_helpers:set_policy(Config, 0,
+      <<"two">>, <<"^one$">>, <<"all">>, [
+        {<<"federation-upstream-set">>, <<"two">>}]),
+
+    rabbit_ct_broker_helpers:set_policy(Config, 0,
+      <<"hare">>, <<"^hare\.">>, <<"all">>, [
+        {<<"federation-upstream-set">>, <<"upstream5673">>}]),
+
+    rabbit_ct_broker_helpers:set_policy(Config, 0,
+      <<"all">>, <<"^all\.">>, <<"all">>, [
+        {<<"federation-upstream-set">>, <<"all">>}]),
+
+    rabbit_ct_broker_helpers:set_policy(Config, 0,
+      <<"new">>, <<"^new\.">>, <<"all">>, [
+        {<<"federation-upstream-set">>, <<"new-set">>}]),
+    Config.
+
+with_ch(Config, Fun, Methods) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    declare_all(Config, Ch, Methods),
+    %% Clean up queues even after test failure.
+    try
+        Fun(Ch)
+    after
+        delete_all(Ch, Methods),
+        rabbit_ct_client_helpers:close_channel(Ch)
+    end,
+    ok.
+
+declare_all(Config, Ch, Methods) -> [maybe_declare_queue(Config, Ch, Op) || Op <- Methods].
+delete_all(Ch, Methods) ->
+    [delete_queue(Ch, Q) || #'queue.declare'{queue = Q} <- Methods].
+
+maybe_declare_queue(Config, Ch, Method) ->
+    OneOffCh = rabbit_ct_client_helpers:open_channel(Config),
+    try
+        amqp_channel:call(OneOffCh, Method#'queue.declare'{passive = true})
+    catch exit:{{shutdown, {server_initiated_close, ?NOT_FOUND, _Message}}, _} ->
+        amqp_channel:call(Ch, Method)
+    after
+        catch rabbit_ct_client_helpers:close_channel(OneOffCh)
+    end.
+
+delete_queue(Ch, Q) ->
+    amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
+
+q(Name) ->
+    q(Name, []).
+
+q(Name, undefined) ->
+    q(Name, []);
+q(Name, Args) ->
+    #'queue.declare'{queue   = Name,
+                     durable = true,
+                     arguments = Args}.
+
+-define(PD_KEY, metric_families).
+collect_mf(Registry, Collector) ->
+    put(?PD_KEY, []),
+    Collector:collect_mf(Registry, fun(MF) -> put(?PD_KEY, [MF | get(?PD_KEY)]) end),
+    MFs = lists:reverse(get(?PD_KEY)),
+    erase(?PD_KEY),
+    MFs.

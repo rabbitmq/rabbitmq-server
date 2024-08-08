@@ -554,6 +554,24 @@ jobs:
       repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
       plugin: rabbitmq_federation_management
     secrets: inherit
+  test-rabbitmq_federation_prometheus:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_federation_prometheus
+    secrets: inherit
   test-rabbitmq_jms_topic_exchange:
     needs:
     - check-workflow
@@ -842,6 +860,24 @@ jobs:
       repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
       plugin: rabbitmq_shovel_management
     secrets: inherit
+  test-rabbitmq_shovel_prometheus:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_shovel_prometheus
+    secrets: inherit
   test-rabbitmq_stomp:
     needs:
     - check-workflow
@@ -1063,6 +1099,7 @@ jobs:
     - test-rabbitmq_event_exchange
     - test-rabbitmq_federation
     - test-rabbitmq_federation_management
+    - test-rabbitmq_federation_prometheus
     - test-rabbitmq_jms_topic_exchange
     - test-rabbitmq_management
     - test-rabbitmq_management_agent
@@ -1079,6 +1116,7 @@ jobs:
     - test-rabbitmq_sharding
     - test-rabbitmq_shovel
     - test-rabbitmq_shovel_management
+    - test-rabbitmq_shovel_prometheus
     - test-rabbitmq_stomp
     - test-rabbitmq_stream
     - test-rabbitmq_stream_management
