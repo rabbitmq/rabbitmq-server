@@ -554,7 +554,7 @@ jobs:
       repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
       plugin: rabbitmq_federation_management
     secrets: inherit
-  test-rabbitmq_shovel_prometheus:
+  test-rabbitmq_federation_prometheus:
     needs:
     - check-workflow
     - test-rabbit-0
@@ -569,8 +569,8 @@ jobs:
     - test-rabbit-9
     uses: ./.github/workflows/test-plugin.yaml
     with:
-      repo_cache_key: $*** needs.check-workflow.outputs.repo_cache_key ***
-      plugin: rabbitmq_shovel_prometheus
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_federation_prometheus
     secrets: inherit
   test-rabbitmq_jms_topic_exchange:
     needs:
@@ -875,7 +875,7 @@ jobs:
     - test-rabbit-9
     uses: ./.github/workflows/test-plugin.yaml
     with:
-      repo_cache_key: $*** needs.check-workflow.outputs.repo_cache_key ***
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
       plugin: rabbitmq_shovel_prometheus
     secrets: inherit
   test-rabbitmq_stomp:

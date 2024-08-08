@@ -3,11 +3,8 @@ on:
   push:
     branches:
     - main
-    - v3.12.x
-    - v3.11.x
-    - v3.10.x
-    - v3.9.x
-    - v3.8.x
+    - v4.0.x
+    - v3.13.x
     - bump-otp-*
     - bump-elixir-*
     - bump-rbe-*
@@ -632,7 +629,7 @@ jobs:
     - test-rabbit-9-mixed
     uses: ./.github/workflows/test-plugin-mixed.yaml
     with:
-      repo_cache_key: $*** needs.check-workflow.outputs.repo_cache_key ***
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
       plugin: rabbitmq_federation_prometheus
     secrets: inherit
   test-rabbitmq_jms_topic_exchange-mixed:
@@ -936,11 +933,11 @@ jobs:
     - test-rabbit-7-mixed
     - test-rabbit-8-mixed
     - test-rabbit-9-mixed
-+    uses: ./.github/workflows/test-plugin-mixed.yaml
-+    with:
-+      repo_cache_key: $*** needs.check-workflow.outputs.repo_cache_key ***
-+      plugin: rabbitmq_shovel_prometheus
-+    secrets: inherit
+    uses: ./.github/workflows/test-plugin-mixed.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_shovel_prometheus
+    secrets: inherit
   test-rabbitmq_stomp-mixed:
     needs:
     - check-workflow
