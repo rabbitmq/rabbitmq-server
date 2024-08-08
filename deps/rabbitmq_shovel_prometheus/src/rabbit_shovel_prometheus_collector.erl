@@ -19,6 +19,7 @@
 %%====================================================================
 
 start() ->
+    {ok, _} = application:ensure_all_started(prometheus),
     prometheus_registry:register_collector(?MODULE).
 
 stop() ->
