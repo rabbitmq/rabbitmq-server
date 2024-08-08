@@ -7,8 +7,7 @@
          delete/2,
          size/1,
          smallest/1,
-         map/2,
-         normalize/1
+         map/2
         ]).
 
 -compile({no_auto_import, [size/1]}).
@@ -104,10 +103,6 @@ find_next(Next, Last, Map) ->
             % assuming fifo-ish deletion of entries
             find_next(Next+1, Last, Map)
     end.
-
--spec normalize(state()) -> state().
-normalize(State) ->
-    State#?MODULE{largest = undefined}.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

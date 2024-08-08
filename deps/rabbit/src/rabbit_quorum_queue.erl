@@ -76,6 +76,11 @@
 -export([force_shrink_member_to_current_member/2,
          force_all_queues_shrink_member_to_current_member/0]).
 
+%% for backwards compatibility
+-export([file_handle_leader_reservation/1,
+         file_handle_other_reservation/0,
+         file_handle_release_reservation/0]).
+
 -ifdef(TEST).
 -export([filter_promotable/2]).
 -endif.
@@ -129,11 +134,12 @@
 -define(RPC_TIMEOUT, 1000).
 -define(START_CLUSTER_TIMEOUT, 5000).
 -define(START_CLUSTER_RPC_TIMEOUT, 60_000). %% needs to be longer than START_CLUSTER_TIMEOUT
--define(TICK_TIMEOUT, 5000). %% the ra server tick time
+-define(TICK_INTERVAL, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
 -define(MEMBER_CHANGE_TIMEOUT, 20_000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
--define(UNLIMITED_PREFETCH_COUNT, 2000). %% something large for ra
+% -define(UNLIMITED_PREFETCH_COUNT, 2000). %% something large for ra
+-define(MIN_CHECKPOINT_INTERVAL, 8192). %% the ra default is 16384
 
 %%----------- QQ policies ---------------------------------------------------
 
@@ -529,6 +535,7 @@ handle_tick(QName,
                              0 -> 0;
                              _ -> rabbit_fifo:usage(Name)
                          end,
+
                   Keys = ?STATISTICS_KEYS -- [leader,
                                               consumers,
                                               messages_dlx,
@@ -538,11 +545,24 @@ handle_tick(QName,
                                              ],
                   {SacTag, SacPid} = maps:get(single_active_consumer_id,
                                               Overview, {'', ''}),
+                  Infos0 = maps:fold(
+                             fun(num_ready_messages_high, V, Acc) ->
+                                     [{messages_ready_high, V} | Acc];
+                                (num_ready_messages_low, V, Acc) ->
+                                     [{messages_ready_low, V} | Acc];
+                                (num_ready_messages_return, V, Acc) ->
+                                     [{messages_ready_returned, V} | Acc];
+                                (_, _, Acc) ->
+                                     Acc
+                             end, info(Q, Keys), Overview),
                   MsgBytesDiscarded = DiscardBytes + DiscardCheckoutBytes,
                   MsgBytes = EnqueueBytes + CheckoutBytes + MsgBytesDiscarded,
                   Infos = [{consumers, NumConsumers},
                            {consumer_capacity, Util},
                            {consumer_utilisation, Util},
+                           {messages, NumMessages},
+                           {messages_ready, NumReadyMsgs},
+                           {messages_unacknowledged, NumCheckedOut},
                            {message_bytes_ready, EnqueueBytes},
                            {message_bytes_unacknowledged, CheckoutBytes},
                            {message_bytes, MsgBytes},
@@ -553,7 +573,7 @@ handle_tick(QName,
                            {single_active_consumer_tag, SacTag},
                            {single_active_consumer_pid, SacPid},
                            {leader, node()}
-                           | info(Q, Keys)],
+                           | Infos0],
                   rabbit_core_metrics:queue_stats(QName, Infos),
                   ok = repair_leader_record(Q, Self),
                   case repair_amqqueue_nodes(Q) of
@@ -569,12 +589,12 @@ handle_tick(QName,
                       Stale when length(ExpectedNodes) > 0 ->
                           %% rabbit_nodes:list_members/0 returns [] when there
                           %% is an error so we need to handle that case
-                          rabbit_log:debug("~ts: stale nodes detected. Purging ~w",
+                          rabbit_log:debug("~ts: stale nodes detected in quorum "
+                                           "queue state. Purging ~w",
                                            [rabbit_misc:rs(QName), Stale]),
                           %% pipeline purge command
                           ok = ra:pipeline_command(amqqueue:get_pid(Q),
                                                    rabbit_fifo:make_purge_nodes(Stale)),
-
                           ok;
                       _ ->
                           ok
@@ -761,6 +781,9 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
             MRef = erlang:monitor(process, Leader),
             receive
                 {'DOWN', MRef, process, _, _} ->
+                    %% leader is down,
+                    %% force delete remaining members
+                    ok = force_delete_queue(lists:delete(Leader, Servers)),
                     ok
             after Timeout ->
                     erlang:demonitor(MRef, [flush]),
@@ -824,7 +847,10 @@ settle(_QName, complete, CTag, MsgIds, QState) ->
 settle(_QName, requeue, CTag, MsgIds, QState) ->
     rabbit_fifo_client:return(quorum_ctag(CTag), MsgIds, QState);
 settle(_QName, discard, CTag, MsgIds, QState) ->
-    rabbit_fifo_client:discard(quorum_ctag(CTag), MsgIds, QState).
+    rabbit_fifo_client:discard(quorum_ctag(CTag), MsgIds, QState);
+settle(_QName, {modify, DelFailed, Undel, Anns}, CTag, MsgIds, QState) ->
+    rabbit_fifo_client:modify(quorum_ctag(CTag), MsgIds, DelFailed, Undel,
+                              Anns, QState).
 
 credit_v1(_QName, CTag, Credit, Drain, QState) ->
     rabbit_fifo_client:credit_v1(quorum_ctag(CTag), Credit, Drain, QState).
@@ -871,31 +897,26 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
     ConsumerTag = quorum_ctag(ConsumerTag0),
     %% consumer info is used to describe the consumer properties
     AckRequired = not NoAck,
-    {CreditMode, EffectivePrefetch, DeclaredPrefetch, ConsumerMeta0} =
-        case Mode of
-            {credited, C} ->
-                Meta = if C =:= credit_api_v1 ->
-                              #{};
-                          is_integer(C) ->
-                              #{initial_delivery_count => C}
-                       end,
-                {credited, 0, 0, Meta};
-            {simple_prefetch = M, Declared} ->
-                Effective = case Declared of
-                                0 -> ?UNLIMITED_PREFETCH_COUNT;
-                                _ -> Declared
-                            end,
-                {M, Effective, Declared, #{}}
-        end,
-    ConsumerMeta = maps:merge(
-                     ConsumerMeta0,
-                     #{ack => AckRequired,
-                       prefetch => DeclaredPrefetch,
-                       args => Args,
-                       username => ActingUser}),
-    {ok, QState} = rabbit_fifo_client:checkout(ConsumerTag, EffectivePrefetch,
-                                               CreditMode, ConsumerMeta,
-                                               QState0),
+    Prefetch = case Mode of
+                   {simple_prefetch, Declared} ->
+                       Declared;
+                   _ ->
+                       0
+               end,
+    Priority = case rabbit_misc:table_lookup(Args, <<"x-priority">>) of
+                   {_Key, Value} ->
+                       Value;
+                   _ ->
+                       0
+               end,
+    ConsumerMeta = #{ack => AckRequired,
+                     prefetch => Prefetch,
+                     args => Args,
+                     username => ActingUser,
+                     priority => Priority},
+    {ok, _Infos, QState} = rabbit_fifo_client:checkout(ConsumerTag,
+                                                       Mode, ConsumerMeta,
+                                                       QState0),
     case single_active_consumer_on(Q) of
         true ->
             %% get the leader from state
@@ -910,10 +931,10 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                     rabbit_core_metrics:consumer_created(
                       ChPid, ConsumerTag, ExclusiveConsume,
                       AckRequired, QName,
-                      DeclaredPrefetch, ActivityStatus == single_active, %% Active
+                      Prefetch, ActivityStatus == single_active, %% Active
                       ActivityStatus, Args),
                     emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                          AckRequired, QName, DeclaredPrefetch,
+                                          AckRequired, QName, Prefetch,
                                           Args, none, ActingUser),
                     {ok, QState};
                 {error, Error} ->
@@ -925,17 +946,18 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
             rabbit_core_metrics:consumer_created(
               ChPid, ConsumerTag, ExclusiveConsume,
               AckRequired, QName,
-              DeclaredPrefetch, true, %% Active
+              Prefetch, true, %% Active
               up, Args),
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                  AckRequired, QName, DeclaredPrefetch,
+                                  AckRequired, QName, Prefetch,
                                   Args, none, ActingUser),
             {ok, QState}
     end.
 
 cancel(_Q, #{consumer_tag := ConsumerTag} = Spec, State) ->
     maybe_send_reply(self(), maps:get(ok_msg, Spec, undefined)),
-    rabbit_fifo_client:cancel_checkout(quorum_ctag(ConsumerTag), State).
+    Reason = maps:get(reason, Spec, cancel),
+    rabbit_fifo_client:cancel_checkout(quorum_ctag(ConsumerTag), Reason, State).
 
 emit_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName, PrefetchCount, Args, Ref, ActingUser) ->
     rabbit_event:notify(consumer_created,
@@ -1800,18 +1822,27 @@ make_ra_conf(Q, ServerId) ->
 
 make_ra_conf(Q, ServerId, Membership) ->
     TickTimeout = application:get_env(rabbit, quorum_tick_interval,
-                                      ?TICK_TIMEOUT),
+                                      ?TICK_INTERVAL),
     SnapshotInterval = application:get_env(rabbit, quorum_snapshot_interval,
                                            ?SNAPSHOT_INTERVAL),
-    make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership).
+    CheckpointInterval = application:get_env(rabbit,
+                                             quorum_min_checkpoint_interval,
+                                             ?MIN_CHECKPOINT_INTERVAL),
+    make_ra_conf(Q, ServerId, TickTimeout,
+                 SnapshotInterval, CheckpointInterval, Membership).
 
-make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership) ->
+make_ra_conf(Q, ServerId, TickTimeout,
+             SnapshotInterval, CheckpointInterval, Membership) ->
     QName = amqqueue:get_name(Q),
     RaMachine = ra_machine(Q),
     [{ClusterName, _} | _] = Members = members(Q),
     UId = ra:new_uid(ra_lib:to_binary(ClusterName)),
     FName = rabbit_misc:rs(QName),
     Formatter = {?MODULE, format_ra_event, [QName]},
+    LogCfg = #{uid => UId,
+               snapshot_interval => SnapshotInterval,
+               min_checkpoint_interval => CheckpointInterval,
+               max_checkpoints => 3},
     rabbit_misc:maps_put_truthy(membership, Membership,
                                 #{cluster_name => ClusterName,
                                   id => ServerId,
@@ -1819,8 +1850,7 @@ make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership) ->
                                   friendly_name => FName,
                                   metrics_key => QName,
                                   initial_members => Members,
-                                  log_init_args => #{uid => UId,
-                                                     snapshot_interval => SnapshotInterval},
+                                  log_init_args => LogCfg,
                                   tick_timeout => TickTimeout,
                                   machine => RaMachine,
                                   ra_event_formatter => Formatter}).
@@ -1828,7 +1858,7 @@ make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval, Membership) ->
 make_mutable_config(Q) ->
     QName = amqqueue:get_name(Q),
     TickTimeout = application:get_env(rabbit, quorum_tick_interval,
-                                      ?TICK_TIMEOUT),
+                                      ?TICK_INTERVAL),
     Formatter = {?MODULE, format_ra_event, [QName]},
     #{tick_timeout => TickTimeout,
       ra_event_formatter => Formatter}.
@@ -1974,3 +2004,13 @@ is_process_alive(Name, Node) ->
     %% as this function is used for metrics and stats and the additional
     %% latency isn't warranted
     erlang:is_pid(erpc_call(Node, erlang, whereis, [Name], ?RPC_TIMEOUT)).
+
+%% backwards compat
+file_handle_leader_reservation(_QName) ->
+    ok.
+
+file_handle_other_reservation() ->
+    ok.
+
+file_handle_release_reservation() ->
+    ok.

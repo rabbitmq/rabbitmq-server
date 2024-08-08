@@ -166,19 +166,6 @@
      }}).
 
 -rabbit_feature_flag(
-   {credit_api_v2,
-    #{desc          => "Credit and cancel API v2 between queue clients and queue processes",
-      stability     => stable
-     }}).
-
--rabbit_feature_flag(
-   {message_containers_store_amqp_v1,
-    #{desc          => "Support storing messages in message containers AMQP 1.0 disk format v1",
-      stability     => stable,
-      depends_on    => [message_containers]
-     }}).
-
--rabbit_feature_flag(
    {message_containers_deaths_v2,
     #{desc          => "Bug fix for dead letter cycle detection",
       doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/11159",
@@ -186,9 +173,16 @@
       depends_on    => [message_containers]
      }}).
 
+%% We bundle the following separate concerns (which could have been separate feature flags)
+%% into a single feature flag for better user experience:
+%% 1. credit API v2 between classic / quorum queue client and classic / quorum queue server
+%% 2. cancel API v2 betweeen classic queue client and classic queue server
+%% 3. more compact quorum queue commands in quorum queue v4
+%% 4. store messages in message containers AMQP 1.0 disk format v1
+%% 5. support queue leader locator in classic queues
 -rabbit_feature_flag(
-   {classic_queue_leader_locator,
-    #{desc          => "queue-leader-locator support in classic queues",
-      doc_url       => "https://www.rabbitmq.com/docs/clustering#replica-placement",
-      stability     => stable
+   {'rabbitmq_4.0.0',
+    #{desc          => "Allows rolling upgrades from 3.13.x to 4.0.x",
+      stability     => stable,
+      depends_on    => [message_containers]
      }}).

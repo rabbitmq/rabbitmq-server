@@ -193,7 +193,8 @@ header(first_acquirer = K,
 header(delivery_count = K,
        #amqp10_msg{header = #'v1_0.header'{delivery_count = D}}) ->
     header_value(K, D);
-header(K, #amqp10_msg{header = undefined}) -> header_value(K, undefined).
+header(K, #amqp10_msg{header = undefined}) ->
+    header_value(K, undefined).
 
 -spec delivery_annotations(amqp10_msg()) -> #{annotations_key() => any()}.
 delivery_annotations(#amqp10_msg{delivery_annotations = undefined}) ->

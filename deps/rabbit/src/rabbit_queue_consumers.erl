@@ -33,7 +33,7 @@
 -record(consumer, {tag, ack_required, prefetch, args, user}).
 
 %% AMQP 1.0 link flow control state, see §2.6.7
-%% Delete atom credit_api_v1 when feature flag credit_api_v2 becomes required.
+%% Delete atom credit_api_v1 when feature flag rabbitmq_4.0.0 becomes required.
 -record(link_state, {delivery_count :: rabbit_queue_type:delivery_count() | credit_api_v1,
                      credit :: rabbit_queue_type:credit()}).
 
@@ -596,7 +596,7 @@ parse_credit_mode({simple_prefetch, Prefetch}, _Args) ->
 parse_credit_mode({credited, InitialDeliveryCount}, _Args) ->
     {InitialDeliveryCount, manual};
 %% credit API v1
-%% i.e. below function clause should be deleted when feature flag credit_api_v2 becomes required:
+%% i.e. below function clause should be deleted when feature flag rabbitmq_4.0.0 becomes required:
 parse_credit_mode(Prefetch, Args)
   when is_integer(Prefetch) ->
     case rabbit_misc:table_lookup(Args, <<"x-credit">>) of

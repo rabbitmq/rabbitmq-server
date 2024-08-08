@@ -187,7 +187,7 @@
           send_settled :: boolean(),
           max_message_size :: unlimited | pos_integer(),
 
-          %% When feature flag credit_api_v2 becomes required,
+          %% When feature flag rabbitmq_4.0.0 becomes required,
           %% the following 2 fields should be deleted.
           credit_api_version :: 1 | 2,
           %% When credit API v1 is used, our session process holds the delivery-count
@@ -225,7 +225,7 @@
           frames :: [transfer_frame_body(), ...],
           queue_ack_required :: boolean(),
           %% Queue that sent us this message.
-          %% When feature flag credit_api_v2 becomes required, this field should be deleted.
+          %% When feature flag rabbitmq_4.0.0 becomes required, this field should be deleted.
           queue_pid :: pid() | credit_api_v2,
           delivery_id :: delivery_number(),
           outgoing_unsettled :: #outgoing_unsettled{}
@@ -1068,17 +1068,17 @@ handle_control(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                            QType = amqqueue:get_type(Q),
                            %% Whether credit API v1 or v2 is used is decided only here at link attachment time.
                            %% This decision applies to the whole life time of the link.
-                           %% This means even when feature flag credit_api_v2 will be enabled later, this consumer will
+                           %% This means even when feature flag rabbitmq_4.0.0 will be enabled later, this consumer will
                            %% continue to use credit API v1. This is the safest and easiest solution avoiding
                            %% transferring link flow control state (the delivery-count) at runtime from this session
                            %% process to the queue process.
-                           %% Eventually, after feature flag credit_api_v2 gets enabled and a subsequent rolling upgrade,
+                           %% Eventually, after feature flag rabbitmq_4.0.0 gets enabled and a subsequent rolling upgrade,
                            %% all consumers will use credit API v2.
                            %% Streams always use credit API v2 since the stream client (rabbit_stream_queue) holds the link
                            %% flow control state. Hence, credit API mixed version isn't an issue for streams.
                            {CreditApiVsn, Mode, DeliveryCount, ClientFlowCtl,
                             QueueFlowCtl, CreditReqInFlight, StashedCreditReq} =
-                           case rabbit_feature_flags:is_enabled(credit_api_v2) orelse
+                           case rabbit_feature_flags:is_enabled('rabbitmq_4.0.0') orelse
                                 QType =:= rabbit_stream_queue of
                                true ->
                                    {2,
@@ -1861,20 +1861,30 @@ settle_op_from_outcome(#'v1_0.rejected'{}) ->
     discard;
 settle_op_from_outcome(#'v1_0.released'{}) ->
     requeue;
-%% Keep the same Modified behaviour as in RabbitMQ 3.x
-settle_op_from_outcome(#'v1_0.modified'{delivery_failed = true,
-                                        undeliverable_here = UndelHere})
-  when UndelHere =/= true ->
-    requeue;
-settle_op_from_outcome(#'v1_0.modified'{}) ->
-    %% If delivery_failed is not true, we can't increment its delivery_count.
-    %% So, we will have to reject without requeue.
-    %%
-    %% If undeliverable_here is true, this is not quite correct because
-    %% undeliverable_here refers to the link, and not the message in general.
-    %% However, we cannot filter messages from being assigned to individual consumers.
-    %% That's why we will have to reject it without requeue.
-    discard;
+
+%% Not all queue types support the modified outcome fields correctly.
+%% However, we still allow the client to settle with the modified outcome
+%% because some client libraries such as Apache QPid make use of it:
+%% https://github.com/apache/qpid-jms/blob/90eb60f59cb59b7b9ad8363ee8a843d6903b8e77/qpid-jms-client/src/main/java/org/apache/qpid/jms/JmsMessageConsumer.java#L464
+%% In such cases, it's better when RabbitMQ does not end the session.
+%% See https://github.com/rabbitmq/rabbitmq-server/issues/6121
+settle_op_from_outcome(#'v1_0.modified'{delivery_failed = DelFailed,
+                                        undeliverable_here = UndelHere,
+                                        message_annotations = Anns0
+                                       }) ->
+    Anns = case Anns0 of
+               #'v1_0.message_annotations'{content = C} ->
+                   C;
+               _ ->
+                   []
+           end,
+    {modify,
+     default(DelFailed, false),
+     default(UndelHere, false),
+     %% TODO: this must exist elsewhere
+     lists:foldl(fun ({{symbol, K}, V}, Acc) ->
+                        Acc#{K => unwrap(V)}
+                end, #{}, Anns)};
 settle_op_from_outcome(Outcome) ->
     protocol_error(
       ?V_1_0_AMQP_ERROR_INVALID_FIELD,
@@ -1981,7 +1991,7 @@ handle_queue_actions(Actions, State) ->
            S0 = #state{outgoing_links = OutgoingLinks0,
                        outgoing_pending = Pending}) ->
               %% credit API v1
-              %% Delete this branch when feature flag credit_api_v2 becomes required.
+              %% Delete this branch when feature flag rabbitmq_4.0.0 becomes required.
               Handle = ctag_to_handle(Ctag),
               Link = #outgoing_link{delivery_count = Count0} = maps:get(Handle, OutgoingLinks0),
               {Count, Credit, S} = case Drain of
@@ -2788,7 +2798,7 @@ delivery_count_rcv(undefined) ->
 %% credits to a queue has to synchronously wait for a credit reply from the queue:
 %% https://github.com/rabbitmq/rabbitmq-server/blob/b9566f4d02f7ceddd2f267a92d46affd30fb16c8/deps/rabbitmq_codegen/credit_extension.json#L43
 %% This blocks our entire AMQP 1.0 session process. Since the credit reply from the
-%% queue did not contain the consumr tag prior to feature flag credit_api_v2, we
+%% queue did not contain the consumr tag prior to feature flag rabbitmq_4.0.0, we
 %% must behave here the same way as non-native AMQP 1.0: We wait until the queue
 %% sends us a credit reply sucht that we can correlate that reply with our consumer tag.
 process_credit_reply_sync(
@@ -2853,7 +2863,7 @@ process_credit_reply_sync_quorum_queue(Ctag, QName, Credit, State0) ->
     no_return().
 credit_reply_timeout(QType, QName) ->
     Fmt = "Timed out waiting for credit reply from ~s ~s. "
-    "Hint: Enable feature flag credit_api_v2",
+    "Hint: Enable feature flag rabbitmq_4.0.0",
     Args = [QType, rabbit_misc:rs(QName)],
     rabbit_log:error(Fmt, Args),
     protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, Fmt, Args).
@@ -3441,12 +3451,13 @@ cap_credit(DesiredCredit) ->
     min(DesiredCredit, MaxCredit).
 
 ensure_mc_cluster_compat(Mc) ->
-    IsEnabled = rabbit_feature_flags:is_enabled(message_containers_store_amqp_v1),
+    Feature = 'rabbitmq_4.0.0',
+    IsEnabled = rabbit_feature_flags:is_enabled(Feature),
     case IsEnabled of
         true ->
             Mc;
         false ->
-            McEnv = #{message_containers_store_amqp_v1 => IsEnabled},
+            McEnv = #{Feature => IsEnabled},
             %% other nodes in the cluster may not understand the new internal
             %% amqp mc format - in this case we convert to AMQP legacy format
             %% for compatibility
@@ -3497,3 +3508,8 @@ format_status(
               permission_cache => PermissionCache,
               topic_permission_cache => TopicPermissionCache},
     maps:update(state, State, Status).
+
+unwrap({_Tag, V}) ->
+    V;
+unwrap(V) ->
+    V.

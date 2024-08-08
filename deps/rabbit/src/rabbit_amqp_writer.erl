@@ -74,7 +74,7 @@ send_command_sync(Writer, ChannelNum, Performative) ->
     Request = {send_command, ChannelNum, Performative},
     gen_server:call(Writer, Request, ?CALL_TIMEOUT).
 
-%% Delete this function when feature flag credit_api_v2 becomes required.
+%% Delete this function when feature flag rabbitmq_4.0.0 becomes required.
 -spec send_command_and_notify(pid(),
                               pid(),
                               rabbit_types:channel_number(),
@@ -111,7 +111,7 @@ handle_cast({send_command, SessionPid, ChannelNum, Performative, Payload}, State
     State1 = internal_send_command_async(ChannelNum, Performative, Payload, State0),
     State = credit_flow_ack(SessionPid, State1),
     no_reply(State);
-%% Delete below function clause when feature flag credit_api_v2 becomes required.
+%% Delete below function clause when feature flag rabbitmq_4.0.0 becomes required.
 handle_cast({send_command_and_notify, QueuePid, SessionPid, ChannelNum, Performative, Payload}, State0) ->
     State1 = internal_send_command_async(ChannelNum, Performative, Payload, State0),
     State = credit_flow_ack(SessionPid, State1),
@@ -131,7 +131,7 @@ handle_info({{'DOWN', session}, _MRef, process, SessionPid, _Reason},
     credit_flow:peer_down(SessionPid),
     State = State0#state{monitored_sessions = maps:remove(SessionPid, Sessions)},
     no_reply(State);
-%% Delete below function clause when feature flag credit_api_v2 becomes required.
+%% Delete below function clause when feature flag rabbitmq_4.0.0 becomes required.
 handle_info({'DOWN', _MRef, process, QueuePid, _Reason}, State) ->
     rabbit_amqqueue:notify_sent_queue_down(QueuePid),
     no_reply(State).

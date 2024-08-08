@@ -222,14 +222,7 @@ get_property(priority, Msg) ->
 -spec protocol_state(state(), mc:annotations()) -> iolist().
 protocol_state(Msg0 = #msg_body_decoded{header = Header0,
                                         message_annotations = MA0}, Anns) ->
-    FirstAcquirer = first_acquirer(Anns),
-    Header = case Header0 of
-                 undefined ->
-                     #'v1_0.header'{durable = true,
-                                    first_acquirer = FirstAcquirer};
-                 #'v1_0.header'{} ->
-                     Header0#'v1_0.header'{first_acquirer = FirstAcquirer}
-             end,
+    Header = update_header_from_anns(Header0, Anns),
     MA = protocol_state_message_annotations(MA0, Anns),
     Msg = Msg0#msg_body_decoded{header = Header,
                                 message_annotations = MA},
@@ -238,14 +231,7 @@ protocol_state(Msg0 = #msg_body_decoded{header = Header0,
 protocol_state(#msg_body_encoded{header = Header0,
                                  message_annotations = MA0,
                                  bare_and_footer = BareAndFooter}, Anns) ->
-    FirstAcquirer = first_acquirer(Anns),
-    Header = case Header0 of
-                 undefined ->
-                     #'v1_0.header'{durable = true,
-                                    first_acquirer = FirstAcquirer};
-                 #'v1_0.header'{} ->
-                     Header0#'v1_0.header'{first_acquirer = FirstAcquirer}
-             end,
+    Header = update_header_from_anns(Header0, Anns),
     MA = protocol_state_message_annotations(MA0, Anns),
     Sections = to_sections(Header, MA, []),
     [encode(Sections), BareAndFooter];
@@ -269,10 +255,9 @@ protocol_state(#v1{message_annotations = MA0,
               _ ->
                   undefined
           end,
-    Header = #'v1_0.header'{durable = Durable,
-                            priority = Priority,
-                            ttl = Ttl,
-                            first_acquirer = first_acquirer(Anns)},
+    Header = update_header_from_anns(#'v1_0.header'{durable = Durable,
+                                                    priority = Priority,
+                                                    ttl = Ttl}, Anns),
     MA = protocol_state_message_annotations(MA0, Anns),
     Sections = to_sections(Header, MA, []),
     [encode(Sections), BareAndFooter].
@@ -573,13 +558,22 @@ msg_body_encoded([{{pos, Pos}, {body, Code}}], BarePos, Msg)
 binary_part_bare_and_footer(Payload, Start) ->
     binary_part(Payload, Start, byte_size(Payload) - Start).
 
--spec first_acquirer(mc:annotations()) -> boolean().
-first_acquirer(Anns) ->
+update_header_from_anns(undefined, Anns) ->
+    update_header_from_anns(#'v1_0.header'{durable = true}, Anns);
+update_header_from_anns(Header, Anns) ->
+    DeliveryCount = case Anns of
+                        #{delivery_count := C} -> C;
+                        _ -> 0
+                    end,
     Redelivered = case Anns of
                       #{redelivered := R} -> R;
                       _ -> false
                   end,
-    not Redelivered.
+    FirstAcq = not Redelivered andalso
+               DeliveryCount =:= 0 andalso
+               not is_map_key(deaths, Anns),
+    Header#'v1_0.header'{first_acquirer = FirstAcq,
+                         delivery_count = {uint, DeliveryCount}}.
 
 encode_deaths(Deaths) ->
     lists:map(

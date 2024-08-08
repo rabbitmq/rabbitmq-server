@@ -28,7 +28,7 @@ groups() ->
           {cluster_size_3, [], [
               vhost_deletion,
               quorum_unaffected_after_vhost_failure,
-              recover_follower_after_standalone_restart,
+              forget_cluster_node,
               force_delete_if_no_consensus,
               takeover_on_failure,
               takeover_on_shutdown
@@ -219,7 +219,7 @@ quorum_unaffected_after_vhost_failure(Config) ->
        end,
        60000).
 
-recover_follower_after_standalone_restart(Config) ->
+forget_cluster_node(Config) ->
     %% Tests that quorum queues shrink when forget_cluster_node
     %% operations are issues.
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -243,10 +243,10 @@ recover_follower_after_standalone_restart(Config) ->
     rabbit_ct_client_helpers:close_channel(Ch),
 
     %% Restart one follower
-    forget_cluster_node(Config, B, C),
-    wait_for_messages_ready([B], Name, 15),
-    forget_cluster_node(Config, B, A),
-    wait_for_messages_ready([B], Name, 15),
+    forget_cluster_node(Config, C, B),
+    wait_for_messages_ready([C], Name, 15),
+    forget_cluster_node(Config, C, A),
+    wait_for_messages_ready([C], Name, 15),
 
     ok.
 

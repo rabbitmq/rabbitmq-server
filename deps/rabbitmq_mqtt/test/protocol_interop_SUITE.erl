@@ -338,7 +338,7 @@ amqp_mqtt_amqp(Config) ->
                   properties := Props = #{'Correlation-Data' := Correlation}
                  } = MqttMsg,
                 case rabbit_ct_broker_helpers:is_feature_flag_enabled(
-                       Config, message_containers_store_amqp_v1) of
+                       Config, 'rabbitmq_4.0.0') of
                     true ->
                         ?assertEqual({ok, ResponseTopic},
                                      maps:find('Response-Topic', Props));
@@ -430,7 +430,7 @@ amqp_mqtt(Qos, Config) ->
                  } = MqttMsg1,
                 ?assertEqual([Body1], amqp10_framing:decode_bin(Payload1)),
                 case rabbit_ct_broker_helpers:is_feature_flag_enabled(
-                       Config, message_containers_store_amqp_v1) of
+                       Config, 'rabbitmq_4.0.0') of
                     true ->
                         ?assertEqual({ok, <<"message/vnd.rabbitmq.amqp">>},
                                      maps:find('Content-Type', Props));
