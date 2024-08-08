@@ -718,7 +718,8 @@ do_subscribe(Destination, DestHdr, Frame,
 subscribe_arguments(Frame) ->
     subscribe_arguments([?HEADER_X_STREAM_OFFSET,
                          ?HEADER_X_STREAM_FILTER,
-                         ?HEADER_X_STREAM_MATCH_UNFILTERED], Frame, []).
+                         ?HEADER_X_STREAM_MATCH_UNFILTERED,
+                         ?HEADER_X_PRIORITY], Frame, []).
 
 subscribe_arguments([], _Frame , Acc) ->
     Acc;
@@ -747,6 +748,14 @@ subscribe_argument(?HEADER_X_STREAM_MATCH_UNFILTERED, Frame, Acc) ->
     case MatchUnfiltered of
         {ok, MU} ->
             [{list_to_binary(?HEADER_X_STREAM_MATCH_UNFILTERED), bool, MU}] ++ Acc;
+        not_found ->
+            Acc
+    end;
+subscribe_argument(?HEADER_X_PRIORITY, Frame, Acc) ->
+    Priority = rabbit_stomp_frame:integer_header(Frame, ?HEADER_X_PRIORITY),
+    case Priority of
+        {ok, P} ->
+            [{list_to_binary(?HEADER_X_PRIORITY), byte, P}] ++ Acc;
         not_found ->
             Acc
     end.
