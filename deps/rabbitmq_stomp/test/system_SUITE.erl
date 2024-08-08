@@ -17,7 +17,9 @@
 -include("rabbit_stomp_headers.hrl").
 
 -define(QUEUE, <<"TestQueue">>).
+-define(QUEUE_QQ, <<"TestQueueQQ">>).
 -define(DESTINATION, "/amq/queue/TestQueue").
+-define(DESTINATION_QQ, "/amq/queue/TestQueueQQ").
 
 all() ->
     [{group, version_to_group_name(V)} || V <- ?SUPPORTED_VERSIONS].
@@ -28,6 +30,7 @@ groups() ->
         publish_unauthorized_error,
         subscribe_error,
         subscribe,
+        subscribe_with_x_priority,
         unsubscribe_ack,
         subscribe_ack,
         send,
@@ -159,6 +162,44 @@ subscribe(Config) ->
                                                  payload = <<"hello">>}),
 
     {ok, _Client2, _, [<<"hello">>]} = stomp_receive(Client1, "MESSAGE"),
+    ok.
+
+subscribe_with_x_priority(Config) ->
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    Channel = ?config(amqp_channel, Config),
+    ClientA = ?config(stomp_client, Config),
+    #'queue.declare_ok'{} =
+    amqp_channel:call(Channel, #'queue.declare'{queue     = ?QUEUE_QQ,
+                                                durable   = true,
+                                                arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                                             {<<"x-single-active-consumer">>, bool, true}
+                                                            ]}),
+
+    %% subscribe and wait for receipt
+    rabbit_stomp_client:send(
+      ClientA, "SUBSCRIBE", [{"destination", ?DESTINATION_QQ}, {"receipt", "foo"}]),
+    {ok, _ClientA1, _, _} = stomp_receive(ClientA, "RECEIPT"),
+
+    %% subscribe with a higher priority and wait for receipt
+    {ok, ClientB} = rabbit_stomp_client:connect(Version, StompPort),
+    rabbit_stomp_client:send(
+      ClientB, "SUBSCRIBE", [{"destination", ?DESTINATION_QQ},
+                             {"receipt", "foo"},
+                             {"x-priority", 10}
+                            ]),
+    {ok, ClientB1, _, _} = stomp_receive(ClientB, "RECEIPT"),
+
+    %% send from amqp
+    Method = #'basic.publish'{exchange = <<"">>, routing_key = ?QUEUE_QQ},
+
+    amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
+                                                 payload = <<"hello">>}),
+
+    %% ClientB should receive the message since it has a higher priority
+    {ok, _ClientB2, _, [<<"hello">>]} = stomp_receive(ClientB1, "MESSAGE"),
+    #'queue.delete_ok'{} =
+        amqp_channel:call(Channel, #'queue.delete'{queue = ?QUEUE_QQ}),
     ok.
 
 unsubscribe_ack(Config) ->
