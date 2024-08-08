@@ -894,7 +894,9 @@ rabbitmq_federation:
 rabbitmq_federation_management:
 - rabbit_federation_mgmt
 rabbitmq_federation_prometheus:
-- rabbitmq_federation_prometheus
+- rabbit_federation_prometheus_app
+- rabbit_federation_prometheus_collector
+- rabbit_federation_prometheus_sup
 rabbitmq_jms_topic_exchange:
 - rabbit_db_jms_exchange
 - rabbit_db_jms_exchange_m2k_converter
@@ -1129,7 +1131,9 @@ rabbitmq_shovel_management:
 - rabbit_shovel_mgmt
 - rabbit_shovel_mgmt_util
 rabbitmq_shovel_prometheus:
-- rabbitmq_shovel_prometheus
+- rabbit_shovel_prometheus_app
+- rabbit_shovel_prometheus_collector
+- rabbit_shovel_prometheus_sup
 rabbitmq_stomp:
 - Elixir.RabbitMQ.CLI.Ctl.Commands.ListStompConnectionsCommand
 - rabbit_stomp

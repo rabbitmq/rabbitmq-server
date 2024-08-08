@@ -14,21 +14,21 @@
 -compile(export_all).
 
 -define(ONE_RUNNING_METRIC, #'MetricFamily'{name = <<"rabbitmq_federation_links">>,
-                                            help = "Current number of federation links",
+                                            help = "Number of federation links",
                                             type = 'GAUGE',
                                             metric = [#'Metric'{label = [#'LabelPair'{name = <<"status">>,
                                                                                       value = <<"running">>}],
                                                                 gauge = #'Gauge'{value = 1}}]}).
 
 -define(TWO_RUNNING_METRIC, #'MetricFamily'{name = <<"rabbitmq_federation_links">>,
-                                            help = "Current number of federation links",
+                                            help = "Number of federation links",
                                             type = 'GAUGE',
                                             metric = [#'Metric'{label = [#'LabelPair'{name = <<"status">>,
                                                                                       value = <<"running">>}],
                                                                 gauge = #'Gauge'{value = 2}}]}).
 
 -define(ONE_RUNNING_ONE_STARTING_METRIC, #'MetricFamily'{name = <<"rabbitmq_federation_links">>,
-                                                         help = "Current number of federation links",
+                                                         help = "Number of federation links",
                                                          type = 'GAUGE',
                                                          metric = [#'Metric'{label = [#'LabelPair'{name = <<"status">>,
                                                                                                    value = <<"running">>}],
@@ -142,7 +142,7 @@ upstream_downstream() ->
 get_metrics(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
                                  ?MODULE, collect_mf,
-                                 [default, rabbitmq_federation_prometheus]).
+                                 [default, rabbit_federation_prometheus_collector]).
 
 
 

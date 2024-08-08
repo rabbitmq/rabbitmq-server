@@ -1,11 +1,13 @@
 load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
+load("//:rabbitmq_home.bzl", "rabbitmq_home")
+load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
     "//:rabbitmq.bzl",
+    "BROKER_VERSION_REQUIREMENTS_ANY",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
-    "broker_for_integration_suites",
     "rabbitmq_app",
     "rabbitmq_integration_suite",
 )
@@ -17,7 +19,9 @@ load(
     "test_suite_beam_files",
 )
 
-# gazelle:erlang_always_generate_test_beam_files
+APP_NAME = "rabbitmq_shovel_prometheus"
+
+APP_DESCRIPTION = "Prometheus extension for the Shovel plugin"
 
 APP_ENV = """[
 ]"""
@@ -31,25 +35,22 @@ all_test_beam_files(name = "all_test_beam_files")
 test_suite_beam_files(name = "test_suite_beam_files")
 
 # gazelle:erlang_app_extra_app crypto
-
 # gazelle:erlang_app_dep rabbit
 # gazelle:erlang_app_dep rabbitmq_prometheus
-
 # gazelle:erlang_app_dep_exclude prometheus
 
 rabbitmq_app(
     name = "erlang_app",
     srcs = [":all_srcs"],
     hdrs = [":public_hdrs"],
-    app_description = "Exposes rabbitmq_shovel metrics to Prometheus",
+    app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
-    app_module = "rabbitmq_shovel_prometheus",
-    app_name = "rabbitmq_shovel_prometheus",
-    app_version = module_version(),
+    app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
+    app_module = "rabbit_shovel_prometheus_app",
+    app_name = APP_NAME,
     beam_files = [":beam_files"],
     extra_apps = [
         "crypto",
-        "rabbit_common",
     ],
     license_files = [":license_files"],
     priv = [":priv"],
@@ -58,12 +59,6 @@ rabbitmq_app(
         "//deps/rabbitmq_prometheus:erlang_app",
         "//deps/rabbitmq_shovel:erlang_app",
     ],
-)
-
-alias(
-    name = "rabbitmq_shovel_prometheus",
-    actual = ":erlang_app",
-    visibility = ["//visibility:public"],
 )
 
 xref(
@@ -75,9 +70,8 @@ plt(
     name = "deps_plt",
     for_target = ":erlang_app",
     ignore_warnings = True,
-    libs = ["//deps/rabbitmq_cli:elixir"],  # keep
+    libs = ["@rules_elixir//elixir"],  # keep
     plt = "//:base_plt",
-    deps = ["//deps/rabbitmq_cli:erlang_app"],  # keep
 )
 
 dialyze(
@@ -87,7 +81,23 @@ dialyze(
     target = ":erlang_app",
 )
 
-broker_for_integration_suites()
+eunit(
+    name = "eunit",
+    target = ":test_erlang_app",
+)
+
+rabbitmq_home(
+    name = "broker-for-tests-home",
+    plugins = [
+        "//deps/rabbit:erlang_app",
+        ":erlang_app",
+    ],
+)
+
+rabbitmq_run(
+    name = "rabbitmq-for-tests-run",
+    home = ":broker-for-tests-home",
+)
 
 rabbitmq_integration_suite(
     name = "prometheus_rabbitmq_shovel_collector_SUITE",
@@ -98,7 +108,8 @@ rabbitmq_integration_suite(
 
 assert_suites()
 
-eunit(
-    name = "eunit",
-    target = ":test_erlang_app",
+alias(
+    name = "rabbitmq_shovel_prometheus",
+    actual = ":erlang_app",
+    visibility = ["//visibility:public"],
 )
