@@ -2767,6 +2767,7 @@ detach_requeues_two_connections(QType, Config) ->
     {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session1, <<"my link pair">>),
     QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType}}},
     {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+    flush(link_pair_attached),
 
     %% Attach 1 sender and 2 receivers.
     {ok, Sender} = amqp10_client:attach_sender_link(Session0, <<"sender">>, Address, settled),
@@ -2778,13 +2779,16 @@ detach_requeues_two_connections(QType, Config) ->
     end,
     ok = gen_statem:cast(Session0, {flow_session, #'v1_0.flow'{incoming_window = {uint, 1}}}),
     ok = amqp10_client:flow_link_credit(Receiver0, 50, never),
+    %% Wait for credit being applied to the queue.
+    timer:sleep(10),
 
     {ok, Receiver1} = amqp10_client:attach_receiver_link(Session1, <<"receiver 1">>, Address, unsettled),
     receive {amqp10_event, {link, Receiver1, attached}} -> ok
     after 5000 -> ct:fail({missing_event, ?LINE})
     end,
-    ok = amqp10_client:flow_link_credit(Receiver1, 50, never),
-    flush(attached),
+    ok = amqp10_client:flow_link_credit(Receiver1, 40, never),
+    %% Wait for credit being applied to the queue.
+    timer:sleep(10),
 
     NumMsgs = 6,
     [begin
