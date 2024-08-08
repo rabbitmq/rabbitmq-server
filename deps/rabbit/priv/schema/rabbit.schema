@@ -229,7 +229,12 @@ end}.
     [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "definitions.tls.password", "rabbit.definitions.ssl_options.password",
-    [{datatype, string}]}.
+    [{datatype, [tagged_binary, binary]}]}.
+
+{translation, "rabbit.definitions.ssl_options.password",
+fun(Conf) ->
+    rabbit_cuttlefish:optionally_tagged_string("definitions.tls.password", Conf)
+end}.
 
 {mapping, "definitions.tls.secure_renegotiate", "rabbit.definitions.ssl_options.secure_renegotiate",
     [{datatype, {enum, [true, false]}}]}.
@@ -395,7 +400,12 @@ end}.
     [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "ssl_options.password", "rabbit.ssl_options.password",
-    [{datatype, string}]}.
+    [{datatype, [tagged_binary, binary]}]}.
+
+{translation, "rabbit.ssl_options.password",
+fun(Conf) ->
+    rabbit_cuttlefish:optionally_tagged_binary("ssl_options.password", Conf)
+end}.
 
 {mapping, "ssl_options.psk_identity", "rabbit.ssl_options.psk_identity",
     [{datatype, string}]}.
@@ -656,12 +666,12 @@ fun(Conf) ->
 end}.
 
 {mapping, "default_pass", "rabbit.default_pass", [
-    {datatype, string}
+    {datatype, [tagged_binary, binary]}
 ]}.
 
 {translation, "rabbit.default_pass",
 fun(Conf) ->
-    list_to_binary(cuttlefish:conf_get("default_pass", Conf))
+    rabbit_cuttlefish:optionally_tagged_binary("default_pass", Conf)
 end}.
 
 {mapping, "default_permissions.configure", "rabbit.default_permissions", [
