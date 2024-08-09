@@ -1295,8 +1295,10 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/rabbit_fifo_SUITE.erl"],
         outs = ["test/rabbit_fifo_SUITE.beam"],
-        hdrs = ["src/rabbit_fifo.hrl",
-                "src/rabbit_fifo_dlx.hrl"],
+        hdrs = [
+            "src/rabbit_fifo.hrl",
+            "src/rabbit_fifo_dlx.hrl",
+        ],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app"],
