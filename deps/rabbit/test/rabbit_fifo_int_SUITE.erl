@@ -380,6 +380,16 @@ returns_after_down(Config) ->
     after 5000 ->
               ct:fail("waiting for process exit timed out")
     end,
+    rabbit_ct_helpers:await_condition(
+      fun () ->
+                case ra:member_overview(ServerId) of
+                    {ok, #{machine := #{num_consumers := 0}}, _} ->
+                        true;
+                    X ->
+                        ct:pal("X ~p", [X]),
+                        false
+                end
+      end),
     % message should be available for dequeue
     {ok, _, {_, _, _, _, Msg1Out}, _} =
         rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F2),
