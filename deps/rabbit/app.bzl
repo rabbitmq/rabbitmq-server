@@ -2162,3 +2162,12 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
         deps = ["@proper//:erlang_app"],
     )
+    erlang_bytecode(
+        name = "cluster_upgrade_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/cluster_upgrade_SUITE.erl"],
+        outs = ["test/cluster_upgrade_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
+    )
