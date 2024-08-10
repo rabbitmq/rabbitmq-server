@@ -1209,6 +1209,14 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+    name = "cluster_upgrade_SUITE",
+    size = "medium",
+    additional_beam = [
+        ":test_queue_utils_beam",
+    ],
+)
+
+rabbitmq_integration_suite(
     name = "amqp_client_SUITE",
     size = "large",
     additional_beam = [
