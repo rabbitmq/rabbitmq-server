@@ -100,15 +100,10 @@ init_using_mnesia() ->
     rabbit_sup:start_child(mnesia_sync).
 
 init_using_khepri() ->
-    case rabbit_khepri:members() of
-        [] ->
-            timer:sleep(1000),
-            init_using_khepri();
-        Members ->
-            ?LOG_NOTICE(
-               "Found the following metadata store members: ~p", [Members],
-               #{domain => ?RMQLOG_DOMAIN_DB})
-    end.
+    ?LOG_DEBUG(
+      "DB: initialize Khepri",
+      #{domain => ?RMQLOG_DOMAIN_DB}),
+    rabbit_khepri:init().
 
 init_finished() ->
     %% Used during initialisation by rabbit_logger_exchange_h.erl
