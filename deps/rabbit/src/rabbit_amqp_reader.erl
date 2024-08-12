@@ -392,7 +392,7 @@ handle_connection_frame(
                                                user = User = #user{username = Username}},
       helper_sup = HelperSupPid,
       sock = Sock} = State0) ->
-    logger:update_process_metadata(#{container_id => ContainerId}),
+    logger:update_process_metadata(#{amqp_container => ContainerId}),
     Vhost = vhost(Hostname),
     ok = check_user_loopback(State0),
     ok = check_vhost_exists(Vhost, State0),
@@ -404,7 +404,7 @@ handle_connection_frame(
     rabbit_core_metrics:auth_attempt_succeeded(<<>>, Username, amqp10),
     notify_auth(user_authentication_success, Username, State0),
     rabbit_log_connection:info(
-      "AMQP 1.0 connection from container '~ts': user '~ts' "
+      "Connection from AMQP 1.0 container '~ts': user '~ts' "
       "authenticated and granted access to vhost '~ts'",
       [ContainerId, Username, Vhost]),
 
