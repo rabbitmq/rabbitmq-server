@@ -86,6 +86,7 @@ unpack_from_0_9_1(
   {Sock,RecvLen, PendingRecv, SupPid, Buf, BufLen, ProxySocket,
    ConnectionName, Host, PeerHost, Port, PeerPort, ConnectedAt},
   Parent, HandshakeTimeout) ->
+    logger:update_process_metadata(#{connection => ConnectionName}),
     #v1{parent              = Parent,
         sock                = Sock,
         callback            = handshake,
@@ -380,7 +381,8 @@ parse_frame_body(Body, _Channel) ->
     end.
 
 handle_connection_frame(
-  #'v1_0.open'{max_frame_size = ClientMaxFrame,
+  #'v1_0.open'{container_id = {utf8, ContainerId},
+               max_frame_size = ClientMaxFrame,
                channel_max = ClientChannelMax,
                idle_time_out = IdleTimeout,
                hostname = Hostname,
@@ -390,7 +392,7 @@ handle_connection_frame(
                                                user = User = #user{username = Username}},
       helper_sup = HelperSupPid,
       sock = Sock} = State0) ->
-
+    logger:update_process_metadata(#{container_id => ContainerId}),
     Vhost = vhost(Hostname),
     ok = check_user_loopback(State0),
     ok = check_vhost_exists(Vhost, State0),
@@ -402,8 +404,9 @@ handle_connection_frame(
     rabbit_core_metrics:auth_attempt_succeeded(<<>>, Username, amqp10),
     notify_auth(user_authentication_success, Username, State0),
     rabbit_log_connection:info(
-      "AMQP 1.0 connection: user '~ts' authenticated and granted access to vhost '~ts'",
-      [Username, Vhost]),
+      "AMQP 1.0 connection from container '~ts': user '~ts' "
+      "authenticated and granted access to vhost '~ts'",
+      [ContainerId, Username, Vhost]),
 
     OutgoingMaxFrameSize = case ClientMaxFrame of
                                undefined ->
