@@ -96,6 +96,7 @@
 
 -export([setup/0,
          setup/1,
+         init/0,
          can_join_cluster/1,
          add_member/2,
          remove_member/1,
@@ -319,6 +320,23 @@ wait_for_register_projections(Timeout, Retries) ->
     catch
         throw : timeout ->
             wait_for_register_projections(Timeout, Retries -1)
+    end.
+
+%% @private
+
+-spec init() -> Ret when
+      Ret :: ok.
+
+init() ->
+    case members() of
+        [] ->
+            timer:sleep(1000),
+            init();
+        Members ->
+            ?LOG_NOTICE(
+               "Found the following metadata store members: ~p", [Members],
+               #{domain => ?RMQLOG_DOMAIN_DB}),
+            ok
     end.
 
 %% @private
