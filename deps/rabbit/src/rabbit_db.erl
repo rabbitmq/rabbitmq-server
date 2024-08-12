@@ -107,7 +107,7 @@ init_using_khepri() ->
             timer:sleep(1000),
             init_using_khepri();
         Members ->
-            ?LOG_WARNING(
+            ?LOG_NOTICE(
                "Found the following metadata store members: ~p", [Members],
                #{domain => ?RMQLOG_DOMAIN_DB})
     end.
