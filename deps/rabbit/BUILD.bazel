@@ -277,7 +277,6 @@ rabbitmq_home(
         ":test_erlang_app",
         "//deps/rabbitmq_ct_client_helpers:erlang_app",
         "//deps/rabbitmq_amqp1_0:erlang_app",
-        "//deps/rabbitmq_auth_mechanism_ssl:erlang_app",
         "@inet_tcp_proxy_dist//:erlang_app",
         "@meck//:erlang_app",
     ],
