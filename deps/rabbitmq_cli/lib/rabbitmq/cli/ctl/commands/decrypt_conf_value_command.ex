@@ -4,8 +4,10 @@
 ##
 ## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, Helpers, Input}
+alias RabbitMQ.CLI.Core.Helpers
+
+defmodule RabbitMQ.CLI.Ctl.Commands.DecryptConfValueCommand do
+  alias RabbitMQ.CLI.Core.{DocGuide, Input}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -19,6 +21,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
   end
 
   @atomized_keys [:cipher, :hash]
+  @prefix "encrypted:"
 
   def distribution(_), do: :none
 
@@ -36,6 +39,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
     {args, Helpers.atomize_values(with_defaults, @atomized_keys)}
   end
 
+  def validate(args, _) when length(args) < 1 do
+    {:validation_failure, {:not_enough_args, "Please provide a value to decode and a passphrase"}}
+  end
+
   def validate(args, _) when length(args) > 2 do
     {:validation_failure, :too_many_args}
   end
@@ -43,44 +50,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
   def validate(_args, opts) do
     case {supports_cipher(opts.cipher), supports_hash(opts.hash), opts.iterations > 0} do
       {false, _, _} ->
-        {:validation_failure, {:bad_argument, "The requested cipher is not supported."}}
+        {:validation_failure, {:bad_argument, "The requested cipher is not supported"}}
 
       {_, false, _} ->
         {:validation_failure, {:bad_argument, "The requested hash is not supported"}}
 
       {_, _, false} ->
-        {:validation_failure, {:bad_argument, "The requested number of iterations is incorrect"}}
+        {:validation_failure,
+         {:bad_argument,
+          "The requested number of iterations is incorrect (must be a positive integer)"}}
 
       {true, true, true} ->
         :ok
-    end
-  end
-
-  def run([], %{cipher: cipher, hash: hash, iterations: iterations} = opts) do
-    case Input.consume_single_line_string_with_prompt("Value to encode: ", opts) do
-      :eof ->
-        {:error, :not_enough_args}
-
-      value ->
-        case Input.consume_single_line_string_with_prompt("Passphrase: ", opts) do
-          :eof ->
-            {:error, :not_enough_args}
-
-          passphrase ->
-            try do
-              term_value = Helpers.evaluate_input_as_term(value)
-
-              result =
-                {:encrypted, _} =
-                :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, term_value)
-
-              {:ok, result}
-            catch
-              _, _ ->
-                IO.inspect(__STACKTRACE__)
-                {:error, "Error during cipher operation"}
-            end
-        end
     end
   end
 
@@ -93,15 +74,25 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
         try do
           term_value = Helpers.evaluate_input_as_term(value)
 
-          result =
-            {:encrypted, _} =
-            :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, term_value)
+          term_to_decrypt =
+            case term_value do
+              prefixed_val when is_bitstring(prefixed_val) or is_list(prefixed_val) ->
+                tag_input_value_with_encrypted(prefixed_val)
 
+              {:encrypted, _} = encrypted ->
+                encrypted
+
+              _ ->
+                {:encrypted, term_value}
+            end
+
+          result = :rabbit_pbe.decrypt_term(cipher, hash, iterations, passphrase, term_to_decrypt)
           {:ok, result}
         catch
           _, _ ->
             IO.inspect(__STACKTRACE__)
-            {:error, "Error during cipher operation"}
+            {:error,
+             "Failed to decrypt the value. Things to check: is the passphrase correct? Are the cipher and hash algorithms the same as those used for encryption?"}
         end
     end
   end
@@ -110,30 +101,40 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
     try do
       term_value = Helpers.evaluate_input_as_term(value)
 
-      result =
-        {:encrypted, _} =
-        :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, term_value)
+      term_to_decrypt =
+        case term_value do
+          prefixed_val when is_bitstring(prefixed_val) or is_list(prefixed_val) ->
+            tag_input_value_with_encrypted(prefixed_val)
 
+          {:encrypted, _} = encrypted ->
+            encrypted
+
+          _ ->
+            {:encrypted, term_value}
+        end
+
+      result = :rabbit_pbe.decrypt_term(cipher, hash, iterations, passphrase, term_to_decrypt)
       {:ok, result}
     catch
       _, _ ->
         IO.inspect(__STACKTRACE__)
-        {:error, "Error during cipher operation"}
+        {:error,
+         "Failed to decrypt the value. Things to check: is the passphrase correct? Are the cipher and hash algorithms the same as those used for encryption?"}
     end
   end
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
   def banner(_, _) do
-    "Encrypting value to be used in advanced.config..."
+    "Decrypting a rabbitmq.conf string value..."
   end
 
   def usage,
-    do: "encode value passphrase [--cipher <cipher>] [--hash <hash>] [--iterations <iterations>]"
+    do: "decrypt_conf_value value passphrase [--cipher <cipher>] [--hash <hash>] [--iterations <iterations>]"
 
   def usage_additional() do
     [
-      ["<value>", "value to encode, to be used in advanced.config"],
+      ["<value>", "a double-quoted rabbitmq.conf string value to decode"],
       ["<passphrase>", "passphrase to use with the config value encryption key"],
       ["--cipher <cipher>", "cipher suite to use"],
       ["--hash <hash>", "hashing function to use"],
@@ -149,7 +150,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
 
   def help_section(), do: :configuration
 
-  def description(), do: "Encrypts a sensitive configuration value to be used in the advanced.config file"
+  def description(), do: "Decrypts an encrypted configuration value"
 
   #
   # Implementation
@@ -158,4 +159,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
   defp supports_cipher(cipher), do: Enum.member?(:rabbit_pbe.supported_ciphers(), cipher)
 
   defp supports_hash(hash), do: Enum.member?(:rabbit_pbe.supported_hashes(), hash)
+
+  defp tag_input_value_with_encrypted(value) when is_bitstring(value) or is_list(value) do
+    bin_val = :rabbit_data_coercion.to_binary(value)
+    untagged_val = String.replace_prefix(bin_val, @prefix, "")
+
+    {:encrypted, untagged_val}
+  end
+  defp tag_input_value_with_encrypted(value) do
+    {:encrypted, value}
+  end
 end

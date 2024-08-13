@@ -86,6 +86,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
           {:ok, result}
         catch
           _, _ ->
+            IO.inspect(__STACKTRACE__)
             {:error,
              "Failed to decrypt the value. Things to check: is the passphrase correct? Are the cipher and hash algorithms the same as those used for encryption?"}
         end
@@ -109,6 +110,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
       {:ok, result}
     catch
       _, _ ->
+        IO.inspect(__STACKTRACE__)
         {:error,
          "Failed to decrypt the value. Things to check: is the passphrase correct? Are the cipher and hash algorithms the same as those used for encryption?"}
     end
@@ -117,7 +119,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
   def banner(_, _) do
-    "Decrypting value..."
+    "Decrypting an advanced.config (Erlang term) value..."
   end
 
   def usage,
@@ -125,7 +127,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
 
   def usage_additional() do
     [
-      ["<value>", "config value to decode"],
+      ["<value>", "advanced.config (Erlang term) value to decode"],
       ["<passphrase>", "passphrase to use with the config value encryption key"],
       ["--cipher <cipher>", "cipher suite to use"],
       ["--hash <hash>", "hashing function to use"],
@@ -141,7 +143,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
 
   def help_section(), do: :configuration
 
-  def description(), do: "Decrypts an encrypted configuration value"
+  def description(), do: "Decrypts an encrypted advanced.config value"
 
   #
   # Implementation
