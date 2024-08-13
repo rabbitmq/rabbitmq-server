@@ -4,7 +4,7 @@
 ##
 ## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
+defmodule RabbitMQ.CLI.Ctl.Commands.EncryptConfValueCommand do
   alias RabbitMQ.CLI.Core.{DocGuide, Helpers, Input}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -70,8 +70,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
             try do
               term_value = Helpers.evaluate_input_as_term(value)
 
-              result =
-                {:encrypted, _} =
+              {:encrypted, result} =
                 :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, term_value)
 
               {:ok, result}
@@ -92,8 +91,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
         try do
           term_value = Helpers.evaluate_input_as_term(value)
 
-          result =
-            {:encrypted, _} =
+          {:encrypted, result} =
             :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, term_value)
 
           {:ok, result}
@@ -108,8 +106,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
     try do
       term_value = Helpers.evaluate_input_as_term(value)
 
-      result =
-        {:encrypted, _} =
+      {:encrypted, result} =
         :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, term_value)
 
       {:ok, result}
@@ -119,14 +116,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
     end
   end
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
+  def formatter(), do: RabbitMQ.CLI.Formatters.EncryptedConfValue
 
   def banner(_, _) do
-    "Encrypting value to be used in advanced.config..."
+    "Encrypting value to be used in rabbitmq.conf..."
   end
 
   def usage,
-    do: "encode value passphrase [--cipher <cipher>] [--hash <hash>] [--iterations <iterations>]"
+    do: "encrypt_conf_value value passphrase [--cipher <cipher>] [--hash <hash>] [--iterations <iterations>]"
 
   def usage_additional() do
     [
