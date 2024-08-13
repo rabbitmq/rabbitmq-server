@@ -77,6 +77,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
               {:ok, result}
             catch
               _, _ ->
+                IO.inspect(__STACKTRACE__)
                 {:error, "Error during cipher operation"}
             end
         end
@@ -99,6 +100,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
           {:ok, result}
         catch
           _, _ ->
+            IO.inspect(__STACKTRACE__)
             {:error, "Error during cipher operation"}
         end
     end
@@ -115,6 +117,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
       {:ok, result}
     catch
       _, _ ->
+        IO.inspect(__STACKTRACE__)
         {:error, "Error during cipher operation"}
     end
   end
