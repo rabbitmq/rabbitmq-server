@@ -124,7 +124,7 @@ end}.
     [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "trust_store.ssl_options.password", "rabbitmq_trust_store.ssl_options.password",
-    [{datatype, string}]}.
+    [{datatype, [tagged_binary, binary]}]}.
 
 {mapping, "trust_store.ssl_options.psk_identity", "rabbitmq_trust_store.ssl_options.psk_identity",
     [{datatype, string}]}.

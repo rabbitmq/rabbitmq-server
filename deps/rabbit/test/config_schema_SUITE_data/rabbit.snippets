@@ -182,7 +182,7 @@ ssl_options.fail_if_no_peer_cert = true",
   [{rabbit, [{default_users, [
       {<<"a">>, [{<<"vhost_pattern">>, "banana"},
                  {<<"tags">>, [administrator, operator]},
-                 {<<"password">>, "SECRET"},
+                 {<<"password">>, <<"SECRET">>},
                  {<<"read">>, ".*"}]}]}]}],
   []},
 
@@ -510,7 +510,7 @@ tcp_listen_options.exit_on_close = false",
             [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
              {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
              {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-             {password,"t0p$3kRe7"}]}]}],
+             {password,<<"t0p$3kRe7">>}]}]}],
   []},
  {ssl_options_tls_ver_old,
   "listeners.ssl.1 = 5671

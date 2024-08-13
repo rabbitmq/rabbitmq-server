@@ -85,7 +85,7 @@
              {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
              {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
              {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {password,"changeme"}]}]}],
+             {password,<<"changeme">>}]}]}],
   [rabbitmq_web_mqtt]},
 
  {ssl,
@@ -108,7 +108,7 @@
              {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
              {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
              {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {password,"changeme"},
+             {password,<<"changeme">>},
 
              {versions,['tlsv1.2','tlsv1.1']}
             ]}]}],
@@ -145,7 +145,7 @@
              {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
              {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
              {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {password,"changeme"},
+             {password,<<"changeme">>},
 
              {honor_cipher_order,   true},
              {honor_ecc_order,      true},

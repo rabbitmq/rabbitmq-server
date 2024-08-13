@@ -706,7 +706,7 @@ end}.
 ]}.
 
 {mapping, "default_users.$name.password", "rabbit.default_users", [
-    {datatype, string}
+    {datatype, [tagged_binary, binary]}
 ]}.
 
 {mapping, "default_users.$name.configure", "rabbit.default_users", [
