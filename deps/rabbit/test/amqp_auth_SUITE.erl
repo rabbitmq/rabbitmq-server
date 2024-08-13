@@ -87,6 +87,11 @@ groups() ->
        unbind_queue_target,
        unbind_from_topic_exchange
       ]
+     },
+     {sasl_external, [shuffle],
+      [
+       sasl_external_success
+      ]
      }
     ].
 
@@ -98,15 +103,40 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
-init_per_group(Group, Config0) ->
-    PermitV1 = case Group of
-                   address_v1 -> true;
-                   address_v2 -> false
-               end,
+init_per_group(address_v1, Config) ->
+    init_per_group0(true, Config);
+init_per_group(address_v2, Config) ->
+    init_per_group0(false, Config);
+init_per_group(sasl_external, Config0) ->
+    %% Command `deps/rabbitmq_ct_helpers/tools/tls-certs$ make`
+    %% will put our hostname as common name in the client cert.
     Config1 = rabbit_ct_helpers:merge_app_env(
-                Config0, {rabbit,
-                          [{permit_deprecated_features,
-                            #{amqp_address_v1 => PermitV1}}]}),
+                Config0,
+                {rabbit,
+                 [
+                  {permit_deprecated_features, #{amqp_address_v1 => false}},
+                  {auth_mechanisms, ['EXTERNAL']},
+                  {ssl_cert_login_from, common_name}
+                 ]
+                }),
+    Config = rabbit_ct_helpers:run_setup_steps(
+               Config1,
+               rabbit_ct_broker_helpers:setup_steps() ++
+               rabbit_ct_client_helpers:setup_steps()),
+    {ok, UserString} = inet:gethostname(),
+    User = unicode:characters_to_binary(UserString),
+    ok = rabbit_ct_broker_helpers:add_user(Config, User),
+    Vhost = <<"test vhost">>,
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, Vhost),
+    [{test_vhost, Vhost},
+     {test_user, User}] ++ Config.
+
+init_per_group0(PermitV1, Config0) ->
+    Config1 = rabbit_ct_helpers:merge_app_env(
+                Config0,
+                {rabbit,
+                 [{permit_deprecated_features, #{amqp_address_v1 => PermitV1}}]
+                }),
     Config = rabbit_ct_helpers:run_setup_steps(
                Config1,
                rabbit_ct_broker_helpers:setup_steps() ++
@@ -1016,6 +1046,28 @@ unbind_from_topic_exchange(Config) ->
                  rabbitmq_amqp_client:unbind_exchange(LinkPair2, DstXName, SrcXName, Topic, #{})),
 
     ok = close_connection_sync(Conn).
+
+sasl_external_success(Config) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp_tls),
+    Host = ?config(rmq_hostname, Config),
+    Vhost = ?config(test_vhost, Config),
+    CACertFile = ?config(rmq_certsdir, Config) ++ "/testca/cacert.pem",
+    CertFile = ?config(rmq_certsdir, Config) ++ "/client/cert.pem",
+    KeyFile = ?config(rmq_certsdir, Config) ++ "/client/key.pem",
+    OpnConf = #{address => Host,
+                port => Port,
+                container_id => atom_to_binary(?FUNCTION_NAME),
+                hostname => <<"vhost:", Vhost/binary>>,
+                sasl => external,
+                tls_opts => {secure_port, [{cacertfile, CACertFile},
+                                           {certfile, CertFile},
+                                           {keyfile, KeyFile}]}
+               },
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    receive {amqp10_event, {connection, Connection, opened}} -> ok
+    after 5000 -> ct:fail(missing_opened)
+    end,
+    ok = amqp10_client:close_connection(Connection).
 
 init_pair(Config) ->
     OpnConf = connection_config(Config),
