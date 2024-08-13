@@ -116,7 +116,7 @@ end}.
     [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "auth_http.ssl_options.password", "rabbitmq_auth_backend_http.ssl_options.password",
-    [{datatype, string}]}.
+    [{datatype, [tagged_binary, binary]}]}.
 
 {mapping, "auth_http.ssl_options.psk_identity", "rabbitmq_auth_backend_http.ssl_options.psk_identity",
     [{datatype, string}]}.

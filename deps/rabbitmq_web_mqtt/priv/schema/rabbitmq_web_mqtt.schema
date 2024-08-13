@@ -56,7 +56,7 @@
 {mapping, "web_mqtt.ssl.cacertfile", "rabbitmq_web_mqtt.ssl_config.cacertfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 {mapping, "web_mqtt.ssl.password", "rabbitmq_web_mqtt.ssl_config.password",
-    [{datatype, string}]}.
+    [{datatype, [tagged_binary, binary]}]}.
 
 {translation,
     "rabbitmq_web_mqtt.ssl_config",
