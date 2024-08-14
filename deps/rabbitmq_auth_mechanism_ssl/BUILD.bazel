@@ -1,17 +1,22 @@
+load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
+load("//:rabbitmq_home.bzl", "rabbitmq_home")
+load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
     "//:rabbitmq.bzl",
     "BROKER_VERSION_REQUIREMENTS_ANY",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "rabbitmq_app",
+    "rabbitmq_integration_suite",
 )
 load(
     ":app.bzl",
     "all_beam_files",
     "all_srcs",
     "all_test_beam_files",
+    "test_suite_beam_files",
 )
 
 APP_NAME = "rabbitmq_auth_mechanism_ssl"
@@ -26,7 +31,7 @@ APP_ENV = """[
 
 all_beam_files(name = "all_beam_files")
 
-all_test_beam_files()
+all_test_beam_files(name = "all_test_beam_files")
 
 all_srcs(name = "all_srcs")
 
@@ -70,10 +75,39 @@ dialyze(
     target = ":erlang_app",
 )
 
+rabbitmq_home(
+    name = "broker-for-tests-home",
+    testonly = True,
+    plugins = [
+        ":test_erlang_app",
+    ],
+)
+
+rabbitmq_run(
+    name = "rabbitmq-for-tests-run",
+    testonly = True,
+    home = ":broker-for-tests-home",
+)
+
+rabbitmq_integration_suite(
+    name = "system_SUITE",
+    shard_count = 1,
+    runtime_deps = [
+        "//deps/amqp10_client:erlang_app",
+    ],
+)
+
 assert_suites()
 
 alias(
     name = "rabbitmq_auth_mechanism_ssl",
     actual = ":erlang_app",
     visibility = ["//visibility:public"],
+)
+
+test_suite_beam_files(name = "test_suite_beam_files")
+
+eunit(
+    name = "eunit",
+    target = ":test_erlang_app",
 )

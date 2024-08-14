@@ -23,7 +23,9 @@
                     {cleanup,     {rabbit_registry, unregister,
                                    [auth_mechanism, <<"EXTERNAL">>]}}]}).
 
--record(state, {username = undefined}).
+-record(state, {
+          username = undefined :: undefined | rabbit_types:username() | {refused, none, string(), [term()]}
+         }).
 
 description() ->
     [{description, <<"TLS peer verification-based authentication plugin. Used in combination with the EXTERNAL SASL mechanism.">>}].

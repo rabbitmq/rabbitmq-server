@@ -106,9 +106,7 @@ open_connection(ConnectionConfig0) ->
         notify_when_opened => NotifyWhenOpened,
         notify_when_closed => NotifyWhenClosed
     },
-    Sasl = maps:get(sasl, ConnectionConfig1),
-    ConnectionConfig2 = ConnectionConfig1#{sasl => amqp10_client_connection:encrypt_sasl(Sasl)},
-    ConnectionConfig = merge_default_tls_options(ConnectionConfig2),
+    ConnectionConfig = merge_default_tls_options(ConnectionConfig1),
     amqp10_client_connection:open(ConnectionConfig).
 
 %% @doc Closes a connection.
