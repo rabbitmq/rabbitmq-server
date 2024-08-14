@@ -38,8 +38,6 @@ define PROJECT_ENV
 	    {default_user_tags, [administrator]},
 	    {default_vhost, <<"/">>},
 	    {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
-	    {amqp1_0_default_user, <<"guest">>},
-	    {amqp1_0_default_vhost, <<"/">>},
 	    {loopback_users, [<<"guest">>]},
 	    {password_hashing_module, rabbit_password_hashing_sha256},
 	    {server_properties, []},
@@ -47,7 +45,12 @@ define PROJECT_ENV
 	    {collect_statistics_interval, 5000},
 	    {mnesia_table_loading_retry_timeout, 30000},
 	    {mnesia_table_loading_retry_limit, 10},
-	    {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
+	    %% The identity to act as for anonymous logins.
+	    {anonymous_login_user, <<"guest">>},
+	    {anonymous_login_pass, <<"guest">>},
+	    %% "The server mechanisms are ordered in decreasing level of preference."
+	    %% AMQP §5.3.3.1
+	    {auth_mechanisms, ['PLAIN', 'AMQPLAIN', 'ANONYMOUS']},
 	    {auth_backends, [rabbit_auth_backend_internal]},
 	    {delegate_count, 16},
 	    {trace_vhosts, []},
