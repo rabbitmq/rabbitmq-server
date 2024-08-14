@@ -220,6 +220,8 @@ ssl_options.fail_if_no_peer_cert = true",
  {default_user_settings,
   "default_user = guest
 default_pass = guest
+anonymous_login_user = guest
+anonymous_login_pass = guest
 default_user_tags.administrator = true
 default_permissions.configure = .*
 default_permissions.read = .*
@@ -227,8 +229,15 @@ default_permissions.write = .*",
   [{rabbit,
        [{default_user,<<"guest">>},
         {default_pass,<<"guest">>},
+        {anonymous_login_user,<<"guest">>},
+        {anonymous_login_pass,<<"guest">>},
         {default_user_tags,[administrator]},
         {default_permissions,[<<".*">>,<<".*">>,<<".*">>]}]}],
+  []},
+ {anonymous_login_user,
+  "anonymous_login_user = none",
+  [{rabbit,
+       [{anonymous_login_user, none}]}],
   []},
  {cluster_formation,
   "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_classic_config

@@ -58,11 +58,10 @@ groups() ->
        %% authn
        authn_failure_event,
        sasl_anonymous_success,
-       sasl_none_success,
        sasl_plain_success,
        sasl_anonymous_failure,
-       sasl_none_failure,
        sasl_plain_failure,
+       sasl_none_failure,
        vhost_absent,
 
        %% limits
@@ -609,10 +608,6 @@ sasl_anonymous_success(Config) ->
     Mechanism = anon,
     ok = sasl_success(Mechanism, Config).
 
-sasl_none_success(Config) ->
-    Mechanism = none,
-    ok = sasl_success(Mechanism, Config).
-
 sasl_plain_success(Config) ->
     Mechanism = {plain, <<"guest">>, <<"guest">>},
     ok = sasl_success(Mechanism, Config).
@@ -627,38 +622,40 @@ sasl_success(Mechanism, Config) ->
     ok = amqp10_client:close_connection(Connection).
 
 sasl_anonymous_failure(Config) ->
-    Mechanism = anon,
-    ?assertEqual(
-       {sasl_not_supported, Mechanism},
-       sasl_failure(Mechanism, Config)
-      ).
-
-sasl_none_failure(Config) ->
-    Mechanism = none,
-    sasl_failure(Mechanism, Config).
-
-sasl_plain_failure(Config) ->
-    Mechanism = {plain, <<"guest">>, <<"wrong password">>},
-    ?assertEqual(
-       sasl_auth_failure,
-       sasl_failure(Mechanism, Config)
-      ).
-
-sasl_failure(Mechanism, Config) ->
     App = rabbit,
-    Par = amqp1_0_default_user,
+    Par = anonymous_login_user,
     {ok, Default} = rpc(Config, application, get_env, [App, Par]),
+    %% Prohibit anonymous login.
     ok = rpc(Config, application, set_env, [App, Par, none]),
 
+    Mechanism = anon,
     OpnConf0 = connection_config(Config, <<"/">>),
     OpnConf = OpnConf0#{sasl := Mechanism},
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
-    Reason = receive {amqp10_event, {connection, Connection, {closed, Reason0}}} -> Reason0
-             after 5000 -> ct:fail(missing_closed)
-             end,
+    receive {amqp10_event, {connection, Connection, {closed, Reason}}} ->
+                ?assertEqual({sasl_not_supported, Mechanism}, Reason)
+    after 5000 -> ct:fail(missing_closed)
+    end,
 
-    ok = rpc(Config, application, set_env, [App, Par, Default]),
-    Reason.
+    ok = rpc(Config, application, set_env, [App, Par, Default]).
+
+sasl_plain_failure(Config) ->
+    OpnConf0 = connection_config(Config, <<"/">>),
+    OpnConf = OpnConf0#{sasl := {plain, <<"guest">>, <<"wrong password">>}},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    receive {amqp10_event, {connection, Connection, {closed, Reason}}} ->
+                ?assertEqual(sasl_auth_failure, Reason)
+    after 5000 -> ct:fail(missing_closed)
+    end.
+
+%% Skipping SASL is disallowed in RabbitMQ.
+sasl_none_failure(Config) ->
+    OpnConf0 = connection_config(Config, <<"/">>),
+    OpnConf = OpnConf0#{sasl := none},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    receive {amqp10_event, {connection, Connection, {closed, _Reason}}} -> ok
+    after 5000 -> ct:fail(missing_closed)
+    end.
 
 vhost_absent(Config) ->
     OpnConf = connection_config(Config, <<"this vhost does not exist">>),

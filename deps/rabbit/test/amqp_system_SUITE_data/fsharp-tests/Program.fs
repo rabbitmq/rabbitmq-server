@@ -48,8 +48,13 @@ module AmqpClient =
         let s = Session c
         { Conn = c; Session = s }
 
-    let connectWithOpen uri opn =
-        let c = Connection(Address uri, null, opn, null)
+    let connectAnon uri =
+        let c = Connection(Address uri, SaslProfile.Anonymous, null, null)
+        let s = Session c
+        { Conn = c; Session = s }
+
+    let connectAnonWithOpen uri opn =
+        let c = Connection(Address uri, SaslProfile.Anonymous, opn, null)
         let s = Session c
         { Conn = c; Session = s }
 
@@ -114,7 +119,7 @@ module Test =
         ]
 
     let testOutcome uri (attach: Attach) (cond: string) =
-        use ac = connect uri
+        use ac = connectAnon uri
         let trySet (mre: AutoResetEvent) =
             try mre.Set() |> ignore with _ -> ()
 
@@ -135,7 +140,7 @@ module Test =
     let no_routes_is_released uri =
         // tests that a message sent to an exchange that resolves no routes for the
         // binding key returns the Released outcome, rather than Accepted
-        use ac = connect uri
+        use ac = connectAnon uri
         let address = "/exchanges/no_routes_is_released"
         let sender = SenderLink(ac.Session, "released-sender", address)
         let trySet (mre: AutoResetEvent) =
@@ -160,7 +165,7 @@ module Test =
         ()
 
     let roundtrip uri =
-        use c = connect uri
+        use c = connectAnon uri
         let sender, receiver = senderReceiver c "test" "/queues/roundtrip"
         for body in sampleTypes do
             let corr = "correlation"
@@ -175,7 +180,7 @@ module Test =
             ()
 
     let streams uri =
-        use c = connect uri
+        use c = connectAnon uri
         let name = "streams-test"
         let address = "/queues/streams"
         let sender = SenderLink(c.Session, name + "-sender" , address)
@@ -216,7 +221,7 @@ module Test =
     open RabbitMQ.Client
 
     let roundtrip_to_amqp_091 uri =
-        use c = connect uri
+        use c = connectAnon uri
         let q = "roundtrip_to_amqp_091"
         let target = "/queues/roundtrip_to_amqp_091"
         let corr = "correlation"
@@ -282,7 +287,7 @@ module Test =
             let opn = Open(ContainerId = Guid.NewGuid().ToString(),
                            HostName = addr.Host, ChannelMax = 256us,
                            MaxFrameSize = frameSize)
-            use c = connectWithOpen uri opn
+            use c = connectAnonWithOpen uri opn
             let sender, receiver = senderReceiver c "test" "/queues/fragmentation"
             let m = new Message(String.replicate size "a")
             sender.Send m
@@ -290,7 +295,7 @@ module Test =
             assertEqual (m.Body) (m'.Body)
 
     let message_annotations uri =
-        use c = connect uri
+        use c = connectAnon uri
         let sender, receiver = senderReceiver c "test" "/queues/message_annotations"
         let ann = MessageAnnotations()
         let k1 = Symbol "key1"
@@ -309,7 +314,7 @@ module Test =
         assertTrue (m.MessageAnnotations.[k2] = m'.MessageAnnotations.[k2])
 
     let footer uri =
-        use c = connect uri
+        use c = connectAnon uri
         let sender, receiver = senderReceiver c "test" "/queues/footer"
         let footer = Footer()
         let k1 = Symbol "key1"
@@ -327,7 +332,7 @@ module Test =
         assertTrue (m.Footer.[k2] = m'.Footer.[k2])
 
     let data_types uri =
-        use c = connect uri
+        use c = connectAnon uri
         let sender, receiver = senderReceiver c "test" "/queues/data_types"
         let aSeq = amqpSequence sampleTypes
         (new Message(aSeq)) |> sender.Send
@@ -337,7 +342,7 @@ module Test =
             List.exists ((=) a) sampleTypes |> assertTrue
 
     let reject uri =
-        use c = connect uri
+        use c = connectAnon uri
         let sender, receiver = senderReceiver c "test" "/queues/reject"
         new Message "testing reject" |> sender.Send
         let m = receiver.Receive()
@@ -345,7 +350,7 @@ module Test =
         assertEqual null (receiver.Receive(TimeSpan.FromMilliseconds 100.))
 
     let redelivery uri =
-        use c = connect uri
+        use c = connectAnon uri
         let sender, receiver = senderReceiver c "test" "/queues/redelivery"
         new Message "testing redelivery" |> sender.Send
         let m = receiver.Receive()
@@ -363,7 +368,7 @@ module Test =
         session.Close()
 
     let released uri =
-        use c = connect uri
+        use c = connectAnon uri
         let sender, receiver = senderReceiver c "test" "/queues/released"
         new Message "testing released" |> sender.Send
         let m = receiver.Receive()
@@ -392,7 +397,7 @@ module Test =
              "/queues/autodel_q",   "/queues/autodel_q",   ""] do
 
             let rnd = Random()
-            use c = connect uri
+            use c = connectAnon uri
             let sender = SenderLink(c.Session, "test-sender", target)
             let receiver = ReceiverLink(c.Session, "test-receiver", source)
             receiver.SetCredit(100, true)
@@ -411,7 +416,7 @@ module Test =
         for dest, cond in
             ["/exchanges/missing", "amqp:not-found"
              "/fruit/orange", "amqp:invalid-field"] do
-            use ac = connect uri
+            use ac = connectAnon uri
             let trySet (mre: AutoResetEvent) =
                 try mre.Set() |> ignore with _ -> ()
 
