@@ -1,31 +1,63 @@
 # Manual Pages and Documentation Extras
 
-This directory contains [CLI tool](https://rabbitmq.com/cli.html) man page sources as well as a few documentation extras:
+This directory contains [CLI tools](https://rabbitmq.com/docs/cli/) man page sources as well as a few documentation extras:
 
- * An [annotated rabbitmq.conf example](./rabbitmq.conf.example) (see [new style configuration format](https://www.rabbitmq.com/configure.html#config-file-formats))
- * An [annotated advanced.config example](./advanced.config.example) (see [The advanced.config file](https://www.rabbitmq.com/configure.html#advanced-config-file))
+ * An [annotated rabbitmq.conf example](./rabbitmq.conf.example) (see [new style configuration format](https://www.rabbitmq.com/docs/configure#config-file-formats))
+ * An [annotated advanced.config example](./advanced.config.example) (see [The advanced.config file](https://www.rabbitmq.com/docs/configure#advanced-config-file))
  * A [systemd unit file example](./rabbitmq-server.service.example)
 
-Please [see rabbitmq.com](https://rabbitmq.com/documentation.html) for documentation guides.
-
-
-## Classic Config File Format Example
-
-Feeling nostalgic and looking for the [classic configuration file example](https://github.com/rabbitmq/rabbitmq-server/blob/v3.7.x/docs/rabbitmq.config.example)?
-Now that's old school! Keep in mind that classic configuration file **should be considered deprecated**.
-Prefer `rabbitmq.conf` (see [new style configuration format](https://www.rabbitmq.com/configure.html#config-file-formats))
-with an `advanced.config` to complement it as needed.
+Please [see rabbitmq.com](https://rabbitmq.com/docs/) for documentation guides.
 
 
 ## man Pages
 
+### Dependencies
+
+ * `man`
+ * [`tidy5`](https://binaries.html-tidy.org/) (a.k.a. `tidy-html5`)
+
+On macOS, `tidy5` can be installed with Homebrew:
+
+``` shell
+brew install tidy-html5
+```
+
+and then be found under the `bin` directory of the Homebrew cellar:
+
+``` shell
+/opt/homebrew/bin/tidy --help
+```
+
 ### Source Files
 
-This directory contains man pages that are converted to HTML using `mandoc`:
+This directory contains man pages in ntroff, the man page format.
 
-    gmake web-manpages
+To inspect a local version, use `man`:
 
-The result is then copied to the [website repository](https://github.com/rabbitmq/rabbitmq-website/tree/live/site/man)
+``` shell
+man docs/rabbitmq-diagnostics.8
+
+man docs/rabbitmq-queues.8
+```
+
+To converted all man pages to HTML using `mandoc`:
+
+``` shell
+gmake web-manpages
+```
+
+The result then must be post-processed and copied to the website repository:
+
+``` shell
+# cd deps/rabbit/docs
+#
+# clear all generated HTML and Markdown files
+rm *.html *.md
+# export tidy5 path
+export TIDY5_BIN=/opt/homebrew/bin/tidy;
+# run the post-processing script, in this case it updates the 3.13.x version of the docs
+./postprocess_man_html.sh . /path/to/rabbitmq-website.git/versioned_docs/version-3.13/man/
+```
 
 ### Contributions
 
