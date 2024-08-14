@@ -73,11 +73,14 @@
 -type rcv_settle_mode() :: first | second.
 
 -type terminus_durability() :: none | configuration | unsettled_state.
+-type terminus_capabilities() :: binary() | [binary(),...].
 
 -type target_def() :: #{address => link_address(),
-                        durable => terminus_durability()}.
+                        durable => terminus_durability(),
+                        capabilities => terminus_capabilities()}.
 -type source_def() :: #{address => link_address(),
-                        durable => terminus_durability()}.
+                        durable => terminus_durability(),
+                        capabilities => terminus_capabilities()}.
 
 -type attach_role() :: {sender, target_def()} | {receiver, source_def(), pid()}.
 
@@ -191,7 +194,10 @@ begin_sync(Connection, Timeout) ->
 
 -spec attach(pid(), attach_args()) -> {ok, link_ref()}.
 attach(Session, Args) ->
-    gen_statem:call(Session, {attach, Args}, ?TIMEOUT).
+    logger:warning("amqp10_session: call_session attach ~p", [Args]),
+    Ret = gen_statem:call(Session, {attach, Args}, ?TIMEOUT),
+    logger:warning("amqp10_session: call_session attach returned ~p", [Ret]),
+    Ret.
 
 -spec detach(pid(), output_handle()) -> ok | {error, link_not_found | half_attached}.
 detach(Session, Handle) ->
@@ -246,11 +252,13 @@ init([FromPid, Channel, Reader, ConnConfig]) ->
     {ok, unmapped, State}.
 
 unmapped(cast, {socket_ready, Socket}, State) ->
+    logger:warning("unmapped socket_ready calling send_begin"),
     State1 = State#state{socket = Socket},
     ok = send_begin(State1),
     {next_state, begin_sent, State1};
 unmapped({call, From}, {attach, Attach},
                       #state{early_attach_requests = EARs} = State) ->
+    logger:warning("on unmapped state, received call attach. Storing it in early_attach_requests"),
     {keep_state,
      State#state{early_attach_requests = [{From, Attach} | EARs]}}.
 
@@ -259,10 +267,13 @@ begin_sent(cast, #'v1_0.begin'{remote_channel = {ushort, RemoteChannel},
                                incoming_window = {uint, InWindow},
                                outgoing_window = {uint, OutWindow}},
            #state{early_attach_requests = EARs} = State) ->
-
+    logger:warning("on state begin_sent, received v1_0.beging with remote channlel : ~p", [RemoteChannel]),
     State1 = State#state{remote_channel = RemoteChannel},
+    logger:warning("sending early attach requests ~p", [EARs]),
     State2 = lists:foldr(fun({From, Attach}, S) ->
+                                 logger:warning("send early attach request ~tp", [Attach]),
                                  {S2, H} = send_attach(fun send/2, Attach, From, S),
+                                 logger:warning("sent attach request ~p with result ~p", [Attach, H]),
                                  gen_statem:reply(From, {ok, H}),
                                  S2
                          end, State1, EARs),
@@ -295,11 +306,12 @@ mapped(cast, {flow_session, Flow0 = #'v1_0.flow'{incoming_window = {uint, Incomi
     ok = send(Flow, State),
     {keep_state, State#state{incoming_window = IncomingWindow}};
 mapped(cast, #'v1_0.end'{error = Err}, State) ->
+    logger:warning("on mapped state, received v1_0.end frame with error ~p", [Err]),
     %% We receive the first end frame, reply and terminate.
     _ = send_end(State),
     % TODO: send notifications for links?
     Reason = reason(Err),
-    ok = notify_session_ended(State, Reason),
+    ok = notify_session_ended(State, Reason),    
     {stop, normal, State};
 mapped(cast, #'v1_0.attach'{name = {utf8, Name},
                             initial_delivery_count = IDC,
@@ -308,7 +320,7 @@ mapped(cast, #'v1_0.attach'{name = {utf8, Name},
                             max_message_size = MaybeMaxMessageSize},
        #state{links = Links, link_index = LinkIndex,
               link_handle_index = LHI} = State0) ->
-
+    logger:warning("on mapped state, received v1_0.attach frame"),
     OurRoleBool = not PeerRoleBool,
     OurRole = boolean_to_role(OurRoleBool),
     LinkIndexKey = {OurRole, Name},
@@ -543,6 +555,7 @@ mapped({call, From},
     {keep_state, State, {reply, From, Res}};
 
 mapped({call, From}, {attach, Attach}, State) ->
+    logger:warning("on mapped state, received call to attach ~p", [Attach]),
     {State1, LinkRef} = send_attach(fun send/2, Attach, From, State),
     {keep_state, State1, {reply, From, {ok, LinkRef}}};
 
@@ -557,6 +570,7 @@ mapped(_EvtType, Msg, _State) ->
 
 end_sent(_EvtType, #'v1_0.end'{error = Err}, State) ->
     Reason = reason(Err),
+    logger:warning("mapped v1_0.end notfy_session_end ~p", [Reason]),
     ok = notify_session_ended(State, Reason),
     {stop, normal, State};
 end_sent(_EvtType, _Frame, _State) ->
@@ -586,8 +600,12 @@ send_begin(#state{socket = Socket,
     Begin = #'v1_0.begin'{next_outgoing_id = uint(NextOutId),
                           incoming_window = uint(InWin),
                           outgoing_window = ?UINT_OUTGOING_WINDOW},
+    logger:warning("send_begin encode_frame ..."), 
     Frame = encode_frame(Begin, State),
-    socket_send(Socket, Frame).
+    logger:warning("send_begin encoded frame  ~p", [Frame]), 
+    Ret = socket_send(Socket, Frame),
+    logger:warning("socket_send ~p", [Ret]), 
+    Ret.
 
 send_end(State) ->
     send_end(State, undefined).
@@ -713,20 +731,38 @@ make_source(#{role := {sender, _}}) ->
 make_source(#{role := {receiver, #{address := Address} = Source, _Pid}, filter := Filter}) ->
     Durable = translate_terminus_durability(maps:get(durable, Source, none)),
     TranslatedFilter = translate_filters(Filter),
-    #'v1_0.source'{address = {utf8, Address},
+    try translate_terminus_capabilities(maps:get(capabilities, Source, [])) of 
+        Capabilities -> 
+            logger:warning("make_source capabilities : ~p", [Capabilities]),
+             #'v1_0.source'{address = {utf8, Address},
                    durable = {uint, Durable},
-                   filter = TranslatedFilter}.
+                   filter = TranslatedFilter,
+                   capabilities = Capabilities}
+    catch         
+        throw:Err -> 
+                    logger:warning("make_source failed due to ~p", [Err]),
+                    {error, Err}        
+    end.
 
 make_target(#{role := {receiver, _Source, _Pid}}) ->
     #'v1_0.target'{};
 make_target(#{role := {sender, #{address := Address} = Target}}) ->
     Durable = translate_terminus_durability(maps:get(durable, Target, none)),
-    TargetAddr = case is_binary(Address) of
-                     true -> {utf8, Address};
-                     false -> Address
-                 end,
-    #'v1_0.target'{address = TargetAddr,
-                   durable = {uint, Durable}}.
+    try translate_terminus_capabilities(maps:get(capabilities, Target, [])) of 
+        Capabilities ->
+            logger:warning("make_target capabilities : ~p", [Capabilities]),
+            TargetAddr = case is_binary(Address) of
+                            true -> {utf8, Address};
+                            false -> Address
+                        end,
+            #'v1_0.target'{address = TargetAddr,
+                        durable = {uint, Durable},
+                        capabilities = Capabilities}
+    catch 
+        throw:Err -> 
+                    logger:warning("make_target failed due to ~p", [Err]),
+                    {error, Err}
+    end.
 
 max_message_size(#{max_message_size := Size})
   when is_integer(Size) andalso
@@ -771,6 +807,13 @@ filter_value_type({T, _} = V) when is_atom(T) ->
     %% looks like an already tagged type, just pass it through
     V.
 
+translate_terminus_capabilities(Capabilities) when is_binary(Capabilities) ->
+    {symbol, Capabilities};
+translate_terminus_capabilities(CapabilitiesList) when is_list(CapabilitiesList) ->
+    {array, symbol, [{symbol, V} || V <- CapabilitiesList, is_binary(V)]};
+translate_terminus_capabilities(_) ->
+    [].
+
 % https://people.apache.org/~rgodfrey/amqp-1.0/apache-filters.html
 translate_legacy_amqp_headers_binding(LegacyHeaders) ->
     {map,
@@ -814,8 +857,11 @@ send_attach(Send, #{name := Name, role := RoleTuple} = Args, {FromPid, _},
             #state{next_link_handle = OutHandle0, links = Links,
              link_index = LinkIndex} = State) ->
 
+    logger:warning("make_source ..."),
     Source = make_source(Args),
+    logger:warning("make_target ..."),
     Target = make_target(Args),
+    logger:warning("make properties ..."),    
     Properties = amqp10_client_types:make_properties(Args),
 
     {LinkTarget, InitialDeliveryCount, MaxMessageSize} =
@@ -846,7 +892,10 @@ send_attach(Send, #{name := Name, role := RoleTuple} = Args, {FromPid, _},
                             rcv_settle_mode = rcv_settle_mode(Args),
                             target = Target,
                             max_message_size = MaxMessageSize},
+
+    logger:warning("sending ..."),
     ok = Send(Attach, State),
+    logger:warning("sent ..."),
 
     Ref = make_link_ref(Role, self(), OutHandle),
     Link = #link{name = Name,
@@ -1149,7 +1198,8 @@ amqp10_session_event(Evt) ->
 socket_send(Sock, Data) ->
     case socket_send0(Sock, Data) of
         ok -> ok;
-        {error, _Reason} ->
+        {error, Reason} ->
+            logger:warning("socket_send ~p", [Reason]),
             throw({stop, normal})
     end.
 

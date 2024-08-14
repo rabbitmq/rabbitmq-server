@@ -164,6 +164,8 @@ end_session(Pid) ->
 %% @doc Synchronously attach a link on 'Session'.
 %% This is a convenience function that awaits attached event
 %% for the link before returning.
+-spec attach_sender_link_sync(pid(), binary(), binary()) ->
+    {ok, link_ref()} | link_timeout.
 attach_sender_link_sync(Session, Name, Target) ->
     attach_sender_link_sync(Session, Name, Target, mixed).
 
@@ -273,7 +275,8 @@ attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter) ->
 -spec attach_receiver_link(pid(), binary(), binary(), snd_settle_mode(),
                            terminus_durability(), filter(), properties()) ->
     {ok, link_ref()}.
-attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter, Properties)
+attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter, 
+    Properties)
   when is_pid(Session) andalso
        is_binary(Name) andalso
        is_binary(Source) andalso
