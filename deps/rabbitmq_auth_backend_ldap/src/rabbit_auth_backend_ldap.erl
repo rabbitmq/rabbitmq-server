@@ -85,6 +85,7 @@ user_login_authentication(Username, _AuthProps) ->
 %% Credentials (i.e. password) maybe directly in the password attribute in AuthProps
 %% or as a Function with the attribute rabbit_auth_backend_ldap if the user was already authenticated with http backend
 %% or as a Function with the attribute rabbit_auth_backend_cache if the user was already authenticated via cache backend
+-spec extractPassword(list()) -> rabbit_types:option(binary()).
 extractPassword(AuthProps) ->
     case proplists:get_value(password, AuthProps, none) of
         none ->
