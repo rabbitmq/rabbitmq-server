@@ -75,4 +75,11 @@ def all_test_beam_files(name = "all_test_beam_files"):
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):
-    pass
+    erlang_bytecode(
+        name = "system_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/system_SUITE.erl"],
+        outs = ["test/system_SUITE.beam"],
+        app_name = "rabbitmq_auth_mechanism_ssl",
+        erlc_opts = "//:test_erlc_opts",
+    )
