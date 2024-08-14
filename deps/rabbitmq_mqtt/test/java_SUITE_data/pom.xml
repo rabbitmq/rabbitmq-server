@@ -16,7 +16,7 @@
     <paho.v5.version>[1.2.5,)</paho.v5.version>
     <paho.v3.version>[1.2.5,)</paho.v3.version>
     <amqp-client.version>5.21.0</amqp-client.version>
-    <junit.version>5.10.3</junit.version>
+    <junit.version>5.11.0</junit.version>
     <assertj.version>3.26.3</assertj.version>
     <logback.version>1.2.13</logback.version>
     <maven-surefire-plugin.version>3.3.1</maven-surefire-plugin.version>
