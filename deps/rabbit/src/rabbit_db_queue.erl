@@ -942,8 +942,9 @@ create_or_get_in_khepri(Q) ->
 %% set().
 %% -------------------------------------------------------------------
 
--spec set(Queue) -> ok when
-      Queue :: amqqueue:amqqueue().
+-spec set(Queue) -> Ret when
+      Queue :: amqqueue:amqqueue(),
+      Ret :: ok | rabbit_khepri:timeout_error().
 %% @doc Writes a queue record. If the queue is durable, it writes both instances:
 %% durable and transient. For the durable one, it resets mirrors and decorators.
 %% The transient one is left as it is.

@@ -169,16 +169,23 @@ create_stream(Q0) ->
             case rabbit_stream_coordinator:new_stream(Q, Leader) of
                 {ok, {ok, LeaderPid}, _} ->
                     %% update record with leader pid
-                    set_leader_pid(LeaderPid, amqqueue:get_name(Q)),
-                    rabbit_event:notify(queue_created,
-                                        [{name, QName},
-                                         {durable, true},
-                                         {auto_delete, false},
-                                         {arguments, Arguments},
-                                         {type, amqqueue:get_type(Q1)},
-                                         {user_who_performed_action,
-                                          ActingUser}]),
-                    {new, Q};
+                    case set_leader_pid(LeaderPid, amqqueue:get_name(Q)) of
+                        ok ->
+                            rabbit_event:notify(queue_created,
+                                                [{name, QName},
+                                                 {durable, true},
+                                                 {auto_delete, false},
+                                                 {arguments, Arguments},
+                                                 {type, amqqueue:get_type(Q1)},
+                                                 {user_who_performed_action,
+                                                  ActingUser}]),
+                            {new, Q};
+                        {error, timeout} ->
+                            {protocol_error, internal_error,
+                             "Could not set leader PID for ~ts on node '~ts' "
+                             "because the metadata store operation timed out",
+                             [rabbit_misc:rs(QName), node()]}
+                    end;
                 Error ->
                     _ = rabbit_amqqueue:internal_delete(Q, ActingUser),
                     {protocol_error, internal_error, "Cannot declare ~ts on node '~ts': ~255p",
@@ -1182,6 +1189,11 @@ resend_all(#stream_client{leader = LeaderPid,
                            stream_message(Msg, FilteringSupported))
      end || {Seq, Msg} <- Msgs],
     State.
+
+-spec set_leader_pid(Pid, QName) -> Ret when
+      Pid :: pid(),
+      QName :: rabbit_amqqueue:name(),
+      Ret :: ok | {error, timeout}.
 
 set_leader_pid(Pid, QName) ->
     %% TODO this should probably be a single khepri transaction for better performance.

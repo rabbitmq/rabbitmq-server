@@ -289,15 +289,19 @@ internal_declare(Q, Recover) ->
     do_internal_declare(Q, Recover).
 
 do_internal_declare(Q0, true) ->
-    %% TODO Why do we return the old state instead of the actual one?
-    %% I'm leaving it like it was before the khepri refactor, because
-    %% rabbit_amqqueue_process:init_it2 compares the result of this declare to decide
-    %% if continue or stop. If we return the actual one, it fails and the queue stops
-    %% silently during init.
-    %% Maybe we should review this bit of code at some point.
     Q = amqqueue:set_state(Q0, live),
-    ok = store_queue(Q),
-    {created, Q0};
+    case store_queue(Q) of
+        ok ->
+            %% TODO Why do we return the old state instead of the actual one?
+            %% I'm leaving it like it was before the khepri refactor, because
+            %% rabbit_amqqueue_process:init_it2 compares the result of this
+            %% declare to decide if continue or stop. If we return the actual
+            %% one, it fails and the queue stops silently during init.
+            %% Maybe we should review this bit of code at some point.
+            {created, Q0};
+        {error, timeout} = Err ->
+            Err
+    end;
 do_internal_declare(Q0, false) ->
     Q = rabbit_policy:set(amqqueue:set_state(Q0, live)),
     Queue = rabbit_queue_decorator:set(Q),
@@ -310,12 +314,18 @@ do_internal_declare(Q0, false) ->
 update(Name, Fun) ->
     rabbit_db_queue:update(Name, Fun).
 
-%% only really used for quorum queues to ensure the rabbit_queue record
+-spec ensure_rabbit_queue_record_is_initialized(Queue) -> Ret when
+      Queue :: amqqueue:amqqueue(),
+      Ret :: ok | {error, timeout}.
+
+%% only really used for stream queues to ensure the rabbit_queue record
 %% is initialised
 ensure_rabbit_queue_record_is_initialized(Q) ->
     store_queue(Q).
 
--spec store_queue(amqqueue:amqqueue()) -> 'ok'.
+-spec store_queue(Queue) -> Ret when
+      Queue :: amqqueue:amqqueue(),
+      Ret :: ok | {error, timeout}.
 
 store_queue(Q0) ->
     Q = rabbit_queue_decorator:set(Q0),

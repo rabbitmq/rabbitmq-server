@@ -311,7 +311,7 @@ terminate(normal,            State) -> %% delete case
 terminate(_Reason,           State = #q{q = Q}) ->
     terminate_shutdown(fun (BQS) ->
                                Q2 = amqqueue:set_state(Q, crashed),
-                               rabbit_amqqueue:store_queue(Q2),
+                               _ = rabbit_amqqueue:store_queue(Q2),
                                BQS
                        end, State).
 
