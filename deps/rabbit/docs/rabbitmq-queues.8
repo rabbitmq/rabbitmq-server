@@ -182,13 +182,14 @@ This command is currently only supported by quorum queues.
 Example:
 .Sp
 .Dl rabbitmq-queues peek --vhost Qo a-vhost Qc Qo a-queue Qc Qo 1 Qc
-.It Cm check_if_node_is_mirror_sync_critical
+.It Cm check_if_cluster_has_classic_queue_mirroring_policy
 .Pp
-Health check that exits with a non-zero code if there are classic mirrored queues without online synchronised mirrors (queues that would potentially lose data if the target node is shut down).
+Health check that exits with a non-zero code if there are policies in the cluster that enable classic queue mirroring.
+Classic queue mirroring has been deprecated since 2021 and was completely removed in the RabbitMQ 4.0 development cycle.
 .Pp
 Example:
 .Sp
-.Dl rabbitmq-queues check_if_node_is_mirror_sync_critical
+.Dl rabbitmq-queues check_if_cluster_has_classic_queue_mirroring_policy
 .It Cm check_if_node_is_quorum_critical
 .Pp
 Health check that exits with a non-zero code if there are queues with minimum online quorum (queues that would lose their quorum if the target node is shut down).
@@ -210,4 +211,4 @@ Example:
 .\" ------------------------------------------------------------------
 .Sh AUTHOR
 .\" ------------------------------------------------------------------
-.An The RabbitMQ Team Aq Mt rabbitmq-core@groups.vmware.com
+.An The RabbitMQ Team Aq Mt contact-tanzu-data.pdl@broadcom.com
