@@ -75,6 +75,7 @@
 -export([queue/1, queue_names/1]).
 
 -export([kill_queue/2, kill_queue/3, kill_queue_hard/2, kill_queue_hard/3]).
+-export([delete_transient_queues_on_node/1]).
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
@@ -2055,13 +2056,39 @@ maybe_clear_recoverable_node(Node) ->
 -spec on_node_down(node()) -> 'ok'.
 
 on_node_down(Node) ->
+    case delete_transient_queues_on_node(Node) of
+        ok ->
+            ok;
+        {error, timeout} ->
+            %% This case is possible when running Khepri. The node going down
+            %% could leave the cluster in a minority so the command to delete
+            %% the transient queue records would fail. Also see
+            %% `rabbit_khepri:init/0': we also try this deletion when the node
+            %% restarts - a time that the cluster is very likely to have a
+            %% majority - to ensure these records are deleted.
+            rabbit_log:warning("transient queues for node '~ts' could not be "
+                               "deleted because of a timeout. These queues "
+                               "will be removed when node '~ts' restarts or "
+                               "is removed from the cluster.", [Node, Node]),
+            ok
+    end.
+
+-spec delete_transient_queues_on_node(Node) -> Ret when
+      Node :: node(),
+      Ret :: ok | rabbit_khepri:timeout_error().
+
+delete_transient_queues_on_node(Node) ->
     {Time, Ret} = timer:tc(fun() -> rabbit_db_queue:delete_transient(filter_transient_queues_to_delete(Node)) end),
     case Ret of
-        ok -> ok;
-        {QueueNames, Deletions} ->
+        ok ->
+            ok;
+        {error, timeout} = Err ->
+            Err;
+        {QueueNames, Deletions} when is_list(QueueNames) ->
             case length(QueueNames) of
                 0 -> ok;
-                N -> rabbit_log:info("~b transient queues from an old incarnation of node ~tp deleted in ~fs",
+                N -> rabbit_log:info("~b transient queues from node '~ts' "
+                                     "deleted in ~fs",
                                      [N, Node, Time / 1_000_000])
             end,
             notify_queue_binding_deletions(Deletions),

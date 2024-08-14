@@ -96,6 +96,7 @@
 
 -export([setup/0,
          setup/1,
+         init/0,
          can_join_cluster/1,
          add_member/2,
          remove_member/1,
@@ -319,6 +320,30 @@ wait_for_register_projections(Timeout, Retries) ->
     catch
         throw : timeout ->
             wait_for_register_projections(Timeout, Retries -1)
+    end.
+
+%% @private
+
+-spec init() -> Ret when
+      Ret :: ok | timeout_error().
+
+init() ->
+    case members() of
+        [] ->
+            timer:sleep(1000),
+            init();
+        Members ->
+            ?LOG_NOTICE(
+               "Found the following metadata store members: ~p", [Members],
+               #{domain => ?RMQLOG_DOMAIN_DB}),
+            %% Delete transient queues on init.
+            %% Note that we also do this in the
+            %% `rabbit_amqqueue:on_node_down/1' callback. We must try this
+            %% deletion during init because the cluster may have been in a
+            %% minority when this node went down. We wait for a majority while
+            %% booting (via `rabbit_khepri:setup/0') though so this deletion is
+            %% likely to succeed.
+            rabbit_amqqueue:delete_transient_queues_on_node(node())
     end.
 
 %% @private
