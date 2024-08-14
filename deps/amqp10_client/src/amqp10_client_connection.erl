@@ -22,9 +22,7 @@
          socket_ready/2,
          protocol_header_received/5,
          begin_session/1,
-         heartbeat/1,
-         encrypt_sasl/1,
-         decrypt_sasl/1]).
+         heartbeat/1]).
 
 %% gen_statem callbacks
 -export([init/1,
@@ -52,7 +50,8 @@
 -type address() :: inet:socket_address() | inet:hostname().
 
 -type encrypted_sasl() :: {plaintext, binary()} | {encrypted, binary()}.
--type decrypted_sasl() :: none | anon | {plain, User :: binary(), Pwd :: binary()}.
+-type decrypted_sasl() :: none | anon | external | {plain, User :: binary(), Pwd :: binary()}.
+-type sasl() :: encrypted_sasl() | decrypted_sasl().
 
 -type connection_config() ::
     #{container_id => binary(), % AMQP container id
@@ -72,9 +71,7 @@
       % set to a negative value to allow a sender to "overshoot" the flow
       % control by this margin
       transfer_limit_margin => 0 | neg_integer(),
-      %% These credentials_obfuscation-wrapped values have the type of
-      %% decrypted_sasl/0
-      sasl => encrypted_sasl() | decrypted_sasl(),
+      sasl => sasl(),
       properties => amqp10_client_types:properties()
   }.
 
@@ -92,16 +89,15 @@
         }).
 
 -export_type([connection_config/0,
-              amqp10_socket/0,
-              encrypted_sasl/0,
-              decrypted_sasl/0]).
+              amqp10_socket/0]).
 
 %% -------------------------------------------------------------------
 %% Public API.
 %% -------------------------------------------------------------------
 
 -spec open(connection_config()) -> supervisor:startchild_ret().
-open(Config) ->
+open(Config0) ->
+    Config = maps:update_with(sasl, fun maybe_encrypt_sasl/1, Config0),
     %% Start the supervision tree dedicated to that connection. It
     %% starts at least a connection process (the PID we want to return)
     %% and a reader process (responsible for opening and reading the
@@ -127,17 +123,23 @@ open(Config) ->
 close(Pid, Reason) ->
     gen_statem:cast(Pid, {close, Reason}).
 
--spec encrypt_sasl(decrypted_sasl()) -> encrypted_sasl().
-encrypt_sasl(none) ->
-    credentials_obfuscation:encrypt(none);
-encrypt_sasl(DecryptedSasl) ->
-    credentials_obfuscation:encrypt(term_to_binary(DecryptedSasl)).
+-spec maybe_encrypt_sasl(decrypted_sasl()) -> sasl().
+maybe_encrypt_sasl(Sasl)
+  when Sasl =:= none orelse
+       Sasl =:= anon orelse
+       Sasl =:= external ->
+    Sasl;
+maybe_encrypt_sasl(Plain = {plain, _User, _Passwd}) ->
+    credentials_obfuscation:encrypt(term_to_binary(Plain)).
 
--spec decrypt_sasl(encrypted_sasl()) -> decrypted_sasl().
-decrypt_sasl(none) ->
-    credentials_obfuscation:decrypt(none);
-decrypt_sasl(EncryptedSasl) ->
-    binary_to_term(credentials_obfuscation:decrypt(EncryptedSasl)).
+-spec maybe_decrypt_sasl(sasl()) -> decrypted_sasl().
+maybe_decrypt_sasl(Sasl)
+  when Sasl =:= none orelse
+       Sasl =:= anon orelse
+       Sasl =:= external ->
+    Sasl;
+maybe_decrypt_sasl(Encrypted) ->
+    binary_to_term(credentials_obfuscation:decrypt(Encrypted)).
 
 %% -------------------------------------------------------------------
 %% Private API.
@@ -207,13 +209,11 @@ sasl_hdr_sent({call, From}, begin_session,
     {keep_state, State1}.
 
 sasl_hdr_rcvds(_EvtType, #'v1_0.sasl_mechanisms'{
-                  sasl_server_mechanisms = {array, symbol, Mechs}},
-               State = #state{config = #{sasl := EncryptedSasl}}) ->
-    DecryptedSasl = decrypt_sasl(EncryptedSasl),
-    SaslBin = {symbol, decrypted_sasl_to_bin(DecryptedSasl)},
-    case lists:any(fun(S) when S =:= SaslBin -> true;
-                      (_) -> false
-                   end, Mechs) of
+                            sasl_server_mechanisms = {array, symbol, AvailableMechs}},
+               State = #state{config = #{sasl := Sasl}}) ->
+    DecryptedSasl = maybe_decrypt_sasl(Sasl),
+    OurMech = {symbol, decrypted_sasl_to_mechanism(DecryptedSasl)},
+    case lists:member(OurMech, AvailableMechs) of
         true ->
             ok = send_sasl_init(State, DecryptedSasl),
             {next_state, sasl_init_sent, State};
@@ -454,6 +454,15 @@ send_close(#state{socket = Socket}, _Reason) ->
 send_sasl_init(State, anon) ->
     Frame = #'v1_0.sasl_init'{mechanism = {symbol, <<"ANONYMOUS">>}},
     send(Frame, 1, State);
+send_sasl_init(State, external) ->
+    Frame = #'v1_0.sasl_init'{
+               mechanism = {symbol, <<"EXTERNAL">>},
+               %% "This response is empty when the client is requesting to act
+               %% as the identity the server associated with its authentication
+               %% credentials."
+               %% https://datatracker.ietf.org/doc/html/rfc4422#appendix-A.1
+               initial_response = {binary, <<>>}},
+    send(Frame, 1, State);
 send_sasl_init(State, {plain, User, Pass}) ->
     Response = <<0:8, User/binary, 0:8, Pass/binary>>,
     Frame = #'v1_0.sasl_init'{mechanism = {symbol, <<"PLAIN">>},
@@ -546,9 +555,12 @@ translate_err(#'v1_0.error'{condition = Cond, description = Desc}) ->
 amqp10_event(Evt) ->
     {amqp10_event, {connection, self(), Evt}}.
 
-decrypted_sasl_to_bin({plain, _, _}) -> <<"PLAIN">>;
-decrypted_sasl_to_bin(anon) -> <<"ANONYMOUS">>;
-decrypted_sasl_to_bin(none) -> <<"ANONYMOUS">>.
+decrypted_sasl_to_mechanism(anon) ->
+    <<"ANONYMOUS">>;
+decrypted_sasl_to_mechanism(external) ->
+    <<"EXTERNAL">>;
+decrypted_sasl_to_mechanism({plain, _, _}) ->
+    <<"PLAIN">>.
 
 config_defaults() ->
     #{sasl => none,
