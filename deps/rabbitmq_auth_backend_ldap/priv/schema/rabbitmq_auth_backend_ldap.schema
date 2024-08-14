@@ -120,7 +120,7 @@ end}.
     [{datatype, [string]}]}.
 
 {mapping, "auth_ldap.dn_lookup_bind.password", "rabbitmq_auth_backend_ldap.dn_lookup_bind",
-    [{datatype, [string]}]}.
+    [{datatype, [tagged_binary, binary]}]}.
 
 %%  - as_user (to bind as the authenticated user - requires a password)
 %%  - anon    (to bind anonymously)
@@ -161,7 +161,7 @@ end}.
     [{datatype, string}]}.
 
 {mapping, "auth_ldap.other_bind.password", "rabbitmq_auth_backend_ldap.other_bind",
-    [{datatype, string}]}.
+    [{datatype, [tagged_binary, binary]}]}.
 
 {translation, "rabbitmq_auth_backend_ldap.other_bind",
 fun(Conf) ->
