@@ -738,15 +738,7 @@ end}.
 %% Setting this to a username will allow (anonymous) clients to connect and act as this
 %% given user. For production environments, set this value to 'none'.
 {mapping, "anonymous_login_user", "rabbit.anonymous_login_user",
-    [{datatype, [{enum, [none]}, string]}]}.
-
-{translation, "rabbit.anonymous_login_user",
-fun(Conf) ->
-        case cuttlefish:conf_get("anonymous_login_user", Conf) of
-            none -> none;
-            User -> list_to_binary(User)
-        end
-end}.
+    [{datatype, [{enum, [none]}, binary]}]}.
 
 {mapping, "anonymous_login_pass", "rabbit.anonymous_login_pass", [
     {datatype, [tagged_binary, binary]}
