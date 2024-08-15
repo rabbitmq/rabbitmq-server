@@ -123,15 +123,20 @@ init_per_group(authz, Config0) ->
     User = <<"mqtt-user">>,
     Password = <<"mqtt-password">>,
     VHost = <<"mqtt-vhost">>,
-    MqttConfig = {rabbitmq_mqtt, [{default_user, User}
-                                 ,{default_pass, Password}
-                                 ,{allow_anonymous, true}
-                                 ,{vhost, VHost}
-                                 ,{exchange, <<"amq.topic">>}
-                                 ]},
-    Config = rabbit_ct_helpers:run_setup_steps(rabbit_ct_helpers:merge_app_env(Config0, MqttConfig),
-                                               rabbit_ct_broker_helpers:setup_steps() ++
-                                               rabbit_ct_client_helpers:setup_steps()),
+    Env = [{rabbitmq_mqtt,
+            [{allow_anonymous, true},
+             {vhost, VHost},
+             {exchange, <<"amq.topic">>}
+            ]},
+           {rabbit,
+            [{anonymous_login_user, User},
+             {anonymous_login_pass, Password}
+            ]}],
+    Config1 = rabbit_ct_helpers:merge_app_env(Config0, Env),
+    Config = rabbit_ct_helpers:run_setup_steps(
+               Config1,
+               rabbit_ct_broker_helpers:setup_steps() ++
+               rabbit_ct_client_helpers:setup_steps()),
     rabbit_ct_broker_helpers:add_user(Config, User, Password),
     rabbit_ct_broker_helpers:add_vhost(Config, VHost),
     [Log|_] = rpc(Config, 0, rabbit, log_locations, []),
@@ -411,7 +416,6 @@ anonymous_auth_success(Config) ->
 
 anonymous_auth_failure(Config) ->
     expect_authentication_failure(fun connect_anonymous/1, Config).
-
 
 ssl_user_auth_success(Config) ->
     expect_successful_connection(fun connect_ssl/1, Config).

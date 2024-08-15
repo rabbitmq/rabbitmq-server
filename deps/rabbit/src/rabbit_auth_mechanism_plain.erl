@@ -39,11 +39,15 @@ handle_response(Response, _State) ->
 
 extract_user_pass(Response) ->
     case extract_elem(Response) of
-        {ok, User, Response1} -> case extract_elem(Response1) of
-                                     {ok, Pass, <<>>} -> {ok, User, Pass};
-                                     _                -> error
-                                 end;
-        error                 -> error
+        {ok, User, Response1} ->
+            case extract_elem(Response1) of
+                {ok, Pass, <<>>} ->
+                    {ok, User, Pass};
+                _ ->
+                    error
+            end;
+        error ->
+            error
     end.
 
 extract_elem(<<0:8, Rest/binary>>) ->

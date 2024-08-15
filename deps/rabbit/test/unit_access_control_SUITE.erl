@@ -282,31 +282,36 @@ version_negotiation(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, ?MODULE, version_negotiation1, [Config]).
 
 version_negotiation1(Config) ->
-    H = ?config(rmq_hostname, Config),
-    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
 
-    [?assertEqual(<<"AMQP",0,1,0,0>>, version_negotiation2(H, P, Vsn)) ||
+    [?assertEqual(<<"AMQP",3,1,0,0>>,
+                  version_negotiation2(Hostname, Port, Vsn)) ||
      Vsn <- [<<"AMQP",0,1,0,0>>,
              <<"AMQP",0,1,0,1>>,
              <<"AMQP",0,1,1,0>>,
              <<"AMQP",0,9,1,0>>,
              <<"AMQP",0,0,8,0>>,
-             <<"XXXX",0,1,0,0>>,
-             <<"XXXX",0,0,9,1>>]],
-
-    [?assertEqual(<<"AMQP",3,1,0,0>>, version_negotiation2(H, P, Vsn)) ||
-     Vsn <- [<<"AMQP",1,1,0,0>>,
+             <<"AMQP",1,1,0,0>>,
+             <<"AMQP",2,1,0,0>>,
+             <<"AMQP",3,1,0,0>>,
+             <<"AMQP",3,1,0,1>>,
+             <<"AMQP",3,1,0,1>>,
              <<"AMQP",4,1,0,0>>,
-             <<"AMQP",9,1,0,0>>]],
+             <<"AMQP",9,1,0,0>>,
+             <<"XXXX",0,1,0,0>>,
+             <<"XXXX",0,0,9,1>>
+            ]],
 
-    [?assertEqual(<<"AMQP",0,0,9,1>>, version_negotiation2(H, P, Vsn)) ||
+    [?assertEqual(<<"AMQP",0,0,9,1>>,
+                  version_negotiation2(Hostname, Port, Vsn)) ||
      Vsn <- [<<"AMQP",0,0,9,2>>,
              <<"AMQP",0,0,10,0>>,
              <<"AMQP",0,0,10,1>>]],
     ok.
 
-version_negotiation2(H, P, Header) ->
-    {ok, C} = gen_tcp:connect(H, P, [binary, {active, false}]),
+version_negotiation2(Hostname, Port, Header) ->
+    {ok, C} = gen_tcp:connect(Hostname, Port, [binary, {active, false}]),
     ok = gen_tcp:send(C, Header),
     {ok, ServerVersion} = gen_tcp:recv(C, 8, 100),
     ok = gen_tcp:close(C),
