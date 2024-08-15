@@ -183,7 +183,7 @@ process_connect(
     maybe
         ok ?= check_extended_auth(ConnectProps),
         {ok, ClientId} ?= ensure_client_id(ClientId0, CleanStart, ProtoVer),
-        {ok, {Username1, Password}} ?= check_credentials(Username0, Password0, SslLoginName, PeerIp),
+        {ok, Username1, Password} ?= check_credentials(Username0, Password0, SslLoginName, PeerIp),
 
         {VHostPickedUsing, {VHost, Username2}} = get_vhost(Username1, SslLoginName, Port),
         ?LOG_DEBUG("MQTT connection ~s picked vhost using ~s", [ConnName0, VHostPickedUsing]),
@@ -626,6 +626,8 @@ check_extended_auth(_) ->
 
 check_credentials(Username, Password, SslLoginName, PeerIp) ->
     case creds(Username, Password, SslLoginName) of
+        {ok, _, _} = Ok ->
+            Ok;
         nocreds ->
             ?LOG_ERROR("MQTT login failed: no credentials provided"),
             auth_attempt_failed(PeerIp, <<>>),
@@ -637,9 +639,7 @@ check_credentials(Username, Password, SslLoginName, PeerIp) ->
         {invalid_creds, {User, _Pass}} when is_binary(User) ->
             ?LOG_ERROR("MQTT login failed for user '~s': no password provided", [User]),
             auth_attempt_failed(PeerIp, User),
-            {error, ?RC_BAD_USER_NAME_OR_PASSWORD};
-        {UserBin, PassBin} ->
-            {ok, {UserBin, PassBin}}
+            {error, ?RC_BAD_USER_NAME_OR_PASSWORD}
     end.
 
 -spec ensure_client_id(client_id(), boolean(), protocol_version()) ->
@@ -1201,29 +1201,37 @@ get_vhost_from_port_mapping(Port, Mapping) ->
     Res.
 
 creds(User, Pass, SSLLoginName) ->
-    DefaultUser   = rabbit_mqtt_util:env(default_user),
-    DefaultPass   = rabbit_mqtt_util:env(default_pass),
-    {ok, Anon}    = application:get_env(?APP_NAME, allow_anonymous),
-    {ok, TLSAuth} = application:get_env(?APP_NAME, ssl_cert_login),
-    HaveDefaultCreds = Anon =:= true andalso
-        is_binary(DefaultUser) andalso
-        is_binary(DefaultPass),
-
     CredentialsProvided = User =/= undefined orelse Pass =/= undefined,
-    CorrectCredentials = is_binary(User) andalso is_binary(Pass) andalso Pass =/= <<>>,
+    ValidCredentials = is_binary(User) andalso is_binary(Pass) andalso Pass =/= <<>>,
+    {ok, TLSAuth} = application:get_env(?APP_NAME, ssl_cert_login),
     SSLLoginProvided = TLSAuth =:= true andalso SSLLoginName =/= none,
 
-    case {CredentialsProvided, CorrectCredentials, SSLLoginProvided, HaveDefaultCreds} of
-        %% Username and password take priority
-        {true, true, _, _}          -> {User, Pass};
-        %% Either username or password is provided
-        {true, false, _, _}         -> {invalid_creds, {User, Pass}};
-        %% rabbitmq_mqtt.ssl_cert_login is true. SSL user name provided.
-        %% Authenticating using username only.
-        {false, false, true, _}     -> {SSLLoginName, none};
-        %% Anonymous connection uses default credentials
-        {false, false, false, true} -> {DefaultUser, DefaultPass};
-        _                           -> nocreds
+    case {CredentialsProvided, ValidCredentials, SSLLoginProvided} of
+        {true, true, _} ->
+            %% Username and password take priority
+            {ok, User, Pass};
+        {true, false, _} ->
+            %% Either username or password is provided
+            {invalid_creds, {User, Pass}};
+        {false, false, true} ->
+            %% rabbitmq_mqtt.ssl_cert_login is true. SSL user name provided.
+            %% Authenticating using username only.
+            {ok, SSLLoginName, none};
+        {false, false, false} ->
+            {ok, AllowAnon} = application:get_env(?APP_NAME, allow_anonymous),
+            case AllowAnon of
+                true ->
+                    case rabbit_auth_mechanism_anonymous:credentials() of
+                        {ok, _, _} = Ok ->
+                            Ok;
+                        error ->
+                            nocreds
+                    end;
+                false ->
+                    nocreds
+            end;
+        _ ->
+            nocreds
     end.
 
 -spec auth_attempt_failed(inet:ip_address(), binary()) -> ok.

@@ -6,35 +6,8 @@
 %% ----------------------------------------------------------------------------
 
 %  {rabbitmq_mqtt,
-%   [%% Set the default user name and password. Will be used as the default login
-%% if a connecting client provides no other login details.
-%%
-%% Please note that setting this will allow clients to connect without
-%% authenticating!
-%%
-%% {default_user, <<"guest">>},
-%% {default_pass, <<"guest">>},
-
-{mapping, "mqtt.default_user", "rabbitmq_mqtt.default_user", [
-    {datatype, string}
-]}.
-
-{mapping, "mqtt.default_pass", "rabbitmq_mqtt.default_pass", [
-    {datatype, string}
-]}.
-
-{translation, "rabbitmq_mqtt.default_user",
-fun(Conf) ->
-    list_to_binary(cuttlefish:conf_get("mqtt.default_user", Conf))
-end}.
-
-{translation, "rabbitmq_mqtt.default_pass",
-fun(Conf) ->
-    list_to_binary(cuttlefish:conf_get("mqtt.default_pass", Conf))
-end}.
-
-%% Enable anonymous access. If this is set to false, clients MUST provide
-%% login information in order to connect. See the default_user/default_pass
+%   [%% Enable anonymous access. If this is set to false, clients MUST provide
+%% login information in order to connect. See the anonymous_login_user/anonymous_login_pass
 %% configuration elements for managing logins without authentication.
 %%
 %% {allow_anonymous, true},

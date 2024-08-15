@@ -4,10 +4,7 @@ PROJECT_MOD = rabbit_mqtt
 
 define PROJECT_ENV
 [
-	    {default_user, <<"guest">>},
-	    {default_pass, <<"guest">>},
 	    {ssl_cert_login,false},
-	    %% To satisfy an unfortunate expectation from popular MQTT clients.
 	    {allow_anonymous, true},
 	    {vhost, <<"/">>},
 	    {exchange, <<"amq.topic">>},
