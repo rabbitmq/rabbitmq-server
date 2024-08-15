@@ -69,8 +69,10 @@ is_stateful() ->
 
 -spec declare(amqqueue:amqqueue(), node()) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
-    {'absent', amqqueue:amqqueue(), rabbit_amqqueue:absent_reason()}.
+    {'absent', amqqueue:amqqueue(), rabbit_amqqueue:absent_reason()} |
+    {protocol_error, internal_error, string(), [string()]}.
 declare(Q0, _Node) ->
+    QName = amqqueue:get_name(Q0),
     Q1 = case amqqueue:get_pid(Q0) of
              none ->
                  %% declaring process becomes the queue
@@ -85,7 +87,7 @@ declare(Q0, _Node) ->
             Opts = amqqueue:get_options(Q),
             ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
             rabbit_event:notify(queue_created,
-                                [{name, amqqueue:get_name(Q)},
+                                [{name, QName},
                                  {durable, true},
                                  {auto_delete, false},
                                  {exclusive, true},
@@ -93,6 +95,11 @@ declare(Q0, _Node) ->
                                  {arguments, amqqueue:get_arguments(Q)},
                                  {user_who_performed_action, ActingUser}]),
             {new, Q};
+        {error, timeout} ->
+            {protocol_error, internal_error,
+             "Could not declare ~ts because the metadata store operation "
+             "timed out",
+             [rabbit_misc:rs(QName)]};
         Other ->
             Other
     end.

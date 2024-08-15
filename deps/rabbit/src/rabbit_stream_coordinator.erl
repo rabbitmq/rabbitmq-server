@@ -1241,7 +1241,7 @@ phase_update_mnesia(StreamId, Args, #{reference := QName,
                                 #{name := S} when S == StreamId ->
                                     rabbit_log:debug("~ts: initializing queue record for stream id  ~ts",
                                                      [?MODULE, StreamId]),
-                                    _ = rabbit_amqqueue:ensure_rabbit_queue_record_is_initialized(Fun(Q)),
+                                    ok = rabbit_amqqueue:ensure_rabbit_queue_record_is_initialized(Fun(Q)),
                                     ok;
                                 _ ->
                                     ok
