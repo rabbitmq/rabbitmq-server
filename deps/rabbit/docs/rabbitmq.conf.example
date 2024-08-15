@@ -232,6 +232,7 @@
 ##
 # auth_mechanisms.1 = PLAIN
 # auth_mechanisms.2 = AMQPLAIN
+# auth_mechanisms.3 = ANONYMOUS
 
 ## The rabbitmq-auth-mechanism-ssl plugin makes it possible to
 ## authenticate a user based on the client's x509 (TLS) certificate.
@@ -905,14 +906,8 @@
 ##
 # mqtt.proxy_protocol = false
 
-## Set the default user name and password used for anonymous connections (when client
-## provides no credentials). Anonymous connections are highly discouraged!
-##
-# mqtt.default_user = guest
-# mqtt.default_pass = guest
-
 ## Enable anonymous connections. If this is set to false, clients MUST provide
-## credentials in order to connect. See also the mqtt.default_user/mqtt.default_pass
+## credentials in order to connect. See also the anonymous_login_user/anonymous_login_pass
 ## keys. Anonymous connections are highly discouraged!
 ##
 # mqtt.allow_anonymous = true
