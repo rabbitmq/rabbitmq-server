@@ -917,7 +917,6 @@ which_module(4) -> ?MODULE.
                gc = #aux_gc{} :: #aux_gc{},
                tick_pid :: undefined | pid(),
                cache = #{} :: map(),
-               %% TODO: we need a state conversion for this
                last_checkpoint :: #checkpoint{}}).
 
 init_aux(Name) when is_atom(Name) ->

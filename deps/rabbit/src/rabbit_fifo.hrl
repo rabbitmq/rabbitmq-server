@@ -220,8 +220,6 @@
                     checkpoint_max_indexes => non_neg_integer(),
                     max_length => non_neg_integer(),
                     max_bytes => non_neg_integer(),
-                    max_in_memory_length => non_neg_integer(),
-                    max_in_memory_bytes => non_neg_integer(),
                     overflow_strategy => drop_head | reject_publish,
                     single_active_consumer_on => boolean(),
                     delivery_limit => non_neg_integer(),
