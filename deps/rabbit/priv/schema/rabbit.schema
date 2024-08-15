@@ -438,7 +438,7 @@ end}.
 %% 'AMQPLAIN'. Additional mechanisms can be added via
 %% plugins.
 %%
-%% See https://www.rabbitmq.com/authentication.html for more details.
+%% See https://www.rabbitmq.com/docs/access-control for more details.
 %%
 %% {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
 
