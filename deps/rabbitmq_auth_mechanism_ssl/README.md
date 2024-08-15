@@ -18,7 +18,7 @@ present a client certificate.
 ## Usage
 
 This mechanism must also be enabled in RabbitMQ's configuration file,
-see [Authentication Mechanisms](https://www.rabbitmq.com/authentication.html) and
+see [Authentication Mechanisms](https://www.rabbitmq.com/docs/access-control/) and
 [Configuration](https://www.rabbitmq.com/configure.html) guides for
 more details.
 
