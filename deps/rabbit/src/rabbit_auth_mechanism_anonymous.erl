@@ -9,6 +9,7 @@
 -behaviour(rabbit_auth_mechanism).
 
 -export([description/0, should_offer/1, init/1, handle_response/2]).
+-export([credentials/0]).
 
 -define(STATE, []).
 

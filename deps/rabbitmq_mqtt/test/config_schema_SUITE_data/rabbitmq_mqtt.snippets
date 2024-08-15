@@ -1,7 +1,5 @@
 [{defaults,
   "listeners.tcp.default = 5672
-   mqtt.default_user     = guest
-   mqtt.default_pass     = guest
    mqtt.allow_anonymous  = true
    mqtt.vhost            = /
    mqtt.exchange         = amq.topic
@@ -20,9 +18,7 @@
    mqtt.topic_alias_maximum = 16",
   [{rabbit,[{tcp_listeners,[5672]}]},
    {rabbitmq_mqtt,
-       [{default_user,<<"guest">>},
-        {default_pass,<<"guest">>},
-        {allow_anonymous,true},
+       [{allow_anonymous,true},
         {vhost,<<"/">>},
         {exchange,<<"amq.topic">>},
         {max_session_expiry_interval_seconds,86400},
@@ -101,8 +97,6 @@
   [rabbitmq_mqtt]},
  {proxy_protocol,
   "listeners.tcp.default = 5672
-   mqtt.default_user     = guest
-   mqtt.default_pass     = guest
    mqtt.allow_anonymous  = true
    mqtt.vhost            = /
    mqtt.exchange         = amq.topic
@@ -111,9 +105,7 @@
    mqtt.proxy_protocol = true",
   [{rabbit,[{tcp_listeners,[5672]}]},
    {rabbitmq_mqtt,
-       [{default_user,<<"guest">>},
-        {default_pass,<<"guest">>},
-        {allow_anonymous,true},
+       [{allow_anonymous,true},
         {vhost,<<"/">>},
         {exchange,<<"amq.topic">>},
         {max_session_expiry_interval_seconds,infinity},
@@ -121,9 +113,7 @@
         {proxy_protocol,true}]}],
   [rabbitmq_mqtt]},
  {prefetch_retained_msg_store,
-  "mqtt.default_user     = guest
-   mqtt.default_pass     = guest
-   mqtt.allow_anonymous  = true
+  "mqtt.allow_anonymous  = true
    mqtt.vhost            = /
    mqtt.exchange         = amq.topic
    mqtt.max_session_expiry_interval_seconds = 1800
@@ -136,9 +126,7 @@
    mqtt.listeners.ssl = none
    mqtt.listeners.tcp.default = 1883",
   [{rabbitmq_mqtt,
-       [{default_user,<<"guest">>},
-        {default_pass,<<"guest">>},
-        {allow_anonymous,true},
+       [{allow_anonymous,true},
         {vhost,<<"/">>},
         {exchange,<<"amq.topic">>},
         {max_session_expiry_interval_seconds,1800},

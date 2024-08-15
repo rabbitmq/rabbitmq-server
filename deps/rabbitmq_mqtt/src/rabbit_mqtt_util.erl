@@ -141,10 +141,10 @@ env(Key) ->
         undefined -> undefined
     end.
 
-coerce_env_value(default_pass, Val) -> rabbit_data_coercion:to_binary(Val);
-coerce_env_value(default_user, Val) -> rabbit_data_coercion:to_binary(Val);
-coerce_env_value(vhost, Val)        -> rabbit_data_coercion:to_binary(Val);
-coerce_env_value(_, Val)            -> Val.
+coerce_env_value(vhost, Val) ->
+    rabbit_data_coercion:to_binary(Val);
+coerce_env_value(_, Val) ->
+    Val.
 
 -spec table_lookup(rabbit_framing:amqp_table() | undefined,  binary()) ->
     tuple() | undefined.

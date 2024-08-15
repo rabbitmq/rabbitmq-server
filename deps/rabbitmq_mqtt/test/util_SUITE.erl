@@ -18,8 +18,6 @@ groups() ->
     [
      {tests, [parallel], [
                           coerce_vhost,
-                          coerce_default_user,
-                          coerce_default_pass,
                           mqtt_amqp_topic_translation
                          ]
      }
@@ -35,12 +33,6 @@ end_per_suite(Config) ->
 
 coerce_vhost(_) ->
     ?assertEqual(<<"/">>, rabbit_mqtt_util:env(vhost)).
-
-coerce_default_user(_) ->
-    ?assertEqual(<<"guest_user">>, rabbit_mqtt_util:env(default_user)).
-
-coerce_default_pass(_) ->
-    ?assertEqual(<<"guest_pass">>, rabbit_mqtt_util:env(default_pass)).
 
 mqtt_amqp_topic_translation(_) ->
     ok = application:set_env(rabbitmq_mqtt, sparkplug, true),
