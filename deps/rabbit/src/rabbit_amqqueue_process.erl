@@ -226,6 +226,12 @@ init_it2(Recover, From, State = #q{q                   = Q,
                 false ->
                     {stop, normal, {existing, Q1}, State}
             end;
+        {error, timeout} ->
+            Reason = {protocol_error, internal_error,
+                      "Could not declare ~ts on node '~ts' because the "
+                      "metadata store operation timed out",
+                      [rabbit_misc:rs(amqqueue:get_name(Q)), node()]},
+            {stop, normal, Reason, State};
         Err ->
             {stop, normal, Err, State}
     end.
@@ -311,7 +317,7 @@ terminate(normal,            State) -> %% delete case
 terminate(_Reason,           State = #q{q = Q}) ->
     terminate_shutdown(fun (BQS) ->
                                Q2 = amqqueue:set_state(Q, crashed),
-                               rabbit_amqqueue:store_queue(Q2),
+                               _ = rabbit_amqqueue:store_queue(Q2),
                                BQS
                        end, State).
 
