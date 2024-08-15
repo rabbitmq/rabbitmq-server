@@ -63,7 +63,8 @@ groups() ->
        offset_lag_calculation,
        test_super_stream_duplicate_partitions,
        authentication_error_should_close_with_delay,
-       unauthorized_vhost_access_should_close_with_delay
+       unauthorized_vhost_access_should_close_with_delay,
+       sasl_anonymous
       ]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
@@ -248,6 +249,16 @@ test_stream(Config) ->
     Stream = atom_to_binary(?FUNCTION_NAME, utf8),
     test_server(gen_tcp, Stream, Config),
     ok.
+
+sasl_anonymous(Config) ->
+    Port = get_port(gen_tcp, Config),
+    Opts = get_opts(gen_tcp),
+    {ok, S} = gen_tcp:connect("localhost", Port, Opts),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(gen_tcp, S, C0),
+    C2 = sasl_handshake(gen_tcp, S, C1),
+    C3 = test_anonymous_sasl_authenticate(gen_tcp, S, C2),
+    _C = tune(gen_tcp, S, C3).
 
 test_update_secret(Config) ->
     Transport = gen_tcp,
@@ -1150,16 +1161,19 @@ test_authenticate(Transport, S, C0, Username, Password) ->
 sasl_handshake(Transport, S, C0) ->
     SaslHandshakeFrame = request(sasl_handshake),
     ok = Transport:send(S, SaslHandshakeFrame),
-    Plain = <<"PLAIN">>,
-    AmqPlain = <<"AMQPLAIN">>,
     {Cmd, C1} = receive_commands(Transport, S, C0),
     case Cmd of
         {response, _, {sasl_handshake, ?RESPONSE_CODE_OK, Mechanisms}} ->
-            ?assertEqual([AmqPlain, Plain], lists:sort(Mechanisms));
+            ?assertEqual([<<"AMQPLAIN">>, <<"ANONYMOUS">>, <<"PLAIN">>],
+                         lists:sort(Mechanisms));
         _ ->
             ct:fail("invalid cmd ~tp", [Cmd])
     end,
     C1.
+
+test_anonymous_sasl_authenticate(Transport, S, C) ->
+    Res = sasl_authenticate(Transport, S, C, <<"ANONYMOUS">>, <<>>),
+    expect_successful_authentication(Res).
 
 test_plain_sasl_authenticate(Transport, S, C1, Username) ->
     test_plain_sasl_authenticate(Transport, S, C1, Username, Username).
@@ -1175,6 +1189,7 @@ expect_successful_authentication({SaslAuth, C2} = _SaslReponse) ->
     ?assertEqual({response, 2, {sasl_authenticate, ?RESPONSE_CODE_OK}},
                  SaslAuth),
     C2.
+
 expect_unsuccessful_authentication({SaslAuth, C2} = _SaslReponse, ExpectedError) ->
     ?assertEqual({response, 2, {sasl_authenticate, ExpectedError}},
                  SaslAuth),

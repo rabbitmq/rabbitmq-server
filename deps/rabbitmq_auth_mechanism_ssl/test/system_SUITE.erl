@@ -13,12 +13,13 @@
 -include_lib("eunit/include/eunit.hrl").
 
 all() ->
-    [{group, tests}].
+    [{group, external_enforced}].
 
 groups() ->
     [
-     {tests, [shuffle],
-      [amqp]
+     {external_enforced, [shuffle],
+      [external_succeeds,
+       anonymous_fails]
      }
     ].
 
@@ -37,6 +38,7 @@ init_per_group(_Group, Config0) ->
                 Config0,
                 {rabbit,
                  [
+                  %% Enforce EXTERNAL disallowing other mechanisms.
                   {auth_mechanisms, ['EXTERNAL']},
                   {ssl_cert_login_from, common_name}
                  ]}),
@@ -68,7 +70,7 @@ end_per_testcase(Testcase, Config) ->
     ok = clear_permissions(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
-amqp(Config) ->
+external_succeeds(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp_tls),
     Host = ?config(rmq_hostname, Config),
     Vhost = ?config(test_vhost, Config),
@@ -89,6 +91,24 @@ amqp(Config) ->
     after 5000 -> ct:fail(missing_opened)
     end,
     ok = amqp10_client:close_connection(Connection).
+
+anonymous_fails(Config) ->
+    Mechansim = anon,
+    OpnConf0 = connection_config(Config, <<"/">>),
+    OpnConf = OpnConf0#{sasl => Mechansim},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    receive {amqp10_event, {connection, Connection, {closed, Reason}}} ->
+                ?assertEqual({sasl_not_supported, Mechansim}, Reason)
+    after 5000 -> ct:fail(missing_closed)
+    end.
+
+connection_config(Config, Vhost) ->
+    Host = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    #{address => Host,
+      port => Port,
+      container_id => <<"my container">>,
+      hostname => <<"vhost:", Vhost/binary>>}.
 
 set_permissions(Config, ConfigurePerm, WritePerm, ReadPerm) ->
     ok = rabbit_ct_broker_helpers:set_permissions(Config,

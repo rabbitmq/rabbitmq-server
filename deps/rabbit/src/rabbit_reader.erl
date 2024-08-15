@@ -60,6 +60,8 @@
 %% from connection storms and DoS.
 -define(SILENT_CLOSE_DELAY, 3).
 -define(CHANNEL_MIN, 1).
+%% AMQP 1.0 §5.3
+-define(PROTOCOL_ID_SASL, 3).
 
 %%--------------------------------------------------------------------------
 
@@ -432,6 +434,12 @@ log_connection_exception(Severity, Name, {handshake_error, tuning, _Channel,
     log_connection_exception_with_severity(Severity,
         "closing AMQP connection ~tp (~ts):~nfailed to negotiate connection parameters: ~ts",
         [self(), Name, Explanation]);
+log_connection_exception(Severity, Name, {sasl_required, ProtocolId}) ->
+    log_connection_exception_with_severity(
+      Severity,
+      "closing AMQP 1.0 connection (~ts): RabbitMQ requires SASL "
+      "security layer (expected protocol ID 3, but client sent protocol ID ~b)",
+      [Name, ProtocolId]);
 %% old exception structure
 log_connection_exception(Severity, Name, connection_closed_abruptly) ->
     log_connection_exception_with_severity(Severity,
@@ -1086,8 +1094,11 @@ handle_input(Callback, Data, _State) ->
     throw({bad_input, Callback, Data}).
 
 %% AMQP 1.0 §2.2
-version_negotiation({Id, 1, 0, 0}, State) ->
-    become_10(Id, State);
+version_negotiation({?PROTOCOL_ID_SASL, 1, 0, 0}, State) ->
+    become_10(State);
+version_negotiation({ProtocolId, 1, 0, 0}, #v1{sock = Sock}) ->
+    %% AMQP 1.0 figure 2.13: We require SASL security layer.
+    refuse_connection(Sock, {sasl_required, ProtocolId});
 version_negotiation({0, 0, 9, 1}, State) ->
     start_091_connection({0, 9, 1}, rabbit_framing_amqp_0_9_1, State);
 version_negotiation({1, 1, 0, 9}, State) ->
@@ -1126,13 +1137,12 @@ start_091_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
 
 -spec refuse_connection(rabbit_net:socket(), any()) -> no_return().
 refuse_connection(Sock, Exception) ->
-    refuse_connection(Sock, Exception, {0, 1, 0, 0}).
+    refuse_connection(Sock, Exception, {?PROTOCOL_ID_SASL, 1, 0, 0}).
 
 -spec refuse_connection(_, _, _) -> no_return().
 refuse_connection(Sock, Exception, {A, B, C, D}) ->
     ok = inet_op(fun () -> rabbit_net:send(Sock, <<"AMQP",A,B,C,D>>) end),
     throw(Exception).
-
 
 ensure_stats_timer(State = #v1{connection_state = running}) ->
     rabbit_event:ensure_stats_timer(State, #v1.stats_timer, emit_stats);
@@ -1626,21 +1636,12 @@ emit_stats(State) ->
     State1 = rabbit_event:reset_stats_timer(State, #v1.stats_timer),
     ensure_stats_timer(State1).
 
-%% 1.0 stub
--spec become_10(non_neg_integer(), #v1{}) -> no_return().
-become_10(Id, State = #v1{sock = Sock}) ->
-    Mode = case Id of
-               0 -> amqp;
-               3 -> sasl;
-               _ -> refuse_connection(
-                      Sock, {unsupported_amqp1_0_protocol_id, Id},
-                      {3, 1, 0, 0})
-           end,
-    F = fun (_Deb, Buf, BufLen, State0) ->
-                {rabbit_amqp_reader, init,
-                 [Mode, pack_for_1_0(Buf, BufLen, State0)]}
-        end,
-    State#v1{connection_state = {become, F}}.
+become_10(State) ->
+    Fun = fun(_Deb, Buf, BufLen, State0) ->
+                  {rabbit_amqp_reader, init,
+                   [pack_for_1_0(Buf, BufLen, State0)]}
+          end,
+    State#v1{connection_state = {become, Fun}}.
 
 pack_for_1_0(Buf, BufLen, #v1{sock         = Sock,
                               recv_len     = RecvLen,

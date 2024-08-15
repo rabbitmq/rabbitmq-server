@@ -444,13 +444,12 @@ end}.
 %% ===========================================================================
 
 %% Choose the available SASL mechanism(s) to expose.
-%% The two default (built in) mechanisms are 'PLAIN' and
-%% 'AMQPLAIN'. Additional mechanisms can be added via
-%% plugins.
+%% The three default (built in) mechanisms are 'PLAIN', 'AMQPLAIN' and 'ANONYMOUS'.
+%% Additional mechanisms can be added via plugins.
 %%
 %% See https://www.rabbitmq.com/authentication.html for more details.
 %%
-%% {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
+%% {auth_mechanisms, ['PLAIN', 'AMQPLAIN', 'ANONYMOUS']},
 
 {mapping, "auth_mechanisms.$name", "rabbit.auth_mechanisms", [
     {datatype, atom}]}.
@@ -734,6 +733,22 @@ end}.
         Props -> Props
     end
 end}.
+
+%% Connections that skip SASL layer or use SASL mechanism ANONYMOUS will use this identity.
+%% Setting this to a username will allow (anonymous) clients to connect and act as this
+%% given user. For production environments, set this value to 'none'.
+{mapping, "anonymous_login_user", "rabbit.anonymous_login_user",
+    [{datatype, [{enum, [none]}, binary]}]}.
+
+{mapping, "anonymous_login_pass", "rabbit.anonymous_login_pass", [
+    {datatype, [tagged_binary, binary]}
+]}.
+
+{translation, "rabbit.anonymous_login_pass",
+fun(Conf) ->
+    rabbit_cuttlefish:optionally_tagged_binary("anonymous_login_pass", Conf)
+end}.
+
 
 %%
 %% Default Policies
@@ -2648,32 +2663,6 @@ end}.
          end
     end
 }.
-
-% ===============================
-% AMQP 1.0
-% ===============================
-
-%% Connections that skip SASL layer or use SASL mechanism ANONYMOUS will connect as this account.
-%% Setting this to a username will allow clients to connect without authenticating.
-%% For production environments, set this value to 'none'.
-{mapping, "amqp1_0.default_user", "rabbit.amqp1_0_default_user",
-    [{datatype, [{enum, [none]}, string]}]}.
-
-{mapping, "amqp1_0.default_vhost", "rabbit.amqp1_0_default_vhost",
-    [{datatype, string}]}.
-
-{translation, "rabbit.amqp1_0_default_user",
-fun(Conf) ->
-        case cuttlefish:conf_get("amqp1_0.default_user", Conf) of
-            none -> none;
-            User -> list_to_binary(User)
-        end
-end}.
-
-{translation , "rabbit.amqp1_0_default_vhost",
-fun(Conf) ->
-    list_to_binary(cuttlefish:conf_get("amqp1_0.default_vhost", Conf))
-end}.
 
 {mapping, "stream.replication.port_range.min", "osiris.port_range", [
     {datatype, [integer]},

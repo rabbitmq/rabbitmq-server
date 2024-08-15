@@ -556,6 +556,7 @@ rabbit:
 - rabbit_amqqueue_sup_sup
 - rabbit_auth_backend_internal
 - rabbit_auth_mechanism_amqplain
+- rabbit_auth_mechanism_anonymous
 - rabbit_auth_mechanism_cr_demo
 - rabbit_auth_mechanism_plain
 - rabbit_autoheal
