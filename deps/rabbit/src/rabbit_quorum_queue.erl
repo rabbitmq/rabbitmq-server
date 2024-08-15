@@ -295,7 +295,12 @@ start_cluster(Q) ->
                     declare_queue_error(Error, NewQ, LeaderNode, ActingUser)
             end;
         {existing, _} = Ex ->
-            Ex
+            Ex;
+        {error, timeout} ->
+            {protocol_error, internal_error,
+             "Could not declare quorum ~ts on node '~ts' because the metadata "
+             "store operation timed out",
+             [rabbit_misc:rs(QName), node()]}
     end.
 
 declare_queue_error(Error, Queue, Leader, ActingUser) ->
