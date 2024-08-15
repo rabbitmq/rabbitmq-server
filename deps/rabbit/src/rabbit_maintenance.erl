@@ -298,14 +298,18 @@ revive_local_quorum_queue_replicas() ->
         %% start local QQ replica (Ra server) of this queue
         {Prefix, _Node} = amqqueue:get_pid(Q),
         RaServer = {Prefix, node()},
-        rabbit_log:debug("Will start Ra server ~tp", [RaServer]),
+        rabbit_log:debug("Will start quorum queue replica (Ra server) ~tp", [RaServer]),
         case rabbit_quorum_queue:restart_server(RaServer) of
             ok     ->
-                rabbit_log:debug("Successfully restarted Ra server ~tp", [RaServer]);
+                rabbit_log:debug("Successfully restarted a quorum queue replica ~tp", [RaServer]);
             {error, {already_started, _Pid}} ->
-                rabbit_log:debug("Ra server ~tp is already running", [RaServer]);
+                rabbit_log:debug("Quorum queue replica ~tp is already running", [RaServer]);
             {error, nodedown} ->
-                rabbit_log:error("Failed to restart Ra server ~tp: target node was reported as down")
+                rabbit_log:error("Failed to restart quorum queue replica ~tp: target node was reported as down", [RaServer]);
+            {error, name_not_registered} ->
+                rabbit_log:error("Failed to restart quorum queue replica ~tp: it reported as not registered (was deleted very recently?)", [RaServer]);
+            {error, Other} ->
+                rabbit_log:error("Failed to restart quorum queue replica ~tp: ~tp", [RaServer, Other])
         end
      end || Q <- Queues],
     rabbit_log:info("Restart of local quorum queue replicas is complete").
