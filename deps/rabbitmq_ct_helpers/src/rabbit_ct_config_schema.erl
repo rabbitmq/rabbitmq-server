@@ -25,10 +25,14 @@ run_snippets(Config) ->
     {ok, [Snippets]} = file:consult(?config(conf_snippets, Config)),
     ct:pal("Loaded config schema snippets: ~tp", [Snippets]),
     lists:map(
-        fun({N, S, C, P})    -> ok = test_snippet(Config, {snippet_id(N), S, []}, C, P);
-           ({N, S, A, C, P}) -> ok = test_snippet(Config, {snippet_id(N), S, A},  C, P)
-        end,
-        Snippets),
+      fun({N, S, C, P}) ->
+              ok = test_snippet(Config, {snippet_id(N), S, []}, C, P, true);
+         ({N, S, A, C, P}) ->
+              ok = test_snippet(Config, {snippet_id(N), S, A},  C, P, true);
+         ({N, S, A, C, P, nosort}) ->
+              ok = test_snippet(Config, {snippet_id(N), S, A},  C, P, false)
+      end,
+      Snippets),
     ok.
 
 snippet_id(N) when is_integer(N) ->
@@ -40,7 +44,7 @@ snippet_id(A) when is_atom(A) ->
 snippet_id(L) when is_list(L) ->
     L.
 
-test_snippet(Config, Snippet = {SnipID, _, _}, Expected, _Plugins) ->
+test_snippet(Config, Snippet = {SnipID, _, _}, Expected, _Plugins, Sort) ->
     {ConfFile, AdvancedFile} = write_snippet(Config, Snippet),
     %% We ignore the rabbit -> log portion of the config on v3.9+, where the lager
     %% dependency has been dropped
@@ -50,8 +54,12 @@ test_snippet(Config, Snippet = {SnipID, _, _}, Expected, _Plugins) ->
                     _ ->
                         generate_config(ConfFile, AdvancedFile)
                 end,
-    Gen = deepsort(Generated),
-    Exp = deepsort(Expected),
+    {Exp, Gen} = case Sort of
+                     true ->
+                         {deepsort(Expected), deepsort(Generated)};
+                     false ->
+                         {Expected, Generated}
+                 end,
     case Exp of
         Gen -> ok;
         _         ->
