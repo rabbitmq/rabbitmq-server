@@ -1644,7 +1644,6 @@ become_10(State) ->
     State#v1{connection_state = {become, Fun}}.
 
 pack_for_1_0(Buf, BufLen, #v1{sock         = Sock,
-                              recv_len     = RecvLen,
                               pending_recv = PendingRecv,
                               helper_sup = {_HelperSup091, HelperSup10},
                               proxy_socket = ProxySocket,
@@ -1655,7 +1654,7 @@ pack_for_1_0(Buf, BufLen, #v1{sock         = Sock,
                                               port = Port,
                                               peer_port = PeerPort,
                                               connected_at = ConnectedAt}}) ->
-    {Sock, RecvLen, PendingRecv, HelperSup10, Buf, BufLen, ProxySocket,
+    {Sock, PendingRecv, HelperSup10, Buf, BufLen, ProxySocket,
      Name, Host, PeerHost, Port, PeerPort, ConnectedAt}.
 
 respond_and_close(State, Channel, Protocol, Reason, LogErr) ->
