@@ -239,6 +239,20 @@ default_permissions.write = .*",
   [{rabbit,
        [{anonymous_login_user, none}]}],
   []},
+
+ {auth_mechanisms_ordered,
+  "auth_mechanisms.1 = PLAIN
+auth_mechanisms.2 = AMQPLAIN
+auth_mechanisms.3 = ANONYMOUS",
+  [],
+  [{rabbit,
+    %% We expect the mechanisms in the order as declared.
+    [{auth_mechanisms, ['PLAIN', 'AMQPLAIN', 'ANONYMOUS']}]
+   }],
+  [],
+  nosort
+ },
+
  {cluster_formation,
   "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_classic_config
 cluster_formation.classic_config.nodes.peer1 = rabbit@hostname1
