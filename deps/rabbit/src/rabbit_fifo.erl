@@ -850,10 +850,9 @@ overview(#?STATE{consumers = Cons,
                           #{}
                   end,
     MsgsRet = lqueue:len(Returns),
-
-    #{len := _MsgsLen,
-      num_hi := MsgsHi,
+    #{num_hi := MsgsHi,
       num_lo := MsgsLo} = rabbit_fifo_q:overview(Messages),
+
     Overview = #{type => ?STATE,
                  config => Conf,
                  num_consumers => map_size(Cons),

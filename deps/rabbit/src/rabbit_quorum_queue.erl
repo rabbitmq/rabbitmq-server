@@ -517,11 +517,12 @@ spawn_notify_decorators(QName, Fun, Args) ->
     catch notify_decorators(QName, Fun, Args).
 
 handle_tick(QName,
-            #{config := #{name := Name},
+            #{config := #{name := Name} = Cfg,
               num_active_consumers := NumConsumers,
               num_checked_out := NumCheckedOut,
               num_ready_messages := NumReadyMsgs,
               num_messages := NumMessages,
+              num_enqueuers := NumEnqueuers,
               enqueue_message_bytes := EnqueueBytes,
               checkout_message_bytes := CheckoutBytes,
               num_discarded := NumDiscarded,
@@ -568,6 +569,7 @@ handle_tick(QName,
                   MsgBytesDiscarded = DiscardBytes + DiscardCheckoutBytes,
                   MsgBytes = EnqueueBytes + CheckoutBytes + MsgBytesDiscarded,
                   Infos = [{consumers, NumConsumers},
+                           {publishers, NumEnqueuers},
                            {consumer_capacity, Util},
                            {consumer_utilisation, Util},
                            {messages, NumMessages},
@@ -582,7 +584,14 @@ handle_tick(QName,
                            {message_bytes_dlx, MsgBytesDiscarded},
                            {single_active_consumer_tag, SacTag},
                            {single_active_consumer_pid, SacPid},
-                           {leader, node()}
+                           {leader, node()},
+                           {delivery_limit, case maps:get(delivery_limit, Cfg,
+                                                          undefined) of
+                                                undefined ->
+                                                    unlimited;
+                                                Limit ->
+                                                    Limit
+                                            end}
                            | Infos0],
                   rabbit_core_metrics:queue_stats(QName, Infos),
                   ok = repair_leader_record(Q, Self),
