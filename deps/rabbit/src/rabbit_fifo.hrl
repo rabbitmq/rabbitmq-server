@@ -12,6 +12,8 @@
 %% Raw message data is always stored on disk.
 -define(MSG(Index, Header), ?TUPLE(Index, Header)).
 
+-define(NIL, []).
+
 -define(IS_HEADER(H),
         (is_integer(H) andalso H >= 0) orelse
         is_list(H) orelse
@@ -97,8 +99,10 @@
 -type applied_mfa() :: {module(), atom(), list()}.
 % represents a partially applied module call
 
--define(RELEASE_CURSOR_EVERY, 2048 * 4).
--define(RELEASE_CURSOR_EVERY_MAX, 1_000_000).
+-define(CHECK_MIN_INTERVAL_MS, 1000).
+-define(CHECK_MIN_INDEXES, 4096).
+-define(CHECK_MAX_INDEXES, 666_667).
+
 -define(USE_AVG_HALF_LIFE, 10000.0).
 %% an average QQ without any message uses about 100KB so setting this limit
 %% to ~10 times that should be relatively safe.
@@ -143,20 +147,20 @@
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),
          % out of order enqueues - sorted list
-         unused,
+         unused = ?NIL,
          status = up :: up | suspected_down,
          %% it is useful to have a record of when this was blocked
          %% so that we can retry sending the block effect if
          %% the publisher did not receive the initial one
          blocked :: option(ra:index()),
-         unused_1,
-         unused_2
+         unused_1 = ?NIL,
+         unused_2 = ?NIL
         }).
 
 -record(cfg,
         {name :: atom(),
          resource :: rabbit_types:r('queue'),
-         release_cursor_interval :: option({non_neg_integer(), non_neg_integer()}),
+         unused_1 = ?NIL,
          dead_letter_handler :: dead_letter_handler(),
          become_leader_handler :: option(applied_mfa()),
          overflow_strategy = drop_head :: drop_head | reject_publish,
@@ -168,8 +172,8 @@
          delivery_limit :: option(non_neg_integer()),
          expires :: option(milliseconds()),
          msg_ttl :: option(milliseconds()),
-         unused_1,
-         unused_2
+         unused_2 = ?NIL,
+         unused_3 = ?NIL
         }).
 
 -record(rabbit_fifo,
@@ -191,7 +195,7 @@
          % index when there are large gaps but should be faster than gb_trees
          % for normal appending operations as it's backed by a map
          ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
-         unused_1,
+         unused_1 = ?NIL,
          % consumers need to reflect consumer state at time of snapshot
          consumers = #{} :: #{consumer_key() => consumer()},
          % consumers that require further service are queued here
@@ -205,18 +209,17 @@
          waiting_consumers = [] :: [{consumer_key(), consumer()}],
          last_active :: option(non_neg_integer()),
          msg_cache :: option({ra:index(), raw_msg()}),
-         unused_2
+         unused_2 = ?NIL
         }).
 
 -type config() :: #{name := atom(),
                     queue_resource := rabbit_types:r('queue'),
                     dead_letter_handler => dead_letter_handler(),
                     become_leader_handler => applied_mfa(),
-                    release_cursor_interval => non_neg_integer(),
+                    checkpoint_min_indexes => non_neg_integer(),
+                    checkpoint_max_indexes => non_neg_integer(),
                     max_length => non_neg_integer(),
                     max_bytes => non_neg_integer(),
-                    max_in_memory_length => non_neg_integer(),
-                    max_in_memory_bytes => non_neg_integer(),
                     overflow_strategy => drop_head | reject_publish,
                     single_active_consumer_on => boolean(),
                     delivery_limit => non_neg_integer(),

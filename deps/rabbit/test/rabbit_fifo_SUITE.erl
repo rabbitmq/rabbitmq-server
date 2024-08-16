@@ -2737,7 +2737,44 @@ modify_test(Config) ->
 
     ok.
 
+ttb_test(Config) ->
+    S0 = init(#{name => ?FUNCTION_NAME,
+                queue_resource =>
+                    rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)}),
+
+
+    S1 = do_n(5_000_000,
+           fun (N, Acc) ->
+                   I = (5_000_000 - N),
+                   element(1, enq(Config, I, I, ?FUNCTION_NAME_B, Acc))
+           end, S0),
+
+
+
+    {T1, _Res} = timer:tc(fun () ->
+                               do_n(100, fun (_, S) ->
+                                               term_to_binary(S),
+                                               S1 end, S1)
+                       end),
+    ct:pal("T1 took ~bus", [T1]),
+
+
+    {T2, _} = timer:tc(fun () ->
+                               do_n(100, fun (_, S) -> term_to_iovec(S), S1 end, S1)
+                       end),
+    ct:pal("T2 took ~bus", [T2]),
+
+    ok.
+
 %% Utility
+%%
+
+do_n(0, _, A) ->
+    A;
+do_n(N, Fun, A0) ->
+    A = Fun(N, A0),
+    do_n(N-1, Fun, A).
+
 
 init(Conf) -> rabbit_fifo:init(Conf).
 make_register_enqueuer(Pid) -> rabbit_fifo:make_register_enqueuer(Pid).
