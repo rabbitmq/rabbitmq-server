@@ -121,6 +121,10 @@
         <th>Readers</th>
         <td><%= fmt_table_short(queue.readers) %></td>
       </tr>
+      <tr>
+        <th>Segments</th>
+        <td><%= fmt_string(queue.segments) %></td>
+      </tr>
       <% } %>
     </table>
 
@@ -128,8 +132,10 @@
       <tr>
         <td></td>
         <th class="horizontal">Total</th>
+        <% if (!is_stream(queue)) { %>
         <th class="horizontal">Ready</th>
         <th class="horizontal">Unacked</th>
+        <% } %>
         <% if (is_quorum(queue)) { %>
         <th class="horizontal">High priority</th>
         <th class="horizontal">Low priority</th>
@@ -147,17 +153,23 @@
       <tr>
         <th>
           Messages
+          <% if (is_stream(queue)) { %>
+          <span class="help" id="queue-messages-stream"></span>
+          <% } else { %>
           <span class="help" id="queue-messages"></span>
+          <% } %>
         </th>
         <td class="r">
           <%= fmt_num_thousands(queue.messages) %>
         </td>
+        <% if (!is_stream(queue)) { %>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_ready) %>
         </td>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_unacknowledged) %>
         </td>
+        <% } %>
         <% if (is_quorum(queue)) { %>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_ready_high) %>
