@@ -50,7 +50,7 @@
          incoming_max_frame_size :: pos_integer(),
          outgoing_max_frame_size :: unlimited | pos_integer(),
          channel_max :: non_neg_integer(),
-         auth_mechanism :: none | {binary(), module()},
+         auth_mechanism :: sasl_init_unprocessed | {binary(), module()},
          auth_state :: term(),
          properties :: undefined | {map, list(tuple())}
         }).
@@ -85,23 +85,23 @@
 %%--------------------------------------------------------------------------
 
 unpack_from_0_9_1(
-  {Sock,RecvLen, PendingRecv, SupPid, Buf, BufLen, ProxySocket,
+  {Sock, PendingRecv, SupPid, Buf, BufLen, ProxySocket,
    ConnectionName, Host, PeerHost, Port, PeerPort, ConnectedAt},
-  Parent, HandshakeTimeout) ->
+  Parent) ->
     logger:update_process_metadata(#{connection => ConnectionName}),
-    #v1{parent              = Parent,
-        sock                = Sock,
-        callback            = handshake,
-        recv_len            = RecvLen,
-        pending_recv        = PendingRecv,
-        connection_state    = received_amqp3100,
-        heartbeater         = none,
-        helper_sup          = SupPid,
-        buf                 = Buf,
-        buf_len             = BufLen,
-        proxy_socket        = ProxySocket,
-        tracked_channels    = maps:new(),
-        writer              = none,
+    #v1{parent           = Parent,
+        sock             = Sock,
+        callback         = {frame_header, sasl},
+        recv_len         = 8,
+        pending_recv     = PendingRecv,
+        heartbeater      = none,
+        helper_sup       = SupPid,
+        buf              = Buf,
+        buf_len          = BufLen,
+        proxy_socket     = ProxySocket,
+        tracked_channels = maps:new(),
+        writer           = none,
+        connection_state = received_amqp3100,
         connection = #v1_connection{
                         name = ConnectionName,
                         vhost = none,
@@ -111,12 +111,12 @@ unpack_from_0_9_1(
                         peer_port = PeerPort,
                         connected_at = ConnectedAt,
                         user = unauthenticated,
-                        timeout = HandshakeTimeout,
+                        timeout = ?NORMAL_TIMEOUT,
                         incoming_max_frame_size = ?INITIAL_MAX_FRAME_SIZE,
                         outgoing_max_frame_size = ?INITIAL_MAX_FRAME_SIZE,
                         channel_max = 0,
-                        auth_mechanism = none,
-                        auth_state = none}}.
+                        auth_mechanism = sasl_init_unprocessed,
+                        auth_state = unauthenticated}}.
 
 -spec system_continue(pid(), [sys:dbg_opt()], state()) -> no_return() | ok.
 system_continue(Parent, Deb, State) ->
@@ -142,7 +142,9 @@ inet_op(F) -> rabbit_misc:throw_on_error(inet_error, F).
 
 recvloop(Deb, State = #v1{pending_recv = true}) ->
     mainloop(Deb, State);
-recvloop(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
+recvloop(Deb, State = #v1{sock = Sock,
+                          recv_len = RecvLen,
+                          buf_len = BufLen})
   when BufLen < RecvLen ->
     case rabbit_net:setopts(Sock, [{active, once}]) of
         ok ->
@@ -203,10 +205,10 @@ handle_other({'EXIT', Parent, Reason}, State = #v1{parent = Parent}) ->
     exit(Reason);
 handle_other({{'DOWN', ChannelNum}, _MRef, process, SessionPid, Reason}, State) ->
     handle_session_exit(ChannelNum, SessionPid, Reason, State);
-handle_other(handshake_timeout, State)
-  when ?IS_RUNNING(State) orelse
-       State#v1.connection_state =:= closing orelse
-       State#v1.connection_state =:= closed ->
+handle_other(handshake_timeout, State = #v1{connection_state = ConnState})
+  when ConnState =:= running orelse
+       ConnState =:= closing orelse
+       ConnState =:= closed ->
     State;
 handle_other(handshake_timeout, State) ->
     throw({handshake_timeout, State#v1.callback});
@@ -573,13 +575,14 @@ handle_sasl_frame(#'v1_0.sasl_response'{response = {binary, Response}},
 handle_sasl_frame(Performative, State) ->
     throw({unexpected_1_0_sasl_frame, Performative, State}).
 
-handle_input(handshake, <<"AMQP",0,1,0,0>>,
+handle_input(handshake,
+             <<"AMQP",0,1,0,0>>,
              #v1{connection_state = waiting_amqp0100,
                  sock = Sock,
-                 connection = Connection = #v1_connection{user = #user{}},
+                 connection = #v1_connection{user = #user{}},
                  helper_sup = HelperSup
                 } = State0) ->
-    %% Client already got successfully authenticated by SASL.
+    %% At this point, client already got successfully authenticated by SASL.
     send_handshake(Sock, <<"AMQP",0,1,0,0>>),
     ChildSpec = #{id => session_sup,
                   start => {rabbit_amqp_session_sup, start_link, [self()]},
@@ -593,8 +596,7 @@ handle_input(handshake, <<"AMQP",0,1,0,0>>,
               %% "After establishing or accepting a TCP connection and sending
               %% the protocol header, each peer MUST send an open frame before
               %% sending any other frames." [2.4.1]
-              connection_state = waiting_open,
-              connection = Connection#v1_connection{timeout = ?NORMAL_TIMEOUT}},
+              connection_state = waiting_open},
     switch_callback(State, {frame_header, amqp}, 8);
 handle_input({frame_header, Mode},
              Header = <<Size:32, DOff:8, Type:8, Channel:16>>,
@@ -620,7 +622,8 @@ handle_input({frame_header, Mode},
 handle_input({frame_header, _Mode}, Malformed, _State) ->
     throw({bad_1_0_header, Malformed});
 handle_input({frame_body, Mode, DOff, Channel},
-             FrameBin, State) ->
+             FrameBin,
+             State) ->
     %% Figure 2.16
     %% DOff = 4-byte words minus 8 bytes we've already read
     ExtendedHeaderSize = (DOff * 32 - 64),
@@ -633,24 +636,21 @@ handle_input(Callback, Data, _State) ->
 
 -spec init(tuple()) -> no_return().
 init(PackedState) ->
-    {ok, HandshakeTimeout} = application:get_env(rabbit, handshake_timeout),
     {parent, Parent} = erlang:process_info(self(), parent),
     ok = rabbit_connection_sup:remove_connection_helper_sup(Parent, helper_sup_amqp_091),
-    State0 = unpack_from_0_9_1(PackedState, Parent, HandshakeTimeout),
+    State0 = unpack_from_0_9_1(PackedState, Parent),
     State = advertise_sasl_mechanism(State0),
     %% By invoking recvloop here we become 1.0.
     recvloop(sys:debug_options([]), State).
 
 advertise_sasl_mechanism(State0 = #v1{connection_state = received_amqp3100,
-                                      connection = Connection,
                                       sock = Sock}) ->
     send_handshake(Sock, <<"AMQP",3,1,0,0>>),
     Ms0 = [{symbol, atom_to_binary(M)} || M <- auth_mechanisms(Sock)],
     Ms1 = {array, symbol, Ms0},
     Ms = #'v1_0.sasl_mechanisms'{sasl_server_mechanisms = Ms1},
     ok = send_on_channel0(Sock, Ms, rabbit_amqp_sasl),
-    State = State0#v1{connection_state = waiting_sasl_init,
-                      connection = Connection#v1_connection{timeout = ?NORMAL_TIMEOUT}},
+    State = State0#v1{connection_state = waiting_sasl_init},
     switch_callback(State, {frame_header, sasl}, 8).
 
 send_handshake(Sock, Handshake) ->
@@ -715,15 +715,16 @@ auth_phase(
             auth_fail(none, State),
             protocol_error(?V_1_0_AMQP_ERROR_DECODE_ERROR, Msg, Args);
         {challenge, Challenge, AuthState1} ->
-            Secure = #'v1_0.sasl_challenge'{challenge = {binary, Challenge}},
-            ok = send_on_channel0(Sock, Secure, rabbit_amqp_sasl),
-            State#v1{connection = Conn#v1_connection{auth_state = AuthState1}};
+            Challenge = #'v1_0.sasl_challenge'{challenge = {binary, Challenge}},
+            ok = send_on_channel0(Sock, Challenge, rabbit_amqp_sasl),
+            State1 = State#v1{connection = Conn#v1_connection{auth_state = AuthState1}},
+            switch_callback(State1, {frame_header, sasl}, 8);
         {ok, User} ->
             Outcome = #'v1_0.sasl_outcome'{code = ?V_1_0_SASL_CODE_OK},
             ok = send_on_channel0(Sock, Outcome, rabbit_amqp_sasl),
             State1 = State#v1{connection_state = waiting_amqp0100,
                               connection = Conn#v1_connection{user = User,
-                                                              auth_state = none}},
+                                                              auth_state = authenticated}},
             switch_callback(State1, handshake, 8)
     end.
 

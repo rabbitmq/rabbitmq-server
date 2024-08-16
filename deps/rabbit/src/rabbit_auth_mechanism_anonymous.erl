@@ -34,7 +34,7 @@ should_offer(_Sock) ->
 init(_Sock) ->
     ?STATE.
 
-handle_response(_Response, ?STATE) ->
+handle_response(_TraceInfo, ?STATE) ->
     {ok, User, Pass} = credentials(),
     rabbit_access_control:check_user_pass_login(User, Pass).
 
