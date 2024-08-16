@@ -714,6 +714,7 @@ rabbitmq_suite(
         "@gen_batch_server//:erlang_app",
         "@meck//:erlang_app",
         "@ra//:erlang_app",
+        "//deps/rabbitmq_ct_helpers:erlang_app",
     ],
 )
 
