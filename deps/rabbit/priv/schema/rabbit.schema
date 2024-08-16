@@ -455,10 +455,11 @@ end}.
     {datatype, atom}]}.
 
 {translation, "rabbit.auth_mechanisms",
-fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("auth_mechanisms", Conf),
-    [ V || {_, V} <- Settings ]
-end}.
+ fun(Conf) ->
+         Settings = cuttlefish_variable:filter_by_prefix("auth_mechanisms", Conf),
+         Sorted = lists:keysort(1, Settings),
+         [V || {_, V} <- Sorted]
+ end}.
 
 
 %% Select an authentication backend to use. RabbitMQ provides an
