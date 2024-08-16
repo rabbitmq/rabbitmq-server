@@ -256,6 +256,9 @@ var HELP = {
     'queue-dead-lettered':
       'Applies to messages dead-lettered with dead-letter-strategy <code>at-least-once</code>.',
 
+    'queue-delivery-limit':
+      'The number of times a message can be returned to this queue before it is dead-lettered (if configured) or dropped.',
+
     'queue-message-body-bytes':
       '<p>The sum total of the sizes of the message bodies in this queue. This only counts message bodies; it does not include message properties (including headers) or metadata used by the queue.</p><p>Note that "in memory" and "persistent" are not mutually exclusive; persistent messages can be in memory as well as on disc, and transient messages can be paged out if memory is tight. Non-durable queues will consider all messages to be transient.</p><p>If a message is routed to multiple queues on publication, its body will be stored only once (in memory and on disk) and shared between queues. The value shown here does not take account of this effect.</p>',
 
