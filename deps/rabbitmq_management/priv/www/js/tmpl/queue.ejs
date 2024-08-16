@@ -92,10 +92,16 @@
         <td><%= fmt_string(queue.consumer_details.length) %></td>
       </tr>
       <% } %>
-      <% if (!is_stream(queue)) { %>
+      <% if (is_classic(queue)) { %>
       <tr>
         <th>Consumer capacity <span class="help" id="queue-consumer-capacity"></th>
         <td><%= fmt_percent(queue.consumer_capacity) %></td>
+      </tr>
+      <% } %>
+      <% if(queue.hasOwnProperty('publishers')) { %>
+      <tr>
+        <th>Publishers</th>
+        <td><%= fmt_string(queue.publishers) %></td>
       </tr>
       <% } %>
       <% if (is_quorum(queue)) { %>
@@ -103,6 +109,12 @@
         <th>Open files</th>
         <td><%= fmt_table_short(queue.open_files) %></td>
       </tr>
+      <% if (queue.hasOwnProperty('delivery_limit')) { %>
+      <tr>
+        <th>Delivery limit <span class="help" id="queue-delivery-limit"></th>
+        <td><%= fmt_string(queue.delivery_limit) %></td>
+      </tr>
+      <% } %>
       <% } %>
       <% if (is_stream(queue)) { %>
       <tr>
@@ -187,11 +199,10 @@
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_unacknowledged) %>
         </td>
-        <td class="r">
-          <%= fmt_bytes(queue.message_bytes_ram) %>
-        </td>
         <% } %>
         <% if (is_quorum(queue)) { %>
+        <td class="r">
+        </td>
         <td class="r">
         </td>
         <td class="r">
@@ -201,6 +212,9 @@
         </td>
         <% } %>
         <% if (is_classic(queue)) { %>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes_ram) %>
+        </td>
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_persistent) %>
         </td>
