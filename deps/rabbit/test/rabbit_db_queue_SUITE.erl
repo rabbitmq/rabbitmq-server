@@ -42,6 +42,7 @@ all_tests() ->
      set,
      delete,
      update,
+     update_decorators,
      exists,
      get_all_durable,
      get_all_durable_by_type,
@@ -323,7 +324,7 @@ update_decorators1(_Config) ->
     ?assertEqual({ok, Q}, rabbit_db_queue:get(QName)),
     ?assertEqual(undefined, amqqueue:get_decorators(Q)),
     %% Not really testing we set a decorator, but at least the field is being updated
-    ?assertEqual(ok, rabbit_db_queue:update_decorators(QName)),
+    ?assertEqual(ok, rabbit_db_queue:update_decorators(QName, [])),
     {ok, Q1} = rabbit_db_queue:get(QName),
     ?assertEqual([], amqqueue:get_decorators(Q1)),
     passed.
