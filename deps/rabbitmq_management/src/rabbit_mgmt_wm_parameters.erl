@@ -43,8 +43,7 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 %% Hackish fix to make sure we return a JSON object instead of an empty list
-%% when the publish-properties value is empty. Should be removed in 3.7.0
-%% when we switch to a new JSON library.
+%% when the publish-properties value is empty.
 fix_shovel_publish_properties(P) ->
     case lists:keyfind(component, 1, P) of
         {_, <<"shovel">>} ->
