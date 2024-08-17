@@ -9,7 +9,8 @@ def all_beam_files(name = "all_beam_files"):
     erlang_bytecode(
         name = "other_beam",
         srcs = [
-            "src/rabbit_shovel_mgmt.erl",
+            "src/rabbit_shovel_mgmt_shovel.erl",
+            "src/rabbit_shovel_mgmt_shovels.erl",
             "src/rabbit_shovel_mgmt_util.erl",
         ],
         hdrs = [":public_and_private_hdrs"],
@@ -33,7 +34,8 @@ def all_test_beam_files(name = "all_test_beam_files"):
         name = "test_other_beam",
         testonly = True,
         srcs = [
-            "src/rabbit_shovel_mgmt.erl",
+            "src/rabbit_shovel_mgmt_shovel.erl",
+            "src/rabbit_shovel_mgmt_shovels.erl",
             "src/rabbit_shovel_mgmt_util.erl",
         ],
         hdrs = [":public_and_private_hdrs"],
@@ -72,7 +74,8 @@ def all_srcs(name = "all_srcs"):
     filegroup(
         name = "srcs",
         srcs = [
-            "src/rabbit_shovel_mgmt.erl",
+            "src/rabbit_shovel_mgmt_shovel.erl",
+            "src/rabbit_shovel_mgmt_shovels.erl",
             "src/rabbit_shovel_mgmt_util.erl",
         ],
     )
