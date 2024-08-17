@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(rabbit_shovel_mgmt).
+-module(rabbit_shovel_mgmt_shovel).
 
 -behaviour(rabbit_mgmt_extension).
 
@@ -19,9 +19,9 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel_mgmt.hrl").
 
-dispatcher() -> [{"/shovels",        ?MODULE, []},
-                 {"/shovels/:vhost", ?MODULE, []},
-                 {"/shovels/vhost/:vhost/:name", ?MODULE, []},
+-define(COMPONENT, <<"shovel">>).
+
+dispatcher() -> [{"/shovels/vhost/:vhost/:name", ?MODULE, []},
                  {"/shovels/vhost/:vhost/:name/restart", ?MODULE, []}].
 
 web_ui()     -> [{javascript, <<"shovel.js">>}].
@@ -42,7 +42,7 @@ resource_exists(ReqData, Context) ->
                 not_found ->
                     false;
                 VHost ->
-                    case rabbit_mgmt_util:id(name, ReqData) of
+                    case name(ReqData) of
                         none -> true;
                         Name ->
                             %% Deleting or restarting a shovel
@@ -65,8 +65,10 @@ resource_exists(ReqData, Context) ->
     {Reply, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply_list(
-      filter_vhost_req(rabbit_shovel_mgmt_util:status(ReqData, Context), ReqData), ReqData, Context).
+    Shovel = parameter(ReqData),
+    rabbit_mgmt_util:reply(rabbit_mgmt_format:parameter(
+        rabbit_mgmt_wm_parameters:fix_shovel_publish_properties(Shovel)),
+        ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_monitor(ReqData, Context).
@@ -115,18 +117,24 @@ delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
 
 %%--------------------------------------------------------------------
 
+name(ReqData) -> rabbit_mgmt_util:id(name, ReqData).
+
+parameter(ReqData) ->
+    VHostName = rabbit_mgmt_util:vhost(ReqData),
+    Name = name(ReqData),
+    if
+        VHostName =/= not_found andalso
+            Name =/= none ->
+            rabbit_runtime_parameters:lookup(VHostName, ?COMPONENT, Name);
+        true ->
+            not_found
+    end.
+
 is_restart(ReqData) ->
     Path = cowboy_req:path(ReqData),
     case string:find(Path, "/restart", trailing) of
         nomatch -> false;
         _ -> true
-    end.
-
-filter_vhost_req(List, ReqData) ->
-    case rabbit_mgmt_util:vhost(ReqData) of
-        none      -> List;
-        VHost     -> [I || I <- List,
-                           pget(vhost, I) =:= VHost]
     end.
 
 get_shovel_node(VHost, Name, ReqData, Context) ->

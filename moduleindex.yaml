@@ -1131,7 +1131,8 @@ rabbitmq_shovel:
 - rabbit_shovel_worker
 - rabbit_shovel_worker_sup
 rabbitmq_shovel_management:
-- rabbit_shovel_mgmt
+- rabbit_shovel_mgmt_shovel
+- rabbit_shovel_mgmt_shovels
 - rabbit_shovel_mgmt_util
 rabbitmq_shovel_prometheus:
 - rabbit_shovel_prometheus_app
