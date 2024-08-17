@@ -1304,8 +1304,8 @@ list_local_followers() ->
     [Q
       || Q <- list(),
          amqqueue:is_quorum(Q),
-         amqqueue:get_state(Q) =/= crashed,
          amqqueue:get_leader(Q) =/= node(),
+         lists:member(node(), get_quorum_nodes(Q)),
          rabbit_quorum_queue:is_recoverable(Q)
          ].
 
