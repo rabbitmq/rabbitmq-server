@@ -66,8 +66,7 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Shovel = parameter(ReqData),
-    rabbit_mgmt_util:reply(rabbit_mgmt_format:parameter(
-        rabbit_mgmt_wm_parameters:fix_shovel_publish_properties(Shovel)),
+    rabbit_mgmt_util:reply(rabbit_mgmt_format:parameter(Shovel),
         ReqData, Context).
 
 is_authorized(ReqData, Context) ->
