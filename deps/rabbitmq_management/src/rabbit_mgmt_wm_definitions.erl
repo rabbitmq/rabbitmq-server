@@ -107,8 +107,7 @@ vhost_definitions(ReqData, VHost, Context) ->
                             export_binding(B, QNames)],
     {ok, Vsn} = application:get_key(rabbit, vsn),
     Parameters = [strip_vhost(
-                    rabbit_mgmt_format:parameter(
-                      rabbit_mgmt_wm_parameters:fix_shovel_publish_properties(P)))
+                    rabbit_mgmt_format:parameter(P))
                   || P <- rabbit_runtime_parameters:list(VHost)],
     rabbit_mgmt_util:reply(
       [{rabbit_version, rabbit_data_coercion:to_binary(Vsn)}] ++

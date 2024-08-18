@@ -9,7 +9,6 @@
 
 -export([init/2, to_json/2, content_types_provided/2, is_authorized/2,
          resource_exists/2, basic/1]).
--export([fix_shovel_publish_properties/1]).
 -export([variances/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
@@ -42,24 +41,6 @@ is_authorized(ReqData, Context) ->
 
 %%--------------------------------------------------------------------
 
-%% Hackish fix to make sure we return a JSON object instead of an empty list
-%% when the publish-properties value is empty.
-fix_shovel_publish_properties(P) ->
-    case lists:keyfind(component, 1, P) of
-        {_, <<"shovel">>} ->
-            case lists:keytake(value, 1, P) of
-                {value, {_, Values}, P2} ->
-                    case lists:keytake(<<"publish-properties">>, 1, Values) of
-                        {_, {_, []}, Values2} ->
-                            P2 ++ [{value, Values2 ++ [{<<"publish-properties">>, empty_struct}]}];
-                        _ ->
-                            P
-                    end;
-                _ -> P
-            end;
-        _ -> P
-    end.
-
 basic(ReqData) ->
     Raw = case rabbit_mgmt_util:id(component, ReqData) of
               none -> rabbit_runtime_parameters:list();
@@ -73,5 +54,5 @@ basic(ReqData) ->
           end,
     case Raw of
         not_found -> not_found;
-        _         -> [rabbit_mgmt_format:parameter(fix_shovel_publish_properties(P)) || P <- Raw]
+        _         -> [rabbit_mgmt_format:parameter(P) || P <- Raw]
     end.
