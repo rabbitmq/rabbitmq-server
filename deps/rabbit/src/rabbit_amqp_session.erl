@@ -1886,21 +1886,20 @@ settle_op_from_outcome(#'v1_0.released'{}) ->
 %% See https://github.com/rabbitmq/rabbitmq-server/issues/6121
 settle_op_from_outcome(#'v1_0.modified'{delivery_failed = DelFailed,
                                         undeliverable_here = UndelHere,
-                                        message_annotations = Anns0
-                                       }) ->
+                                        message_annotations = Anns0}) ->
     Anns = case Anns0 of
                #'v1_0.message_annotations'{content = C} ->
-                   C;
+                   Anns1 = lists:map(fun({{symbol, K}, V}) ->
+                                             {K, unwrap(V)}
+                                     end, C),
+                   maps:from_list(Anns1);
                _ ->
-                   []
+                   #{}
            end,
     {modify,
      default(DelFailed, false),
      default(UndelHere, false),
-     %% TODO: this must exist elsewhere
-     lists:foldl(fun ({{symbol, K}, V}, Acc) ->
-                        Acc#{K => unwrap(V)}
-                end, #{}, Anns)};
+     Anns};
 settle_op_from_outcome(Outcome) ->
     protocol_error(
       ?V_1_0_AMQP_ERROR_INVALID_FIELD,
