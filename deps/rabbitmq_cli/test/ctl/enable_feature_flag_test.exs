@@ -35,7 +35,7 @@ defmodule EnableFeatureFlagCommandTest do
 
     {
       :ok,
-      opts: %{node: get_rabbit_hostname()}, feature_flag: @feature_flag
+      opts: %{node: get_rabbit_hostname(), experimental: false}, feature_flag: @feature_flag
     }
   end
 
@@ -59,7 +59,7 @@ defmodule EnableFeatureFlagCommandTest do
   end
 
   test "run: attempt to use an unreachable node returns a nodedown" do
-    opts = %{node: :jake@thedog, timeout: 200}
+    opts = %{node: :jake@thedog, timeout: 200, experimental: false}
     assert match?({:badrpc, _}, @command.run(["na"], opts))
   end
 
