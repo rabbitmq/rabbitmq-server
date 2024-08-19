@@ -1352,28 +1352,6 @@ fun(Conf) ->
     end
 end}.
 
-%% Cluster formation: Randomized startup delay
-%%
-%% DEPRECATED: This is a no-op. Old configs are still allowed, but a warning will be printed.
-
-{mapping, "cluster_formation.randomized_startup_delay_range.min", "rabbit.cluster_formation.randomized_startup_delay_range", []}.
-{mapping, "cluster_formation.randomized_startup_delay_range.max", "rabbit.cluster_formation.randomized_startup_delay_range", []}.
-
-{translation, "rabbit.cluster_formation.randomized_startup_delay_range",
-fun(Conf) ->
-    Min = cuttlefish:conf_get("cluster_formation.randomized_startup_delay_range.min", Conf, undefined),
-    Max = cuttlefish:conf_get("cluster_formation.randomized_startup_delay_range.max", Conf, undefined),
-
-    case {Min, Max} of
-      {undefined, undefined} ->
-        ok;
-      _ ->
-        cuttlefish:warn("cluster_formation.randomized_startup_delay_range.min and "
-                               "cluster_formation.randomized_startup_delay_range.max are deprecated")
-    end,
-    cuttlefish:unset()
-end}.
-
 %% Cluster formation: lock acquisition retries as passed to https://erlang.org/doc/man/global.html#set_lock-3
 %%
 %% Currently used in classic, k8s, and aws peer discovery backends.
