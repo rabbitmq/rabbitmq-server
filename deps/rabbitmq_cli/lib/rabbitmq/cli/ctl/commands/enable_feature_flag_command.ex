@@ -8,7 +8,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnableFeatureFlagCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def switches(), do: [experimental: :boolean]
-  def aliases(), do: [f: :experimental]
+  def aliases(), do: [e: :experimental]
 
   def merge_defaults(args, opts), do: { args, Map.merge(%{experimental: false}, opts) }
 
@@ -24,9 +24,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnableFeatureFlagCommand do
 
   def run(["all"], %{node: node_name}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_feature_flags, :enable_all, []) do
-      # Server does not support feature flags, consider none are available.
-      # See rabbitmq/rabbitmq-cli#344 for context. MK.
-      {:badrpc, {:EXIT, {:undef, _}}} -> {:error, :unsupported}
       {:badrpc, _} = err -> err
       other -> other
     end
@@ -36,7 +33,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnableFeatureFlagCommand do
     case {experimental, :rabbit_misc.rpc_call(node_name, :rabbit_feature_flags, :get_stability, [
       String.to_atom(feature_flag)
     ])} do
-          {_, {:badrpc, {:EXIT, {:undef, _}}}} -> {:error, :unsupported}
           {_, {:badrpc, _} = err} -> err
           {false, :experimental} ->
               IO.puts("Feature flag #{feature_flag} is experimental. If you understand the risk, use --experimental to enable it.")
@@ -44,9 +40,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnableFeatureFlagCommand do
                 case :rabbit_misc.rpc_call(node_name, :rabbit_feature_flags, :enable, [
                   String.to_atom(feature_flag)
                 ]) do
-                  # Server does not support feature flags, consider none are available.
-                  # See rabbitmq/rabbitmq-cli#344 for context. MK.
-                  {:badrpc, {:EXIT, {:undef, _}}} -> {:error, :unsupported}
                   {:badrpc, _} = err -> err
                   other -> other
                 end
@@ -70,7 +63,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnableFeatureFlagCommand do
       ],
       [
         "--experimental",
-        "required to enable experimental feature flags (make sure you understand the risks!))"
+        "required to enable experimental feature flags (make sure you understand the risks!)"
       ]
     ]
   end
