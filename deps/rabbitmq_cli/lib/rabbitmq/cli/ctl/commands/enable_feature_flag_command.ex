@@ -7,10 +7,10 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.EnableFeatureFlagCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def switches(), do: [force: :boolean]
-  def aliases(), do: [f: :force]
+  def switches(), do: [experimental: :boolean]
+  def aliases(), do: [f: :experimental]
 
-  def merge_defaults(args, opts), do: { args, Map.merge(%{force: false}, opts) }
+  def merge_defaults(args, opts), do: { args, Map.merge(%{experimental: false}, opts) }
 
   def validate([], _opts), do: {:validation_failure, :not_enough_args}
   def validate([_ | _] = args, _opts) when length(args) > 1, do: {:validation_failure, :too_many_args}
@@ -32,14 +32,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnableFeatureFlagCommand do
     end
   end
 
-  def run([feature_flag], %{node: node_name, force: force}) do
-    case {force, :rabbit_misc.rpc_call(node_name, :rabbit_feature_flags, :get_stability, [
+  def run([feature_flag], %{node: node_name, experimental: experimental}) do
+    case {experimental, :rabbit_misc.rpc_call(node_name, :rabbit_feature_flags, :get_stability, [
       String.to_atom(feature_flag)
     ])} do
           {_, {:badrpc, {:EXIT, {:undef, _}}}} -> {:error, :unsupported}
           {_, {:badrpc, _} = err} -> err
           {false, :experimental} ->
-              IO.puts("Feature flag #{feature_flag} is experimental and requires --force to enable it.")
+              IO.puts("Feature flag #{feature_flag} is experimental. If you understand the risk, use --experimental to enable it.")
           _ ->
                 case :rabbit_misc.rpc_call(node_name, :rabbit_feature_flags, :enable, [
                   String.to_atom(feature_flag)
@@ -60,7 +60,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnableFeatureFlagCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "enable_feature_flag [--force] <all | feature_flag>"
+  def usage, do: "enable_feature_flag [--experimental] <all | feature_flag>"
 
   def usage_additional() do
     [
@@ -69,7 +69,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnableFeatureFlagCommand do
         "name of the feature flag to enable, or \"all\" to enable all supported flags"
       ],
       [
-        "--force",
+        "--experimental",
         "required to enable experimental feature flags (make sure you understand the risks!))"
       ]
     ]
