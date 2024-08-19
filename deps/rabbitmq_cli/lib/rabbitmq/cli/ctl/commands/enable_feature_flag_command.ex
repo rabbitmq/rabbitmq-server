@@ -22,10 +22,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnableFeatureFlagCommand do
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run(["all"], %{node: node_name}) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_feature_flags, :enable_all, []) do
-      {:badrpc, _} = err -> err
-      other -> other
+  def run(["all"], %{node: node_name, experimental: experimental}) do
+    case experimental do
+      true ->
+        {:error, RabbitMQ.CLI.Core.ExitCodes.exit_usage(), "`--experiemntal` flag is not allowed when enabling all feature flags.\nUse --experimental with a specific feature flag if you want to enable an experimental feature."}
+      false ->
+        case :rabbit_misc.rpc_call(node_name, :rabbit_feature_flags, :enable_all, []) do
+          {:badrpc, _} = err -> err
+          other -> other
+        end
     end
   end
 
