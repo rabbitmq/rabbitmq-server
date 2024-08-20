@@ -316,7 +316,7 @@ apply(#{index := Idx} = Meta,
                                 credit = increase_credit(Con0, 1)},
             State1 = State0#?STATE{ra_indexes = rabbit_fifo_index:delete(OldIdx,
                                                                          Indexes0),
-                                   messages = rabbit_fifo_q:in(lo,
+                                   messages = rabbit_fifo_q:in(no,
                                                                ?MSG(Idx, Header),
                                                                Messages),
                                    enqueue_count = EnqCount + 1},
@@ -851,7 +851,7 @@ overview(#?STATE{consumers = Cons,
                   end,
     MsgsRet = lqueue:len(Returns),
     #{num_hi := MsgsHi,
-      num_lo := MsgsLo} = rabbit_fifo_q:overview(Messages),
+      num_no := MsgsNo} = rabbit_fifo_q:overview(Messages),
 
     Overview = #{type => ?STATE,
                  config => Conf,
@@ -861,7 +861,7 @@ overview(#?STATE{consumers = Cons,
                  num_enqueuers => maps:size(Enqs),
                  num_ready_messages => messages_ready(State),
                  num_ready_messages_high => MsgsHi,
-                 num_ready_messages_low => MsgsLo,
+                 num_ready_messages_normal => MsgsNo,
                  num_ready_messages_return => MsgsRet,
                  num_messages => messages_total(State),
                  num_release_cursors => 0, %% backwards compat
@@ -2838,10 +2838,10 @@ priority_tag(Msg) ->
                        P > 4 ->
                     hi;
                 _ ->
-                    lo
+                    no
             end;
         false ->
-            lo
+            no
     end.
 
 
