@@ -40,7 +40,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EnableFeatureFlagCommand do
     ])} do
           {_, {:badrpc, _} = err} -> err
           {false, :experimental} ->
-              IO.puts("Feature flag #{feature_flag} is experimental. If you understand the risk, use --experimental to enable it.")
+              {:error, RabbitMQ.CLI.Core.ExitCodes.exit_usage(), "Feature flag #{feature_flag} is experimental. If you understand the risk, use --experimental to enable it."}
           _ ->
                 case :rabbit_misc.rpc_call(node_name, :rabbit_feature_flags, :enable, [
                   String.to_atom(feature_flag)
