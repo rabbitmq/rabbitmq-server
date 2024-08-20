@@ -132,7 +132,7 @@
         <th class="horizontal">Unacked</th>
         <% if (is_quorum(queue)) { %>
         <th class="horizontal">High priority</th>
-        <th class="horizontal">Low priority</th>
+        <th class="horizontal">Normal priority</th>
         <th class="horizontal">Returned</th>
         <th class="horizontal">Dead-lettered
         <span class="help" id="queue-dead-lettered"></span>
@@ -163,7 +163,7 @@
           <%= fmt_num_thousands(queue.messages_ready_high) %>
         </td>
         <td class="r">
-          <%= fmt_num_thousands(queue.messages_ready_low) %>
+          <%= fmt_num_thousands(queue.messages_ready_normal) %>
         </td>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_ready_returned) %>

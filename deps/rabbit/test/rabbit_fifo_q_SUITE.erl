@@ -72,9 +72,9 @@ basics(_Config) ->
                    rabbit_fifo_q:in(P, I, Q)
            end, Q0, [
                      {hi, ?MSG(1)},
-                     {lo, ?MSG(2)},
+                     {no, ?MSG(2)},
                      {hi, ?MSG(3)},
-                     {lo, ?MSG(4)},
+                     {no, ?MSG(4)},
                      {hi, ?MSG(5)}
                     ]),
     {?MSG(1), Q2} = rabbit_fifo_q:out(Q1),
@@ -87,7 +87,7 @@ basics(_Config) ->
 
 hi_is_prioritised(_Config) ->
     Q0 = rabbit_fifo_q:new(),
-    %% when `hi' has a lower index than the next lo then it is still
+    %% when `hi' has a lower index than the next 'no' then it is still
     %% prioritied (as this is safe to do).
     Q1 = lists:foldl(
            fun ({P, I}, Q) ->
@@ -97,7 +97,7 @@ hi_is_prioritised(_Config) ->
                      {hi, ?MSG(2)},
                      {hi, ?MSG(3)},
                      {hi, ?MSG(4)},
-                     {lo, ?MSG(5)}
+                     {no, ?MSG(5)}
                     ]),
     {?MSG(1), Q2} = rabbit_fifo_q:out(Q1),
     {?MSG(2), Q3} = rabbit_fifo_q:out(Q2),
@@ -110,8 +110,8 @@ hi_is_prioritised(_Config) ->
 get_lowest_index(_Config) ->
     Q0 = rabbit_fifo_q:new(),
     Q1 = rabbit_fifo_q:in(hi, ?MSG(1, ?LINE), Q0),
-    Q2 = rabbit_fifo_q:in(lo, ?MSG(2, ?LINE), Q1),
-    Q3 = rabbit_fifo_q:in(lo, ?MSG(3, ?LINE), Q2),
+    Q2 = rabbit_fifo_q:in(no, ?MSG(2, ?LINE), Q1),
+    Q3 = rabbit_fifo_q:in(no, ?MSG(3, ?LINE), Q2),
     {_, Q4} = rabbit_fifo_q:out(Q3),
     {_, Q5} = rabbit_fifo_q:out(Q4),
     {_, Q6} = rabbit_fifo_q:out(Q5),
@@ -129,7 +129,7 @@ get_lowest_index(_Config) ->
 single_priority_behaves_like_queue(_Config) ->
     run_proper(
       fun () ->
-              ?FORALL({P, Ops}, {oneof([hi, lo]), op_gen(256)},
+              ?FORALL({P, Ops}, {oneof([hi, no]), op_gen(256)},
                       queue_prop(P, Ops))
       end, [], 25),
     ok.
