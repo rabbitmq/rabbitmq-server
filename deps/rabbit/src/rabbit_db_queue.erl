@@ -376,7 +376,9 @@ list_for_count_in_khepri(VHostName) ->
 -spec delete(QName, Reason) -> Ret when
       QName :: rabbit_amqqueue:name(),
       Reason :: atom(),
-      Ret :: ok | Deletions :: rabbit_binding:deletions().
+      Ret :: ok |
+             Deletions :: rabbit_binding:deletions() |
+             rabbit_khepri:timeout_error().
 
 delete(QueueName, Reason) ->
     rabbit_khepri:handle_fallback(
