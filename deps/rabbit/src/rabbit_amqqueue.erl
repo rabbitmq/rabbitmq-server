@@ -1669,6 +1669,11 @@ delete_with(QueueName, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive) whe
         {error, {exit, _, _}} ->
             %% delete()/delegate:invoke might return {error, {exit, _, _}}
             {ok, 0};
+        {error, timeout} ->
+            rabbit_misc:protocol_error(
+              internal_error,
+              "The operation to delete the queue from the metadata store "
+              "timed out", []);
         {ok, Count} ->
             {ok, Count};
         {protocol_error, Type, Reason, ReasonArgs} ->

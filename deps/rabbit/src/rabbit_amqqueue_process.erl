@@ -297,7 +297,7 @@ terminate(shutdown = R,      State = #q{backing_queue = BQ, q = Q0}) ->
     end, State);
 terminate({shutdown, missing_owner = Reason}, {{reply_to, From}, #q{q = Q} = State}) ->
     %% if the owner was missing then there will be no queue, so don't emit stats
-    State1 = terminate_shutdown(terminate_delete(false, Reason, State), State),
+    State1 = terminate_shutdown(terminate_delete(false, Reason, none, State), State),
     send_reply(From, {owner_died, Q}),
     State1;
 terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
@@ -310,18 +310,22 @@ terminate(normal, State = #q{status = {terminated_by, auto_delete}}) ->
     %% thousands of queues. A optimisation introduced by server#1513
     %% needs to be reverted by this case, avoiding to guard the delete
     %% operation on `rabbit_durable_queue`
-    terminate_shutdown(terminate_delete(true, auto_delete, State), State);
-terminate(normal,            State) -> %% delete case
-    terminate_shutdown(terminate_delete(true, normal, State), State);
+    terminate_shutdown(terminate_delete(true, auto_delete, none, State), State);
+terminate(normal, {{reply_to, ReplyTo}, State}) -> %% delete case
+    terminate_shutdown(terminate_delete(true, normal, ReplyTo, State), State);
+terminate(normal, State) ->
+    terminate_shutdown(terminate_delete(true, normal, none, State), State);
 %% If we crashed don't try to clean up the BQS, probably best to leave it.
 terminate(_Reason,           State = #q{q = Q}) ->
     terminate_shutdown(fun (BQS) ->
                                Q2 = amqqueue:set_state(Q, crashed),
+                               %% When mnesia is removed this update can become
+                               %% an async Khepri command.
                                _ = rabbit_amqqueue:store_queue(Q2),
                                BQS
                        end, State).
 
-terminate_delete(EmitStats, Reason0,
+terminate_delete(EmitStats, Reason0, ReplyTo,
                  State = #q{q = Q,
                             backing_queue = BQ,
                             status = Status}) ->
@@ -332,19 +336,24 @@ terminate_delete(EmitStats, Reason0,
                      missing_owner -> normal;
                      Any -> Any
                  end,
+        Len = BQ:len(BQS),
         BQS1 = BQ:delete_and_terminate(Reason, BQS),
         if EmitStats -> rabbit_event:if_enabled(State, #q.stats_timer,
                                                 fun() -> emit_stats(State) end);
            true      -> ok
         end,
         %% This try-catch block transforms throws to errors since throws are not
-        %% logged.
-        try
-            %% don't care if the internal delete doesn't return 'ok'.
-            rabbit_amqqueue:internal_delete(Q, ActingUser, Reason0)
-        catch
-            {error, ReasonE} -> error(ReasonE)
-        end,
+        %% logged. When mnesia is removed this `try` can be removed: Khepri
+        %% returns errors as error tuples instead.
+        Reply = try rabbit_amqqueue:internal_delete(Q, ActingUser, Reason0) of
+                    ok ->
+                        {ok, Len};
+                    {error, _} = Err ->
+                        Err
+                catch
+                    {error, ReasonE} -> error(ReasonE)
+                end,
+        send_reply(ReplyTo, Reply),
         BQS1
     end.
 
@@ -1396,15 +1405,16 @@ handle_call(stat, _From, State) ->
         ensure_expiry_timer(State),
     reply({ok, BQ:len(BQS), rabbit_queue_consumers:count()}, State1);
 
-handle_call({delete, IfUnused, IfEmpty, ActingUser}, _From,
+handle_call({delete, IfUnused, IfEmpty, ActingUser}, From,
             State = #q{backing_queue_state = BQS, backing_queue = BQ}) ->
     IsEmpty  = BQ:is_empty(BQS),
     IsUnused = is_unused(State),
     if
         IfEmpty  and not(IsEmpty)  -> reply({error, not_empty}, State);
         IfUnused and not(IsUnused) -> reply({error,    in_use}, State);
-        true                       -> stop({ok, BQ:len(BQS)},
-                                           State#q{status = {terminated_by, ActingUser}})
+        true ->
+            State1 = State#q{status = {terminated_by, ActingUser}},
+            stop({{reply_to, From}, State1})
     end;
 
 handle_call(purge, _From, State = #q{backing_queue       = BQ,
