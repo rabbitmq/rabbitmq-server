@@ -2319,6 +2319,7 @@ incoming_link_transfer(
     end,
     validate_transfer_rcv_settle_mode(RcvSettleMode, Settled),
     validate_message_size(PayloadBin, MaxMessageSize),
+    rabbit_global_counters:message_size(?PROTOCOL, byte_size(PayloadBin)),
 
     Mc0 = mc:init(mc_amqp, PayloadBin, #{}),
     case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, PermCache0) of

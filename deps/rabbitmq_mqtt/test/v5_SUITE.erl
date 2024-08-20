@@ -128,7 +128,8 @@ cluster_size_1_tests() ->
      topic_alias_disallowed_retained_message,
      extended_auth,
      headers_exchange,
-     consistent_hash_exchange
+     consistent_hash_exchange,
+     global_counters
     ].
 
 cluster_size_3_tests() ->
@@ -2101,6 +2102,26 @@ consistent_hash_exchange(Config) ->
     [#'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = Q}) || Q <- Qs],
     ok = rabbit_ct_client_helpers:close_channels_and_connection(Config, 0).
 
+global_counters(Config) ->
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    PacketSize1 = 10,
+    PacketSize2 = 200,
+    C = connect(ClientId, Config, []),
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
+    Payload1 = binary:copy(<<"x">>, PacketSize1),
+    Payload2 = binary:copy(<<"x">>, PacketSize2),
+    Before = msg_size_metrics(mqtt50, Config),
+    %% We expect the PUBLISH from client to server to succeed.
+    ?assertMatch({ok, _}, emqtt:publish(C, Topic, Payload1, [{qos, 1}])),
+    ?assertMatch({ok, _}, emqtt:publish(C, Topic, Payload2, [{qos, 1}])),
+    ?assertMatch({ok, _}, emqtt:publish(C, Topic, Payload2, [{qos, 1}])),
+    After = msg_size_metrics(mqtt50, Config),
+    ?assertEqual(#{message_size_64B => 1,
+                   message_size_256B => 2},
+                 rabbit_msg_size_metrics:changed_buckets(After, Before)),
+    ok = emqtt:disconnect(C),
+    ok.
+
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
@@ -2136,6 +2157,9 @@ dead_letter_metric(Metric, Config, Strategy) ->
     Counters = rpc(Config, rabbit_global_counters, overview, []),
     Map = maps:get([{queue_type, rabbit_classic_queue}, {dead_letter_strategy, Strategy}], Counters),
     maps:get(Metric, Map).
+
+msg_size_metrics(ProtoVer, Config) ->
+    rpc(Config, rabbit_global_counters, overview, [[{protocol, ProtoVer}]]).
 
 assert_nothing_received() ->
     assert_nothing_received(500).

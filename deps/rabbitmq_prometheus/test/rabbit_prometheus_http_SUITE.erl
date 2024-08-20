@@ -488,7 +488,23 @@ global_metrics_present_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_redelivered_total{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_acknowledged_total{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_global_publishers{", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_global_consumers{", [{capture, none}, multiline])).
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_consumers{", [{capture, none}, multiline])),
+
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_64B{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_256B{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_1KiB{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_4KiB{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_16KiB{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_64KiB{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_256KiB{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_1MiB{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_4MiB{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_16MiB{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_64MiB{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_256MiB{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_512MiB{", [{capture, none}, multiline])),
+
+    ok.
 
 global_metrics_single_metric_family_test(Config) ->
     {_Headers, Body} = http_get_with_pal(Config, [], 200),
