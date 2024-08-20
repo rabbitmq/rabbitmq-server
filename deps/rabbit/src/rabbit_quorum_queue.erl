@@ -559,8 +559,8 @@ handle_tick(QName,
                   Infos0 = maps:fold(
                              fun(num_ready_messages_high, V, Acc) ->
                                      [{messages_ready_high, V} | Acc];
-                                (num_ready_messages_low, V, Acc) ->
-                                     [{messages_ready_low, V} | Acc];
+                                (num_ready_messages_normal, V, Acc) ->
+                                     [{messages_ready_normal, V} | Acc];
                                 (num_ready_messages_return, V, Acc) ->
                                      [{messages_ready_returned, V} | Acc];
                                 (_, _, Acc) ->
