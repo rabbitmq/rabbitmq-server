@@ -217,8 +217,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "khepri_mnesia_migration",
     build_file = "@rabbitmq-server//bazel:BUILD.khepri_mnesia_migration",
-    sha256 = "f56d277ca7876371615cef9c5674c78854f31cf9f26ce97fd3f4b5a65573ccc4",
-    version = "0.5.0",
+    sha256 = "c2426e113ca9901180cc141967ef81c0beaba2bf702ed1456360b6ec02280a71",
+    version = "0.6.0",
 )
 
 erlang_package.hex_package(
