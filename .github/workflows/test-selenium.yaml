@@ -54,7 +54,7 @@ jobs:
           https://cdn.jsdelivr.net/hex
 
     - name: Authenticate To Google Cloud
-      uses: google-github-actions/auth@v2.1.4
+      uses: google-github-actions/auth@v2.1.5
       with:
         credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
 
