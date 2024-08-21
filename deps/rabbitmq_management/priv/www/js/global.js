@@ -253,6 +253,9 @@ var HELP = {
     'queue-messages':
       '<p>Message counts.</p><p>Note that "in memory" and "persistent" are not mutually exclusive; persistent messages can be in memory as well as on disc, and transient messages can be paged out if memory is tight. Non-durable queues will consider all messages to be transient.</p>',
 
+    'queue-messages-stream':
+      '<p>Approximate message counts.</p><p>Note that streams store some entries that are not user messages such as offset tracking data which is included in this count. Thus this value will never be completely correct.</p>',
+
     'queue-dead-lettered':
       'Applies to messages dead-lettered with dead-letter-strategy <code>at-least-once</code>.',
 
