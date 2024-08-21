@@ -151,11 +151,13 @@ list_in_mnesia() ->
     mnesia:dirty_all_keys(?MNESIA_TABLE).
 
 list_in_khepri() ->
-    case rabbit_khepri:match(khepri_exchanges_path() ++
-                                 [rabbit_khepri:if_has_data_wildcard()]) of
-        {ok, Map} ->
-            maps:fold(fun(_K, X, Acc) -> [X#exchange.name | Acc] end, [], Map);
-        _ ->
+    try
+        ets:foldr(
+          fun(#exchange{name = Name}, Acc) ->
+                  [Name | Acc]
+          end, [], ?KHEPRI_PROJECTION)
+    catch
+        error:badarg ->
             []
     end.
 
