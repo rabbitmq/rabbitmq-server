@@ -20,7 +20,7 @@ on:
   pull_request:
     paths:
       - 'deps/rabbitmq_management/**'
-      - .github/workflows/test-selenium-for-pull-requests.yaml      
+      - .github/workflows/test-selenium-for-pull-requests.yaml
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
