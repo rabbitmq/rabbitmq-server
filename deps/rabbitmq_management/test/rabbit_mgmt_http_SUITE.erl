@@ -3265,13 +3265,14 @@ vhost_limits_list_test(Config) ->
     lists:map(
         fun(#{vhost := VHost, value := Val}) ->
             Param = [ {atom_to_binary(K, utf8),V} || {K,V} <- maps:to_list(Val) ],
+            ct:pal("Setting limits of virtual host '~ts' to ~tp", [VHost, Param]),
             ok = rabbit_ct_broker_helpers:set_parameter(Config, 0, VHost, <<"vhost-limits">>, <<"limits">>, Param)
         end,
         Expected),
 
-    Expected = http_get(Config, "/vhost-limits", ?OK),
-    Limits1 = http_get(Config, "/vhost-limits/limit_test_vhost_1", ?OK),
-    Limits2 = http_get(Config, "/vhost-limits/limit_test_vhost_2", ?OK),
+    ?assertEqual(lists:usort(Expected), lists:usort(http_get(Config, "/vhost-limits", ?OK))),
+    ?assertEqual(Limits1, http_get(Config, "/vhost-limits/limit_test_vhost_1", ?OK)),
+    ?assertEqual(Limits2, http_get(Config, "/vhost-limits/limit_test_vhost_2", ?OK)),
 
     NoVhostUser = <<"no_vhost_user">>,
     rabbit_ct_broker_helpers:add_user(Config, NoVhostUser),
