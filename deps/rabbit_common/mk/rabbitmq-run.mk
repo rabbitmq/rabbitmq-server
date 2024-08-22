@@ -128,7 +128,7 @@ RABBITMQ_STREAM_DIR="$(call node_stream_dir,$(2))" \
 RABBITMQ_FEATURE_FLAGS_FILE="$(call node_feature_flags_file,$(2))" \
 RABBITMQ_PLUGINS_DIR="$(call node_plugins_dir)" \
 RABBITMQ_PLUGINS_EXPAND_DIR="$(call node_plugins_expand_dir,$(2))" \
-RABBITMQ_SERVER_START_ARGS="-ra wal_sync_method sync $(RABBITMQ_SERVER_START_ARGS)" \
+RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
 RABBITMQ_ENABLED_PLUGINS="$(RABBITMQ_ENABLED_PLUGINS)"
 endef
 
@@ -202,8 +202,7 @@ $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((5552 
 $(if $(RABBITMQ_NODE_PORT),      {tcp_config$(comma) [{port$(comma) $(shell echo "$$((15692 + $(RABBITMQ_NODE_PORT) - 5672))")}]},)
     ]},
   {ra, [
-      {data_dir, "$(RABBITMQ_QUORUM_DIR)"},
-      {wal_sync_method, sync}
+      {data_dir, "$(RABBITMQ_QUORUM_DIR)"}
     ]},
   {osiris, [
       {data_dir, "$(RABBITMQ_STREAM_DIR)"}
@@ -240,8 +239,7 @@ define test_rabbitmq_config_with_tls
         ]}
   ]},
   {ra, [
-      {data_dir, "$(RABBITMQ_QUORUM_DIR)"},
-      {wal_sync_method, sync}
+      {data_dir, "$(RABBITMQ_QUORUM_DIR)"}
     ]},
   {osiris, [
       {data_dir, "$(RABBITMQ_STREAM_DIR)"}
