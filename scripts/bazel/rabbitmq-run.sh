@@ -78,8 +78,7 @@ write_config_file() {
       ${rabbitmq_prometheus_fragment}
     ]},
   {ra, [
-      {data_dir, "${RABBITMQ_QUORUM_DIR}"},
-      {wal_sync_method, sync}
+      {data_dir, "${RABBITMQ_QUORUM_DIR}"}
     ]},
   {osiris, [
       {data_dir, "${RABBITMQ_STREAM_DIR}"}
@@ -195,8 +194,6 @@ fi
 
 RABBITMQ_PLUGINS_DIR=${RABBITMQ_PLUGINS_DIR:=${DEFAULT_PLUGINS_DIR}}
 export RABBITMQ_PLUGINS_DIR
-RABBITMQ_SERVER_START_ARGS="${RABBITMQ_SERVER_START_ARGS:=-ra wal_sync_method sync}"
-export RABBITMQ_SERVER_START_ARGS
 
 # Enable colourful debug logging by default
 # To change this, set RABBITMQ_LOG to info, notice, warning etc.
