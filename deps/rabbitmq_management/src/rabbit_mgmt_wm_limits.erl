@@ -47,13 +47,21 @@ limits(ReqData, Context) ->
         none ->
             User = Context#context.user,
             VisibleVhosts = rabbit_mgmt_util:list_visible_vhosts_names(User),
-            [ [{vhost, VHost}, {value, Value}]
-              || {VHost, Value} <- rabbit_vhost_limit:list(),
-                 lists:member(VHost, VisibleVhosts) ];
+            [
+                #{
+                    vhost => VHost,
+                    value => rabbit_data_coercion:to_map(Value)
+                } || {VHost, Value} <- rabbit_vhost_limit:list(), lists:member(VHost, VisibleVhosts)
+            ];
         VHost when is_binary(VHost) ->
             case rabbit_vhost_limit:list(VHost) of
                 []    -> [];
-                Value -> [[{vhost, VHost}, {value, Value}]]
+                Value -> [
+                    #{
+                        vhost => VHost,
+                        value => rabbit_data_coercion:to_map(Value)
+                    }
+                ]
             end
     end.
 %%--------------------------------------------------------------------
