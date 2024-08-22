@@ -257,7 +257,8 @@ setup(_) ->
     Timeout = application:get_env(rabbit, khepri_default_timeout, 30000),
     ok = application:set_env(
            [{khepri, [{default_timeout, Timeout},
-                      {default_store_id, ?STORE_ID}]}],
+                      {default_store_id, ?STORE_ID},
+                      {default_ra_system, ?RA_SYSTEM}]}],
            [{persistent, true}]),
     RaServerConfig = #{cluster_name => ?RA_CLUSTER_NAME,
                        friendly_name => ?RA_FRIENDLY_NAME},
