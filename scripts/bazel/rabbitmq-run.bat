@@ -81,10 +81,6 @@ set RABBITMQ_PLUGINS_EXPAND_DIR=%NODE_TMPDIR%\plugins
 set RABBITMQ_FEATURE_FLAGS_FILE=%NODE_TMPDIR%\feature_flags
 set RABBITMQ_ENABLED_PLUGINS_FILE=%NODE_TMPDIR%\enabled_plugins
 
-if not defined RABBITMQ_SERVER_START_ARGS (
-    set RABBITMQ_SERVER_START_ARGS=-ra wal_sync_method sync
-)
-
 if not defined RABBITMQ_LOG (
     set RABBITMQ_LOG=debug,+color
 )
@@ -115,8 +111,7 @@ if "%CMD%" == "run-broker" (
         @echo   {rabbitmq_mqtt, []},
         @echo   {rabbitmq_stomp, []},
         @echo   {ra, [
-        @echo     {data_dir, "!RABBITMQ_QUORUM_DIR:\=\\!"},
-        @echo     {wal_sync_method, sync}
+        @echo     {data_dir, "!RABBITMQ_QUORUM_DIR:\=\\!"}
         @echo   ]},
         @echo   {osiris, [
         @echo     {data_dir, "!RABBITMQ_STREAM_DIR:\=\\!"}
