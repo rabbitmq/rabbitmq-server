@@ -46,8 +46,18 @@ log(#{meta := #{mfa := {?MODULE, _, _}}}, _) ->
     ok;
 log(LogEvent, Config) ->
     case rabbit_boot_state:get() of
-        ready -> do_log(LogEvent, Config);
-        _     -> ok
+        ready ->
+            try
+                do_log(LogEvent, Config)
+            catch
+                C:R:S ->
+                    %% don't let logging crash, because then OTP logger
+                    %% removes the logger_exchange handler, which in
+                    %% turn deletes the log exchange and its bindings
+                    erlang:display({?MODULE, crashed, {C, R, S}})
+            end,
+            ok;
+        _ -> ok
     end.
 
 do_log(LogEvent, #{config := #{exchange := Exchange}} = Config) ->
