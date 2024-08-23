@@ -6,8 +6,8 @@
 %%
 
 %% This module tracks received message size distribution as histograms.
-%% (One histogram is represented by a set of seshat counters, one for
-%%  each bucket.)
+%% (One histogram is represented by a set of counters, one for each
+%%  bucket.)
 -module(rabbit_msg_size_metrics).
 
 -export([init/1,
@@ -20,47 +20,58 @@
          changed_buckets/2]).
 
 -define(MSG_SIZE_BUCKETS,
-        [{1, 64, "64B"},
-         {2, 256, "256B"},
-         {3, 1024, "1KiB"},
-         {4, 4 * 1024, "4KiB"},
-         {5, 16 * 1024, "16KiB"},
-         {6, 64 * 1024, "64KiB"},
-         {7, 256 * 1024, "256KiB"},
-         {8, 1024 * 1024, "1MiB"},
-         {9, 4 * 1024 * 1024, "4MiB"},
-         {10, 16 * 1024 * 1024, "16MiB"},
-         {11, 64 * 1024 * 1024, "64MiB"},
-         {12, 256 * 1024 * 1024, "256MiB"},
-         {13, infinity, "512MiB"}]).
+        [{1, 64},
+         {2, 256},
+         {3, 1024},
+         {4, 4 * 1024},
+         {5, 16 * 1024},
+         {6, 64 * 1024},
+         {7, 256 * 1024},
+         {8, 1024 * 1024},
+         {9, 4 * 1024 * 1024},
+         {10, 16 * 1024 * 1024},
+         {11, 64 * 1024 * 1024},
+         {12, 256 * 1024 * 1024},
+         {13, infinity}]).
+-define(MSG_SIZE_SUM_POS, 14).
 
 -type labels() :: [{protocol, atom()}].
--type buckets() :: #{atom() => integer()}.
+-type hist_values() :: #{BucketUpperBound :: integer() => integer(), sum => integer()}.
 
 -spec init(labels()) -> any().
-init(Labels = [{protocol, Protocol}]) ->
-    _ = seshat:new_group(?MODULE),
-    Counters = seshat:new(?MODULE, Labels, message_size_counters()),
+init([{protocol, Protocol}]) ->
+    Size = ?MSG_SIZE_SUM_POS,
+    Counters = counters:new(Size, [write_concurrency]),
     put_counters(Protocol, Counters).
 
--spec overview() -> #{labels() => buckets()}.
+-spec overview() -> #{labels() => #{atom() => hist_values()}}.
 overview() ->
-    seshat:overview(?MODULE).
+    LabelsList = fetch_labels(),
+    maps:from_list([{Labels, #{message_size_bytes => overview(Labels)}} || Labels <- LabelsList]).
 
--spec overview([{protocol, atom()}]) -> buckets().
+-spec overview(labels()) -> hist_values().
 overview(Labels) ->
-    maps:get(Labels, overview(), undefined).
+    {BucketValues, Sum} = values(Labels),
+    BucketMap = maps:from_list(BucketValues),
+    BucketMap#{sum => Sum}.
 
 -spec prometheus_format() -> #{atom() => map()}.
 prometheus_format() ->
-    seshat:format(?MODULE).
+    LabelsList = fetch_labels(),
+    Values = [prometheus_values(Labels) || Labels <- LabelsList],
+
+    #{message_size_bytes => #{type => histogram,
+                              help => "Size of messages received from publishers",
+                              values => Values}}.
 
 -spec update(atom(), integer()) -> any().
 update(Protocol, MessageSize) ->
     BucketPos = find_hist_bucket(?MSG_SIZE_BUCKETS, MessageSize),
-    counters:add(fetch_counters(Protocol), BucketPos, 1).
+    Counters = fetch_counters(Protocol),
+    counters:add(Counters, BucketPos, 1),
+    counters:add(Counters, ?MSG_SIZE_SUM_POS, MessageSize).
 
--spec changed_buckets(buckets(), buckets()) -> buckets().
+-spec changed_buckets(hist_values(), hist_values()) -> hist_values().
 changed_buckets(After, Before) ->
     maps:filtermap(
       fun(Key, ValueAfter) ->
@@ -74,19 +85,33 @@ changed_buckets(After, Before) ->
 %% Helper functions
 %%
 
-message_size_counters() ->
-    [{list_to_atom("message_size_" ++ UpperBoundReadable),
-      BucketPos,
-      counter,
-     "Total number of messages received from publishers with a size =< " ++ UpperBoundReadable}
-     || {BucketPos, _, UpperBoundReadable} <- ?MSG_SIZE_BUCKETS].
-
-find_hist_bucket([{BucketPos, UpperBound, _}|_], MessageSize) when MessageSize =< UpperBound ->
+find_hist_bucket([{BucketPos, UpperBound}|_], MessageSize) when MessageSize =< UpperBound ->
     BucketPos;
-find_hist_bucket([{BucketPos, _Infinity, _}], _) ->
+find_hist_bucket([{BucketPos, _Infinity}], _) ->
     BucketPos;
 find_hist_bucket([_|T], MessageSize) ->
     find_hist_bucket(T, MessageSize).
+
+%% Returned bucket values are count in the range (UpperBound[N-1]-UpperBound[N]]
+values(_Labels = [{protocol, Protocol}]) ->
+    Counters = fetch_counters(Protocol),
+    Sum = counters:get(Counters, ?MSG_SIZE_SUM_POS),
+    BucketValues =
+        [{UpperBound, counters:get(Counters, Pos)}
+         || {Pos, UpperBound} <- ?MSG_SIZE_BUCKETS],
+    {BucketValues, Sum}.
+
+%% Returned bucket values are cumulative counts, ie in the range 0-UpperBound[N],
+%% as defined by Prometheus classic histogram format
+prometheus_values(Labels) ->
+    {BucketValues, Sum} = values(Labels),
+    {CumulatedValues, Count} =
+        lists:mapfoldl(
+          fun({UpperBound, V}, Count0) ->
+                  CumulatedValue = Count0 + V,
+                  {{UpperBound, CumulatedValue}, CumulatedValue}
+          end, 0, BucketValues),
+    {Labels, CumulatedValues, Count, Sum}.
 
 put_counters(Protocol, Counters) ->
     persistent_term:put({?MODULE, Protocol}, Counters).
@@ -94,3 +119,5 @@ put_counters(Protocol, Counters) ->
 fetch_counters(Protocol) ->
     persistent_term:get({?MODULE, Protocol}).
 
+fetch_labels() ->
+    [[{protocol, Protocol}] || {{?MODULE, Protocol}, _} <- persistent_term:get()].

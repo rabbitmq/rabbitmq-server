@@ -3696,7 +3696,7 @@ global_counters(Config) ->
       messages_routed_total := Routed0,
       messages_unroutable_dropped_total := UnroutableDropped0,
       messages_unroutable_returned_total := UnroutableReturned0,
-      message_size_64B := MsgSize64B0} = get_global_counters(Config),
+      message_size_bytes := MsgSizeBytes0} = get_global_counters(Config),
 
     #{messages_delivered_total := CQDelivered0,
       messages_redelivered_total := CQRedelivered0,
@@ -3750,14 +3750,18 @@ global_counters(Config) ->
       messages_routed_total := Routed1,
       messages_unroutable_dropped_total := UnroutableDropped1,
       messages_unroutable_returned_total := UnroutableReturned1,
-      message_size_64B := MsgSize64B} = get_global_counters(Config),
+      message_size_bytes := MsgSizeBytes} = get_global_counters(Config),
     ?assertEqual(Received0 + 2, Received1),
     ?assertEqual(ReceivedConfirm0 + 1, ReceivedConfirm1),
     ?assertEqual(Confirmed0 + 1, Confirmed1),
     ?assertEqual(Routed0 + 2, Routed1),
     ?assertEqual(UnroutableDropped0, UnroutableDropped1),
     ?assertEqual(UnroutableReturned0, UnroutableReturned1),
-    ?assertEqual(MsgSize64B0 + 2, MsgSize64B),
+    %% the 2 byte message body is encapsulated in an #'v1_0.data'{}
+    %% structure, which takes 7 bytes encoded
+    ?assertEqual(#{64 => 2,
+                   sum => (2 * 7)},
+                 rabbit_msg_size_metrics:changed_buckets(MsgSizeBytes, MsgSizeBytes0)),
 
     #{messages_delivered_total := CQDelivered1,
       messages_redelivered_total := CQRedelivered1,

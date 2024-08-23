@@ -61,24 +61,26 @@ end_per_testcase(Testcase, Config) ->
 
 message_size(Config) ->
     Binary2B = <<"12">>,
-    Binary2M  = binary:copy(<<"x">>, 2 * 1024 * 1024),
+    Binary2M  = binary:copy(<<"x">>, 2_000_000),
 
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
 
     Before = get_msg_size_metrics(Config),
 
     [amqp_channel:call(Ch, #'basic.publish'{routing_key = <<"none">>}, #amqp_msg{payload = Payload})
-     || Payload <- [Binary2B, Binary2M, Binary2M]],
+     || Payload <- [Binary2B, Binary2B, Binary2M]],
 
     After = get_msg_size_metrics(Config),
 
-    ?assertEqual(#{message_size_64B => 1, message_size_4MiB => 2},
+    ?assertEqual(#{64 => 2,
+                   4 * 1024 * 1024 => 1,
+                   sum => 2_000_004},
                  rabbit_msg_size_metrics:changed_buckets(After, Before)).
 
 over_max_message_size(Config) ->
-    Binary4M  = binary:copy(<<"x">>, 4 * 1024 * 1024),
+    Binary4M  = binary:copy(<<"x">>, 4_000_000),
 
-    ok = rabbit_ct_broker_helpers:rpc(Config, persistent_term, put, [max_message_size, 4 * 1024 * 1024]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, persistent_term, put, [max_message_size, 3_000_000]),
 
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
 

@@ -2116,8 +2116,9 @@ global_counters(Config) ->
     ?assertMatch({ok, _}, emqtt:publish(C, Topic, Payload2, [{qos, 1}])),
     ?assertMatch({ok, _}, emqtt:publish(C, Topic, Payload2, [{qos, 1}])),
     After = msg_size_metrics(mqtt50, Config),
-    ?assertEqual(#{message_size_64B => 1,
-                   message_size_256B => 2},
+    ?assertEqual(#{64 => 1,
+                   256 => 2,
+                   sum => 410},
                  rabbit_msg_size_metrics:changed_buckets(After, Before)),
     ok = emqtt:disconnect(C),
     ok.
@@ -2159,7 +2160,7 @@ dead_letter_metric(Metric, Config, Strategy) ->
     maps:get(Metric, Map).
 
 msg_size_metrics(ProtoVer, Config) ->
-    rpc(Config, rabbit_global_counters, overview, [[{protocol, ProtoVer}]]).
+    rpc(Config, rabbit_msg_size_metrics, overview, [[{protocol, ProtoVer}]]).
 
 assert_nothing_received() ->
     assert_nothing_received(500).

@@ -38,7 +38,7 @@ collect_mf(_Registry, Callback) ->
                     create_mf(?METRIC_NAME(Name),
                               Help,
                               Type,
-                              maps:to_list(Values))),
+                              ensure_list(Values))),
                   Acc
           end,
           ok,
@@ -48,3 +48,8 @@ collect_mf(_Registry, Callback) ->
 %% ===================================================================
 %% Private functions
 %% ===================================================================
+
+ensure_list(Values) when is_map(Values) ->
+    maps:to_list(Values);
+ensure_list(Values) when is_list(Values) ->
+    Values.
