@@ -14,7 +14,12 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MetadataStoreStatusCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([] = _args, %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit_khepri, :status, [])
+    case :rabbit_misc.rpc_call(node_name, :rabbit_feature_flags, :is_enabled, [:khepri_db]) do
+      true ->
+        :rabbit_misc.rpc_call(node_name, :rabbit_khepri, :status, [])
+      false ->
+         [[{<<"Metadata Store">>, "mnesia"}]]
+    end
   end
 
   use RabbitMQ.CLI.DefaultOutput
