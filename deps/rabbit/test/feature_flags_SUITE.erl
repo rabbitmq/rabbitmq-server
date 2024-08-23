@@ -122,9 +122,7 @@ end_per_suite(Config) ->
 
 init_per_group(registry, Config) ->
     logger:set_primary_config(level, debug),
-    rabbit_ct_helpers:run_steps(
-      Config,
-      [fun rabbit_ct_helpers:redirect_logger_to_ct_logs/1]);
+    rabbit_ct_helpers:run_steps(Config, []);
 init_per_group(feature_flags_v2, Config) ->
     %% `feature_flags_v2' is now required and won't work in mixed-version
     %% clusters if the other version doesn't support it.
