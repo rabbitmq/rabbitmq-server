@@ -275,17 +275,26 @@ short_alias_of(<<"quorum">>) ->
     <<"quorum">>;
 short_alias_of(rabbit_quorum_queue) ->
     <<"quorum">>;
+%% AMQP 1.0 management client
+short_alias_of({utf8, <<"quorum">>}) ->
+    <<"quorum">>;
 short_alias_of(<<"rabbit_classic_queue">>) ->
     <<"classic">>;
 short_alias_of(<<"classic">>) ->
     <<"classic">>;
 short_alias_of(rabbit_classic_queue) ->
     <<"classic">>;
+%% AMQP 1.0 management client
+short_alias_of({utf8, <<"classic">>}) ->
+    <<"classic">>;
 short_alias_of(<<"rabbit_stream_queue">>) ->
     <<"stream">>;
 short_alias_of(<<"stream">>) ->
     <<"stream">>;
 short_alias_of(rabbit_stream_queue) ->
+    <<"stream">>;
+%% AMQP 1.0 management client
+short_alias_of({utf8, <<"stream">>}) ->
     <<"stream">>;
 short_alias_of(_Other) ->
     undefined.
