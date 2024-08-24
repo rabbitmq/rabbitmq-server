@@ -1152,21 +1152,24 @@ queues_test(Config) ->
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
-                   arguments   => #{}},
+                   arguments   => #{'x-queue-type' => <<"classic">>}
+                 },
                  #{name        => <<"foo">>,
                    vhost       => <<"downvhost">>,
                    state       => <<"stopped">>,
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
-                   arguments   => #{}}], DownQueues),
+                   arguments   => #{'x-queue-type' => <<"classic">>}
+                 }], DownQueues),
     assert_item(#{name        => <<"foo">>,
                   vhost       => <<"downvhost">>,
                   state       => <<"stopped">>,
                   durable     => true,
                   auto_delete => false,
                   exclusive   => false,
-                  arguments   => #{}}, DownQueue),
+                  arguments   => #{'x-queue-type' => <<"classic">>}
+                }, DownQueue),
 
     http_put(Config, "/queues/badvhost/bar", Good, ?NOT_FOUND),
     http_put(Config, "/queues/%2F/bar",
@@ -1188,21 +1191,21 @@ queues_test(Config) ->
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
-                   arguments   => #{},
+                   arguments   => #{'x-queue-type' => <<"classic">>},
                    storage_version => 2},
                  #{name        => <<"foo">>,
                    vhost       => <<"/">>,
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
-                   arguments   => #{},
+                   arguments   => #{'x-queue-type' => <<"classic">>},
                    storage_version => 2}], Queues),
     assert_item(#{name        => <<"foo">>,
                   vhost       => <<"/">>,
                   durable     => true,
                   auto_delete => false,
                   exclusive   => false,
-                  arguments   => #{},
+                  arguments   => #{'x-queue-type' => <<"classic">>},
                   storage_version => 2}, Queue),
 
     http_delete(Config, "/queues/%2F/foo", {group, '2xx'}),
@@ -2242,7 +2245,8 @@ exclusive_queue_test(Config) ->
                             durable     => false,
                             auto_delete => false,
                             exclusive   => true,
-                            arguments   => #{}}, Queue),
+                            arguments   => #{'x-queue-type' => <<"classic">>}
+                           }, Queue),
               true
       end),
     amqp_channel:close(Ch),
@@ -2809,7 +2813,7 @@ columns_test(Config) ->
     http_delete(Config, Path, [{group, '2xx'}, 404]),
     http_put(Config, Path, [{arguments, [{<<"x-message-ttl">>, TTL}]}],
              {group, '2xx'}),
-    Item = #{arguments => #{'x-message-ttl' => TTL}, name => <<"columns.test">>},
+    Item = #{arguments => #{'x-message-ttl' => TTL, 'x-queue-type' => <<"classic">>}, name => <<"columns.test">>},
 
     ?AWAIT(
        begin
