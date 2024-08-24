@@ -742,6 +742,10 @@ augment_declare_args(VHost, Durable, Exclusive, AutoDelete, Args0) ->
             end
     end.
 
+-spec update_args_table_with_queue_type(
+    rabbit_queue_type:queue_type() | binary(),
+    boolean(), boolean(), boolean(),
+    rabbit_framing:amqp_table()) -> rabbit_framing:amqp_table().
 update_args_table_with_queue_type(DefaultQueueType, Durable, Exclusive, AutoDelete, Args) ->
     Type = rabbit_queue_type:discover(DefaultQueueType),
     IsPermitted = is_queue_args_combination_permitted(
