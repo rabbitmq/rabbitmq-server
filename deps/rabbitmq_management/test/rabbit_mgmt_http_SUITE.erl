@@ -1116,41 +1116,18 @@ queues_test(Config) ->
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
-<<<<<<< HEAD
-                   arguments   => #{},
-                   storage_version => 1},
-=======
                    arguments   => #{'x-queue-type' => <<"classic">>},
-                   storage_version => 2},
->>>>>>> bd2ea280cc (Update HTTP API tests)
+                   storage_version => 1},
                  #{name        => <<"foo">>,
                    vhost       => <<"/">>,
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
-<<<<<<< HEAD
-                   arguments   => #{},
-                   storage_version => 1}], Queues),
-=======
                    arguments   => #{'x-queue-type' => <<"classic">>},
-                   storage_version => 2}], Queues),
->>>>>>> bd2ea280cc (Update HTTP API tests)
+                   storage_version => 1}], Queues),
     assert_item(#{name        => <<"foo">>,
-                  vhost       => <<"/">>,
-                  durable     => true,
-                  auto_delete => false,
-                  exclusive   => false,
-<<<<<<< HEAD
-                  arguments   => #{},
-                  storage_version => 1}, Queue),
-=======
                   arguments   => #{'x-queue-type' => <<"classic">>},
-                  storage_version => 2}, Queue),
->>>>>>> bd2ea280cc (Update HTTP API tests)
-
-    http_delete(Config, "/queues/%2F/foo", {group, '2xx'}),
-    http_delete(Config, "/queues/%2F/baz", {group, '2xx'}),
-    http_delete(Config, "/queues/%2F/foo", ?NOT_FOUND),
+                  storage_version => 1}, Queue),
     http_get(Config, "/queues/badvhost", ?NOT_FOUND),
 
     http_delete(Config, "/queues/downvhost/foo", {group, '2xx'}),
@@ -2166,7 +2143,6 @@ exclusive_queue_test(Config) ->
     {ok, Ch} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{ queue = QName } =
     amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
-<<<<<<< HEAD
     %% Sadly we need to sleep to let the stats update
     timer:sleep(1500),
     Path = "/queues/vh.tests.exclusive_queue_test/" ++ rabbit_http_util:quote_plus(QName),
@@ -2176,22 +2152,8 @@ exclusive_queue_test(Config) ->
                   durable     => false,
                   auto_delete => false,
                   exclusive   => true,
-                  arguments   => #{}}, Queue),
-=======
-    Path = "/queues/%2F/" ++ rabbit_http_util:quote_plus(QName),
-    await_condition(
-      fun () ->
-              Queue = http_get(Config, Path),
-              assert_item(#{name        => QName,
-                            vhost       => <<"/">>,
-                            durable     => false,
-                            auto_delete => false,
-                            exclusive   => true,
-                            arguments   => #{'x-queue-type' => <<"classic">>}
-                           }, Queue),
-              true
-      end),
->>>>>>> bd2ea280cc (Update HTTP API tests)
+                  arguments   => #{'x-queue-type' => <<"classic">>}
+                }, Queue),
     amqp_channel:close(Ch),
     close_connection(Conn),
 
@@ -2701,21 +2663,10 @@ columns_test(Config) ->
     http_delete(Config, Path, [{group, '2xx'}, 404]),
     http_put(Config, Path, [{arguments, [{<<"x-message-ttl">>, TTL}]}],
              {group, '2xx'}),
-<<<<<<< HEAD
-    Item = #{arguments => #{'x-message-ttl' => TTL}, name => <<"columns.test">>},
+    Item = #{arguments => #{'x-message-ttl' => TTL, 'x-queue-type' => <<"classic">>}, name => <<"columns.test">>},
     timer:sleep(2000),
     [Item] = http_get(Config, "/queues?columns=arguments.x-message-ttl,name", ?OK),
     Item = http_get(Config, "/queues/vh.tests.columns_test/columns.test?columns=arguments.x-message-ttl,name", ?OK),
-=======
-    Item = #{arguments => #{'x-message-ttl' => TTL, 'x-queue-type' => <<"classic">>}, name => <<"columns.test">>},
-
-    ?AWAIT(
-       begin
-           [Item] = http_get(Config, "/queues?columns=arguments.x-message-ttl,name", ?OK),
-           Item = http_get(Config, "/queues/%2F/columns.test?columns=arguments.x-message-ttl,name", ?OK),
-           true
-       end),
->>>>>>> bd2ea280cc (Update HTTP API tests)
     http_delete(Config, Path, {group, '2xx'}),
     passed.
 
