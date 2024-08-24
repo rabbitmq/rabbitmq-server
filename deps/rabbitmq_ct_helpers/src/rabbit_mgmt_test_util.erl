@@ -267,7 +267,10 @@ atomize_map_keys(I) ->
 
 %% @todo There wasn't a specific order before; now there is; maybe we shouldn't have one?
 assert_list(Exp, Act) ->
-    case length(Exp) == length(Act) of
+    %% allow actual map to include keys we do not assert on
+    %% but not the other way around: we may want to only assert on a subset
+    %% of keys
+    case length(Act) >= length(Exp) of
         true  -> ok;
         false -> error({expected, Exp, actual, Act})
     end,
