@@ -144,6 +144,7 @@ all_tests() ->
      server_system_recover,
      vhost_with_quorum_queue_is_deleted,
      vhost_with_default_queue_type_declares_quorum_queue,
+     node_wide_default_queue_type_declares_quorum_queue,
      delete_immediately_by_resource,
      consume_redelivery_count,
      subscribe_redelivery_count,
@@ -604,7 +605,7 @@ start_queue_concurrent(Config) ->
 quorum_cluster_size_3(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
-            {skip, "quorum_cluster_size_3 tests isn't mixed version reliable"};
+            {skip, "quorum_cluster_size_3 test isn't mixed version reliable"};
         false ->
             quorum_cluster_size_x(Config, 3, 3)
     end.
@@ -827,6 +828,40 @@ vhost_with_default_queue_type_declares_quorum_queue(Config) ->
                                                         arguments = []})),
     assert_queue_type(Node, VHost, QNameAd, rabbit_classic_queue),
     amqp_connection:close(Conn),
+    ok.
+
+node_wide_default_queue_type_declares_quorum_queue(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+    true ->
+        {skip, "node_wide_default_queue_type_declares_quorum_queue test isn't mixed version compatible"};
+    false ->
+        node_wide_default_queue_type_declares_quorum_queue0(Config)
+    end.
+
+node_wide_default_queue_type_declares_quorum_queue0(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    rpc:call(Node, application, set_env, [rabbit, default_queue_type, rabbit_quorum_queue]),
+    VHost = atom_to_binary(?FUNCTION_NAME, utf8),
+    QName = atom_to_binary(?FUNCTION_NAME, utf8),
+    User = ?config(rmq_username, Config),
+
+    AddVhostArgs = [VHost, #{}, User],
+    ok = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_vhost, add,
+        AddVhostArgs),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Node, VHost),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    ?assertEqual({'queue.declare_ok', QName, 0, 0}, declare(Ch, QName, [])),
+    assert_queue_type(Node, VHost, QName, rabbit_quorum_queue),
+    ?assertEqual({'queue.declare_ok', QName, 0, 0}, declare(Ch, QName, [])),
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+        declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({'queue.declare_ok', QName, 0, 0}, declare_passive(Ch, QName, [])),
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+        declare_passive(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    amqp_connection:close(Conn),
+
+    rpc:call(Node, application, set_env, [rabbit, default_queue_type, rabbit_classic_queue]),
     ok.
 
 restart_all_types(Config) ->
@@ -1236,7 +1271,7 @@ shrink_all(Config) ->
 rebalance(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
-            {skip, "rebalance tests isn't mixed version compatible"};
+            {skip, "rebalance test isn't mixed version compatible"};
         false ->
             rebalance0(Config)
     end.
@@ -1704,7 +1739,7 @@ leadership_takeover(Config) ->
 metrics_cleanup_on_leadership_takeover(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
-            {skip, "metrics_cleanup_on_leadership_takeover tests isn't mixed version compatible"};
+            {skip, "metrics_cleanup_on_leadership_takeover test isn't mixed version compatible"};
         false ->
             metrics_cleanup_on_leadership_takeover0(Config)
     end.

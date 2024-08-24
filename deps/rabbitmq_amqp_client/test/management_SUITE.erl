@@ -117,7 +117,7 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
-    %% Assert that every testcase cleaned up.
+    %% Ensure that all queues were cleaned up
     eventually(?_assertEqual([], rpc(Config, rabbit_amqqueue, list, []))),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -268,12 +268,12 @@ all_management_operations(Config) ->
 queue_defaults(Config) ->
     Init = {_, LinkPair} = init(Config),
     QName = atom_to_binary(?FUNCTION_NAME),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
-    [Q] = rpc(Config, rabbit_amqqueue, list, []),
+    {ok, Q} = rpc(Config, rabbit_amqqueue, lookup, [QName, <<"/">>]),
     ?assert(rpc(Config, amqqueue, is_durable, [Q])),
     ?assertNot(rpc(Config, amqqueue, is_exclusive, [Q])),
     ?assertNot(rpc(Config, amqqueue, is_auto_delete, [Q])),
-    ?assertEqual([], rpc(Config, amqqueue, get_arguments, [Q])),
 
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ok = cleanup(Init).
@@ -448,10 +448,11 @@ declare_queue_default_queue_type(Config) ->
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
     {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session, <<"my link pair">>),
 
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ?assertMatch({ok, #{type := <<"quorum">>}},
                  rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{})),
 
-    {ok, #{}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),

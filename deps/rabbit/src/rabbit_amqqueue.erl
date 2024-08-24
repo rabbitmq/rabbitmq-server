@@ -733,31 +733,38 @@ augment_declare_args(VHost, Durable, Exclusive, AutoDelete, Args0) ->
         #{default_queue_type := DefaultQueueType}
           when is_binary(DefaultQueueType) andalso
                not HasQTypeArg ->
-            Type = rabbit_queue_type:discover(DefaultQueueType),
-            IsPermitted = is_queue_args_combination_permitted(
-                            Durable, Exclusive),
-            IsCompatible = rabbit_queue_type:is_compatible(
-                             Type, Durable, Exclusive, AutoDelete),
-            case IsPermitted andalso IsCompatible of
-                true ->
-                    %% patch up declare arguments with x-queue-type if there
-                    %% is a vhost default set the queue is durable and not exclusive
-                    %% and there is no queue type argument
-                    %% present
-                    rabbit_misc:set_table_value(Args0,
-                                                <<"x-queue-type">>,
-                                                longstr,
-                                                DefaultQueueType);
-                false ->
-                    %% if the properties are incompatible with the declared
-                    %% DQT, use the fall back type
-                    rabbit_misc:set_table_value(Args0,
-                                                <<"x-queue-type">>,
-                                                longstr,
-                                                rabbit_queue_type:short_alias_of(rabbit_queue_type:fallback()))
-            end;
+            update_args_table_with_queue_type(DefaultQueueType, Durable, Exclusive, AutoDelete, Args0);
         _ ->
-            Args0
+            case HasQTypeArg of
+                true -> Args0;
+                false ->
+                    update_args_table_with_queue_type(rabbit_queue_type:short_alias_of(rabbit_queue_type:default()), Durable, Exclusive, AutoDelete, Args0)
+            end
+    end.
+
+update_args_table_with_queue_type(DefaultQueueType, Durable, Exclusive, AutoDelete, Args) ->
+    Type = rabbit_queue_type:discover(DefaultQueueType),
+    IsPermitted = is_queue_args_combination_permitted(
+        Durable, Exclusive),
+    IsCompatible = rabbit_queue_type:is_compatible(
+        Type, Durable, Exclusive, AutoDelete),
+    case IsPermitted andalso IsCompatible of
+        true ->
+            %% patch up declare arguments with x-queue-type if there
+            %% is a vhost default set the queue is durable and not exclusive
+            %% and there is no queue type argument
+            %% present
+            rabbit_misc:set_table_value(Args,
+                <<"x-queue-type">>,
+                longstr,
+                DefaultQueueType);
+        false ->
+            %% if the properties are incompatible with the declared
+            %% DQT, use the fall back type
+            rabbit_misc:set_table_value(Args,
+                <<"x-queue-type">>,
+                longstr,
+                rabbit_queue_type:short_alias_of(rabbit_queue_type:fallback()))
     end.
 
 -spec check_exclusive_access(amqqueue:amqqueue(), pid()) ->
