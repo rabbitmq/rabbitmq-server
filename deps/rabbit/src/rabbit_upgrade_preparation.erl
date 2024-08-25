@@ -109,6 +109,6 @@ list_with_minimum_quorum_for_cli() ->
     [#{
            <<"readable_name">> => C,
            <<"name">> => C,
-           <<"virtual_host">> => "-",
+           <<"virtual_host">> => <<"(not applicable)">>,
            <<"type">> => process
       } || C <- endangered_critical_components()].
