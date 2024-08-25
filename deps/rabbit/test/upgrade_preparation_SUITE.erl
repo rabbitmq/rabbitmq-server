@@ -14,20 +14,16 @@
 
 all() ->
     [
-      {group, quorum_queue},
-      {group, stream}
+      {group, clustered}
     ].
 
 groups() ->
     [
-     {quorum_queue, [], [
-         await_quorum_plus_one_qq
-     ]},
-     {stream, [], [
-         await_quorum_plus_one_stream
-     ]},
-     {stream_coordinator, [], [
-         await_quorum_plus_one_stream_coordinator
+     {clustered, [], [
+         await_quorum_plus_one_qq,
+         await_quorum_plus_one_stream,
+         await_quorum_plus_one_stream_coordinator,
+         await_quorum_plus_one_rabbitmq_metadata
      ]}
     ].
 
@@ -44,21 +40,14 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(Group, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            %% in a 3.8/3.9 mixed cluster, ra will not cluster across versions,
-            %% so quorum plus one will not be achieved
-            {skip, "not mixed versions compatible"};
-        _ ->
-            Config1 = rabbit_ct_helpers:set_config(Config,
-                                                   [
-                                                    {rmq_nodes_count, 3},
-                                                    {rmq_nodename_suffix, Group}
-                                                   ]),
-            rabbit_ct_helpers:run_steps(Config1,
-                                        rabbit_ct_broker_helpers:setup_steps() ++
-                                            rabbit_ct_client_helpers:setup_steps())
-    end.
+    Config1 = rabbit_ct_helpers:set_config(Config,
+                                           [
+                                            {rmq_nodes_count, 3},
+                                            {rmq_nodename_suffix, Group}
+                                           ]),
+    rabbit_ct_helpers:run_steps(Config1,
+                                rabbit_ct_broker_helpers:setup_steps() ++
+                                rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_steps(Config,
@@ -66,9 +55,15 @@ end_per_group(_Group, Config) ->
               rabbit_ct_broker_helpers:teardown_steps()).
 
 
-init_per_testcase(TestCase, Config) ->
-    rabbit_ct_helpers:testcase_started(Config, TestCase),
-    Config.
+init_per_testcase(Testcase, Config) when Testcase == await_quorum_plus_one_rabbitmq_metadata ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "not mixed versions compatible"};
+        _ ->
+            rabbit_ct_helpers:testcase_started(Config, Testcase)
+    end;
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(TestCase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, TestCase).
@@ -120,11 +115,23 @@ await_quorum_plus_one_stream_coordinator(Config) ->
     %% no queues/streams beyond this point
 
     ok = rabbit_ct_broker_helpers:stop_node(Config, B),
-    %% this should fail because the corrdinator has only 2 running nodes
+    %% this should fail because the coordinator has only 2 running nodes
     ?assertNot(await_quorum_plus_one(Config, 0)),
 
     ok = rabbit_ct_broker_helpers:start_node(Config, B),
     ?assert(await_quorum_plus_one(Config, 0)).
+
+await_quorum_plus_one_rabbitmq_metadata(Config) ->
+    Nodes = [A, B, _C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, Nodes, khepri_db),
+    ?assert(await_quorum_plus_one(Config, A)),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, B),
+    %% this should fail because rabbitmq_metadata has only 2 running nodes
+    ?assertNot(await_quorum_plus_one(Config, A)),
+
+    ok = rabbit_ct_broker_helpers:start_node(Config, B),
+    ?assert(await_quorum_plus_one(Config, A)).
 
 %%
 %% Implementation
