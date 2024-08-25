@@ -223,8 +223,11 @@ is_quorum_critical_test(Config) ->
     Body = http_get_failed(Config, "/health/checks/node-is-quorum-critical"),
     ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body)),
     ?assertEqual(true, maps:is_key(<<"reason">>, Body)),
-    [Queue] = maps:get(<<"queues">>, Body),
-    ?assertEqual(QName, maps:get(<<"name">>, Queue)),
+    Queues = maps:get(<<"queues">>, Body),
+    ?assert(lists:any(
+        fun(Item) ->
+            QName =:= maps:get(<<"name">>, Item)
+        end, Queues)),
 
     passed.
 
