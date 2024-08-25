@@ -55,9 +55,15 @@ end_per_group(_Group, Config) ->
               rabbit_ct_broker_helpers:teardown_steps()).
 
 
-init_per_testcase(TestCase, Config) ->
-    rabbit_ct_helpers:testcase_started(Config, TestCase),
-    Config.
+init_per_testcase(Testcase, Config) when Testcase == await_quorum_plus_one_rabbitmq_metadata ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "not mixed versions compatible"};
+        _ ->
+            rabbit_ct_helpers:testcase_started(Config, Testcase)
+    end;
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(TestCase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, TestCase).
