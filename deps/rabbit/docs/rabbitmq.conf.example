@@ -404,23 +404,6 @@
 
 
 
-## Fraction of the high watermark limit at which queues start to
-## page message out to disc in order to free up memory.
-## For example, when vm_memory_high_watermark is set to 0.4 and this value is set to 0.5,
-## paging can begin as early as when 20% of total available RAM is used by the node.
-##
-## Values greater than 1.0 can be dangerous and should be used carefully.
-##
-## One alternative to this is to use durable queues and publish messages
-## as persistent (delivery mode = 2). With this combination queues will
-## move messages to disk much more rapidly.
-##
-## Another alternative is to configure queues to page all messages (both
-## persistent and transient) to disk as quickly
-## as possible, see https://www.rabbitmq.com/docs/lazy-queues.
-##
-# vm_memory_high_watermark_paging_ratio = 0.5
-
 ## Selects Erlang VM memory consumption calculation strategy. Can be `allocated`, `rss` or `legacy` (aliased as `erlang`),
 ## Introduced in 3.6.11. `rss` is the default as of 3.6.12.
 ## See https://github.com/rabbitmq/rabbitmq-server/issues/1223 and rabbitmq/rabbitmq-common#224 for background.
