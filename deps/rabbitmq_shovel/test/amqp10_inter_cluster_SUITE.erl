@@ -72,25 +72,13 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 old_to_new_on_old(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "TODO: Unskip when lower version is >= 3.13.7 "
-             "because AMQP 1.0 client must use SASL when connecting to 4.0"};
-        false ->
-            ok = shovel(?OLD, ?NEW, ?OLD, Config)
-    end.
+    ok = shovel(?OLD, ?NEW, ?OLD, Config).
 
 old_to_new_on_new(Config) ->
     ok = shovel(?OLD, ?NEW, ?NEW, Config).
 
 new_to_old_on_old(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip, "TODO: Unskip when lower version is >= 3.13.7 "
-             "because AMQP 1.0 client must use SASL when connecting to 4.0"};
-        false ->
-            ok = shovel(?NEW, ?OLD, ?OLD, Config)
-    end.
+    ok = shovel(?NEW, ?OLD, ?OLD, Config).
 
 new_to_old_on_new(Config) ->
     ok = shovel(?NEW, ?OLD, ?NEW, Config).
