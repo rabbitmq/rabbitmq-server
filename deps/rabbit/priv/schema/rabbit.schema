@@ -1149,6 +1149,8 @@ fun(Conf) ->
     end
 end}.
 
+%% DEPRECATED. Not used since RabbitMQ 4.0
+%%
 %% Fraction of the high watermark limit at which queues start to
 %% page message out to disc in order to free up memory.
 %%
