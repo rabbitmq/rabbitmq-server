@@ -140,6 +140,7 @@ start_link(Q, Marker) ->
     gen_server2:start_link(?MODULE, {Q, Marker}, []).
 
 init({Q, Marker}) ->
+    process_flag(min_bin_vheap_size, 1000000),
     case is_process_alive(Marker) of
         true  ->
             %% start
