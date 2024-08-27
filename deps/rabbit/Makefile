@@ -65,7 +65,6 @@ define PROJECT_ENV
 	                          {linger,        {true, 0}},
 	                          {exit_on_close, false}
 	                         ]},
-	    {halt_on_upgrade_failure, true},
 	    {ssl_apps, [asn1, crypto, public_key, ssl]},
 	    %% classic queue storage implementation version
 	    {classic_queue_default_version, 2},
