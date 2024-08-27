@@ -1162,6 +1162,8 @@ end}.
           "rabbit.vm_memory_high_watermark_paging_ratio",
           [{datatype, float}, {validators, ["less_than_1"]}]}.
 
+%% DEPRECATED. Not used since RabbitMQ 4.0
+%%
 %% Interval (in milliseconds) at which we perform the check of the memory
 %% levels against the watermarks.
 %%

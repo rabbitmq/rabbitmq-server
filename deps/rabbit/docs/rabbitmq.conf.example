@@ -409,11 +409,6 @@
 ## See https://github.com/rabbitmq/rabbitmq-server/issues/1223 and rabbitmq/rabbitmq-common#224 for background.
 # vm_memory_calculation_strategy = rss
 
-## Interval (in milliseconds) at which we perform the check of the memory
-## levels against the watermarks.
-##
-# memory_monitor_interval = 2500
-
 ## The total memory available can be calculated from the OS resources
 ## - default option - or provided as a configuration parameter.
 # total_memory_available_override_value = 2GB

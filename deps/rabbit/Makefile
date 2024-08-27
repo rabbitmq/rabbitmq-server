@@ -16,7 +16,6 @@ define PROJECT_ENV
 	    {ssl_options, []},
 	    {vm_memory_high_watermark, 0.4},
 	    {vm_memory_calculation_strategy, rss},
-	    {memory_monitor_interval, 2500},
 	    {disk_free_limit, 50000000}, %% 50MB
 	    {backing_queue_module, rabbit_variable_queue},
 	    %% 0 ("no limit") would make a better default, but that
