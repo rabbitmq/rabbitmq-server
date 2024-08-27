@@ -1673,6 +1673,11 @@ delete_with(QueueName, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive) whe
         {error, {exit, _, _}} ->
             %% delete()/delegate:invoke might return {error, {exit, _, _}}
             {ok, 0};
+        {error, timeout} ->
+            rabbit_misc:protocol_error(
+              internal_error,
+              "The operation to delete the queue from the metadata store "
+              "timed out", []);
         {ok, Count} ->
             {ok, Count};
         {protocol_error, Type, Reason, ReasonArgs} ->
@@ -1781,7 +1786,10 @@ notify_sent_queue_down(QPid) ->
 resume(QPid, ChPid) -> delegate:invoke_no_result(QPid, {gen_server2, cast,
                                                         [{resume, ChPid}]}).
 
--spec internal_delete(amqqueue:amqqueue(), rabbit_types:username()) -> 'ok'.
+-spec internal_delete(Queue, ActingUser) -> Ret when
+      Queue :: amqqueue:amqqueue(),
+      ActingUser :: rabbit_types:username(),
+      Ret :: ok | {error, timeout}.
 
 internal_delete(Queue, ActingUser) ->
     internal_delete(Queue, ActingUser, normal).
@@ -1791,6 +1799,8 @@ internal_delete(Queue, ActingUser, Reason) ->
     case rabbit_db_queue:delete(QueueName, Reason) of
         ok ->
             ok;
+        {error, timeout} = Err ->
+            Err;
         Deletions ->
             _ = rabbit_binding:process_deletions(Deletions),
             rabbit_binding:notify_deletions(Deletions, ?INTERNAL_USER),

@@ -467,7 +467,7 @@ assert_benign({error, not_found}, _) -> ok;
 assert_benign({error, {absent, Q, _}}, ActingUser) ->
     %% Removing the database entries here is safe. If/when the down node
     %% restarts, it will clear out the on-disk storage of the queue.
-    rabbit_amqqueue:internal_delete(Q, ActingUser).
+    ok = rabbit_amqqueue:internal_delete(Q, ActingUser).
 
 -spec exists(vhost:name()) -> boolean().
 

@@ -809,10 +809,16 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                     ok = force_delete_queue(Servers)
             end,
             notify_decorators(QName, shutdown),
-            ok = delete_queue_data(Q, ActingUser),
-            _ = erpc:call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName],
-                          ?RPC_TIMEOUT),
-            {ok, ReadyMsgs};
+            case delete_queue_data(Q, ActingUser) of
+                ok ->
+                    _ = erpc:call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName],
+                                  ?RPC_TIMEOUT),
+                    {ok, ReadyMsgs};
+                {error, timeout} ->
+                    {protocol_error, internal_error,
+                     "The operation to delete queue ~ts from the metadata "
+                     "store timed out", [rabbit_misc:rs(QName)]}
+            end;
         {error, {no_more_servers_to_try, Errs}} ->
             case lists:all(fun({{error, noproc}, _}) -> true;
                               (_) -> false
@@ -820,8 +826,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                 true ->
                     %% If all ra nodes were already down, the delete
                     %% has succeed
-                    delete_queue_data(Q, ActingUser),
-                    {ok, ReadyMsgs};
+                    ok;
                 false ->
                     %% attempt forced deletion of all servers
                     rabbit_log:warning(
@@ -830,9 +835,15 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                        " Attempting force delete.",
                       [rabbit_misc:rs(QName), Errs]),
                     ok = force_delete_queue(Servers),
-                    notify_decorators(QName, shutdown),
-                    delete_queue_data(Q, ActingUser),
-                    {ok, ReadyMsgs}
+                    notify_decorators(QName, shutdown)
+            end,
+            case delete_queue_data(Q, ActingUser) of
+                ok ->
+                    {ok, ReadyMsgs};
+                {error, timeout} ->
+                    {protocol_error, internal_error,
+                     "The operation to delete queue ~ts from the metadata "
+                     "store timed out", [rabbit_misc:rs(QName)]}
             end
     end.
 
@@ -850,9 +861,13 @@ force_delete_queue(Servers) ->
      end || S <- Servers],
     ok.
 
+-spec delete_queue_data(Queue, ActingUser) -> Ret when
+      Queue :: amqqueue:amqqueue(),
+      ActingUser :: rabbit_types:username(),
+      Ret :: ok | {error, timeout}.
+
 delete_queue_data(Queue, ActingUser) ->
-    _ = rabbit_amqqueue:internal_delete(Queue, ActingUser),
-    ok.
+    rabbit_amqqueue:internal_delete(Queue, ActingUser).
 
 
 delete_immediately(Queue) ->
