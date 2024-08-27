@@ -219,7 +219,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
         {ok, Reply} ->
             Reply;
         Error ->
-            {protocol_error, internal_error, "Cannot delete queue '~ts' on node '~ts': ~255p ",
+            {protocol_error, internal_error, "Cannot delete ~ts on node '~ts': ~255p ",
              [rabbit_misc:rs(amqqueue:get_name(Q)), node(), Error]}
     end.
 
