@@ -36,12 +36,20 @@
 %% 32 for quorum queues
 %% 256 for streams
 %% 400 for classic queues
+%% Note however that rabbit_channel can easily overshoot quorum queues' soft limit by 300 due to
+%% higher credit_flow_default_credit setting.
 %% If link target is a queue (rather than an exchange), we could use one of these depending
 %% on target queue type. For the time being just use a static value that's something in between.
 %% In future, we could dynamically grow (or shrink) the link credit we grant depending on how fast
 %% target queue(s) actually confirm messages: see paper "Credit-Based Flow Control for ATM Networks"
 %% from 1995, section 4.2 "Static vs. adaptive credit control" for pros and cons.
--define(DEFAULT_MAX_LINK_CREDIT, 128).
+%% We choose a default of 170 because 170 x 1.5 = 255 which is still below DEFAULT_MAX_QUEUE_CREDIT of 256.
+%% We use "x 1.5" in this calculation because we grant 170 new credit half way through leading to maximum
+%% 85 + 170 = 255 unconfirmed in-flight messages to the target queue.
+%% By staying below DEFAULT_MAX_QUEUE_CREDIT, we avoid situations where a single client is able to enqueue
+%% faster to a quorum queue than to consume from it. (Remember that a quorum queue fsyncs each credit top
+%% up and batch of enqueues.)
+-define(DEFAULT_MAX_LINK_CREDIT, 170).
 %% Initial and maximum link credit that we grant to a sending queue.
 %% Only when we sent sufficient messages to the writer proc, we will again grant
 %% credits to the sending queue. We have this limit in place to ensure that our
