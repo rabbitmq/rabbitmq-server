@@ -2558,6 +2558,7 @@ end}.
 %% Backing queue version
 %%
 
+%% DEPRECATED. Not used since RabbitMQ 4.0
 {mapping, "classic_queue.default_version", "rabbit.classic_queue_default_version", [
   {datatype, integer},
   {validators, ["non_zero_positive_integer"]}
