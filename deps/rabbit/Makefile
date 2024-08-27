@@ -66,8 +66,6 @@ define PROJECT_ENV
 	                          {exit_on_close, false}
 	                         ]},
 	    {ssl_apps, [asn1, crypto, public_key, ssl]},
-	    %% classic queue storage implementation version
-	    {classic_queue_default_version, 2},
 	    %% see rabbitmq-server#227 and related tickets.
 	    %% msg_store_credit_disc_bound only takes effect when
 	    %% messages are persisted to the message store. If messages
