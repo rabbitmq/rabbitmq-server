@@ -130,22 +130,7 @@
 {translation,
  "rabbitmq_auth_backend_oauth2.key_config.signing_keys",
  fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.signing_keys", Conf),
-    TryReadingFileFun =
-        fun(Path) ->
-            case file:read_file(Path) of
-                {ok, Bin} ->
-                    string:trim(Bin, trailing, "\n");
-                _ ->
-                    %% this throws and makes Cuttlefish treak the key as invalid
-                    cuttlefish:invalid("file does not exist or cannot be read by the node")
-            end
-        end,
-    SigningKeys =
-        lists:map(fun({Id, Path}) ->
-                    {list_to_binary(lists:last(Id)), {pem, TryReadingFileFun(Path)}}
-                  end, Settings),
-    maps:from_list(SigningKeys)
+    rabbit_oauth2_schema:translate_signing_keys(Conf)
  end}.
 
 {mapping,
@@ -285,36 +270,29 @@
  "rabbitmq_auth_backend_oauth2.oauth_providers",
  [{datatype, {enum, [true, false, peer, best_effort]}}]}.
 
+{mapping,
+ "auth_oauth2.oauth_providers.$name.default_key",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, string}]}.
+
+%% A map of signing keys
+%%
+%% {signing_keys, #{<<"id1">> => {pem, <<"value1">>}, <<"id2">> => {pem, <<"value2">>}}}
+%% validator doesn't work
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.signing_keys.$id",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, file}, {validators, ["file_accessible"]}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.algorithms.$algorithm",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, string}]}.
+
 {translation, "rabbitmq_auth_backend_oauth2.oauth_providers",
  fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.oauth_providers", Conf),
-    AuthBackends  = [{Name, {list_to_atom(Key), list_to_binary(V)}} || {["auth_oauth2","oauth_providers", Name, Key], V} <- Settings ],
-    Https  = [{Name, {https, {list_to_atom(Key), V}}} || {["auth_oauth2","oauth_providers", Name, "https", Key], V} <- Settings ],
-
-    %% Aggregate all options for one provider
-    KeyFun = fun({Name, _}) -> list_to_binary(Name) end,
-    ValueFun = fun({_, V}) -> V end,
-    ProviderNameToListOfSettings = maps:groups_from_list(KeyFun, ValueFun, AuthBackends),
-    ProviderNameToListOfHttpsSettings = maps:groups_from_list(KeyFun, fun({_, {https, V}}) -> V end, Https),
-    ProviderNameToListWithHttps = maps:map(fun(K1,L1) -> [{https, L1}] end, ProviderNameToListOfHttpsSettings),
-    NewGroup = maps:merge_with(fun(K, V1, V2) -> V1 ++ V2 end, ProviderNameToListOfSettings, ProviderNameToListWithHttps),
-
-    ListOrSingleFun = fun(K, List) ->
-      case K of
-        ssl_options -> proplists:get_all_values(K, List);
-        _ ->
-          case proplists:lookup_all(K, List) of
-            [One] -> proplists:get_value(K, List);
-            [One|_] = V -> V
-          end
-      end
-    end,
-    GroupKeyConfigFun = fun(K, List) ->
-        ListKeys = proplists:get_keys(List),
-        [{K, ListOrSingleFun(K, List)} || K <- ListKeys]
-     end,
-    maps:map(GroupKeyConfigFun, NewGroup)
-
+    rabbit_oauth2_schema:translate_oauth_providers(Conf)
  end}.
 
 {mapping,
@@ -347,34 +325,13 @@
   [{datatype, string}]
 }.
 
+{mapping,
+ "auth_oauth2.resource_servers.$name.preferred_username_claims.$preferred_username_claims",
+ "rabbitmq_auth_backend_oauth2.resource_servers",
+ [{datatype, string}]}.
+
+
 {translation, "rabbitmq_auth_backend_oauth2.resource_servers",
  fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.resource_servers", Conf),
-    AuthBackends  = [{Name, {list_to_atom(Key), list_to_binary(V)}} || {["auth_oauth2","resource_servers", Name, Key], V} <- Settings],
-    KeyFun = fun({Name,_}) -> list_to_binary(Name) end,
-    ValueFun = fun({_,V}) -> V end,
-    NewGroup = maps:groups_from_list(KeyFun, ValueFun, AuthBackends),
-    ListOrSingleFun = fun(K, List) ->
-      case K of
-        key_config -> proplists:get_all_values(K, List);
-        _ ->
-          case proplists:lookup_all(K, List) of
-            [One] -> proplists:get_value(K, List);
-            [One|_] = V -> V
-          end
-      end
-    end,
-    GroupKeyConfigFun = fun(K, List) ->
-        ListKeys = proplists:get_keys(List),
-        [ {K,ListOrSingleFun(K,List)} || K <- ListKeys ]
-     end,
-    NewGroupTwo = maps:map(GroupKeyConfigFun, NewGroup),
-    IndexByIdOrElseNameFun = fun(K, V, NewMap) ->
-      case proplists:get_value(id, V) of
-        undefined -> maps:put(K, V, NewMap);
-        ID -> maps:put(ID, V, NewMap)
-      end
-    end,
-    maps:fold(IndexByIdOrElseNameFun,#{}, NewGroupTwo)
-
+    rabbit_oauth2_schema:translate_resource_servers(Conf)    
  end}.

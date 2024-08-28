@@ -20,6 +20,7 @@
 all() ->
 [
    {group, ssl_options},
+   {group, merge},
    {group, get_expiration_time}
 ].
 
@@ -37,8 +38,95 @@ groups() ->
         access_token_response_without_expiration_time,
         access_token_response_with_expires_in,
         access_token_response_with_exp_in_access_token
+    ]},
+    {merge, [], [
+        merge_openid_configuration,
+        merge_oauth_provider
     ]}
 ].
+
+merge_oauth_provider(_) ->
+    OAuthProvider = #oauth_provider{id = "some_id", ssl_options = [ {verify, verify_none} ]},
+    Proplist = [],
+    Proplist1 = oauth2_client:merge_oauth_provider(OAuthProvider, Proplist),
+    ?assertEqual([], Proplist),
+
+    OAuthProvider1 = OAuthProvider#oauth_provider{jwks_uri = "https://jwks_uri"},
+    Proplist2 = oauth2_client:merge_oauth_provider(OAuthProvider1, Proplist1),
+    ?assertEqual([{jwks_uri, OAuthProvider1#oauth_provider.jwks_uri}], Proplist2),
+
+    OAuthProvider2 = OAuthProvider1#oauth_provider{end_session_endpoint = "https://end_session_endpoint"},
+    Proplist3 = oauth2_client:merge_oauth_provider(OAuthProvider2, Proplist2),
+    ?assertEqual([{jwks_uri, OAuthProvider2#oauth_provider.jwks_uri},
+                  {end_session_endpoint, OAuthProvider2#oauth_provider.end_session_endpoint}],
+                  Proplist3),
+
+    OAuthProvider3 = OAuthProvider2#oauth_provider{authorization_endpoint = "https://authorization_endpoint"},
+    Proplist4 = oauth2_client:merge_oauth_provider(OAuthProvider3, Proplist3),
+    ?assertEqual([{jwks_uri, OAuthProvider3#oauth_provider.jwks_uri},
+                  {end_session_endpoint, OAuthProvider3#oauth_provider.end_session_endpoint},
+                  {authorization_endpoint, OAuthProvider3#oauth_provider.authorization_endpoint}],
+                  Proplist4),
+
+    OAuthProvider4 = OAuthProvider3#oauth_provider{token_endpoint = "https://token_endpoint"},
+    Proplist5 = oauth2_client:merge_oauth_provider(OAuthProvider4, Proplist4),
+    ?assertEqual([{jwks_uri, OAuthProvider4#oauth_provider.jwks_uri},
+                  {end_session_endpoint, OAuthProvider4#oauth_provider.end_session_endpoint},
+                  {authorization_endpoint, OAuthProvider4#oauth_provider.authorization_endpoint},
+                  {token_endpoint, OAuthProvider4#oauth_provider.token_endpoint}],
+                  Proplist5).
+
+merge_openid_configuration(_) ->
+    OpenIdConfiguration = #openid_configuration{},
+    OAuthProvider = #oauth_provider{id = "some_id", ssl_options = [ {verify, verify_none} ]},
+    OAuthProvider1 = oauth2_client:merge_openid_configuration(
+        OpenIdConfiguration, OAuthProvider),
+    ?assertEqual(OAuthProvider#oauth_provider.id, OAuthProvider1#oauth_provider.id),
+    ?assertEqual([{verify, verify_none}], OAuthProvider1#oauth_provider.ssl_options),
+    ?assertEqual(undefined, OAuthProvider1#oauth_provider.jwks_uri),
+    ?assertEqual(undefined, OAuthProvider1#oauth_provider.token_endpoint),
+    ?assertEqual(undefined, OAuthProvider1#oauth_provider.authorization_endpoint),
+    ?assertEqual(undefined, OAuthProvider1#oauth_provider.end_session_endpoint),
+
+    OpenIdConfiguration1 = #openid_configuration{jwks_uri = "https://jwks_uri"},
+    OAuthProvider2 = oauth2_client:merge_openid_configuration(
+        OpenIdConfiguration1, OAuthProvider1),
+    ?assertEqual(OpenIdConfiguration1#openid_configuration.jwks_uri,
+        OAuthProvider2#oauth_provider.jwks_uri),
+    ?assertEqual(undefined, OAuthProvider2#oauth_provider.token_endpoint),
+    ?assertEqual(undefined, OAuthProvider2#oauth_provider.authorization_endpoint),
+    ?assertEqual(undefined, OAuthProvider2#oauth_provider.end_session_endpoint),
+
+    OpenIdConfiguration2 = #openid_configuration{end_session_endpoint = "https://end_session_endpoint"},
+    OAuthProvider3 = oauth2_client:merge_openid_configuration(
+        OpenIdConfiguration2, OAuthProvider2),
+    ?assertEqual(OpenIdConfiguration2#openid_configuration.end_session_endpoint,
+        OAuthProvider3#oauth_provider.end_session_endpoint),
+    ?assertEqual(undefined, OAuthProvider3#oauth_provider.authorization_endpoint),
+    ?assertEqual(undefined, OAuthProvider3#oauth_provider.token_endpoint),
+
+    OpenIdConfiguration3 = #openid_configuration{authorization_endpoint = "https://authorization_endpoint"},
+    OAuthProvider4 = oauth2_client:merge_openid_configuration(
+        OpenIdConfiguration3, OAuthProvider3),
+    ?assertEqual(OpenIdConfiguration3#openid_configuration.authorization_endpoint,
+        OAuthProvider4#oauth_provider.authorization_endpoint),
+    ?assertEqual(undefined, OAuthProvider4#oauth_provider.token_endpoint),
+
+    OpenIdConfiguration4 = #openid_configuration{token_endpoint = "https://token_endpoint"},
+    OAuthProvider5 = oauth2_client:merge_openid_configuration(
+        OpenIdConfiguration4, OAuthProvider4),
+    ?assertEqual(OpenIdConfiguration4#openid_configuration.token_endpoint,
+        OAuthProvider5#oauth_provider.token_endpoint),
+
+    ?assertEqual(OpenIdConfiguration2#openid_configuration.end_session_endpoint,
+        OAuthProvider5#oauth_provider.end_session_endpoint),
+    ?assertEqual(OpenIdConfiguration3#openid_configuration.authorization_endpoint,
+        OAuthProvider5#oauth_provider.authorization_endpoint),
+    ?assertEqual(OpenIdConfiguration2#openid_configuration.end_session_endpoint,
+        OAuthProvider5#oauth_provider.end_session_endpoint),
+    ?assertEqual(OpenIdConfiguration1#openid_configuration.jwks_uri,
+        OAuthProvider5#oauth_provider.jwks_uri).
+
 
 no_ssl_options_triggers_verify_peer(_) ->
     ?assertMatch([
@@ -83,7 +171,7 @@ peer_verification_set_to_verify_none(_) ->
     ?assertEqual(Expected2, oauth2_client:extract_ssl_options_as_list(#{
         peer_verification => verify_none,
         cacertfile => "/tmp"
-    })).  
+    })).
 
 
 peer_verification_set_to_verify_peer_with_cacertfile(_) ->
@@ -144,4 +232,3 @@ access_token_response_without_expiration_time(_) ->
     },
     ct:log("AccessTokenResponse ~p", [AccessTokenResponse]),
     ?assertEqual({error, missing_exp_field}, oauth2_client:get_expiration_time(AccessTokenResponse)).
-

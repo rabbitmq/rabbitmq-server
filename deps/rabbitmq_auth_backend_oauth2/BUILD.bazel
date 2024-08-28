@@ -143,6 +143,14 @@ rabbitmq_suite(
     ],
 )
 
+rabbitmq_suite(
+    name = "rabbit_oauth2_schema_SUITE",
+    size = "medium",
+    deps = [
+        "//deps/rabbit_common:erlang_app",
+    ],
+)
+
 rabbitmq_integration_suite(
     name = "system_SUITE",
     size = "medium",
