@@ -427,11 +427,7 @@ close_connection(#tracked_connection{pid = Pid, type = direct}, Message) ->
     %% Do an RPC call to the node running the direct client.
     Node = node(Pid),
     rpc:call(Node, amqp_direct_connection, server_close, [Pid, 320, Message]);
-close_connection(#tracked_connection{pid = Pid,
-                                     protocol = {'Web MQTT', _}}, Message) ->
-    % this will work for connections to web mqtt plugin
-    Pid ! {shutdown, Message};
 close_connection(#tracked_connection{pid = Pid}, Message) ->
-    % best effort, this will work for connections to the stream plugin
-    Node = node(Pid),
-    rpc:call(Node, gen_server, call, [Pid, {shutdown, Message}, infinity]).
+    %% Best effort will work for following plugins:
+    %% rabbitmq_stream, rabbitmq_mqtt, rabbitmq_web_mqtt
+    Pid ! {shutdown, Message}.
