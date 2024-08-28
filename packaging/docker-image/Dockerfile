@@ -146,7 +146,6 @@ RUN set -eux; \
 		--prefix="$ERLANG_INSTALL_PATH_PREFIX" \
 		--host="$hostArch" \
 		--build="$buildArch" \
-		--disable-hipe \
 		--disable-sctp \
 		--disable-silent-rules \
 		--enable-builtin-zlib \
@@ -166,7 +165,6 @@ RUN set -eux; \
 		--without-et \
 		--without-eunit \
 		--without-ftp \
-		--without-hipe \
 		--without-jinterface \
 		--without-megaco \
 		--without-observer \
