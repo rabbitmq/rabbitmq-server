@@ -91,6 +91,8 @@ cluster_size_1_tests() ->
      ,block_only_publisher
      ,many_qos1_messages
      ,session_expiry
+     ,cli_close_all_connections
+     ,cli_close_all_user_connections
      ,management_plugin_connection
      ,management_plugin_enable
      ,disconnect
@@ -1164,6 +1166,24 @@ rabbit_mqtt_qos0_queue_kill_node(Config) ->
     ok = emqtt:disconnect(Pub),
     ok = rabbit_ct_broker_helpers:start_node(Config, 1),
     ?assertEqual([], rpc(Config, rabbit_db_binding, get_all, [])).
+
+cli_close_all_connections(Config) ->
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config),
+    process_flag(trap_exit, true),
+    {ok, String} = rabbit_ct_broker_helpers:rabbitmqctl(
+                     Config, 0, ["close_all_connections", "bye"]),
+    ?assertEqual(match, re:run(String, "Closing .* reason: bye", [{capture, none}])),
+    ok = await_exit(C).
+
+cli_close_all_user_connections(Config) ->
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config),
+    process_flag(trap_exit, true),
+    {ok, String} = rabbit_ct_broker_helpers:rabbitmqctl(
+                     Config, 0, ["close_all_user_connections","guest", "bye"]),
+    ?assertEqual(match, re:run(String, "Closing .* reason: bye", [{capture, none}])),
+    ok = await_exit(C).
 
 %% Test that MQTT connection can be listed and closed via the rabbitmq_management plugin.
 management_plugin_connection(Config) ->
