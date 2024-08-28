@@ -32,7 +32,7 @@
 
 -spec start_link() -> rabbit_types:ok_pid_or_error().
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], [{hibernate_after, 0}]).
 
 init(_) ->
     Interval =

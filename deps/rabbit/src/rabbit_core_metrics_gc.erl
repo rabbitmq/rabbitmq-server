@@ -6,6 +6,8 @@
 %%
 -module(rabbit_core_metrics_gc).
 
+-behaviour(gen_server).
+
 -record(state, {timer,
                 interval
                }).
@@ -17,7 +19,7 @@
 -spec start_link() -> rabbit_types:ok_pid_or_error().
 
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], [{hibernate_after, 0}]).
 
 init(_) ->
     Interval = rabbit_misc:get_env(rabbit, core_metrics_gc_interval, 120000),
