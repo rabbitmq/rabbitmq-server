@@ -104,11 +104,6 @@ init(Ref) ->
 handle_call({info, InfoItems}, _From, State) ->
     {reply, infos(InfoItems, State), State, ?HIBERNATE_AFTER};
 
-handle_call({shutdown, Explanation} = Reason, _From, State = #state{conn_name = ConnName}) ->
-    %% rabbit_networking:close_all_user_connections -> rabbit_reader:shutdow
-    ?LOG_INFO("MQTT closing connection ~tp: ~p", [ConnName, Explanation]),
-    {stop, Reason, ok, State};
-
 handle_call(Msg, From, State) ->
     {stop, {mqtt_unexpected_call, Msg, From}, State}.
 
@@ -269,7 +264,7 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     {noreply, State, ?HIBERNATE_AFTER};
 
 handle_info({shutdown, Explanation} = Reason, State = #state{conn_name = ConnName}) ->
-    %% rabbitmq_management plugin requests to close connection.
+    %% rabbitmq_management plugin or CLI command requests to close connection.
     ?LOG_INFO("MQTT closing connection ~tp: ~p", [ConnName, Explanation]),
     {stop, Reason, State};
 
