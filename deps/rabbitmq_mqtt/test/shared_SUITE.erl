@@ -98,6 +98,8 @@ cluster_size_1_tests() ->
      ,block_only_publisher
      ,many_qos1_messages
      ,session_expiry
+     ,cli_close_all_connections
+     ,cli_close_all_user_connections
      ,management_plugin_connection
      ,management_plugin_enable
      ,disconnect
@@ -136,8 +138,6 @@ cluster_size_1_tests() ->
      ,retained_message_conversion
      ,bind_exchange_to_exchange
      ,bind_exchange_to_exchange_single_message
-     ,cli_close_all_connections
-     ,cli_close_all_user_connections
     ].
 
 cluster_size_3_tests() ->
@@ -150,8 +150,6 @@ cluster_size_3_tests() ->
      rabbit_mqtt_qos0_queue,
      rabbit_mqtt_qos0_queue_kill_node,
      cli_list_queues,
-     cli_close_all_connections,
-     cli_close_all_user_connections,
      delete_create_queue,
      session_reconnect,
      session_takeover,
@@ -237,12 +235,16 @@ end_per_group(_, Config) ->
 init_per_testcase(T, Config)
   when T =:= management_plugin_connection;
 <<<<<<< HEAD
+<<<<<<< HEAD
        T =:= management_plugin_enable ->
     ok = inets:start(),
 =======
        T =:= management_plugin_enable;
        T =:= cli_close_all_user_connections;
        T =:= cli_close_all_connections ->
+=======
+       T =:= management_plugin_enable ->
+>>>>>>> c2998ca17a (Simplify test cases)
     inets:start(),
 >>>>>>> bf54a61ed8 (Mqtt: test close connection)
     init_per_testcase0(T, Config);
@@ -256,9 +258,7 @@ init_per_testcase0(Testcase, Config) ->
 
 end_per_testcase(T, Config)
   when T =:= management_plugin_connection;
-       T =:= management_plugin_enable;
-       T =:= cli_close_all_user_connections;
-       T =:= cli_close_all_connections ->
+       T =:= management_plugin_enable ->
     ok = inets:stop(),
     end_per_testcase0(T, Config);
 end_per_testcase(Testcase, Config) ->
@@ -1293,6 +1293,24 @@ rabbit_mqtt_qos0_queue_kill_node(Config) ->
     ok = rabbit_ct_broker_helpers:start_node(Config, 1),
     ?assertEqual([], rpc(Config, rabbit_db_binding, get_all, [])).
 
+cli_close_all_connections(Config) ->
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config),
+    process_flag(trap_exit, true),
+    {ok, String} = rabbit_ct_broker_helpers:rabbitmqctl(
+                     Config, 0, ["close_all_connections", "bye"]),
+    ?assertEqual(match, re:run(String, "Closing .* reason: bye", [{capture, none}])),
+    ok = await_exit(C).
+
+cli_close_all_user_connections(Config) ->
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config),
+    process_flag(trap_exit, true),
+    {ok, String} = rabbit_ct_broker_helpers:rabbitmqctl(
+                     Config, 0, ["close_all_user_connections","guest", "bye"]),
+    ?assertEqual(match, re:run(String, "Closing .* reason: bye", [{capture, none}])),
+    ok = await_exit(C).
+
 %% Test that MQTT connection can be listed and closed via the rabbitmq_management plugin.
 management_plugin_connection(Config) ->
     KeepaliveSecs = 99,
@@ -1335,36 +1353,6 @@ management_plugin_enable(Config) ->
     eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
 
     ok = emqtt:disconnect(C).
-
-cli_close_all_connections(Config) ->
-    KeepaliveSecs = 99,
-    ClientId = atom_to_binary(?FUNCTION_NAME),
-
-    _ = connect(ClientId, Config, [{keepalive, KeepaliveSecs}]),
-    eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
-
-    process_flag(trap_exit, true),
-    {ok, String} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["close_all_connections", "bye"]),
-    ?assertEqual(match, re:run(String, "Closing .* reason: bye", [{capture, none}])),
-
-    process_flag(trap_exit, false),
-    eventually(?_assertEqual([], http_get(Config, "/connections")),
-               1000, 10).
-
-cli_close_all_user_connections(Config) ->
-    KeepaliveSecs = 99,
-    ClientId = atom_to_binary(?FUNCTION_NAME),
-
-    _ = connect(ClientId, Config, [{keepalive, KeepaliveSecs}]),
-    eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
-
-    process_flag(trap_exit, true),
-    {ok, String} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["close_all_user_connections","guest", "bye"]),
-    ?assertEqual(match, re:run(String, "Closing .* reason: bye", [{capture, none}])),
-
-    process_flag(trap_exit, false),
-    eventually(?_assertEqual([], http_get(Config, "/connections")),
-               1000, 10).
 
 %% Test that queues of type rabbit_mqtt_qos0_queue can be listed via rabbitmqctl.
 cli_list_queues(Config) ->
