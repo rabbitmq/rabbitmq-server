@@ -87,10 +87,6 @@ define PROJECT_ENV
 	    %% 30 minutes
 	    {consumer_timeout, 1800000},
 
-	    %% see rabbitmq-server#486
-	    {autocluster,
-              [{peer_discovery_backend, rabbit_peer_discovery_classic_config}]
-            },
 	    %% used by rabbit_peer_discovery_classic_config
 	    {cluster_nodes, {[], disc}},
 
