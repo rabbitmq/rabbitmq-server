@@ -59,6 +59,7 @@ groups() ->
           test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_extra_scope_source_field,
           test_post_process_token_payload_complex_claims,
           test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field_and_custom_scope_prefix
+
       ]}
     ].
 
@@ -1128,7 +1129,7 @@ test_incorrect_kid(_) ->
     Username = <<"username">>,
     Jwk      = ?UTIL_MOD:fixture_jwk(),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
-    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk, AltKid),
+    Token = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk, AltKid, true),
     ?assertMatch({refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [{error,{missing_oauth_provider_attributes, [issuer]}}]},
                  rabbit_auth_backend_oauth2:user_login_authentication(Username, #{password => Token})).
 
