@@ -118,4 +118,4 @@ set_and_verify_vm_memory_high_watermark_absolute(MemLimit0) ->
         _           ->
             ct:fail("Expected memory high watermark to be ~tp but it was ~tp", [Interpreted, MemLimit])
     end,
-    vm_memory_monitor:set_vm_memory_high_watermark(0.4).
+    vm_memory_monitor:set_vm_memory_high_watermark(0.6).
