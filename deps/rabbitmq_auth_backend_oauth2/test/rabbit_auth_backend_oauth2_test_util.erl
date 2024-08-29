@@ -14,15 +14,27 @@
 %% API
 %%
 
-sign_token_hs(Token, #{<<"kid">> := TokenKey} = Jwk) ->
-    sign_token_hs(Token, Jwk, TokenKey).
+sign_token_hs(Token, Jwk) ->
+    sign_token_hs(Token, Jwk, true).
 
-sign_token_hs(Token, Jwk, TokenKey) ->
-    Jws = #{
+sign_token_hs(Token, #{<<"kid">> := TokenKey} = Jwk, IncludeKid) ->
+    sign_token_hs(Token, Jwk, TokenKey, IncludeKid).
+
+%%sign_token_hs(Token, Jwk, TokenKey) ->
+%%    sign_token_hs(Token, Jwk, TokenKey, true).
+
+sign_token_hs(Token, Jwk, TokenKey, IncludeKid) ->
+    Jws0 = #{
       <<"alg">> => <<"HS256">>,
       <<"kid">> => TokenKey
     },
-    sign_token(Token, Jwk, Jws).
+    case IncludeKid of
+        true ->
+            Jws = maps:put(<<"kid">>, TokenKey, Jws0),
+            sign_token(Token, Jwk, Jws);
+        false ->
+            sign_token_no_kid(Token, Jwk)
+    end.
 
 sign_token_rsa(Token, Jwk, TokenKey) ->
     Jws = #{
@@ -39,12 +51,15 @@ sign_token(Token, Jwk, Jws) ->
     Signed = jose_jwt:sign(Jwk, Jws, Token),
     jose_jws:compact(Signed).
 
+token_key(#{<<"kid">> := TokenKey} = _Token) ->
+    TokenKey.
+
 fixture_jwk() ->
-  fixture_jwk(<<"token-key">>).
+    fixture_jwk(<<"token-key">>).
 
 fixture_jwk(TokenKey) ->
     fixture_jwk(TokenKey, <<"dG9rZW5rZXk">>).
-  
+
 fixture_jwk(TokenKey, K) ->
     #{<<"alg">> => <<"HS256">>,
       <<"k">> => K,

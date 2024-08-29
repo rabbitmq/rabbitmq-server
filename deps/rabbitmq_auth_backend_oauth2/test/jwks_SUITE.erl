@@ -23,39 +23,114 @@ all() ->
      {group, happy_path},
      {group, unhappy_path},
      {group, no_peer_verification},
-     {group, multi_resource}
+     {group, verify_signing_keys}
     ].
 
 groups() ->
-    [
-     {happy_path, [], [
-                       test_successful_connection_with_a_full_permission_token_and_all_defaults,
-                       test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost,
-                       test_successful_connection_with_simple_strings_for_aud_and_scope,
-                       test_successful_connection_with_complex_claim_as_a_map,
-                       test_successful_connection_with_complex_claim_as_a_list,
-                       test_successful_connection_with_complex_claim_as_a_binary,
-                       test_successful_connection_with_keycloak_token,
-                       test_successful_connection_with_algorithm_restriction,
-                       test_successful_token_refresh
-                      ]},
+    [{happy_path, [], [
+        test_successful_connection_with_a_full_permission_token_and_all_defaults,
+        test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost,
+        test_successful_connection_with_simple_strings_for_aud_and_scope,
+        test_successful_connection_with_complex_claim_as_a_map,
+        test_successful_connection_with_complex_claim_as_a_list,
+        test_successful_connection_with_complex_claim_as_a_binary,
+        test_successful_connection_with_keycloak_token,
+        test_successful_connection_with_algorithm_restriction,
+        test_successful_token_refresh
+        ]},
      {unhappy_path, [], [
-                         test_failed_connection_with_expired_token,
-                         test_failed_connection_with_a_non_token,
-                         test_failed_connection_with_a_token_with_insufficient_vhost_permission,
-                         test_failed_connection_with_a_token_with_insufficient_resource_permission,
-                         test_failed_connection_with_algorithm_restriction,
-                         test_failed_token_refresh_case1,
-                         test_failed_token_refresh_case2
-                        ]},
-     {no_peer_verification, [], [
+        test_failed_connection_with_expired_token,
+        test_failed_connection_with_a_non_token,
+        test_failed_connection_with_a_token_with_insufficient_vhost_permission,
+        test_failed_connection_with_a_token_with_insufficient_resource_permission,
+        test_failed_connection_with_algorithm_restriction,
+        test_failed_token_refresh_case1,
+        test_failed_token_refresh_case2
+        ]},
+    {no_peer_verification, [], [
         {group, happy_path},
         {group, unhappy_path}
-      ]},
-     {multi_resource, [], [
-                            test_m_successful_connection,
-                            test_m_failed_connection_due_to_missing_key
-                          ]}
+    ]},
+    {verify_signing_keys, [], [
+        {with_oauth_providers_A_B_and_C, [], [
+            {with_default_oauth_provider_B, [], [
+                {with_oauth_provider_A_with_jwks_with_one_signing_key, [], [
+                    {with_resource_servers_rabbitmq1_with_oauth_provider_A, [], [
+                        test_successful_connection_for_rabbitmq1_audience_signed_by_provider_A,
+                        {without_kid, [], [
+                            test_unsuccessful_connection_for_rabbitmq1_signed_by_provider_A,
+                            {with_oauth_providers_A_with_default_key, [], [
+                                test_successful_connection_for_rabbitmq1_audience_signed_by_provider_A
+                            ]}
+                        ]}
+                    ]}
+                ]},
+                {with_oauth_provider_B_with_one_static_key_and_jwks_with_two_signing_keys, [], [
+                    {with_resource_servers_rabbitmq2, [], [
+                        test_successful_connection_for_rabbitmq2_audience_signed_by_provider_B_with_static_key,
+                        test_successful_connection_for_rabbitmq2_audience_signed_by_provider_B_with_jwks_key_1,
+                        test_successful_connection_for_rabbitmq2_audience_signed_by_provider_B_with_jwks_key_2,
+                        {without_kid, [], [
+                            test_unsuccessful_connection_for_rabbitmq2_signed_by_provider_B_with_static_key,
+                            {with_oauth_providers_B_with_default_key_static_key, [], [
+                                test_successful_connection_for_rabbitmq2_audience_signed_by_provider_B_with_static_key
+                            ]}
+                        ]}
+                    ]},
+                    {with_oauth_provider_C_with_two_static_keys, [], [
+                        {with_resource_servers_rabbitmq3_with_oauth_provider_C, [], [
+                            test_successful_connection_for_rabbitmq3_audience_signed_by_provider_C_with_static_key_1,
+                            test_successful_connection_for_rabbitmq3_audience_signed_by_provider_C_with_static_key_2,
+                            {without_kid, [], [
+                                test_unsuccessful_connection_for_rabbitmq3_audience_signed_by_provider_C_with_static_key_1,
+                                {with_oauth_providers_C_with_default_key_static_key_1, [], [
+                                    test_successful_connection_for_rabbitmq3_audience_signed_by_provider_C_with_static_key_1
+                                ]}
+                            ]}
+                        ]}
+                    ]}
+                ]}
+            ]}
+
+        ]},
+        {with_root_oauth_provider_with_two_static_keys_and_one_jwks_key, [], [
+            {with_resource_server_rabbitmq, [], [
+                test_successful_connection_for_rabbitmq_audience_signed_by_root_oauth_provider_with_static_key_1,
+                test_successful_connection_for_rabbitmq_audience_signed_by_root_oauth_provider_with_static_key_2,
+                test_successful_connection_for_rabbitmq_audience_signed_by_root_oauth_provider_with_jwks_key,
+                {without_kid, [], [
+                    test_unsuccessful_connection_for_rabbitmq_audience_signed_by_root_oauth_provider_with_static_key_1,
+                    {with_root_oauth_provider_with_default_key_1, [], [
+                        test_successful_connection_for_rabbitmq_audience_signed_by_root_oauth_provider_with_static_key_1
+                    ]}
+                ]},
+                {with_resource_servers_rabbitmq2, [], [
+                    test_successful_connection_for_rabbitmq2_audience_signed_by_root_oauth_provider_with_jwks_key,
+                    {without_kid, [], [
+                        test_unsuccessful_connection_for_rabbitmq2_audience_signed_by_root_oauth_provider_with_jwks_key,
+                        {with_root_oauth_provider_with_default_jwks_key, [], [
+                            test_successful_connection_for_rabbitmq2_audience_signed_by_root_oauth_provider_with_jwks_key
+                        ]}
+                    ]},
+                    {with_oauth_providers_A_B_and_C, [], [
+                        {with_oauth_provider_A_with_jwks_with_one_signing_key, [], [
+                            {with_resource_servers_rabbitmq1_with_oauth_provider_A, [], [
+                                test_successful_connection_for_rabbitmq1_audience_signed_by_provider_A,
+                                test_successful_connection_for_rabbitmq2_audience_signed_by_root_oauth_provider_with_jwks_key,
+                                test_successful_connection_for_rabbitmq_audience_signed_by_root_oauth_provider_with_static_key_1,
+                                {without_kid, [], [
+                                    test_unsuccessful_connection_for_rabbitmq1_signed_by_provider_A,
+                                    {with_oauth_providers_A_with_default_key, [], [
+                                        test_successful_connection_for_rabbitmq1_audience_signed_by_provider_A                                    
+                                    ]}
+                                ]}
+                            ]}
+                        ]}
+                    ]}
+                ]}
+            ]}
+        ]}
+     ]}
     ].
 
 %%
@@ -74,6 +149,7 @@ init_per_suite(Config) ->
         fun preconfigure_node/1,
         fun start_jwks_server/1,
         fun preconfigure_token/1
+        %We fun add_vhosts/1
       ]).
 
 end_per_suite(Config) ->
@@ -83,60 +159,213 @@ end_per_suite(Config) ->
       ] ++ rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(no_peer_verification, Config) ->
-    add_vhosts(Config),
     KeyConfig = rabbit_ct_helpers:set_config(?config(key_config, Config), [{jwks_url, ?config(non_strict_jwks_url, Config)}, {peer_verification, verify_none}]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_auth_backend_oauth2, key_config, KeyConfig]),
     rabbit_ct_helpers:set_config(Config, {key_config, KeyConfig});
 
-init_per_group(multi_resource, Config) ->
-    add_vhosts(Config),
-    ResourceServersConfig =
-      #{
-        <<"rabbitmq1">> => [
-          {id, <<"rabbitmq1">>},
-          {oauth_provider_id, <<"one">>}
+init_per_group(without_kid, Config) ->
+    rabbit_ct_helpers:set_config(Config, [{include_kid, false}]);
+
+init_per_group(with_resource_servers_rabbitmq1_with_oauth_provider_A, Config) ->
+    ResourceServersConfig0 = rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env,
+        [rabbitmq_auth_backend_oauth2, resource_servers, #{}]),
+    Resource0 = maps:get(<<"rabbitmq1">>, ResourceServersConfig0, [{id, <<"rabbitmq1">>}]),
+    ResourceServersConfig1 = maps:put(<<"rabbitmq1">>, [{oauth_provider_id, <<"A">>} | Resource0], ResourceServersConfig0),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, resource_servers, ResourceServersConfig1]);
+
+init_per_group(with_oauth_providers_A_B_and_C, Config) ->
+    OAuthProviders = #{
+        <<"A">> => [
+            {id, <<"A">>},
+            {https, [{verify, verify_none}]}
         ],
-        <<"rabbitmq2">> => [
-          {id, <<"rabbitmq2">>},
-          {oauth_provider_id, <<"two">>}
-        ]
-      },
-    OAuthProviders =
-      #{
-        <<"one">> => [
-          {issuer, strict_jwks_url(Config, "/")},
-          {jwks_uri, strict_jwks_url(Config, "/jwks1")},
-          {https, [{verify, verify_none}]}
+        <<"B">> => [
+            {id, <<"B">>},
+            {https, [{verify, verify_none}]}
         ],
-        <<"two">> => [
-          {issuer, strict_jwks_url(Config, "/")},
-          {jwks_uri, strict_jwks_url(Config, "/jwks2")},
-          {https, [{verify, verify_none}]}
+        <<"C">> => [
+            {id, <<"C">>},
+            {https, [{verify, verify_none}]}
         ]
-      },
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_auth_backend_oauth2, resource_servers, ResourceServersConfig]),
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_auth_backend_oauth2, oauth_providers, OAuthProviders]),
+    },
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, oauth_providers, OAuthProviders]),
+    Config;
+
+init_per_group(with_default_oauth_provider_B, Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, default_oauth_provider, <<"B">>]);
+init_per_group(with_oauth_providers_A_with_default_key, Config) ->
+    {ok, OAuthProviders0} = rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env,
+        [rabbitmq_auth_backend_oauth2, oauth_providers]),
+    OAuthProvider = maps:get(<<"A">>, OAuthProviders0, []),
+    OAuthProviders1 = maps:put(<<"A">>, [
+        {default_key, ?UTIL_MOD:token_key(?config(fixture_jwksA, Config))} | OAuthProvider],
+        OAuthProviders0),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, oauth_providers, OAuthProviders1]),
+    Config;
+
+init_per_group(with_oauth_provider_A_with_jwks_with_one_signing_key, Config) ->
+    {ok, OAuthProviders0} = rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env,
+        [rabbitmq_auth_backend_oauth2, oauth_providers]),
+    OAuthProvider = maps:get(<<"A">>, OAuthProviders0, []),
+    OAuthProviders1 = maps:put(<<"A">>, [{jwks_uri, strict_jwks_url(Config, "/jwksA")} | OAuthProvider],
+        OAuthProviders0),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, oauth_providers, OAuthProviders1]),
+    Config;
+init_per_group(with_resource_servers_rabbitmq2, Config) ->
+    ResourceServersConfig0 = rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env,
+        [rabbitmq_auth_backend_oauth2, resource_servers, #{}]),
+    Resource0 = maps:get(<<"rabbitmq2">>, ResourceServersConfig0, [{id, <<"rabbitmq2">>}]),
+    ResourceServersConfig1 = maps:put(<<"rabbitmq2">>, Resource0, ResourceServersConfig0),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, resource_servers, ResourceServersConfig1]);
+init_per_group(with_oauth_providers_B_with_default_key_static_key, Config) ->
+    {ok, OAuthProviders0} = rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env,
+        [rabbitmq_auth_backend_oauth2, oauth_providers]),
+    OAuthProvider = maps:get(<<"B">>, OAuthProviders0, []),
+    OAuthProviders1 = maps:put(<<"B">>, [
+        {default_key, ?UTIL_MOD:token_key(?config(fixture_staticB, Config))} |
+        proplists:delete(default_key, OAuthProvider)],
+        OAuthProviders0),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, oauth_providers, OAuthProviders1]),
+    Config;
+init_per_group(with_oauth_provider_C_with_two_static_keys, Config) ->
+    {ok, OAuthProviders0} = rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env,
+        [rabbitmq_auth_backend_oauth2, oauth_providers]),
+    OAuthProvider = maps:get(<<"C">>, OAuthProviders0, []),
+    Jwks1 = ?config(fixture_staticC_1, Config),
+    Jwks2 = ?config(fixture_staticC_2, Config),
+    SigningKeys = #{
+        ?UTIL_MOD:token_key(Jwks1) => {json, Jwks1},
+        ?UTIL_MOD:token_key(Jwks2) => {json, Jwks2}
+    },
+    OAuthProviders1 = maps:put(<<"C">>, [{signing_keys, SigningKeys} | OAuthProvider],
+        OAuthProviders0),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, oauth_providers, OAuthProviders1]),
+    Config;
+
+init_per_group(with_root_oauth_provider_with_two_static_keys_and_one_jwks_key, Config) ->
+    KeyConfig = rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env,
+        [rabbitmq_auth_backend_oauth2, key_config, []]),
+    Jwks1 = ?config(fixture_static_1, Config),
+    Jwks2 = ?config(fixture_static_2, Config),
+    SigningKeys = #{
+        ?UTIL_MOD:token_key(Jwks1) => {json, Jwks1},
+        ?UTIL_MOD:token_key(Jwks2) => {json, Jwks2}
+    },
+    KeyConfig1 = [{signing_keys, SigningKeys},
+                  {jwks_url, strict_jwks_url(Config, "/jwks")}| KeyConfig],
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, key_config, KeyConfig1]),
+
+    Config;
+init_per_group(with_root_oauth_provider_with_default_key_1, Config) ->
+    KeyConfig = rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env,
+        [rabbitmq_auth_backend_oauth2, key_config, []]),
+    KeyConfig1 = [{default_key, ?UTIL_MOD:token_key(?config(fixture_static_1, Config))} | KeyConfig],
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, key_config, KeyConfig1]),
+    Config;
+init_per_group(with_root_oauth_provider_with_default_jwks_key, Config) ->
+    KeyConfig = rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env,
+        [rabbitmq_auth_backend_oauth2, key_config, []]),
+    KeyConfig1 = [{default_key, ?UTIL_MOD:token_key(?config(fixture_jwk, Config))} | KeyConfig],
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, key_config, KeyConfig1]),
+    Config;
+
+init_per_group(with_oauth_provider_B_with_one_static_key_and_jwks_with_two_signing_keys, Config) ->
+    {ok, OAuthProviders0} = rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env,
+        [rabbitmq_auth_backend_oauth2, oauth_providers]),
+    OAuthProvider = maps:get(<<"B">>, OAuthProviders0, []),
+    Jwks = ?config(fixture_staticB, Config),
+    SigningKeys = #{
+        ?UTIL_MOD:token_key(Jwks) => {json, Jwks}
+    },
+    OAuthProviders1 = maps:put(<<"B">>, [
+        {signing_keys, SigningKeys},
+        {jwks_uri, strict_jwks_url(Config, "/jwksB")} | OAuthProvider],
+        OAuthProviders0),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, oauth_providers, OAuthProviders1]),
+    Config;
+
+init_per_group(with_resource_servers_rabbitmq3_with_oauth_provider_C, Config) ->
+    ResourceServersConfig0 = rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env,
+        [rabbitmq_auth_backend_oauth2, resource_servers, #{}]),
+    Resource0 = maps:get(<<"rabbitmq3">>, ResourceServersConfig0, [
+        {id, <<"rabbitmq3">>},{oauth_provider_id, <<"C">>}]),
+    ResourceServersConfig1 = maps:put(<<"rabbitmq3">>, Resource0, ResourceServersConfig0),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, resource_servers, ResourceServersConfig1]);
+
+init_per_group(with_oauth_providers_C_with_default_key_static_key_1, Config) ->
+    {ok, OAuthProviders0} = rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env,
+        [rabbitmq_auth_backend_oauth2, oauth_providers]),
+    OAuthProvider = maps:get(<<"C">>, OAuthProviders0, []),
+    Jwks = ?config(fixture_staticC_1, Config),
+    OAuthProviders1 = maps:put(<<"C">>, [
+        {default_key, ?UTIL_MOD:token_key(Jwks)} | OAuthProvider],
+        OAuthProviders0),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, oauth_providers, OAuthProviders1]),
     Config;
 
 init_per_group(_Group, Config) ->
-    add_vhosts(Config),
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_auth_backend_oauth2, resource_server_id, ?RESOURCE_SERVER_ID]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, resource_server_id, ?RESOURCE_SERVER_ID]),
     Config.
 
+end_per_group(without_kid, Config) ->
+    rabbit_ct_helpers:delete_config(Config, include_kid);
+
 end_per_group(no_peer_verification, Config) ->
-    delete_vhosts(Config),
     KeyConfig = rabbit_ct_helpers:set_config(?config(key_config, Config), [{jwks_url, ?config(strict_jwks_url, Config)}, {peer_verification, verify_peer}]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_auth_backend_oauth2, key_config, KeyConfig]),
     rabbit_ct_helpers:set_config(Config, {key_config, KeyConfig});
 
+end_per_group(with_default_oauth_provider_B, Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+        [rabbitmq_auth_backend_oauth2, default_oauth_provider]);
+
+end_per_group(with_root_oauth_provider_with_default_key_1, Config) ->
+    KeyConfig = rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env,
+        [rabbitmq_auth_backend_oauth2, key_config, []]),
+    KeyConfig1 = proplists:delete(default_key, KeyConfig),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, key_config, KeyConfig1]),
+    Config;
+end_per_group(with_root_oauth_provider_with_default_jwks_key, Config) ->
+    KeyConfig = rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env,
+        [rabbitmq_auth_backend_oauth2, key_config, []]),
+    KeyConfig1 = proplists:delete(default_key, KeyConfig),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, key_config, KeyConfig1]),
+    Config;
+
 end_per_group(_Group, Config) ->
-    delete_vhosts(Config),
     Config.
 
 add_vhosts(Config) ->
     %% The broker is managed by {init,end}_per_testcase().
     lists:foreach(fun(Value) -> rabbit_ct_broker_helpers:add_vhost(Config, Value) end,
                   [<<"vhost1">>, <<"vhost2">>, <<"vhost3">>, <<"vhost4">>]).
+    %rabbit_ct_helpers:set_config(Config, []).
 
 delete_vhosts(Config) ->
     %% The broker is managed by {init,end}_per_testcase().
@@ -211,6 +440,7 @@ preconfigure_node(Config) ->
                                       [rabbit, auth_backends, [rabbit_auth_backend_oauth2]]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                       [rabbitmq_auth_backend_oauth2, resource_server_id, ?RESOURCE_SERVER_ID]),
+    add_vhosts(Config),
     Config.
 
 start_jwks_server(Config0) ->
@@ -218,6 +448,11 @@ start_jwks_server(Config0) ->
     Jwk1  = ?UTIL_MOD:fixture_jwk(<<"token-key-1">>),
     Jwk2  = ?UTIL_MOD:fixture_jwk(<<"token-key-2">>),
     Jwk3  = ?UTIL_MOD:fixture_jwk(<<"token-key-3">>),
+    Jwk4  = ?UTIL_MOD:fixture_jwk(<<"token-key-4">>),
+    Jwk5  = ?UTIL_MOD:fixture_jwk(<<"token-key-5">>),
+    Jwk6  = ?UTIL_MOD:fixture_jwk(<<"token-key-6">>),
+    Jwk7  = ?UTIL_MOD:fixture_jwk(<<"token-key-7">>),
+    Jwk8  = ?UTIL_MOD:fixture_jwk(<<"token-key-8">>),
     %% Assume we don't have more than 100 ports allocated for tests
     PortBase = rabbit_ct_broker_helpers:get_node_config(Config0, 0, tcp_ports_base),
     JwksServerPort = PortBase + 100,
@@ -232,7 +467,10 @@ start_jwks_server(Config0) ->
     {ok, _} = application:ensure_all_started(cowboy),
     CertsDir = ?config(rmq_certsdir, Config),
     ok = jwks_http_app:start(JwksServerPort, CertsDir,
-      [ {"/jwks", [Jwk]},
+      [ {"/jwksA", [Jwk]},
+        {"/jwksB", [Jwk1, Jwk3]},
+        {"/jwksRoot", [Jwk2]},
+        {"/jwks", [Jwk]},
         {"/jwks1", [Jwk1, Jwk3]},
         {"/jwks2", [Jwk2]}
       ]),
@@ -246,6 +484,14 @@ start_jwks_server(Config0) ->
                                   {non_strict_jwks_url, NonStrictJwksUrl},
                                   {strict_jwks_url, StrictJwksUrl},
                                   {key_config, KeyConfig},
+                                  {fixture_static_1, Jwk7},
+                                  {fixture_static_2, Jwk8},
+                                  {fixture_staticB, Jwk4},
+                                  {fixture_staticC_1, Jwk5},
+                                  {fixture_staticC_2, Jwk6},
+                                  {fixture_jwksB_1, Jwk1},
+                                  {fixture_jwksB_2, Jwk3},
+                                  {fixture_jwksA, Jwk},
                                   {fixture_jwk, Jwk},
                                   {fixture_jwks_1, [Jwk1, Jwk3]},
                                   {fixture_jwks_2, [Jwk2]}
@@ -277,12 +523,13 @@ generate_valid_token(Config, Scopes, Audience) ->
         end,
     generate_valid_token(Config, Jwk, Scopes, Audience).
 
-generate_valid_token(_Config, Jwk, Scopes, Audience) ->
+generate_valid_token(Config, Jwk, Scopes, Audience) ->
     Token = case Audience of
         undefined -> ?UTIL_MOD:fixture_token_with_scopes(Scopes);
         DefinedAudience -> maps:put(<<"aud">>, DefinedAudience, ?UTIL_MOD:fixture_token_with_scopes(Scopes))
     end,
-    ?UTIL_MOD:sign_token_hs(Token, Jwk).
+    IncludeKid = rabbit_ct_helpers:get_config(Config, include_kid, true),
+    ?UTIL_MOD:sign_token_hs(Token, Jwk, IncludeKid).
 
 generate_valid_token_with_extra_fields(Config, ExtraFields) ->
     Jwk = case rabbit_ct_helpers:get_config(Config, fixture_jwk) of
@@ -290,7 +537,7 @@ generate_valid_token_with_extra_fields(Config, ExtraFields) ->
               Value     -> Value
           end,
     Token = maps:merge(?UTIL_MOD:fixture_token_with_scopes([]), ExtraFields),
-    ?UTIL_MOD:sign_token_hs(Token, Jwk).
+    ?UTIL_MOD:sign_token_hs(Token, Jwk, rabbit_ct_helpers:get_config(Config, include_kid, true)).
 
 generate_expired_token(Config) ->
     generate_expired_token(Config, ?UTIL_MOD:full_permission_scopes()).
@@ -300,7 +547,8 @@ generate_expired_token(Config, Scopes) ->
               undefined -> ?UTIL_MOD:fixture_jwk();
               Value     -> Value
           end,
-    ?UTIL_MOD:sign_token_hs(?UTIL_MOD:expired_token_with_scopes(Scopes), Jwk).
+    ?UTIL_MOD:sign_token_hs(?UTIL_MOD:expired_token_with_scopes(Scopes), Jwk,
+        rabbit_ct_helpers:get_config(Config, include_kid, true)).
 
 generate_expirable_token(Config, Seconds) ->
     generate_expirable_token(Config, ?UTIL_MOD:full_permission_scopes(), Seconds).
@@ -311,7 +559,8 @@ generate_expirable_token(Config, Scopes, Seconds) ->
               Value     -> Value
           end,
     Expiration = os:system_time(seconds) + Seconds,
-    ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scopes_and_expiration(Scopes, Expiration), Jwk).
+    ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scopes_and_expiration(Scopes, Expiration),
+        Jwk, rabbit_ct_helpers:get_config(Config, include_kid, true)).
 
 preconfigure_token(Config) ->
     Token = generate_valid_token(Config),
@@ -321,7 +570,117 @@ preconfigure_token(Config) ->
 %%
 %% Test Cases
 %%
+test_successful_connection_for_rabbitmq1_audience_signed_by_provider_A(Config) ->
+    Jwks = ?config(fixture_jwksA, Config),
+    Scopes = <<"rabbitmq1.configure:*/* rabbitmq1.write:*/* rabbitmq1.read:*/*">>,
+    Audience = <<"rabbitmq1">>,
+    test_queue_declare(Config, Jwks, Scopes, Audience).
+test_unsuccessful_connection_for_rabbitmq1_signed_by_provider_A(Config) ->
+    Jwks = ?config(fixture_jwksA, Config),
+    Scopes = <<"rabbitmq1.configure:*/* rabbitmq1.write:*/* rabbitmq1.read:*/*">>,
+    Audience = <<"rabbitmq1">>,
+    {_Alg, Token} = generate_valid_token(
+        Config,
+        Jwks,
+        Scopes,
+        [Audience]
+    ),
+    ?assertMatch({error, {auth_failure, _}},
+         open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token)).
 
+test_successful_connection_for_rabbitmq2_audience_signed_by_provider_B_with_static_key(Config) ->
+    Jwks = ?config(fixture_staticB, Config),
+    Scopes = <<"rabbitmq2.configure:*/* rabbitmq2.write:*/* rabbitmq2.read:*/*">>,
+    Audience = <<"rabbitmq2">>,
+    test_queue_declare(Config, Jwks, Scopes, Audience).
+test_successful_connection_for_rabbitmq2_audience_signed_by_provider_B_with_jwks_key_1(Config) ->
+    Jwks = ?config(fixture_jwksB_1, Config),
+    Scopes = <<"rabbitmq2.configure:*/* rabbitmq2.write:*/* rabbitmq2.read:*/*">>,
+    Audience = <<"rabbitmq2">>,
+    test_queue_declare(Config, Jwks, Scopes, Audience).
+test_successful_connection_for_rabbitmq2_audience_signed_by_provider_B_with_jwks_key_2(Config) ->
+    Jwks = ?config(fixture_jwksB_2, Config),
+    Scopes = <<"rabbitmq2.configure:*/* rabbitmq2.write:*/* rabbitmq2.read:*/*">>,
+    Audience = <<"rabbitmq2">>,
+    test_queue_declare(Config, Jwks, Scopes, Audience).
+test_successful_connection_for_rabbitmq3_audience_signed_by_provider_C_with_static_key_1(Config) ->
+    Jwks = ?config(fixture_staticC_1, Config),
+    Scopes = <<"rabbitmq3.configure:*/* rabbitmq3.write:*/* rabbitmq3.read:*/*">>,
+    Audience = <<"rabbitmq3">>,
+    test_queue_declare(Config, Jwks, Scopes, Audience).
+test_successful_connection_for_rabbitmq3_audience_signed_by_provider_C_with_static_key_2(Config) ->
+    Jwks = ?config(fixture_staticC_2, Config),
+    Scopes = <<"rabbitmq3.configure:*/* rabbitmq3.write:*/* rabbitmq3.read:*/*">>,
+    Audience = <<"rabbitmq3">>,
+    test_queue_declare(Config, Jwks, Scopes, Audience).
+test_successful_connection_for_rabbitmq_audience_signed_by_root_oauth_provider_with_static_key_1(Config) ->
+    Jwks = ?config(fixture_static_1, Config),
+    Scopes = <<"rabbitmq.configure:*/* rabbitmq.write:*/* rabbitmq.read:*/*">>,
+    Audience = <<"rabbitmq">>,
+    test_queue_declare(Config, Jwks, Scopes, Audience).
+test_successful_connection_for_rabbitmq_audience_signed_by_root_oauth_provider_with_static_key_2(Config) ->
+    Jwks = ?config(fixture_static_2, Config),
+    Scopes = <<"rabbitmq.configure:*/* rabbitmq.write:*/* rabbitmq.read:*/*">>,
+    Audience = <<"rabbitmq">>,
+    test_queue_declare(Config, Jwks, Scopes, Audience).
+test_successful_connection_for_rabbitmq_audience_signed_by_root_oauth_provider_with_jwks_key(Config) ->
+    Jwks = ?config(fixture_jwk, Config),
+    Scopes = <<"rabbitmq.configure:*/* rabbitmq.write:*/* rabbitmq.read:*/*">>,
+    Audience = <<"rabbitmq">>,
+    test_queue_declare(Config, Jwks, Scopes, Audience).
+test_successful_connection_for_rabbitmq2_audience_signed_by_root_oauth_provider_with_jwks_key(Config) ->
+    Jwks = ?config(fixture_jwk, Config),
+    Scopes = <<"rabbitmq2.configure:*/* rabbitmq2.write:*/* rabbitmq2.read:*/*">>,
+    Audience = <<"rabbitmq2">>,
+    test_queue_declare(Config, Jwks, Scopes, Audience).
+test_unsuccessful_connection_for_rabbitmq2_audience_signed_by_root_oauth_provider_with_jwks_key(Config) ->
+    Jwks = ?config(fixture_jwk, Config),
+    Scopes = <<"rabbitmq2.configure:*/* rabbitmq2.write:*/* rabbitmq2.read:*/*">>,
+    Audience = <<"rabbitmq2">>,
+    {_Alg, Token} = generate_valid_token(
+        Config,
+        Jwks,
+        Scopes,
+        [Audience]
+    ),
+    ?assertMatch({error, {auth_failure, _}},
+         open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token)).
+test_unsuccessful_connection_for_rabbitmq2_signed_by_provider_B_with_static_key(Config) ->
+    Jwks = ?config(fixture_staticB, Config),
+    Scopes = <<"rabbitmq2.configure:*/* rabbitmq2.write:*/* rabbitmq2.read:*/*">>,
+    Audience = <<"rabbitmq2">>,
+    {_Alg, Token} = generate_valid_token(
+        Config,
+        Jwks,
+        Scopes,
+        [Audience]
+    ),
+    ?assertMatch({error, {auth_failure, _}},
+         open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token)).
+test_unsuccessful_connection_for_rabbitmq3_audience_signed_by_provider_C_with_static_key_1(Config) ->
+    Jwks = ?config(fixture_staticC_1, Config),
+    Scopes = <<"rabbitmq3.configure:*/* rabbitmq3.write:*/* rabbitmq3.read:*/*">>,
+    Audience = <<"rabbitmq3">>,
+    {_Alg, Token} = generate_valid_token(
+        Config,
+        Jwks,
+        Scopes,
+        [Audience]
+    ),
+    ?assertMatch({error, {auth_failure, _}},
+         open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token)).
+test_unsuccessful_connection_for_rabbitmq_audience_signed_by_root_oauth_provider_with_static_key_1(Config) ->
+    Jwks = ?config(fixture_static_1, Config),
+    Scopes = <<"rabbitmq.configure:*/* rabbitmq.write:*/* rabbitmq.read:*/*">>,
+    Audience = <<"rabbitmq">>,
+    {_Alg, Token} = generate_valid_token(
+        Config,
+        Jwks,
+        Scopes,
+        [Audience]
+    ),
+    ?assertMatch({error, {auth_failure, _}},
+      open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token)).
 test_successful_connection_with_a_full_permission_token_and_all_defaults(Config) ->
     {_Algo, Token} = rabbit_ct_helpers:get_config(Config, fixture_jwt),
     verify_queue_declare_with_token(Config, Token).
@@ -333,41 +692,45 @@ verify_queue_declare_with_token(Config, Token) ->
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     close_connection_and_channel(Conn, Ch).
 
-test_m_successful_connection(Config) ->
+test_queue_declare(Config, Jwks, Scopes, Audience) ->
     {_Alg, Token1} = generate_valid_token(
         Config,
-        lists:nth(1, ?config(fixture_jwks_1, Config)),
-        <<"rabbitmq1.configure:*/* rabbitmq1.write:*/* rabbitmq1.read:*/*">>,
-        [<<"rabbitmq1">>]
+        Jwks,
+        Scopes,
+        [Audience]
     ),
-    verify_queue_declare_with_token(Config, Token1),
+    verify_queue_declare_with_token(Config, Token1).
 
-    {_Alg2, Token2} = generate_valid_token(
-        Config,
-        lists:nth(2, ?config(fixture_jwks_1, Config)),
+c(Config) ->
+    TestCases = [
+        {?config(fixture_jwk, Config),
         <<"rabbitmq1.configure:*/* rabbitmq1.write:*/* rabbitmq1.read:*/*">>,
-        [<<"rabbitmq1">>]
-    ),
-    verify_queue_declare_with_token(Config, Token2),
-
-    {_Alg3, Token3} = generate_valid_token(
-        Config,
-        lists:nth(1, ?config(fixture_jwks_2, Config)),
+        <<"rabbitmq1">>},
+        {?config(fixture_jwk, Config),
         <<"rabbitmq2.configure:*/* rabbitmq2.write:*/* rabbitmq2.read:*/*">>,
-        [<<"rabbitmq2">>]
-    ),
-    verify_queue_declare_with_token(Config, Token3).
-
-
-test_m_failed_connection_due_to_missing_key(Config) ->
-    {_Alg, Token} = generate_valid_token(
-        Config,
-        lists:nth(1, ?config(fixture_jwks_2, Config)), %% used signing key for rabbitmq2 instead of rabbitmq1 one
+        <<"rabbitmq2">>},
+        {?config(fixture_jwk, Config),
         <<"rabbitmq1.configure:*/* rabbitmq1.write:*/* rabbitmq1.read:*/*">>,
-        [<<"rabbitmq1">>]
-    ),
-    ?assertMatch({error, {auth_failure, _}},
-                 open_unmanaged_connection(Config, 0, <<"username">>, Token)).
+        <<"rabbitmq1">>}
+    ],
+    [test_queue_declare(Config, Jwks, Scopes, Audience) ||
+        {Jwks, Scopes, Audience} <- TestCases].
+
+
+test_successful_queue_declaration_using_multiple_keys_and_audiences(Config) ->
+    TestCases = [
+        {lists:nth(1, ?config(fixture_jwks_1, Config)),
+        <<"rabbitmq1.configure:*/* rabbitmq1.write:*/* rabbitmq1.read:*/*">>,
+        <<"rabbitmq1">>},
+        {lists:nth(2, ?config(fixture_jwks_1, Config)),
+        <<"rabbitmq1.configure:*/* rabbitmq1.write:*/* rabbitmq1.read:*/*">>,
+        <<"rabbitmq1">>},
+        {lists:nth(1, ?config(fixture_jwks_2, Config)),
+        <<"rabbitmq2.configure:*/* rabbitmq2.write:*/* rabbitmq2.read:*/*">>,
+        <<"rabbitmq2">>}
+    ],
+    [test_queue_declare(Config, Jwks, Scopes, Audience) ||
+        {Jwks, Scopes, Audience} <- TestCases].
 
 
 test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost(Config) ->
