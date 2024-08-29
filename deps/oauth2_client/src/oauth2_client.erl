@@ -7,7 +7,10 @@
 -module(oauth2_client).
 -export([get_access_token/2, get_expiration_time/1,
         refresh_access_token/2,
-        get_oauth_provider/1, get_oauth_provider/2, 
+        get_oauth_provider/1, get_oauth_provider/2,
+        get_openid_configuration/2, get_openid_configuration/3,
+        merge_openid_configuration/2,
+        merge_oauth_provider/2,
         extract_ssl_options_as_list/1
         ]).
 
@@ -43,7 +46,8 @@ refresh_access_token(OAuthProvider, Request) ->
 append_paths(Path1, Path2) ->
     erlang:iolist_to_binary([Path1, Path2]).
 
--spec get_openid_configuration(uri_string:uri_string(), erlang:iodata() | <<>>, ssl:tls_option() | []) -> {ok, oauth_provider()} | {error, term()}.
+-spec get_openid_configuration(uri_string:uri_string(), erlang:iodata() | <<>>,
+    ssl:tls_option() | []) -> {ok, openid_configuration()} | {error, term()}.
 get_openid_configuration(IssuerURI, OpenIdConfigurationPath, TLSOptions) ->
     URLMap = uri_string:parse(IssuerURI),
     Path = case maps:get(path, URLMap) of
@@ -52,24 +56,106 @@ get_openid_configuration(IssuerURI, OpenIdConfigurationPath, TLSOptions) ->
         P -> append_paths(P, OpenIdConfigurationPath)
     end,
     URL = uri_string:resolve(Path, IssuerURI),
-    rabbit_log:debug("get_openid_configuration issuer URL ~p (~p)", [URL, TLSOptions]),
+    rabbit_log:debug("get_openid_configuration issuer URL ~p (~p)", [URL,
+        format_ssl_options(TLSOptions)]),
     Options = [],
     Response = httpc:request(get, {URL, []}, TLSOptions, Options),
-    enrich_oauth_provider(parse_openid_configuration_response(Response), TLSOptions).
+    parse_openid_configuration_response(Response).
 
--spec get_openid_configuration(uri_string:uri_string(), ssl:tls_option() | []) ->  {ok, oauth_provider()} | {error, term()}.
+-spec get_openid_configuration(uri_string:uri_string(), ssl:tls_option() | []) ->
+    {ok, openid_configuration()} | {error, term()}.
 get_openid_configuration(IssuerURI, TLSOptions) ->
     get_openid_configuration(IssuerURI, ?DEFAULT_OPENID_CONFIGURATION_PATH, TLSOptions).
+% Returns {ok, with_modidified_oauth_provider} or {ok} if oauth_provider was
+% not modified
+-spec merge_openid_configuration(openid_configuration(), oauth_provider()) ->
+    oauth_provider().
+merge_openid_configuration(OpendIdConfiguration, OAuthProvider) ->
+    OAuthProvider0 = case OpendIdConfiguration#openid_configuration.issuer of
+        undefined -> OAuthProvider;
+        Issuer ->
+            OAuthProvider#oauth_provider{issuer = Issuer}
+    end,
+    OAuthProvider1 = case OpendIdConfiguration#openid_configuration.token_endpoint of
+        undefined -> OAuthProvider0;
+        TokenEndpoint ->
+            OAuthProvider0#oauth_provider{token_endpoint = TokenEndpoint}
+    end,
+    OAuthProvider2 = case OpendIdConfiguration#openid_configuration.authorization_endpoint of
+        undefined -> OAuthProvider1;
+        AuthorizationEndpoint ->
+            OAuthProvider1#oauth_provider{authorization_endpoint = AuthorizationEndpoint}
+    end,
+    OAuthProvider3 = case OpendIdConfiguration#openid_configuration.end_session_endpoint of
+        undefined -> OAuthProvider2;
+        EndSessionEndpoint ->
+            OAuthProvider2#oauth_provider{end_session_endpoint = EndSessionEndpoint}
+    end,
+    case OpendIdConfiguration#openid_configuration.jwks_uri of
+        undefined -> OAuthProvider3;
+        JwksUri ->
+            OAuthProvider3#oauth_provider{jwks_uri = JwksUri}
+    end.
 
--spec get_expiration_time(successful_access_token_response()) -> 
+-spec merge_oauth_provider(oauth_provider(), proplists:proplist()) ->
+    proplists:proplist().
+merge_oauth_provider(OAuthProvider, Proplist) ->
+    Proplist0 = case OAuthProvider#oauth_provider.token_endpoint of
+        undefined ->  Proplist;
+        TokenEndpoint -> [{token_endpoint, TokenEndpoint} |
+            proplists:delete(token_endpoint, Proplist)]
+    end,
+    Proplist1 = case OAuthProvider#oauth_provider.authorization_endpoint of
+        undefined ->  Proplist0;
+        AuthzEndpoint -> [{authorization_endpoint, AuthzEndpoint} |
+            proplists:delete(authorization_endpoint, Proplist0)]
+    end,
+    Proplist2 = case OAuthProvider#oauth_provider.end_session_endpoint of
+        undefined ->  Proplist1;
+        EndSessionEndpoint -> [{end_session_endpoint, EndSessionEndpoint} |
+            proplists:delete(end_session_endpoint, Proplist1)]
+    end,
+    case OAuthProvider#oauth_provider.jwks_uri of
+        undefined ->  Proplist2;
+        JwksEndPoint -> [{jwks_uri, JwksEndPoint} |
+            proplists:delete(jwks_uri, Proplist2)]
+    end.
+
+parse_openid_configuration_response({error, Reason}) ->
+    {error, Reason};
+parse_openid_configuration_response({ok,{{_,Code,Reason}, Headers, Body}}) ->
+    map_response_to_openid_configuration(Code, Reason, Headers, Body).
+map_response_to_openid_configuration(Code, Reason, Headers, Body) ->
+    case decode_body(proplists:get_value("content-type", Headers, ?CONTENT_JSON), Body) of
+        {error, {error, InternalError}} ->
+            {error, InternalError};
+        {error, _} = Error ->
+            Error;
+        Value ->
+            case Code of
+                200 -> {ok, map_to_openid_configuration(Value)};
+                201 -> {ok, map_to_openid_configuration(Value)};
+                _ ->   {error, Reason}
+            end
+    end.
+map_to_openid_configuration(Map) ->
+    #openid_configuration{
+        issuer = maps:get(?RESPONSE_ISSUER, Map),
+        token_endpoint = maps:get(?RESPONSE_TOKEN_ENDPOINT, Map, undefined),
+        authorization_endpoint = maps:get(?RESPONSE_AUTHORIZATION_ENDPOINT, Map, undefined),
+        end_session_endpoint = maps:get(?RESPONSE_END_SESSION_ENDPOINT, Map, undefined),
+        jwks_uri = maps:get(?RESPONSE_JWKS_URI, Map, undefined)
+    }.
+
+-spec get_expiration_time(successful_access_token_response()) ->
     {ok, [{expires_in, integer() }| {exp, integer() }]} | {error, missing_exp_field}.
 get_expiration_time(#successful_access_token_response{expires_in = ExpiresInSec,
         access_token = AccessToken}) ->
     case ExpiresInSec of
-        undefined -> 
-            case jwt_helper:get_expiration_time(jwt_helper:decode(AccessToken)) of 
+        undefined ->
+            case jwt_helper:get_expiration_time(jwt_helper:decode(AccessToken)) of
                 {ok, Exp} -> {ok, [{exp, Exp}]};
-                {error, _} = Error -> Error 
+                {error, _} = Error -> Error
             end;
         _ -> {ok, [{expires_in, ExpiresInSec}]}
     end.
@@ -112,34 +198,19 @@ do_update_oauth_provider_endpoints_configuration(OAuthProvider) ->
     List = application:get_env(rabbitmq_auth_backend_oauth2, key_config, []),
     ModifiedList = case OAuthProvider#oauth_provider.jwks_uri of
         undefined ->  List;
-        JwksEndPoint -> [{jwks_url, JwksEndPoint} | List]
+        JwksEndPoint -> [{jwks_url, JwksEndPoint} | proplists:delete(jwks_url, List)]
     end,
     application:set_env(rabbitmq_auth_backend_oauth2, key_config, ModifiedList),
-    rabbit_log:debug("Updated oauth_provider details: ~p ", [ OAuthProvider]),
+    rabbit_log:debug("Updated oauth_provider details: ~p ", [ format_oauth_provider(OAuthProvider)]),
     OAuthProvider.
 
 do_update_oauth_provider_endpoints_configuration(OAuthProviderId, OAuthProvider) ->
     OAuthProviders = application:get_env(rabbitmq_auth_backend_oauth2, oauth_providers, #{}),
-    LookupProviderPropList = maps:get(OAuthProviderId, OAuthProviders),
-    ModifiedList0 = case OAuthProvider#oauth_provider.token_endpoint of
-        undefined ->  LookupProviderPropList;
-        TokenEndpoint -> [{token_endpoint, TokenEndpoint} | LookupProviderPropList]
-    end,
-    ModifiedList1 = case OAuthProvider#oauth_provider.authorization_endpoint of
-        undefined ->  ModifiedList0;
-        AuthzEndpoint -> [{authorization_endpoint, AuthzEndpoint} | ModifiedList0]
-    end,
-    ModifiedList2 = case OAuthProvider#oauth_provider.end_session_endpoint of
-        undefined ->  ModifiedList1;
-        EndSessionEndpoint -> [{end_session_endpoint, EndSessionEndpoint} | ModifiedList1]
-    end,
-    ModifiedList3 = case OAuthProvider#oauth_provider.jwks_uri of
-        undefined ->  ModifiedList2;
-        JwksEndPoint -> [{jwks_uri, JwksEndPoint} | ModifiedList2]
-    end,
-    ModifiedOAuthProviders = maps:put(OAuthProviderId, ModifiedList3, OAuthProviders),
+    Proplist = maps:get(OAuthProviderId, OAuthProviders),
+    ModifiedOAuthProviders = maps:put(OAuthProviderId,
+        merge_oauth_provider(OAuthProvider, Proplist), OAuthProviders),
     application:set_env(rabbitmq_auth_backend_oauth2, oauth_providers, ModifiedOAuthProviders),
-    rabbit_log:debug("Replacing oauth_providers  ~p", [ ModifiedOAuthProviders]),
+    rabbit_log:debug("Replaced oauth_providers "),
     OAuthProvider.
 
 use_global_locks_on_all_nodes() ->
@@ -176,25 +247,27 @@ unlock(LockId) ->
 get_oauth_provider(ListOfRequiredAttributes) ->
     case application:get_env(rabbitmq_auth_backend_oauth2, default_oauth_provider) of
         undefined -> get_oauth_provider_from_keyconfig(ListOfRequiredAttributes);
-        {ok, DefaultOauthProvider} ->
-            rabbit_log:debug("Using default_oauth_provider ~p", [DefaultOauthProvider]),
-            get_oauth_provider(DefaultOauthProvider, ListOfRequiredAttributes)
+        {ok, DefaultOauthProviderId} ->
+            rabbit_log:debug("Using default_oauth_provider ~p", [DefaultOauthProviderId]),
+            get_oauth_provider(DefaultOauthProviderId, ListOfRequiredAttributes)
     end.
 
 get_oauth_provider_from_keyconfig(ListOfRequiredAttributes) ->
     OAuthProvider = lookup_oauth_provider_from_keyconfig(),
-    rabbit_log:debug("Using oauth_provider ~p from keyconfig", [OAuthProvider]),
+    rabbit_log:debug("Using oauth_provider ~s from keyconfig", [format_oauth_provider(OAuthProvider)]),
     case find_missing_attributes(OAuthProvider, ListOfRequiredAttributes) of
         [] ->
             {ok, OAuthProvider};
-        _ ->
+        _ = MissingAttributes ->
+            rabbit_log:debug("OauthProvider has following missing attributes ~p", [MissingAttributes]),
             Result2 = case OAuthProvider#oauth_provider.issuer of
                 undefined -> {error, {missing_oauth_provider_attributes, [issuer]}};
                 Issuer ->
                     rabbit_log:debug("Downloading oauth_provider using issuer ~p", [Issuer]),
                     case get_openid_configuration(Issuer, get_ssl_options_if_any(OAuthProvider)) of
-                        {ok, OauthProvider} ->
-                            {ok, update_oauth_provider_endpoints_configuration(OauthProvider)};
+                        {ok, OpenIdConfiguration} ->
+                            {ok, update_oauth_provider_endpoints_configuration(
+                                merge_openid_configuration(OpenIdConfiguration, OAuthProvider))};
                         {error, _} = Error2 -> Error2
                     end
                 end,
@@ -202,7 +275,7 @@ get_oauth_provider_from_keyconfig(ListOfRequiredAttributes) ->
                 {ok, OAuthProvider2} ->
                     case find_missing_attributes(OAuthProvider2, ListOfRequiredAttributes) of
                         [] ->
-                            rabbit_log:debug("Resolved oauth_provider ~p", [OAuthProvider]),
+                            rabbit_log:debug("Resolved oauth_provider ~p", [format_oauth_provider(OAuthProvider)]),
                             {ok, OAuthProvider2};
                         _ = Attrs->
                             {error, {missing_oauth_provider_attributes, Attrs}}
@@ -213,35 +286,37 @@ get_oauth_provider_from_keyconfig(ListOfRequiredAttributes) ->
 
 
 -spec get_oauth_provider(oauth_provider_id(), list()) -> {ok, oauth_provider()} | {error, any()}.
+get_oauth_provider(root, ListOfRequiredAttributes) ->
+    get_oauth_provider(ListOfRequiredAttributes);
+
 get_oauth_provider(OAuth2ProviderId, ListOfRequiredAttributes) when is_list(OAuth2ProviderId) ->
     get_oauth_provider(list_to_binary(OAuth2ProviderId), ListOfRequiredAttributes);
 
-get_oauth_provider(OAuth2ProviderId, ListOfRequiredAttributes) when is_binary(OAuth2ProviderId) ->
-    rabbit_log:debug("get_oauth_provider ~p with at least these attributes: ~p", [OAuth2ProviderId, ListOfRequiredAttributes]),
-    case lookup_oauth_provider_config(OAuth2ProviderId) of
+get_oauth_provider(OAuthProviderId, ListOfRequiredAttributes) when is_binary(OAuthProviderId) ->
+    rabbit_log:debug("get_oauth_provider ~p with at least these attributes: ~p", [OAuthProviderId, ListOfRequiredAttributes]),
+    case lookup_oauth_provider_config(OAuthProviderId) of
         {error, _} = Error0 ->
             rabbit_log:debug("Failed to find oauth_provider ~p configuration due to ~p",
-                [OAuth2ProviderId, Error0]),
+                [OAuthProviderId, Error0]),
             Error0;
         Config ->
             rabbit_log:debug("Found oauth_provider configuration ~p", [Config]),
-            OAuthProvider = case Config of
-                {error,_} = Error -> Error;
-                _ -> map_to_oauth_provider(Config)
-            end,
-            rabbit_log:debug("Resolved oauth_provider ~p", [OAuthProvider]),
+            OAuthProvider = map_to_oauth_provider(Config),
+            rabbit_log:debug("Resolved oauth_provider ~p", [format_oauth_provider(OAuthProvider)]),
             case find_missing_attributes(OAuthProvider, ListOfRequiredAttributes) of
                 [] ->
                     {ok, OAuthProvider};
-                _ ->
+                _ = MissingAttributes ->
+                    rabbit_log:debug("OauthProvider has following missing attributes ~p", [MissingAttributes]),
                     Result2 = case OAuthProvider#oauth_provider.issuer of
                         undefined -> {error, {missing_oauth_provider_attributes, [issuer]}};
                         Issuer ->
                             rabbit_log:debug("Downloading oauth_provider ~p using issuer ~p",
-                                [OAuth2ProviderId, Issuer]),
+                                [OAuthProviderId, Issuer]),
                             case get_openid_configuration(Issuer, get_ssl_options_if_any(OAuthProvider)) of
-                                {ok, OauthProvider} ->
-                                    {ok, update_oauth_provider_endpoints_configuration(OAuth2ProviderId, OauthProvider)};
+                                {ok, OpenIdConfiguration} ->
+                                    {ok, update_oauth_provider_endpoints_configuration(OAuthProviderId,
+                                        merge_openid_configuration(OpenIdConfiguration, OAuthProvider))};
                                 {error, _} = Error2 -> Error2
                             end
                     end,
@@ -249,7 +324,7 @@ get_oauth_provider(OAuth2ProviderId, ListOfRequiredAttributes) when is_binary(OA
                         {ok, OAuthProvider2} ->
                             case find_missing_attributes(OAuthProvider2, ListOfRequiredAttributes) of
                                 [] ->
-                                    rabbit_log:debug("Resolved oauth_provider ~p", [OAuthProvider]),
+                                    rabbit_log:debug("Resolved oauth_provider ~p", [format_oauth_provider(OAuthProvider)]),
                                     {ok, OAuthProvider2};
                                 _ = Attrs->
                                     {error, {missing_oauth_provider_attributes, Attrs}}
@@ -289,6 +364,7 @@ lookup_oauth_provider_from_keyconfig() ->
     EndSessionEndpoint = application:get_env(rabbitmq_auth_backend_oauth2, end_session_endpoint, undefined),
     Map = maps:from_list(application:get_env(rabbitmq_auth_backend_oauth2, key_config, [])),
     #oauth_provider{
+        id = root,
         issuer = Issuer,
         jwks_uri = maps:get(jwks_url, Map, undefined), %% jwks_url not uri . _url is the legacy name
         token_endpoint = TokenEndpoint,
@@ -296,8 +372,6 @@ lookup_oauth_provider_from_keyconfig() ->
         end_session_endpoint = EndSessionEndpoint,
         ssl_options = extract_ssl_options_as_list(Map)
     }.
-
-
 
 -spec extract_ssl_options_as_list(#{atom() => any()}) -> proplists:proplist().
 extract_ssl_options_as_list(Map) ->
@@ -313,7 +387,6 @@ extract_ssl_options_as_list(Map) ->
             end;
         verify_none -> {verify_none, undefined, undefined}
     end,
-
     [ {verify, Verify} ]
     ++
     case Verify of
@@ -363,9 +436,15 @@ lookup_oauth_provider_config(OAuth2ProviderId) ->
             case maps:get(OAuth2ProviderId, MapOfProviders, undefined) of
                 undefined ->
                     {error, {oauth_provider_not_found, OAuth2ProviderId}};
-                Value -> Value
+                OAuthProvider ->
+                    ensure_oauth_provider_has_id_property(OAuth2ProviderId, OAuthProvider)
             end;
         _ ->  {error, invalid_oauth_provider_configuration}
+    end.
+ensure_oauth_provider_has_id_property(OAuth2ProviderId, OAuth2Provider) ->
+    case proplists:is_defined(id, OAuth2Provider) of
+        true -> OAuth2Provider;
+        false -> OAuth2Provider ++ [{id, OAuth2ProviderId}]
     end.
 
 build_access_token_request_body(Request) ->
@@ -429,8 +508,6 @@ decode_body(MimeType, Body) ->
         true -> decode_body(?CONTENT_JSON, Body);
         false -> {error, mime_type_is_not_json}
     end.
-
-
 map_to_successful_access_token_response(Map) ->
     #successful_access_token_response{
         access_token = maps:get(?RESPONSE_ACCESS_TOKEN, Map),
@@ -438,25 +515,14 @@ map_to_successful_access_token_response(Map) ->
         refresh_token = maps:get(?RESPONSE_REFRESH_TOKEN, Map, undefined),
         expires_in = maps:get(?RESPONSE_EXPIRES_IN, Map, undefined)
     }.
-
 map_to_unsuccessful_access_token_response(Map) ->
     #unsuccessful_access_token_response{
         error = maps:get(?RESPONSE_ERROR, Map),
         error_description = maps:get(?RESPONSE_ERROR_DESCRIPTION, Map, undefined)
     }.
-
-
-map_to_oauth_provider(Map) when is_map(Map) ->
+map_to_oauth_provider(PropList) when is_list(PropList) ->
     #oauth_provider{
-        issuer = maps:get(?RESPONSE_ISSUER, Map),
-        token_endpoint = maps:get(?RESPONSE_TOKEN_ENDPOINT, Map, undefined),
-        authorization_endpoint = maps:get(?RESPONSE_AUTHORIZATION_ENDPOINT, Map, undefined),
-        end_session_endpoint = maps:get(?RESPONSE_END_SESSION_ENDPOINT, Map, undefined),
-        jwks_uri = maps:get(?RESPONSE_JWKS_URI, Map, undefined)
-    };
-
-map_to_oauth_provider(PropList) when is_list(PropList) ->    
-    #oauth_provider{
+        id = proplists:get_value(id, PropList),
         issuer = proplists:get_value(issuer, PropList),
         token_endpoint = proplists:get_value(token_endpoint, PropList),
         authorization_endpoint = proplists:get_value(authorization_endpoint, PropList, undefined),
@@ -464,13 +530,6 @@ map_to_oauth_provider(PropList) when is_list(PropList) ->
         jwks_uri = proplists:get_value(jwks_uri, PropList, undefined),
         ssl_options = extract_ssl_options_as_list(maps:from_list(proplists:get_value(https, PropList, [])))
     }.
-
-
-enrich_oauth_provider({ok, OAuthProvider}, TLSOptions) ->
-    {ok, OAuthProvider#oauth_provider{ssl_options=TLSOptions}};
-enrich_oauth_provider(Response, _) ->
-    Response.
-
 map_to_access_token_response(Code, Reason, Headers, Body) ->
     case decode_body(proplists:get_value("content-type", Headers, ?CONTENT_JSON), Body) of
         {error, {error, InternalError}} ->
@@ -487,28 +546,38 @@ map_to_access_token_response(Code, Reason, Headers, Body) ->
                 _ ->   {error, Reason}
             end
     end.
-
-map_response_to_oauth_provider(Code, Reason, Headers, Body) ->
-    case decode_body(proplists:get_value("content-type", Headers, ?CONTENT_JSON), Body) of
-        {error, {error, InternalError}} ->
-            {error, InternalError};
-        {error, _} = Error ->
-            Error;
-        Value ->
-            case Code of
-                200 -> {ok, map_to_oauth_provider(Value)};
-                201 -> {ok, map_to_oauth_provider(Value)};
-                _ ->   {error, Reason}
-            end
-    end.
-
-
 parse_access_token_response({error, Reason}) ->
     {error, Reason};
 parse_access_token_response({ok,{{_,Code,Reason}, Headers, Body}}) ->
     map_to_access_token_response(Code, Reason, Headers, Body).
 
-parse_openid_configuration_response({error, Reason}) ->
-    {error, Reason};
-parse_openid_configuration_response({ok,{{_,Code,Reason}, Headers, Body}}) ->
-    map_response_to_oauth_provider(Code, Reason, Headers, Body).
+-spec format_ssl_options([ssl:tls_client_option()]) -> string().
+format_ssl_options(TlsOptions) ->
+    CaCertsCount = case proplists:get_value(cacerts, TlsOptions, []) of
+        [] -> 0;
+        Certs -> length(Certs)
+    end,
+    io_lib:format("{verify: ~p, fail_if_no_peer_cert: ~p, crl_check: ~p, " ++
+        "depth: ~p, cacertfile: ~p, cacerts(count): ~p }", [
+        proplists:get_value(verify, TlsOptions),
+        proplists:get_value(fail_if_no_peer_cert, TlsOptions),
+        proplists:get_value(crl_check, TlsOptions),
+        proplists:get_value(depth, TlsOptions),
+        proplists:get_value(cacertfile, TlsOptions),
+        CaCertsCount]).
+
+format_oauth_provider_id(root) -> "<from keyconfig>";
+format_oauth_provider_id(Id) -> binary_to_list(Id).
+
+-spec format_oauth_provider(oauth_provider()) -> string().
+format_oauth_provider(OAuthProvider) ->
+    io_lib:format("{id: ~p, issuer: ~p, token_endpoint: ~p, " ++
+        "authorization_endpoint: ~p, end_session_endpoint: ~p, " ++
+        "jwks_uri: ~p, ssl_options: ~s }", [
+        format_oauth_provider_id(OAuthProvider#oauth_provider.id),
+        OAuthProvider#oauth_provider.issuer,
+        OAuthProvider#oauth_provider.token_endpoint,
+        OAuthProvider#oauth_provider.authorization_endpoint,
+        OAuthProvider#oauth_provider.end_session_endpoint,
+        OAuthProvider#oauth_provider.jwks_uri,
+        format_ssl_options(OAuthProvider#oauth_provider.ssl_options)]).

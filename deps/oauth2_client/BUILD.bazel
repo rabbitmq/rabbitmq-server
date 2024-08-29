@@ -108,6 +108,7 @@ rabbitmq_integration_suite(
     size = "small",
     additional_beam = [
         "test/oauth_http_mock.beam",
+        "test/oauth2_client_test_util.beam",
     ],
     runtime_deps = [
         "@cowboy//:erlang_app",
