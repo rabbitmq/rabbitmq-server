@@ -1417,7 +1417,7 @@ block(Config) ->
     puback_timeout = publish_qos1_timeout(C, Topic, <<"Still blocked">>, 1000),
 
     %% Unblock
-    rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
+    rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.6]),
     ok = expect_publishes(C, Topic, [<<"Not blocked yet">>,
                                      <<"Now blocked">>,
                                      <<"Still blocked">>]),
@@ -1458,7 +1458,7 @@ block_only_publisher(Config) ->
     ?assertEqual(puback_timeout, publish_qos1_timeout(Con, Topic, <<"from Con 2">>, 500)),
     ?assertEqual(pong, emqtt:ping(Sub)),
 
-    rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
+    rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.6]),
     %% Let it unblock
     timer:sleep(100),
 

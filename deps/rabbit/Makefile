@@ -14,7 +14,7 @@ define PROJECT_ENV
 	    {ssl_listeners, []},
 	    {num_ssl_acceptors, 10},
 	    {ssl_options, []},
-	    {vm_memory_high_watermark, 0.4},
+	    {vm_memory_high_watermark, 0.6},
 	    {vm_memory_calculation_strategy, rss},
 	    {disk_free_limit, 50000000}, %% 50MB
 	    {backing_queue_module, rabbit_variable_queue},
