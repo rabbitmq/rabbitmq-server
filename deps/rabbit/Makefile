@@ -15,9 +15,7 @@ define PROJECT_ENV
 	    {num_ssl_acceptors, 10},
 	    {ssl_options, []},
 	    {vm_memory_high_watermark, 0.4},
-	    {vm_memory_high_watermark_paging_ratio, 0.5},
 	    {vm_memory_calculation_strategy, rss},
-	    {memory_monitor_interval, 2500},
 	    {disk_free_limit, 50000000}, %% 50MB
 	    {backing_queue_module, rabbit_variable_queue},
 	    %% 0 ("no limit") would make a better default, but that
@@ -67,10 +65,7 @@ define PROJECT_ENV
 	                          {linger,        {true, 0}},
 	                          {exit_on_close, false}
 	                         ]},
-	    {halt_on_upgrade_failure, true},
 	    {ssl_apps, [asn1, crypto, public_key, ssl]},
-	    %% classic queue storage implementation version
-	    {classic_queue_default_version, 2},
 	    %% see rabbitmq-server#227 and related tickets.
 	    %% msg_store_credit_disc_bound only takes effect when
 	    %% messages are persisted to the message store. If messages
@@ -92,10 +87,6 @@ define PROJECT_ENV
 	    %% 30 minutes
 	    {consumer_timeout, 1800000},
 
-	    %% see rabbitmq-server#486
-	    {autocluster,
-              [{peer_discovery_backend, rabbit_peer_discovery_classic_config}]
-            },
 	    %% used by rabbit_peer_discovery_classic_config
 	    {cluster_nodes, {[], disc}},
 
