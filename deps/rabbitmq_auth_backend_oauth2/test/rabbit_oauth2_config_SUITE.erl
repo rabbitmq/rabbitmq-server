@@ -18,177 +18,152 @@
 -define(AUTH_PORT, 8000).
 
 
-all() ->
-    [
-        {group, with_rabbitmq_node},
-        {group, with_resource_server_id},
-        {group, without_resource_server_id},
-        {group, with_resource_servers},
-        {group, with_resource_servers_and_resource_server_id},
-        {group, inheritance_group}
+all() -> [
+    {group, with_rabbitmq_node},
+    {group, with_resource_server_id},
+    {group, without_resource_server_id},
+    {group, with_resource_servers},
+    {group, with_resource_servers_and_resource_server_id},
+    {group, inheritance_group}
+].
+groups() -> [
+    {with_rabbitmq_node, [], [
+        add_signing_keys_for_specific_oauth_provider,
+        add_signing_keys_for_root_oauth_provider,
 
-    ].
-groups() ->
-    [
-      {with_rabbitmq_node, [], [
-          add_signing_keys_for_specific_oauth_provider,
-          add_signing_keys_for_root_oauth_provider,
-
-          replace_signing_keys_for_root_oauth_provider,
-          replace_signing_keys_for_specific_oauth_provider
-
-        ]
-      },
-
-      {with_resource_server_id, [], [
-          get_default_resource_server_id,
-          get_allowed_resource_server_ids_returns_resource_server_id,
-          get_resource_server_id_for_rabbit_audience_returns_rabbit,
-          get_resource_server_id_for_none_audience_should_fail,
-          get_resource_server_id_for_unknown_audience_should_fail,
-          {with_verify_aud_false, [], [
-              get_resource_server_id_for_rabbit_audience_returns_rabbit,
-              get_resource_server_id_for_none_audience_returns_rabbit,
-              get_resource_server_id_for_unknown_audience_returns_rabbit
-          ]},
-          find_audience_in_resource_server_ids_found_resource_server_id,
-          get_oauth_provider_root_with_jwks_uri_should_fail,
-          get_default_key_should_fail,
-          {with_default_key, [], [
-              get_default_key
-          ]},
-          {with_static_signing_keys, [], [
-              get_signing_keys
-          ]},
-          {with_static_signing_keys_for_oauth_provider_A, [], [
-              get_signing_keys_for_oauth_provider_A
-          ]},
-          get_algorithms_should_return_undefined,
-          {with_algorithms, [], [
-              get_algorithms
-          ]},
-          {with_jwks_url, [], [
-              get_oauth_provider_should_return_root_oauth_provider_with_jwks_uri,
-              {with_oauth_providers_A_with_jwks_uri, [], [
-                  get_oauth_provider_should_return_root_oauth_provider_with_jwks_uri,
-                  {with_default_oauth_provider_A, [], [
-                      get_oauth_provider_should_return_oauth_provider_A_with_jwks_uri
-                    ]
-                  }
-                ]
-              },
-              {with_oauth_providers_A_B_with_jwks_uri, [], [
-                  get_default_key_for_provider_A_should_fail,
-                  {with_default_key, [], [
+        replace_signing_keys_for_root_oauth_provider,
+        replace_signing_keys_for_specific_oauth_provider,
+        {with_root_static_signing_keys, [], [
+            replace_merge_root_static_keys_with_newly_added_keys,
+            replace_override_root_static_keys_with_newly_added_keys
+        ]}
+    ]},
+    {with_resource_server_id, [], [
+        get_default_resource_server_id,
+        get_allowed_resource_server_ids_returns_resource_server_id,
+        get_resource_server_id_for_rabbit_audience_returns_rabbit,
+        get_resource_server_id_for_none_audience_should_fail,
+        get_resource_server_id_for_unknown_audience_should_fail,
+        {with_verify_aud_false, [], [
+            get_resource_server_id_for_rabbit_audience_returns_rabbit,
+            get_resource_server_id_for_none_audience_returns_rabbit,
+            get_resource_server_id_for_unknown_audience_returns_rabbit
+        ]},
+        find_audience_in_resource_server_ids_found_resource_server_id,
+        get_oauth_provider_root_with_jwks_uri_should_fail,
+        get_default_key_should_fail,
+        {with_default_key, [], [
+            get_default_key
+        ]},
+        {with_static_signing_keys, [], [
+            get_signing_keys
+        ]},
+        {with_static_signing_keys_for_oauth_provider_A, [], [
+            get_signing_keys_for_oauth_provider_A
+        ]},
+        get_algorithms_should_return_undefined,
+        {with_algorithms, [], [
+            get_algorithms
+        ]},
+        {with_jwks_url, [], [
+            get_oauth_provider_should_return_root_oauth_provider_with_jwks_uri,
+            {with_oauth_providers_A_with_jwks_uri, [], [
+                get_oauth_provider_should_return_root_oauth_provider_with_jwks_uri,
+                {with_default_oauth_provider_A, [], [
+                    get_oauth_provider_should_return_oauth_provider_A_with_jwks_uri
+                ]}
+            ]},
+            {with_oauth_providers_A_B_with_jwks_uri, [], [
+                get_default_key_for_provider_A_should_fail,
+                {with_default_key, [], [
                     get_default_key_for_provider_A_should_fail
-                  ]},
-                  {with_default_key_for_provider_A, [], [
+                ]},
+                {with_default_key_for_provider_A, [], [
                     get_default_key_for_provider_A
-                  ]},
-                  get_algorithms_for_provider_A_should_return_undefined,
-                  {with_algorithms_for_provider_A, [], [
+                ]},
+                get_algorithms_for_provider_A_should_return_undefined,
+                {with_algorithms_for_provider_A, [], [
                     get_algorithms_for_provider_A
-                  ]},
-                  get_oauth_provider_should_return_root_oauth_provider_with_jwks_uri,
-                  {with_default_oauth_provider_B, [], [
-                      get_oauth_provider_should_return_oauth_provider_B_with_jwks_uri
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          {with_oauth_providers_A_with_jwks_uri, [], [
-              get_oauth_provider_root_with_jwks_uri_should_fail,
-              {with_default_oauth_provider_A, [], [
-                  get_oauth_provider_should_return_oauth_provider_A_with_jwks_uri
-                ]
-              }
-            ]
-          },
-          {with_issuer, [], [
-              get_oauth_provider_should_return_root_oauth_provider_with_all_discovered_endpoints,
-              {with_oauth_providers_A_with_issuer, [], [
-                  get_oauth_provider_should_return_root_oauth_provider_with_all_discovered_endpoints,
-                  {with_default_oauth_provider_A, [], [
-                      get_oauth_provider_should_return_oauth_provider_A_with_all_discovered_endpoints
-                    ]
-                  }
-                ]
-              },
-              {with_oauth_providers_A_B_with_issuer, [], [
-                  get_oauth_provider_should_return_root_oauth_provider_with_all_discovered_endpoints,
-                  {with_default_oauth_provider_B, [], [
-                      get_oauth_provider_should_return_oauth_provider_B_with_all_discovered_endpoints
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      {without_resource_server_id, [], [
-          get_default_resource_server_id_returns_error,
-          get_allowed_resource_server_ids_returns_empty_list
-        ]
-      },
-      {with_resource_servers, [], [
-          get_allowed_resource_server_ids_returns_resource_servers_ids,
-          find_audience_in_resource_server_ids_found_one_resource_servers,
-          index_resource_servers_by_id_else_by_key,
-          is_verify_aud_for_resource_two_returns_true,
-          {with_verify_aud_false_for_resource_two, [], [
+                ]},
+                get_oauth_provider_should_return_root_oauth_provider_with_jwks_uri,
+                {with_default_oauth_provider_B, [], [
+                    get_oauth_provider_should_return_oauth_provider_B_with_jwks_uri
+                ]}
+            ]}
+        ]},
+        {with_oauth_providers_A_with_jwks_uri, [], [
+            get_oauth_provider_root_with_jwks_uri_should_fail,
+            {with_default_oauth_provider_A, [], [
+                get_oauth_provider_should_return_oauth_provider_A_with_jwks_uri
+            ]}
+        ]},
+        {with_issuer, [], [
+            get_oauth_provider_should_return_root_oauth_provider_with_all_discovered_endpoints,
+            {with_oauth_providers_A_with_issuer, [], [
+                get_oauth_provider_should_return_root_oauth_provider_with_all_discovered_endpoints,
+                {with_default_oauth_provider_A, [], [
+                    get_oauth_provider_should_return_oauth_provider_A_with_all_discovered_endpoints
+                ]}
+            ]},
+            {with_oauth_providers_A_B_with_issuer, [], [
+                get_oauth_provider_should_return_root_oauth_provider_with_all_discovered_endpoints,
+                {with_default_oauth_provider_B, [], [
+                    get_oauth_provider_should_return_oauth_provider_B_with_all_discovered_endpoints
+                ]}
+            ]}
+        ]}
+    ]},
+    {without_resource_server_id, [], [
+        get_default_resource_server_id_returns_error,
+        get_allowed_resource_server_ids_returns_empty_list
+    ]},
+    {with_resource_servers, [], [
+        get_allowed_resource_server_ids_returns_resource_servers_ids,
+        find_audience_in_resource_server_ids_found_one_resource_servers,
+        index_resource_servers_by_id_else_by_key,
+        is_verify_aud_for_resource_two_returns_true,
+        {with_verify_aud_false_for_resource_two, [], [
             is_verify_aud_for_resource_one_returns_true,
             is_verify_aud_for_resource_two_returns_false
-          ]},
-          {with_jwks_url, [], [
-              get_oauth_provider_for_both_resources_should_return_root_oauth_provider,
-              {with_oauth_providers_A_with_jwks_uri, [], [
-                  {with_default_oauth_provider_A, [], [
-                      get_oauth_provider_for_both_resources_should_return_oauth_provider_A
-                    ]
-                  }
-                ]
-              },
-              {with_different_oauth_provider_for_each_resource, [], [
-                  {with_oauth_providers_A_B_with_jwks_uri, [], [
+        ]},
+        {with_jwks_url, [], [
+            get_oauth_provider_for_both_resources_should_return_root_oauth_provider,
+            {with_oauth_providers_A_with_jwks_uri, [], [
+                {with_default_oauth_provider_A, [], [
+                    get_oauth_provider_for_both_resources_should_return_oauth_provider_A
+                ]}
+            ]},
+            {with_different_oauth_provider_for_each_resource, [], [
+                {with_oauth_providers_A_B_with_jwks_uri, [], [
                     get_oauth_provider_for_resource_one_should_return_oauth_provider_A,
                     get_oauth_provider_for_resource_two_should_return_oauth_provider_B
-                    ]}
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      {with_resource_servers_and_resource_server_id, [], [
-          get_allowed_resource_server_ids_returns_all_resource_servers_ids,
-          find_audience_in_resource_server_ids_found_resource_server_id,
-          find_audience_in_resource_server_ids_found_one_resource_servers,
-          find_audience_in_resource_server_ids_using_binary_audience
+                ]}
+            ]}
+        ]}
+    ]},
+    {with_resource_servers_and_resource_server_id, [], [
+        get_allowed_resource_server_ids_returns_all_resource_servers_ids,
+        find_audience_in_resource_server_ids_found_resource_server_id,
+        find_audience_in_resource_server_ids_found_one_resource_servers,
+        find_audience_in_resource_server_ids_using_binary_audience
+    ]},
 
-        ]
-      },
-
-      {inheritance_group, [], [
-          get_additional_scopes_key,
-          get_additional_scopes_key_when_not_defined,
-          is_verify_aud,
-          is_verify_aud_when_is_false,
-          get_default_preferred_username_claims,
-          get_preferred_username_claims,
-          get_scope_prefix,
-          get_scope_prefix_when_not_defined,
-          get_resource_server_type,
-          get_resource_server_type_when_not_defined,
-          has_scope_aliases,
-          has_scope_aliases_when_not_defined,
-          get_scope_aliases
-        ]
-      }
-
-    ].
+    {inheritance_group, [], [
+        get_additional_scopes_key,
+        get_additional_scopes_key_when_not_defined,
+        is_verify_aud,
+        is_verify_aud_when_is_false,
+        get_default_preferred_username_claims,
+        get_preferred_username_claims,
+        get_scope_prefix,
+        get_scope_prefix_when_not_defined,
+        get_resource_server_type,
+        get_resource_server_type_when_not_defined,
+        has_scope_aliases,
+        has_scope_aliases_when_not_defined,
+        get_scope_aliases
+    ]}
+].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -208,6 +183,16 @@ init_per_group(with_default_key, Config) ->
     application:set_env(rabbitmq_auth_backend_oauth2, key_config,
         proplists:delete(default_key, KeyConfig) ++ [{default_key,<<"default-key">>}]),
     Config;
+init_per_group(with_root_static_signing_keys, Config) ->
+    KeyConfig = application:get_env(rabbitmq_auth_backend_oauth2, key_config, []),
+    SigningKeys = #{
+        <<"mykey-root-1">> => <<"some key root-1">>,
+        <<"mykey-root-2">> => <<"some key root-2">>
+    },
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config,
+        proplists:delete(default_key, KeyConfig) ++ [{signing_keys,SigningKeys}]),
+    Config;
+
 init_per_group(with_default_key_for_provider_A, Config) ->
     OAuthProviders = application:get_env(rabbitmq_auth_backend_oauth2, oauth_providers, #{}),
     OAuthProvider = maps:get(<<"A">>, OAuthProviders, []),
@@ -401,6 +386,11 @@ init_per_group(_any, Config) ->
 
 end_per_group(with_rabbitmq_node, Config) ->
     rabbit_ct_helpers:run_steps(Config, rabbit_ct_broker_helpers:teardown_steps());
+end_per_group(with_root_static_signing_keys, Config) ->
+    KeyConfig = application:get_env(rabbitmq_auth_backend_oauth2, key_config, []),
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config,
+        proplists:delete(signing_keys, KeyConfig)),
+    Config;
 
 end_per_group(with_resource_server_id, Config) ->
     application:unset_env(rabbitmq_auth_backend_oauth2, resource_server_id),
@@ -596,6 +586,21 @@ add_signing_keys_for_specific_oauth_provider(Config) ->
     ?assertEqual(<<"some key 3-1">>,
         call_get_signing_key(Config, [<<"mykey-3-1">> , <<"my-oauth-provider-3">>])).
 
+replace_merge_root_static_keys_with_newly_added_keys(Config) ->
+    NewKeys = #{<<"key-2">> => <<"some key 2">>, <<"key-3">> => <<"some key 3">>},
+    call_replace_signing_keys(Config, [NewKeys]),
+    #{  <<"mykey-root-1">> := <<"some key root-1">>,
+        <<"mykey-root-2">> := <<"some key root-2">>,
+        <<"key-2">> := <<"some key 2">>,
+        <<"key-3">> := <<"some key 3">>
+    } = call_get_signing_keys(Config).
+replace_override_root_static_keys_with_newly_added_keys(Config) ->
+    NewKeys = #{<<"mykey-root-1">> => <<"new key root-1">>, <<"key-3">> => <<"some key 3">>},
+    call_replace_signing_keys(Config, [NewKeys]),
+    #{  <<"mykey-root-1">> := <<"new key root-1">>,
+        <<"mykey-root-2">> := <<"some key root-2">>,
+        <<"key-3">> := <<"some key 3">>
+    } = call_get_signing_keys(Config).
 replace_signing_keys_for_root_oauth_provider(Config) ->
     call_add_signing_key(Config, [<<"mykey-1">>, <<"some key 1">>]),
     NewKeys = #{<<"key-2">> => <<"some key 2">>, <<"key-3">> => <<"some key 3">>},
