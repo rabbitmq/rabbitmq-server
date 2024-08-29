@@ -176,6 +176,15 @@ join(RemoteNode, NodeType)
                       false -> join_using_mnesia(ClusterNodes, NodeType)
                   end,
 
+            case Ret of
+                ok ->
+                    ok;
+                {error, _} ->
+                    %% We reset feature flags states again and make sure the
+                    %% recorded states on disk are deleted.
+                    rabbit_feature_flags:reset()
+            end,
+
             %% Restart RabbitMQ afterwards, if it was running before the join.
             %% Likewise for the Feature flags controller and Mnesia (if we
             %% still need it).
@@ -201,10 +210,6 @@ join(RemoteNode, NodeType)
                     rabbit_node_monitor:notify_joined_cluster(),
                     ok;
                 {error, _} = Error ->
-                    %% We reset feature flags states again and make sure the
-                    %% recorded states on disk are deleted.
-                    rabbit_feature_flags:reset(),
-
                     Error
             end;
         {ok, already_member} ->
