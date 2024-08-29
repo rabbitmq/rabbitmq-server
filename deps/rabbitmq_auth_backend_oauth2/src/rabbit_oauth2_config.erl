@@ -15,13 +15,16 @@
 -define(TOP_RESOURCE_SERVER_ID, application:get_env(?APP, resource_server_id)).
 %% scope aliases map "role names" to a set of scopes
 
-
 -export([
     add_signing_key/2, add_signing_key/3, replace_signing_keys/1,
     replace_signing_keys/2,
-    get_signing_keys/0, get_signing_keys/1, get_signing_key/2,
-    get_key_config/0, get_key_config/1, get_default_resource_server_id/0,
-    get_oauth_provider_for_resource_server_id/2,
+    get_signing_keys/0, get_signing_keys/1, get_signing_key/1, get_signing_key/2,
+    get_default_key/0,
+    get_default_resource_server_id/0,
+    get_resource_server_id_for_audience/1,
+    get_algorithms/0, get_algorithms/1, get_default_key/1,
+    get_oauth_provider_id_for_resource_server_id/1,
+    get_oauth_provider/2,
     get_allowed_resource_server_ids/0, find_audience_in_resource_server_ids/1,
     is_verify_aud/0, is_verify_aud/1,
     get_additional_scopes_key/0, get_additional_scopes_key/1,
@@ -42,165 +45,239 @@ get_preferred_username_claims() ->
         append_or_return_default(Value, ?DEFAULT_PREFERRED_USERNAME_CLAIMS);
       _ -> ?DEFAULT_PREFERRED_USERNAME_CLAIMS
     end.
--spec get_preferred_username_claims(binary()) -> list().
+-spec get_preferred_username_claims(binary() | list()) -> list().
 get_preferred_username_claims(ResourceServerId) ->
-    get_preferred_username_claims(get_default_resource_server_id(),
-        ResourceServerId).
-get_preferred_username_claims(TopResourceServerId, ResourceServerId)
-  when ResourceServerId =:= TopResourceServerId ->
-    get_preferred_username_claims();
-get_preferred_username_claims(TopResourceServerId, ResourceServerId)
-  when ResourceServerId =/= TopResourceServerId ->
-    ResourceServer = maps:get(ResourceServerId, application:get_env(?APP,
-        resource_servers, #{})),
-    case proplists:get_value(preferred_username_claims, ResourceServer) of
-        undefined -> get_preferred_username_claims();
-        Value -> append_or_return_default(Value, ?DEFAULT_PREFERRED_USERNAME_CLAIMS)
-    end.
-
--type key_type() :: json | pem | map.
--spec add_signing_key(binary(), {key_type(), binary()} ) -> {ok, map()} | {error, term()}.
-add_signing_key(KeyId, Key) ->
-    LockId = lock(),
-    try do_add_signing_key(KeyId, Key) of
-        V -> V
-    after
-        unlock(LockId)
-    end.
-
--spec add_signing_key(binary(), binary(), {key_type(), binary()}) -> {ok, map()} | {error, term()}.
-add_signing_key(ResourceServerId, KeyId, Key) ->
-    LockId = lock(),
-    try do_add_signing_key(ResourceServerId, KeyId, Key) of
-        V -> V
-    after
-        unlock(LockId)
-    end.
-
-do_add_signing_key(KeyId, Key) ->
-    do_replace_signing_keys(maps:put(KeyId, Key, get_signing_keys())).
-
-do_add_signing_key(ResourceServerId, KeyId, Key) ->
-    do_replace_signing_keys(ResourceServerId,
-        maps:put(KeyId, Key, get_signing_keys(ResourceServerId))).
-
-replace_signing_keys(SigningKeys) ->
-    LockId = lock(),
-    try do_replace_signing_keys(SigningKeys) of
-        V -> V
-    after
-        unlock(LockId)
-    end.
-
-replace_signing_keys(ResourceServerId, SigningKeys) ->
-    LockId = lock(),
-    try do_replace_signing_keys(ResourceServerId, SigningKeys) of
-        V -> V
-    after
-        unlock(LockId)
-    end.
-
-do_replace_signing_keys(SigningKeys) ->
-    KeyConfig = application:get_env(?APP, key_config, []),
-    KeyConfig1 = proplists:delete(signing_keys, KeyConfig),
-    KeyConfig2 = [{signing_keys, SigningKeys} | KeyConfig1],
-    application:set_env(?APP, key_config, KeyConfig2),
-    rabbit_log:debug("Replacing signing keys  ~p", [ KeyConfig2]),
-    SigningKeys.
-
-do_replace_signing_keys(ResourceServerId, SigningKeys) ->
-    do_replace_signing_keys(get_default_resource_server_id(),
-        ResourceServerId, SigningKeys).
-do_replace_signing_keys(TopResourceServerId, ResourceServerId, SigningKeys)
-  when ResourceServerId =:= TopResourceServerId ->
-    do_replace_signing_keys(SigningKeys);
-do_replace_signing_keys(TopResourceServerId, ResourceServerId, SigningKeys)
-  when ResourceServerId =/= TopResourceServerId ->
     ResourceServers = application:get_env(?APP, resource_servers, #{}),
     ResourceServer = maps:get(ResourceServerId, ResourceServers, []),
-    KeyConfig0 = proplists:get_value(key_config, ResourceServer, []),
-    KeyConfig1 = proplists:delete(signing_keys, KeyConfig0),
-    KeyConfig2 = [{signing_keys, SigningKeys} | KeyConfig1],
+    case proplists:get_value(preferred_username_claims, ResourceServer, undefined) of
+      undefined ->
+        get_preferred_username_claims();
+      Value ->
+        append_or_return_default(Value, ?DEFAULT_PREFERRED_USERNAME_CLAIMS)
+    end.
 
-    ResourceServer1 = proplists:delete(key_config, ResourceServer),
-    ResourceServer2 = [{key_config, KeyConfig2} | ResourceServer1],
+-spec get_default_key() -> {ok, binary()} | {error, no_default_key_configured}.
+get_default_key() ->
+    get_default_key(root).
 
-    ResourceServers1 = maps:put(ResourceServerId, ResourceServer2, ResourceServers),
-    application:set_env(?APP, resource_servers, ResourceServers1),
-    rabbit_log:debug("Replacing signing keys for ~p -> ~p", [ResourceServerId, ResourceServers1]),
+-spec get_default_key(oauth_provider_id()) -> {ok, binary()} | {error, no_default_key_configured}.
+get_default_key(root) ->
+    case application:get_env(?APP, key_config, undefined) of
+        undefined ->
+            {error, no_default_key_configured};
+        KeyConfig ->
+            case proplists:get_value(default_key, KeyConfig, undefined) of
+                undefined -> {error, no_default_key_configured};
+                V -> {ok, V}
+            end
+    end;
+get_default_key(OauthProviderId) ->
+    OauthProviders = application:get_env(?APP, oauth_providers, #{}),
+    case maps:get(OauthProviderId, OauthProviders, []) of
+        [] ->
+            {error, no_default_key_configured};
+        OauthProvider ->
+            case proplists:get_value(default_key, OauthProvider, undefined) of
+                undefined -> {error, no_default_key_configured};
+                V -> {ok, V}
+            end
+    end.
+
+%%
+%% Signing Key storage:
+%%
+%% * Static signing keys configured via config file are stored under signing_keys attribute
+%% in their respective location (under key_config for the root oauth provider and
+%% directly under each oauth provider)
+%% * Dynamic signing keys loaded via rabbitmqctl or via JWKS endpoint are stored under
+%% jwks attribute in their respective location. However, this attribute stores the
+%% combination of static signing keys and dynamic signing keys. If the same kid is
+%% found in both sets, the dynamic kid overrides the static kid.
+%%
+
+-type key_type() :: json | pem | map.
+-spec add_signing_key(binary(), {key_type(), binary()} ) -> map() | {error, term()}.
+add_signing_key(KeyId, Key) ->
+    LockId = lock(),
+    try do_add_signing_key(KeyId, Key, root) of
+        V -> V
+    after
+        unlock(LockId)
+    end.
+
+-spec add_signing_key(binary(), {key_type(), binary()}, oauth_provider_id()) ->
+    map() | {error, term()}.
+add_signing_key(KeyId, Key, OAuthProviderId) ->
+    case lock() of
+        {error, _} = Error ->
+            Error;
+        LockId ->
+            try do_add_signing_key(KeyId, Key, OAuthProviderId) of
+                V -> V
+            after
+                unlock(LockId)
+            end
+    end.
+
+do_add_signing_key(KeyId, Key, OAuthProviderId) ->
+    do_replace_signing_keys(maps:put(KeyId, Key,
+        get_signing_keys_from_jwks(OAuthProviderId)), OAuthProviderId).
+
+get_signing_keys_from_jwks(root) ->
+    KeyConfig = application:get_env(?APP, key_config, []),
+    proplists:get_value(jwks, KeyConfig, #{});
+get_signing_keys_from_jwks(OAuthProviderId) ->
+    OAuthProviders0 = application:get_env(?APP, oauth_providers, #{}),
+    OAuthProvider0 = maps:get(OAuthProviderId, OAuthProviders0, []),
+    proplists:get_value(jwks, OAuthProvider0, #{}).
+
+-spec replace_signing_keys(map()) -> map() | {error, term()}.
+replace_signing_keys(SigningKeys) ->
+    replace_signing_keys(SigningKeys, root).
+
+-spec replace_signing_keys(map(), oauth_provider_id()) -> map() | {error, term()}.
+replace_signing_keys(SigningKeys, OAuthProviderId) ->
+    case lock() of
+        {error,_} = Error ->
+            Error;
+        LockId ->
+            try do_replace_signing_keys(SigningKeys, OAuthProviderId) of
+                V -> V
+            after
+                unlock(LockId)
+            end
+    end.
+
+do_replace_signing_keys(SigningKeys, root) ->
+    KeyConfig = application:get_env(?APP, key_config, []),
+    KeyConfig1 = proplists:delete(jwks, KeyConfig),
+    KeyConfig2 = [{jwks, maps:merge(
+        proplists:get_value(signing_keys, KeyConfig1, #{}),
+        SigningKeys)} | KeyConfig1],
+    application:set_env(?APP, key_config, KeyConfig2),
+    rabbit_log:debug("Replacing signing keys  ~p", [ KeyConfig2]),
+    SigningKeys;
+
+do_replace_signing_keys(SigningKeys, OauthProviderId) ->
+    OauthProviders0 = application:get_env(?APP, oauth_providers, #{}),
+    OauthProvider0 = maps:get(OauthProviderId, OauthProviders0, []),
+    OauthProvider1 = proplists:delete(jwks, OauthProvider0),
+    OauthProvider = [{jwks, maps:merge(
+        proplists:get_value(signing_keys, OauthProvider1, #{}),
+        SigningKeys)} | OauthProvider1],
+
+    OauthProviders = maps:put(OauthProviderId, OauthProvider, OauthProviders0),
+    application:set_env(?APP, oauth_providers, OauthProviders),
+    rabbit_log:debug("Replacing signing keys for ~p -> ~p", [OauthProviderId, OauthProvider]),
     SigningKeys.
 
+
 -spec get_signing_keys() -> map().
-get_signing_keys() -> proplists:get_value(signing_keys, get_key_config(), #{}).
+get_signing_keys() ->
+    get_signing_keys(root).
 
--spec get_signing_keys(binary()) -> map().
-get_signing_keys(ResourceServerId) ->
-    get_signing_keys(get_default_resource_server_id(), ResourceServerId).
-
-get_signing_keys(TopResourceServerId, ResourceServerId)
-  when ResourceServerId =:= TopResourceServerId ->
-      get_signing_keys();
-get_signing_keys(TopResourceServerId, ResourceServerId)
-  when ResourceServerId =/= TopResourceServerId ->
-      proplists:get_value(signing_keys, get_key_config(ResourceServerId), #{}).
-
--spec get_oauth_provider_for_resource_server_id(binary(), list()) ->
-    {ok, oauth_provider()} | {error, any()}.
-
-get_oauth_provider_for_resource_server_id(ResourceServerId, RequiredAttributeList) ->
-    get_oauth_provider_for_resource_server_id(get_default_resource_server_id(),
-        ResourceServerId, RequiredAttributeList).
-get_oauth_provider_for_resource_server_id(TopResourceServerId,
-  ResourceServerId, RequiredAttributeList) when ResourceServerId =:= TopResourceServerId ->
-    case application:get_env(?APP, default_oauth_provider) of
+-spec get_signing_keys(oauth_provider_id()) -> map().
+get_signing_keys(root) ->
+    case application:get_env(?APP, key_config, undefined) of
         undefined ->
-            oauth2_client:get_oauth_provider(RequiredAttributeList);
-        {ok, DefaultOauthProviderId} ->
-            oauth2_client:get_oauth_provider(DefaultOauthProviderId, RequiredAttributeList)
+            #{};
+        KeyConfig ->
+            case proplists:get_value(jwks, KeyConfig, undefined) of
+                undefined -> proplists:get_value(signing_keys, KeyConfig, #{});
+                Jwks -> Jwks
+            end
     end;
+get_signing_keys(OauthProviderId) ->
+    OauthProviders = application:get_env(?APP, oauth_providers, #{}),
+    OauthProvider = maps:get(OauthProviderId, OauthProviders, []),
+    case proplists:get_value(jwks, OauthProvider, undefined) of
+        undefined ->
+            proplists:get_value(signing_keys, OauthProvider, #{});
+        Jwks ->
+            Jwks
+    end.
 
-get_oauth_provider_for_resource_server_id(TopResourceServerId, ResourceServerId,
-  RequiredAttributeList) when ResourceServerId =/= TopResourceServerId ->
+-spec get_resource_server_id_for_audience(binary() | list() | none) -> binary() | {error, term()}.
+get_resource_server_id_for_audience(none) ->
+    case is_verify_aud() of
+        true ->
+            {error, no_matching_aud_found};
+        false ->
+            case get_default_resource_server_id() of
+                {error, missing_resource_server_id_in_config} ->
+                    {error, mising_audience_in_token_and_resource_server_in_config};
+                V -> V
+            end
+    end;
+get_resource_server_id_for_audience(Audience) ->
+    case find_audience_in_resource_server_ids(Audience) of
+        {ok, ResourceServerId} ->
+            ResourceServerId;
+        {error, only_one_resource_server_as_audience_found_many} = Error ->
+            Error;
+        {error, no_matching_aud_found} ->
+            case is_verify_aud() of
+                true ->
+                    {error, no_matching_aud_found};
+                false ->
+                    case get_default_resource_server_id() of
+                        {error, missing_resource_server_id_in_config} ->
+                            {error, mising_audience_in_token_and_resource_server_in_config};
+                        V -> V
+                    end
+            end
+    end.
+
+-spec get_oauth_provider_id_for_resource_server_id(binary()) -> oauth_provider_id().
+
+get_oauth_provider_id_for_resource_server_id(ResourceServerId) ->
+    get_oauth_provider_id_for_resource_server_id(get_default_resource_server_id(),
+        ResourceServerId).
+get_oauth_provider_id_for_resource_server_id(TopResourceServerId,
+  ResourceServerId) when ResourceServerId =:= TopResourceServerId ->
+    case application:get_env(?APP, default_oauth_provider) of
+        undefined -> root;
+        {ok, DefaultOauthProviderId} -> DefaultOauthProviderId
+    end;
+get_oauth_provider_id_for_resource_server_id(TopResourceServerId,
+  ResourceServerId) when ResourceServerId =/= TopResourceServerId ->
     case proplists:get_value(oauth_provider_id, get_resource_server_props(ResourceServerId)) of
         undefined ->
             case application:get_env(?APP, default_oauth_provider) of
-                undefined ->
-                    oauth2_client:get_oauth_provider(RequiredAttributeList);
-                {ok, DefaultOauthProviderId} ->
-                    oauth2_client:get_oauth_provider(DefaultOauthProviderId,
-                        RequiredAttributeList)
+                undefined -> root;
+                {ok, DefaultOauthProviderId} -> DefaultOauthProviderId
             end;
-        OauthProviderId ->
-            oauth2_client:get_oauth_provider(OauthProviderId, RequiredAttributeList)
+        OauthProviderId -> OauthProviderId
     end.
 
--spec get_key_config() -> list().
-get_key_config() -> application:get_env(?APP, key_config, []).
+-spec get_oauth_provider(oauth_provider_id(), list()) ->
+    {ok, oauth_provider()} | {error, any()}.
+get_oauth_provider(OAuthProviderId, RequiredAttributeList) ->
+    oauth2_client:get_oauth_provider(OAuthProviderId, RequiredAttributeList).
 
--spec get_key_config(binary()) -> list().
-get_key_config(ResourceServerId) ->
-    get_key_config(get_default_resource_server_id(), ResourceServerId).
-get_key_config(TopResourceServerId, ResourceServerId)
-  when ResourceServerId =:= TopResourceServerId ->
-    get_key_config();
-get_key_config(TopResourceServerId, ResourceServerId)
-  when ResourceServerId =/= TopResourceServerId ->
-    proplists:get_value(key_config, get_resource_server_props(ResourceServerId),
-        get_key_config()).
+-spec get_algorithms() -> list() | undefined.
+get_algorithms() ->
+    get_algorithms(root).
+
+-spec get_algorithms(oauth_provider_id()) -> list() | undefined.
+get_algorithms(root) ->
+    proplists:get_value(algorithms, application:get_env(?APP, key_config, []),
+                undefined);
+get_algorithms(OAuthProviderId) ->
+    OAuthProviders = application:get_env(?APP, oauth_providers, #{}),
+    case maps:get(OAuthProviderId, OAuthProviders, undefined) of
+        undefined -> undefined;
+        V -> proplists:get_value(algorithms, V, undefined)
+    end.
 
 get_resource_server_props(ResourceServerId) ->
     ResourceServers = application:get_env(?APP, resource_servers, #{}),
     maps:get(ResourceServerId, ResourceServers, []).
 
-get_signing_key(KeyId, ResourceServerId) ->
-    get_signing_key(get_default_resource_server_id(), KeyId, ResourceServerId).
-
-get_signing_key(TopResourceServerId, KeyId, ResourceServerId)
-  when ResourceServerId =:= TopResourceServerId ->
-    maps:get(KeyId, get_signing_keys(), undefined);
-get_signing_key(TopResourceServerId, KeyId, ResourceServerId)
-  when ResourceServerId =/= TopResourceServerId ->
-    maps:get(KeyId, get_signing_keys(ResourceServerId), undefined).
+get_signing_key(KeyId) ->
+    maps:get(KeyId, get_signing_keys(root), undefined).
+get_signing_key(KeyId, OAuthProviderId) ->
+    maps:get(KeyId, get_signing_keys(OAuthProviderId), undefined).
 
 
 append_or_return_default(ListOrBinary, Default) ->
@@ -213,7 +290,7 @@ append_or_return_default(ListOrBinary, Default) ->
 -spec get_default_resource_server_id() -> binary() | {error, term()}.
 get_default_resource_server_id() ->
     case ?TOP_RESOURCE_SERVER_ID of
-        undefined -> {error, missing_token_audience_and_or_config_resource_server_id };
+        undefined -> {error, missing_resource_server_id_in_config };
         {ok, ResourceServerId} -> ResourceServerId
     end.
 
@@ -241,13 +318,17 @@ find_audience_in_resource_server_ids(AudList) when is_list(AudList) ->
         [] -> {error, no_matching_aud_found}
     end.
 
-
 -spec is_verify_aud() -> boolean().
 is_verify_aud() -> application:get_env(?APP, verify_aud, true).
 
 -spec is_verify_aud(binary()) -> boolean().
 is_verify_aud(ResourceServerId) ->
-    is_verify_aud(get_default_resource_server_id(), ResourceServerId).
+    case get_default_resource_server_id() of
+        {error, _} ->
+            is_verify_aud(undefined, ResourceServerId);
+        V ->
+            is_verify_aud(V, ResourceServerId)
+    end.
 is_verify_aud(TopResourceServerId, ResourceServerId)
   when ResourceServerId =:= TopResourceServerId -> is_verify_aud();
 is_verify_aud(TopResourceServerId, ResourceServerId)
@@ -261,10 +342,14 @@ get_additional_scopes_key() ->
         undefined -> {error, not_found};
         ScopeKey -> {ok, ScopeKey}
     end.
-
 -spec get_additional_scopes_key(binary()) -> {ok, binary()} | {error, not_found}.
 get_additional_scopes_key(ResourceServerId) ->
-    get_additional_scopes_key(get_default_resource_server_id(), ResourceServerId).
+    case get_default_resource_server_id() of
+        {error, _} ->
+            get_additional_scopes_key(undefined, ResourceServerId);
+        V ->
+            get_additional_scopes_key(V, ResourceServerId)
+    end.
 get_additional_scopes_key(TopResourceServerId, ResourceServerId)
   when ResourceServerId =:= TopResourceServerId -> get_additional_scopes_key();
 get_additional_scopes_key(TopResourceServerId, ResourceServerId)
@@ -279,13 +364,20 @@ get_additional_scopes_key(TopResourceServerId, ResourceServerId)
 
 -spec get_scope_prefix() -> binary().
 get_scope_prefix() ->
-    DefaultScopePrefix = erlang:iolist_to_binary([
-        get_default_resource_server_id(), <<".">>]),
+    DefaultScopePrefix = case get_default_resource_server_id() of
+        {error, _} -> <<"">>;
+        V -> erlang:iolist_to_binary([V, <<".">>])
+    end,
     application:get_env(?APP, scope_prefix, DefaultScopePrefix).
 
 -spec get_scope_prefix(binary()) -> binary().
 get_scope_prefix(ResourceServerId) ->
-    get_scope_prefix(get_default_resource_server_id(), ResourceServerId).
+    case get_default_resource_server_id() of
+        {error, _} ->
+            get_scope_prefix(undefined, ResourceServerId);
+        V ->
+            get_scope_prefix(V, ResourceServerId)
+    end.
 get_scope_prefix(TopResourceServerId, ResourceServerId)
   when ResourceServerId =:= TopResourceServerId -> get_scope_prefix();
 get_scope_prefix(TopResourceServerId, ResourceServerId)
@@ -306,7 +398,12 @@ get_resource_server_type() -> application:get_env(?APP, resource_server_type, <<
 
 -spec get_resource_server_type(binary()) -> binary().
 get_resource_server_type(ResourceServerId) ->
-    get_resource_server_type(get_default_resource_server_id(), ResourceServerId).
+    case get_default_resource_server_id() of
+        {error, _} ->
+            get_resource_server_type(undefined, ResourceServerId);
+        V ->
+            get_resource_server_type(V, ResourceServerId)
+    end.
 get_resource_server_type(TopResourceServerId, ResourceServerId)
   when ResourceServerId =:= TopResourceServerId -> get_resource_server_type();
 get_resource_server_type(TopResourceServerId, ResourceServerId)
@@ -318,7 +415,12 @@ get_resource_server_type(TopResourceServerId, ResourceServerId)
 
 -spec has_scope_aliases(binary()) -> boolean().
 has_scope_aliases(ResourceServerId) ->
-    has_scope_aliases(get_default_resource_server_id(), ResourceServerId).
+    case get_default_resource_server_id() of
+        {error, _} ->
+            has_scope_aliases(undefined, ResourceServerId);
+        V ->
+            has_scope_aliases(V, ResourceServerId)
+    end.
 has_scope_aliases(TopResourceServerId, ResourceServerId)
   when ResourceServerId =:= TopResourceServerId ->
     case application:get_env(?APP, scope_aliases) of
@@ -336,7 +438,12 @@ has_scope_aliases(TopResourceServerId, ResourceServerId)
 
 -spec get_scope_aliases(binary()) -> map().
 get_scope_aliases(ResourceServerId) ->
-    get_scope_aliases(get_default_resource_server_id(), ResourceServerId).
+    case get_default_resource_server_id() of
+        {error, _} ->
+            get_scope_aliases(undefined, ResourceServerId);
+        V ->
+            get_scope_aliases(V, ResourceServerId)
+    end.
 get_scope_aliases(TopResourceServerId, ResourceServerId)
   when ResourceServerId =:= TopResourceServerId ->
     application:get_env(?APP, scope_aliases, #{});
@@ -357,15 +464,11 @@ lock() ->
     LockId = case global:set_lock({oauth2_config_lock,
             rabbitmq_auth_backend_oauth2}, Nodes, Retries) of
         true  -> rabbitmq_auth_backend_oauth2;
-        false -> undefined
+        false -> {error, unable_to_claim_lock}
     end,
     LockId.
 
 unlock(LockId) ->
     Nodes = rabbit_nodes:list_running(),
-    case LockId of
-        undefined -> ok;
-        Value     ->
-          global:del_lock({oauth2_config_lock, Value}, Nodes)
-    end,
+    global:del_lock({oauth2_config_lock, LockId}, Nodes),
     ok.
