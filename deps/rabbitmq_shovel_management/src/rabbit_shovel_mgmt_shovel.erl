@@ -45,17 +45,22 @@ resource_exists(ReqData, Context) ->
                     case name(ReqData) of
                         none -> true;
                         Name ->
-                            %% Deleting or restarting a shovel
                             case get_shovel_node(VHost, Name, ReqData, Context) of
                                 undefined ->
                                     rabbit_log:error("Shovel with the name '~ts' was not found on virtual host '~ts'. "
                                                      "It may be failing to connect and report its status.",
                                         [Name, VHost]),
-                                    case is_restart(ReqData) of
-                                        true -> false;
-                                        %% this is a deletion attempt, it can continue and idempotently try to
-                                        %% delete the shovel
-                                        false -> true
+                                    case cowboy_req:method(ReqData) of
+                                        <<"DELETE">> ->
+                                            %% Deleting or restarting a shovel
+                                            case is_restart(ReqData) of
+                                                true -> false;
+                                                %% this is a deletion attempt, it can continue and idempotently try to
+                                                %% delete the shovel
+                                                false -> true
+                                            end;
+                                        _ ->
+                                            false
                                     end;
                                 _ ->
                                     true
