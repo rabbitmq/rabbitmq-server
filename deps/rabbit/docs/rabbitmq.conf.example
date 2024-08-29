@@ -382,7 +382,7 @@
 
 ## Memory-based Flow Control threshold.
 ##
-# vm_memory_high_watermark.relative = 0.4
+# vm_memory_high_watermark.relative = 0.6
 
 ## Alternatively, we can set a limit (in bytes) of RAM used by the node.
 ##
