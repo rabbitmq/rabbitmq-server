@@ -372,6 +372,7 @@ tcp_listen_options.exit_on_close = false",
    vm_memory_high_watermark.relative = 0.4",
   [{rabbit,[{vm_memory_high_watermark,{absolute,1073741824}}]}],
   []},
+ %% DEPRECATED; just for backwards compatibility
  {vm_memory_watermark_paging_ratio,
   "vm_memory_high_watermark_paging_ratio = 0.75
    vm_memory_high_watermark.relative = 0.4",
@@ -379,6 +380,7 @@ tcp_listen_options.exit_on_close = false",
        [{vm_memory_high_watermark_paging_ratio,0.75},
         {vm_memory_high_watermark,0.4}]}],
   []},
+ %% DEPRECATED; just for backwards compatibility
  {memory_monitor_interval, "memory_monitor_interval = 5000",
   [{rabbit,
        [{memory_monitor_interval, 5000}]}],
