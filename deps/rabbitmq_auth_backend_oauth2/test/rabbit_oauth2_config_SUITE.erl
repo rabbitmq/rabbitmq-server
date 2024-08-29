@@ -36,6 +36,10 @@ groups() -> [
         {with_root_static_signing_keys, [], [
             replace_merge_root_static_keys_with_newly_added_keys,
             replace_override_root_static_keys_with_newly_added_keys
+        ]},
+        {with_static_signing_keys_for_specific_oauth_provider, [], [
+            replace_merge_static_keys_with_newly_added_keys,
+            replace_override_static_keys_with_newly_added_keys
         ]}
     ]},
     {with_resource_server_id, [], [
@@ -184,13 +188,24 @@ init_per_group(with_default_key, Config) ->
         proplists:delete(default_key, KeyConfig) ++ [{default_key,<<"default-key">>}]),
     Config;
 init_per_group(with_root_static_signing_keys, Config) ->
-    KeyConfig = application:get_env(rabbitmq_auth_backend_oauth2, key_config, []),
+    KeyConfig = call_get_env(Config, key_config, []),
     SigningKeys = #{
         <<"mykey-root-1">> => <<"some key root-1">>,
         <<"mykey-root-2">> => <<"some key root-2">>
     },
-    application:set_env(rabbitmq_auth_backend_oauth2, key_config,
+    call_set_env(Config, key_config,
         proplists:delete(default_key, KeyConfig) ++ [{signing_keys,SigningKeys}]),
+    Config;
+init_per_group(with_static_signing_keys_for_specific_oauth_provider, Config) ->
+    OAuthProviders = call_get_env(Config, oauth_providers, #{}),
+    OAuthProvider = maps:get(<<"A">>, OAuthProviders, []),
+    SigningKeys = #{
+        <<"mykey-root-1">> => <<"some key root-1">>,
+        <<"mykey-root-2">> => <<"some key root-2">>
+    },
+    OAuthProvider1 = proplists:delete(signing_keys, OAuthProvider) ++ [{signing_keys, SigningKeys}],
+
+    call_set_env(Config, oauth_providers, maps:put(<<"A">>, OAuthProvider1, OAuthProviders)),
     Config;
 
 init_per_group(with_default_key_for_provider_A, Config) ->
@@ -387,9 +402,8 @@ init_per_group(_any, Config) ->
 end_per_group(with_rabbitmq_node, Config) ->
     rabbit_ct_helpers:run_steps(Config, rabbit_ct_broker_helpers:teardown_steps());
 end_per_group(with_root_static_signing_keys, Config) ->
-    KeyConfig = application:get_env(rabbitmq_auth_backend_oauth2, key_config, []),
-    application:set_env(rabbitmq_auth_backend_oauth2, key_config,
-        proplists:delete(signing_keys, KeyConfig)),
+    KeyConfig = call_get_env(Config, key_config, []),
+    call_set_env(Config, key_config, KeyConfig),
     Config;
 
 end_per_group(with_resource_server_id, Config) ->
@@ -529,6 +543,14 @@ end_per_testcase(_Testcase, Config) ->
 
 %% -----
 
+call_set_env(Config, Par, Value) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, Par, Value]).
+
+call_get_env(Config, Par, Def) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, get_env,
+        [rabbitmq_auth_backend_oauth2, Par, Def]).
+
 call_add_signing_key(Config, Args) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_config, add_signing_key, Args).
 
@@ -594,6 +616,14 @@ replace_merge_root_static_keys_with_newly_added_keys(Config) ->
         <<"key-2">> := <<"some key 2">>,
         <<"key-3">> := <<"some key 3">>
     } = call_get_signing_keys(Config).
+replace_merge_static_keys_with_newly_added_keys(Config) ->
+    NewKeys = #{<<"key-2">> => <<"some key 2">>, <<"key-3">> => <<"some key 3">>},
+    call_replace_signing_keys(Config, [NewKeys, <<"A">>]),
+    #{  <<"mykey-root-1">> := <<"some key root-1">>,
+        <<"mykey-root-2">> := <<"some key root-2">>,
+        <<"key-2">> := <<"some key 2">>,
+        <<"key-3">> := <<"some key 3">>
+    } = call_get_signing_keys(Config, [<<"A">>]).
 replace_override_root_static_keys_with_newly_added_keys(Config) ->
     NewKeys = #{<<"mykey-root-1">> => <<"new key root-1">>, <<"key-3">> => <<"some key 3">>},
     call_replace_signing_keys(Config, [NewKeys]),
@@ -601,6 +631,14 @@ replace_override_root_static_keys_with_newly_added_keys(Config) ->
         <<"mykey-root-2">> := <<"some key root-2">>,
         <<"key-3">> := <<"some key 3">>
     } = call_get_signing_keys(Config).
+replace_override_static_keys_with_newly_added_keys(Config) ->
+    NewKeys = #{<<"mykey-root-1">> => <<"new key root-1">>, <<"key-3">> => <<"some key 3">>},
+    call_replace_signing_keys(Config, [NewKeys, <<"A">>]),
+    #{  <<"mykey-root-1">> := <<"new key root-1">>,
+        <<"mykey-root-2">> := <<"some key root-2">>,
+        <<"key-3">> := <<"some key 3">>
+    } = call_get_signing_keys(Config, [<<"A">>]).
+
 replace_signing_keys_for_root_oauth_provider(Config) ->
     call_add_signing_key(Config, [<<"mykey-1">>, <<"some key 1">>]),
     NewKeys = #{<<"key-2">> => <<"some key 2">>, <<"key-3">> => <<"some key 3">>},
