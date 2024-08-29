@@ -1029,6 +1029,11 @@ logging_to_exchange_works(Config) ->
                                  #{domain => ?RMQLOG_DOMAIN_UPGRADE}, Config1),
     rabbit_ct_helpers:await_condition(ContainsLogEntry4, 30_000),
 
+    ContainsLogEntryUnicode =
+        ping_log(rmq_1_exchange, info, "unicode 257 is ā",
+                 #{domain => ?RMQLOG_DOMAIN_UPGRADE}, Config1),
+    rabbit_ct_helpers:await_condition(ContainsLogEntryUnicode, 30_000),
+
     %% increase log level
     ok = rabbit_ct_broker_helpers:rpc(
            Config, 0,
@@ -1179,14 +1184,17 @@ ping_log(Id, Level, Metadata, Config) ->
                   32,
                   "abcdefghijklmnopqrstuvwxyz"
                   "ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
-    ct:log("Logging \"~ts\" at level ~ts (~tp)", [RandomMsg, Level, Metadata]),
+    ping_log(Id, Level, RandomMsg, Metadata, Config).
+
+ping_log(Id, Level, Msg, Metadata, Config) ->
+    ct:log("Logging \"~ts\" at level ~ts (~tp)", [Msg, Level, Metadata]),
     case need_rpc(Config) of
-        false -> logger:log(Level, RandomMsg, Metadata);
+        false -> logger:log(Level, Msg, Metadata);
         true  -> rabbit_ct_broker_helpers:rpc(
                    Config, 0,
-                   logger, log, [Level, RandomMsg, Metadata])
+                   logger, log, [Level, Msg, Metadata])
     end,
-    check_log(Id, Level, RandomMsg, Config).
+    check_log(Id, Level, Msg, Config).
 
 need_rpc(Config) ->
     rabbit_ct_helpers:get_config(
@@ -1216,7 +1224,7 @@ check_log1(#{id := Id,
          end,
     fun() ->
             {ok, Content} = file:read_file(Filename),
-            ReOpts = [{capture, none}, multiline],
+            ReOpts = [{capture, none}, multiline, unicode],
             match =:= re:run(Content, RandomMsg ++ "$", ReOpts)
     end;
 check_log1(#{module := Mod,
@@ -1227,7 +1235,7 @@ check_log1(#{module := Mod,
   when ?IS_STD_H_COMPAT(Mod) andalso ?IS_STDDEV(Stddev) ->
     Filename = html_report_filename(Config),
     {ColorStart, ColorEnd} = get_color_config(Handler, Level),
-    ReOpts = [{capture, none}, multiline],
+    ReOpts = [{capture, none}, multiline, unicode],
     fun() ->
             {ok, Content} = file:read_file(Filename),
             Regex =
@@ -1239,7 +1247,7 @@ check_log1(#{module := rabbit_logger_exchange_h},
            RandomMsg,
            Config) ->
     {Chan, QName} = ?config(test_channel_and_queue, Config),
-    ReOpts = [{capture, none}, multiline],
+    ReOpts = [{capture, none}, multiline, unicode],
     fun() ->
             Ret = amqp_channel:call(
                     Chan, #'basic.get'{queue = QName, no_ack = false}),
@@ -1257,7 +1265,7 @@ check_log1(#{module := syslog_logger_h},
            _Level,
            RandomMsg,
            Config) ->
-    ReOpts = [{capture, none}, multiline],
+    ReOpts = [{capture, none}, multiline, unicode],
     fun() ->
             Buffer = get_syslogd_messages(Config),
             match =:= re:run(Buffer, RandomMsg ++ "$", ReOpts)
