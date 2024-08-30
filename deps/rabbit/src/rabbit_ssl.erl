@@ -10,7 +10,7 @@
 -include_lib("public_key/include/public_key.hrl").
 
 -export([peer_cert_issuer/1, peer_cert_subject/1, peer_cert_validity/1]).
--export([peer_cert_subject_items/2, peer_cert_auth_name/1]).
+-export([peer_cert_subject_items/2, peer_cert_auth_name/1, peer_cert_auth_name/2]).
 -export([cipher_suites_erlang/2, cipher_suites_erlang/1,
          cipher_suites_openssl/2, cipher_suites_openssl/1,
          cipher_suites/1]).
@@ -18,7 +18,7 @@
 
 %%--------------------------------------------------------------------------
 
--export_type([certificate/0]).
+-export_type([certificate/0, ssl_cert_login_type/0]).
 
 % Due to API differences between OTP releases.
 -dialyzer(no_missing_calls).
@@ -109,28 +109,51 @@ peer_cert_subject_alternative_names(Cert, Type) ->
 peer_cert_validity(Cert) ->
     rabbit_cert_info:validity(Cert).
 
+-type ssl_cert_login_type() :: 
+    {subject_alternative_name | subject_alt_name, atom(), integer()} | 
+    {distinguished_name | common_name, undefined, undefined }.
+
+-spec extract_ssl_cert_login_settings() -> none | ssl_cert_login_type().
+extract_ssl_cert_login_settings() ->
+    case application:get_env(rabbit, ssl_cert_login_from) of 
+        {ok, Mode} ->
+            case Mode of 
+                subject_alternative_name -> extract_san_login_type(Mode);
+                subject_alt_name -> extract_san_login_type(Mode);
+                _ -> {Mode, undefined, undefined}
+            end;
+        undefined -> none 
+    end.
+
+extract_san_login_type(Mode) ->
+    {Mode,
+        application:get_env(rabbit, ssl_cert_login_san_type, dns),
+        application:get_env(rabbit, ssl_cert_login_san_index, 0)
+    }.
+
 %% Extract a username from the certificate
 -spec peer_cert_auth_name(certificate()) -> binary() | 'not_found' | 'unsafe'.
 peer_cert_auth_name(Cert) ->
-    {ok, Mode} = application:get_env(rabbit, ssl_cert_login_from),
-    peer_cert_auth_name(Mode, Cert).
+    case extract_ssl_cert_login_settings() of 
+        none -> 'not_found';
+        Settings -> peer_cert_auth_name(Settings, Cert)        
+    end.
 
--spec peer_cert_auth_name(atom(), certificate()) -> binary() | 'not_found' | 'unsafe'.
-peer_cert_auth_name(distinguished_name, Cert) ->
+-spec peer_cert_auth_name(ssl_cert_login_type(), certificate()) -> binary() | 'not_found' | 'unsafe'.
+peer_cert_auth_name({distinguished_name, _, _}, Cert) ->
     case auth_config_sane() of
         true  -> iolist_to_binary(peer_cert_subject(Cert));
         false -> unsafe
     end;
 
-peer_cert_auth_name(subject_alt_name, Cert) ->
-    peer_cert_auth_name(subject_alternative_name, Cert);
+peer_cert_auth_name({subject_alt_name, Type, Index0}, Cert) ->
+    peer_cert_auth_name({subject_alternative_name, Type, Index0}, Cert);
 
-peer_cert_auth_name(subject_alternative_name, Cert) ->
+peer_cert_auth_name({subject_alternative_name, Type, Index0}, Cert) ->
     case auth_config_sane() of
         true  ->
-            Type   = application:get_env(rabbit, ssl_cert_login_san_type,  dns),
             %% lists:nth/2 is 1-based
-            Index  = application:get_env(rabbit, ssl_cert_login_san_index, 0) + 1,
+            Index  = Index0 + 1,
             OfType = peer_cert_subject_alternative_names(Cert, otp_san_type(Type)),
             rabbit_log:debug("Peer certificate SANs of type ~ts: ~tp, index to use with lists:nth/2: ~b", [Type, OfType, Index]),
             case length(OfType) of
@@ -152,7 +175,7 @@ peer_cert_auth_name(subject_alternative_name, Cert) ->
         false -> unsafe
     end;
 
-peer_cert_auth_name(common_name, Cert) ->
+peer_cert_auth_name({common_name, _, _}, Cert) ->
     %% If there is more than one CN then we join them with "," in a
     %% vaguely DN-like way. But this is more just so we do something
     %% more intelligent than crashing, if you actually want to escape
