@@ -68,6 +68,13 @@ sub_groups() ->
        ssl_user_vhost_parameter_mapping_vhost_does_not_exist,
        ssl_user_cert_vhost_mapping_takes_precedence_over_port_vhost_mapping
       ]},
+     {ssl_user_with_client_id_in_cert_san_dns, [], 
+       [client_id_from_cert_san_dns,
+        invalid_client_id_from_cert_san_dns
+       ]},
+     {ssl_user_with_client_id_in_cert_dn, [], 
+       [client_id_from_cert_dn
+       ]},  
      {no_ssl_user, [shuffle],
       [anonymous_auth_failure,
        user_credentials_auth,
@@ -193,14 +200,27 @@ mqtt_config(no_ssl_user) ->
 mqtt_config(client_id_propagation) ->
     {rabbitmq_mqtt, [{ssl_cert_login,  true},
                      {allow_anonymous, true}]};
+mqtt_config(ssl_user_with_client_id_in_cert_san_dns) ->
+    {rabbitmq_mqtt, [{ssl_cert_login,  true},
+                     {allow_anonymous, false}, 
+                     {ssl_cert_client_id_from, subject_alternative_name},
+                     {ssl_cert_client_id_san_type, dns}]};
+mqtt_config(ssl_user_with_client_id_in_cert_dn) ->
+    {rabbitmq_mqtt, [{ssl_cert_login,  true},
+                     {allow_anonymous, false}, 
+                     {ssl_cert_client_id_from, distinguished_name}
+                     ]};
 mqtt_config(_) ->
     undefined.
 
-auth_config(client_id_propagation) ->
+auth_config(T) when T == client_id_propagation; 
+                    T == ssl_user_with_client_id_in_cert_san_dns;
+                    T == ssl_user_with_client_id_in_cert_dn ->
     {rabbit, [
             {auth_backends, [rabbit_auth_backend_mqtt_mock]}
           ]
     };
+
 auth_config(_) ->
     undefined.
 
@@ -291,9 +311,24 @@ init_per_testcase(T, Config)
         v4 -> {skip, "Will Delay Interval is an MQTT 5.0 feature"};
         v5 -> testcase_started(Config, T)
     end;
+init_per_testcase(T, Config) 
+  when T =:= client_id_propagation;
+       T =:= invalid_client_id_from_cert_san_dns;
+       T =:= client_id_from_cert_san_dns;
+       T =:= client_id_from_cert_dn ->
+    SetupProcess = setup_rabbit_auth_backend_mqtt_mock(Config),
+    rabbit_ct_helpers:set_config(Config, {mock_setup_process, SetupProcess});
+       
 init_per_testcase(Testcase, Config) ->
     testcase_started(Config, Testcase).
 
+get_client_cert_subject(Config) ->
+    CertsDir = ?config(rmq_certsdir, Config),
+    CertFile = filename:join([CertsDir, "client", "cert.pem"]),
+    {ok, CertBin} = file:read_file(CertFile),
+    [{'Certificate', Cert, not_encrypted}] = public_key:pem_decode(CertBin),
+    iolist_to_binary(rpc(Config, 0, rabbit_ssl, peer_cert_subject, [Cert])).
+    
 set_cert_user_on_default_vhost(Config) ->
     CertsDir = ?config(rmq_certsdir, Config),
     CertFile = filename:join([CertsDir, "client", "cert.pem"]),
@@ -403,6 +438,15 @@ end_per_testcase(T, Config) when T == queue_bind_permission;
     file:write_file(?config(log_location, Config), <<>>),
 
     rabbit_ct_helpers:testcase_finished(Config, T);
+
+end_per_testcase(T, Config) 
+   when T =:= client_id_propagation;
+       T =:= invalid_client_id_from_cert_san_dns;
+       T =:= client_id_from_cert_san_dns;
+       T =:= client_id_from_cert_dn ->
+    SetupProcess = ?config(mock_setup_process, Config),
+    SetupProcess ! stop;
+    
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -455,6 +499,36 @@ user_credentials_auth(Config) ->
         fun(Conf) -> connect_user(<<"non-existing-vhost:guest">>, <<"guest">>, Conf) end,
         Config).
 
+client_id_from_cert_san_dns(Config) ->    
+    ExpectedClientId = <<"rabbit_client_id">>, % Found in the client's certificate as SAN type CLIENT_ID 
+    MqttClientId = ExpectedClientId,
+    {ok, C} = connect_ssl(MqttClientId, Config),
+    {ok, _} = emqtt:connect(C),
+    [{authentication, AuthProps}] = rpc(Config, 0,
+                                        rabbit_auth_backend_mqtt_mock,
+                                        get,
+                                        [authentication]),
+    ?assertEqual(ExpectedClientId, proplists:get_value(client_id, AuthProps)),
+    ok = emqtt:disconnect(C).
+
+client_id_from_cert_dn(Config) ->    
+    ExpectedClientId = get_client_cert_subject(Config), % subject = distinguished_name
+    MqttClientId = ExpectedClientId,
+    {ok, C} = connect_ssl(MqttClientId, Config),
+    {ok, _} = emqtt:connect(C),
+    [{authentication, AuthProps}] = rpc(Config, 0,
+                                        rabbit_auth_backend_mqtt_mock,
+                                        get,
+                                        [authentication]),
+    ?assertEqual(ExpectedClientId, proplists:get_value(client_id, AuthProps)),
+    ok = emqtt:disconnect(C).
+
+invalid_client_id_from_cert_san_dns(Config) ->    
+    MqttClientId = <<"other_client_id">>,
+    {ok, C} = connect_ssl(MqttClientId, Config),
+    ?assertMatch({error, _}, emqtt:connect(C)),
+    unlink(C).
+
 ssl_user_vhost_parameter_mapping_success(Config) ->
     expect_successful_connection(fun connect_ssl/1, Config).
 
@@ -506,6 +580,9 @@ connect_anonymous(Config, ClientId) ->
                       {proto_ver, ?config(mqtt_version, Config)}]).
 
 connect_ssl(Config) ->
+    connect_ssl(<<"simpleClient">>, Config).
+
+connect_ssl(ClientId, Config) ->
     CertsDir = ?config(rmq_certsdir, Config),
     SSLConfig = [{cacertfile, filename:join([CertsDir, "testca", "cacert.pem"])},
                  {certfile, filename:join([CertsDir, "client", "cert.pem"])},
@@ -514,12 +591,12 @@ connect_ssl(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt_tls),
     emqtt:start_link([{host, "localhost"},
                       {port, P},
-                      {clientid, <<"simpleClient">>},
+                      {clientid, ClientId},
                       {proto_ver, ?config(mqtt_version, Config)},
                       {ssl, true},
                       {ssl_opts, SSLConfig}]).
 
-client_id_propagation(Config) ->
+setup_rabbit_auth_backend_mqtt_mock(Config) ->
     ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config,
                                                              rabbit_auth_backend_mqtt_mock),
     %% setup creates the ETS table required for the mqtt auth mock
@@ -531,10 +608,16 @@ client_id_propagation(Config) ->
           end),
     %% the setup process will notify us
     receive
+<<<<<<< HEAD
         ok -> ok
+=======
+        {ok, SP} -> SP
+>>>>>>> 42a8f25ab6 (Extract client_id from client cert)
     after
         3000 -> ct:fail("timeout waiting for rabbit_auth_backend_mqtt_mock:setup/1")
-    end,
+    end.
+
+client_id_propagation(Config) ->
     ClientId = <<"client-id-propagation">>,
     {ok, C} = connect_user(<<"fake-user">>, <<"fake-password">>,
                            Config, ClientId),
@@ -565,7 +648,12 @@ client_id_propagation(Config) ->
     VariableMap = maps:get(variable_map, TopicContext),
     ?assertEqual(ClientId, maps:get(<<"client_id">>, VariableMap)),
 
+<<<<<<< HEAD
     ok = emqtt:disconnect(C).
+=======
+    emqtt:disconnect(C).
+    
+>>>>>>> 42a8f25ab6 (Extract client_id from client cert)
 
 %% These tests try to cover all operations that are listed in the
 %% table in https://www.rabbitmq.com/access-control.html#authorisation

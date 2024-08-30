@@ -183,6 +183,20 @@ end}.
     {datatype, {enum, [true, false]}}]}.
 
 
+{mapping, "mqtt.ssl_cert_client_id_from", "rabbitmq_mqtt.ssl_cert_client_id_from", [
+    {datatype, {enum, [distinguished_name, subject_alternative_name]}}
+]}.
+
+{mapping, "mqtt.ssl_cert_login_san_type", "rabbitmq_mqtt.ssl_cert_login_san_type", [
+    {datatype, {enum, [dns, ip, email, uri, other_name]}}
+]}.
+
+{mapping, "mqtt.ssl_cert_login_san_index", "rabbitmq_mqtt.ssl_cert_login_san_index", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+
+
 %% TCP/Socket options (as per the broker configuration).
 %%
 %% {tcp_listen_options, [{backlog,   128},

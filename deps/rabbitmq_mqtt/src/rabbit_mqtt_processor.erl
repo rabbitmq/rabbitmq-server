@@ -189,9 +189,15 @@ process_connect(
     maybe
         ok ?= check_protocol_version(ProtoVer),
         ok ?= check_extended_auth(ConnectProps),
+<<<<<<< HEAD
         {ok, ClientId} ?= ensure_client_id(ClientId0, CleanStart, ProtoVer),
         {ok, {Username1, Password}} ?= check_credentials(Username0, Password0, SslLoginName, PeerIp),
 
+=======
+        {ok, ClientId1} ?= extract_client_id_from_certificate(ClientId0, Socket),
+        {ok, ClientId} ?= ensure_client_id(ClientId1, CleanStart, ProtoVer),
+        {ok, Username1, Password} ?= check_credentials(Username0, Password0, SslLoginName, PeerIp),
+>>>>>>> 42a8f25ab6 (Extract client_id from client cert)
         {VHostPickedUsing, {VHost, Username2}} = get_vhost(Username1, SslLoginName, Port),
         ?LOG_DEBUG("MQTT connection ~s picked vhost using ~s", [ConnName0, VHostPickedUsing]),
         ok ?= check_vhost_exists(VHost, Username2, PeerIp),
@@ -664,6 +670,26 @@ check_credentials(Username, Password, SslLoginName, PeerIp) ->
             {ok, {UserBin, PassBin}}
     end.
 
+%% Extract client_id from the certificate provided it was configured to do so and
+%% it is possible to extract it else returns the client_id passed as parameter
+-spec extract_client_id_from_certificate(client_id(), rabbit_net:socket()) -> {ok, client_id()} | {error, reason_code()}.
+extract_client_id_from_certificate(Client0, Socket) ->
+    case extract_ssl_cert_client_id_settings() of
+        none -> {ok, Client0};
+        SslClientIdSettings ->
+            case ssl_client_id(Socket, SslClientIdSettings) of
+                none ->
+                    {ok, Client0};
+                V when V == Client0 ->
+                    {ok, Client0};
+                V ->
+                    ?LOG_ERROR(
+                        "MQTT login failed: client_id in cert (~p) does not match client_id in protocol (~p)",
+                        [V, Client0]),
+                    {error, ?RC_CLIENT_IDENTIFIER_NOT_VALID}
+            end
+    end.
+
 -spec ensure_client_id(client_id(), boolean(), protocol_version()) ->
     {ok, client_id()} | {error, reason_code()}.
 ensure_client_id(<<>>, _CleanStart = false, ProtoVer)
@@ -1069,16 +1095,9 @@ check_vhost_alive(VHost) ->
     end.
 
 check_user_login(VHost, Username, Password, ClientId, PeerIp, ConnName) ->
-    AuthProps = case Password of
-                    none ->
-                        %% SSL user name provided.
-                        %% Authenticating using username only.
-                        [];
-                    _ ->
-                        [{password, Password},
-                         {vhost, VHost},
-                         {client_id, ClientId}]
-                end,
+    AuthProps = [{vhost, VHost},
+                  {client_id, ClientId},
+                  {password, Password}],
     case rabbit_access_control:check_user_login(Username, AuthProps) of
         {ok, User = #user{username = Username1}} ->
             notify_auth_result(user_authentication_success, Username1, ConnName),
@@ -2378,6 +2397,37 @@ info(Other, _) -> throw({bad_argument, Other}).
 ssl_login_name(Sock) ->
     case rabbit_net:peercert(Sock) of
         {ok, C}              -> case rabbit_ssl:peer_cert_auth_name(C) of
+                                    unsafe    -> none;
+                                    not_found -> none;
+                                    Name      -> Name
+                                end;
+        {error, no_peercert} -> none;
+        nossl                -> none
+    end.
+
+-spec extract_ssl_cert_client_id_settings() -> none | rabbit_ssl:ssl_cert_login_type().
+extract_ssl_cert_client_id_settings() ->
+    case application:get_env(?APP_NAME, ssl_cert_client_id_from) of
+        {ok, Mode} ->
+            case Mode of
+                subject_alternative_name -> extract_client_id_san_type(Mode);
+                _ -> {Mode, undefined, undefined}
+            end;
+        undefined -> none
+    end.
+
+extract_client_id_san_type(Mode) ->
+    {Mode,
+        application:get_env(?APP_NAME, ssl_cert_client_id_san_type, dns),
+        application:get_env(?APP_NAME, ssl_cert_client_id_san_index, 0)
+    }.
+
+
+-spec ssl_client_id(rabbit_net:socket(), rabbit_ssl:ssl_cert_login_type()) ->
+    none | binary().
+ssl_client_id(Sock, SslClientIdSettings) ->
+    case rabbit_net:peercert(Sock) of
+        {ok, C}              -> case rabbit_ssl:peer_cert_auth_name(SslClientIdSettings, C) of
                                     unsafe    -> none;
                                     not_found -> none;
                                     Name      -> Name
