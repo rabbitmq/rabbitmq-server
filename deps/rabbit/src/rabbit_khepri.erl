@@ -110,6 +110,7 @@
          nodes/0,
          locally_known_nodes/0,
          get_ra_cluster_name/0,
+         get_server_id/1,
          get_store_id/0,
          transfer_leadership/1,
 
@@ -676,6 +677,14 @@ locally_known_nodes() ->
 
 get_ra_cluster_name() ->
     ?RA_CLUSTER_NAME.
+
+-spec get_server_id(Node) -> RaServerId when
+      Node :: node(),
+      RaServerId :: ra:server_id().
+%% @doc Returns the Ra server id of the Khepri member on the given node.
+
+get_server_id(Node) ->
+    {?RA_CLUSTER_NAME, Node}.
 
 -spec get_store_id() -> StoreId when
       StoreId :: khepri:store_id().
