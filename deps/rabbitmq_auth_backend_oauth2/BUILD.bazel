@@ -50,6 +50,7 @@ rabbitmq_app(
         "//deps/rabbit:erlang_app",
         "@base64url//:erlang_app",
         "@cowlib//:erlang_app",
+        "@cuttlefish//:erlang_app",
         "@jose//:erlang_app",
     ],
 )
