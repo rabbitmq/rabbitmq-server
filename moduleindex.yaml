@@ -835,6 +835,7 @@ rabbitmq_auth_backend_oauth2:
 - rabbit_auth_backend_oauth2
 - rabbit_auth_backend_oauth2_app
 - rabbit_oauth2_config
+- rabbit_oauth2_schema
 - rabbit_oauth2_scope
 - uaa_jwks
 - uaa_jwt
