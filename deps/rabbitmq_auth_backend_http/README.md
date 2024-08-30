@@ -159,6 +159,27 @@ If the certificate of your Web Server should be matched against a wildcard certi
 {customize_hostname_check, [{match_fun,public_key:pkix_verify_hostname_match_fun(https)}]}
 ```
 
+## Tuning HTTP client timeouts
+
+You can configure the request timeout and connection timeout (see `timeout` and `connect_timeout` respectively in Erlang/OTP [httpc documentation](https://www.erlang.org/doc/apps/inets/httpc.html#request/5)). The default value is 15 seconds for both.
+
+In `rabbitmq.conf`:
+
+```
+auth_http.request_timeout=20000
+auth_http.connection_timeout=10000
+```
+
+In the [`advanced.config` format](https://www.rabbitmq.com/configure.html#advanced-config-file):
+
+```
+{rabbitmq_auth_backend_http,
+    [{request_timeout, 20_000},
+     {connection_timeout, 10_000},
+     ...
+]}
+```
+
 ## Debugging
 
 [Enable debug logging](https://rabbitmq.com/logging.html#debug-logging) to see what the backend service receives.
