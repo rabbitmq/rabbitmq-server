@@ -78,7 +78,7 @@ jobs:
     - uses: actions/setup-dotnet@v4
       if: inputs.plugin == 'rabbit'
       with:
-        dotnet-version: '3.1.x'
+        dotnet-version: '8.0'
     - name: deps/amqp10_client SETUP
       if: inputs.plugin == 'amqp10_client'
       run: |
