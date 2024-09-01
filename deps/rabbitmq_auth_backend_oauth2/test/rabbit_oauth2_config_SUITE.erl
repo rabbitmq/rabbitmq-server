@@ -416,7 +416,7 @@ end_per_group(with_verify_aud_false_for_resource_two, Config) ->
     ResourceServers = application:get_env(rabbitmq_auth_backend_oauth2, resource_servers, #{}),
     Proplist = maps:get(?RABBITMQ_RESOURCE_TWO, ResourceServers, []),
      application:set_env(rabbitmq_auth_backend_oauth2, resource_servers,
-        map:put(?RABBITMQ_RESOURCE_TWO, proplists:delete(verify_aud, Proplist))),
+        maps:put(?RABBITMQ_RESOURCE_TWO, proplists:delete(verify_aud, Proplist), ResourceServers)),
     Config;
 end_per_group(with_default_key, Config) ->
     KeyConfig = application:get_env(rabbitmq_auth_backend_oauth2, key_config, []),
