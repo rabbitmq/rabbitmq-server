@@ -1747,6 +1747,12 @@ eval_listener({P, member}, {ListNode, ListMPid0}, {Lsts0, Effs0},
                                         {queue_event, QRef,
                                          {stream_local_member_change, MemberPid}},
                                         cast} | Efs]};
+                     (_MNode, #member{state = {running, _, MemberPid},
+                                      role = {replica, _},
+                                      target = deleted}, {_, Efs}) ->
+                          {MemberPid, [{send_msg, P,
+                                        {queue_event, QRef, deleted_replica},
+                                        cast} | Efs]};
                      (_N, _M, Acc) ->
                           %% not a replica, nothing to do
                           Acc
