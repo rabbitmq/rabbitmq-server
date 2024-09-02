@@ -54,6 +54,7 @@
 
 all() ->
     [{group, mqtt},
+    %% @todo Move web_mqtt to rabbitmq_web_mqtt directly.
      {group, web_mqtt}].
 
 %% The code being tested under v3 and v4 is almost identical.
@@ -218,6 +219,7 @@ init_per_testcase(Testcase, Config) ->
 
 init_per_testcase0(Testcase, Config) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    %% @todo This should only be necessary for Bazel's mixed version testing.
     [ok = rabbit_ct_broker_helpers:enable_plugin(Config, N, rabbitmq_web_mqtt) || N <- Nodes],
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 

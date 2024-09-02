@@ -1,0 +1,55 @@
+name: Parallel CT (make)
+on:
+  workflow_call:
+    inputs:
+      erlang_version:
+        required: true
+        type: number
+      elixir_version:
+        required: true
+        type: number
+      metadata_store:
+        required: true
+        type: string
+      make_target:
+        required: true
+        type: string
+      plugin:
+        required: true
+        type: string
+jobs:
+  test:
+    name: ${{ inputs.plugin }} (${{ inputs.make_target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v4
+
+    - name: SETUP OTP & ELIXIR
+      uses: erlef/setup-beam@v1.17
+      with:
+        otp-version: ${{ inputs.erlang_version }}
+        elixir-version: ${{ inputs.elixir_version }}
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://cdn.jsdelivr.net/hex
+
+    - name: SETUP DOTNET (rabbit)
+      uses: actions/setup-dotnet@v4
+      if: inputs.plugin == 'rabbit'
+      with:
+        dotnet-version: '3.1.x'
+
+    - name: RUN TESTS
+      run: |
+        make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} RABBITMQ_METADATA_STORE=${{ inputs.metadata_store }}
+
+    - name: UPLOAD TEST LOGS
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: CT logs (${{ inputs.plugin }} ${{ inputs.make_target }} OTP-${{ inputs.erlang_version }} ${{ inputs.metadata_store }})
+        path: |
+          deps/${{ inputs.plugin }}/logs/
+          !deps/${{ inputs.plugin }}/logs/**/log_private

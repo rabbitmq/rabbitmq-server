@@ -1,0 +1,66 @@
+name: Test (make)
+on:
+  push:
+    branches:
+    - main
+    - bump-otp-for-oci
+    - bump-rbe-*
+    paths:
+    - deps/**
+    - scripts/**
+    - Makefile
+    - plugins.mk
+    - rabbitmq-components.mk
+    - .github/workflows/test-make.yaml
+  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  version-matrix:
+    name: Test
+    strategy:
+      fail-fast: false
+      matrix:
+        erlang_version:
+        - 26
+        - 27
+        elixir_version:
+        - 1.17
+        metadata_store:
+          - mnesia
+          - khepri
+    uses: ./.github/workflows/test-make-jobs.yaml
+    with:
+      erlang_version: ${{ matrix.erlang_version }}
+      elixir_version: ${{ matrix.elixir_version }}
+      metadata_store: ${{ matrix.metadata_store }}
+
+  build:
+    name: Build
+    strategy:
+      fail-fast: false
+      matrix:
+        erlang_version:
+        - 26
+        - 27
+        elixir_version:
+        - 1.17
+    # @todo Add macOS and Windows.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v4
+
+    - name: SETUP OTP & ELIXIR
+      uses: erlef/setup-beam@v1.17
+      with:
+        otp-version: ${{ matrix.erlang_version }}
+        elixir-version: ${{ matrix.elixir_version }}
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://cdn.jsdelivr.net/hex
+
+    - name: BUILD
+      run: make

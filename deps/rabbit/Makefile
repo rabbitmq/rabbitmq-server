@@ -236,7 +236,7 @@ define ct_master.erl
 	peer:call(Pid2, persistent_term, put, [rabbit_ct_tcp_port_base, 25000]),
 	peer:call(Pid3, persistent_term, put, [rabbit_ct_tcp_port_base, 27000]),
 	peer:call(Pid4, persistent_term, put, [rabbit_ct_tcp_port_base, 29000]),
-	ct_master:run("ct.test.spec"),
+	ct_master:run("$1"),
 	peer:stop(Pid4),
 	peer:stop(Pid3),
 	peer:stop(Pid2),
@@ -244,9 +244,97 @@ define ct_master.erl
 	halt()
 endef
 
-ct-master: test-build
+# @todo We must ensure that the CT_OPTS also apply to ct-master
+# @todo We should probably refactor ct_master.erl to have node init in a separate .erl
+# @todo We would benefit from having rabbit nodes started with peer (no leftovers)
+# @todo We need ct-master to be expanded to all components and not just rabbit
+# @todo Generate ct.test.spec from Makefile variables instead of hardcoded for ct-master
+
+
+#PARALLEL_CT_NUM_NODES ?= 4
+#PARALLEL_CT_NODE_NAME = rabbit_shard$1@localhost
+#PARALLEL_CT_NODE_INIT_FUN = fun(Pid, Num) -> peer:call(Pid, net_kernel, set_net_ticktime, [5]), peer:call(Pid, persistent_term, put, [rabbit_ct_tcp_port_base, 21000 + 2000 * Num]) end
+
+#PARALLEL_CT_NUM_SETS = 8
+
+
+PARALLEL_CT_SET_1_A = amqp_client unit_cluster_formation_locking_mocks unit_cluster_formation_sort_nodes unit_collections unit_config_value_encryption unit_connection_tracking
+PARALLEL_CT_SET_1_B = amqp_address amqp_auth amqp_credit_api_v2 amqp_system signal_handling single_active_consumer unit_access_control_authn_authz_context_propagation unit_access_control_credential_validation unit_amqp091_content_framing unit_amqp091_server_properties unit_app_management
+PARALLEL_CT_SET_1_C = amqp_proxy_protocol amqpl_consumer_ack amqpl_direct_reply_to backing_queue bindings rabbit_db_maintenance rabbit_db_msup rabbit_db_policy rabbit_db_queue rabbit_db_topic_exchange rabbit_direct_reply_to_prop cluster_limit cluster_minority term_to_binary_compat_prop topic_permission transactions unicode unit_access_control
+PARALLEL_CT_SET_1_D = amqqueue_backward_compatibility channel_interceptor channel_operation_timeout classic_queue classic_queue_prop config_schema peer_discovery_dns peer_discovery_tmp_hidden_node per_node_limit per_user_connection_channel_limit
+
+PARALLEL_CT_SET_2_A = cluster confirms_rejects consumer_timeout rabbit_access_control rabbit_confirms rabbit_core_metrics_gc rabbit_cuttlefish rabbit_db_binding rabbit_db_exchange
+PARALLEL_CT_SET_2_B = clustering_recovery crashing_queues deprecated_features direct_exchange_routing_v2 disconnect_detected_during_alarm exchanges unit_gen_server2
+PARALLEL_CT_SET_2_C = disk_monitor dynamic_qq unit_disk_monitor unit_file_handle_cache unit_log_management unit_operator_policy
+PARALLEL_CT_SET_2_D = queue_length_limits queue_parallel quorum_queue_member_reconciliation rabbit_fifo rabbit_fifo_dlx rabbit_stream_coordinator
+
+PARALLEL_CT_SET_3_A = definition_import per_user_connection_channel_limit_partitions per_vhost_connection_limit_partitions policy priority_queue_recovery rabbit_fifo_prop rabbit_fifo_v0 rabbit_stream_sac_coordinator unit_credit_flow unit_queue_consumers unit_queue_location unit_quorum_queue
+PARALLEL_CT_SET_3_B = cluster_upgrade list_consumers_sanity_check list_queues_online_and_offline logging lqueue maintenance_mode rabbit_fifo_q
+PARALLEL_CT_SET_3_C = cli_forget_cluster_node feature_flags_v2 mc_unit message_containers_deaths_v2 message_size_limit metadata_store_migration
+PARALLEL_CT_SET_3_D = metadata_store_phase1 metrics mirrored_supervisor msg_store peer_discovery_classic_config proxy_protocol runtime_parameters unit_stats_and_metrics unit_supervisor2 unit_vm_memory_monitor
+
+PARALLEL_CT_SET_4_A = clustering_events rabbit_local_random_exchange rabbit_message_interceptor rabbitmq_4_0_deprecations unit_pg_local unit_plugin_directories unit_plugin_versioning unit_policy_validators unit_priority_queue
+PARALLEL_CT_SET_4_B = per_user_connection_tracking per_vhost_connection_limit rabbit_fifo_dlx_integration rabbit_fifo_int
+PARALLEL_CT_SET_4_C = per_vhost_msg_store per_vhost_queue_limit priority_queue upgrade_preparation vhost
+PARALLEL_CT_SET_4_D = per_user_connection_channel_tracking product_info publisher_confirms_parallel queue_type rabbitmq_queues_cli_integration rabbitmqctl_integration rabbitmqctl_shutdown routing
+
+PARALLEL_CT_SET_1 = $(sort $(PARALLEL_CT_SET_1_A) $(PARALLEL_CT_SET_1_B) $(PARALLEL_CT_SET_1_C) $(PARALLEL_CT_SET_1_D))
+PARALLEL_CT_SET_2 = $(sort $(PARALLEL_CT_SET_2_A) $(PARALLEL_CT_SET_2_B) $(PARALLEL_CT_SET_2_C) $(PARALLEL_CT_SET_2_D))
+PARALLEL_CT_SET_3 = $(sort $(PARALLEL_CT_SET_3_A) $(PARALLEL_CT_SET_3_B) $(PARALLEL_CT_SET_3_C) $(PARALLEL_CT_SET_3_D))
+PARALLEL_CT_SET_4 = $(sort $(PARALLEL_CT_SET_4_A) $(PARALLEL_CT_SET_4_B) $(PARALLEL_CT_SET_4_C) $(PARALLEL_CT_SET_4_D))
+
+SEQUENTIAL_CT_SUITES = clustering_management dead_lettering feature_flags metadata_store_clustering quorum_queue rabbit_stream_queue
+PARALLEL_CT_SUITES = $(PARALLEL_CT_SET_1) $(PARALLEL_CT_SET_2) $(PARALLEL_CT_SET_3) $(PARALLEL_CT_SET_4)
+
+ifneq ($(filter-out $(SEQUENTIAL_CT_SUITES) $(PARALLEL_CT_SUITES),$(CT_SUITES)),)
+$(error Some test suites in CT_SUITES but not configured for CI.)
+endif
+
+
+
+define tpl_parallel_ct_test_spec
+{logdir, "logs/"}.
+{logdir, master, "logs/"}.
+{create_priv_dir, all_nodes, auto_per_run}.
+
+{node, shard1, 'rabbit_shard1@localhost'}.
+{node, shard2, 'rabbit_shard2@localhost'}.
+{node, shard3, 'rabbit_shard3@localhost'}.
+{node, shard4, 'rabbit_shard4@localhost'}.
+
+{define, 'Set1', [$(call comma_list,$(addsuffix _SUITE,$1))]}.
+{define, 'Set2', [$(call comma_list,$(addsuffix _SUITE,$2))]}.
+{define, 'Set3', [$(call comma_list,$(addsuffix _SUITE,$3))]}.
+{define, 'Set4', [$(call comma_list,$(addsuffix _SUITE,$4))]}.
+
+{suites, shard1, "test/", 'Set1'}.
+{suites, shard2, "test/", 'Set2'}.
+{suites, shard3, "test/", 'Set3'}.
+{suites, shard4, "test/", 'Set4'}.
+endef
+
+define parallel_ct_set_target
+tpl_parallel_ct_test_spec_set_$1 = $$(call tpl_parallel_ct_test_spec,$(PARALLEL_CT_SET_$(1)_A),$(PARALLEL_CT_SET_$(1)_B),$(PARALLEL_CT_SET_$(1)_C),$(PARALLEL_CT_SET_$(1)_D))
+
+parallel-ct-set-$(1): test-build
 	$(verbose) mkdir -p $(CT_LOGS_DIR)
-	$(call erlang,$(ct_master.erl),-sname rabbit_master@localhost -hidden -kernel net_ticktime 5)
+	$(verbose) $$(call core_render,tpl_parallel_ct_test_spec_set_$(1),ct.set-$(1).spec)
+	$$(call erlang,$$(call ct_master.erl,ct.set-$(1).spec),-sname parallel_ct_$(PROJECT)@localhost -hidden -kernel net_ticktime 5)
+endef
+
+$(foreach set,1 2 3 4,$(eval $(call parallel_ct_set_target,$(set))))
+
+
+
+
+
+
+
+
+
+parallel-ct: test-build
+	$(verbose) mkdir -p $(CT_LOGS_DIR)
+	$(call erlang,$(call ct_master.erl,ct.test.spec),-sname parallel_ct_$(PROJECT)@localhost -hidden -kernel net_ticktime 5)
 
 # --------------------------------------------------------------------
 # Compilation.

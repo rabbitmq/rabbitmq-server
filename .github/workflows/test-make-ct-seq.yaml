@@ -1,0 +1,64 @@
+name: Sequential CT (make)
+on:
+  workflow_call:
+    inputs:
+      erlang_version:
+        required: true
+        type: number
+      elixir_version:
+        required: true
+        type: number
+      metadata_store:
+        required: true
+        type: string
+      plugin:
+        required: true
+        type: string
+jobs:
+  test:
+    name: ${{ inputs.plugin }} (tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v4
+
+    - name: SETUP OTP & ELIXIR
+      uses: erlef/setup-beam@v1.17
+      with:
+        otp-version: ${{ inputs.erlang_version }}
+        elixir-version: ${{ inputs.elixir_version }}
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://cdn.jsdelivr.net/hex
+
+    - name: SETUP rabbitmq_auth_backend_ldap
+      if: inputs.plugin == 'rabbitmq_auth_backend_ldap'
+      run: |
+        sudo apt-get update && \
+        sudo apt-get install -y \
+          apparmor-utils \
+          ldap-utils \
+          slapd
+
+        sudo aa-complain `which slapd`
+
+# @todo Why?
+#    - name: CLI COMPILE WARNINGS AS ERRORS
+#      if: inputs.plugin == 'rabbitmq_cli'
+#      run: |
+#        bazel build //deps/rabbitmq_cli:compile_warnings_as_errors \
+#          --verbose_failures
+
+    - name: RUN TESTS
+      run: |
+        make -C deps/${{ inputs.plugin }} tests RABBITMQ_METADATA_STORE=${{ inputs.metadata_store }}
+
+    - name: UPLOAD TEST LOGS
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: CT logs (${{ inputs.plugin }} OTP-${{ inputs.erlang_version }} ${{ inputs.metadata_store }})
+        path: |
+          deps/${{ inputs.plugin }}/logs/
+          !deps/${{ inputs.plugin }}/logs/**/log_private
