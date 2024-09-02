@@ -646,7 +646,11 @@ delete_immediately_by_resource(Config) ->
     ok.
 
 cc_header_non_array_should_close_channel(Config) ->
-    {C, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    %% We use an unmanaged connection to avoid issues with
+    %% tests running in parallel: in this test we expect the
+    %% channel to close, but that channel is reused in other tests.
+    C = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Ch} = amqp_connection:open_channel(C),
     Name0 = ?FUNCTION_NAME,
     Name = atom_to_binary(Name0),
     QName = <<"queue_cc_header_non_array", Name/binary>>,

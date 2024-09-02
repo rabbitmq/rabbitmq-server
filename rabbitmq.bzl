@@ -191,6 +191,7 @@ def rabbitmq_suite(
             "COVERDATA_TO_LCOV_APPS_DIRS": "deps:deps/rabbit/apps",
         }.items() + test_env.items()),
         deps = [":test_erlang_app"] + deps + runtime_deps,
+        ct_run_extra_args = ["-kernel net_ticktime 5"],
         **kwargs
     )
     return name
@@ -261,6 +262,7 @@ def rabbitmq_integration_suite(
             ":rabbitmq-for-tests-run",
         ] + tools,
         deps = assumed_deps + deps + runtime_deps,
+        ct_run_extra_args = ["-kernel net_ticktime 5"],
         **kwargs
     )
 
@@ -296,6 +298,7 @@ def rabbitmq_integration_suite(
             "@rabbitmq-server-generic-unix-3.13//:rabbitmq-run",
         ] + tools,
         deps = assumed_deps + deps + runtime_deps,
+        ct_run_extra_args = ["-kernel net_ticktime 5"],
         **kwargs
     )
 

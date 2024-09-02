@@ -2,7 +2,5 @@
 /etc/
 /test/config_schema_SUITE_data/schema/**
 
-rabbit-rabbitmq-deps.mk
-
 [Bb]in/
 [Oo]bj/

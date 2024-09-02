@@ -11,7 +11,7 @@ dep_temp = hex 0.4.7
 dep_x509 = hex 0.8.8
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk
 
 VERBOSE_TEST ?= true
 MAX_CASES ?= 1

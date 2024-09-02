@@ -33,13 +33,10 @@ DEPS = amqp10_common credentials_obfuscation
 TEST_DEPS = rabbit rabbitmq_ct_helpers
 LOCAL_DEPS = ssl inets crypto public_key
 
-DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
+DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
+# We do not depend on rabbit therefore can't run the broker.
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
-	      rabbit_common/mk/rabbitmq-hexpm.mk \
-	      rabbit_common/mk/rabbitmq-dist.mk \
-	      rabbit_common/mk/rabbitmq-run.mk \
-	      rabbit_common/mk/rabbitmq-test.mk \
-	      rabbit_common/mk/rabbitmq-tools.mk
+	      rabbit_common/mk/rabbitmq-hexpm.mk
 
 DEP_PLUGINS += elvis_mk
 dep_elvis_mk = git https://github.com/inaka/elvis.mk.git master

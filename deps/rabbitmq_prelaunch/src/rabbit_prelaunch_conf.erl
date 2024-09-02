@@ -11,9 +11,8 @@
          generate_config_from_cuttlefish_files/3,
          decrypt_config/1]).
 
--ifdef(TEST).
+%% Only used in tests.
 -export([decrypt_config/2]).
--endif.
 
 %% These can be removed when we only support OTP-26+.
 -ignore_xref([{user_drv, whereis_group, 0},

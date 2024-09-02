@@ -112,8 +112,7 @@ end_per_suite(Config) ->
 init_per_group(unclustered, Config) ->
     rabbit_ct_helpers:set_config(Config, [{metadata_store, mnesia},
                                           {rmq_nodes_clustered, false},
-                                          {tcp_ports_base},
-                                          {net_ticktime, 10}]);
+                                          {tcp_ports_base}]);
 init_per_group(cluster_size_2, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 2}]);
 init_per_group(cluster_size_3, Config) ->

@@ -224,15 +224,14 @@ init_per_group1(Group, Config) ->
                                             {rmq_nodename_suffix, Group},
                                             {tcp_ports_base},
                                             {rmq_nodes_clustered, Clustered}]),
-    Config1b = rabbit_ct_helpers:set_config(Config1, [{net_ticktime, 10}]),
-    Config1c = case Group of
+    Config1b = case Group of
                    unclustered_size_3_4 ->
                        rabbit_ct_helpers:merge_app_env(
-                         Config1b, {rabbit, [{stream_tick_interval, 5000}]});
+                         Config1, {rabbit, [{stream_tick_interval, 5000}]});
                    _ ->
-                       Config1b
+                       Config1
                end,
-    Ret = rabbit_ct_helpers:run_steps(Config1c,
+    Ret = rabbit_ct_helpers:run_steps(Config1b,
                                       [fun merge_app_env/1 ] ++
                                       rabbit_ct_broker_helpers:setup_steps()),
     case Ret of

@@ -489,11 +489,15 @@ init_tcp_port_numbers(Config, NodeConfig, I) ->
     update_tcp_ports_in_rmq_config(NodeConfig2, ?TCP_PORTS_LIST).
 
 tcp_port_base_for_broker(Config, I, PortsCount) ->
+    tcp_port_base_for_broker0(Config, I, PortsCount).
+
+tcp_port_base_for_broker0(Config, I, PortsCount) ->
+    Base0 = persistent_term:get(rabbit_ct_tcp_port_base, ?TCP_PORTS_BASE),
     Base = case rabbit_ct_helpers:get_config(Config, tcp_ports_base) of
         undefined ->
-            ?TCP_PORTS_BASE;
+            Base0;
         {skip_n_nodes, N} ->
-            tcp_port_base_for_broker1(?TCP_PORTS_BASE, N, PortsCount);
+            tcp_port_base_for_broker1(Base0, N, PortsCount);
         B ->
             B
     end,
@@ -668,25 +672,9 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
             DistArg = re:replace(DistModS, "_dist$", "", [{return, list}]),
             "-pa \"" ++ DistModPath ++ "\" -proto_dist " ++ DistArg
     end,
-    %% Set the net_ticktime.
-    CurrentTicktime = case net_kernel:get_net_ticktime() of
-        {ongoing_change_to, T} -> T;
-        T                      -> T
-    end,
-    StartArgs1 = case rabbit_ct_helpers:get_config(Config, net_ticktime) of
-        undefined ->
-            case CurrentTicktime of
-                60 -> ok;
-                _  -> net_kernel:set_net_ticktime(60)
-            end,
-            StartArgs0;
-        Ticktime ->
-            case CurrentTicktime of
-                Ticktime -> ok;
-                _        -> net_kernel:set_net_ticktime(Ticktime)
-            end,
-            StartArgs0 ++ " -kernel net_ticktime " ++ integer_to_list(Ticktime)
-    end,
+    %% Set the net_ticktime to 5s for all nodes (including CT via CT_OPTS).
+    %% A lower tick time helps trigger distribution failures faster.
+    StartArgs1 = StartArgs0 ++ " -kernel net_ticktime 5",
     ExtraArgs0 = [],
     ExtraArgs1 = case rabbit_ct_helpers:get_config(Config, rmq_plugins_dir) of
                      undefined ->
@@ -769,6 +757,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                 _ ->
                     AbortCmd = ["stop-node" | MakeVars],
                     _ = rabbit_ct_helpers:make(Config, SrcDir, AbortCmd),
+                    %% @todo Need to stop all nodes in the cluster, not just the one node.
                     {skip, "Failed to initialize RabbitMQ"}
             end;
         RunCmd ->
