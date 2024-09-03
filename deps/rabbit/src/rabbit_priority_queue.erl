@@ -100,6 +100,8 @@ mutate_name(P, Q) when ?is_amqqueue(Q) ->
     Res1 = Res0#resource{name = QNameBin1},
     amqqueue:set_name(Q, Res1).
 
+%% For those interested: when a classic queues is declared with x-max-priority, multiple "subqueues" are created, one for each priority. 
+%% Those subqueues append their priority value to the queue's name (<<NameBin/binary, 0, P:8>>) and those mutated subqueue names are kept in the main queue's state:
 mutate_name_bin(P, NameBin) ->
     <<NameBin/binary, 0, P:8>>.
 
