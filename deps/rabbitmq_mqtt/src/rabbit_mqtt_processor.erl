@@ -652,12 +652,12 @@ extract_client_id_from_certificate(Client0, Socket) ->
             case ssl_client_id(Socket, SslClientIdSettings) of
                 none ->
                     {ok, Client0};
-                V when V == Client0 ->
+                Client0 ->
                     {ok, Client0};
-                V ->
+                Other ->
                     ?LOG_ERROR(
-                        "MQTT login failed: client_id in cert (~p) does not match client_id in protocol (~p)",
-                        [V, Client0]),
+                        "MQTT login failed: client_id in the certificate (~tp) does not match the client-provided ID (~p)",
+                        [Other, Client0]),
                     {error, ?RC_CLIENT_IDENTIFIER_NOT_VALID}
             end
     end.
