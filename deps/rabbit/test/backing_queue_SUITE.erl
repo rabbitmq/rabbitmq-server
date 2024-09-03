@@ -517,6 +517,7 @@ msg_store_file_scan1(Config) ->
         Expected = gen_result(Blocks),
         Path = gen_msg_file(Config, Blocks),
         Result = rabbit_msg_store:scan_file_for_valid_messages(Path),
+        ok = file:delete(Path),
         case Result of
             Expected -> ok;
             _ -> {expected, Expected, got, Result}
