@@ -151,6 +151,7 @@ all_tests() ->
      message_bytes_metrics,
      queue_length_limit_drop_head,
      queue_length_limit_reject_publish,
+     queue_length_limit_policy_cleared,
      subscribe_redelivery_limit,
      subscribe_redelivery_limit_disable,
      subscribe_redelivery_limit_many,
@@ -2970,6 +2971,36 @@ queue_length_limit_reject_publish(Config) ->
     %% publish should be allowed again now
     ok = publish_confirm(Ch, QQ),
     ok.
+
+queue_length_limit_policy_cleared(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, <<"max-length">>, QQ, <<"queues">>,
+           [{<<"max-length">>, 2},
+            {<<"overflow">>, <<"reject-publish">>}]),
+    timer:sleep(1000),
+    RaName = ra_name(QQ),
+    QueryFun = fun rabbit_fifo:overview/1,
+    ?awaitMatch({ok, {_, #{config := #{max_length := 2}}}, _},
+                rpc:call(Server, ra, local_query, [RaName, QueryFun]),
+                ?DEFAULT_AWAIT),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    ok = publish_confirm(Ch, QQ),
+    ok = publish_confirm(Ch, QQ),
+    ok = publish_confirm(Ch, QQ), %% QQs allow one message above the limit
+    wait_for_messages_ready(Servers, RaName, 3),
+    fail = publish_confirm(Ch, QQ),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"max-length">>),
+    ?awaitMatch({ok, {_, #{config := #{max_length := undefined}}}, _},
+                rpc:call(Server, ra, local_query, [RaName, QueryFun]),
+                ?DEFAULT_AWAIT),
+    ok = publish_confirm(Ch, QQ),
+    wait_for_messages_ready(Servers, RaName, 4).
 
 purge(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
