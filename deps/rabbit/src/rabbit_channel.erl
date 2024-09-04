@@ -484,6 +484,8 @@ update_user_state(Pid, UserState) when is_pid(Pid) ->
 init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
       Capabilities, CollectorPid, LimiterPid, AmqpParams]) ->
     process_flag(trap_exit, true),
+    rabbit_process_flag:adjust_for_message_handling_proc(),
+
     ?LG_PROCESS_TYPE(channel),
     ?store_proc_name({ConnName, Channel}),
     ok = pg_local:join(rabbit_channels, self()),
@@ -2785,3 +2787,16 @@ maybe_decrease_global_publishers(#ch{publishing_mode = true}) ->
 
 is_global_qos_permitted() ->
     rabbit_deprecated_features:is_permitted(global_qos).
+
+adjust_vheap() ->
+    case code_version:get_otp_version() of
+        OtpMaj when OtpMaj >= 27 ->
+            %% 46422 is the default min_bin_vheap_size and for OTP 27 and above
+            %% we want to substantially increase it for processes that may buffer
+            %% messages. 32x has proven workable in testing whilst not being
+            %% rediculously large
+            process_flag(min_bin_vheap_size, 46422 * 32);
+        _ ->
+            ok
+    end.
+
