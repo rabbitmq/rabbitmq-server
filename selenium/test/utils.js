@@ -56,7 +56,7 @@ module.exports = {
     if (!runLocal) {
       builder = builder.usingServer(seleniumUrl)
     }
-    var chromeCapabilities = Capabilities.chrome();
+    let chromeCapabilities = Capabilities.chrome();
     chromeCapabilities.setAcceptInsecureCerts(true);
     chromeCapabilities.set('goog:chromeOptions', {
       args: [

@@ -12,5 +12,4 @@
  rabbitmq_shovel_management,rabbitmq_stomp,rabbitmq_stream,
  rabbitmq_stream_common,rabbitmq_stream_management,rabbitmq_top,
  rabbitmq_tracing,rabbitmq_trust_store,rabbitmq_web_dispatch,
- rabbitmq_web_mqtt,rabbitmq_web_mqtt_examples,rabbitmq_web_stomp,
- rabbitmq_web_stomp_examples].
+ rabbitmq_web_mqtt,rabbitmq_web_stomp].
