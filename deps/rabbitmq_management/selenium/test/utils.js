@@ -9,13 +9,20 @@ const KeycloakLoginPage = require('./pageobjects/KeycloakLoginPage')
 const assert = require('assert')
 
 const uaaUrl = process.env.UAA_URL || 'http://localhost:8080'
-const baseUrl = process.env.RABBITMQ_URL || 'http://localhost:15672/'
+const baseUrl = randomly_pick_baseurl(process.env.RABBITMQ_URL) || 'http://localhost:15672/'
 const hostname = process.env.RABBITMQ_HOSTNAME || 'localhost'
 const runLocal = String(process.env.RUN_LOCAL).toLowerCase() != 'false'
 const seleniumUrl = process.env.SELENIUM_URL || 'http://selenium:4444'
 const screenshotsDir = process.env.SCREENSHOTS_DIR || '/screens'
 const profiles = process.env.PROFILES || ''
 
+function randomly_pick_baseurl(baseUrl) {
+    urls = baseUrl.split(",")
+    return urls[getRandomInt(urls.length)]
+}
+function getRandomInt(max) {
+  return Math.floor(Math.random() * max);
+}
 class CaptureScreenshot {
   driver
   test
@@ -51,6 +58,12 @@ module.exports = {
     }
     var chromeCapabilities = Capabilities.chrome();
     chromeCapabilities.setAcceptInsecureCerts(true);
+    chromeCapabilities.set('goog:chromeOptions', {
+      args: [
+          "--lang=en",
+          "--disable-search-engine-choice-screen"
+      ]
+    });
     driver = builder
       .forBrowser('chrome')
       .withCapabilities(chromeCapabilities)

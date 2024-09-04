@@ -1,0 +1,49 @@
+
+
+# https://docs.docker.com/compose/compose-file/#networks
+networks:
+  rabbitmq_net:
+      name: rabbitmq_net
+      external: true
+
+services:
+  rmq0: &rabbitmq
+    # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
+    << : *rabbitmq_image
+    networks:
+      - "rabbitmq_net"
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+      - "15692:15692"
+    # https://unix.stackexchange.com/questions/71940/killing-tcp-connection-in-linux
+    # https://en.wikipedia.org/wiki/Tcpkill
+    # https://www.digitalocean.com/community/tutorials/iptables-essentials-common-firewall-rules-and-commands#block-an-ip-address
+    cap_add:
+      - ALL
+    hostname: rabbitmq
+    container_name: rabbitmq
+    environment:
+      RABBITMQ_ERLANG_COOKIE: rmq0
+
+    # we want to simulate hitting thresholds
+    ulimits:
+      nofile:
+        soft: "2000"
+        hard: "2000"
+  rmq1:
+    << : *rabbitmq
+    container_name: rabbitmq1
+    hostname: rabbitmq1
+    ports:
+      - "5677:5672"
+      - "15677:15672"
+      - "15697:15692"
+  rmq2:
+    << : *rabbitmq
+    hostname: rabbitmq2
+    container_name: rabbitmq2
+    ports:
+      - "5678:5672"
+      - "15678:15672"
+      - "15698:15692"

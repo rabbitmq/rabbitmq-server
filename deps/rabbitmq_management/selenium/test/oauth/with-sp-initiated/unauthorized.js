@@ -47,7 +47,7 @@ describe('An user without management tag', function () {
       })
 
       it('should get redirected to home page again without error message', async function(){
-        await homePage.isLoaded()
+        await driver.sleep(250)        
         const visible = await homePage.isWarningVisible()
         assert.ok(!visible)
       })

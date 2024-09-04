@@ -10,14 +10,42 @@ init_rabbitmq() {
   [[ -z "${OAUTH_SERVER_CONFIG_DIR}" ]] || print "> OAUTH_SERVER_CONFIG_DIR: ${OAUTH_SERVER_CONFIG_DIR}"
 
 }
+
 start_rabbitmq() {
   if [[ "$PROFILES" == *"docker"* ]]; then
-    start_docker_rabbitmq
+      if [[ "$PROFILES" == *"cluster"* ]]; then
+          start_docker_cluster_rabbitmq
+      else
+          start_docker_rabbitmq
+      fi
   else
     start_local_rabbitmq
   fi
 }
-
+stop_rabbitmq() {
+  if [[ "$PROFILES" == *"docker"* ]]; then
+      if [[ "$PROFILES" == *"cluster"* ]]; then
+          docker compose -f $CONF_DIR/rabbitmq/compose.yml kill
+      else
+          kill_container_if_exist "$component"
+      fi
+  else
+      stop_local_rabbitmq
+  fi
+}
+stop_local_rabbitmq() {
+    RABBITMQ_SERVER_ROOT=$(realpath $TEST_DIR/../../../../)
+    gmake --directory=${RABBITMQ_SERVER_ROOT} stop-node
+}
+save_logs_rabbitmq() {
+    if [[ "$PROFILES" == *"docker"* ]]; then
+        if [[ "$PROFILES" == *"cluster"* ]]; then
+            docker compose -f $CONF_DIR/rabbitmq/compose.yml logs > $LOGS/rabbitmq.log
+        else
+            save_container_logs "rabbitmq"
+        fi
+    fi
+}
 start_local_rabbitmq() {
   begin "Starting rabbitmq ..."
 
@@ -31,22 +59,76 @@ start_local_rabbitmq() {
 
   print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_RABBITMQ_CONF"
   ${BIN_DIR}/gen-advanced-config ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_ADVANCED_CONFIG
+  cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins /tmp/etc/rabbitmq/
   RESULT=$?
   if [ $RESULT -eq 0 ]; then
     print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_ADVANCED_CONFIG"
   	gmake --directory=${RABBITMQ_SERVER_ROOT} run-broker \
-  		RABBITMQ_ENABLED_PLUGINS_FILE=${RABBITMQ_CONFIG_DIR}/enabled_plugins \
+  		RABBITMQ_ENABLED_PLUGINS_FILE=/tmp/etc/rabbitmq/enabled_plugins \
   		RABBITMQ_CONFIG_FILE=/tmp$MOUNT_RABBITMQ_CONF \
       RABBITMQ_ADVANCED_CONFIG_FILE=/tmp$MOUNT_ADVANCED_CONFIG
   else
     gmake --directory=${RABBITMQ_SERVER_ROOT} run-broker \
-  		RABBITMQ_ENABLED_PLUGINS_FILE=${RABBITMQ_CONFIG_DIR}/enabled_plugins \
+  		RABBITMQ_ENABLED_PLUGINS_FILE=/tmp/etc/rabbitmq/enabled_plugins \
   		RABBITMQ_CONFIG_FILE=/tmp$MOUNT_RABBITMQ_CONF
   fi
   print "> RABBITMQ_TEST_DIR: ${RABBITMQ_CONFIG_DIR}"
 
 
 }
+start_docker_cluster_rabbitmq() {
+    begin "Starting rabbitmq cluster in docker ..."
+    init_rabbitmq
+    kill_container_if_exist rabbitmq
+    kill_container_if_exist rabbitmq1
+    kill_container_if_exist rabbitmq2
+
+    mkdir -p $CONF_DIR/rabbitmq
+    MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
+    MOUNT_ADVANCED_CONFIG="/etc/rabbitmq/advanced.config"
+
+    RABBITMQ_TEST_DIR="/var/rabbitmq" ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/rabbitmq.conf
+    print "> EFFECTIVE RABBITMQ_CONFIG_FILE: $CONF_DIR/rabbitmq/rabbitmq.conf"
+    ${BIN_DIR}/gen-advanced-config ${RABBITMQ_CONFIG_DIR} $ENV_FILE /$CONF_DIR/rabbitmq/advanced.config
+    RESULT=$?
+    if [ $RESULT -eq 0 ]; then
+        if [ -s $RESULT ]; then
+            print "> EFFECTIVE ADVANCED_CONFIG_FILE: $CONF_DIR/rabbitmq/advanced.config"
+        else
+            rm $CONF_DIR/rabbitmq/advanced.config
+        fi
+    fi
+    mkdir -p $CONF_DIR/rabbitmq/conf.d/
+    cp ${RABBITMQ_CONFIG_DIR}/logging.conf $CONF_DIR/rabbitmq/conf.d/
+    if [ -f ${RABBITMQ_CONFIG_DIR}/enabled_plugins ]; then
+        cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins $CONF_DIR/rabbitmq
+    fi
+    if [ -d ${RABBITMQ_CONFIG_DIR}/certs ]; then
+        cp -r ${RABBITMQ_CONFIG_DIR}/certs $CONF_DIR/rabbitmq
+    fi
+    if [ -d ${RABBITMQ_CONFIG_DIR}/imports ]; then
+        cp -r ${RABBITMQ_CONFIG_DIR}/imports $CONF_DIR/rabbitmq
+    fi
+
+    cat > $CONF_DIR/rabbitmq/image_compose.yml <<EOF
+x-rabbitmq_image: &rabbitmq_image
+    image: ${RABBITMQ_DOCKER_IMAGE}
+    volumes:
+    - $CONF_DIR/rabbitmq/:/etc/rabbitmq
+    - $CONF_DIR/rabbitmq/:/var/rabbitmq
+    - ${TEST_DIR}:/config
+EOF
+    cat $CONF_DIR/rabbitmq/image_compose.yml > $CONF_DIR/rabbitmq/compose.yml
+    cat ${BIN_DIR}/components/../rabbit-compose.yml >> $CONF_DIR/rabbitmq/compose.yml
+
+    docker compose -f $CONF_DIR/rabbitmq/compose.yml up -d
+
+    wait_for_message rabbitmq "Server startup complete"
+    wait_for_message rabbitmq1 "Server startup complete"
+    wait_for_message rabbitmq2 "Server startup complete"
+    end "RabbitMQ cluster ready"
+}
+
 start_docker_rabbitmq() {
   begin "Starting rabbitmq in docker ..."
 
