@@ -1,30 +1,10 @@
-name: Test Authentication/Authorization backends via mutiple messaging protocols
+name: Test Management UI with Selenium for PRs
 on:
-  push:
-    branches:
-      - main
-      - v3.12.x
-      - v3.11.x
-    paths:
-      - 'deps/rabbit/**'
-      - 'deps/rabbitmq_auth_**'
-      - 'deps/rabbitmq_management/selenium/**'
-      - 'scripts/**'
-      - .bazelrc
-      - .bazelversion
-      - BUILD.*
-      - '*.bzl'
-      - '*.bazel'
-      - .github/workflows/test-authnz.yaml
-  pull_request:
-    paths:
-      - 'deps/rabbit/**'
-      - 'deps/rabbitmq_auth_/**'
-      - 'deps/rabbitmq_mqtt/**'
-      - 'deps/rabbitmq_management/selenium/full-suite-authnz-messaging'
-      - 'deps/rabbitmq_management/selenium/suites/authnz-messaging'
-      - 'deps/rabbitmq_management/selenium/test/authnz-msg-protocols'
-      - .github/workflows/test-authnz.yaml
+   pull_request:
+     paths:
+     - 'deps/**'
+     - 'selenium/**'
+     - .github/workflows/test-management-ui-for-pr.yaml
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -89,10 +69,16 @@ jobs:
         cd ${SELENIUM_DIR}
         docker build -t mocha-test --target test .
 
-    - name: Run Suites
+    - name: Run full ui suites on a standalone rabbitmq server
       run: |
         RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq-amd64 \
-         ${SELENIUM_DIR}/run-suites.sh full-suite-authnz-messaging
+            ${SELENIUM_DIR}/run-suites.sh
+        mkdir -p /tmp/full-suite
+        mv /tmp/selenium/* /tmp/full-suite
+        mkdir -p /tmp/full-suite/logs
+        mv ${SELENIUM_DIR}/logs/* /tmp/full-suite/logs
+        mkdir -p /tmp/full-suite/screens
+        mv ${SELENIUM_DIR}/screens/* /tmp/full-suite/screens
 
     - name: Upload Test Artifacts
       if: always()
@@ -100,9 +86,7 @@ jobs:
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
         path: |
-          logs/*
-          screens/*
-          /tmp/selenium/*
+          /tmp/full-suite          
 
   summary-selenium:
     needs:

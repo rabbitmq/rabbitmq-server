@@ -6,7 +6,7 @@
   "scripts": {
     "fakeportal": "node fakeportal/app.js",
     "fakeproxy": "node fakeportal/proxy.js",
-    "amqp10_roundtriptest": "eval $(cat $ENV_FILE ) &&./run-amqp10-roundtriptest",
+    "amqp10_roundtriptest": "eval $(cat $ENV_FILE ) && amqp10-roundtriptest/run",
     "test": " eval $(cat $ENV_FILE ) && mocha --recursive --trace-warnings --timeout 40000"
   },
   "keywords": [],

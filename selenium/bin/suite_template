@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 
-#set -x
+if [[ ! -z "${DEBUG}" ]]; then
+  set -x
+fi
+
 
 SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SUITE=$(caller)
@@ -396,6 +399,9 @@ run_local_with() {
   if [[ "$COMMAND" == "start-rabbitmq" ]]
   then
     start_local_rabbitmq
+elif [[ "$COMMAND" == "stop-rabbitmq" ]]
+  then
+    stop_local_rabbitmq
   elif [[ "$COMMAND" == "start-others" ]]
   then
     start_local_others

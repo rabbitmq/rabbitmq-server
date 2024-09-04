@@ -4,7 +4,6 @@ FROM atools/jdk-maven-node:mvn3-jdk11-node16 as base
 WORKDIR /code
 
 COPY package.json package.json
-COPY run-amqp10-roundtriptest run-amqp10-roundtriptest
 
 FROM base as test
 RUN npm install
