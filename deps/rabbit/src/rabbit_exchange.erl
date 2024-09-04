@@ -14,7 +14,7 @@
          update_scratch/3, update_decorators/2, immutable/1,
          info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4,
          route/2, route/3, delete/3, validate_binding/2, count/0,
-         ensure_deleted/3]).
+         ensure_deleted/3, delete_all/2]).
 -export([list_names/0]).
 -export([serialise_events/1]).
 -export([serial/1, peek_serial/1]).
@@ -483,6 +483,17 @@ delete(XName, IfUnused, Username) ->
                                         ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
                                         XName#resource.name, Username)
     end.
+
+-spec delete_all(VHostName, ActingUser) -> Ret when
+      VHostName :: vhost:name(),
+      ActingUser :: rabbit_types:username(),
+      Ret :: ok.
+
+delete_all(VHostName, ActingUser) ->
+    {ok, Deletions} = rabbit_db_exchange:delete_all(VHostName),
+    Deletions1 = rabbit_binding:process_deletions(Deletions),
+    rabbit_binding:notify_deletions(Deletions1, ActingUser),
+    ok.
 
 process_deletions({error, _} = E) ->
     E;

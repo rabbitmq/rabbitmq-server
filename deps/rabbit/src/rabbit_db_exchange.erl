@@ -26,6 +26,7 @@
          peek_serial/1,
          next_serial/1,
          delete/2,
+         delete_all/1,
          delete_serial/1,
          recover/1,
          match/1,
@@ -656,6 +657,69 @@ unconditional_delete_in_khepri(X, OnlyDurable) ->
 delete_in_khepri(X = #exchange{name = XName}, OnlyDurable, RemoveBindingsForSource) ->
     ok = khepri_tx:delete(khepri_exchange_path(XName)),
     rabbit_db_binding:delete_all_for_exchange_in_khepri(X, OnlyDurable, RemoveBindingsForSource).
+
+%% -------------------------------------------------------------------
+%% delete_all().
+%% -------------------------------------------------------------------
+
+-spec delete_all(VHostName) -> Ret when
+      VHostName :: vhost:name(),
+      Deletions :: rabbit_binding:deletions(),
+      Ret :: {ok, Deletions}.
+%% @doc Deletes all exchanges for a given vhost.
+%%
+%% @returns an `{ok, Deletions}' tuple containing the {@link
+%% rabbit_binding:deletions()} caused by deleting the exchanges under the given
+%% vhost.
+%%
+%% @private
+
+delete_all(VHostName) ->
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun() -> delete_all_in_mnesia(VHostName) end,
+        khepri => fun() -> delete_all_in_khepri(VHostName) end
+       }).
+
+delete_all_in_mnesia(VHostName) ->
+    rabbit_mnesia:execute_mnesia_transaction(
+      fun() ->
+              delete_all_in_mnesia_tx(VHostName)
+      end).
+
+delete_all_in_mnesia_tx(VHostName) ->
+    Match = #exchange{name = rabbit_misc:r(VHostName, exchange), _ = '_'},
+    Xs = mnesia:match_object(?MNESIA_TABLE, Match, write),
+    Deletions =
+    lists:foldl(
+      fun(X, Acc) ->
+              {deleted, #exchange{name = XName}, Bindings, XDeletions} =
+              unconditional_delete_in_mnesia( X, false),
+              XDeletions1 = rabbit_binding:add_deletion(
+                              XName, {X, deleted, Bindings}, XDeletions),
+              rabbit_binding:combine_deletions(Acc, XDeletions1)
+      end, rabbit_binding:new_deletions(), Xs),
+    {ok, Deletions}.
+
+delete_all_in_khepri(VHostName) ->
+    rabbit_khepri:transaction(
+      fun() ->
+              delete_all_in_khepri_tx(VHostName)
+      end, rw, #{timeout => infinity}).
+
+delete_all_in_khepri_tx(VHostName) ->
+    Pattern = khepri_exchange_path(VHostName, ?KHEPRI_WILDCARD_STAR),
+    {ok, NodeProps} = khepri_tx_adv:delete_many(Pattern),
+    Deletions =
+    maps:fold(
+      fun(_Path, #{data := X}, Deletions) ->
+              {deleted, #exchange{name = XName}, Bindings, XDeletions} =
+                rabbit_db_binding:delete_all_for_exchange_in_khepri(
+                  X, false, true),
+              Deletions1 = rabbit_binding:add_deletion(
+                             XName, {X, deleted, Bindings}, XDeletions),
+              rabbit_binding:combine_deletions(Deletions, Deletions1)
+      end, rabbit_binding:new_deletions(), NodeProps),
+    {ok, Deletions}.
 
 %% -------------------------------------------------------------------
 %% delete_serial().
