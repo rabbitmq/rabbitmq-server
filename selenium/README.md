@@ -3,7 +3,7 @@
 ## What is it?
 
 It is a solution that allows you to write end-to-end tests in Javascript. The solution
-takes care of: 
+takes care of:
 
     - generating the required RabbitMQ configuration  
     - deploying RabbitMQ with the generated configuration in 3 ways:  
@@ -25,9 +25,9 @@ takes care of:
 
 These are the three github workflows that run end-to-end tests:
 - [test-management-ui.yaml](.github/workflows/test-management-ui.yaml) Runs all the test suites
-listed on the file [short-suite-management-ui](selenium/short-suite-management-ui). It tests the management ui deployed a standalone RabbitMQ server. It is invoked on every push to a branch.
+listed on the file [short-suite-management-ui](selenium/short-suite-management-ui). It tests the management ui deployed on a 3-node cluster. It is invoked on every push to a branch.
 - [test-management-ui-for-prs.yaml](.github/workflows/test-management-ui.yaml) Runs all the test suites
-listed on the file [full-suite-management-ui](selenium/full-suite-management-ui). It tests the management ui deployed on a 3-node cluster using a smaller test suite. It is invoked on every push to a PR.
+listed on the file [full-suite-management-ui](selenium/full-suite-management-ui). It tests the management ui deployed on a single docker instance. It is invoked on every push to a PR.
 - [test-authnz.yaml](.github/workflows/test-authnz.yaml) Runs all the test suites
 listed on the file [full-suite-authnz-messaging](selenium/full-suite-authnz-messaging). It is invoked on every push to a PR and/or branch.
 
