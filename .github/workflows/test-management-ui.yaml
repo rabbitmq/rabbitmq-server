@@ -16,11 +16,9 @@ on:
       - BUILD.*
       - '*.bzl'
       - '*.bazel'
-      - .github/workflows/test-selenium.yaml
-  pull_request:
-    paths:
-      - 'deps/rabbitmq_management/**'
-      - .github/workflows/test-selenium-for-pull-requests.yaml
+      - 'selenium/**'
+      - .github/workflows/test-management-ui.yaml
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -38,7 +36,7 @@ jobs:
         - erlang_version: "26.2"
           elixir_version: 1.15.7
     env:
-      SELENIUM_DIR: deps/rabbitmq_management/selenium
+      SELENIUM_DIR: selenium
       DOCKER_NETWORK: rabbitmq_net
     steps:
     - name: Checkout
@@ -85,17 +83,6 @@ jobs:
         cd ${SELENIUM_DIR}
         docker build -t mocha-test --target test .
 
-    - name: Run full ui suites on a standalone rabbitmq server
-      run: |
-        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq-amd64 \
-            ${SELENIUM_DIR}/run-suites.sh
-        mkdir -p /tmp/full-suite
-        mv /tmp/selenium/* /tmp/full-suite
-        mkdir -p /tmp/full-suite/logs
-        mv ${SELENIUM_DIR}/logs/* /tmp/full-suite/logs
-        mkdir -p /tmp/full-suite/screens
-        mv ${SELENIUM_DIR}/screens/* /tmp/full-suite/screens
-
     - name: Run short ui suite on a 3-node rabbitmq cluster
       run: |
         RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq-amd64 \
@@ -113,7 +100,6 @@ jobs:
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
         path: |
-          /tmp/full-suite
           /tmp/short-suite
 
   summary-selenium:

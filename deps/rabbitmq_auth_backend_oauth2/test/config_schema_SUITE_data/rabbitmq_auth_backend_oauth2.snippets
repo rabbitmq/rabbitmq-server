@@ -1,5 +1,5 @@
 [
-  {oauth2_pem_config2,
+  {root_resource_server,
        "auth_oauth2.resource_server_id = new_resource_server_id
         auth_oauth2.scope_prefix = new_resource_server_id.
         auth_oauth2.resource_server_type = new_resource_server_type
@@ -51,7 +51,7 @@
         ]}
         ],[]
   },
-  {oauth2_pem_config3,
+  {multiple_resource_servers,
        "auth_oauth2.resource_server_id = new_resource_server_id
         auth_oauth2.scope_prefix = new_resource_server_id.
         auth_oauth2.resource_server_type = new_resource_server_type
@@ -92,7 +92,7 @@
                 ],
                 <<"rabbitmq-customers">> => [
                   {additional_scopes_key, <<"roles">>},
-                  {id, <<"rabbitmq-customers">>}                  
+                  {id, <<"rabbitmq-customers">>}
                 ]
               }
             },
@@ -117,7 +117,7 @@
         ]}
         ],[]
   },
-  {oauth2_pem_config4,
+  {multiple_oauth_providers,
        "auth_oauth2.resource_server_id = new_resource_server_id
         auth_oauth2.scope_prefix = new_resource_server_id.
         auth_oauth2.resource_server_type = new_resource_server_type
@@ -172,6 +172,16 @@
 
               }
             }
+        ]}
+        ],[]
+  },
+  {empty_scope_prefix,
+       "auth_oauth2.resource_server_id = new_resource_server_id
+        auth_oauth2.scope_prefix = '' ",
+        [
+        {rabbitmq_auth_backend_oauth2, [
+            {resource_server_id,<<"new_resource_server_id">>},
+            {scope_prefix,<<>>}
         ]}
         ],[]
   }
