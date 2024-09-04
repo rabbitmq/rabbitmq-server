@@ -1,5 +1,5 @@
 const assert = require('assert')
-const { getURLForProtocol, tokenFor, openIdConfiguration } = require('../utils')
+const { tokenFor, openIdConfiguration } = require('../utils')
 const { reset, expectUser, expectVhost, expectResource, allow, verifyAll } = require('../mock_http_backend')
 const mqtt = require('mqtt');
 

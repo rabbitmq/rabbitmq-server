@@ -28,5 +28,6 @@ then
 fi
 if [ "$FOUND_TEMPLATES_COUNT" -lt 1 ]
 then
+  rm $FINAL_CONFIG_FILE
   exit -1
 fi
