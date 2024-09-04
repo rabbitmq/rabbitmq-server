@@ -299,8 +299,7 @@ delete(VHost, ActingUser) ->
          assert_benign(rabbit_amqqueue:with(Name, QDelFun), ActingUser)
      end || Q <- rabbit_amqqueue:list(VHost)],
     rabbit_log:info("Deleting exchanges in vhost '~ts' because it's being deleted", [VHost]),
-    [ok = rabbit_exchange:ensure_deleted(Name, false, ActingUser) ||
-        #exchange{name = Name} <- rabbit_exchange:list(VHost)],
+    ok = rabbit_exchange:delete_all(VHost, ActingUser),
     rabbit_log:info("Clearing policies and runtime parameters in vhost '~ts' because it's being deleted", [VHost]),
     _ = rabbit_runtime_parameters:clear_vhost(VHost, ActingUser),
     rabbit_log:debug("Removing vhost '~ts' from the metadata storage because it's being deleted", [VHost]),
