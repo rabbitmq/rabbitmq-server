@@ -85,9 +85,27 @@ jobs:
         cd ${SELENIUM_DIR}
         docker build -t mocha-test --target test .
 
-    - name: Run Suites
+    - name: Run full ui suites on a standalone rabbitmq server
       run: |
-        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq-amd64 ${SELENIUM_DIR}/run-suites.sh
+        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq-amd64 \
+            ${SELENIUM_DIR}/run-suites.sh
+        mkdir -p /tmp/full-suite
+        mv /tmp/selenium/* /tmp/full-suite
+        mkdir -p /tmp/full-suite/logs
+        mv ${SELENIUM_DIR}/logs/* /tmp/full-suite/logs
+        mkdir -p /tmp/full-suite/screens
+        mv ${SELENIUM_DIR}/screens/* /tmp/full-suite/screens
+
+    - name: Run short ui suite on a 3-node rabbitmq cluster
+      run: |
+        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq-amd64 \
+            ADDON_PROFILES=cluster ${SELENIUM_DIR}/run-suites.sh short-suite-management-ui
+        mkdir -p /tmp/short-suite
+        mv /tmp/selenium/* /tmp/short-suite
+        mkdir -p /tmp/short-suite/logs
+        mv ${SELENIUM_DIR}/logs/* /tmp/short-suite/logs
+        mkdir -p /tmp/short-suite/screens
+        mv ${SELENIUM_DIR}/screens/* /tmp/short-suite/screens
 
     - name: Upload Test Artifacts
       if: always()
@@ -95,9 +113,8 @@ jobs:
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
         path: |
-          logs/*
-          screens/*
-          /tmp/selenium/*
+          /tmp/full-suite
+          /tmp/short-suite
 
   summary-selenium:
     needs:
