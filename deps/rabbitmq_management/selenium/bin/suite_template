@@ -32,6 +32,8 @@ SCREENS=${SELENIUM_ROOT_FOLDER}/screens/${SUITE}
 CONF_DIR=/tmp/selenium/${SUITE}
 ENV_FILE=$CONF_DIR/.env
 
+rm -rf $CONF_DIR
+
 for f in $SCRIPT/components/*; do
   if [[ ! "$f" == *README.md ]]
   then
@@ -54,6 +56,9 @@ parse_arguments() {
     elif [[ "$1" == "stop-others" ]]
       then
       echo "stop-others"
+    elif [[ "$1" == "stop-rabbitmq" ]]
+      then
+      echo "stop-rabbitmq"
     elif [[ "$1" == "test" ]]
       then
       echo "test $2"
@@ -107,7 +112,10 @@ init_suite() {
   print "> TEST_CASES_DIR: ${TEST_CASES_DIR} "
   print "> TEST_CONFIG_DIR: ${TEST_CONFIG_DIR} "
   print "> DOCKER_NETWORK: ${DOCKER_NETWORK} "
-  print "> PROFILES: ${PROFILES} "
+  print "> initial PROFILES: ${PROFILES} "
+  print "> (+) ADDON_PROFILES: ${ADDON_PROFILES} "
+  PROFILES="${PROFILES} ${ADDON_PROFILES}"
+  print "> (=) final PROFILES: ${PROFILES} "
   print "> ENV_FILE: ${ENV_FILE} "
   print "> COMMAND: ${COMMAND}"
   end "Initialized suite"
@@ -239,25 +247,68 @@ wait_for_url_docker() {
   done
 }
 
-
+test_on_cluster() {
+    IFS=', ' read -r -a array <<< "$RABBITMQ_CLUSTER_NODES"
+    begin "Running against all nodes in cluster $RABBITMQ_CLUSTER_NODES :"
+    for item in "${array[@]}"
+    do
+        RMQ_HOST_0=${RABBITMQ_HOST:-rabbitmq:15672}
+        RMQ_HOST=$(rewrite_rabbitmq_hostname ${item} $RMQ_HOST_0)
+        PUBLIC_RMQ_HOST_0=${PUBLIC_RABBITMQ_HOST:-$RMQ_HOST}
+        PUBLIC_RMQ_HOST=$(rewrite_rabbitmq_hostname ${item} $PUBLIC_RMQ_HOST_0)
+        RMQ_URL=$(calculate_rabbitmq_url $PUBLIC_RMQ_HOST)
+        RMQ_HOSTNAME=${item}
+        _test $RMQ_HOST \
+              $PUBLIC_RMQ_HOST \
+              $RMQ_URL \
+              $RMQ_HOSTNAME
+        TEST_RESULT=$?
+        if [ $TEST_RESULT -ne 0 ]; then
+            break
+        fi
+    done
+    end "Finishing running test ($TEST_RESULT)"
+}
+rewrite_rabbitmq_hostname() {
+    IFS=':' read -r -a array <<< "$2"
+    if [ "${array[0]}" == "rabbitmq" ]; then
+        echo "${2//rabbitmq/$1}"
+    else
+        echo "$2"
+    fi
+}
 test() {
-  kill_container_if_exist mocha
-  begin "Running tests with env variables:"
+  if [[ "$PROFILES" == *"cluster"* && ! -z "$RABBITMQ_CLUSTER_NODES" ]]; then
+      test_on_cluster
+  else
+      RMQ_HOST=${RABBITMQ_HOST:-rabbitmq:15672}
+      PUBLIC_RMQ_HOST=${PUBLIC_RABBITMQ_HOST:-$RMQ_HOST}
+      _test $RABBITMQ_HOST \
+            $PUBLIC_RMQ_HOST \
+            $(calculate_rabbitmq_url $PUBLIC_RMQ_HOST) \
+            ${RABBITMQ_HOSTNAME:-rabbitmq}
+  fi
+}
 
-  RABBITMQ_HOST=${RABBITMQ_HOST:-rabbitmq:15672}
-  PUBLIC_RABBITMQ_HOST=${PUBLIC_RABBITMQ_HOST:-$RABBITMQ_HOST}
-  RABBITMQ_URL=$(calculate_rabbitmq_url $PUBLIC_RABBITMQ_HOST)
-  RABBITMQ_HOSTNAME=${RABBITMQ_HOSTNAME:-rabbitmq}
+_test() {
+  RMQ_HOST=$1
+  PUBLIC_RMQ_HOST=$2
+  RMQ_URL=$3
+  RMQ_HOSTNAME=$4
+
+  kill_container_if_exist mocha
+  begin "Running tests against $RMQ_HOSTNAME with these env variable:"
+
   SELENIUM_TIMEOUT=${SELENIUM_TIMEOUT:-20000}
   SELENIUM_POLLING=${SELENIUM_POLLING:-500}
 
   print "> SELENIUM_TIMEOUT: ${SELENIUM_TIMEOUT}"
   print "> SELENIUM_POLLING: ${SELENIUM_POLLING}"
-  print "> RABBITMQ_HOST: ${RABBITMQ_HOST}"
-  print "> RABBITMQ_HOSTNAME: ${RABBITMQ_HOSTNAME}"
-  print "> PUBLIC_RABBITMQ_HOST: ${PUBLIC_RABBITMQ_HOST}"
+  print "> RABBITMQ_HOST: ${RMQ_HOST}"
+  print "> RABBITMQ_HOSTNAME: ${RMQ_HOSTNAME}"
+  print "> PUBLIC_RABBITMQ_HOST: ${PUBLIC_RMQ_HOST}"
   print "> RABBITMQ_PATH: ${RABBITMQ_PATH}"
-  print "> RABBITMQ_URL: ${RABBITMQ_URL}"
+  print "> RABBITMQ_URL: ${RMQ_URL}"
   print "> UAA_URL: ${UAA_URL}"
   print "> FAKEPORTAL_URL: ${FAKEPORTAL_URL}"
   mocha_test_tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))
@@ -270,8 +321,8 @@ test() {
     --rm \
     --name mocha \
     --net ${DOCKER_NETWORK} \
-    --env RABBITMQ_URL=${RABBITMQ_URL} \
-    --env RABBITMQ_HOSTNAME=${RABBITMQ_HOSTNAME} \
+    --env RABBITMQ_URL=${RMQ_URL} \
+    --env RABBITMQ_HOSTNAME=${RMQ_HOSTNAME} \
     --env UAA_URL=${UAA_URL} \
     --env FAKE_PORTAL_URL=${FAKEPORTAL_URL} \
     --env RUN_LOCAL=false \
@@ -354,6 +405,9 @@ run_local_with() {
   elif [[ "$COMMAND" == "stop-others" ]]
   then
     teardown_local_others
+  elif [[ "$COMMAND" == "stop-rabbitmq" ]]
+  then
+    stop_local_rabbitmq
   elif [[ "$COMMAND" =~ test[[:space:]]*([^[:space:]]*) ]]
   then
     test_local ${BASH_REMATCH[1]}
@@ -466,13 +520,15 @@ start_components() {
     $start
   done
 }
+
 teardown_components() {
   begin "Tear down ..."
   for i in "${REQUIRED_COMPONENTS[@]}"
   do
     local component="$i"
+    stop="stop_$i"
+    type "$stop" &>/dev/null && $stop || kill_container_if_exist "$component"
     print "Tear down $component"
-    kill_container_if_exist "$component"
   done
   end "Finished teardown"
 }
@@ -481,8 +537,9 @@ save_components_logs() {
   for i in "${REQUIRED_COMPONENTS[@]}"
   do
     local component="$i"
+    save="save_logs_$i"
+    type "$save" &>/dev/null && $save || save_container_logs "$component"
     print "Saving logs for component $component"
-    save_container_logs "$component"
   done
   end "Finished saving logs"
 }
