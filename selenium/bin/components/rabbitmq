@@ -1,3 +1,4 @@
+
 #!/usr/bin/env bash
 
 init_rabbitmq() {
@@ -10,16 +11,18 @@ init_rabbitmq() {
   [[ -z "${OAUTH_SERVER_CONFIG_DIR}" ]] || print "> OAUTH_SERVER_CONFIG_DIR: ${OAUTH_SERVER_CONFIG_DIR}"
 
 }
+
 start_rabbitmq() {
   if [[ "$PROFILES" == *"docker"* ]]; then
-    start_docker_rabbitmq
+      if [[ "$PROFILES" == *"cluster"* ]]; then
+          start_docker_cluster_rabbitmq
+      else
+          start_docker_rabbitmq
+      fi
   else
     start_local_rabbitmq
   fi
 }
-<<<<<<< HEAD:deps/rabbitmq_management/selenium/bin/components/rabbitmq
-
-=======
 stop_rabbitmq() {
   if [[ "$PROFILES" == *"docker"* ]]; then
       if [[ "$PROFILES" == *"cluster"* ]]; then
@@ -44,7 +47,6 @@ save_logs_rabbitmq() {
         fi
     fi
 }
->>>>>>> a1206dc801 (Move selenium to the root of the repo):selenium/bin/components/rabbitmq
 start_local_rabbitmq() {
   begin "Starting rabbitmq ..."
 
@@ -58,25 +60,24 @@ start_local_rabbitmq() {
 
   print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_RABBITMQ_CONF"
   ${BIN_DIR}/gen-advanced-config ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_ADVANCED_CONFIG
+  cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins /tmp/etc/rabbitmq/
   RESULT=$?
   cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins /tmp/etc/rabbitmq/
   if [ $RESULT -eq 0 ]; then
     print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_ADVANCED_CONFIG"
   	gmake --directory=${RABBITMQ_SERVER_ROOT} run-broker \
-  		RABBITMQ_ENABLED_PLUGINS_FILE=${RABBITMQ_CONFIG_DIR}/enabled_plugins \
+  		RABBITMQ_ENABLED_PLUGINS_FILE=/tmp/etc/rabbitmq/enabled_plugins \
   		RABBITMQ_CONFIG_FILE=/tmp$MOUNT_RABBITMQ_CONF \
       RABBITMQ_ADVANCED_CONFIG_FILE=/tmp$MOUNT_ADVANCED_CONFIG
   else
     gmake --directory=${RABBITMQ_SERVER_ROOT} run-broker \
-  		RABBITMQ_ENABLED_PLUGINS_FILE=${RABBITMQ_CONFIG_DIR}/enabled_plugins \
+  		RABBITMQ_ENABLED_PLUGINS_FILE=/tmp/etc/rabbitmq/enabled_plugins \
   		RABBITMQ_CONFIG_FILE=/tmp$MOUNT_RABBITMQ_CONF
   fi
   print "> RABBITMQ_TEST_DIR: ${RABBITMQ_CONFIG_DIR}"
 
 
 }
-<<<<<<< HEAD:deps/rabbitmq_management/selenium/bin/components/rabbitmq
-=======
 start_docker_cluster_rabbitmq() {
     begin "Starting rabbitmq cluster in docker ..."
     init_rabbitmq
@@ -130,7 +131,6 @@ EOF
     end "RabbitMQ cluster ready"
 }
 
->>>>>>> a1206dc801 (Move selenium to the root of the repo):selenium/bin/components/rabbitmq
 start_docker_rabbitmq() {
   begin "Starting rabbitmq in docker ..."
 
