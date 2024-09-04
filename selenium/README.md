@@ -1,7 +1,38 @@
-# Automated End-to-End testing of the management ui with Selenium
+# Automated End-to-End testing with Mocha and Selenium
 
-Selenium webdriver is used to drive web browser's interactions on the management ui.
-And Mocha is used as the testing framework for Javascript.
+## What is it?
+
+It is a solution that allows you to write end-to-end tests in Javascript. The solution
+takes care of: 
+
+    - generating the required RabbitMQ configuration  
+    - deploying RabbitMQ with the generated configuration in 3 ways:  
+        - from source via `make run-broker`.
+        - with docker via a single docker instance.
+        - with docker compose via a 3-node cluster.
+    - deploying any other dependencies required by the test case such as:
+        - keycloak
+        - uaa
+        - ldap
+        - http authentication backend
+        - http proxy
+        - http portal
+    - running the test cases
+    - capturing the logs from RabbitMQ and all the dependencies
+    - stopping RabbitMQ and all the dependencies
+
+## Integration with Github actions
+
+These are the three github workflows that run end-to-end tests:
+- [test-management-ui.yaml](.github/workflows/test-management-ui.yaml) Runs all the test suites
+listed on the file [short-suite-management-ui](selenium/short-suite-management-ui). It tests the management ui deployed a standalone RabbitMQ server. It is invoked on every push to a branch.
+- [test-management-ui-for-prs.yaml](.github/workflows/test-management-ui.yaml) Runs all the test suites
+listed on the file [full-suite-management-ui](selenium/full-suite-management-ui). It tests the management ui deployed on a 3-node cluster using a smaller test suite. It is invoked on every push to a PR.
+- [test-authnz.yaml](.github/workflows/test-authnz.yaml) Runs all the test suites
+listed on the file [full-suite-authnz-messaging](selenium/full-suite-authnz-messaging). It is invoked on every push to a PR and/or branch.
+
+
+## Prerequisites
 
 The following must be installed to run the tests:
 - make
@@ -10,9 +41,9 @@ The following must be installed to run the tests:
 
 # Organization of test cases
 
-`test` folder contains the test cases written in Javascript using Selenium webdriver. Test cases are grouped into folders based on the area of functionality.
-For instance, `test/basic-auth` contains test cases that validates basic authentication. Another example, a bit
-more complex, is `test/oauth` where the test cases are stored in subfolders. For instance, `test/oauth/with-sp-initiated` which validate OAuth 2 authorization where users come to RabbitMQ without any token and RabbitMQ initiates the authorization process.  
+`test` folder contains the test cases written in Javascript using Mocha framework.
+Test cases are grouped into folders based on the area of functionality.
+For instance, `test/basic-auth` contains test cases that validates basic authentication. Another example, a bit more complex, is `test/oauth` where the test cases are stored in subfolders. For instance, `test/oauth/with-sp-initiated` which validate OAuth 2 authorization where users come to RabbitMQ without any token and RabbitMQ initiates the authorization process.  
 
 The `test` folder also contains the necessary configuration files. For instance, `test/basic-auth` contains `rabbitmq.conf` file which is also shared by other test cases such as `test/definitions` or `test/limits`.
 

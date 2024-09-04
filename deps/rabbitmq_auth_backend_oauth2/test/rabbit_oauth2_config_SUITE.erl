@@ -130,6 +130,14 @@ groups() -> [
             is_verify_aud_for_resource_one_returns_true,
             is_verify_aud_for_resource_two_returns_false
         ]},
+        get_scope_prefix_for_resource_one_returns_default_scope_prefix,
+        {with_root_scope_prefix, [], [
+            get_scope_prefix_for_resource_one_returns_root_scope_prefix,
+            {with_empty_scope_prefix_for_resource_one, [], [
+                get_scope_prefix_for_resource_one_returns_empty_scope_prefix,
+                get_scope_prefix_for_resource_two_returns_root_scope_prefix
+            ]}
+        ]},
         {with_jwks_url, [], [
             get_oauth_provider_for_both_resources_should_return_root_oauth_provider,
             {with_oauth_providers_A_with_jwks_uri, [], [
@@ -160,6 +168,7 @@ groups() -> [
         get_default_preferred_username_claims,
         get_preferred_username_claims,
         get_scope_prefix,
+        get_empty_scope_prefix,
         get_scope_prefix_when_not_defined,
         get_resource_server_type,
         get_resource_server_type_when_not_defined,
@@ -309,6 +318,16 @@ init_per_group(with_resource_server_id, Config) ->
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, ?RABBITMQ),
     Config;
 
+init_per_group(with_root_scope_prefix, Config) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, scope_prefix, <<"some-prefix:">>),
+    Config;
+init_per_group(with_empty_scope_prefix_for_resource_one, Config) ->
+    ResourceServers = application:get_env(rabbitmq_auth_backend_oauth2, resource_servers, #{}),
+    Proplist = maps:get(?RABBITMQ_RESOURCE_ONE, ResourceServers, []),
+     application:set_env(rabbitmq_auth_backend_oauth2, resource_servers,
+        maps:put(?RABBITMQ_RESOURCE_ONE, [{scope_prefix, <<"">>} | proplists:delete(scope_prefix, Proplist)], ResourceServers)),
+    Config;
+
 init_per_group(with_verify_aud_false, Config) ->
     application:set_env(rabbitmq_auth_backend_oauth2, verify_aud, false),
     Config;
@@ -405,7 +424,9 @@ end_per_group(with_root_static_signing_keys, Config) ->
     KeyConfig = call_get_env(Config, key_config, []),
     call_set_env(Config, key_config, KeyConfig),
     Config;
-
+end_per_group(get_empty_scope_prefix, Config) ->
+    application:unset_env(rabbitmq_auth_backend_oauth2, scope_prefix),
+    Config;
 end_per_group(with_resource_server_id, Config) ->
     application:unset_env(rabbitmq_auth_backend_oauth2, resource_server_id),
     Config;
@@ -418,6 +439,13 @@ end_per_group(with_verify_aud_false_for_resource_two, Config) ->
      application:set_env(rabbitmq_auth_backend_oauth2, resource_servers,
         maps:put(?RABBITMQ_RESOURCE_TWO, proplists:delete(verify_aud, Proplist), ResourceServers)),
     Config;
+end_per_group(with_empty_scope_prefix_for_resource_one, Config) ->
+    ResourceServers = application:get_env(rabbitmq_auth_backend_oauth2, resource_servers, #{}),
+    Proplist = maps:get(?RABBITMQ_RESOURCE_ONE, ResourceServers, []),
+     application:set_env(rabbitmq_auth_backend_oauth2, resource_servers,
+        maps:put(?RABBITMQ_RESOURCE_ONE, proplists:delete(scope_prefix, Proplist), ResourceServers)),
+    Config;
+
 end_per_group(with_default_key, Config) ->
     KeyConfig = application:get_env(rabbitmq_auth_backend_oauth2, key_config, []),
     application:set_env(rabbitmq_auth_backend_oauth2, key_config,
@@ -507,6 +535,10 @@ end_per_group(inheritance_group, Config) ->
     application:unset_env(rabbitmq_auth_backend_oauth2, resource_servers),
     Config;
 
+end_per_group(with_root_scope_prefix, Config) ->
+    application:unset_env(rabbitmq_auth_backend_oauth2, scope_prefix),
+    Config;
+
 end_per_group(_any, Config) ->
     Config.
 
@@ -519,6 +551,9 @@ init_per_testcase(get_additional_scopes_key_when_not_defined, Config) ->
     Config;
 init_per_testcase(is_verify_aud_when_is_false, Config) ->
     application:set_env(rabbitmq_auth_backend_oauth2, verify_aud, false),
+    Config;
+init_per_testcase(get_empty_scope_prefix, Config) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, scope_prefix, <<"">>),
     Config;
 init_per_testcase(get_scope_prefix_when_not_defined, Config) ->
     application:unset_env(rabbitmq_auth_backend_oauth2, scope_prefix),
@@ -756,10 +791,34 @@ get_scope_prefix_when_not_defined(_Config) ->
     ?assertEqual(<<"rabbitmq.">>, rabbit_oauth2_config:get_scope_prefix()),
     ?assertEqual(<<"rabbitmq2.">>, rabbit_oauth2_config:get_scope_prefix(<<"rabbitmq2">>)).
 
+get_empty_scope_prefix(_Config) ->
+    ?assertEqual(<<"">>, rabbit_oauth2_config:get_scope_prefix()),
+    ?assertEqual(<<"">>, rabbit_oauth2_config:get_scope_prefix(<<"rabbitmq2">>)).
+
 get_scope_prefix(_Config) ->
     ?assertEqual(<<"some-prefix-">>, rabbit_oauth2_config:get_scope_prefix()),
     ?assertEqual(<<"my-prefix:">>, rabbit_oauth2_config:get_scope_prefix(<<"rabbitmq1">>)),
     ?assertEqual(rabbit_oauth2_config:get_scope_prefix(), rabbit_oauth2_config:get_scope_prefix(<<"rabbitmq2">>)).
+
+get_scope_prefix_for_resource_one_returns_default_scope_prefix(_Config) ->
+    ?assertEqual(undefined, application:get_env(rabbitmq_auth_backend_oauth2, scope_prefix)),
+    ?assertEqual(append_paths(?RABBITMQ_RESOURCE_ONE, <<".">>),
+        rabbit_oauth2_config:get_scope_prefix(?RABBITMQ_RESOURCE_ONE)).
+get_scope_prefix_for_resource_one_returns_root_scope_prefix(_Config) ->
+    {ok, Prefix} = application:get_env(rabbitmq_auth_backend_oauth2, scope_prefix),
+    ?assertEqual(rabbit_oauth2_config:get_scope_prefix(),
+        rabbit_oauth2_config:get_scope_prefix(?RABBITMQ_RESOURCE_ONE)),
+    ?assertEqual(Prefix,
+        rabbit_oauth2_config:get_scope_prefix(?RABBITMQ_RESOURCE_ONE)).
+get_scope_prefix_for_resource_one_returns_empty_scope_prefix(_Config) ->
+    ?assertEqual(<<"">>,
+        rabbit_oauth2_config:get_scope_prefix(?RABBITMQ_RESOURCE_ONE)).
+get_scope_prefix_for_resource_two_returns_root_scope_prefix(_Config) ->
+    {ok, Prefix} = application:get_env(rabbitmq_auth_backend_oauth2, scope_prefix),
+    ?assertEqual(rabbit_oauth2_config:get_scope_prefix(),
+        rabbit_oauth2_config:get_scope_prefix(?RABBITMQ_RESOURCE_TWO)),
+    ?assertEqual(Prefix,
+        rabbit_oauth2_config:get_scope_prefix(?RABBITMQ_RESOURCE_TWO)).
 
 get_resource_server_type_when_not_defined(_Config) ->
     ?assertEqual(<<>>, rabbit_oauth2_config:get_resource_server_type()),

@@ -1270,7 +1270,7 @@ test_validate_payload_resource_server_id_mismatch(_) ->
                  rabbit_auth_backend_oauth2:validate_payload(?RESOURCE_SERVER_ID, EmptyAud, ?DEFAULT_SCOPE_PREFIX)).
 
 test_validate_payload_with_scope_prefix(_) ->
-    Scenarios = [ { <<>>,
+    Scenarios = [ { <<"">>,
                 #{<<"aud">>   => [?RESOURCE_SERVER_ID],
                   <<"scope">> => [<<"foo">>, <<"foo.bar">>, <<"foo.other.third">> ]},
                 [<<"foo">>, <<"foo.bar">>, <<"foo.other.third">> ]

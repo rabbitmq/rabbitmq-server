@@ -34,7 +34,7 @@ stop_rabbitmq() {
   fi
 }
 stop_local_rabbitmq() {
-    RABBITMQ_SERVER_ROOT=$(realpath $TEST_DIR/../../../../)
+    RABBITMQ_SERVER_ROOT=$(realpath ../)
     gmake --directory=${RABBITMQ_SERVER_ROOT} stop-node
 }
 save_logs_rabbitmq() {
@@ -51,7 +51,7 @@ start_local_rabbitmq() {
 
   init_rabbitmq
 
-  RABBITMQ_SERVER_ROOT=$(realpath $TEST_DIR/../../../../)
+  RABBITMQ_SERVER_ROOT=$(realpath ../)
   MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
   MOUNT_ADVANCED_CONFIG="/etc/rabbitmq/advanced.config"
 
@@ -61,6 +61,7 @@ start_local_rabbitmq() {
   ${BIN_DIR}/gen-advanced-config ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_ADVANCED_CONFIG
   cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins /tmp/etc/rabbitmq/
   RESULT=$?
+  cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins /tmp/etc/rabbitmq/
   if [ $RESULT -eq 0 ]; then
     print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_ADVANCED_CONFIG"
   	gmake --directory=${RABBITMQ_SERVER_ROOT} run-broker \
@@ -84,12 +85,10 @@ start_docker_cluster_rabbitmq() {
     kill_container_if_exist rabbitmq2
 
     mkdir -p $CONF_DIR/rabbitmq
-    MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
-    MOUNT_ADVANCED_CONFIG="/etc/rabbitmq/advanced.config"
 
     RABBITMQ_TEST_DIR="/var/rabbitmq" ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/rabbitmq.conf
     print "> EFFECTIVE RABBITMQ_CONFIG_FILE: $CONF_DIR/rabbitmq/rabbitmq.conf"
-    ${BIN_DIR}/gen-advanced-config ${RABBITMQ_CONFIG_DIR} $ENV_FILE /$CONF_DIR/rabbitmq/advanced.config
+    ${BIN_DIR}/gen-advanced-config ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/advanced.config
     RESULT=$?
     if [ $RESULT -eq 0 ]; then
         if [ -s $RESULT ]; then
@@ -98,8 +97,10 @@ start_docker_cluster_rabbitmq() {
             rm $CONF_DIR/rabbitmq/advanced.config
         fi
     fi
-    mkdir -p $CONF_DIR/rabbitmq/conf.d/
-    cp ${RABBITMQ_CONFIG_DIR}/logging.conf $CONF_DIR/rabbitmq/conf.d/
+    if [ -f ${RABBITMQ_CONFIG_DIR}/logging.conf ]; then
+        mkdir -p $CONF_DIR/rabbitmq/conf.d/
+        cp ${RABBITMQ_CONFIG_DIR}/logging.conf $CONF_DIR/rabbitmq/conf.d/
+    fi
     if [ -f ${RABBITMQ_CONFIG_DIR}/enabled_plugins ]; then
         cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins $CONF_DIR/rabbitmq
     fi
@@ -136,25 +137,30 @@ start_docker_rabbitmq() {
   kill_container_if_exist rabbitmq
 
   mkdir -p $CONF_DIR/rabbitmq
-  MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
-  MOUNT_ADVANCED_CONFIG="/etc/rabbitmq/advanced.config"
 
   RABBITMQ_TEST_DIR="/var/rabbitmq" ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/rabbitmq.conf
   print "> EFFECTIVE RABBITMQ_CONFIG_FILE: $CONF_DIR/rabbitmq/rabbitmq.conf"
-  ${BIN_DIR}/gen-advanced-config ${RABBITMQ_CONFIG_DIR} $ENV_FILE /$CONF_DIR/rabbitmq/advanced.config
+  ${BIN_DIR}/gen-advanced-config ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/advanced.config
   RESULT=$?
   if [ $RESULT -eq 0 ]; then
-    print "> EFFECTIVE ADVANCED_CONFIG_FILE: $CONF_DIR/rabbitmq/advanced.config"
-    EXTRA_MOUNTS="-v $CONF_DIR/rabbitmq/advanced.config:${MOUNT_ADVANCED_CONFIG}:ro "
+      if [ -s $RESULT ]; then
+          print "> EFFECTIVE ADVANCED_CONFIG_FILE: $CONF_DIR/rabbitmq/advanced.config"
+      else
+          rm $CONF_DIR/rabbitmq/advanced.config
+      fi
+  fi
+  if [ -f ${RABBITMQ_CONFIG_DIR}/logging.conf ]; then
+      mkdir -p $CONF_DIR/rabbitmq/conf.d/
+      cp ${RABBITMQ_CONFIG_DIR}/logging.conf $CONF_DIR/rabbitmq/conf.d/
   fi
   if [ -f ${RABBITMQ_CONFIG_DIR}/enabled_plugins ]; then
-    EXTRA_MOUNTS="$EXTRA_MOUNTS -v ${RABBITMQ_CONFIG_DIR}/enabled_plugins:/etc/rabbitmq/enabled_plugins "
+      cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins $CONF_DIR/rabbitmq
   fi
   if [ -d ${RABBITMQ_CONFIG_DIR}/certs ]; then
-    EXTRA_MOUNTS=" $EXTRA_MOUNTS -v ${RABBITMQ_CONFIG_DIR}/certs:/var/rabbitmq/certs "
+      cp -r ${RABBITMQ_CONFIG_DIR}/certs $CONF_DIR/rabbitmq
   fi
   if [ -d ${RABBITMQ_CONFIG_DIR}/imports ]; then
-    EXTRA_MOUNTS="$EXTRA_MOUNTS -v ${RABBITMQ_CONFIG_DIR}/imports:/var/rabbitmq/imports "
+      cp -r ${RABBITMQ_CONFIG_DIR}/imports $CONF_DIR/rabbitmq
   fi
 
   print "> RABBITMQ_TEST_DIR: /var/rabbitmq"
@@ -167,10 +173,9 @@ start_docker_rabbitmq() {
     -p 5671:5671 \
     -p 15672:15672 \
     -p 15671:15671 \
-    -v ${RABBITMQ_CONFIG_DIR}/logging.conf:/etc/rabbitmq/conf.d/logging.conf:ro \
-    -v $CONF_DIR/rabbitmq/rabbitmq.conf:${MOUNT_RABBITMQ_CONF}:ro \
+    -v $CONF_DIR/rabbitmq/:/etc/rabbitmq \
+    -v $CONF_DIR/rabbitmq/:/var/rabbitmq \
     -v ${TEST_DIR}:/config \
-    ${EXTRA_MOUNTS} \
     ${RABBITMQ_DOCKER_IMAGE}
 
   wait_for_message rabbitmq "Server startup complete"
