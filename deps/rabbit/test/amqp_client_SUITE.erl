@@ -140,7 +140,8 @@ groups() ->
        incoming_window_closed_rabbitmq_internal_flow_classic_queue,
        incoming_window_closed_rabbitmq_internal_flow_quorum_queue,
        tcp_back_pressure_rabbitmq_internal_flow_classic_queue,
-       tcp_back_pressure_rabbitmq_internal_flow_quorum_queue
+       tcp_back_pressure_rabbitmq_internal_flow_quorum_queue,
+       session_max
       ]},
 
      {cluster_size_3, [shuffle],
@@ -4168,7 +4169,7 @@ trace(Config) ->
                    <<"connection">> := <<"127.0.0.1:", _/binary>>,
                    <<"node">> := Node,
                    <<"vhost">> := <<"/">>,
-                   <<"channel">> := 1,
+                   <<"channel">> := 0,
                    <<"user">> := <<"guest">>,
                    <<"properties">> := #{<<"correlation_id">> := CorrelationId},
                    <<"routed_queues">> := [Q]},
@@ -4183,7 +4184,7 @@ trace(Config) ->
                    <<"connection">> := <<"127.0.0.1:", _/binary>>,
                    <<"node">> := Node,
                    <<"vhost">> := <<"/">>,
-                   <<"channel">> := 2,
+                   <<"channel">> := 1,
                    <<"user">> := <<"guest">>,
                    <<"properties">> := #{<<"correlation_id">> := CorrelationId},
                    <<"redelivered">> := 0},
@@ -5620,6 +5621,28 @@ tcp_back_pressure_rabbitmq_internal_flow(QType, Config) ->
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = end_session_sync(Session),
     ok = amqp10_client:close_connection(Connection).
+
+session_max(Config) ->
+    App = rabbit,
+    Par = ?FUNCTION_NAME,
+    {ok, Default} = rpc(Config, application, get_env, [App, Par]),
+    %% Let's allow only 1 session per connection.
+    ok = rpc(Config, application, set_env, [App, Par, 1]),
+
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    %% The 1st session should succeed.
+    {ok, _Session1} = amqp10_client:begin_session_sync(Connection),
+    %% The 2nd session should fail.
+    {ok, _Session2} = amqp10_client:begin_session(Connection),
+    receive {amqp10_event, {connection, Connection, {closed, Reason}}} ->
+                ?assertEqual(
+                   {framing_error, <<"channel number (1) exceeds maximum channel number (0)">>},
+                   Reason)
+    after 5000 -> ct:fail(missing_closed)
+    end,
+
+    ok = rpc(Config, application, set_env, [App, Par, Default]).
 
 %% internal
 %%
