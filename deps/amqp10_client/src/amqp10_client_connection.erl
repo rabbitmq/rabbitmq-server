@@ -76,7 +76,7 @@
   }.
 
 -record(state,
-        {next_channel = 1 :: pos_integer(),
+        {next_channel = 0 :: non_neg_integer(),
          connection_sup :: pid(),
          reader_m_ref :: reference() | undefined,
          sessions_sup :: pid() | undefined,
