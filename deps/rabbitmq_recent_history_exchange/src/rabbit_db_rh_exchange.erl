@@ -177,7 +177,6 @@ delete_in_khepri(XName) ->
 khepri_recent_history_path(#resource{virtual_host = VHost, name = Name}) ->
     khepri_recent_history_path(VHost, Name).
 
-khepri_recent_history_path(VHost, Name)
-  when ?IS_KHEPRI_PATH_CONDITION(VHost) andalso
-       ?IS_KHEPRI_PATH_CONDITION(Name) ->
-    [?MODULE, recent_history_exchange, VHost, Name].
+khepri_recent_history_path(VHost, Name) ->
+    ExchangePath = rabbit_db_exchange:khepri_exchange_path(VHost, Name),
+    ExchangePath ++ [recent_history].

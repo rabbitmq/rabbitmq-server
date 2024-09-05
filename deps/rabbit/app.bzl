@@ -525,6 +525,7 @@ def all_srcs(name = "all_srcs"):
             "include/amqqueue.hrl",
             "include/amqqueue_v2.hrl",
             "include/internal_user.hrl",
+            "include/khepri.hrl",
             "include/mc.hrl",
             "include/rabbit_amqp.hrl",
             "include/rabbit_global_counters.hrl",
