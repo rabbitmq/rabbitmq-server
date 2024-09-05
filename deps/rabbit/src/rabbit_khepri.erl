@@ -87,6 +87,8 @@
 
 -module(rabbit_khepri).
 
+-feature(maybe_expr, enable).
+
 -include_lib("kernel/include/logger.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
@@ -1518,9 +1520,10 @@ get_feature_state(Node) ->
 %% @private
 
 khepri_db_migration_enable(#{feature_name := FeatureName}) ->
-    case sync_cluster_membership_from_mnesia(FeatureName) of
-        ok    -> migrate_mnesia_tables(FeatureName);
-        Error -> Error
+    maybe
+        ok ?= sync_cluster_membership_from_mnesia(FeatureName),
+        ok ?= register_projections(),
+        migrate_mnesia_tables(FeatureName)
     end.
 
 %% @private
