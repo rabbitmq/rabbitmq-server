@@ -366,13 +366,13 @@ start_connection(Parent, HelperSups, RanchRef, Deb, Sock) ->
                                          connected_at = ConnectedAt0}} ->
                 ConnName = dynamic_connection_name(Name),
                 ConnDuration = connection_duration(ConnectedAt0),
-                rabbit_log_connection:info("closing AMQP connection (~ts, vhost: '~ts', user: '~ts', duration: '~ts')",
+                rabbit_log_connection:info("closing AMQP connection (~ts, vhost: '~ts', user: '~ts', duration: ~ts)",
                                            [ConnName, VHost, Username, ConnDuration]);
             %% just to be more defensive
             _ ->
                 ConnName = dynamic_connection_name(Name),
                 ConnDuration = connection_duration(ConnectedAt),
-                rabbit_log_connection:info("closing AMQP connection (~ts, duration: '~ts')",
+                rabbit_log_connection:info("closing AMQP connection (~ts, duration: ~ts)",
                                            [ConnName, ConnDuration])
         end
     catch
@@ -417,7 +417,7 @@ log_connection_exception(Name, ConnectedAt, Ex) ->
 
 log_connection_exception(Severity, Name, ConnectedAt, {heartbeat_timeout, TimeoutSec}) ->
     ConnDuration = connection_duration(ConnectedAt),
-    Fmt = "closing AMQP connection ~tp (~ts, duration: '~ts'):~n"
+    Fmt = "closing AMQP connection ~tp (~ts, duration: ~ts):~n"
           "missed heartbeats from client, timeout: ~ps",
     %% Long line to avoid extra spaces and line breaks in log
     log_connection_exception_with_severity(Severity, Fmt,
@@ -428,7 +428,7 @@ log_connection_exception(Severity, Name, _ConnectedAt,
                                                        vhost = VHost,
                                                        connected_at = ConnectedAt}}}) ->
     ConnDuration = connection_duration(ConnectedAt),
-    Fmt = "closing AMQP connection ~tp (~ts, vhost: '~ts', user: '~ts', duration: '~ts'):~n"
+    Fmt = "closing AMQP connection ~tp (~ts, vhost: '~ts', user: '~ts', duration: ~ts):~n"
           "client unexpectedly closed TCP connection",
     log_connection_exception_with_severity(Severity, Fmt,
                                            [self(), Name, VHost, Username, ConnDuration]);
@@ -436,7 +436,7 @@ log_connection_exception(Severity, Name, _ConnectedAt,
 %% succeeded, don't log username and vhost as 'none'
 log_connection_exception(Severity, Name, ConnectedAt, {connection_closed_abruptly, _}) ->
     ConnDuration = connection_duration(ConnectedAt),
-    Fmt = "closing AMQP connection ~tp (~ts, duration: '~ts'):~n"
+    Fmt = "closing AMQP connection ~tp (~ts, duration: ~ts):~n"
           "client unexpectedly closed TCP connection",
     log_connection_exception_with_severity(Severity, Fmt,
                                            [self(), Name, ConnDuration]);
@@ -450,20 +450,20 @@ log_connection_exception(Severity, Name, ConnectedAt, {handshake_error, tuning, 
     log_connection_exception_with_severity(Severity, Fmt, [self(), Name, ConnDuration, Explanation]);
 log_connection_exception(Severity, Name, ConnectedAt, {sasl_required, ProtocolId}) ->
     ConnDuration = connection_duration(ConnectedAt),
-    Fmt = "closing AMQP 1.0 connection (~ts, duration: '~ts'): RabbitMQ requires SASL "
+    Fmt = "closing AMQP 1.0 connection (~ts, duration: ~ts): RabbitMQ requires SASL "
           "security layer (expected protocol ID 3, but client sent protocol ID ~b)",
     log_connection_exception_with_severity(Severity, Fmt,
                                            [Name, ConnDuration, ProtocolId]);
 %% old exception structure
 log_connection_exception(Severity, Name, ConnectedAt, connection_closed_abruptly) ->
     ConnDuration = connection_duration(ConnectedAt),
-    Fmt = "closing AMQP connection ~tp (~ts, duration: '~ts'):~n"
+    Fmt = "closing AMQP connection ~tp (~ts, duration: ~ts):~n"
           "client unexpectedly closed TCP connection",
     log_connection_exception_with_severity(Severity, Fmt,
                                            [self(), Name, ConnDuration]);
 log_connection_exception(Severity, Name, ConnectedAt, Ex) ->
     ConnDuration = connection_duration(ConnectedAt),
-    Fmt = "closing AMQP connection ~tp (~ts, duration: '~ts'):~n"
+    Fmt = "closing AMQP connection ~tp (~ts, duration: ~ts):~n"
           "~tp",
     log_connection_exception_with_severity(Severity, Fmt,
                                            [self(), Name, ConnDuration, Ex]).
