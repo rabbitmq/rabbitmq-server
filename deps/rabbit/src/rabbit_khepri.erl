@@ -100,6 +100,7 @@
 
 -export([setup/0,
          setup/1,
+         register_projections/0,
          init/0,
          can_join_cluster/1,
          add_member/2,
