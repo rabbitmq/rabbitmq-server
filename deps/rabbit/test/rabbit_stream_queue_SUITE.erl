@@ -34,6 +34,7 @@ all() ->
      {group, cluster_size_3},
      {group, cluster_size_3_1},
      {group, cluster_size_3_2},
+     {group, cluster_size_3_3},
      {group, cluster_size_3_parallel_1},
      {group, cluster_size_3_parallel_2},
      {group, cluster_size_3_parallel_3},
@@ -79,6 +80,7 @@ groups() ->
      {cluster_size_3_2, [], [recover,
                              declare_with_node_down_1,
                              declare_with_node_down_2]},
+     {cluster_size_3_3, [], [consume_while_deleting_replica]},
      {cluster_size_3_parallel_1, [parallel], [
                                               delete_replica,
                                               delete_last_replica,
@@ -207,6 +209,7 @@ init_per_group1(Group, Config) ->
                       cluster_size_3_parallel_5 -> 3;
                       cluster_size_3_1 -> 3;
                       cluster_size_3_2 -> 3;
+                      cluster_size_3_3 -> 3;
                       unclustered_size_3_1 -> 3;
                       unclustered_size_3_2 -> 3;
                       unclustered_size_3_3 -> 3;
@@ -1669,6 +1672,45 @@ consume_from_replica(Config) ->
 
     subscribe(Ch2, Q, false, 0),
     receive_batch(Ch2, 0, 99),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+consume_while_deleting_replica(Config) ->
+    [Server1, _, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Q = ?config(queue_name, Config),
+
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    rabbit_ct_helpers:await_condition(
+      fun () ->
+              Info = find_queue_info(Config, 1, [online]),
+              length(proplists:get_value(online, Info)) == 3
+      end),
+
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server3),
+    qos(Ch2, 10, false),
+
+    CTag = atom_to_binary(?FUNCTION_NAME),
+    subscribe(Ch2, Q, false, 0, CTag),
+
+    %% Delete replica in node 3
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stream_queue,
+                                 delete_replica, [<<"/">>, Q, Server3]),
+
+    publish_confirm(Ch1, Q, [<<"msg1">> || _ <- lists:seq(1, 100)]),
+
+    %% no messages should be received
+    receive
+        #'basic.cancel'{consumer_tag = CTag} ->
+            ok;
+        {_, #amqp_msg{}} ->
+            exit(unexpected_message)
+    after 30000 ->
+            exit(missing_consumer_cancel)
+    end,
+
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 consume_credit(Config) ->

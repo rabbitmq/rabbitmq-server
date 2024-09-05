@@ -613,6 +613,19 @@ get_data(queue_coarse_metrics = Table, true, VHostsFilter, _) when is_map(VHosts
                   (_, Acc) ->
                       Acc
               end, [], Table);
+get_data(ra_metrics = Table, true, _, _) ->
+    ets:foldl(
+      fun ({#resource{kind = queue}, _, _, _, _, _, _} = Row, Acc) ->
+              %% Metrics for QQ records use the queue resource as the table
+              %% key. The queue name and vhost will be rendered as tags.
+              [Row | Acc];
+          ({ClusterName, _, _, _, _, _, _} = Row, Acc) when is_atom(ClusterName) ->
+              %% Other Ra clusters like Khepri and the stream coordinator use
+              %% the cluster name as the metrics key. Transform this into a
+              %% value that can be rendered as a "raft_cluster" tag.
+              Row1 = setelement(1, Row, #{<<"raft_cluster">> => atom_to_binary(ClusterName, utf8)}),
+              [Row1 | Acc]
+      end, [], Table);
 get_data(MF, true, VHostsFilter, _) when is_map(VHostsFilter), MF == queue_metrics orelse MF == queue_consumer_count ->
     Table = queue_metrics,
     ets:foldl(fun

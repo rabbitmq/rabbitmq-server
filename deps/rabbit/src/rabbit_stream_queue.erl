@@ -607,7 +607,9 @@ handle_event(_QName, {stream_local_member_change, Pid},
                          end, #{}, Readers0),
     {ok, State#stream_client{local_pid = Pid, readers = Readers1}, []};
 handle_event(_QName, eol, #stream_client{name = Name}) ->
-    {eol, [{unblock, Name}]}.
+    {eol, [{unblock, Name}]};
+handle_event(QName, deleted_replica, State) ->
+    {ok, State, [{queue_down, QName}]}.
 
 is_recoverable(Q) ->
     Node = node(),
