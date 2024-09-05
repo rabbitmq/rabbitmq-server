@@ -441,7 +441,7 @@ log_connection_exception(Severity, Name, ConnectedAt, {connection_closed_abruptl
     log_connection_exception_with_severity(Severity, Fmt,
                                            [self(), Name, ConnDuration]);
 %% failed connection.tune negotiations
-log_connection_exception(Severity, Name, ConnectedAt, {handshake_error, tuning, _Channel,
+log_connection_exception(Severity, Name, ConnectedAt, {handshake_error, tuning,
                                                        {exit, #amqp_error{explanation = Explanation},
                                                         _Method, _Stacktrace}}) ->
     ConnDuration = connection_duration(ConnectedAt),
@@ -873,11 +873,11 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol,
         " user: '~ts', state: ~tp):~n~ts",
         [self(), ConnName, User#user.username, tuning, ErrMsg]),
     send_error_on_channel0_and_close(Channel, Protocol, Reason, State);
-handle_exception(State, Channel, Reason) ->
+handle_exception(State, _Channel, Reason) ->
     %% We don't trust the client at this point - force them to wait
     %% for a bit so they can't DOS us with repeated failed logins etc.
     timer:sleep(?SILENT_CLOSE_DELAY * 1000),
-    throw({handshake_error, State#v1.connection_state, Channel, Reason}).
+    throw({handshake_error, State#v1.connection_state, Reason}).
 
 %% we've "lost sync" with the client and hence must not accept any
 %% more input
