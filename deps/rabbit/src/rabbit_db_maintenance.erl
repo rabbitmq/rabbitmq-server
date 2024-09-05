@@ -155,11 +155,7 @@ get_consistent_in_mnesia(Node) ->
 
 get_consistent_in_khepri(Node) ->
     Path = khepri_maintenance_path(Node),
-    %% FIXME: Ra consistent queries are fragile in the sense that the query
-    %% function may run on a remote node and the function reference or MFA may
-    %% not be valid on that node. That's why we force a local query for now.
-    %Options = #{favor => consistent},
-    Options = #{favor => local},
+    Options = #{favor => consistency},
     case rabbit_khepri:get(Path, Options) of
         {ok, #node_maintenance_state{status = Status}} ->
             Status;
