@@ -183,15 +183,8 @@ needs_default_data() ->
     end.
 
 needs_default_data_in_khepri() ->
-    Paths = [rabbit_db_vhost:khepri_vhosts_path(),
-             rabbit_db_user:khepri_users_path()],
-    lists:all(
-      fun(Path) ->
-              case rabbit_khepri:list(Path) of
-                  {ok, List} when is_map(List) andalso List =:= #{} -> true;
-                  _                                                 -> false
-              end
-      end, Paths).
+    rabbit_db_user:count_all() =:= {ok, 0} orelse
+    rabbit_db_vhost:count_all() =:= {ok, 0}.
 
 needs_default_data_in_mnesia() ->
     is_empty([rabbit_user, rabbit_user_permission,

@@ -16,11 +16,11 @@
          get/1,
          insert/3,
          delete/0,
-         delete/1
+         delete/1,
+         delete_in_khepri/0
         ]).
 
--export([khepri_recent_history_path/1,
-         khepri_recent_history_path/0]).
+-export([khepri_recent_history_path/1]).
 
 -rabbit_mnesia_tables_to_khepri_db(
    [{?RH_TABLE, rabbit_db_rh_exchange_m2k_converter}]).
@@ -150,7 +150,9 @@ delete_in_mnesia() ->
     end.
 
 delete_in_khepri() ->
-    rabbit_khepri:delete(khepri_recent_history_path()).
+    Path = khepri_recent_history_path(
+             ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
+    rabbit_khepri:delete(Path).
 
 delete(XName) ->
     rabbit_khepri:handle_fallback(
@@ -165,14 +167,17 @@ delete_in_mnesia(XName) ->
       end).
 
 delete_in_khepri(XName) ->
-    rabbit_khepri:delete(khepri_recent_history_path(XName)).
+    Path = khepri_recent_history_path(XName),
+    rabbit_khepri:delete(Path).
 
 %% -------------------------------------------------------------------
 %% paths
 %% -------------------------------------------------------------------
 
-khepri_recent_history_path() ->
-    [?MODULE, recent_history_exchange].
-
 khepri_recent_history_path(#resource{virtual_host = VHost, name = Name}) ->
+    khepri_recent_history_path(VHost, Name).
+
+khepri_recent_history_path(VHost, Name)
+  when ?IS_KHEPRI_PATH_CONDITION(VHost) andalso
+       ?IS_KHEPRI_PATH_CONDITION(Name) ->
     [?MODULE, recent_history_exchange, VHost, Name].

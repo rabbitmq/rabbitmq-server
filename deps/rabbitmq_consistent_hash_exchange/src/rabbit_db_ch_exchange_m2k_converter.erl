@@ -10,6 +10,7 @@
 -behaviour(mnesia_to_khepri_converter).
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("khepri/include/khepri.hrl").
 -include_lib("khepri_mnesia_migration/src/kmm_logging.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -93,7 +94,8 @@ delete_from_khepri(?HASH_RING_STATE_TABLE = Table, Key, State) ->
       end, State).
 
 clear_data_in_khepri(?HASH_RING_STATE_TABLE) ->
-    Path = rabbit_db_ch_exchange:khepri_consistent_hash_path(),
+    Path = rabbit_db_ch_exchange:khepri_consistent_hash_path(
+             ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
     case rabbit_khepri:delete(Path) of
         ok ->
             ok;
