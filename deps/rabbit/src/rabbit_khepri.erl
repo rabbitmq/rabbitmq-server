@@ -301,10 +301,10 @@ wait_for_register_projections(_Timeout, 0) ->
 wait_for_register_projections(Timeout, Retries) ->
     rabbit_log:info("Waiting for Khepri projections for ~tp ms, ~tp retries left",
                     [Timeout, Retries - 1]),
-    try
-        register_projections()
-    catch
-        throw : timeout ->
+    case register_projections() of
+        ok ->
+            ok;
+        {error, timeout} ->
             wait_for_register_projections(Timeout, Retries -1)
     end.
 
@@ -1116,20 +1116,23 @@ register_projections() ->
                fun register_rabbit_bindings_projection/0,
                fun register_rabbit_index_route_projection/0,
                fun register_rabbit_topic_graph_projection/0],
-    [case RegisterFun() of
-         ok ->
-             ok;
-         %% Before Khepri v0.13.0, `khepri:register_projection/1,2,3` would
-         %% return `{error, exists}` for projections which already exist.
-         {error, exists} ->
-             ok;
-         %% In v0.13.0+, Khepri returns a `?khepri_error(..)` instead.
-         {error, {khepri, projection_already_exists, _Info}} ->
-             ok;
-         {error, Error} ->
-             throw(Error)
-     end || RegisterFun <- RegFuns],
-    ok.
+    rabbit_misc:for_each_while_ok(
+      fun(RegisterFun) ->
+              case RegisterFun() of
+                  ok ->
+                      ok;
+                  %% Before Khepri v0.13.0, `khepri:register_projection/1,2,3`
+                  %% would return `{error, exists}` for projections which
+                  %% already exist.
+                  {error, exists} ->
+                      ok;
+                  %% In v0.13.0+, Khepri returns a `?khepri_error(..)` instead.
+                  {error, {khepri, projection_already_exists, _Info}} ->
+                      ok;
+                  {error, _} = Error ->
+                      Error
+              end
+      end, RegFuns).
 
 register_rabbit_exchange_projection() ->
     Name = rabbit_khepri_exchange,
