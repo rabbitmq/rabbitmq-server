@@ -192,6 +192,7 @@ setup_khepri(Config) ->
     %% Configure Khepri. It takes care of configuring Ra system & cluster. It
     %% uses the Mnesia directory to store files.
     ok = rabbit_khepri:setup(undefined),
+    ok = rabbit_khepri:register_projections(),
 
     ct:pal("Khepri info below:"),
     rabbit_khepri:info(),
