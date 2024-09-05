@@ -304,24 +304,30 @@ init(IsVirgin) ->
             ?LOG_NOTICE(
                "Found the following metadata store members: ~p", [Members],
                #{domain => ?RMQLOG_DOMAIN_DB}),
-            Ret = case IsVirgin of
-                      true ->
-                          register_projections();
-                      false ->
-                          ok
-                  end,
-            case Ret of
-                ok ->
-                    %% Delete transient queues on init.
-                    %% Note that we also do this in the
-                    %% `rabbit_amqqueue:on_node_down/1' callback. We must try
-                    %% this deletion during init because the cluster may have
-                    %% been in a minority when this node went down. We wait for
-                    %% a majority while registering projections above
-                    %% though so this deletion is likely to succeed.
-                    rabbit_amqqueue:delete_transient_queues_on_node(node());
-                {error, _} = Error ->
-                    Error
+            maybe
+                ?LOG_DEBUG(
+                   "Khepri-based " ?RA_FRIENDLY_NAME " catching up on "
+                   "replication to the Raft cluster leader", [],
+                   #{domain => ?RMQLOG_DOMAIN_DB}),
+                ok ?= fence(retry_timeout()),
+                ?LOG_DEBUG(
+                   "local Khepri-based " ?RA_FRIENDLY_NAME " member is caught "
+                   "up to the Raft cluster leader", [],
+                   #{domain => ?RMQLOG_DOMAIN_DB}),
+                ok ?= case IsVirgin of
+                          true ->
+                              register_projections();
+                          false ->
+                              ok
+                      end,
+                %% Delete transient queues on init.
+                %% Note that we also do this in the
+                %% `rabbit_amqqueue:on_node_down/1' callback. We must try this
+                %% deletion during init because the cluster may have been in a
+                %% minority when this node went down. We wait for a majority
+                %% while registering projections above though so this deletion
+                %% is likely to succeed.
+                rabbit_amqqueue:delete_transient_queues_on_node(node())
             end
     end.
 
@@ -1055,6 +1061,9 @@ info() ->
 
 handle_async_ret(RaEvent) ->
     khepri:handle_async_ret(?STORE_ID, RaEvent).
+
+fence(Timeout) ->
+    khepri:fence(?STORE_ID, Timeout).
 
 %% -------------------------------------------------------------------
 %% collect_payloads().
