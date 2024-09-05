@@ -319,7 +319,7 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
     %% take the minimum value of the policy and the queue arg if present
     MaxLength = args_policy_lookup(<<"max-length">>, fun min/2, Q),
-    OverflowBin = args_policy_lookup(<<"overflow">>, fun policyHasPrecedence/2, Q),
+    OverflowBin = args_policy_lookup(<<"overflow">>, fun policy_has_precedence/2, Q),
     Overflow = overflow(OverflowBin, drop_head, QName),
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
     DeliveryLimit = case args_policy_lookup(<<"delivery-limit">>, fun min/2, Q) of
@@ -346,9 +346,10 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
       msg_ttl => MsgTTL
      }.
 
-policyHasPrecedence(Policy, _QueueArg) ->
+policy_has_precedence(Policy, _QueueArg) ->
     Policy.
-queueArgHasPrecedence(_Policy, QueueArg) ->
+
+queue_arg_has_precedence(_Policy, QueueArg) ->
     QueueArg.
 
 single_active_consumer_on(Q) ->
@@ -1527,9 +1528,9 @@ reclaim_memory(Vhost, QueueName) ->
 
 %%----------------------------------------------------------------------------
 dead_letter_handler(Q, Overflow) ->
-    Exchange = args_policy_lookup(<<"dead-letter-exchange">>, fun queueArgHasPrecedence/2, Q),
-    RoutingKey = args_policy_lookup(<<"dead-letter-routing-key">>, fun queueArgHasPrecedence/2, Q),
-    Strategy = args_policy_lookup(<<"dead-letter-strategy">>, fun queueArgHasPrecedence/2, Q),
+    Exchange = args_policy_lookup(<<"dead-letter-exchange">>, fun queue_arg_has_precedence/2, Q),
+    RoutingKey = args_policy_lookup(<<"dead-letter-routing-key">>, fun queue_arg_has_precedence/2, Q),
+    Strategy = args_policy_lookup(<<"dead-letter-strategy">>, fun queue_arg_has_precedence/2, Q),
     QName = amqqueue:get_name(Q),
     dlh(Exchange, RoutingKey, Strategy, Overflow, QName).
 
