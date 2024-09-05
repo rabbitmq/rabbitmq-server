@@ -253,8 +253,8 @@ erlang_package.hex_package(
     name = "ra",
     build_file = "@rabbitmq-server//bazel:BUILD.ra",
     pkg = "ra",
-    sha256 = "0be7645dce4a76edd4c4642d0fa69639518c72b6b60a34fc86590d1909166aeb",
-    version = "2.13.6",
+    sha256 = "1d553dd971a0b398b7af0fa8c8458dda575715ff71c65c972e9500b24039b240",
+    version = "2.14.0",
 )
 
 erlang_package.git_package(
