@@ -269,7 +269,6 @@ setup(_) ->
             RetryTimeout = retry_timeout(),
             case khepri_cluster:wait_for_leader(?STORE_ID, RetryTimeout) of
                 ok ->
-                    wait_for_register_projections(),
                     ?LOG_DEBUG(
                        "Khepri-based " ?RA_FRIENDLY_NAME " ready",
                        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
@@ -287,27 +286,6 @@ retry_timeout() ->
     case application:get_env(rabbit, khepri_leader_wait_retry_timeout) of
         {ok, T}   -> T;
         undefined -> 30000
-    end.
-
-retry_limit() ->
-    case application:get_env(rabbit, khepri_leader_wait_retry_limit) of
-        {ok, T}   -> T;
-        undefined -> 10
-    end.
-
-wait_for_register_projections() ->
-    wait_for_register_projections(retry_timeout(), retry_limit()).
-
-wait_for_register_projections(_Timeout, 0) ->
-    exit(timeout_waiting_for_khepri_projections);
-wait_for_register_projections(Timeout, Retries) ->
-    rabbit_log:info("Waiting for Khepri projections for ~tp ms, ~tp retries left",
-                    [Timeout, Retries - 1]),
-    case register_projections() of
-        ok ->
-            ok;
-        {error, timeout} ->
-            wait_for_register_projections(Timeout, Retries -1)
     end.
 
 %% @private
