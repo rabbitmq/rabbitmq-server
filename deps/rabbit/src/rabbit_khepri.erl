@@ -101,7 +101,7 @@
 -export([setup/0,
          setup/1,
          register_projections/0,
-         init/0,
+         init/1,
          can_join_cluster/1,
          add_member/2,
          remove_member/1,
@@ -291,26 +291,38 @@ retry_timeout() ->
 
 %% @private
 
--spec init() -> Ret when
+-spec init(IsVirgin) -> Ret when
+      IsVirgin :: boolean(),
       Ret :: ok | timeout_error().
 
-init() ->
+init(IsVirgin) ->
     case members() of
         [] ->
             timer:sleep(1000),
-            init();
+            init(IsVirgin);
         Members ->
             ?LOG_NOTICE(
                "Found the following metadata store members: ~p", [Members],
                #{domain => ?RMQLOG_DOMAIN_DB}),
-            %% Delete transient queues on init.
-            %% Note that we also do this in the
-            %% `rabbit_amqqueue:on_node_down/1' callback. We must try this
-            %% deletion during init because the cluster may have been in a
-            %% minority when this node went down. We wait for a majority while
-            %% booting (via `rabbit_khepri:setup/0') though so this deletion is
-            %% likely to succeed.
-            rabbit_amqqueue:delete_transient_queues_on_node(node())
+            Ret = case IsVirgin of
+                      true ->
+                          register_projections();
+                      false ->
+                          ok
+                  end,
+            case Ret of
+                ok ->
+                    %% Delete transient queues on init.
+                    %% Note that we also do this in the
+                    %% `rabbit_amqqueue:on_node_down/1' callback. We must try
+                    %% this deletion during init because the cluster may have
+                    %% been in a minority when this node went down. We wait for
+                    %% a majority while registering projections above
+                    %% though so this deletion is likely to succeed.
+                    rabbit_amqqueue:delete_transient_queues_on_node(node());
+                {error, _} = Error ->
+                    Error
+            end
     end.
 
 %% @private
