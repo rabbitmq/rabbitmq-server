@@ -719,14 +719,14 @@ insufficient_credit(Config) ->
     OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
                        {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>}}]}
                end,
-    BeginStep = fun({1 = Ch, #'v1_0.begin'{}, _Pay}) ->
-                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, 1},
+    BeginStep = fun({0 = Ch, #'v1_0.begin'{}, _Pay}) ->
+                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, Ch},
                                              next_outgoing_id = {uint, 1},
                                              incoming_window = {uint, 1000},
                                              outgoing_window = {uint, 1000}}
                                              ]}
                 end,
-    AttachStep = fun({1 = Ch, #'v1_0.attach'{role = false,
+    AttachStep = fun({0 = Ch, #'v1_0.attach'{role = false,
                                              name = Name}, <<>>}) ->
                          {Ch, [#'v1_0.attach'{name = Name,
                                               handle = {uint, 99},
@@ -759,14 +759,14 @@ multi_transfer_without_delivery_id(Config) ->
     OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
                        {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>}}]}
                end,
-    BeginStep = fun({1 = Ch, #'v1_0.begin'{}, _Pay}) ->
-                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, 1},
+    BeginStep = fun({0 = Ch, #'v1_0.begin'{}, _Pay}) ->
+                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, Ch},
                                              next_outgoing_id = {uint, 1},
                                              incoming_window = {uint, 1000},
                                              outgoing_window = {uint, 1000}}
                                              ]}
                 end,
-    AttachStep = fun({1 = Ch, #'v1_0.attach'{role = true,
+    AttachStep = fun({0 = Ch, #'v1_0.attach'{role = true,
                                              name = Name}, <<>>}) ->
                          {Ch, [#'v1_0.attach'{name = Name,
                                               handle = {uint, 99},
@@ -775,7 +775,7 @@ multi_transfer_without_delivery_id(Config) ->
                               ]}
                  end,
 
-    LinkCreditStep = fun({1 = Ch, #'v1_0.flow'{}, <<>>}) ->
+    LinkCreditStep = fun({0 = Ch, #'v1_0.flow'{}, <<>>}) ->
                              {Ch, {multi, [[#'v1_0.transfer'{handle = {uint, 99},
                                                              delivery_id = {uint, 12},
                                                              more = true},

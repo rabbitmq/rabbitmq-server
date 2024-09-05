@@ -376,10 +376,13 @@ process_frame(Pid, FrameBody) ->
     gen_server:cast(Pid, {frame_body, FrameBody}).
 
 init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ConnName,
-      #'v1_0.begin'{next_outgoing_id = ?UINT(RemoteNextOutgoingId),
-                    incoming_window = ?UINT(RemoteIncomingWindow),
-                    outgoing_window = ?UINT(RemoteOutgoingWindow),
-                    handle_max = HandleMax0}}) ->
+      #'v1_0.begin'{
+         %% "If a session is locally initiated, the remote-channel MUST NOT be set." [2.7.2]
+         remote_channel = undefined,
+         next_outgoing_id = ?UINT(RemoteNextOutgoingId),
+         incoming_window = ?UINT(RemoteIncomingWindow),
+         outgoing_window = ?UINT(RemoteOutgoingWindow),
+         handle_max = HandleMax0}}) ->
     process_flag(trap_exit, true),
     process_flag(message_queue_data, off_heap),
 
@@ -406,11 +409,14 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ConnName,
                     ?UINT(Max) -> Max;
                     _ -> ?DEFAULT_MAX_HANDLE
                 end,
-    Reply = #'v1_0.begin'{remote_channel = {ushort, ChannelNum},
-                          handle_max = ?UINT(HandleMax),
-                          next_outgoing_id = ?UINT(NextOutgoingId),
-                          incoming_window = ?UINT(IncomingWindow),
-                          outgoing_window = ?UINT_OUTGOING_WINDOW},
+    Reply = #'v1_0.begin'{
+               %% "When an endpoint responds to a remotely initiated session, the remote-channel
+               %% MUST be set to the channel on which the remote session sent the begin." [2.7.2]
+               remote_channel = {ushort, ChannelNum},
+               handle_max = ?UINT(HandleMax),
+               next_outgoing_id = ?UINT(NextOutgoingId),
+               incoming_window = ?UINT(IncomingWindow),
+               outgoing_window = ?UINT_OUTGOING_WINDOW},
     rabbit_amqp_writer:send_command(WriterPid, ChannelNum, Reply),
 
     {ok, #state{next_incoming_id = RemoteNextOutgoingId,

@@ -114,6 +114,7 @@ unpack_from_0_9_1(
                         timeout = ?NORMAL_TIMEOUT,
                         incoming_max_frame_size = ?INITIAL_MAX_FRAME_SIZE,
                         outgoing_max_frame_size = ?INITIAL_MAX_FRAME_SIZE,
+                        %% "Prior to any explicit negotiation, [...] the maximum channel number is 0." [2.4.1]
                         channel_max = 0,
                         auth_mechanism = sasl_init_unprocessed,
                         auth_state = unauthenticated}}.
@@ -292,7 +293,7 @@ handle_session_exit(ChannelNum, SessionPid, Reason, State0) ->
                                         "Session error: ~tp",
                                         [Reason])
                     end,
-                handle_exception(State, SessionPid, R)
+                handle_exception(State, ChannelNum, R)
         end,
     maybe_close(S).
 
@@ -318,19 +319,19 @@ error_frame(Condition, Fmt, Args) ->
 handle_exception(State = #v1{connection_state = closed}, Channel,
                  #'v1_0.error'{description = {utf8, Desc}}) ->
     rabbit_log_connection:error(
-      "Error on AMQP 1.0 connection ~tp (~tp), channel ~tp:~n~tp",
+      "Error on AMQP 1.0 connection ~tp (~tp), channel number ~b:~n~tp",
       [self(), closed, Channel, Desc]),
     State;
 handle_exception(State = #v1{connection_state = CS}, Channel,
                  Error = #'v1_0.error'{description = {utf8, Desc}})
   when ?IS_RUNNING(State) orelse CS =:= closing ->
     rabbit_log_connection:error(
-      "Error on AMQP 1.0 connection ~tp (~tp), channel ~tp:~n~tp",
+      "Error on AMQP 1.0 connection ~tp (~tp), channel number ~b:~n~tp",
       [self(), CS, Channel, Desc]),
     close(Error, State);
-handle_exception(State, Channel, Error) ->
+handle_exception(State, _Channel, Error) ->
     silent_close_delay(),
-    throw({handshake_error, State#v1.connection_state, Channel, Error}).
+    throw({handshake_error, State#v1.connection_state, Error}).
 
 is_connection_frame(#'v1_0.open'{})  -> true;
 is_connection_frame(#'v1_0.close'{}) -> true;
@@ -341,21 +342,30 @@ handle_frame(Mode, Channel, Body, State) ->
         handle_frame0(Mode, Channel, Body, State)
     catch
         _:#'v1_0.error'{} = Reason ->
-            handle_exception(State, 0, Reason);
+            handle_exception(State, Channel, Reason);
         _:{error, {not_allowed, Username}} ->
             %% section 2.8.15 in http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-complete-v1.0-os.pdf
-            handle_exception(State, 0, error_frame(
-                                         ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
-                                         "Access for user '~ts' was refused: insufficient permissions",
-                                         [Username]));
+            handle_exception(State,
+                             Channel,
+                             error_frame(
+                               ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+                               "Access for user '~ts' was refused: insufficient permissions",
+                               [Username]));
         _:Reason:Trace ->
-            handle_exception(State, 0, error_frame(
-                                         ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                         "Reader error: ~tp~n~tp",
-                                         [Reason, Trace]))
+            handle_exception(State,
+                             Channel,
+                             error_frame(
+                               ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                               "Reader error: ~tp~n~tp",
+                               [Reason, Trace]))
     end.
 
-%% Nothing specifies that connection methods have to be on a particular channel.
+handle_frame0(amqp, Channel, _Body,
+              #v1{connection = #v1_connection{channel_max = ChannelMax}})
+  when Channel > ChannelMax ->
+    protocol_error(?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
+                   "channel number (~b) exceeds maximum channel number (~b)",
+                   [Channel, ChannelMax]);
 handle_frame0(_Mode, Channel, Body,
               State = #v1{connection_state = CS})
   when CS =:= closing orelse
@@ -466,20 +476,25 @@ handle_connection_frame(
                     SendTimeoutSec, SendFun,
                     ReceiveTimeoutSec, ReceiveFun),
     {ok, IncomingMaxFrameSize} = application:get_env(rabbit, frame_max),
-    %% TODO enforce channel_max
-    ChannelMax = case ClientChannelMax of
-                     undefined ->
-                         %% default as per 2.7.1
-                         16#ff_ff;
-                     {ushort, N} ->
-                         N
-                 end,
+    {ok, SessionMax} = application:get_env(rabbit, session_max),
+    %% "The channel-max value is the highest channel number that can be used on the connection.
+    %% This value plus one is the maximum number of sessions that can be simultaneously active
+    %% on the connection." [2.7.1]
+    ChannelMax = SessionMax - 1,
+    %% Assert config is valid.
+    true = ChannelMax >= 0 andalso ChannelMax =< 16#ff_ff,
+    EffectiveChannelMax = case ClientChannelMax of
+                              undefined ->
+                                  ChannelMax;
+                              {ushort, N} ->
+                                  min(N, ChannelMax)
+                          end,
     State1 = State0#v1{connection_state = running,
                        connection = Connection#v1_connection{
                                       vhost = Vhost,
                                       incoming_max_frame_size = IncomingMaxFrameSize,
                                       outgoing_max_frame_size = OutgoingMaxFrameSize,
-                                      channel_max = ChannelMax,
+                                      channel_max = EffectiveChannelMax,
                                       properties = Properties,
                                       timeout = ReceiveTimeoutMillis},
                        heartbeater = Heartbeater},
@@ -504,7 +519,7 @@ handle_connection_frame(
             %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
             {symbol, <<"ANONYMOUS-RELAY">>}],
     Open = #'v1_0.open'{
-              channel_max = ClientChannelMax,
+              channel_max = {ushort, EffectiveChannelMax},
               max_frame_size = {uint, IncomingMaxFrameSize},
               %% "the value in idle-time-out SHOULD be half the peer's actual timeout threshold" [2.4.5]
               idle_time_out = {uint, ReceiveTimeoutMillis div 2},
