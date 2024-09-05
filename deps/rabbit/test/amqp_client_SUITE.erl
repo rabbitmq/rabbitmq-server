@@ -5624,7 +5624,7 @@ tcp_back_pressure_rabbitmq_internal_flow(QType, Config) ->
 
 session_max(Config) ->
     App = rabbit,
-    Par = ?FUNCTION_NAME,
+    Par = session_max,
     {ok, Default} = rpc(Config, application, get_env, [App, Par]),
     %% Let's allow only 1 session per connection.
     ok = rpc(Config, application, set_env, [App, Par, 1]),
