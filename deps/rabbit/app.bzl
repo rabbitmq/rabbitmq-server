@@ -1716,6 +1716,15 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )
     erlang_bytecode(
+        name = "unit_msg_size_metrics_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/unit_msg_size_metrics_SUITE.erl"],
+        outs = ["test/unit_msg_size_metrics_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+        deps = [],
+    )
+    erlang_bytecode(
         name = "unit_operator_policy_SUITE_beam_files",
         testonly = True,
         srcs = ["test/unit_operator_policy_SUITE.erl"],

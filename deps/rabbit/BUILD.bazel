@@ -997,6 +997,11 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_suite(
+    name = "unit_msg_size_metrics_SUITE",
+    size = "small",
+)
+
+rabbitmq_suite(
     name = "unit_operator_policy_SUITE",
     size = "small",
     deps = [

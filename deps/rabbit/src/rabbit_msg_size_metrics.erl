@@ -17,7 +17,8 @@
 
 %% Useful for testing
 -export([overview/1,
-         changed_buckets/2]).
+         changed_buckets/2,
+         cleanup/1]).
 
 -define(MSG_SIZE_BUCKETS,
         [{1, 64},
@@ -43,6 +44,10 @@ init([{protocol, Protocol}]) ->
     Size = ?MSG_SIZE_SUM_POS,
     Counters = counters:new(Size, [write_concurrency]),
     put_counters(Protocol, Counters).
+
+-spec cleanup(labels()) -> any().
+cleanup([{protocol, Protocol}]) ->
+    delete_counters(Protocol).
 
 -spec overview() -> #{labels() => #{atom() => hist_values()}}.
 overview() ->
@@ -121,3 +126,6 @@ fetch_counters(Protocol) ->
 
 fetch_labels() ->
     [[{protocol, Protocol}] || {{?MODULE, Protocol}, _} <- persistent_term:get()].
+
+delete_counters(Protocol) ->
+    persistent_term:erase({?MODULE, Protocol}).
