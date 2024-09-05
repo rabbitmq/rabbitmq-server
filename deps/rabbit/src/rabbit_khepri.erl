@@ -1107,6 +1107,27 @@ collect_payloads(Props, Acc0) when is_map(Props) andalso is_list(Acc0) ->
               Acc
       end, Acc0, Props).
 
+-spec unregister_all_projections() -> Ret when
+      Ret :: ok | timeout_error().
+
+unregister_all_projections() ->
+    %% Note that we don't use `all' since `khepri_mnesia_migration' also
+    %% creates a projection table which we don't want to unregister. Instead
+    %% we list all of the currently used projection names:
+    Names = [
+        rabbit_khepri_exchange,
+        rabbit_khepri_queue,
+        rabbit_khepri_vhost,
+        rabbit_khepri_users,
+        rabbit_khepri_global_rtparams,
+        rabbit_khepri_per_vhost_rtparams,
+        rabbit_khepri_user_permissions,
+        rabbit_khepri_bindings,
+        rabbit_khepri_index_route,
+        rabbit_khepri_topic_trie
+    ],
+    khepri:unregister_projections(?STORE_ID, Names).
+
 register_projections() ->
     RegFuns = [fun register_rabbit_exchange_projection/0,
                fun register_rabbit_queue_projection/0,
@@ -1522,6 +1543,7 @@ get_feature_state(Node) ->
 khepri_db_migration_enable(#{feature_name := FeatureName}) ->
     maybe
         ok ?= sync_cluster_membership_from_mnesia(FeatureName),
+        ok ?= unregister_all_projections(),
         ok ?= register_projections(),
         migrate_mnesia_tables(FeatureName)
     end.
