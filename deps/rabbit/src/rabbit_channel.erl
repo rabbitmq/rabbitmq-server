@@ -756,20 +756,20 @@ handle_info({update_user_state, User}, State = #ch{cfg = Cfg}) ->
     noreply(State#ch{cfg = Cfg#conf{user = User}}).
 
 
-handle_pre_hibernate(State0) ->
-    ok = clear_permission_cache(),
-    State = maybe_cancel_tick_timer(State0),
-    rabbit_event:if_enabled(
-      State, #ch.stats_timer,
-      fun () -> emit_stats(State,
-                           [{idle_since,
-                             os:system_time(millisecond)}])
-      end),
-    {hibernate, rabbit_event:stop_stats_timer(State, #ch.stats_timer)}.
-
-handle_post_hibernate(State0) ->
-    State = init_tick_timer(State0),
-    {noreply, State}.
+%handle_pre_hibernate(State0) ->
+%    ok = clear_permission_cache(),
+%    State = maybe_cancel_tick_timer(State0),
+%    rabbit_event:if_enabled(
+%      State, #ch.stats_timer,
+%      fun () -> emit_stats(State,
+%                           [{idle_since,
+%                             os:system_time(millisecond)}])
+%      end),
+%    {hibernate, rabbit_event:stop_stats_timer(State, #ch.stats_timer)}.
+%
+%handle_post_hibernate(State0) ->
+%    State = init_tick_timer(State0),
+%    {noreply, State}.
 
 terminate(_Reason,
           State = #ch{cfg = #conf{user = #user{username = Username}},
@@ -2654,20 +2654,20 @@ init_tick_timer(State) ->
 reset_tick_timer(State) ->
     State#ch{tick_timer = undefined}.
 
-maybe_cancel_tick_timer(#ch{tick_timer = undefined} = State) ->
-    State;
-maybe_cancel_tick_timer(#ch{tick_timer = TRef,
-                            unacked_message_q = UMQ} = State) ->
-    case ?QUEUE:len(UMQ) of
-        0 ->
-            %% we can only cancel the tick timer if the unacked messages
-            %% queue is empty.
-            _ = erlang:cancel_timer(TRef),
-            State#ch{tick_timer = undefined};
-        _ ->
-            %% let the timer continue
-            State
-    end.
+%maybe_cancel_tick_timer(#ch{tick_timer = undefined} = State) ->
+%    State;
+%maybe_cancel_tick_timer(#ch{tick_timer = TRef,
+%                            unacked_message_q = UMQ} = State) ->
+%    case ?QUEUE:len(UMQ) of
+%        0 ->
+%            %% we can only cancel the tick timer if the unacked messages
+%            %% queue is empty.
+%            _ = erlang:cancel_timer(TRef),
+%            State#ch{tick_timer = undefined};
+%        _ ->
+%            %% let the timer continue
+%            State
+%    end.
 
 now_millis() ->
     erlang:monotonic_time(millisecond).
