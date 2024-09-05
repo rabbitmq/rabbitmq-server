@@ -1192,7 +1192,7 @@ register_rabbit_user_permissions_projection() ->
 register_simple_projection(Name, PathPattern, KeyPos) ->
     Options = #{keypos => KeyPos},
     Projection = khepri_projection:new(Name, copy, Options),
-    khepri:register_projection(?RA_CLUSTER_NAME, PathPattern, Projection).
+    khepri:register_projection(?STORE_ID, PathPattern, Projection).
 
 register_rabbit_bindings_projection() ->
     MapFun = fun(_Path, Binding) ->
@@ -1208,7 +1208,7 @@ register_rabbit_bindings_projection() ->
                     _Kind = ?KHEPRI_WILDCARD_STAR,
                     _DstName = ?KHEPRI_WILDCARD_STAR,
                     _RoutingKey = ?KHEPRI_WILDCARD_STAR),
-    khepri:register_projection(?RA_CLUSTER_NAME, PathPattern, Projection).
+    khepri:register_projection(?STORE_ID, PathPattern, Projection).
 
 register_rabbit_index_route_projection() ->
     MapFun = fun(Path, _) ->
@@ -1240,7 +1240,7 @@ register_rabbit_index_route_projection() ->
                     _Kind = ?KHEPRI_WILDCARD_STAR,
                     _DstName = ?KHEPRI_WILDCARD_STAR,
                     _RoutingKey = ?KHEPRI_WILDCARD_STAR),
-    khepri:register_projection(?RA_CLUSTER_NAME, PathPattern, Projection).
+    khepri:register_projection(?STORE_ID, PathPattern, Projection).
 
 %% Routing information is stored in the Khepri store as a `set'.
 %% In order to turn these bindings into records in an ETS `bag', we use a
@@ -1341,7 +1341,7 @@ register_rabbit_topic_graph_projection() ->
                     _Kind = ?KHEPRI_WILDCARD_STAR,
                     _DstName = ?KHEPRI_WILDCARD_STAR,
                     _RoutingKey = ?KHEPRI_WILDCARD_STAR),
-    khepri:register_projection(?RA_CLUSTER_NAME, PathPattern, Projection).
+    khepri:register_projection(?STORE_ID, PathPattern, Projection).
 
 -spec follow_down_update(Table, Exchange, Words, UpdateFn) -> Ret when
       Table :: ets:tid(),
