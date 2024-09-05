@@ -64,6 +64,7 @@ groups() ->
       [
        enable_feature_flag_in_a_healthy_situation,
        enable_unsupported_feature_flag_in_a_healthy_situation,
+       enable_feature_flag_when_ff_file_is_unwritable,
        required_feature_flag_enabled_by_default,
        required_plugin_feature_flag_enabled_by_default,
        required_plugin_feature_flag_enabled_after_activation,
@@ -73,6 +74,7 @@ groups() ->
       [
        enable_feature_flag_in_a_healthy_situation,
        enable_unsupported_feature_flag_in_a_healthy_situation,
+       enable_feature_flag_when_ff_file_is_unwritable,
        enable_feature_flag_with_a_network_partition,
        mark_feature_flag_as_enabled_with_a_network_partition,
        required_feature_flag_enabled_by_default,
@@ -653,6 +655,7 @@ enable_unsupported_feature_flag_in_a_healthy_situation(Config) ->
        False,
        is_feature_flag_enabled(Config, FeatureName)).
 
+%% This test case must run as an unprivileged user.
 enable_feature_flag_when_ff_file_is_unwritable(Config) ->
     Supported = rabbit_ct_broker_helpers:is_feature_flag_supported(
                   Config, ff_from_testsuite),

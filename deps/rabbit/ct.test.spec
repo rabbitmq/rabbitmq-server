@@ -48,7 +48,6 @@
     cli_forget_cluster_node_SUITE
 ,   feature_flags_SUITE
 ,   feature_flags_v2_SUITE
-,   feature_flags_with_unpriveleged_user_SUITE
 ,   list_consumers_sanity_check_SUITE
 ,   list_queues_online_and_offline_SUITE
 ,   logging_SUITE
