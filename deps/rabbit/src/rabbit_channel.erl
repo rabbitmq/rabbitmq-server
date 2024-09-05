@@ -56,9 +56,7 @@
 -export([update_user_state/2]).
 
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2, handle_pre_hibernate/1, handle_post_hibernate/1,
-         prioritise_call/4, prioritise_cast/3, prioritise_info/3,
-         format_message_queue/2]).
+         handle_info/2, format_status/1]).
 
 %% Internal
 -export([list_local/0, emit_info_local/3, deliver_reply_local/3]).
@@ -557,26 +555,6 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
     State3 = init_tick_timer(State2),
     {ok, State3}.
 
-prioritise_call(Msg, _From, _Len, _State) ->
-    case Msg of
-        info           -> 9;
-        {info, _Items} -> 9;
-        _              -> 0
-    end.
-
-prioritise_cast(Msg, _Len, _State) ->
-    case Msg of
-        {confirm,            _MsgSeqNos, _QPid} -> 5;
-        {reject_publish,     _MsgSeqNos, _QPid} -> 5;
-        _                                       -> 0
-    end.
-
-prioritise_info(Msg, _Len, _State) ->
-    case Msg of
-        emit_stats                   -> 7;
-        _                            -> 0
-    end.
-
 handle_call(flush, _From, State) ->
     reply(ok, State);
 
@@ -822,7 +800,13 @@ terminate(_Reason,
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
+format_status(Status) ->
+    maps:map(
+      fun(state, State = #ch{unacked_message_q = UnackedMessageQ}) ->
+              State#ch{unacked_message_q = lqueue:len(UnackedMessageQ)};
+         (_,Value) ->
+              Value
+      end, Status).
 
 get_consumer_timeout() ->
     case application:get_env(rabbit, consumer_timeout) of
