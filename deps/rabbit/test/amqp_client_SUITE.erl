@@ -167,6 +167,8 @@ groups() ->
        leader_transfer_quorum_queue_credit_batches,
        leader_transfer_stream_credit_single,
        leader_transfer_stream_credit_batches,
+       leader_transfer_quorum_queue_send,
+       leader_transfer_stream_send,
        list_connections,
        detach_requeues_two_connections_classic_queue,
        detach_requeues_two_connections_quorum_queue
@@ -314,7 +316,9 @@ init_per_testcase(T, Config)
   when  T =:= leader_transfer_quorum_queue_credit_single orelse
         T =:= leader_transfer_quorum_queue_credit_batches orelse
         T =:= leader_transfer_stream_credit_single orelse
-        T =:= leader_transfer_stream_credit_batches ->
+        T =:= leader_transfer_stream_credit_batches orelse
+        T =:= leader_transfer_quorum_queue_send orelse
+        T =:= leader_transfer_stream_send ->
     case rpc(Config, rabbit_feature_flags, is_supported, ['rabbitmq_4.0.0']) of
         true ->
             rabbit_ct_helpers:testcase_started(Config, T);
@@ -3585,21 +3589,21 @@ maintenance(Config) ->
 %% https://github.com/rabbitmq/rabbitmq-server/issues/11841
 leader_transfer_quorum_queue_credit_single(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
-    leader_transfer(QName, <<"quorum">>, 1, Config).
+    leader_transfer_credit(QName, <<"quorum">>, 1, Config).
 
 leader_transfer_quorum_queue_credit_batches(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
-    leader_transfer(QName, <<"quorum">>, 3, Config).
+    leader_transfer_credit(QName, <<"quorum">>, 3, Config).
 
 leader_transfer_stream_credit_single(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
-    leader_transfer(QName, <<"stream">>, 1, Config).
+    leader_transfer_credit(QName, <<"stream">>, 1, Config).
 
 leader_transfer_stream_credit_batches(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
-    leader_transfer(QName, <<"stream">>, 3, Config).
+    leader_transfer_credit(QName, <<"stream">>, 3, Config).
 
-leader_transfer(QName, QType, Credit, Config) ->
+leader_transfer_credit(QName, QType, Credit, Config) ->
     %% Create queue with leader on node 1.
     {Connection1, Session1, LinkPair1} = init(1, Config),
     {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(
@@ -3642,6 +3646,46 @@ leader_transfer(QName, QType, Credit, Config) ->
 
     ok = revive_node(Config, 1),
     ok = amqp10_client:detach_link(Receiver),
+    ok = delete_queue(Session0, QName),
+    ok = end_session_sync(Session0),
+    ok = amqp10_client:close_connection(Connection0).
+
+leader_transfer_quorum_queue_send(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    leader_transfer_send(QName, <<"quorum">>, Config).
+
+leader_transfer_stream_send(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    leader_transfer_send(QName, <<"stream">>, Config).
+
+%% Test a leader transfer while we send to the queue.
+leader_transfer_send(QName, QType, Config) ->
+    %% Create queue with leader on node 1.
+    {Connection1, Session1, LinkPair1} = init(1, Config),
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(
+                               LinkPair1,
+                               QName,
+                               #{arguments => #{<<"x-queue-type">> => {utf8, QType},
+                                                <<"x-queue-leader-locator">> => {utf8, <<"client-local">>}}}),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair1),
+    ok = end_session_sync(Session1),
+    ok = close_connection_sync(Connection1),
+
+    %% Send from a follower.
+    OpnConf = connection_config(0, Config),
+    {ok, Connection0} = amqp10_client:open_connection(OpnConf),
+    {ok, Session0} = amqp10_client:begin_session_sync(Connection0),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session0, <<"test-sender">>, Address),
+    ok = wait_for_credit(Sender),
+
+    NumMsgs = 500,
+    ok = send_messages(Sender, NumMsgs, false),
+    ok = rabbit_ct_broker_helpers:kill_node(Config, 1),
+    ok = wait_for_accepts(NumMsgs),
+
+    ok = rabbit_ct_broker_helpers:start_node(Config, 1),
+    ok = detach_link_sync(Sender),
     ok = delete_queue(Session0, QName),
     ok = end_session_sync(Session0),
     ok = amqp10_client:close_connection(Connection0).
