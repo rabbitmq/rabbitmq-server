@@ -951,9 +951,16 @@ end}.
 %% Sets the maximum number of AMQP 1.0 sessions that can be simultaneously
 %% active on an AMQP 1.0 connection.
 %%
-%% {session_max, 1},
-{mapping, "session_max", "rabbit.session_max",
- [{datatype, integer}, {validators, ["positive_16_bit_integer"]}]}.
+%% {session_max_per_connection, 1},
+{mapping, "session_max_per_connection", "rabbit.session_max_per_connection",
+ [{datatype, integer}, {validators, ["positive_16_bit_unsigned_integer"]}]}.
+
+%% Sets the maximum number of AMQP 1.0 links that can be simultaneously
+%% active on an AMQP 1.0 session.
+%%
+%% {link_max_per_session, 10},
+{mapping, "link_max_per_session", "rabbit.link_max_per_session",
+ [{datatype, integer}, {validators, ["positive_32_bit_unsigned_integer"]}]}.
 
 %% Set the max permissible number of client connections per node.
 %% `infinity` means "no limit".
@@ -2436,7 +2443,7 @@ end}.
 
 {mapping, "raft.segment_max_entries", "ra.segment_max_entries", [
   {datatype, integer},
-  {validators, ["non_zero_positive_integer", "positive_16_bit_integer"]}
+  {validators, ["non_zero_positive_integer", "positive_16_bit_unsigned_integer"]}
 ]}.
 
 {translation, "ra.segment_max_entries",
@@ -2743,10 +2750,15 @@ fun(Int) when is_integer(Int) ->
     Int >= 1
 end}.
 
-{validator, "positive_16_bit_integer", "number should be between 1 and 65535",
-fun(Int) when is_integer(Int) ->
-    (Int >= 1) and (Int =< 65535)
-end}.
+{validator, "positive_16_bit_unsigned_integer", "number should be between 1 and 65535",
+ fun(Int) when is_integer(Int) ->
+         (Int >= 1) and (Int =< 16#ff_ff)
+ end}.
+
+{validator, "positive_32_bit_unsigned_integer", "number should be between 1 and 4294967295",
+ fun(Int) when is_integer(Int) ->
+         (Int >= 1) and (Int =< 16#ff_ff_ff_ff)
+ end}.
 
 {validator, "valid_regex", "string must be a valid regular expression",
  fun("")     -> false;
