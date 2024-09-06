@@ -788,6 +788,7 @@ rabbit_common:
 - rabbit_password_hashing_md5
 - rabbit_password_hashing_sha256
 - rabbit_password_hashing_sha512
+- rabbit_password_hashing_pbkdf2_hmac_sha512_v1
 - rabbit_pbe
 - rabbit_peer_discovery_backend
 - rabbit_policy_validator
