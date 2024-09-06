@@ -1969,7 +1969,11 @@ force_shrink_member_to_current_member(VHost, Name) ->
                   end,
             _ = rabbit_amqqueue:update(QName, Fun),
             _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes],
+<<<<<<< HEAD
             rabbit_log:warning("Shrinking ~ts finished", [QNameFmt]);
+=======
+            rabbit_log:warning("Disaster recovery procedure: shrinking finished");
+>>>>>>> d9de6d989c (Shutdown peer QQ FSMs on connected nodes on force-shrink execution for cluster)
         _ ->
             rabbit_log:warning("Shrinking failed, ~ts not found", [QNameFmt]),
             {error, not_found}
@@ -1991,7 +1995,11 @@ force_all_queues_shrink_member_to_current_member(ListQQFun) when is_function(Lis
              QName = amqqueue:get_name(Q),
              {RaName, _} = amqqueue:get_pid(Q),
              OtherNodes = lists:delete(Node, get_nodes(Q)),
+<<<<<<< HEAD
              rabbit_log:warning("Shrinking queue ~ts to a single node: ~ts", [rabbit_misc:rs(QName), Node]),
+=======
+             rabbit_log:warning("Disaster recovery procedure: shrinking queue ~p", [QName]),
+>>>>>>> d9de6d989c (Shutdown peer QQ FSMs on connected nodes on force-shrink execution for cluster)
              ok = ra_server_proc:force_shrink_members_to_current_member({RaName, Node}),
              Fun = fun (QQ) ->
                            TS0 = amqqueue:get_type_state(QQ),
@@ -2000,8 +2008,13 @@ force_all_queues_shrink_member_to_current_member(ListQQFun) when is_function(Lis
                    end,
              _ = rabbit_amqqueue:update(QName, Fun),
              _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes]
+<<<<<<< HEAD
          end || Q <- ListQQFun(), amqqueue:get_type(Q) == ?MODULE],
     rabbit_log:warning("Shrinking finished"),
+=======
+         end || Q <- rabbit_amqqueue:list(), amqqueue:get_type(Q) == ?MODULE],
+    rabbit_log:warning("Disaster recovery procedure: shrinking finished"),
+>>>>>>> d9de6d989c (Shutdown peer QQ FSMs on connected nodes on force-shrink execution for cluster)
     ok.
 
 is_minority(All, Up) ->
