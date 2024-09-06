@@ -141,7 +141,8 @@ groups() ->
        incoming_window_closed_rabbitmq_internal_flow_quorum_queue,
        tcp_back_pressure_rabbitmq_internal_flow_classic_queue,
        tcp_back_pressure_rabbitmq_internal_flow_quorum_queue,
-       session_max
+       session_max_per_connection,
+       link_max_per_session
       ]},
 
      {cluster_size_3, [shuffle],
@@ -3346,17 +3347,7 @@ async_notify(SenderSettleMode, QType, Config) ->
     flush(settled),
     ok = detach_link_sync(Sender),
 
-    case QType of
-        <<"stream">> ->
-            %% If it is a stream we need to wait until there is a local member
-            %% on the node we want to subscibe from before proceeding.
-            rabbit_ct_helpers:await_condition(
-              fun() -> rpc(Config, 0, ?MODULE, has_local_member,
-                           [rabbit_misc:r(<<"/">>, queue, QName)])
-              end, 30_000);
-        _ ->
-            ok
-    end,
+    ok = wait_for_local_member(QType, QName, Config),
     Filter = consume_from_first(QType),
     {ok, Receiver} = amqp10_client:attach_receiver_link(
                        Session, <<"test-receiver">>, Address,
@@ -3634,10 +3625,7 @@ leader_transfer(QName, QType, Credit, Config) ->
     ok = wait_for_accepts(NumMsgs),
     ok = detach_link_sync(Sender),
 
-    %% Wait a bit to avoid the following error when attaching:
-    %% "stream queue <name> does not have a running replica on the local node"
-    timer:sleep(50),
-
+    ok = wait_for_local_member(QType, QName, Config),
     Filter = consume_from_first(QType),
     {ok, Receiver} = amqp10_client:attach_receiver_link(
                        Session0, <<"receiver">>, Address,
@@ -5622,15 +5610,18 @@ tcp_back_pressure_rabbitmq_internal_flow(QType, Config) ->
     ok = end_session_sync(Session),
     ok = amqp10_client:close_connection(Connection).
 
-session_max(Config) ->
+session_max_per_connection(Config) ->
     App = rabbit,
-    Par = session_max,
+    Par = session_max_per_connection,
     {ok, Default} = rpc(Config, application, get_env, [App, Par]),
     %% Let's allow only 1 session per connection.
     ok = rpc(Config, application, set_env, [App, Par, 1]),
 
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    receive {amqp10_event, {connection, Connection, opened}} -> ok
+    after 5000 -> ct:fail(opened_timeout)
+    end,
     %% The 1st session should succeed.
     {ok, _Session1} = amqp10_client:begin_session_sync(Connection),
     %% The 2nd session should fail.
@@ -5642,6 +5633,32 @@ session_max(Config) ->
     after 5000 -> ct:fail(missing_closed)
     end,
 
+    ok = rpc(Config, application, set_env, [App, Par, Default]).
+
+link_max_per_session(Config) ->
+    App = rabbit,
+    Par = link_max_per_session,
+    {ok, Default} = rpc(Config, application, get_env, [App, Par]),
+    %% Let's allow only 1 link per session.
+    ok = rpc(Config, application, set_env, [App, Par, 1]),
+
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    receive {amqp10_event, {connection, Connection, opened}} -> ok
+    after 5000 -> ct:fail(opened_timeout)
+    end,
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    Address1 = rabbitmq_amqp_address:exchange(<<"amq.direct">>, <<"k1">>),
+    Address2 = rabbitmq_amqp_address:exchange(<<"amq.direct">>, <<"k2">>),
+    %% The 1st link should succeed.
+    {ok, Link1} = amqp10_client:attach_sender_link_sync(Session, <<"link-1">>, Address1),
+    ok = wait_for_credit(Link1),
+    %% Since the 2nd link should fail, we expect our session process to die.
+    ?assert(is_process_alive(Session)),
+    {ok, _Link2} = amqp10_client:attach_sender_link(Session, <<"link-2">>, Address2),
+    eventually(?_assertNot(is_process_alive(Session))),
+
+    flush(test_succeeded),
     ok = rpc(Config, application, set_env, [App, Par, Default]).
 
 %% internal
@@ -5940,6 +5957,16 @@ ready_messages(QName, Config)
 
 ra_name(Q) ->
     binary_to_atom(<<"%2F_", Q/binary>>).
+
+wait_for_local_member(<<"stream">>, QName, Config) ->
+    %% If it is a stream we need to wait until there is a local member
+    %% on the node we want to subscribe from before proceeding.
+    rabbit_ct_helpers:await_condition(
+      fun() -> rpc(Config, 0, ?MODULE, has_local_member,
+                   [rabbit_misc:r(<<"/">>, queue, QName)])
+      end, 30_000);
+wait_for_local_member(_, _, _) ->
+    ok.
 
 has_local_member(QName) ->
     case rabbit_amqqueue:lookup(QName) of

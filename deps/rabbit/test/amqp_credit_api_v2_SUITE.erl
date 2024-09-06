@@ -97,7 +97,7 @@ credit_api_v2(Config) ->
     ok = amqp10_client:detach_link(QQSender),
 
     %% Consume with credit API v1
-    CQAttachArgs = #{handle => 300,
+    CQAttachArgs = #{handle => 100,
                      name => <<"cq receiver 1">>,
                      role => {receiver, #{address => CQAddr,
                                           durable => configuration}, self()},
@@ -105,7 +105,7 @@ credit_api_v2(Config) ->
                      rcv_settle_mode => first,
                      filter => #{}},
     {ok, CQReceiver1} = amqp10_client:attach_link(Session, CQAttachArgs),
-    QQAttachArgs = #{handle => 400,
+    QQAttachArgs = #{handle => 200,
                      name => <<"qq receiver 1">>,
                      role => {receiver, #{address => QQAddr,
                                           durable => configuration}, self()},

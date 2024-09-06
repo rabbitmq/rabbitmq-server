@@ -476,7 +476,7 @@ handle_connection_frame(
                     SendTimeoutSec, SendFun,
                     ReceiveTimeoutSec, ReceiveFun),
     {ok, IncomingMaxFrameSize} = application:get_env(rabbit, frame_max),
-    {ok, SessionMax} = application:get_env(rabbit, session_max),
+    {ok, SessionMax} = application:get_env(rabbit, session_max_per_connection),
     %% "The channel-max value is the highest channel number that can be used on the connection.
     %% This value plus one is the maximum number of sessions that can be simultaneously active
     %% on the connection." [2.7.1]
