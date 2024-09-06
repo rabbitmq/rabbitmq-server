@@ -1303,6 +1303,7 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
                     _ = rabbit_amqqueue:update(QName, Fun),
                     case ra:force_delete_server(?RA_SYSTEM, ServerId) of
                         ok ->
+                            rabbit_log:info("Deleted a replica of quorum ~ts on node ~ts", [rabbit_misc:rs(QName), Node]),
                             ok;
                         {error, {badrpc, nodedown}} ->
                             ok;
@@ -1893,6 +1894,7 @@ force_shrink_member_to_current_member(VHost, Name) ->
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} when ?is_amqqueue(Q) ->
             {RaName, _} = amqqueue:get_pid(Q),
+            OtherNodes = lists:delete(Node, get_nodes(Q)),
             ok = ra_server_proc:force_shrink_members_to_current_member({RaName, Node}),
             Fun = fun (Q0) ->
                           TS0 = amqqueue:get_type_state(Q0),
@@ -1900,6 +1902,7 @@ force_shrink_member_to_current_member(VHost, Name) ->
                           amqqueue:set_type_state(Q, TS)
                   end,
             _ = rabbit_amqqueue:update(QName, Fun),
+            _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes],
             rabbit_log:warning("Disaster recovery procedure: shrinking finished");
         _ ->
             rabbit_log:warning("Disaster recovery procedure: shrinking failed, queue ~p not found at vhost ~p", [Name, VHost]),
@@ -1912,6 +1915,7 @@ force_all_queues_shrink_member_to_current_member() ->
     _ = [begin
              QName = amqqueue:get_name(Q),
              {RaName, _} = amqqueue:get_pid(Q),
+             OtherNodes = lists:delete(Node, get_nodes(Q)),
              rabbit_log:warning("Disaster recovery procedure: shrinking queue ~p", [QName]),
              ok = ra_server_proc:force_shrink_members_to_current_member({RaName, Node}),
              Fun = fun (QQ) ->
@@ -1919,7 +1923,8 @@ force_all_queues_shrink_member_to_current_member() ->
                            TS = TS0#{nodes => [Node]},
                            amqqueue:set_type_state(QQ, TS)
                    end,
-             _ = rabbit_amqqueue:update(QName, Fun)
+             _ = rabbit_amqqueue:update(QName, Fun),
+             _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes]
          end || Q <- rabbit_amqqueue:list(), amqqueue:get_type(Q) == ?MODULE],
     rabbit_log:warning("Disaster recovery procedure: shrinking finished"),
     ok.
