@@ -10,7 +10,7 @@
   <properties>
     <junit.jupiter.version>5.9.3</junit.jupiter.version>
     <qpid-jms-client.version>2.3.0</qpid-jms-client.version>
-    <logback.version>1.2.11</logback.version>
+    <logback.version>1.2.13</logback.version>
     <spotless.version>2.24.0</spotless.version>
     <google-java-format.version>1.17.0</google-java-format.version>
     <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
